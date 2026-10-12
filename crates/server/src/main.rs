@@ -40,6 +40,13 @@ enum Command {
         #[arg(long, env = "OPENGRID_NEW_PASSWORD", hide_env_values = true)]
         password: String,
     },
+    /// Turn off two-factor authentication for a user who lost their
+    /// authenticator, and sign them out everywhere.
+    #[command(name = "disable-2fa")]
+    Disable2fa {
+        #[arg(long)]
+        email: String,
+    },
     /// Write a consistent backup archive (database + attachments).
     Backup {
         /// Output file (.tar.gz). Defaults to <data_dir>/backups/opengrid-<timestamp>.tar.gz
@@ -67,6 +74,24 @@ fn init_tracing(format: &str) {
     } else {
         builder.init()
     }
+}
+
+/// Clear a user's TOTP secret and revoke their sessions (lost authenticator).
+fn disable_two_factor(state: &AppState, email: &str) -> opengrid::error::AppResult<()> {
+    let email = email.trim().to_string();
+    state.db.write_sync(|tx| {
+        let id: String = tx
+            .query_row("SELECT id FROM users WHERE email = ?1", [&email], |r| {
+                r.get(0)
+            })
+            .map_err(|_| opengrid::error::AppError::not_found("user"))?;
+        tx.execute(
+            "UPDATE users SET totp_enabled = 0, totp_secret = NULL, updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![opengrid::db::now_ms(), id],
+        )?;
+        opengrid::auth::session::delete_all_for_user(tx, &id, None)?;
+        Ok(())
+    })
 }
 
 /// Timeout for each step of the health check (connect, write, read).
@@ -167,6 +192,12 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("created administrator {email} ({id})");
             Ok(())
         }
+        Command::Disable2fa { email } => {
+            let state = AppState::open(config)?;
+            disable_two_factor(&state, &email)?;
+            println!("two-factor authentication disabled for {email}; all sessions revoked");
+            Ok(())
+        }
         Command::ResetPassword { email, password } => {
             let state = AppState::open(config)?;
             opengrid::cli::reset_password(&state, &email, &password)?;
@@ -263,6 +294,39 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res, Ok(()));
+    }
+
+    #[test]
+    fn disable_two_factor_clears_secret_and_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(Config::for_tests(dir.path())).unwrap();
+        state
+            .db
+            .write_sync(|tx| {
+                tx.execute(
+                    "INSERT INTO users (id, email, name, password_hash, totp_secret, totp_enabled, created_at, updated_at)
+                     VALUES ('usr1', 'a@example.com', 'A', 'x', 'SECRET', 1, 0, 0)",
+                    [],
+                )?;
+                opengrid::auth::session::create(tx, "usr1", false, None, None)?;
+                Ok(())
+            })
+            .unwrap();
+        disable_two_factor(&state, " A@example.com ").unwrap();
+        let (enabled, secret, sessions): (bool, Option<String>, i64) = state
+            .db
+            .write_sync(|tx| {
+                Ok(tx.query_row(
+                    "SELECT totp_enabled, totp_secret, (SELECT count(*) FROM sessions) FROM users",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?)
+            })
+            .unwrap();
+        assert!(!enabled);
+        assert_eq!(secret, None);
+        assert_eq!(sessions, 0);
+        assert!(disable_two_factor(&state, "nobody@example.com").is_err());
     }
 
     #[test]
