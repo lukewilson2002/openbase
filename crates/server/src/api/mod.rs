@@ -13,6 +13,7 @@ pub mod fields;
 pub mod invites;
 pub mod notifications;
 pub mod records;
+pub mod schema_support;
 pub mod sharing;
 pub mod tables;
 pub mod tokens;
