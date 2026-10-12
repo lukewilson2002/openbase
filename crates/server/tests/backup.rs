@@ -63,7 +63,7 @@ fn archive_entries(path: &Path) -> Vec<(String, Vec<u8>)> {
 /// Build a .tar.gz with raw entries; names are written verbatim into the
 /// header (bypassing the tar crate's own path checks) so tests can craft
 /// malicious archives.
-fn raw_archive(path: &Path, entries: &[(&str, &[u8], tar::EntryType)]) {
+fn raw_archive(path: &Path, entries: &[RawEntry]) {
     let f = std::fs::File::create(path).unwrap();
     let gz = flate2::write::GzEncoder::new(f, flate2::Compression::fast());
     let mut b = tar::Builder::new(gz);
@@ -82,6 +82,8 @@ fn raw_archive(path: &Path, entries: &[(&str, &[u8], tar::EntryType)]) {
     }
     b.into_inner().unwrap().finish().unwrap().flush().unwrap();
 }
+
+type RawEntry<'a> = (&'a str, &'a [u8], tar::EntryType);
 
 fn manifest(schema_version: i64) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
@@ -272,7 +274,7 @@ fn restore_rejects_newer_schema_and_missing_parts() {
     let db = valid_db_bytes();
     let newer = manifest(opengrid::db::schema_version() + 1);
     let ok = manifest(opengrid::db::schema_version());
-    let cases: Vec<(&str, Vec<(&str, &[u8], tar::EntryType)>)> = vec![
+    let cases: Vec<(&str, Vec<RawEntry>)> = vec![
         (
             "newer",
             vec![
