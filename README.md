@@ -6,10 +6,11 @@ database, and it is built to run well on a $4–6/month VPS.
 
 - **One process, one data directory.** The database (`opengrid.db`),
   uploaded files (`attachments/`) and backups (`backups/`) all live in a
-  single directory. You don't need Postgres, Redis or Node.
-- **All Rust.** The axum + SQLite server and the Leptos (WebAssembly) client
-  share one core crate. Field types, the formula engine and filter/sort
-  rules therefore behave the same in the browser and on the server.
+  single directory. You don't need Postgres or Redis, and the Docker image
+  and release binary don't need Node either.
+- **Rust server, embedded web app.** The axum + SQLite server is written in
+  Rust. The React + TypeScript web client (built with Vite) is compiled into
+  the binary at build time, so a deployment is still one file.
 - **No paid tier.** There are no license keys and no feature flags. Dual
   licensed MIT OR Apache-2.0.
 
@@ -113,13 +114,16 @@ administrator. Caddy gets and renews the TLS certificate automatically.
 ### Single binary
 
 ```sh
-# Build (requires Rust and trunk), or download a release binary.
-(cd crates/web && trunk build --release)
-cargo build --release -p opengrid
+# Build from source (requires Rust and Node 24), or download a release binary.
+(cd web && npm ci && npm run build)    # produces web/dist, embedded below
+cargo build --release --locked -p opengrid
 
 OPENGRID_DATA_DIR=./data ./target/release/opengrid
 # Listening on http://127.0.0.1:8080
 ```
+
+Building from source requires Rust and Node 24. Docker and release-binary
+users need neither: the web client is already inside the binary.
 
 Put it behind a reverse proxy that terminates TLS (Caddy, nginx) before
 exposing it to the internet. See [docs/self-hosting.md](docs/self-hosting.md)
@@ -187,7 +191,11 @@ replaced with its measured results.
 
 ```sh
 scripts/check.sh    # cargo fmt --check, clippy -D warnings, all tests
+(cd web && npm ci && npm run build)   # web client, embedded by the server build
 ```
+
+The server embeds `web/dist` when it is compiled. Without it the server
+still builds and runs, and shows a "web client not built" page at `/`.
 
 The design and the reasons behind it are in
 [docs/plans/2026-10-12-opengrid.md](docs/plans/2026-10-12-opengrid.md).
