@@ -16,6 +16,7 @@
 
 pub mod api;
 pub mod cell;
+pub mod deps;
 pub mod field;
 pub mod formula;
 pub mod limits;

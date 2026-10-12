@@ -6,3 +6,4 @@
 *.db-shm
 /crates/web/dist
 .DS_Store
+/.claude/worktrees
