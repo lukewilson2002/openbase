@@ -4,6 +4,8 @@
 
 mod common;
 
+use std::time::{Duration, SystemTime};
+
 use common::TestApp;
 use opengrid::store::attachments::{blob_path, thumb_path};
 use opengrid::tasks;
@@ -17,8 +19,35 @@ fn put(dir: &std::path::Path, sha: &str) -> (std::path::PathBuf, std::path::Path
     (blob, thumb)
 }
 
+fn insert_row(app: &TestApp, id: &str, sha: &str) {
+    let (id, sha) = (id.to_string(), sha.to_string());
+    app.state
+        .db
+        .write_sync(|tx| {
+            tx.execute(
+                "INSERT INTO attachments (id, sha256, filename, mime, size, created_at)
+                 VALUES (?1, ?2, 'f', 'text/plain', 1, 0)",
+                [id, sha],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn sweep(app: &TestApp, dir: &std::path::Path, now: SystemTime) -> usize {
+    app.state
+        .db
+        .write_sync(|tx| tasks::sweep_orphan_files(tx, dir, now))
+        .unwrap()
+}
+
+/// A moment past the grace period for files written just now.
+fn later() -> SystemTime {
+    SystemTime::now() + tasks::ORPHAN_GRACE + Duration::from_secs(60)
+}
+
 #[test]
-fn sweep_deletes_files_without_rows_and_keeps_used_and_foreign_files() {
+fn sweep_deletes_old_files_without_rows_and_keeps_used_and_foreign_files() {
     let app = TestApp::new();
     let dir = app.state.config.attachments_dir();
     let used = "a".repeat(64);
@@ -31,25 +60,13 @@ fn sweep_deletes_files_without_rows_and_keeps_used_and_foreign_files() {
     std::fs::write(&lone_thumb, b"t").unwrap();
     let foreign = dir.join("aa").join("README.txt");
     std::fs::write(&foreign, b"keep me").unwrap();
+    insert_row(&app, "attUsedxxxxxxxxx1", &used);
 
-    let used_sha = used.clone();
-    app.state
-        .db
-        .write_sync(|tx| {
-            tx.execute(
-                "INSERT INTO attachments (id, sha256, filename, mime, size, created_at)
-                 VALUES ('attUsedxxxxxxxxx1', ?1, 'f', 'text/plain', 1, 0)",
-                [used_sha],
-            )?;
-            Ok(())
-        })
-        .unwrap();
+    // Fresh files are inside the grace period: nothing is deleted yet.
+    assert_eq!(sweep(&app, &dir, SystemTime::now()), 0);
+    assert!(orphan_blob.exists() && lone_thumb.exists());
 
-    let removed = app
-        .state
-        .db
-        .write_sync(|tx| tasks::sweep_orphan_files(tx, &dir))
-        .unwrap();
+    let removed = sweep(&app, &dir, later());
     assert_eq!(removed, 2, "orphan blob + lone thumbnail");
     assert!(used_blob.exists() && used_thumb.exists());
     assert!(!orphan_blob.exists() && !orphan_thumb.exists());
@@ -57,16 +74,17 @@ fn sweep_deletes_files_without_rows_and_keeps_used_and_foreign_files() {
     assert!(foreign.exists());
 
     // Idempotent; a missing directory is fine.
-    let again = app
-        .state
-        .db
-        .write_sync(|tx| tasks::sweep_orphan_files(tx, &dir))
-        .unwrap();
-    assert_eq!(again, 0);
-    let none = app
-        .state
-        .db
-        .write_sync(|tx| tasks::sweep_orphan_files(tx, &dir.join("missing")))
-        .unwrap();
-    assert_eq!(none, 0);
+    assert_eq!(sweep(&app, &dir, later()), 0);
+    assert_eq!(sweep(&app, &dir.join("missing"), later()), 0);
+}
+
+#[test]
+fn sweep_never_deletes_anything_when_the_attachments_table_is_empty() {
+    // E.g. opengrid.db was replaced by a fresh database by mistake: the files
+    // on disk are then the only copy left.
+    let app = TestApp::new();
+    let dir = app.state.config.attachments_dir();
+    let (blob, thumb) = put(&dir, &"d".repeat(64));
+    assert_eq!(sweep(&app, &dir, later()), 0);
+    assert!(blob.exists() && thumb.exists());
 }

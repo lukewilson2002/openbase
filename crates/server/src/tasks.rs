@@ -39,6 +39,8 @@ pub const ATTACHMENT_GRACE_MS: i64 = 24 * 3600 * 1000;
 const HOURLY: Duration = Duration::from_secs(3600);
 const DAILY: Duration = Duration::from_secs(24 * 3600);
 const STALE_TMP: Duration = Duration::from_secs(24 * 3600);
+/// Orphaned attachment files younger than this are never swept.
+pub const ORPHAN_GRACE: Duration = Duration::from_secs(24 * 3600);
 
 /// Start the background loop. Call once, from inside the tokio runtime.
 pub fn spawn_all(state: &AppState) {
@@ -98,7 +100,8 @@ pub async fn tick(state: &AppState, clock: &mut Clock) {
     if due(&mut clock.orphans, DAILY) {
         run_job(state, "orphaned attachment files", |s| {
             let dir = s.config.attachments_dir();
-            let n = s.db.write_sync(|tx| sweep_orphan_files(tx, &dir))?;
+            let n =
+                s.db.write_sync(|tx| sweep_orphan_files(tx, &dir, SystemTime::now()))?;
             if n > 0 {
                 tracing::info!(files = n, "deleted orphaned attachment files");
             }
@@ -219,7 +222,31 @@ pub fn gc_attachments(
 /// Like [`gc_attachments`], must run inside a write transaction so it cannot
 /// race an upload that is reusing a file. Returns the number of files removed
 /// (a blob and its thumbnail count once).
-pub fn sweep_orphan_files(conn: &Connection, attachments_dir: &Path) -> AppResult<usize> {
+///
+/// Two safety guards, because deleting files cannot be undone: nothing is
+/// deleted when the attachments table is empty (e.g. `opengrid.db` was
+/// replaced by a fresh database by mistake: the files are then the only copy
+/// left), and only files last modified more than [`ORPHAN_GRACE`] before
+/// `now` are candidates (a just-restored or just-copied file is kept for a
+/// day, giving the administrator time to notice a mistake).
+pub fn sweep_orphan_files(
+    conn: &Connection,
+    attachments_dir: &Path,
+    now: SystemTime,
+) -> AppResult<usize> {
+    let any_rows = conn.query_row("SELECT EXISTS (SELECT 1 FROM attachments)", [], |r| {
+        r.get::<_, bool>(0)
+    })?;
+    if !any_rows {
+        return Ok(0);
+    }
+    let old_enough = |path: &Path| {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|m| now.duration_since(m).ok())
+            .is_some_and(|age| age >= ORPHAN_GRACE)
+    };
     let shards = match std::fs::read_dir(attachments_dir) {
         Ok(rd) => rd,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
@@ -249,6 +276,7 @@ pub fn sweep_orphan_files(conn: &Connection, attachments_dir: &Path) -> AppResul
                 continue;
             };
             if blob.parent() != Some(shard.path().as_path())
+                || !old_enough(&file.path())
                 || attachment_store::sha_in_use(conn, &sha)?
             {
                 continue;
