@@ -9,6 +9,7 @@ use crate::error::{AppError, AppResult};
 
 #[derive(Clone, Default)]
 pub struct RateLimiter {
+    #[allow(clippy::type_complexity)]
     inner: Arc<Mutex<HashMap<(&'static str, String), (Instant, u32)>>>,
 }
 
