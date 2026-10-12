@@ -1,0 +1,51 @@
+# OpenGrid behind Caddy (automatic HTTPS via Let's Encrypt).
+#
+#   cd deploy
+#   cp .env.example .env      # set OPENGRID_DOMAIN (DNS must point here)
+#   docker compose up -d --build
+#
+# Data lives in named volumes: `opengrid-data` (database, attachments,
+# backups) and `caddy-data` (TLS certificates). See docs/self-hosting.md.
+
+services:
+  opengrid:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: opengrid:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      OPENGRID_DATA_DIR: /data
+      OPENGRID_BIND: 0.0.0.0:8080
+      OPENGRID_PUBLIC_URL: https://${OPENGRID_DOMAIN:?set OPENGRID_DOMAIN in deploy/.env}
+      # Only Caddy can reach OpenGrid (no published port), so trust its
+      # X-Forwarded-For / X-Forwarded-Proto headers.
+      OPENGRID_TRUST_PROXY: "true"
+    volumes:
+      - opengrid-data:/data
+    # Not published on the host: reachable only through Caddy.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - opengrid
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      OPENGRID_DOMAIN: ${OPENGRID_DOMAIN:?set OPENGRID_DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  opengrid-data:
+  caddy-data:
+  caddy-config:

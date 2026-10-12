@@ -1,0 +1,19 @@
+# Caddy terminates TLS (certificates are obtained and renewed automatically)
+# and forwards everything to OpenGrid. OPENGRID_DOMAIN comes from deploy/.env.
+
+{$OPENGRID_DOMAIN} {
+	reverse_proxy opengrid:8080 {
+		# Stream Server-Sent Events (live updates) without buffering.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

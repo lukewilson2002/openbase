@@ -1,0 +1,15 @@
+# Keep the Docker build context small and free of local data and secrets.
+target/
+target-*/
+data/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+web/node_modules/
+web/dist/
+crates/web/dist/
+.git/
+.claude/
+deploy/.env
+**/.env
+**/.DS_Store

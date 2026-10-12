@@ -5,6 +5,7 @@ pub mod admin;
 pub mod attachments;
 pub mod auth;
 pub mod automations;
+pub mod backups;
 pub mod bases;
 pub mod comments;
 pub mod csv;
@@ -29,6 +30,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .merge(auth::router())
         .merge(admin::router())
+        .merge(backups::router())
         .merge(tokens::router())
         .merge(invites::router())
         .merge(workspaces::router())

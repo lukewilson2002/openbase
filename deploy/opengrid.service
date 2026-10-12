@@ -1,0 +1,68 @@
+# systemd unit for running the OpenGrid binary directly (no Docker).
+#
+# Install (see docs/self-hosting.md for the full walkthrough):
+#   sudo useradd --system --home-dir /var/lib/opengrid --shell /usr/sbin/nologin opengrid
+#   sudo install -m 0755 opengrid /usr/local/bin/opengrid
+#   sudo install -m 0644 deploy/opengrid.service /etc/systemd/system/opengrid.service
+#   sudo install -d -m 0750 /etc/opengrid   # optional: /etc/opengrid/opengrid.env
+#   sudo systemctl daemon-reload && sudo systemctl enable --now opengrid
+#
+# A dedicated user (rather than DynamicUser) lets you run CLI commands such as
+# `sudo -u opengrid opengrid backup` against the same files.
+
+[Unit]
+Description=OpenGrid (self-hosted Airtable alternative)
+Documentation=https://github.com/opengrid/opengrid
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opengrid
+Group=opengrid
+Environment=OPENGRID_DATA_DIR=/var/lib/opengrid
+Environment=OPENGRID_BIND=127.0.0.1:8080
+# Site settings (OPENGRID_PUBLIC_URL, SMTP, ...). Optional file; keep it 0640.
+EnvironmentFile=-/etc/opengrid/opengrid.env
+ExecStart=/usr/local/bin/opengrid serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Creates /var/lib/opengrid owned by the service user.
+StateDirectory=opengrid
+StateDirectoryMode=0750
+UMask=0027
+
+# Resource limits sized for a 1 GB VPS.
+MemoryMax=400M
+LimitNOFILE=65536
+
+# Hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/opengrid
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
