@@ -7,6 +7,22 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value as Json;
 
+/// Static type of a computed field's result. The server fills it in on
+/// formula/rollup/lookup options when the field is saved (from formula type
+/// inference or the lookup target), so stored materialized JSON can be read
+/// back into the right [`Value`] variant (e.g. a date string vs plain text).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultType {
+    #[default]
+    Text,
+    Number,
+    Bool,
+    Date,
+    DateTime,
+    Array(Box<ResultType>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// Empty / blank.

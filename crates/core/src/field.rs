@@ -30,6 +30,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{ChoiceId, FieldId, TableId, ViewId};
+use crate::value::ResultType;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Field {
@@ -520,6 +521,9 @@ pub struct FormulaOptions {
     pub expression: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<ValueFormat>,
+    /// Filled by the server from type inference; ignored on input.
+    #[serde(default)]
+    pub result_type: ResultType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -528,6 +532,9 @@ pub struct LookupOptions {
     pub link_field_id: FieldId,
     /// A field in the linked table.
     pub target_field_id: FieldId,
+    /// Filled by the server (always an array of the target's type); ignored on input.
+    #[serde(default)]
+    pub result_type: ResultType,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -539,6 +546,9 @@ pub struct RollupOptions {
     pub expression: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<ValueFormat>,
+    /// Filled by the server from type inference; ignored on input.
+    #[serde(default)]
+    pub result_type: ResultType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
