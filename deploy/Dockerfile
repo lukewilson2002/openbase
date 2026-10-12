@@ -4,34 +4,40 @@
 #
 #   docker build -f deploy/Dockerfile -t opengrid .
 #
-# Stage 1 builds the Leptos web client (trunk -> crates/web/dist) and then the
-# server, which embeds that dist directory into the binary. Stage 2 is a slim
-# Debian runtime with only the binary, CA certificates and time zone data.
+# Stage 1 (node) builds the React + TypeScript web client with Vite into
+# web/dist. Stage 2 (rust) builds the server, which embeds web/dist into the
+# binary. Stage 3 is a slim Debian runtime with only the binary, CA
+# certificates and time zone data: no Node and no Rust toolchain at runtime.
 
+ARG NODE_IMAGE=node:24-bookworm-slim
 ARG RUST_IMAGE=rust:1-bookworm
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 
+# ---------------------------------------------------------------- web client
+FROM ${NODE_IMAGE} AS web
+WORKDIR /src/web
+# Dependencies first, so source edits don't invalidate the npm layer.
+# --ignore-scripts: no install-time scripts from third-party packages.
+COPY web/package.json web/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --ignore-scripts
+COPY web/ ./
+RUN npm run build && test -f dist/index.html
+
+# -------------------------------------------------------------------- server
 FROM ${RUST_IMAGE} AS builder
-ARG TRUNK_VERSION=0.21.14
-
-RUN rustup target add wasm32-unknown-unknown
-# Pinned trunk, built from crates.io with its lockfile.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install trunk --locked --version "${TRUNK_VERSION}"
-
 WORKDIR /src
 COPY . .
-
-# The web client must be built first: the server embeds crates/web/dist.
+# The server embeds web/dist at compile time (rust-embed).
+COPY --from=web /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     set -eux; \
     rustup show active-toolchain; \
-    (cd crates/web && trunk build --release); \
-    test -f crates/web/dist/index.html; \
     cargo build --release --locked -p opengrid; \
     install -m 0755 target/release/opengrid /usr/local/bin/opengrid
 
+# ------------------------------------------------------------------- runtime
 FROM ${RUNTIME_IMAGE}
 
 RUN set -eux; \

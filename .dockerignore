@@ -5,8 +5,11 @@ data/
 **/*.db
 **/*.db-wal
 **/*.db-shm
+web/node_modules/
+web/dist/
 crates/web/dist/
 .git/
 .claude/
 deploy/.env
+**/.env
 **/.DS_Store
