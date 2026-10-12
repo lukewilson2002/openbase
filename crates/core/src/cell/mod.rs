@@ -38,10 +38,10 @@ pub use convert::{choices_needed_for_conversion, convert};
 pub use normalize::{missing_choices, normalize, parse_text};
 pub use present::{display_text, to_value};
 
-#[allow(unused_imports)]
+pub(crate) use normalize::{field_zone, num_json};
 pub(crate) use present::{
-    NumberFormat, computed_to_value, date_options_of, format_date_value, format_general_number,
-    number_format_of,
+    date_options_of, format_date_value, format_general_number, number_format_of, string_items,
+    value_text,
 };
 
 /// Context for interpreting client input.
