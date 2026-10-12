@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::config::Config;
 use crate::db::Db;
+use crate::email::Mailer;
 use crate::error::AppResult;
 use crate::events::EventBus;
 use crate::ratelimit::RateLimiter;
@@ -14,6 +15,8 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub events: EventBus,
     pub limiter: RateLimiter,
+    /// Outgoing email (SMTP, or a no-op logger when SMTP is not configured).
+    pub mailer: Arc<dyn Mailer>,
 }
 
 impl AppState {
@@ -24,11 +27,13 @@ impl AppState {
             .map_err(crate::error::AppError::internal)?;
         std::fs::create_dir_all(config.backups_dir()).map_err(crate::error::AppError::internal)?;
         let db = Db::open(&config.db_path())?;
+        let mailer = crate::email::from_config(&config)?;
         Ok(AppState {
             db,
             config: Arc::new(config),
             events: EventBus::default(),
             limiter: RateLimiter::default(),
+            mailer,
         })
     }
 }
