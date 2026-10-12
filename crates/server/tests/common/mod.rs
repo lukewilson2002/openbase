@@ -2,11 +2,14 @@
 //! driven through the real router (middleware included) with `oneshot`.
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use opengrid::config::Config;
+use opengrid::email::CapturingMailer;
 use opengrid::state::AppState;
 use serde_json::Value;
 use tower::ServiceExt;
@@ -14,6 +17,9 @@ use tower::ServiceExt;
 pub struct TestApp {
     pub state: AppState,
     pub router: Router,
+    /// Every email the app "sent" (installed as `state.mailer`). Email
+    /// features still only trigger when `config.smtp_host` is set.
+    pub mailer: Arc<CapturingMailer>,
     _dir: tempfile::TempDir,
 }
 
@@ -67,13 +73,182 @@ impl TestApp {
         let dir = tempfile::tempdir().unwrap();
         let mut config = Config::for_tests(dir.path());
         f(&mut config);
-        let state = AppState::open(config).unwrap();
+        let mut state = AppState::open(config).unwrap();
+        let mailer = Arc::new(CapturingMailer::default());
+        state.mailer = mailer.clone();
         let router = opengrid::http::router(state.clone());
         TestApp {
             state,
             router,
+            mailer,
             _dir: dir,
         }
+    }
+
+    /// Like [`TestApp::request`] with extra request headers and extensions
+    /// control: `csrf: false` omits the CSRF header; `peer` sets the TCP peer
+    /// address (ConnectInfo), which oneshot requests otherwise lack.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn request_with(
+        &self,
+        client: &Client,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+        headers: &[(&str, &str)],
+        csrf: bool,
+        peer: Option<std::net::SocketAddr>,
+    ) -> Response {
+        let mut req = Request::builder().method(method).uri(path);
+        if let Some(c) = &client.cookie {
+            req = req.header(
+                header::COOKIE,
+                format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+            );
+        }
+        if let Some(t) = &client.bearer {
+            req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
+        }
+        if csrf {
+            req = req.header(opengrid::http::CSRF_HEADER, "1");
+        }
+        for (k, v) in headers {
+            req = req.header(*k, *v);
+        }
+        let mut req = match body {
+            Some(b) => req
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&b).unwrap()))
+                .unwrap(),
+            None => req.body(Body::empty()).unwrap(),
+        };
+        if let Some(addr) = peer {
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(addr));
+        }
+        self.send(req).await
+    }
+
+    /// Sign up through the API; returns the response and a client holding
+    /// the new session cookie (if any).
+    pub async fn signup(
+        &self,
+        email: &str,
+        password: &str,
+        invite_token: Option<&str>,
+    ) -> (Response, Client) {
+        let res = self
+            .post(
+                &self.anon(),
+                "/api/auth/signup",
+                serde_json::json!({
+                    "email": email,
+                    "name": "Test User",
+                    "password": password,
+                    "invite_token": invite_token,
+                }),
+            )
+            .await;
+        let client = Client {
+            cookie: res.session_cookie(),
+            bearer: None,
+            user_id: res.body["id"].as_str().map(str::to_string),
+        };
+        (res, client)
+    }
+
+    /// Log in through the API; returns the response and a client holding the
+    /// session cookie set by it (a pending-2FA cookie when 2FA is on).
+    pub async fn login(&self, email: &str, password: &str) -> (Response, Client) {
+        let res = self
+            .post(
+                &self.anon(),
+                "/api/auth/login",
+                serde_json::json!({ "email": email, "password": password }),
+            )
+            .await;
+        let client = Client {
+            cookie: res.session_cookie(),
+            bearer: None,
+            user_id: res.body["user"]["id"].as_str().map(str::to_string),
+        };
+        (res, client)
+    }
+
+    /// Create a workspace (and optionally a base in it) directly in the
+    /// database with `owner` as workspace owner. Returns (workspace_id, base_id).
+    pub fn workspace_with_base(&self, owner: &Client, name: &str) -> (String, String) {
+        let owner_id = owner.user_id.clone().unwrap();
+        let name = name.to_string();
+        self.state
+            .db
+            .write_sync(|tx| {
+                let ws = opengrid::ids::new_id(og_core::ids::WORKSPACE);
+                let base = opengrid::ids::new_id(og_core::ids::BASE);
+                let now = opengrid::db::now_ms();
+                tx.execute(
+                    "INSERT INTO workspaces (id, name, created_by, created_at) VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![ws, name, owner_id, now],
+                )?;
+                tx.execute(
+                    "INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+                     VALUES (?1, ?2, 'owner', ?3)",
+                    rusqlite::params![ws, owner_id, now],
+                )?;
+                tx.execute(
+                    "INSERT INTO bases (id, workspace_id, name, created_by, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![base, ws, format!("{name} base"), owner_id, now],
+                )?;
+                Ok((ws, base))
+            })
+            .unwrap()
+    }
+
+    /// Give `user` a direct role on a base (base-level sharing).
+    pub fn grant_base_role(&self, user: &Client, base_id: &str, role: &str) {
+        let uid = user.user_id.clone().unwrap();
+        let base_id = base_id.to_string();
+        let role = role.to_string();
+        self.state
+            .db
+            .write_sync(|tx| {
+                tx.execute(
+                    "INSERT INTO base_members (base_id, user_id, role, created_at) VALUES (?1, ?2, ?3, 0)
+                     ON CONFLICT(base_id, user_id) DO UPDATE SET role = excluded.role",
+                    rusqlite::params![base_id, uid, role],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    /// Give `user` a role on a workspace.
+    pub fn grant_workspace_role(&self, user: &Client, workspace_id: &str, role: &str) {
+        let uid = user.user_id.clone().unwrap();
+        let ws = workspace_id.to_string();
+        let role = role.to_string();
+        self.state
+            .db
+            .write_sync(|tx| {
+                tx.execute(
+                    "INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?1, ?2, ?3, 0)
+                     ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role",
+                    rusqlite::params![ws, uid, role],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    /// Run a read query against the database (for assertions).
+    pub fn query_i64(&self, sql: &str, params: &[&str]) -> i64 {
+        self.state
+            .db
+            .write_sync(|tx| {
+                Ok(tx.query_row(sql, rusqlite::params_from_iter(params), |r| r.get(0))?)
+            })
+            .unwrap()
     }
 
     pub async fn request(
