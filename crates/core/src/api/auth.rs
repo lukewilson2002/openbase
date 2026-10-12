@@ -1,0 +1,263 @@
+//! DTOs for setup, authentication, account, tokens, invites and admin APIs.
+//! Owned by workstream W3 (server) and consumed by W5 (web). Add fields with
+//! `#[serde(default)]` so older clients keep working.
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetupStatus {
+    /// No users exist yet: the next signup creates the administrator.
+    pub needs_setup: bool,
+    pub open_signup: bool,
+    pub email_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub name: String,
+    pub is_admin: bool,
+    #[serde(default)]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub totp_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignupRequest {
+    pub email: String,
+    pub name: String,
+    pub password: String,
+    #[serde(default)]
+    pub invite_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+/// Login result: either a user (logged in) or a 2FA challenge (a pending
+/// session cookie is set; complete with `POST /api/auth/login/2fa`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LoginResponse {
+    #[serde(default)]
+    pub user: Option<User>,
+    #[serde(default)]
+    pub two_factor_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TwoFactorCode {
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateMeRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    /// IANA zone, or empty string to clear (use browser zone).
+    #[serde(default)]
+    pub timezone: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordResetConfirm {
+    pub token: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TwoFactorSetup {
+    /// Base32 secret for manual entry.
+    pub secret: String,
+    /// otpauth:// URI for QR codes.
+    pub otpauth_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TwoFactorDisable {
+    pub password: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInfo {
+    /// Opaque id (a prefix of the token hash), usable with DELETE /api/auth/sessions/{id}.
+    pub id: String,
+    pub created_at: i64,
+    pub last_seen_at: i64,
+    pub expires_at: i64,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub ip: Option<String>,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTokenRequest {
+    pub name: String,
+    pub write: bool,
+    /// Limit to these bases; None = all bases the user can access.
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub expires_in_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TokenInfo {
+    pub id: String,
+    pub name: String,
+    pub write: bool,
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
+    pub created_at: i64,
+    #[serde(default)]
+    pub last_used_at: Option<i64>,
+    #[serde(default)]
+    pub expires_at: Option<i64>,
+}
+
+/// Returned once at creation; the raw token is never shown again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreatedToken {
+    pub token: String,
+    pub info: TokenInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInviteRequest {
+    /// Optional: restrict acceptance to this email and send an email if SMTP is configured.
+    #[serde(default)]
+    pub email: Option<String>,
+    /// viewer | commenter | editor | creator | owner
+    pub role: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InviteInfo {
+    pub id: String,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub base_id: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    pub role: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    #[serde(default)]
+    pub accepted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreatedInvite {
+    /// Full URL to share: `<public_url>/invite/<token>`. Shown once.
+    pub url: String,
+    pub info: InviteInfo,
+}
+
+/// Public view of an invite (by token) shown on the accept page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvitePreview {
+    /// Workspace or base name.
+    pub target_name: String,
+    pub target_kind: String,
+    pub role: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub invited_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminUser {
+    pub id: String,
+    pub email: String,
+    pub name: String,
+    pub is_admin: bool,
+    pub is_active: bool,
+    pub totp_enabled: bool,
+    pub created_at: i64,
+    #[serde(default)]
+    pub last_login_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminCreateUser {
+    pub email: String,
+    pub name: String,
+    /// If omitted, a reset link is returned for the user to set their password.
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdminUpdateUser {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    pub is_admin: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResetLink {
+    pub url: String,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub id: i64,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub user_email: Option<String>,
+    pub action: String,
+    #[serde(default)]
+    pub target: Option<String>,
+    #[serde(default)]
+    pub detail: Option<serde_json::Value>,
+    #[serde(default)]
+    pub ip: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InstanceStats {
+    pub users: i64,
+    pub workspaces: i64,
+    pub bases: i64,
+    pub records: i64,
+    pub database_bytes: i64,
+    pub attachments_bytes: i64,
+    #[serde(default)]
+    pub last_backup_at: Option<i64>,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BackupInfo {
+    pub name: String,
+    pub size: u64,
+    pub created_at: i64,
+}

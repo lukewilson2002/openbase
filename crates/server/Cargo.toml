@@ -1,0 +1,65 @@
+[package]
+name = "opengrid"
+description = "OpenGrid server: a self-hosted Airtable alternative in a single binary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+default-run = "opengrid"
+
+[lib]
+name = "opengrid"
+path = "src/lib.rs"
+
+[[bin]]
+name = "opengrid"
+path = "src/main.rs"
+
+[dependencies]
+og-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+regex.workspace = true
+
+anyhow = "1"
+axum = { version = "0.8", features = ["multipart", "macros"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+cookie = "0.18"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time", "fs", "net"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+tower = { version = "0.5", features = ["util", "limit", "timeout"] }
+tower-http = { version = "0.7", features = ["trace", "compression-gzip", "set-header", "limit", "timeout", "catch-panic", "request-id"] }
+rusqlite = { version = "0.40", features = ["bundled", "backup", "serde_json"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.35"
+argon2 = "0.6"
+rand = "0.10"
+sha2 = "0.11"
+hex = "0.4"
+base64 = "0.23"
+subtle = "2"
+totp-rs = { version = "6", features = ["otpauth", "gen_secret"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1", "tokio1-rustls", "rustls-platform-verifier", "aws-lc-rs"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+rust-embed = { version = "8", features = ["include-exclude"] }
+mime_guess = "2"
+csv = "1"
+croner = "4"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+ammonia = "4"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+flate2 = "1"
+tar = "0.4"
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+http-body-util = "0.1"
+proptest = "1"
