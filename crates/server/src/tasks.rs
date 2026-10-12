@@ -9,6 +9,7 @@
 //! Jobs:
 //! - expired session purge (hourly)
 //! - attachment garbage collection + stale upload temp files (hourly)
+//! - orphaned attachment file sweep (daily)
 //! - record history retention (`history_days`, daily)
 //! - daily automatic backup at `backup_hour` local time + retention
 //!
@@ -58,6 +59,7 @@ pub fn spawn_all(state: &AppState) {
 pub struct Clock {
     sessions: Option<Instant>,
     attachments: Option<Instant>,
+    orphans: Option<Instant>,
     history: Option<Instant>,
 }
 
@@ -90,6 +92,17 @@ pub async fn tick(state: &AppState, clock: &mut Clock) {
                 );
             }
             clean_tmp(&s.config.data_dir.join("tmp"), SystemTime::now())
+        })
+        .await;
+    }
+    if due(&mut clock.orphans, DAILY) {
+        run_job(state, "orphaned attachment files", |s| {
+            let dir = s.config.attachments_dir();
+            let n = s.db.write_sync(|tx| sweep_orphan_files(tx, &dir))?;
+            if n > 0 {
+                tracing::info!(files = n, "deleted orphaned attachment files");
+            }
+            Ok(n)
         })
         .await;
     }
@@ -196,6 +209,62 @@ pub fn gc_attachments(
         remove_if_exists(&thumb)?;
     }
     Ok(stats)
+}
+
+/// Delete attachment files (and thumbnails) whose hash no attachment row uses.
+/// Such files appear when a row insert fails after its file was stored, or
+/// after a restore merges in attachments the restored database doesn't use.
+/// Files whose names are not `<sha256>` / `<sha256>.thumb.png` are left alone.
+///
+/// Like [`gc_attachments`], must run inside a write transaction so it cannot
+/// race an upload that is reusing a file. Returns the number of files removed
+/// (a blob and its thumbnail count once).
+pub fn sweep_orphan_files(conn: &Connection, attachments_dir: &Path) -> AppResult<usize> {
+    let shards = match std::fs::read_dir(attachments_dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => {
+            return Err(AppError::internal(format!(
+                "cannot read {}: {e}",
+                attachments_dir.display()
+            )));
+        }
+    };
+    let mut removed = 0;
+    for shard in shards.filter_map(|e| e.ok()) {
+        if !shard.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        let Ok(files) = std::fs::read_dir(shard.path()) else {
+            continue;
+        };
+        for file in files.filter_map(|e| e.ok()) {
+            let name = file.file_name().to_string_lossy().into_owned();
+            let (sha, is_thumb) = match name.strip_suffix(".thumb.png") {
+                Some(sha) => (sha.to_string(), true),
+                None => (name.clone(), false),
+            };
+            // blob_path validates the hash, so anything not ours is skipped.
+            let Ok(blob) = attachment_store::blob_path(attachments_dir, &sha) else {
+                continue;
+            };
+            if blob.parent() != Some(shard.path().as_path())
+                || attachment_store::sha_in_use(conn, &sha)?
+            {
+                continue;
+            }
+            if is_thumb {
+                // Counted only when its blob is already gone.
+                if !blob.exists() && remove_if_exists(&file.path())? {
+                    removed += 1;
+                }
+            } else if remove_if_exists(&blob)? {
+                remove_if_exists(&attachment_store::thumb_path(attachments_dir, &sha)?)?;
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
 }
 
 fn remove_if_exists(path: &Path) -> AppResult<bool> {
