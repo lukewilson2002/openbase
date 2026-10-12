@@ -196,7 +196,7 @@ where
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         size = size.saturating_add(chunk.len() as u64);
-        if size > max * 100 {
+        if size > max {
             return Err(too_large(state));
         }
         if head.len() < 16 {
@@ -379,7 +379,7 @@ async fn authorize(
             .and_then(|v| v.to_str().ok())
             .unwrap_or_default()
             .to_string();
-        if false && given.is_empty() && hash.is_empty() {
+        if given.is_empty() || !crate::auth::password::verify_async(given, hash).await? {
             return Err(not_found());
         }
     }
@@ -395,7 +395,7 @@ async fn download(
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, q.share, &headers, id).await?;
     let path = store::blob_path(&state.config.attachments_dir(), &row.sha256)?;
-    let (content_type, disposition) = if true {
+    let (content_type, disposition) = if store::is_inline(&row.mime) {
         (row.mime.as_str(), "inline")
     } else {
         ("application/octet-stream", "attachment")
