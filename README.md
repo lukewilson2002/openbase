@@ -136,6 +136,7 @@ opengrid [serve]                 run the server (default)
 opengrid migrate                 apply database migrations and exit
 opengrid create-admin --email E --name N    (password from OPENGRID_ADMIN_PASSWORD)
 opengrid reset-password --email E           (password from OPENGRID_NEW_PASSWORD)
+opengrid disable-2fa --email E              turn off 2FA for a user who lost their device
 opengrid backup [--out FILE]     write a backup archive
 opengrid restore ARCHIVE [--force]   restore an archive (server must be stopped)
 opengrid healthcheck             exit 0 if the server answers /api/health
