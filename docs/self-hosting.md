@@ -200,7 +200,10 @@ day. Set `OPENGRID_BACKUP_HOUR=-1` to turn automatic backups off.
   ```
 
   Manual backups are named `opengrid-YYYYmmdd-HHMMSS.tar.gz`. Delete old
-  ones yourself when you no longer need them.
+  ones yourself when you no longer need them. Archives written with
+  `--out` under any other name work for `restore` but are not listed (or
+  downloadable) on the admin Backups page, which only shows OpenGrid's own
+  file names.
 
 ### Offsite copies (strongly recommended)
 
