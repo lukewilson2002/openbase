@@ -217,6 +217,19 @@ pub struct AdminUpdateUser {
     pub is_active: Option<bool>,
     #[serde(default)]
     pub is_admin: Option<bool>,
+    /// Turn off the user's two-factor authentication (e.g. lost device).
+    #[serde(default)]
+    pub disable_2fa: bool,
+}
+
+/// Result of `POST /api/admin/users`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminCreatedUser {
+    pub user: AdminUser,
+    /// Present when no password was given: send this link to the user so they
+    /// can choose one.
+    #[serde(default)]
+    pub reset_link: Option<ResetLink>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -240,6 +253,31 @@ pub struct AuditEntry {
     #[serde(default)]
     pub ip: Option<String>,
     pub created_at: i64,
+}
+
+/// One page of `GET /api/admin/audit?before=<id>&limit=<n>` (newest first).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AuditPage {
+    pub entries: Vec<AuditEntry>,
+    /// Pass as `before` to fetch the next (older) page; None when exhausted.
+    #[serde(default)]
+    pub next_before: Option<i64>,
+}
+
+/// `GET /api/tokens/whoami`: who the caller is and, for API tokens, the scope.
+/// Works with a session or a token, so integrations can check their token.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WhoAmI {
+    pub user_id: String,
+    pub email: String,
+    pub name: String,
+    /// True when authenticated with an API token.
+    pub via_token: bool,
+    /// Whether writes are allowed (always true for sessions).
+    pub write: bool,
+    /// Base restriction of the token; None = all bases the user can access.
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

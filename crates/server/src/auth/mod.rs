@@ -6,6 +6,7 @@
 
 pub mod password;
 pub mod session;
+pub mod totp;
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -51,6 +52,67 @@ impl Actor {
         } else {
             Err(AppError::forbidden("administrator access required"))
         }
+    }
+
+    /// Reject API-token callers: account, token, invite and workspace
+    /// management are only available to signed-in users (session cookie).
+    pub fn require_session(&self) -> AppResult<()> {
+        if self.token_scope.is_none() {
+            Ok(())
+        } else {
+            Err(AppError::forbidden(
+                "API tokens cannot use this endpoint; sign in instead",
+            ))
+        }
+    }
+}
+
+/// Where a request came from, for audit entries, sessions and rate limits.
+#[derive(Debug, Clone)]
+pub struct ClientInfo {
+    /// Client IP: the first `X-Forwarded-For` entry when `trust_proxy` is on,
+    /// else the TCP peer address, else `"unknown"` (in-process tests).
+    pub ip: String,
+    pub user_agent: Option<String>,
+}
+
+/// Compute the client IP from the request parts (see [`ClientInfo::ip`]).
+pub fn client_ip(parts: &Parts, trust_proxy: bool) -> String {
+    if trust_proxy {
+        let forwarded = parts
+            .headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(str::trim)
+            .and_then(|v| v.parse::<std::net::IpAddr>().ok());
+        if let Some(ip) = forwarded {
+            return ip.to_string();
+        }
+    }
+    parts
+        .extensions
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+impl FromRequestParts<AppState> for ClientInfo {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let user_agent = parts
+            .headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.chars().take(255).collect());
+        Ok(ClientInfo {
+            ip: client_ip(parts, state.config.trust_proxy),
+            user_agent,
+        })
     }
 }
 

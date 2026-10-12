@@ -7,9 +7,12 @@ use std::time::{Duration, Instant};
 
 use crate::error::{AppError, AppResult};
 
+/// (bucket, key) -> (window start, hits in window).
+type Windows = HashMap<(&'static str, String), (Instant, u32)>;
+
 #[derive(Clone, Default)]
 pub struct RateLimiter {
-    inner: Arc<Mutex<HashMap<(&'static str, String), (Instant, u32)>>>,
+    inner: Arc<Mutex<Windows>>,
 }
 
 impl RateLimiter {
