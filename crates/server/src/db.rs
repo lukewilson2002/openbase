@@ -30,6 +30,20 @@ struct Inner {
     readers: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
 }
 
+impl Drop for Inner {
+    /// On shutdown, fold the WAL back into the database file and truncate it.
+    /// SQLite only does this automatically when the *last* connection closes,
+    /// and here that can be a read-only pool connection, which cannot. An
+    /// empty WAL after a clean stop is what `opengrid restore` relies on to
+    /// tell a stopped server from a running one.
+    fn drop(&mut self) {
+        let conn = self.writer.get_mut().unwrap_or_else(|p| p.into_inner());
+        if let Err(e) = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
+            tracing::warn!(error = %e, "could not checkpoint the database on shutdown");
+        }
+    }
+}
+
 fn configure(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
