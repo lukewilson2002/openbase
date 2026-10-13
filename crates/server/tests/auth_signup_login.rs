@@ -17,7 +17,7 @@ async fn setup_reports_needs_setup_until_first_user() {
     res.assert_status(200);
     assert_eq!(
         res.body,
-        json!({"needs_setup": true, "open_signup": false, "email_enabled": false})
+        json!({"needs_setup": true, "open_signup": false, "email_enabled": false, "public_url": "http://localhost:8080"})
     );
     app.signup("first@example.com", PW, None)
         .await
@@ -36,6 +36,14 @@ async fn setup_reflects_config() {
     let res = app.get(&app.anon(), "/api/setup").await;
     assert_eq!(res.body["open_signup"], true);
     assert_eq!(res.body["email_enabled"], true);
+}
+
+#[tokio::test]
+async fn setup_reports_the_public_url_without_a_trailing_slash() {
+    // The account page builds the address AI assistants connect to from this value.
+    let app = TestApp::with_config(|c| c.public_url = "https://base.example.com/".into());
+    let res = app.get(&app.anon(), "/api/setup").await;
+    assert_eq!(res.body["public_url"], "https://base.example.com");
 }
 
 #[tokio::test]

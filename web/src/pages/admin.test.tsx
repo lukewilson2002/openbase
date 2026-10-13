@@ -116,6 +116,25 @@ describe("admin", () => {
     expect(await screen.findByText("action.200")).toBeInTheDocument();
   });
 
+  it("says which connected app or token did something, and shows the person's own actions plainly", async () => {
+    const entry = (id: number, detail: unknown) => ({ id, user_id: "usr0", user_email: "root@example.com", action: `invite_create`, target: `inv${id}`, detail, ip: "127.0.0.1", created_at: 1_700_000_000_000 + id });
+    mockApi({
+      "GET /api/auth/me": ADMIN,
+      "GET /api/admin/audit": {
+        entries: [
+          entry(3, { via: { kind: "token", token_id: "pat1", token: "ci token" } }),
+          entry(2, { via: { kind: "oauth", grant_id: "grt1", client_id: "ocl1", client: "Fancy Agent" } }),
+          entry(1, { role: "viewer" }),
+        ],
+        next_before: null,
+      },
+    });
+    renderApp({ route: "/admin?tab=audit" });
+    expect(await screen.findByText("connected app Fancy Agent")).toBeInTheDocument();
+    expect(screen.getByText("API token ci token")).toBeInTheDocument();
+    expect(screen.getAllByText("via")).toHaveLength(2);
+  });
+
   it("shows instance statistics", async () => {
     mockApi({
       "GET /api/auth/me": ADMIN,

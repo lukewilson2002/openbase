@@ -94,9 +94,9 @@ async fn create_user(
                 (None, false) => Some(issue_reset_link(tx, &public_url, &id)?),
                 _ => None,
             };
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::ADMIN_USER_CREATE,
                 Some(&id),
                 Some(json!({ "email": email, "is_admin": req.is_admin })),
@@ -127,9 +127,9 @@ async fn update_user(
         .write(move |tx| {
             let (user, changes) = users::admin_update(tx, &actor.user_id, &id, &req)?;
             if changes.as_object().is_some_and(|m| !m.is_empty()) {
-                audit::record(
+                audit::record_as(
                     tx,
-                    Some(&actor.user_id),
+                    &actor,
                     actions::ADMIN_USER_UPDATE,
                     Some(&id),
                     Some(changes),
@@ -170,9 +170,9 @@ async fn reset_link(
                 ));
             }
             let link = issue_reset_link(tx, &public_url, &user.id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::ADMIN_RESET_LINK,
                 Some(&user.id),
                 None,

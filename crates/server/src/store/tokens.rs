@@ -22,6 +22,33 @@ pub const MAX_BASES_PER_TOKEN: usize = 100;
 
 const DAY_MS: i64 = 24 * 3600 * 1000;
 
+/// The bases a token (or an OAuth grant) may be limited to: at least one, at most
+/// [`MAX_BASES_PER_TOKEN`], all of them bases `user_id` can currently access. Returned sorted
+/// and without duplicates.
+pub fn validate_base_ids(
+    conn: &Connection,
+    user_id: &str,
+    ids: &[String],
+) -> AppResult<Vec<String>> {
+    if ids.is_empty() {
+        return Err(AppError::bad_request(
+            "base_ids must list at least one base (omit it for all bases)",
+        ));
+    }
+    if ids.len() > MAX_BASES_PER_TOKEN {
+        return Err(AppError::bad_request("too many bases for one token"));
+    }
+    let mut ids = ids.to_vec();
+    ids.sort();
+    ids.dedup();
+    for id in &ids {
+        if crate::perm::base_role(conn, user_id, id)?.is_none() {
+            return Err(AppError::bad_request(format!("unknown base '{id}'")));
+        }
+    }
+    Ok(ids)
+}
+
 /// Create a token for `user_id`. Base restrictions must name bases the user
 /// can currently access (the effective role is still checked on every use).
 pub fn create(
@@ -43,25 +70,7 @@ pub fn create(
     }
     let base_ids = match &req.base_ids {
         None => None,
-        Some(ids) => {
-            if ids.is_empty() {
-                return Err(AppError::bad_request(
-                    "base_ids must list at least one base (omit it for all bases)",
-                ));
-            }
-            if ids.len() > MAX_BASES_PER_TOKEN {
-                return Err(AppError::bad_request("too many bases for one token"));
-            }
-            let mut ids = ids.clone();
-            ids.sort();
-            ids.dedup();
-            for id in &ids {
-                if crate::perm::base_role(conn, user_id, id)?.is_none() {
-                    return Err(AppError::bad_request(format!("unknown base '{id}'")));
-                }
-            }
-            Some(ids)
-        }
+        Some(ids) => Some(validate_base_ids(conn, user_id, ids)?),
     };
     let expires_at = match req.expires_in_days {
         None => None,
@@ -161,9 +170,10 @@ pub fn delete(conn: &Connection, user_id: &str, token_id: &str) -> AppResult<()>
 }
 
 /// Delete every token of a user (password change or reset: a token minted
-/// during a compromise must not outlive the credential change). Returns how
-/// many were deleted.
+/// during a compromise must not outlive the credential change). The user's OAuth
+/// grants ("connected apps") go with them. Returns how many API tokens were deleted.
 pub fn delete_all_for_user(conn: &Connection, user_id: &str) -> AppResult<usize> {
+    crate::store::oauth::revoke_all_for_user(conn, user_id)?;
     Ok(conn.execute("DELETE FROM api_tokens WHERE user_id = ?1", [user_id])?)
 }
 

@@ -582,7 +582,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   const clientId = String(req.headers["x-client-id"] ?? "");
   let g: RegExpExecArray | null;
 
-  if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false }), true;
+  if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://openbase.example.com" }), true;
   if (p === "/api/auth/me") return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false }), true;
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, [{ id: "wsp1", name: "Acme", role: "owner", bases: [{ id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: "owner" }] }]), true;
   if ((g = /^\/api\/__mock\/role\/(\w+)$/.exec(p))) {

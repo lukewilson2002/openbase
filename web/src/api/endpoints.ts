@@ -21,9 +21,13 @@ import type {
   CreateTokenRequest,
   CreateView,
   CreatedInvite,
+  ConsentDecision,
+  ConsentOutcome,
+  ConsentRequest,
   CreatedToken,
   EmailSettings,
   EmailTestResult,
+  GrantInfo,
   DuplicateBase,
   InstanceStats,
   InviteInfo,
@@ -112,6 +116,16 @@ export const api = {
       http.get<WhoAmI>("/api/tokens/whoami", { headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined }),
   },
 
+  /** Apps connected through OAuth (Claude, ChatGPT, ...): the consent step and the connected-apps list. */
+  oauth: {
+    /** A pending authorization request, as the consent page shows it. */
+    request: (id: string) => http.get<ConsentRequest>(`/api/oauth/requests/${enc(id)}`),
+    /** `redirect_to` is where the browser goes next: the app's address with the code (or the refusal). */
+    decide: (id: string, body: ConsentDecision) => http.post<ConsentOutcome>(`/api/oauth/requests/${enc(id)}/decision`, body),
+    grants: () => http.get<GrantInfo[]>("/api/oauth/grants"),
+    revokeGrant: (id: string) => http.delete<void>(`/api/oauth/grants/${enc(id)}`),
+  },
+
   invites: {
     preview: (token: string) =>
       http.get<InvitePreview>(`/api/invites/by-token/${enc(token)}`, { skipAuthRedirect: true }),
@@ -136,6 +150,9 @@ export const api = {
     audit: (opts: { before?: number | null; limit?: number } = {}) =>
       http.get<AuditPage>("/api/admin/audit", { query: { before: opts.before, limit: opts.limit } }),
     stats: () => http.get<InstanceStats>("/api/admin/stats"),
+    /** Every user's connected apps. */
+    oauthGrants: () => http.get<GrantInfo[]>("/api/admin/oauth/grants"),
+    revokeOauthGrant: (id: string) => http.delete<void>(`/api/admin/oauth/grants/${enc(id)}`),
     backups: () => http.get<BackupInfo[]>("/api/admin/backups"),
     createBackup: () => http.post<BackupInfo>("/api/admin/backups"),
     /** The effective SMTP settings and where each comes from (the password is never returned). */

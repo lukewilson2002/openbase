@@ -311,6 +311,10 @@ pub fn admin_update(
         }
         if !active {
             session::delete_all_for_user(conn, target_id, None)?;
+            // Connected apps end with the account's access: reactivating the account must not
+            // bring an AI assistant back. (Personal access tokens are only suspended, as
+            // documented in docs/security.md.)
+            crate::store::oauth::revoke_all_for_user(conn, target_id)?;
         }
     }
     if let Some(admin) = req.is_admin {
@@ -324,6 +328,8 @@ pub fn admin_update(
     }
     if req.disable_2fa && (user.totp_enabled || user.totp_secret.is_some()) {
         set_totp(conn, target_id, None, false)?;
+        // A lost authenticator may mean a lost device: what was connected from it ends too.
+        crate::store::oauth::revoke_all_for_user(conn, target_id)?;
         changes.insert("disable_2fa".into(), json!(true));
     }
     let updated = require(conn, target_id)?;

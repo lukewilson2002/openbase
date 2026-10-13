@@ -423,6 +423,18 @@ password and set up 2FA again:
 docker compose exec openbase openbase disable-2fa --email user@example.com
 ```
 
+**Connect Claude or ChatGPT.** They sign in through OAuth, which OpenBase serves
+itself, but they connect from their providers' servers: `OPENBASE_PUBLIC_URL` must be your
+public `https://` address (with the bundled Caddy it already is) and the server must be
+reachable from the internet. Over plain `http://` on a public address OpenBase does not
+offer OAuth at all. Check with
+`curl https://<domain>/.well-known/oauth-protected-resource/mcp`. People approve each app
+on an approval page after signing in; you can see and revoke everyone's connections under
+**Admin → Connected apps**. Apps register themselves unless you set
+`OPENBASE_OAUTH_REGISTRATION=false` (apps that publish a metadata document can still ask a
+signed-in person for approval); `openbase oauth-client add --name N --redirect-uri URI`
+adds one by hand. Details: [mcp.md](mcp.md#connect-with-oauth-sign-in).
+
 **The only administrator is locked out.** Use `reset-password` and/or
 `disable-2fa` above, or create another administrator with `create-admin`.
 
@@ -440,6 +452,7 @@ docker compose exec openbase openbase disable-2fa --email user@example.com
 | Live updates do not appear | A proxy is buffering Server-Sent Events. For nginx set `proxy_buffering off;` for `/api/bases/`. |
 | `restore` says the server looks like it is still running | Stop the server. If it crashed, start and stop it cleanly once, then retry. |
 | Disk full | Delete old manual backups and `pre-migration-*.db` / `openbase.db.pre-restore-*` files from the data directory, or lower `OPENBASE_BACKUP_KEEP`. |
+| Claude or ChatGPT cannot connect or sign in | They connect from the internet: `OPENBASE_PUBLIC_URL` must be the public `https://` address, with a valid certificate, and `/.well-known/oauth-protected-resource/mcp` must answer JSON from outside. Put a proxy rule in front of `/mcp`, `/oauth/` and `/.well-known/` if you restrict paths. |
 | Emails are not delivered | Check the logs for SMTP errors, make sure outgoing port 587/465 is not blocked, and check SPF/DKIM. |
 
 Logs go to stdout (`docker compose logs`, or `journalctl -u openbase` for

@@ -4,7 +4,12 @@
 //! - `GET /api/admin/backups` lists archives and pre-migration snapshots.
 //! - `POST /api/admin/backups` writes a manual backup now.
 //! - `GET /api/admin/backups/{name}` downloads one. `name` must match the
-//!   strict backup-name pattern, which is the path-traversal guard.
+//!   strict backup-name pattern, which is the path-traversal guard. **Session only**: an
+//!   archive holds the whole database (password hashes, two-factor secrets, the SMTP password,
+//!   every record), so fetching it is a credential-level action that no token can do, not even
+//!   the `manage` token of an administrator or an OAuth grant with full control. Listing and
+//!   creating stay available to such tokens: they reveal names and sizes only and the archive
+//!   stays on the server.
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, header};
@@ -14,7 +19,7 @@ use axum::{Json, Router};
 use ob_core::api::auth::BackupInfo;
 use tokio::sync::Mutex;
 
-use crate::auth::{Actor, ClientInfo, admin_guard};
+use crate::auth::{Actor, Capability, ClientInfo, admin_guard};
 use crate::backup;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -74,6 +79,7 @@ async fn download(
     client: ClientInfo,
     Path(name): Path<String>,
 ) -> AppResult<Response> {
+    actor.require_capability(Capability::SessionOnly)?;
     admin_guard(&state, &actor, &client, "GET /api/admin/backups/{name}").await?;
     if !backup::is_backup_name(&name) {
         return Err(AppError::not_found("backup"));

@@ -15,6 +15,7 @@ pub mod history;
 pub mod invites;
 pub mod links;
 pub mod notifications;
+pub mod oauth;
 pub mod records;
 pub mod schema;
 pub mod sharing;

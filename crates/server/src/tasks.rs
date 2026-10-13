@@ -8,6 +8,8 @@
 //!
 //! Jobs:
 //! - expired session purge (hourly)
+//! - OAuth garbage collection: expired authorization requests, codes and tokens, lapsed grants,
+//!   clients nobody used for a week (hourly)
 //! - attachment garbage collection + stale upload temp files (hourly)
 //! - orphaned attachment file sweep (daily)
 //! - record history retention (`history_days`, daily)
@@ -72,6 +74,7 @@ pub fn spawn_all(state: &AppState) {
 #[derive(Debug, Default)]
 pub struct Clock {
     sessions: Option<Instant>,
+    oauth: Option<Instant>,
     attachments: Option<Instant>,
     orphans: Option<Instant>,
     history: Option<Instant>,
@@ -94,6 +97,17 @@ pub async fn tick(state: &AppState, clock: &mut Clock) {
     if due(&mut clock.sessions, HOURLY) {
         run_job(state, "purge expired sessions", |s| {
             s.db.write_sync(|tx| purge_sessions(tx))
+        })
+        .await;
+    }
+    if due(&mut clock.oauth, HOURLY) {
+        run_job(state, "OAuth garbage collection", |s| {
+            let stats =
+                s.db.write_sync(|tx| crate::store::oauth::gc(tx, now_ms()))?;
+            if stats != Default::default() {
+                tracing::info!(?stats, "removed expired OAuth data");
+            }
+            Ok(())
         })
         .await;
     }

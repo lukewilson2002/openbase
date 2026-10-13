@@ -11,6 +11,10 @@ export const keys = {
   me: ["me"] as const,
   sessions: ["sessions"] as const,
   tokens: ["tokens"] as const,
+  /** The caller's connected apps (OAuth grants). */
+  oauthGrants: ["oauth", "grants"] as const,
+  /** A pending OAuth authorization request (consent page). */
+  oauthRequest: (id: string) => ["oauth", "request", id] as const,
   workspaces: ["workspaces"] as const,
   /** The caller's deleted workspaces (home page, "Recently deleted workspaces"). */
   deletedWorkspaces: ["workspaces", "deleted"] as const,
@@ -27,6 +31,7 @@ export const keys = {
   /** `before` is the audit-log cursor (an entry id), null for the newest page. */
   adminAudit: (before: number | null) => ["admin", "audit", before] as const,
   adminStats: ["admin", "stats"] as const,
+  adminOauthGrants: ["admin", "oauth-grants"] as const,
   adminBackups: ["admin", "backups"] as const,
   adminEmail: ["admin", "email"] as const,
   notifications: ["notifications"] as const,

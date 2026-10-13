@@ -43,9 +43,9 @@ async fn create(
         .db
         .write(move |tx| {
             let created = tokens::create(tx, &actor.user_id, &req)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::TOKEN_CREATE,
                 Some(&created.info.id),
                 Some(json!({
@@ -73,9 +73,9 @@ async fn remove(
         .db
         .write(move |tx| {
             tokens::delete(tx, &actor.user_id, &id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::TOKEN_DELETE,
                 Some(&id),
                 None,

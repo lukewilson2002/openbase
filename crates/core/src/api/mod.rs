@@ -26,6 +26,7 @@ pub mod auth;
 pub mod automations;
 pub mod email;
 pub mod events;
+pub mod oauth;
 pub mod records;
 pub mod schema;
 pub mod sharing;

@@ -7,7 +7,8 @@ import { useSetUser } from "@/auth/useAuth";
 import { AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
-import { safeNext } from "@/lib/format";
+import { isServerPath, safeNext } from "@/lib/format";
+import { followRedirect } from "@/lib/oauthAccess";
 
 /** Second step of login when the account has TOTP enabled. */
 export function TwoFactorLoginPage() {
@@ -26,7 +27,8 @@ export function TwoFactorLoginPage() {
     },
     onSuccess: (user) => {
       setUser(user);
-      navigate(next, { replace: true });
+      if (isServerPath(next)) followRedirect(next);
+      else navigate(next, { replace: true });
     },
   });
 

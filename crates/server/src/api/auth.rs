@@ -131,6 +131,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
         needs_setup: n == 0,
         open_signup: state.config.open_signup,
         email_enabled: state.email.enabled(),
+        public_url: state.config.public_url.trim_end_matches('/').to_string(),
     }))
 }
 
@@ -506,9 +507,9 @@ async fn change_password(
             users::set_password_hash(tx, &actor.user_id, &hash)?;
             session::delete_all_for_user(tx, &actor.user_id, actor.session_hash.as_deref())?;
             let revoked = tokens::delete_all_for_user(tx, &actor.user_id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::PASSWORD_CHANGE,
                 None,
                 Some(json!({ "api_tokens_revoked": revoked })),
@@ -689,6 +690,9 @@ async fn totp_enable(
             // someone who only had the password) must not outlive turning it
             // on; the session making this request stays.
             session::delete_all_for_user(tx, &user.id, actor.session_hash.as_deref())?;
+            // The same goes for connected apps (OAuth grants): they were approved before the
+            // second factor existed. (API tokens stay, as documented in docs/security.md.)
+            crate::store::oauth::revoke_all_for_user(tx, &user.id)?;
             audit::record(
                 tx,
                 Some(&user.id),
@@ -799,9 +803,9 @@ async fn revoke_session(
             if n == 0 {
                 return Err(AppError::not_found("session"));
             }
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::SESSION_REVOKE,
                 Some(&id),
                 None,
@@ -822,9 +826,12 @@ async fn revoke_other_sessions(
         .db
         .write(move |tx| {
             session::delete_all_for_user(tx, &actor.user_id, actor.session_hash.as_deref())?;
-            audit::record(
+            // "Sign out everywhere else" is what a person does when they fear someone else has
+            // access, and connected apps are access: they end too and have to be approved again.
+            crate::store::oauth::revoke_all_for_user(tx, &actor.user_id)?;
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::SESSION_REVOKE,
                 Some("others"),
                 None,

@@ -106,6 +106,19 @@ fn access_ok(conn: &Connection, actor: &Actor, base_id: &str) -> bool {
             return false;
         }
     }
+    if let Some(grant) = &actor.oauth_grant_id {
+        // A revoked OAuth grant ends its streams too.
+        let valid: bool = conn
+            .query_row(
+                "SELECT count(*) > 0 FROM oauth_grants WHERE id = ?1",
+                [grant],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !valid {
+            return false;
+        }
+    }
     perm::require_base(conn, actor, base_id, Role::Viewer).is_ok()
 }
 

@@ -5,12 +5,13 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
 /** Read-only text with a copy button (invite links, API tokens, reset links). */
-export function CopyField({ value, label }: { value: string; label: string }) {
+export function CopyField({ value, label, copyLabel }: { value: string; label: string; copyLabel?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex gap-2">
       <Input readOnly value={value} aria-label={label} onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
       <Button
+        aria-label={copyLabel ? (copied ? "Copied" : copyLabel) : undefined}
         onClick={() => {
           void copyToClipboard(value).then((ok) => {
             setCopied(ok);

@@ -4,4 +4,10 @@ export type SetupStatus = {
 /**
  * No users exist yet: the next signup creates the administrator.
  */
-needs_setup: boolean, open_signup: boolean, email_enabled: boolean, };
+needs_setup: boolean, open_signup: boolean, email_enabled: boolean, 
+/**
+ * The address users reach OpenBase at (`OPENBASE_PUBLIC_URL`, no trailing slash). The account
+ * page builds the MCP address from it, because the browser may be on another address (a proxy,
+ * a tunnel) than the one AI assistants must use.
+ */
+public_url: string, };

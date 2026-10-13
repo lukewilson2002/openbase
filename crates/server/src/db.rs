@@ -17,6 +17,7 @@ use crate::error::{AppError, AppResult};
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_icons.sql"),
+    include_str!("../migrations/0003_oauth.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -335,8 +336,8 @@ mod tests {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 2);
-        assert_eq!(schema_version(), 2);
+        assert_eq!(v, schema_version());
+        assert_eq!(schema_version(), 3);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -395,7 +396,46 @@ mod tests {
         let files = snapshots(&dir.path().join("backups"));
         assert_eq!(files.len(), 1, "{files:?}");
         assert!(files[0].starts_with("pre-migration-v1-"));
-        assert_eq!(file_schema_version(&path).unwrap(), 2);
+        assert_eq!(file_schema_version(&path).unwrap(), schema_version());
+    }
+
+    #[test]
+    fn v2_database_gets_the_oauth_tables_and_is_snapshotted_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("openbase.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+            migrate_with(&conn, &MIGRATIONS[..2], None).unwrap();
+            conn.execute_batch(
+                "INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
+                     VALUES ('u1', 'a@example.com', 'A', '!', 1, 1);",
+            )
+            .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        drop(db);
+        let files = snapshots(&dir.path().join("backups"));
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert!(files[0].starts_with("pre-migration-v2-"));
+        assert_eq!(file_schema_version(&path).unwrap(), 3);
+        let conn = Connection::open(&path).unwrap();
+        for table in [
+            "oauth_clients",
+            "oauth_requests",
+            "oauth_codes",
+            "oauth_grants",
+            "oauth_tokens",
+        ] {
+            let n: i64 = conn
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 0, "{table}");
+        }
+        let users: i64 = conn
+            .query_row("SELECT count(*) FROM users", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(users, 1, "existing data is kept");
     }
 
     #[test]

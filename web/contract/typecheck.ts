@@ -27,6 +27,8 @@ import type {
   BaseSummary,
   Collaborator,
   Comment,
+  ConsentOutcome,
+  ConsentRequest,
   CreatedInvite,
   CreatedToken,
   DeleteFieldResponse,
@@ -35,6 +37,7 @@ import type {
   EventEnvelope,
   Field,
   FormulaCheckResult,
+  GrantInfo,
   HistoryEntry,
   ImportResult,
   InstanceStats,
@@ -83,6 +86,8 @@ export interface TypeMap {
   BaseSummary: BaseSummary;
   Collaborator: Collaborator;
   Comment: Comment;
+  ConsentOutcome: ConsentOutcome;
+  ConsentRequest: ConsentRequest;
   CreatedInvite: CreatedInvite;
   CreatedToken: CreatedToken;
   DeleteFieldResponse: DeleteFieldResponse;
@@ -91,6 +96,7 @@ export interface TypeMap {
   EventEnvelope: EventEnvelope;
   Field: Field;
   FormulaCheckResult: FormulaCheckResult;
+  GrantInfo: GrantInfo;
   HistoryEntry: HistoryEntry;
   ImportResult: ImportResult;
   InstanceStats: InstanceStats;

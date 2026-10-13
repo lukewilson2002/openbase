@@ -93,9 +93,9 @@ async fn create_invite(
             }
             let (token, info) =
                 invites::create(tx, &actor.user_id, &target, email.as_deref(), role)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::INVITE_CREATE,
                 Some(&info.id),
                 Some(json!({
@@ -195,9 +195,9 @@ async fn revoke(
                 ));
             }
             invites::delete(tx, &id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::INVITE_REVOKE,
                 Some(&id),
                 None,
@@ -238,9 +238,9 @@ async fn accept(
         .write(move |tx| {
             let invite = invites::require_valid_by_token(tx, &token)?;
             let info = invites::accept(tx, &invite, &actor.user_id, &actor.email)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::INVITE_ACCEPT,
                 Some(&info.id),
                 None,

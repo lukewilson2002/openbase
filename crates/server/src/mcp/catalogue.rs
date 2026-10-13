@@ -1003,6 +1003,46 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "204",
     ),
     e(
+        GET,
+        "/api/oauth/requests/{id}",
+        "account",
+        "-",
+        SessionOnly,
+        "A pending OAuth authorization request, as the consent page shows it.",
+        NO_BODY,
+        "ConsentRequest",
+    ),
+    e(
+        POST,
+        "/api/oauth/requests/{id}/decision",
+        "account",
+        "-",
+        SessionOnly,
+        "Approve or deny an app's OAuth authorization request.",
+        "{decision: approve|deny, access?: read|write|manage, base_ids?}",
+        "ConsentOutcome {redirect_to}",
+    ),
+    e(
+        GET,
+        "/api/oauth/grants",
+        "account",
+        "-",
+        SessionOnly,
+        "List the user's connected apps (OAuth grants).",
+        NO_BODY,
+        "GrantInfo[]",
+    ),
+    e(
+        DELETE,
+        "/api/oauth/grants/{id}",
+        "account",
+        "-",
+        SessionOnly,
+        "Revoke a connected app.",
+        NO_BODY,
+        "204",
+    ),
+    e(
         POST,
         "/api/auth/password",
         "account",
@@ -1145,6 +1185,26 @@ pub static ENDPOINTS: &[Endpoint] = &[
     ),
     e(
         GET,
+        "/api/admin/oauth/grants",
+        "admin",
+        "instance admin",
+        SessionOnly,
+        "Every user's connected apps (OAuth grants).",
+        NO_BODY,
+        "GrantInfo[] (with user_email, user_name)",
+    ),
+    e(
+        DELETE,
+        "/api/admin/oauth/grants/{id}",
+        "admin",
+        "instance admin",
+        SessionOnly,
+        "Revoke any user's connected app.",
+        NO_BODY,
+        "204",
+    ),
+    e(
+        GET,
         "/api/admin/audit",
         "admin",
         "instance admin",
@@ -1188,8 +1248,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "/api/admin/backups/{name}",
         "admin",
         "instance admin",
-        Admin,
-        "Download a backup archive (binary; too large to return through MCP).",
+        SessionOnly,
+        "Download a backup archive. It holds password hashes, two-factor secrets and the SMTP password, so only a signed-in administrator can fetch it in the web app.",
         NO_BODY,
         "archive bytes",
     ),
@@ -1415,6 +1475,41 @@ pub const EXCLUDED: &[(&str, &str, &str)] = &[
         "/mcp",
         "the MCP endpoint itself (answers 405: no sessions to end)",
     ),
+    (
+        "GET",
+        "/.well-known/oauth-protected-resource",
+        "OAuth discovery document (RFC 9728), not part of the internal API",
+    ),
+    (
+        "GET",
+        "/.well-known/oauth-protected-resource/mcp",
+        "OAuth discovery document (RFC 9728), not part of the internal API",
+    ),
+    (
+        "GET",
+        "/.well-known/oauth-authorization-server",
+        "OAuth discovery document (RFC 8414), not part of the internal API",
+    ),
+    (
+        "GET",
+        "/oauth/authorize",
+        "OAuth protocol endpoint for browsers and OAuth clients; api_request only forwards /api/ paths",
+    ),
+    (
+        "POST",
+        "/oauth/register",
+        "OAuth dynamic client registration (RFC 7591); api_request only forwards /api/ paths",
+    ),
+    (
+        "POST",
+        "/oauth/token",
+        "OAuth token endpoint; api_request only forwards /api/ paths",
+    ),
+    (
+        "POST",
+        "/oauth/revoke",
+        "OAuth revocation endpoint (RFC 7009); api_request only forwards /api/ paths",
+    ),
 ];
 
 /// Does the route template `template` (with `{param}` segments) match the concrete `path`?
@@ -1483,15 +1578,32 @@ fn endpoint_json(ep: &Endpoint, detailed: bool) -> Value {
     }
 }
 
+/// What `api_reference` shows as the capability of an `/api/v1` endpoint to a caller that is an
+/// OAuth grant: those endpoints exist, but not for such a caller.
+const AIRTABLE_UNAVAILABLE_FOR_OAUTH: &str =
+    "not available to apps connected through OAuth sign-in (needs a personal access token)";
+
 /// The text of `api_reference`. Without an area: the list of areas with their endpoint lines
 /// would be long, so only the areas are listed; with one, every endpoint of the area in detail.
-pub fn reference(area: Option<&str>) -> Result<Value, String> {
+/// `oauth` is true for a caller that is an OAuth grant: it cannot use `/api/v1` (the
+/// Airtable-compatible API takes a personal access token only), so those endpoints are marked
+/// unavailable instead of being offered as if they worked.
+pub fn reference(area: Option<&str>, oauth: bool) -> Result<Value, String> {
     match area {
         None => {
             let areas: Vec<Value> = AREAS
                 .iter()
                 .map(|(name, what)| {
                     let n = ENDPOINTS.iter().filter(|e| e.area == *name).count();
+                    if oauth && *name == "airtable" {
+                        return json!({
+                            "area": name,
+                            "endpoints": n,
+                            "about": what,
+                            "available": false,
+                            "note": AIRTABLE_UNAVAILABLE_FOR_OAUTH,
+                        });
+                    }
                     json!({"area": name, "endpoints": n, "about": what})
                 })
                 .collect();
@@ -1511,7 +1623,14 @@ pub fn reference(area: Option<&str>) -> Result<Value, String> {
             let list: Vec<Value> = ENDPOINTS
                 .iter()
                 .filter(|e| e.area == name)
-                .map(|e| endpoint_json(e, true))
+                .map(|e| {
+                    let mut v = endpoint_json(e, true);
+                    if oauth && crate::mcp::api::is_airtable_api(e.path) {
+                        v["token_capability"] = json!(AIRTABLE_UNAVAILABLE_FOR_OAUTH);
+                        v["available"] = json!(false);
+                    }
+                    v
+                })
                 .collect();
             if list.is_empty() {
                 let known: Vec<&str> = AREAS.iter().map(|(n, _)| *n).collect();
@@ -1593,16 +1712,16 @@ mod tests {
 
     #[test]
     fn reference_lists_areas_and_endpoints() {
-        let all = reference(None).unwrap();
+        let all = reference(None, false).unwrap();
         assert_eq!(all["areas"].as_array().unwrap().len(), AREAS.len());
-        let records = reference(Some("Records")).unwrap();
+        let records = reference(Some("Records"), false).unwrap();
         let list = records["endpoints"].as_array().unwrap();
         assert!(list.iter().any(|e| e["path"] == "/api/views/{id}/query"));
         assert!(
             list.iter()
                 .all(|e| e["token_capability"].as_str().is_some() && e["min_role"].is_string())
         );
-        let err = reference(Some("nope")).unwrap_err();
+        let err = reference(Some("nope"), false).unwrap_err();
         assert!(err.contains("records"), "{err}");
     }
 

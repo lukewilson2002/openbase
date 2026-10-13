@@ -14,6 +14,7 @@ pub mod events;
 pub mod fields;
 pub mod invites;
 pub mod notifications;
+pub mod oauth;
 pub mod records;
 pub mod schema_support;
 pub mod sharing;
@@ -35,6 +36,7 @@ pub fn router() -> Router<AppState> {
         .merge(admin_email::router())
         .merge(backups::router())
         .merge(tokens::router())
+        .merge(oauth::router())
         .merge(invites::router())
         .merge(workspaces::router())
         .merge(bases::router())

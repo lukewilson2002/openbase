@@ -38,11 +38,11 @@ export function AccountPage() {
         <TabsContent value="sessions">
           <SessionsSection />
         </TabsContent>
-        <TabsContent value="tokens">
+        <TabsContent value="tokens" className="flex flex-col gap-6">
           <TokensSection />
         </TabsContent>
         <TabsContent value="assistants">
-          <AssistantsSection onOpenTokens={() => setParams({ tab: "tokens" }, { replace: true })} />
+          <AssistantsSection />
         </TabsContent>
       </Tabs>
     </AppPage>

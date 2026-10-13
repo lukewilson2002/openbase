@@ -262,8 +262,23 @@ fn check_token(s: &str, what: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `/api/v1` is the Airtable-compatible API: it authenticates with a personal access token in an
+/// `Authorization` header and nothing else. An app connected through OAuth has no such token (its
+/// access token is valid on `/mcp` only), so it cannot use that API at all; the message says so
+/// and where to go instead.
+pub fn is_airtable_api(path: &str) -> bool {
+    path == "/api/v1" || path.starts_with("/api/v1/")
+}
+
+/// What `api_request` answers an OAuth grant that asks for `/api/v1`.
+pub const AIRTABLE_API_FOR_OAUTH: &str = "/api/v1 (the Airtable-compatible API) is not available to apps connected through OAuth \
+     sign-in: it needs a personal access token. Use the curated tools (list_records, \
+     create_records, ...) or the endpoints api_reference lists under the other areas, which do \
+     the same with the access you were given.";
+
 /// Check a call before anything is sent: method, path shape, and endpoints agents may not use.
-pub fn preflight(call: &ApiCall) -> Result<(String, String), String> {
+/// `oauth` is true when the caller is an OAuth grant rather than a personal access token.
+pub fn preflight(call: &ApiCall, oauth: bool) -> Result<(String, String), String> {
     let method = call.method.trim().to_ascii_uppercase();
     if !METHODS.contains(&method.as_str()) {
         return Err(format!(
@@ -273,6 +288,9 @@ pub fn preflight(call: &ApiCall) -> Result<(String, String), String> {
         ));
     }
     validate_path(&call.path)?;
+    if oauth && is_airtable_api(&call.path) {
+        return Err(AIRTABLE_API_FOR_OAUTH.into());
+    }
     if let Some(ep) = catalogue::find(&method, &call.path)
         && ep.access.blocked_for_agents()
     {
@@ -308,7 +326,7 @@ pub async fn execute_with(
     text_cap: usize,
     plain_cut: bool,
 ) -> Result<ApiResponse, String> {
-    let (method, path) = preflight(&call)?;
+    let (method, path) = preflight(&call, ctx.actor.oauth_grant_id.is_some())?;
     let uri = match &call.query {
         None | Some(Value::Null) => path.clone(),
         Some(q) => {
@@ -324,11 +342,6 @@ pub async fn execute_with(
     let mut builder = Request::builder()
         .method(method.as_str())
         .uri(&uri)
-        .header(
-            header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", ctx.token))
-                .map_err(|_| "the API token cannot be used in a header".to_string())?,
-        )
         .header(
             header::USER_AGENT,
             HeaderValue::from_str(&format!(
@@ -370,9 +383,23 @@ pub async fn execute_with(
             Body::from(bytes)
         }
     };
+    // A personal access token goes along as the `Authorization` header it came in. An OAuth
+    // access token is valid on /mcp only and is never sent to /api/*: the router is told who
+    // the caller is instead (see `TrustedActor`).
+    if ctx.actor.oauth_grant_id.is_none() {
+        builder = builder.header(
+            header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", ctx.token))
+                .map_err(|_| "the API token cannot be used in a header".to_string())?,
+        );
+    }
     let mut req = builder
         .body(body)
         .map_err(|e| format!("could not build the request: {e}"))?;
+    if ctx.actor.oauth_grant_id.is_some() {
+        req.extensions_mut()
+            .insert(crate::auth::TrustedActor(ctx.actor.clone()));
+    }
     if let Some(peer) = ctx.peer {
         req.extensions_mut().insert(ConnectInfo(peer));
     }
@@ -530,7 +557,7 @@ mod tests {
             query: None,
             body: None,
         };
-        assert!(preflight(&call("get", "/api/bases/appX")).is_ok());
+        assert!(preflight(&call("get", "/api/bases/appX"), false).is_ok());
         for (m, p) in [
             ("POST", "/api/auth/password"),
             ("GET", "/api/tokens"),
@@ -539,16 +566,27 @@ mod tests {
             ("POST", "/api/auth/login"),
             ("GET", "/api/bases/appX/events"),
         ] {
-            let err = preflight(&call(m, p)).unwrap_err();
+            let err = preflight(&call(m, p), false).unwrap_err();
             assert!(err.contains("not available through MCP"), "{m} {p}: {err}");
         }
-        assert!(preflight(&call("GET", "/api/tokens/whoami")).is_ok());
-        assert!(preflight(&call("TRACE", "/api/bases/appX")).is_err());
-        assert!(preflight(&call("HEAD", "/api/health")).is_err());
+        assert!(preflight(&call("GET", "/api/tokens/whoami"), false).is_ok());
+        assert!(preflight(&call("TRACE", "/api/bases/appX"), false).is_err());
+        assert!(preflight(&call("HEAD", "/api/health"), false).is_err());
+        // The Airtable-compatible API needs a personal access token: refused up front for OAuth.
+        assert!(preflight(&call("GET", "/api/v1/meta/bases"), false).is_ok());
+        for p in ["/api/v1/meta/bases", "/api/v1/appX/Tasks", "/api/v1"] {
+            let err = preflight(&call("GET", p), true).unwrap_err();
+            assert!(
+                err.contains("not available to apps connected through OAuth"),
+                "{p}: {err}"
+            );
+        }
+        assert!(preflight(&call("GET", "/api/v10/x"), true).is_ok());
+        assert!(preflight(&call("GET", "/api/bases/appX"), true).is_ok());
         let mut with_body = call("GET", "/api/bases/appX");
         with_body.body = Some(json!({}));
         assert!(
-            preflight(&with_body)
+            preflight(&with_body, false)
                 .unwrap_err()
                 .contains("cannot have a body")
         );

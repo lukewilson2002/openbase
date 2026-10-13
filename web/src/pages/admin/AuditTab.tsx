@@ -13,6 +13,21 @@ import { formatDateTime } from "@/lib/format";
 export const AUDIT_PAGE_SIZE = 50;
 
 /**
+ * The credential behind an action, when it was not the person's own session: the connected app
+ * (OAuth) or the personal access token that did it (`detail.via`, written by the server).
+ */
+export function viaOf(detail: unknown): string | null {
+  if (!detail || typeof detail !== "object") return null;
+  const via = (detail as Record<string, unknown>)["via"];
+  if (!via || typeof via !== "object") return null;
+  const v = via as Record<string, unknown>;
+  const text = (x: unknown) => (typeof x === "string" ? x : "");
+  if (v["kind"] === "oauth") return `connected app ${text(v["client"]) || text(v["grant_id"])}`;
+  if (v["kind"] === "token") return `API token ${text(v["token"]) || text(v["token_id"])}`;
+  return null;
+}
+
+/**
  * The audit log is cursor-paged (`GET /api/admin/audit?before=<id>&limit=<n>`, newest first):
  * each page returns `next_before`, the cursor for the next older page. `cursors` is the trail of
  * cursors visited so "Newer" can step back (the first page's cursor is null).
@@ -52,7 +67,14 @@ export function AuditTab() {
             {entries.map((e) => (
               <tr key={e.id}>
                 <td className="whitespace-nowrap px-3 py-2 text-muted">{formatDateTime(e.created_at)}</td>
-                <td className="px-3 py-2">{e.user_email ?? e.user_id ?? "System"}</td>
+                <td className="px-3 py-2">
+                  {e.user_email ?? e.user_id ?? "System"}
+                  {viaOf(e.detail) && (
+                    <span className="block text-xs text-muted">
+                      via <bdi>{viaOf(e.detail)}</bdi>
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">{e.action}</td>
                 <td className="max-w-56 truncate px-3 py-2 text-muted" title={e.detail ? JSON.stringify(e.detail) : undefined}>
                   {e.target ?? ""}
