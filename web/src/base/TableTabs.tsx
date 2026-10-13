@@ -5,8 +5,7 @@ import { ChevronDown, Copy, FileUp, PanelLeft, Pencil, Plus, Table2, Trash2 } fr
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table } from "@/api/types";
-import { ImportCsvDialog } from "@/components/csv/ImportCsvDialog";
-import { NewTableFromCsvDialog } from "@/components/csv/NewTableFromCsvDialog";
+import { ImportCsvDialog, NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
 import { NameDialog } from "@/components/NameDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -140,7 +139,7 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
         submitLabel="Create table"
         onSubmit={(name) => create.mutateAsync(name)}
       />
-      <NewTableFromCsvDialog open={dialog?.kind === "create-from-csv"} onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} />
+      {dialog?.kind === "create-from-csv" && <NewTableFromCsvDialog open onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} />}
       {dialog?.kind === "import" && <ImportCsvDialog open onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} table={dialog.table} />}
       <NameDialog
         open={dialog?.kind === "rename"}

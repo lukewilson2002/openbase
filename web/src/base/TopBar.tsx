@@ -7,8 +7,8 @@ import { keys } from "@/api/keys";
 import type { BaseSchema } from "@/api/types";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { SharingDialog } from "@/components/SharingDialog";
-import { TrashButton } from "@/components/trash/TrashDialog";
+import { SharingDialog } from "@/components/LazySharingDialog";
+import { TrashButton } from "@/components/trash/TrashButton";
 import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import { basePermissions } from "./permissions";
 
 export function TopBar({ schema }: { schema: BaseSchema }) {
   const [sharing, setSharing] = useState(false);
+  // Mounted from the first click on (it stays, so closing still animates), loaded then.
+  const [sharingLoaded, setSharingLoaded] = useState(false);
   const canEdit = basePermissions.editBase(schema.role);
   const onAutomations = useLocation().pathname.startsWith(`/base/${schema.id}/automations`);
   return (
@@ -40,13 +42,19 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
           </Link>
         </Button>
       )}
-      <Button size="sm" onClick={() => setSharing(true)}>
+      <Button
+        size="sm"
+        onClick={() => {
+          setSharingLoaded(true);
+          setSharing(true);
+        }}
+      >
         <Share2 aria-hidden className="size-3.5" /> Share
       </Button>
       <TrashButton schema={schema} />
       <NotificationBell />
       <UserMenu />
-      <SharingDialog open={sharing} onOpenChange={setSharing} scope={{ kind: "base", id: schema.id, name: schema.name }} myRole={schema.role} />
+      {sharingLoaded && <SharingDialog open={sharing} onOpenChange={setSharing} scope={{ kind: "base", id: schema.id, name: schema.name }} myRole={schema.role} />}
     </header>
   );
 }

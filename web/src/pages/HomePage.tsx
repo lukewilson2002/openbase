@@ -6,7 +6,7 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
 import { NameDialog } from "@/components/NameDialog";
-import { SharingDialog } from "@/components/SharingDialog";
+import { SharingDialog } from "@/components/LazySharingDialog";
 import { DeletedWorkspaces } from "@/components/trash/DeletedWorkspaces";
 import { AppPage, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
