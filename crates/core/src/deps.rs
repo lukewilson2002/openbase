@@ -219,11 +219,19 @@ impl DepGraph {
         let mut out = Vec::with_capacity(subset.len());
         while let Some(f) = ready.pop_first() {
             out.push(f.to_string());
-            for e in self.dependents_of(f) {
-                if let Some(d) = indeg.get_mut(e.dependent.as_str()) {
+            // `indeg` counts distinct sources, so a dependent that reads `f`
+            // through several edges (a lookup whose target is its own link
+            // field has a same-record and a via-link edge from it) must be
+            // released once, not once per edge.
+            let dependents: BTreeSet<&str> = self
+                .dependents_of(f)
+                .map(|e| e.dependent.as_str())
+                .collect();
+            for dependent in dependents {
+                if let Some(d) = indeg.get_mut(dependent) {
                     *d -= 1;
                     if *d == 0 {
-                        ready.insert(e.dependent.as_str());
+                        ready.insert(dependent);
                     }
                 }
             }
@@ -296,6 +304,40 @@ mod tests {
         assert_eq!(g.topo_order(&subset), vec!["x", "a", "b"]);
         g.add_edge("b", "x", EdgeKind::SameRecord);
         assert!(g.check_acyclic().is_err());
+    }
+
+    #[test]
+    fn lookup_targeting_its_own_link_field_is_ordered_once() {
+        // A self-linked table: the lookup reads the link field both as the
+        // link and as the target, which gives two edges from one source.
+        let link = field(
+            "link",
+            FieldKind::Link(LinkOptions {
+                linked_table_id: "tbl".into(),
+                inverse_field_id: "inv".into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        );
+        let lookup = field(
+            "lk",
+            FieldKind::Lookup(LookupOptions {
+                link_field_id: "link".into(),
+                target_field_id: "link".into(),
+                result_type: ResultType::Text,
+            }),
+        );
+        let after = formula("after");
+        let fields = vec![link, lookup, after];
+        let g = DepGraph::build(&fields, &refs_table(&[("after", &["lk"])]));
+        assert!(g.check_acyclic().is_ok());
+        let subset: HashSet<FieldId> = ["link", "lk", "after"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(g.topo_order(&subset), vec!["link", "lk", "after"]);
+        let deps = g.transitive_dependents(&["link".into()]);
+        assert_eq!(g.topo_order(&deps), vec!["lk", "after"]);
     }
 
     #[test]
