@@ -1,0 +1,263 @@
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+
+/**
+ * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
+ * search, hide fields, add a field, expanded record with comments, add/delete records.
+ * Runs only with OPENGRID_E2E=1:
+ *
+ *   OPENGRID_E2E=1 OPENGRID_E2E_URL=http://127.0.0.1:8080 npm run e2e -- grid.spec.ts
+ *
+ * The first run on an empty data directory signs up the first user (the administrator); on a used
+ * instance set OPENGRID_E2E_EMAIL and OPENGRID_E2E_PASSWORD to an existing account.
+ *
+ * Glide draws on a canvas, so cells are operated by position (column widths and row heights are
+ * the grid's defaults) with real mouse and keyboard input, and results are asserted against the
+ * server (`rows()`), never against pixels.
+ */
+test.skip(!process.env.OPENGRID_E2E, "set OPENGRID_E2E=1 and start an opengrid server to run E2E tests");
+test.describe.configure({ mode: "serial" });
+
+const EMAIL = process.env.OPENGRID_E2E_EMAIL ?? "e2e-grid@example.com";
+const PASSWORD = process.env.OPENGRID_E2E_PASSWORD ?? "correct horse battery staple 42";
+const CSRF = { "X-OpenGrid-CSRF": "1" };
+
+// Grid geometry (see views/grid/cellModels.ts defaultWidth and the Glide setup in GlideGrid.tsx).
+const MARKER_W = 56;
+const HEADER_H = 34;
+const ROW_H = 33;
+const WIDTHS = { name: 220, qty: 140, status: 170, done: 110 };
+
+interface Fixture {
+  baseId: string;
+  tableId: string;
+  viewId: string;
+  fields: Record<"name" | "qty" | "status" | "done", string>;
+}
+
+let fx: Fixture;
+
+async function post<T>(req: APIRequestContext, path: string, data: unknown): Promise<T> {
+  const res = await req.post(path, { data, headers: CSRF });
+  expect(res.ok(), `${path}: ${res.status()} ${await res.text()}`).toBeTruthy();
+  return (await res.json()) as T;
+}
+
+async function signIn(page: Page): Promise<void> {
+  const req = page.request;
+  const signup = await req.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Grid", password: PASSWORD }, headers: CSRF });
+  if (signup.ok()) return;
+  const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
+  expect(login.ok(), `login failed (${login.status()}): set OPENGRID_E2E_EMAIL/OPENGRID_E2E_PASSWORD`).toBeTruthy();
+}
+
+type TableDto = { id: string; fields: { id: string; name: string }[]; views: { id: string }[] };
+
+async function seed(page: Page): Promise<Fixture> {
+  const req = page.request;
+  const ws = await post<{ id: string }>(req, "/api/workspaces", { name: `E2E ${Date.now()}` });
+  const base = await post<{ id: string; tables: TableDto[] }>(req, `/api/workspaces/${ws.id}/bases`, { name: "Grid E2E" });
+  const table = base.tables[0] ?? (await post<TableDto>(req, `/api/bases/${base.id}/tables`, { name: "Tasks" }));
+  const nameField = table.fields[0]!.id;
+  const qty = await post<{ id: string }>(req, `/api/tables/${table.id}/fields`, { name: "Qty", type: "number", options: { precision: 0, allow_negative: true } });
+  const status = await post<{ id: string; options: { choices: { id: string; name: string }[] } }>(req, `/api/tables/${table.id}/fields`, {
+    name: "Status",
+    type: "single_select",
+    options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] },
+  });
+  const done = await post<{ id: string }>(req, `/api/tables/${table.id}/fields`, { name: "Done", type: "checkbox", options: {} });
+  const choice = Object.fromEntries(status.options.choices.map((c) => [c.name, c.id]));
+  await post(req, `/api/tables/${table.id}/records`, {
+    typecast: true,
+    records: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((n, i) => ({ values: { [nameField]: n, [qty.id]: (i + 1) * 10, [status.id]: choice[i % 2 ? "Done" : "Todo"] } })),
+  });
+  const refreshed = await (await req.get(`/api/bases/${base.id}`)).json();
+  const t = refreshed.tables.find((x: { id: string }) => x.id === table.id);
+  return { baseId: base.id, tableId: table.id, viewId: t.views[0].id, fields: { name: nameField, qty: qty.id, status: status.id, done: done.id } };
+}
+
+/** Records as the server has them, in the default view order. */
+async function rows(page: Page): Promise<{ name: string; qty: number | undefined; status: string | undefined }[]> {
+  const res = await page.request.post(`/api/views/${fx.viewId}/query`, { data: { offset: 0, limit: 100 }, headers: CSRF });
+  const body = (await res.json()) as { records: { values: Record<string, unknown> }[] };
+  return body.records.map((r) => ({ name: String(r.values[fx.fields.name] ?? ""), qty: r.values[fx.fields.qty] as number | undefined, status: r.values[fx.fields.status] as string | undefined }));
+}
+
+const canvas = (page: Page): Locator => page.locator("canvas[data-testid='data-grid-canvas']").first();
+
+/** Click the centre of the cell at (`col` among name/qty/status/done, `row` 0-based). */
+async function pointAt(page: Page, col: keyof typeof WIDTHS, row: number) {
+  const box = await canvas(page).boundingBox();
+  expect(box, "the grid canvas is not on screen").not.toBeNull();
+  const order = ["name", "qty", "status", "done"] as const;
+  let x = MARKER_W;
+  for (const c of order) {
+    if (c === col) break;
+    x += WIDTHS[c];
+  }
+  return { x: box!.x + x + WIDTHS[col] / 2, y: box!.y + HEADER_H + row * ROW_H + ROW_H / 2 };
+}
+
+async function clickCell(page: Page, col: keyof typeof WIDTHS, row: number, opts: { double?: boolean; right?: boolean } = {}) {
+  const p = await pointAt(page, col, row);
+  if (opts.double) await page.mouse.dblclick(p.x, p.y);
+  else await page.mouse.click(p.x, p.y, { button: opts.right ? "right" : "left" });
+}
+
+async function openGrid(page: Page) {
+  await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.viewId}`);
+  await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+  await expect(page.getByText(/\d+ records?/)).toBeVisible();
+  await expect(canvas(page)).toBeVisible();
+}
+
+test.beforeAll(async ({ browser }) => {
+  const ctx = await browser.newContext({ baseURL: process.env.OPENGRID_E2E_URL ?? "http://127.0.0.1:8080" });
+  const page = await ctx.newPage();
+  await signIn(page);
+  fx = await seed(page);
+  await ctx.storageState({ path: "e2e/.grid-auth.json" });
+  await ctx.close();
+});
+
+test.use({ storageState: "e2e/.grid-auth.json", viewport: { width: 1360, height: 820 } });
+
+test("shows the seeded records and the record count", async ({ page }) => {
+  await openGrid(page);
+  await expect(page.getByText("5 records")).toBeVisible();
+  expect((await rows(page)).map((r) => r.name)).toEqual(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
+});
+
+test("edits a text cell, saves it on the server, and undoes and redoes it", async ({ page }) => {
+  await openGrid(page);
+  await clickCell(page, "name", 0, { double: true });
+  await page.keyboard.press("End");
+  await page.keyboard.type(" edited");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Alpha edited");
+  await clickCell(page, "name", 0);
+  await page.keyboard.press("Control+Z");
+  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Alpha");
+  await page.keyboard.press("Control+Shift+Z");
+  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Alpha edited");
+  await page.keyboard.press("Control+Z");
+  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Alpha");
+});
+
+test("type-to-edit replaces a number; text that is not a number is rejected", async ({ page }) => {
+  await openGrid(page);
+  await clickCell(page, "qty", 1);
+  await page.keyboard.type("77");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await rows(page))[1]!.qty).toBe(77);
+  await clickCell(page, "qty", 1);
+  await page.keyboard.type("abc");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert").first()).toContainText(/not a number/);
+  await page.keyboard.press("Escape");
+  expect((await rows(page))[1]!.qty).toBe(77);
+});
+
+test("picks a single select option from the editor", async ({ page }) => {
+  await openGrid(page);
+  await clickCell(page, "status", 0, { double: true });
+  await page.getByRole("combobox", { name: /Find an option/ }).fill("Done");
+  await page.getByRole("option", { name: "Done" }).click();
+  await expect.poll(async () => (await rows(page))[0]!.status).toBeTruthy();
+});
+
+test("clears selected cells with Delete and fills down with Ctrl+D", async ({ page }) => {
+  await openGrid(page);
+  await clickCell(page, "qty", 2);
+  await page.keyboard.press("Delete");
+  await expect.poll(async () => (await rows(page))[2]!.qty).toBeUndefined();
+  await page.keyboard.press("Control+Z");
+  await expect.poll(async () => (await rows(page))[2]!.qty).toBe(30);
+});
+
+test("filters by a text condition and shows the record count", async ({ page }) => {
+  await openGrid(page);
+  await page.getByRole("button", { name: /^Filter/ }).click();
+  await page.getByRole("button", { name: "Add condition" }).click();
+  await page.getByLabel("Operator").selectOption("contains");
+  await page.getByLabel("Value").fill("lph");
+  await expect(page.getByText("1 record")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /1 filter/ }).click();
+  await page.getByRole("button", { name: "Remove condition" }).click();
+  await expect(page.getByText("5 records")).toBeVisible();
+});
+
+test("sorts by a field descending from the toolbar", async ({ page }) => {
+  await openGrid(page);
+  await page.getByRole("button", { name: /^Sort/ }).click();
+  await page.getByRole("button", { name: "Add sort" }).click();
+  await page.getByLabel("Direction for sort 1").selectOption("desc");
+  await expect(page.getByRole("button", { name: /Sorted by 1 field/ })).toBeVisible();
+  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Echo");
+  await page.getByRole("button", { name: "Remove sort 1" }).click();
+});
+
+test("searches with Ctrl+F", async ({ page }) => {
+  await openGrid(page);
+  await page.keyboard.press("Control+F");
+  await page.getByRole("searchbox", { name: "Search records" }).fill("char");
+  await expect(page.getByText(/1 record found/)).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search records" }).press("Escape");
+  await expect(page.getByText("5 records")).toBeVisible();
+});
+
+test("hides a field and shows it again", async ({ page }) => {
+  await openGrid(page);
+  await page.getByRole("button", { name: /Hide fields/ }).click();
+  await page.getByRole("switch", { name: "Qty" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /1 hidden field/ })).toBeVisible();
+  await page.getByRole("button", { name: /1 hidden field/ }).click();
+  await page.getByRole("button", { name: "Show all" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Hide fields" })).toBeVisible();
+});
+
+test("adds a field from the dialog", async ({ page }) => {
+  await openGrid(page);
+  await page.getByRole("button", { name: "Add field" }).click();
+  await page.getByLabel("Field name").fill("Notes");
+  await page.getByRole("option", { name: /Long text/ }).click();
+  await page.getByRole("button", { name: "Create field" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  const base = await (await page.request.get(`/api/bases/${fx.baseId}`)).json();
+  const names = base.tables.find((t: { id: string }) => t.id === fx.tableId).fields.map((f: { name: string }) => f.name);
+  expect(names).toContain("Notes");
+});
+
+test("opens the expanded record with Shift+Space, comments, and the link is shareable", async ({ page }) => {
+  await openGrid(page);
+  await clickCell(page, "name", 1);
+  await page.keyboard.press("Shift+Space");
+  await expect(page).toHaveURL(/[?&]record=rec/);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Bravo" })).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Write a comment" }).fill("Hello from the e2e test");
+  await dialog.getByRole("button", { name: "Comment" }).click();
+  await expect(dialog.getByText("Hello from the e2e test")).toBeVisible();
+  await dialog.getByRole("tab", { name: "History" }).click();
+  await expect(dialog.getByRole("list", { name: "Revision history" })).toBeVisible();
+  const url = page.url();
+  await page.goto(url);
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Bravo" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page).not.toHaveURL(/record=/);
+});
+
+test("adds and deletes records, with undo", async ({ page }) => {
+  await openGrid(page);
+  await page.getByRole("button", { name: "Add record" }).click();
+  await expect(page.getByText("6 records")).toBeVisible();
+  await page.keyboard.press("Control+Z");
+  await expect(page.getByText("5 records")).toBeVisible();
+  await clickCell(page, "name", 4, { right: true });
+  await page.getByRole("menuitem", { name: /Delete record/ }).click();
+  await expect(page.getByText("4 records")).toBeVisible();
+  await page.keyboard.press("Control+Z");
+  await expect(page.getByText("5 records")).toBeVisible();
+});

@@ -1,0 +1,219 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import type { Comment, HistoryEntry } from "@/api/types";
+import { Providers, createQueryClient } from "@/providers";
+import { ALL_FIELDS, CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
+import { makeSchema, mockApi } from "@/test/utils";
+import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
+
+const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
+const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
+const budget = field("currency", { precision: 2, symbol: "$", allow_negative: true }, { id: "fld_budget", name: "Budget" });
+const owner = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_owner", name: "Owner" });
+const secret = field("single_line_text", {}, { id: "fld_secret", name: "Secret" });
+const score = { ...ALL_FIELDS.formula, id: "fld_score", name: "Score" };
+const table = makeTable([name, status, budget, owner, secret, score]);
+const schema = { ...makeSchema("owner"), tables: [table] };
+const record = makeRecord({ fld_name: "Launch", fld_status: "chs2", fld_budget: 1200, fld_owner: [{ id: "recA", name: "Alpha" }], fld_score: 24, fld_secret: "hush" }, "rec1");
+const config = { ...schema.tables[0]!.views[0]!.config, hidden_fields: ["fld_secret"] };
+
+const comments: Comment[] = [
+  { id: "cmt1", record_id: "rec1", user_id: "usr2", user_name: "Grace Hopper", body: "Looks good @[Ada Lovelace](usr1)", created_at: 1_700_000_000_000, updated_at: 1_700_000_000_000 },
+  { id: "cmt2", record_id: "rec1", user_id: "usr1", user_name: "Ada Lovelace", body: "Thanks!", created_at: 1_700_000_100_000, updated_at: 1_700_000_100_000 },
+];
+
+const history: HistoryEntry[] = [
+  { id: 2, user_id: "usr1", user_name: "Ada Lovelace", kind: "update", created_at: 1_700_000_300_000, changes: { fld_budget: { old: 1000, new: 1200 }, fld_status: { old: "chs1", new: "chs2" }, fld_owner: { old: [], new: [{ id: "recA", name: "Alpha" }] }, fld_gone: { old: "x", new: "y" } } },
+  { id: 1, user_id: "usr1", user_name: "Ada Lovelace", kind: "create", created_at: 1_700_000_000_000, changes: { fld_name: { old: null, new: "Launch" } } },
+];
+
+function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, unknown> = {}) {
+  let current = record;
+  const api = mockApi({
+    "GET /api/tables/tbl1/records/rec1": () => current,
+    "GET /api/records/rec1/comments": comments,
+    "GET /api/records/rec1/history": history,
+    "PATCH /api/tables/tbl1/records": (call: { body: unknown }) => {
+      current = { ...current, values: { ...current.values, ...((call.body as { records: { values: object }[] }).records[0]!.values) } };
+      return { records: [current] };
+    },
+    "POST /api/records/rec1/comments": (call: { body: unknown }) => ({ status: 201, json: { id: "cmt3", record_id: "rec1", user_id: "usr1", user_name: "Ada Lovelace", body: (call.body as { body: string }).body, created_at: 1_700_000_500_000, updated_at: 1_700_000_500_000 } }),
+    "PATCH /api/comments/cmt2": (call: { body: unknown }) => ({ ...comments[1], body: (call.body as { body: string }).body }),
+    "DELETE /api/comments/cmt2": { ok: true },
+    ...routes,
+  } as never);
+  const props: ExpandedRecordProps = {
+    schema,
+    table,
+    role: "owner",
+    recordId: "rec1",
+    config,
+    prevId: "rec0",
+    nextId: "rec2",
+    onNavigate: vi.fn(),
+    onClose: vi.fn(),
+    emails: new Map(PEOPLE.map((p) => [p.id, p.email])),
+    timeZone: "UTC",
+    currentUserId: "usr1",
+    collaborators: PEOPLE,
+    ...over,
+  };
+  render(
+    <Providers client={createQueryClient()}>
+      <ExpandedRecord {...props} />
+    </Providers>,
+  );
+  return { api, props };
+}
+
+describe("ExpandedRecord", () => {
+  it("shows every field with its value, computed ones read-only, hidden ones collapsed", async () => {
+    setup();
+    expect(await screen.findByDisplayValue("Launch")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Launch" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("1200")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    const scoreRow = screen.getByRole("group", { name: "Score" });
+    expect(within(scoreRow).getByText("24.0")).toBeInTheDocument();
+    expect(within(scoreRow).getByText(/computed, read-only/)).toBeInTheDocument();
+    expect(within(scoreRow).queryByRole("textbox")).not.toBeInTheDocument();
+    // Hidden fields live in a collapsible section.
+    expect(screen.queryByDisplayValue("hush")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Show 1 hidden field/ }));
+    expect(screen.getByDisplayValue("hush")).toBeInTheDocument();
+  });
+
+  it("edits a field through the shared editor and sends the wire value with typecast", async () => {
+    const { api } = setup();
+    const input = await screen.findByDisplayValue("Launch");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Ship it{Enter}");
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Ship it" } }] });
+    expect(await screen.findByRole("heading", { name: "Ship it" })).toBeInTheDocument();
+  });
+
+  it("shows a validation message for an unparseable value and does not save", async () => {
+    const { api } = setup();
+    const input = await screen.findByDisplayValue("1200");
+    await userEvent.clear(input);
+    await userEvent.type(input, "lots{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not a number/);
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(0);
+  });
+
+  it("navigates between records and closes", async () => {
+    const { props } = setup();
+    await screen.findByDisplayValue("Launch");
+    await userEvent.click(screen.getByRole("button", { name: /Previous record/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Next record/ }));
+    expect(props.onNavigate).toHaveBeenNthCalledWith(1, "rec0");
+    expect(props.onNavigate).toHaveBeenNthCalledWith(2, "rec2");
+    await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(props.onNavigate).toHaveBeenCalledTimes(3);
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  it("disables navigation at the ends", async () => {
+    setup({ prevId: null, nextId: null });
+    await screen.findByDisplayValue("Launch");
+    expect(screen.getByRole("button", { name: /Previous record/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Next record/ })).toBeDisabled();
+  });
+
+  it("viewers see values but no editors and cannot comment", async () => {
+    setup({ role: "viewer" });
+    await screen.findByRole("heading", { name: "Launch" });
+    expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
+    expect(screen.getByText(/You can read comments but not write them/)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Write a comment" })).not.toBeInTheDocument();
+  });
+
+  it("shows a message when the record cannot be loaded", async () => {
+    setup({}, { "GET /api/tables/tbl1/records/rec1": { status: 404, json: { error: { code: "not_found", message: "no such record" } } } });
+    expect(await screen.findByText("This record could not be loaded.")).toBeInTheDocument();
+  });
+});
+
+describe("ExpandedRecord: comments", () => {
+  it("lists comments with mentions rendered and marks your own", async () => {
+    setup();
+    const list = await screen.findByRole("list", { name: "", hidden: false }).catch(() => null);
+    void list;
+    expect(await screen.findByText("Looks good")).toBeInTheDocument();
+    expect(screen.getByText("@Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByLabelText("Comment by Grace Hopper")).toBeInTheDocument();
+    const mine = screen.getByLabelText("Comment by Ada Lovelace");
+    expect(within(mine).getByRole("button", { name: "Edit comment" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Comment by Grace Hopper")).queryByRole("button", { name: "Edit comment" })).not.toBeInTheDocument();
+  });
+
+  it("posts a comment with an @mention inserted as @[Name](usrXXX)", async () => {
+    const { api } = setup();
+    const box = await screen.findByRole("combobox", { name: "Write a comment" });
+    await userEvent.type(box, "Ping @gra");
+    const options = await screen.findByRole("listbox", { name: "People to mention" });
+    expect(within(options).getAllByRole("option").map((o) => o.textContent)).toEqual([expect.stringContaining("Grace Hopper")]);
+    await userEvent.keyboard("{Enter}");
+    expect(box).toHaveValue("Ping @[Grace Hopper](usr2) ");
+    await userEvent.type(box, "please review");
+    await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+    await waitFor(() => expect(api.callsTo("POST /api/records/rec1/comments")).toHaveLength(1));
+    expect(api.callsTo("POST /api/records/rec1/comments")[0]!.body).toEqual({ body: "Ping @[Grace Hopper](usr2) please review" });
+    await waitFor(() => expect(box).toHaveValue(""));
+  });
+
+  it("edits and deletes your own comment", async () => {
+    const { api } = setup();
+    const mine = await screen.findByLabelText("Comment by Ada Lovelace");
+    await userEvent.click(within(mine).getByRole("button", { name: "Edit comment" }));
+    const editor = within(mine).getByRole("combobox", { name: "Edit comment" });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "Thanks a lot");
+    await userEvent.click(within(mine).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/comments/cmt2")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/comments/cmt2")[0]!.body).toEqual({ body: "Thanks a lot" });
+
+    await userEvent.click(within(await screen.findByLabelText("Comment by Ada Lovelace")).getByRole("button", { name: "Delete comment" }));
+    const confirm = await screen.findByRole("alertdialog");
+    await userEvent.click(within(confirm).getByRole("button", { name: "Delete comment" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/comments/cmt2")).toHaveLength(1));
+  });
+
+  it("does not post an empty comment", async () => {
+    setup();
+    await screen.findByRole("combobox", { name: "Write a comment" });
+    expect(screen.getByRole("button", { name: "Comment" })).toBeDisabled();
+  });
+});
+
+describe("ExpandedRecord: history", () => {
+  it("renders old -> new per field using display formatting, newest first", async () => {
+    setup();
+    await userEvent.click(await screen.findByRole("tab", { name: "History" }));
+    const list = await screen.findByRole("list", { name: "Revision history" });
+    const entries = within(list).getAllByRole("listitem", {}).filter((li) => li.parentElement === list);
+    expect(entries).toHaveLength(2);
+    // Newest entry first.
+    const changes = within(entries[0]!).getByRole("list", { name: "Changes" });
+    const item = (label: string) => within(changes).getByText(label).closest("li")!;
+    expect(within(item("Budget")).getByText("$1,000.00")).toBeInTheDocument();
+    expect(within(item("Budget")).getByText("$1,200.00")).toBeInTheDocument();
+    expect(within(item("Status")).getByText("Todo")).toBeInTheDocument();
+    expect(within(item("Status")).getByText("In progress")).toBeInTheDocument();
+    expect(within(item("Owner")).getByText("Alpha")).toBeInTheDocument();
+    expect(within(item("Owner")).getByText("(empty)")).toBeInTheDocument();
+    expect(within(item("(deleted field)")).getByText("y")).toBeInTheDocument();
+    expect(within(entries[1]!).getByText("Created this record")).toBeInTheDocument();
+    expect(within(entries[1]!).getByText("Launch")).toBeInTheDocument();
+  });
+
+  it("explains an empty history", async () => {
+    setup({}, { "GET /api/records/rec1/history": [] });
+    await userEvent.click(await screen.findByRole("tab", { name: "History" }));
+    expect(await screen.findByText("No changes recorded yet.")).toBeInTheDocument();
+  });
+});

@@ -3,6 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { USER, apiError, makeSchema, mockApi, renderApp } from "@/test/utils";
 
+// These tests are about the shell (tabs, sidebar, permissions). The real grid draws on a canvas
+// and has its own tests under src/views/grid, so the shell tests render the placeholder for it.
+vi.mock("@/views/grid/GridView", async () => {
+  const { PlaceholderView } = await import("@/views/PlaceholderView");
+  return { default: PlaceholderView };
+});
+
 afterEach(() => vi.unstubAllGlobals());
 
 function openBase(role: string, extra: Record<string, unknown> = {}, route = "/base/app1") {
