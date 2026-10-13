@@ -22,6 +22,7 @@ use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 use crate::config::Config;
 use crate::error::{AppError, AppResult};
+use crate::ratelimit::RateLimiter;
 
 /// A plain-text email sender.
 pub trait Mailer: Send + Sync {
@@ -40,6 +41,21 @@ pub fn from_config(config: &Config) -> AppResult<Arc<dyn Mailer>> {
         Some(_) => Arc::new(SmtpMailer::new(config)?),
         None => Arc::new(NoopMailer),
     })
+}
+
+/// Charge `n` outgoing emails that `user_id` caused (invites, automation
+/// emails) to the per-user and instance-wide hourly budgets
+/// (`email_per_user_hour`, `email_per_hour`), so that no account can turn the
+/// server's SMTP identity into a spam relay. 429 when either is exhausted.
+pub fn spend_budget(
+    limiter: &RateLimiter,
+    config: &Config,
+    user_id: &str,
+    n: u32,
+) -> AppResult<()> {
+    let hour = Duration::from_secs(3600);
+    limiter.check_n("email_user", user_id, n, config.email_per_user_hour, hour)?;
+    limiter.check_n("email_all", "*", n, config.email_per_hour, hour)
 }
 
 /// Send an email without blocking the caller. Failures are logged (without

@@ -51,6 +51,9 @@ const LOGIN_2FA_SESSION_PER_10_MIN: u32 = 10;
 /// (each password login hands out a fresh pending session).
 const LOGIN_2FA_USER_PER_HOUR: u32 = 10;
 
+/// Password-reset emails one address can be sent per hour.
+const RESET_MAILS_PER_ADDRESS_PER_HOUR: u32 = 3;
+
 /// Forget the per-account login counters after a fully successful sign-in.
 fn reset_login_limits(state: &AppState, email_key: &str, ip: &str) {
     state.limiter.reset("login_email", email_key);
@@ -526,6 +529,21 @@ async fn reset_request(
     let Ok(email) = users::normalize_email(&req.email) else {
         return Ok(ok());
     };
+    // No single mailbox gets more than a few reset mails an hour, whoever asks
+    // (otherwise a handful of addresses can mail-bomb a victim through us).
+    // Answered like any other request so it reveals nothing.
+    if state
+        .limiter
+        .check(
+            "reset_email",
+            &email.to_lowercase(),
+            RESET_MAILS_PER_ADDRESS_PER_HOUR,
+            HOUR,
+        )
+        .is_err()
+    {
+        return Ok(ok());
+    }
     let ip = client.ip.clone();
     let issued = state
         .db
