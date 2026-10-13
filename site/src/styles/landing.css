@@ -278,3 +278,8 @@
     height: 4.5rem;
   }
 }
+
+/* The landing page draws its own h1, so the empty title panel Starlight renders above it is hidden. */
+main > .content-panel:has(> .sl-container:empty) {
+  display: none;
+}
