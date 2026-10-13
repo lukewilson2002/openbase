@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useMutation } from "@tanstack/react-query";
+import { KeyRound } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { useMe, useSetUser, useSetupStatus } from "@/auth/useAuth";
+import { usePasskeyLogin } from "@/auth/usePasskeyLogin";
 import { AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -32,6 +34,11 @@ export function LoginPage() {
     },
   });
 
+  const passkey = usePasskeyLogin(setup, (user) => {
+    setUser(user);
+    navigate(next, { replace: true });
+  });
+
   if (me) return <Navigate to={next} replace />;
   if (setupPending) return <PageSpinner />;
   if (setup?.needs_setup) return <Navigate to="/setup" replace />;
@@ -58,8 +65,9 @@ export function LoginPage() {
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         {login.isError && <Notice tone="error">{errorMessage(login.error)}</Notice>}
+        {passkey.problem && <Notice tone="error">{passkey.problem}</Notice>}
         <Field label="Email">
-          {(ctl) => <Input {...ctl} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />}
+          {(ctl) => <Input {...ctl} type="email" autoComplete={passkey.conditional ? "username webauthn" : "username"} value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />}
         </Field>
         <Field label="Password">
           {(ctl) => <Input {...ctl} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
@@ -71,6 +79,18 @@ export function LoginPage() {
           Forgot your password?
         </Link>
       </form>
+      {passkey.available && (
+        <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+          <Button size="lg" loading={passkey.pending} onClick={passkey.signIn}>
+            <KeyRound aria-hidden className="size-4" /> Sign in with a passkey
+          </Button>
+        </div>
+      )}
+      {passkey.unsupported && (
+        <p className="mt-4 border-t border-line pt-4 text-center text-[0.8125rem] text-muted">
+          Passkeys are set up on this server, but this browser cannot use them here. Sign in with your password.
+        </p>
+      )}
     </AuthLayout>
   );
 }

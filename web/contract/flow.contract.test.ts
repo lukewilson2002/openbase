@@ -70,7 +70,8 @@ beforeAll(() => {
 describe("setup and first administrator", () => {
   it("reports that setup is needed", async () => {
     const status = parse("SetupStatus", await asAnon(api.setup.status));
-    expect(status).toEqual({ needs_setup: true, open_signup: false, email_enabled: false, public_url: env.baseUrl });
+    // The contract server's public URL is an IP address, which WebAuthn cannot use.
+    expect(status).toEqual({ needs_setup: true, open_signup: false, email_enabled: false, public_url: env.baseUrl, passkeys_enabled: false });
   });
 
   it("answers 401 with the error envelope before anyone is signed in", async () => {
@@ -296,6 +297,7 @@ describe("personal access tokens", () => {
     const bearer = { headers: { Authorization: `Bearer ${secret}` } };
     expectError(await failure(asAnon(() => http.get("/api/tokens", bearer))), 403, "forbidden");
     expectError(await failure(asAnon(() => http.get("/api/auth/sessions", bearer))), 403, "forbidden");
+    expectError(await failure(asAnon(() => http.get("/api/auth/passkeys", bearer))), 403, "forbidden");
     // Admin pages need the manage permission, which this read-only token lacks.
     expectError(await failure(asAnon(() => http.get("/api/admin/users", bearer))), 403, "forbidden");
   });
@@ -490,6 +492,20 @@ describe("administration", () => {
     expectError(await failure(asSecond(() => api.auth.twoFactorDisable({ password: "wrong password", code }))), 403, "forbidden");
     const off = parse("User", await asSecond(() => api.auth.twoFactorDisable({ password: secondPassword, code })));
     expect(off.totp_enabled).toBe(false);
+  });
+
+  it("has no passkeys, cannot register one at an IP address, and removes a user's passkeys for administrators only", async () => {
+    expect(parseList("PasskeyInfo", await asSecond(api.auth.passkeys))).toEqual([]);
+    // The server's public URL is an IP address here: there is no relying party to register with.
+    const e = await failure(asSecond(() => api.auth.passkeyRegisterStart()));
+    expectError(e, 400, "bad_request");
+    expect(e.message).toContain("domain name");
+    expectError(await failure(asAnon(api.auth.passkeyLoginStart)), 400, "bad_request");
+    expect(parse("PasskeysRemoved", await asAdmin(() => api.admin.removePasskeys(secondId)))).toEqual({ removed: 0 });
+    expectError(await failure(asSecond(() => api.admin.removePasskeys(adminId))), 403, "forbidden");
+    expectError(await failure(asAdmin(() => api.admin.removePasskeys("usrNope"))), 404, "not_found");
+    const users = parseList("AdminUser", await asAdmin(api.admin.users));
+    expect(users.every((u) => u.passkey_count === 0)).toBe(true);
   });
 
   it("reports instance statistics", async () => {

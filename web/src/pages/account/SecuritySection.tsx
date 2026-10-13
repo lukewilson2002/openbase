@@ -13,11 +13,13 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { MIN_PASSWORD_LENGTH, validatePasswords } from "@/lib/password";
+import { PasskeysSection } from "./PasskeysSection";
 
 export function SecuritySection({ user }: { user: User }) {
   return (
     <>
       <PasswordForm />
+      <PasskeysSection />
       <TwoFactor user={user} />
     </>
   );

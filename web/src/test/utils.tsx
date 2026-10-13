@@ -179,6 +179,7 @@ export const ADMIN_USER_ROW: AdminUser = {
   is_admin: false,
   is_active: true,
   totp_enabled: true,
+  passkey_count: 0,
   created_at: 1_700_000_000_000,
   last_login_at: null,
 };
