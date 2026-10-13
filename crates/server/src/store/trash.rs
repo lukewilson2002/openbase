@@ -169,6 +169,30 @@ pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashL
     Ok(TrashListing { items })
 }
 
+/// Workspaces in the trash that `user_id` owns, newest first. Once a workspace
+/// is deleted, `GET /api/workspaces/{id}/trash` answers 404 (the workspace no
+/// longer resolves), so this is how an owner finds one to restore.
+pub fn list_deleted_workspaces(conn: &Connection, user_id: &str) -> AppResult<TrashListing> {
+    let mut stmt = conn.prepare(
+        "SELECT w.id, w.name, w.deleted_at FROM workspaces w
+         JOIN workspace_members m ON m.workspace_id = w.id
+         WHERE w.deleted_at IS NOT NULL AND m.user_id = ?1 AND m.role = 'owner'
+         ORDER BY w.deleted_at DESC, w.id",
+    )?;
+    let items = stmt
+        .query_map([user_id], |r| {
+            Ok(TrashItem {
+                kind: "workspace".into(),
+                id: r.get(0)?,
+                name: r.get(1)?,
+                table_id: None,
+                deleted_at: r.get(2)?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(TrashListing { items })
+}
+
 // ----------------------------------------------------------------- restore
 
 /// What a restore request points at, once authorized.

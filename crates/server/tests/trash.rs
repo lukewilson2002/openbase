@@ -718,3 +718,53 @@ async fn restoring_a_table_recomputes_its_counts_after_linked_records_changed_me
     assert_eq!(counted().await, json!(1));
     let _ = a2;
 }
+
+#[tokio::test]
+async fn deleted_workspaces_are_listed_for_their_owners_to_restore() {
+    let f = Fixture::new().await;
+    let listing = async |c: &common::Client| f.app.get(c, "/api/trash/workspaces").await;
+    // Nothing deleted yet.
+    let r = listing(&f.owner).await;
+    r.assert_status(200);
+    assert!(items(&r).is_empty());
+
+    // The workspace's own trash stops answering once it is deleted: this is the way back.
+    f.app
+        .delete(&f.owner, &format!("/api/workspaces/{}", f.ws))
+        .await
+        .assert_status(200);
+    f.app
+        .get(&f.owner, &format!("/api/workspaces/{}/trash", f.ws))
+        .await
+        .assert_status(404);
+    let r = listing(&f.owner).await;
+    r.assert_status(200);
+    let listed = items(&r);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (listed[0].0.as_str(), listed[0].1.as_str()),
+        ("workspace", f.ws.as_str())
+    );
+    assert!(r.body["items"][0]["deleted_at"].as_i64().unwrap() > 0);
+
+    // Only owners see it: not other roles, not outsiders, not tokens.
+    for role in [Role::Viewer, Role::Commenter, Role::Editor, Role::Creator] {
+        let u = f.member(&format!("{role:?}@example.com"), role);
+        assert!(items(&listing(&u).await).is_empty(), "{role:?}");
+    }
+    let outsider = f.app.user("o@example.com", "O");
+    assert!(items(&listing(&outsider).await).is_empty());
+    let token = token_client(&f.app, &f.owner, true);
+    listing(&token).await.assert_status(403);
+    listing(&f.app.anon()).await.assert_status(401);
+
+    // Restoring it by the listed id empties the list again.
+    restore(&f, &f.owner, "workspace", &listed[0].1)
+        .await
+        .assert_status(200);
+    assert!(items(&listing(&f.owner).await).is_empty());
+    f.app
+        .get(&f.owner, &format!("/api/workspaces/{}/trash", f.ws))
+        .await
+        .assert_status(200);
+}
