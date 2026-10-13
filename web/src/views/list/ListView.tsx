@@ -27,7 +27,7 @@ function ListInner(props: ViewProps) {
   const fields = useMemo(() => cardFields(table, config, new Set(config.groups.map((g) => g.field_id))), [table, config]);
   const [collapsed, toggle, replace] = usePersistedSet(`og-list-collapsed:${view.id}`);
 
-  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone });
+  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
   const data = records.data;
   const grouped = !!data && data.groups.length > 0;
   const paths = useMemo(() => (data ? allPaths(buildOutline(data.groups)) : []), [data]);

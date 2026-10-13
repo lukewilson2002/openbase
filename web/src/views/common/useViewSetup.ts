@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { Collaborator, ViewConfig } from "@/api/types";
+import type { Collaborator, TransientConfig, ViewConfig } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import type { EditorEnv } from "@/components/record/editors/env";
 import { useDebounced } from "@/components/record/editors/useDebounced";
@@ -26,6 +26,12 @@ export interface ViewSetup extends ViewProps {
   config: ViewConfig;
   /** Hash of the saved config the record query depends on. */
   configKey: string;
+  /**
+   * The request-only filter/sort/group override of people who cannot save the view (null for
+   * everyone else, or when nothing differs from the saved config). Every query this view makes
+   * must send it, and it is part of the query's cache key.
+   */
+  transient: TransientConfig | null;
   timeZone: string;
   canEdit: boolean;
   canCreateOptions: boolean;
@@ -96,6 +102,7 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     cfg,
     config: cfg.config,
     configKey,
+    transient: cfg.transient,
     timeZone,
     canEdit,
     canCreateOptions,

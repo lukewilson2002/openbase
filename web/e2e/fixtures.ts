@@ -27,7 +27,7 @@ function watch(page: Page, problems: string[]): void {
     if (ALLOWED.some((a) => a.text.test(msg.text()) && a.url.test(url))) return;
     problems.push(`console.error: ${msg.text()}${url ? ` (${url})` : ""}`);
   });
-  page.on("pageerror", (err) => problems.push(`uncaught exception: ${err.message}`));
+  page.on("pageerror", (err) => problems.push(`uncaught exception: ${err.message}${err.stack ? `\n${err.stack.split("\n").slice(1, 6).join("\n")}` : ""}`));
   page.on("requestfailed", (req) => {
     // Navigations away and aborted event streams are not failures of the page.
     const error = req.failure()?.errorText ?? "";

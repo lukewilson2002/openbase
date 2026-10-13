@@ -34,6 +34,7 @@ import type {
   Field,
   FormulaCheckResult,
   HistoryEntry,
+  ImportResult,
   InstanceStats,
   InviteInfo,
   InvitePreview,
@@ -42,6 +43,9 @@ import type {
   Member,
   NotificationsResponse,
   OkResponse,
+  PublicForm,
+  PublicQueryResponse,
+  PublicView,
   QueryResponse,
   RecordsResponse,
   ResetLink,
@@ -49,6 +53,7 @@ import type {
   RunsPage,
   SessionInfo,
   SetupStatus,
+  ShareLink,
   Table,
   TableRecord,
   TestResult,
@@ -83,6 +88,7 @@ export interface TypeMap {
   Field: Field;
   FormulaCheckResult: FormulaCheckResult;
   HistoryEntry: HistoryEntry;
+  ImportResult: ImportResult;
   InstanceStats: InstanceStats;
   InviteInfo: InviteInfo;
   InvitePreview: InvitePreview;
@@ -91,6 +97,9 @@ export interface TypeMap {
   Member: Member;
   NotificationsResponse: NotificationsResponse;
   OkResponse: OkResponse;
+  PublicForm: PublicForm;
+  PublicQueryResponse: PublicQueryResponse;
+  PublicView: PublicView;
   QueryResponse: QueryResponse;
   RecordsResponse: RecordsResponse;
   ResetLink: ResetLink;
@@ -98,6 +107,7 @@ export interface TypeMap {
   RunsPage: RunsPage;
   SessionInfo: SessionInfo;
   SetupStatus: SetupStatus;
+  ShareLink: ShareLink;
   Table: Table;
   TableRecord: TableRecord;
   TestResult: TestResult;

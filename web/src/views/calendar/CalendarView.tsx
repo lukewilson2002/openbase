@@ -51,11 +51,16 @@ function CalendarInner(props: ViewProps) {
     () => (fields && visible ? { field_id: fields.start.field.id, end_field_id: fields.end?.field.id ?? null, from: visible.from, to: visible.to } : null),
     [fields, visible],
   );
-  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, enabled: !!range });
+  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, transient: setup.transient, enabled: !!range });
   // The unscheduled list asks the server for the view's records whose date is empty (a transient
   // filter that keeps the saved one); the client filter below also drops a record the moment it is
   // dropped onto the calendar, before the refetch lands.
-  const transient = useMemo(() => (fields ? unscheduledTransient(cfg.queryConfig.filter, fields.start.field.id) : null), [fields, cfg.queryConfig.filter]);
+  // Sorts and groups of a viewer's own (unsaved) override carry over; only the filter is replaced.
+  const viewerTransient = setup.transient;
+  const transient = useMemo(
+    () => (fields ? { ...viewerTransient, ...unscheduledTransient(cfg.queryConfig.filter, fields.start.field.id) } : null),
+    [fields, cfg.queryConfig.filter, viewerTransient],
+  );
   const all = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, enabled: !!fields && sidebar, variant: "unscheduled", transient });
 
   const events = useMemo(

@@ -671,6 +671,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchInputRef={searchInputRef}
           onAddField={() => setFieldDialog({ mode: "create" })}
           canManageFields={canManageFields}
+          timeZone={timeZone}
         />
         <div className="relative min-h-0 flex-1 border-t border-line bg-surface">
           {data.error && !data.loading && total === 0 ? (

@@ -75,6 +75,7 @@ administrator already exists for the data plane:
 | `views.contract.test.ts` | every view type, config replacement, personal and locked views, duplicate, delete |
 | `records.contract.test.ts` | create / update / delete / restore / move, typecast, links from both sides, `before_record_id`, view query (filter, sort, group, search, range, paging, colors, `transient`), aggregations, link lookup, history |
 | `collab.contract.test.ts` | comments, mentions and notifications, trash, automations (CRUD, dry-run test, webhook runs, run history) |
+| `sharing.contract.test.ts` | share links (create, disable, password, delete, limits, who may), public views and forms without credentials (visible fields only, search / paging / transient / range, passwords, uploads, submissions, rate limit), attachments through `?share=`, CSV export and both CSV imports |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
 `OPENGRID_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
@@ -92,8 +93,10 @@ OPENGRID_E2E=1 npm run e2e
 the app with `web/dist` moved away. The projects run in order on that one instance: `smoke` (the embedded
 build loads `/` without console errors or CSP violations), `journey` (first-run setup, workspace and base, rename a
 table, add number / single select / date / formula fields through the dialog, add records and edit cells,
-filter and sort, expanded record and a comment, log out and in) and `grid` (`grid.spec.ts`: cell editing,
-undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records). Every test
+filter and sort, expanded record and a comment, log out and in), `grid` (`grid.spec.ts`: cell editing,
+undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records) and `sharing`
+(`sharing.spec.ts`: build, share and anonymously submit a form in a fresh cookie-less browser context, a
+password-protected grid share that hides a field, CSV download and import, a viewer sorting a board). Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
 are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
@@ -157,6 +160,37 @@ All five get `{schema, table, view, role}`, are lazy chunks registered in `views
 Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field with time stores the UTC instant of the wall time in the field's zone (DST gaps and overlaps resolve like the server's `store_date`). Computed date fields (created/modified time, formulas) can be shown but not dragged.
 
 `dev/mock-api.ts` also serves a "Projects" table (tbl3, 40 records with dates, owners, cover images and dependencies) with one configured view of each type, plus notifications and trash fixtures; open `/base/app1/tbl3/viw11` (Board), `viw13` (Gallery), `viw14` (Calendar), `viw16` (Timeline), `viw17` (Outline).
+
+### Forms, sharing, public pages and CSV
+
+| Where | What |
+|---|---|
+| `src/api/sharing.ts` | `sharesApi` (manage links), `publicApi` (public form / shared view / attachments), `csvApi` (export, import into a table, new table); `ImportFailedError` carries the problem rows of a refused import |
+| `src/lib/forms/` | Pure logic: `formConfig.ts` (builder edits, what a form may hold, which fields the public form leaves out), `publicValues.ts` (what a visitor typed -> `values`, with validation), `drafts.ts` (the same for the internal fill-in mode) |
+| `src/lib/csv/` | The CSV preview parser (BOM, delimiter detection, quotes), `mapping.ts` (the column names the server derives, auto matching, payload) and `read.ts` (size / encoding checks) |
+| `src/views/form/` | The form view: `FormBuilder` (settings, `FormFieldList` with dnd-kit reorder, live preview through `FormSurface` with the record editors in their `form` variant) and `FormFill` (signed-in editors create a record through the normal records API) |
+| `src/components/share/ShareViewDialog.tsx` | "Share view" / "Share form" for creators: links, enable / disable, password, delete, and what is public |
+| `src/components/csv/` | Download CSV button, Import CSV (preview + column mapping + row errors), New table from CSV |
+| `src/public/` | Public pages, outside the app shell: `/form/:token`, `/share/:token` (and `/f/:token`, `/s/:token`, the paths the API reports) |
+
+- **Public pages** never call a signed-in endpoint and never redirect to `/login`: public requests pass `skipAuthRedirect`, and
+  `/share/`, `/s/`, `/form/`, `/f/` are public routes for the client. A password is kept in memory only (a reload asks again) and sent as
+  `X-Share-Password`; it is never in the URL, storage or a query key.
+- **Public form**: native inputs per field type (`PublicFieldInput`), validated with the shared cell parsers before sending; files go to
+  `POST /api/public/forms/{token}/attachments`; after submitting: the success message, "submit another" and the redirect (http/https only).
+  Link and user fields are never collected by public forms (server policy); the builder marks them "Not public", and a preview switch shows
+  only what visitors get.
+- **Shared views** are read-only. The signed-in views are wired to the signed-in API, so the public page reuses only what is presentational
+  or pure (cell display, card helpers, kanban stacking, the timeline chart, calendar date math) with simple layouts around it: grid and list
+  are a clean read-only table (group header rows, click a header to sort, paging, search), gallery cards with covers, kanban read-only
+  stacks, calendar a month grid (one query per month), timeline the real chart with every editing gesture off. A board, calendar or
+  timeline whose configured field is hidden in the share falls back to the table and says so. Card titles use the first visible field (the
+  public view does not say which field is primary).
+- **Attachments of a shared view** are authorised by `?share=<token>`; an `<img>` cannot send `X-Share-Password`, so for protected links the
+  page fetches the bytes with the header and shows a blob URL (CSP allows `blob:`); open links use plain URLs.
+- **CSV**: export is `GET /api/views/{id}/export.csv?timezone=` saved from a blob under the server's file name; import maps columns by the
+  names the server derives (trimmed, `Column N` when empty, `name 2` when repeated, or column numbers without a header row), is all or
+  nothing, and lists up to 50 refused rows. Link, user, attachment and computed fields cannot receive imported data.
 
 ### Trash and notifications
 

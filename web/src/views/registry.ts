@@ -13,7 +13,7 @@ import type { ViewComponent } from "./types";
  */
 export const viewRegistry: Record<ViewType, ViewComponent> = {
   grid: lazy(() => import("./grid/GridView")), // W9a
-  form: PlaceholderView, // W9b
+  form: lazy(() => import("./form/FormView")), // W9c
   gallery: lazy(() => import("./gallery/GalleryView")), // W9b
   kanban: lazy(() => import("./kanban/KanbanView")), // W9b
   calendar: lazy(() => import("./calendar/CalendarView")), // W9b

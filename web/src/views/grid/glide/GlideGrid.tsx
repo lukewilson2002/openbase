@@ -81,6 +81,19 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
 
   useEffect(ensurePortal, []);
 
+  // Glide listens for `click` on the window and reads `changedTouches` from anything that is not a
+  // MouseEvent. Radix switches and checkboxes inside a <form> (any dialog or popover of the page)
+  // dispatch a plain `new Event("click")` from their hidden input to notify the form, which makes
+  // Glide throw "Cannot read properties of undefined (reading '0')". Such events are not clicks of
+  // the pointer: keep them away from Glide (capture phase on the window runs before its listener).
+  useEffect(() => {
+    const guard = (e: Event) => {
+      if (!(e instanceof MouseEvent) && !("changedTouches" in e)) e.stopImmediatePropagation();
+    };
+    window.addEventListener("click", guard, true);
+    return () => window.removeEventListener("click", guard, true);
+  }, []);
+
   const renderer = useMemo(
     () =>
       createRenderer(() => ({

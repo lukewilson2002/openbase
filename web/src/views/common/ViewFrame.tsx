@@ -42,6 +42,8 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           role={role}
           config={config}
           canConfigure={cfg.canConfigure}
+          hasLocalQuery={cfg.transient !== null}
+          onResetLocalQuery={cfg.resetTransient}
           saving={cfg.saving}
           update={cfg.update}
           collaborators={setup.people}
@@ -52,6 +54,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           onSearchOpenChange={setup.setSearchOpen}
           searchInputRef={searchInputRef}
           canManageFields={false}
+          timeZone={setup.timeZone}
           features={{ shareView: true, ...features }}
           hideFieldsNoun={hideFieldsNoun}
           extra={toolbarExtra}

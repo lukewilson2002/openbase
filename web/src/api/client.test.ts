@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getClientId, http, isPublicRoute, request, setApiBase, setUnauthorizedHandler, withQuery } from "./client";
+import { ApiError, filenameFromDisposition, getClientId, http, isPublicRoute, request, requestFile, setApiBase, setUnauthorizedHandler, withQuery } from "./client";
 import { apiError, mockApi } from "@/test/utils";
 
 describe("api client", () => {
@@ -157,5 +157,51 @@ describe("api client", () => {
     expect(isPublicRoute("/loginx")).toBe(false);
     expect(isPublicRoute("/")).toBe(false);
     expect(isPublicRoute("/base/app1")).toBe(false);
+  });
+
+  it("treats share links and public forms as public routes in both spellings", () => {
+    for (const p of ["/share/tok", "/s/tok", "/form/tok", "/f/tok"]) expect(isPublicRoute(p)).toBe(true);
+    expect(isPublicRoute("/share")).toBe(false);
+    expect(isPublicRoute("/formula/x")).toBe(false);
+    expect(isPublicRoute("/sx/tok")).toBe(false);
+  });
+
+  it("keeps the rest of an error object for the few errors that carry more than a message", async () => {
+    mockApi({ "POST /api/x": { status: 422, json: { error: { code: "import_failed", message: "nope", rows: [{ row: 2, message: "bad" }] } } } });
+    const err = await http.post("/api/x", {}).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).details).toMatchObject({ rows: [{ row: 2, message: "bad" }] });
+  });
+
+  it("does not bounce public requests to the login page on a 401 when the address bar is a share link", async () => {
+    window.history.replaceState(null, "", "/share/tok_1");
+    mockApi({ "GET /api/public/shares/tok_1": apiError(401, "share_password_required", "protected") });
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    await expect(http.get("/api/public/shares/tok_1")).rejects.toMatchObject({ code: "share_password_required" });
+    expect(handler).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/");
+  });
+
+  describe("files", () => {
+    it("reads the file name from Content-Disposition, preferring the UTF-8 form", () => {
+      expect(filenameFromDisposition('attachment; filename="My view.csv"; filename*=UTF-8\'\'My%20view%20%E2%9C%93.csv')).toBe("My view \u2713.csv");
+      expect(filenameFromDisposition('attachment; filename="plain.csv"')).toBe("plain.csv");
+      expect(filenameFromDisposition("attachment; filename=bare.csv")).toBe("bare.csv");
+      expect(filenameFromDisposition(null)).toBeNull();
+      expect(filenameFromDisposition("attachment")).toBeNull();
+    });
+
+    it("returns the bytes and the suggested name of a successful download", async () => {
+      mockApi({ "GET /api/views/viw1/export.csv": { status: 200, text: "a,b\r\n", headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Tasks.csv"' } } });
+      const file = await requestFile("/api/views/viw1/export.csv", { query: { timezone: "UTC" } });
+      expect(file.filename).toBe("Tasks.csv");
+      expect(await file.blob.text()).toBe("a,b\r\n");
+    });
+
+    it("throws the API error for a failed download", async () => {
+      mockApi({ "GET /api/views/viw1/export.csv": apiError(404, "not_found", "view not found") });
+      await expect(requestFile("/api/views/viw1/export.csv")).rejects.toMatchObject({ status: 404, message: "view not found" });
+    });
   });
 });

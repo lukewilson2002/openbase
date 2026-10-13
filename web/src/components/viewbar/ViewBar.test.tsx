@@ -92,3 +92,33 @@ describe("ViewBar for people who can save the view", () => {
     expect(screen.getByText("Locked")).toBeInTheDocument();
   });
 });
+
+describe("ViewBar sharing and export", () => {
+  it("offers Download CSV to everyone who can see the view", () => {
+    renderBar();
+    expect(screen.getByRole("button", { name: "Download CSV" })).toBeInTheDocument();
+  });
+
+  it("can leave the CSV button out (form views)", () => {
+    renderBar({ features: { csv: false } });
+    expect(screen.queryByRole("button", { name: "Download CSV" })).not.toBeInTheDocument();
+  });
+
+  it.each(["viewer", "commenter", "editor"])("hides Share view from a %s", (role) => {
+    renderBar({ role });
+    expect(screen.queryByRole("button", { name: "Share view" })).not.toBeInTheDocument();
+  });
+
+  it("opens the share dialog for a creator", async () => {
+    renderBar({ role: "creator", schema: makeSchema("creator") });
+    await userEvent.click(screen.getByRole("button", { name: "Share view" }));
+    expect(await screen.findByRole("dialog", { name: /^Share / })).toBeInTheDocument();
+  });
+
+  it("disables Share view on a personal view and says why", () => {
+    renderBar({ role: "creator", schema: makeSchema("creator"), view: makeView({ id: "viw1", personal: true }) });
+    const button = screen.getByRole("button", { name: "Share view" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Personal views cannot be shared");
+  });
+});
