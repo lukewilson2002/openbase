@@ -302,6 +302,10 @@ Creators manage links on a view: `GET|POST /api/views/{id}/shares`
 (`{"enabled"?, "password"? | null}`), `DELETE /api/shares/{id}`. A form link
 needs a form view; a read-only link needs any other view; personal views cannot
 be shared. At most 20 links per view. Passwords are stored as Argon2id hashes.
+A public link follows its view's live configuration, so while a view has an
+enabled link, changing the shown fields, their order, the filter or the form
+needs the Creator role (403 for Editors; widths, sorts, colours and renames
+stay open to Editors).
 
 Public endpoints take no credentials; the token in the URL is the capability.
 A password-protected link wants the header `X-Share-Password` (401
@@ -309,13 +313,16 @@ A password-protected link wants the header `X-Share-Password` (401
 wrong-kind links are 404, like unknown tokens. All responses are
 `Cache-Control: no-store`; requests are rate limited per client IP (300/min),
 per token (1,200/min), password checks (30/min) and form traffic (20 submits
-and 20 uploads per 10 minutes per IP and link).
+and 20 uploads per 10 minutes per IP and link). Anonymous form uploads also
+have hourly byte budgets: 200 MB per client IP, 500 MB per base and 1,000 MB
+for the whole server (429 when used up; a request is charged its declared
+length). Unattached public-form uploads are deleted after 2 hours.
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
 | `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
-| `GET /api/attachments/{id}/{filename}?share={token}` | attachment files of the shared view (send `X-Share-Password` when protected) |
+| `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field of a live record the view's filter lists, otherwise 404 (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
 | `POST /api/public/forms/{token}/attachments` | multipart `file` for an attachment field of the form (at most 25 MB, further capped by the upload limit) |
@@ -326,13 +333,17 @@ and 20 uploads per 10 minutes per IP and link).
 
 - `GET /api/views/{id}/export.csv?timezone=` (Viewer): the view's visible
   fields in view order, filter and sort applied, cells as display text (dates
-  in `timezone`, default the caller's zone), streamed in 500-record pages.
+  in `timezone`, default the caller's zone), streamed in 500-record pages
+  from the list of matching records taken when the export starts (edits made
+  while it streams cannot repeat or skip rows).
   UTF-8 with a BOM, CRLF, RFC 4180 quoting. Cells (and headers) starting with
   `=`, `+`, `-`, `@`, TAB or CR get a leading `'` so spreadsheets do not run
   them as formulas (numbers keep their sign). The file name is the view name,
   sanitized.
 - `POST /api/tables/{id}/import` (Editor): multipart `file` (CSV, at most 20 MB,
-  100,000 rows, 500 columns), `mapping` (JSON `{csvColumn: fieldId | null}`;
+  100,000 rows, 500 columns and 3,000,000 cells, counting every row as padded
+  to the widest one; at most two imports run at the same time, others wait),
+  `mapping` (JSON `{csvColumn: fieldId | null}`;
   columns are header names, or zero-based numbers when `has_header` is
   `false`; omitted = match by field name) and `has_header` (default `true`).
   Values are read with typecast. **All or nothing**: any bad row gives
