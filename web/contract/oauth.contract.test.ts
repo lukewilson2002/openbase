@@ -185,7 +185,9 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     expect(provider.saved!.refresh_token).not.toBe(before.refresh_token);
     await again.client.close();
 
-    // The old refresh token is dead, and presenting it kills the whole connection (reuse detection).
+    // The old refresh token is dead. Presented again right away (an app racing itself) it is refused
+    // with invalid_grant but the connection lives on; reuse after the 30 second grace window revokes
+    // it (covered by crates/server/tests/oauth_flow.rs, which can move the clock).
     const res = await fetch(`${seeded.baseUrl}/oauth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -194,9 +196,10 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("invalid_grant");
     const after = connectWith(provider);
-    await after.connect().catch(() => undefined);
-    await expect(connectWith(provider).connect()).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(parseList("GrantInfo", await admin.run(api.oauth.grants)).filter((g) => g.client_name === provider.clientMetadata.client_name)).toHaveLength(0);
+    await after.connect();
+    expect((await after.client.listTools()).tools.length).toBeGreaterThan(5);
+    await after.client.close();
+    expect(parseList("GrantInfo", await admin.run(api.oauth.grants)).filter((g) => g.client_name === provider.clientMetadata.client_name)).toHaveLength(1);
   });
 
   it("answers a tool the grant does not allow with 403 insufficient_scope and a challenge the SDK understands", async () => {
