@@ -14,6 +14,10 @@ via_token: boolean,
  */
 write: boolean, 
 /**
+ * Whether account-level management is allowed (always true for sessions).
+ */
+manage: boolean, 
+/**
  * Base restriction of the token; None = all bases the user can access.
  */
 base_ids?: Array<string> | null, };

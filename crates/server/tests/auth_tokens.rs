@@ -154,7 +154,7 @@ async fn tokens_cannot_use_session_only_endpoints() {
     let (ws, base) = app.workspace_with_base(&admin, "Acme");
     let (token, info) = create_token(&app, &admin, json!({"name": "all", "write": true})).await;
     let t = bearer(&token);
-    app.get(&t, "/api/auth/me").await.assert_status(403);
+    app.get(&t, "/api/auth/sessions").await.assert_status(403);
     app.get(&t, "/api/tokens").await.assert_status(403);
     app.post(&t, "/api/tokens", json!({"name": "child", "write": true}))
         .await
@@ -162,10 +162,10 @@ async fn tokens_cannot_use_session_only_endpoints() {
     app.delete(&t, &format!("/api/tokens/{}", info["id"].as_str().unwrap()))
         .await
         .assert_status(403);
-    // Admin endpoints are session-only even for an admin's token.
+    // Admin endpoints need the manage permission, which this token lacks.
     app.get(&t, "/api/admin/users").await.assert_status(403);
     app.get(&t, "/api/admin/stats").await.assert_status(403);
-    // Invite management is session-only.
+    // Invite management needs the manage permission too.
     app.post(
         &t,
         &format!("/api/workspaces/{ws}/invites"),
@@ -336,4 +336,53 @@ async fn last_used_at_is_stamped_at_most_once_a_minute() {
     let stale = stamp();
     app.get(&t, "/api/tokens/whoami").await.assert_status(200);
     assert!(stamp() > stale + 100_000, "a stale stamp was not refreshed");
+}
+
+#[tokio::test]
+async fn manage_permission_needs_write_and_is_reported() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    // `manage` without `write` makes no sense (managing is writing): refused.
+    let res = app
+        .post(
+            &user,
+            "/api/tokens",
+            json!({"name": "x", "write": false, "manage": true}),
+        )
+        .await;
+    res.assert_status(400);
+    // Omitting it keeps the old behaviour: no manage.
+    let (_, info) = create_token(&app, &user, json!({"name": "w", "write": true})).await;
+    assert_eq!(info["manage"], false);
+    let (token, info) = create_token(
+        &app,
+        &user,
+        json!({"name": "m", "write": true, "manage": true}),
+    )
+    .await;
+    assert_eq!(info["manage"], true);
+    let listed = app.get(&user, "/api/tokens").await;
+    assert!(
+        listed
+            .body
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["manage"] == true)
+    );
+    let who = app.get(&bearer(&token), "/api/tokens/whoami").await;
+    who.assert_status(200);
+    assert_eq!(who.body["manage"], true);
+    assert_eq!(who.body["write"], true);
+    // Creating the token is audited with its scope.
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM audit_log WHERE action = 'token_create' AND detail LIKE '%\"manage\":true%'",
+            &[]
+        ),
+        1
+    );
+    // Sessions report full capability.
+    let me = app.get(&user, "/api/tokens/whoami").await;
+    assert_eq!(me.body["manage"], true);
 }

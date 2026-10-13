@@ -73,8 +73,14 @@ pub fn create(
         }
         Some(d) => Some(now_ms() + i64::from(d) * DAY_MS),
     };
+    if req.manage && !req.write {
+        return Err(AppError::bad_request(
+            "a token that can manage workspaces and members must also allow writes",
+        ));
+    }
     let scope = TokenScope {
         write: req.write,
+        manage: req.manage,
         base_ids: base_ids.clone(),
     };
     let id = new_id(og_core::ids::TOKEN);
@@ -99,6 +105,7 @@ pub fn create(
             id,
             name,
             write: req.write,
+            manage: req.manage,
             base_ids,
             created_at: now,
             last_used_at: None,
@@ -131,6 +138,7 @@ pub fn list(conn: &Connection, user_id: &str) -> AppResult<Vec<TokenInfo>> {
             id,
             name,
             write: scope.write,
+            manage: scope.manage && scope.write,
             base_ids: scope.base_ids,
             created_at,
             last_used_at,
@@ -175,6 +183,7 @@ mod tests {
         CreateTokenRequest {
             name: name.into(),
             write: false,
+            manage: false,
             base_ids: None,
             expires_in_days: None,
         }

@@ -108,7 +108,7 @@ describe("account", () => {
 
   it("creates an API token, shows it once, and revokes tokens", async () => {
     const user = userEvent.setup();
-    const info = { id: "pat1", name: "Zapier", write: true, base_ids: null, created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
+    const info = { id: "pat1", name: "Zapier", write: true, manage: false, base_ids: null, created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
     const api = mockApi({
       "GET /api/auth/me": USER,
       "GET /api/tokens": [info],
@@ -127,12 +127,52 @@ describe("account", () => {
 
     const shown = await screen.findByRole("dialog", { name: "Copy your new token" });
     expect(within(shown).getByLabelText("API token")).toHaveValue("pat_SECRETVALUE");
-    expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Zapier", write: true, base_ids: null, expires_in_days: 90 });
+    expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Zapier", write: true, manage: false, base_ids: null, expires_in_days: 90 });
     await user.click(within(shown).getByRole("button", { name: "Done" }));
     expect(screen.queryByDisplayValue("pat_SECRETVALUE")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Revoke Zapier" }));
     await user.click(await screen.findByRole("button", { name: "Revoke token" }));
     await waitFor(() => expect(api.callsTo("DELETE /api/tokens/pat1")).toHaveLength(1));
+  });
+
+  it("offers the manage permission only with write access, warns about it, and shows it in the list", async () => {
+    const user = userEvent.setup();
+    const base = { write: true, base_ids: null, created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
+    const agent = { id: "pat2", name: "Agent", manage: true, ...base };
+    const plain = { id: "pat3", name: "Plain", manage: false, ...base };
+    const api = mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/tokens": [agent, plain],
+      "POST /api/tokens": { token: "pat_X", info: agent },
+    });
+    renderApp({ route: "/account?tab=tokens" });
+
+    // Only the manage-capable token carries the badge.
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+    expect(screen.getAllByText("Can manage workspaces and members")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: /New token/ }));
+    const form = await screen.findByRole("dialog", { name: "New personal access token" });
+    const manage = within(form).getByRole("checkbox", { name: "Allow managing workspaces, members and settings" });
+    // Managing is writing: unavailable while the token is read only.
+    expect(manage).toBeDisabled();
+    expect(within(form).getByText(/can never be changed with a token/)).toBeInTheDocument();
+
+    await user.type(within(form).getByLabelText("Name"), "Agent");
+    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
+    expect(manage).toBeEnabled();
+    await user.click(manage);
+    expect(manage).toBeChecked();
+    // Turning writes off again clears and disables it.
+    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
+    expect(manage).toBeDisabled();
+    expect(manage).not.toBeChecked();
+    await user.click(within(form).getByRole("checkbox", { name: /Allow writes/ }));
+    await user.click(manage);
+    await user.click(within(form).getByRole("button", { name: "Create token" }));
+
+    await screen.findByRole("dialog", { name: "Copy your new token" });
+    expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Agent", write: true, manage: true, base_ids: null, expires_in_days: null });
   });
 });

@@ -50,6 +50,7 @@ export function TokensSection() {
                 <p className="truncate text-[0.8125rem] font-medium">
                   {t.name}
                   <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{t.write ? "Read and write" : "Read only"}</span>
+                  {t.manage && <span className="ml-1 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-danger">Can manage workspaces and members</span>}
                 </p>
                 <p className="text-xs text-muted">
                   Created {formatDate(t.created_at)} - {t.last_used_at ? `last used ${formatDate(t.last_used_at)}` : "never used"}
@@ -110,9 +111,11 @@ export function TokensSection() {
 function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (t: CreatedToken) => void }) {
   const [name, setName] = useState("");
   const [write, setWrite] = useState(false);
+  const [manage, setManage] = useState(false);
   const [expiry, setExpiry] = useState("");
   const create = useMutation({
-    mutationFn: () => api.tokens.create({ name: name.trim(), write, base_ids: null, expires_in_days: expiry ? Number(expiry) : null }),
+    mutationFn: () =>
+      api.tokens.create({ name: name.trim(), write, manage: write && manage, base_ids: null, expires_in_days: expiry ? Number(expiry) : null }),
     onSuccess: onCreated,
   });
   const submit = (e: FormEvent) => {
@@ -126,7 +129,22 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
         <Field label="Name" hint="For example: Zapier, nightly export.">
           {(ctl) => <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required autoFocus />}
         </Field>
-        <Checkbox checked={write} onCheckedChange={setWrite} label="Allow writes (otherwise read only)" />
+        <Checkbox
+          checked={write}
+          onCheckedChange={(v) => {
+            setWrite(v);
+            if (!v) setManage(false);
+          }}
+          label="Allow writes (otherwise read only)"
+        />
+        <div className="flex flex-col gap-1">
+          <Checkbox checked={write && manage} onCheckedChange={setManage} disabled={!write} label="Allow managing workspaces, members and settings" />
+          <p className="pl-6 text-xs text-muted">
+            Lets whoever holds this token do what you can do in the app beyond your data: create, rename and delete workspaces, change who has access, send invites,
+            and use the admin pages if you are an administrator. Only turn this on for tools you fully trust, such as an AI agent that should work for you. Passwords, two-factor
+            settings, sessions and tokens can never be changed with a token.
+          </p>
+        </div>
         <Field label="Expires">
           {(ctl) => (
             <Select {...ctl} value={expiry} onChange={(e) => setExpiry(e.target.value)}>

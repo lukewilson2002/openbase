@@ -320,7 +320,11 @@ impl TestApp {
     }
 
     fn user_with(&self, email: &str, name: &str, is_admin: bool) -> Client {
-        let hash = opengrid::auth::password::hash("password1234").unwrap();
+        // Hashing is deliberately slow; every test user shares one hash of the same password.
+        static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let hash = HASH
+            .get_or_init(|| opengrid::auth::password::hash("password1234").unwrap())
+            .clone();
         let email = email.to_string();
         let name = name.to_string();
         let (user_id, token) = self
@@ -347,5 +351,46 @@ impl TestApp {
 
     pub fn anon(&self) -> Client {
         Client::default()
+    }
+
+    /// A bearer-only client for a raw token string.
+    pub fn bearer(token: &str) -> Client {
+        Client {
+            bearer: Some(token.to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// Create a personal access token for `user` through the API (a session call, like the
+    /// account page) and return a bearer client for it. `body` is a `CreateTokenRequest`.
+    pub async fn api_token(&self, user: &Client, body: Value) -> Client {
+        let res = self.post(user, "/api/tokens", body).await;
+        res.assert_status(201);
+        let mut c = Self::bearer(res.body["token"].as_str().unwrap());
+        c.user_id = user.user_id.clone();
+        c
+    }
+
+    /// Insert a token row with arbitrary stored `scopes` JSON (for shapes the API refuses to
+    /// create, such as `manage` without `write`, or rows written before `manage` existed).
+    pub fn raw_token(&self, user: &Client, scopes: Value) -> Client {
+        let token = format!("pat_raw_{}", opengrid::ids::new_id("x"));
+        let hash = opengrid::ids::hash_token(&token);
+        let uid = user.user_id.clone().unwrap();
+        let scopes = scopes.to_string();
+        self.state
+            .db
+            .write_sync(|tx| {
+                tx.execute(
+                    "INSERT INTO api_tokens (id, user_id, name, token_hash, scopes, created_at)
+                     VALUES (?1, ?2, 'raw', ?3, ?4, 1)",
+                    rusqlite::params![opengrid::ids::new_id("pat"), uid, hash, scopes],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let mut c = Self::bearer(&token);
+        c.user_id = user.user_id.clone();
+        c
     }
 }

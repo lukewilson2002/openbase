@@ -421,7 +421,7 @@ async fn admin_reset_link_works_without_email() {
 }
 
 #[tokio::test]
-async fn me_and_sessions_reject_api_tokens() {
+async fn credentials_and_sessions_reject_api_tokens() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");
     let res = app
@@ -432,16 +432,18 @@ async fn me_and_sessions_reject_api_tokens() {
         bearer: Some(res.body["token"].as_str().unwrap().to_string()),
         ..Default::default()
     };
-    for path in ["/api/auth/me", "/api/auth/sessions"] {
-        let res = app.get(&token_client, path).await;
-        res.assert_status(403);
-        assert!(
-            res.body["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("API tokens")
-        );
-    }
+    // Reading the profile is harmless; sessions are credentials.
+    let me = app.get(&token_client, "/api/auth/me").await;
+    me.assert_status(200);
+    assert_eq!(me.body["email"], "a@example.com");
+    let res = app.get(&token_client, "/api/auth/sessions").await;
+    res.assert_status(403);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("API tokens")
+    );
     for (path, body) in [
         (
             "/api/auth/password",
@@ -452,6 +454,7 @@ async fn me_and_sessions_reject_api_tokens() {
     ] {
         app.post(&token_client, path, body).await.assert_status(403);
     }
+    // Changing the profile needs the manage permission, which this token lacks.
     app.patch(&token_client, "/api/auth/me", json!({"name": "Hacked"}))
         .await
         .assert_status(403);

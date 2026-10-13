@@ -2,8 +2,10 @@
 //! logout, profile, password change and reset, 2FA management, and the
 //! caller's session list.
 //!
-//! Everything except setup/signup/login/reset is session-only: API tokens are
-//! rejected so a leaked token can't take over the account.
+//! Credential, 2FA and session endpoints are session-only: API tokens are
+//! rejected whatever their scope, so a leaked token can't take over the account.
+//! Reading the profile (`GET /api/auth/me`) works with any token; changing the
+//! display name or time zone needs the `manage` permission.
 
 use std::time::Duration;
 
@@ -22,7 +24,7 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::json;
 
 use crate::auth::password::{self, DUMMY_HASH};
-use crate::auth::{Actor, ClientInfo, SESSION_COOKIE, session, totp};
+use crate::auth::{Actor, Capability, ClientInfo, SESSION_COOKIE, session, totp};
 use crate::db::now_ms;
 use crate::email;
 use crate::error::{AppError, AppResult};
@@ -447,7 +449,6 @@ async fn logout(
 }
 
 async fn me(State(state): State<AppState>, actor: Actor) -> AppResult<Json<User>> {
-    actor.require_session()?;
     let user = state
         .db
         .read(move |c| users::require(c, &actor.user_id))
@@ -460,7 +461,7 @@ async fn update_me(
     actor: Actor,
     ApiJson(req): ApiJson<UpdateMeRequest>,
 ) -> AppResult<Json<User>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::Manage)?;
     let name = req.name.as_deref().map(users::validate_name).transpose()?;
     let timezone = req
         .timezone
@@ -488,7 +489,7 @@ async fn change_password(
     client: ClientInfo,
     ApiJson(req): ApiJson<ChangePasswordRequest>,
 ) -> AppResult<Json<OkResponse>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     state
         .limiter
         .check("password_change", &actor.user_id, 10, 10 * MINUTE)?;
@@ -636,7 +637,7 @@ async fn totp_setup(
     State(state): State<AppState>,
     actor: Actor,
 ) -> AppResult<Json<TwoFactorSetup>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     let secret = totp::generate_secret();
     let stored = secret.clone();
     let user = state
@@ -664,7 +665,7 @@ async fn totp_enable(
     client: ClientInfo,
     ApiJson(req): ApiJson<TwoFactorCode>,
 ) -> AppResult<Json<User>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     state
         .limiter
         .check("2fa_manage", &actor.user_id, 10, 10 * MINUTE)?;
@@ -708,7 +709,7 @@ async fn totp_disable(
     client: ClientInfo,
     ApiJson(req): ApiJson<TwoFactorDisable>,
 ) -> AppResult<Json<User>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     state
         .limiter
         .check("2fa_manage", &actor.user_id, 10, 10 * MINUTE)?;
@@ -746,7 +747,7 @@ async fn list_sessions(
     State(state): State<AppState>,
     actor: Actor,
 ) -> AppResult<Json<Vec<SessionInfo>>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     let current = actor.session_hash.clone().unwrap_or_default();
     let sessions = state
         .db
@@ -780,7 +781,7 @@ async fn revoke_session(
     client: ClientInfo,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     let valid_id = id.len() == SESSION_ID_LEN
         && id
             .chars()
@@ -816,7 +817,7 @@ async fn revoke_other_sessions(
     actor: Actor,
     client: ClientInfo,
 ) -> AppResult<Json<OkResponse>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     state
         .db
         .write(move |tx| {

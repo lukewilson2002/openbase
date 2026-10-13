@@ -121,8 +121,10 @@ disable 2FA, which is a path to any account.
 - **No dynamic SQL from user input.** User tables are JSON rows keyed by field id;
   adding, renaming or deleting a field never builds SQL from names.
 - **Roles are checked in one place** (`perm.rs`). No access answers 404 (no
-  existence leaks); insufficient role answers 403. API tokens cannot manage
-  workspaces, tokens or admin.
+  existence leaks); insufficient role answers 403. API tokens can manage
+  workspaces, members, invites and (for administrators) the admin pages only with
+  the explicit `manage` permission, and can never touch credentials, 2FA, sessions
+  or tokens (see below).
 - **Outgoing HTTP from automations** resolves the host, refuses non-public
   addresses, pins the connection to the vetted address and does not follow
   redirects ([automations](automations.md#http-requests-and-ssrf)).
@@ -156,6 +158,26 @@ disable 2FA, which is a path to any account.
   reset link, or an operator runs `reset-password`. Deactivating a user blocks
   their tokens but does not delete them (reactivation restores them); reset the
   password when reactivating an account you think was compromised.
+- **The `manage` permission** (off by default, needs `write`) lets a token do the
+  account-level things a user can do in the UI: create, rename, delete and
+  restore workspaces, change members' roles and remove them, create / list /
+  revoke / accept invites, delete, duplicate and restore bases, and, when the
+  owner is an instance administrator, use the admin pages. Every such check goes
+  through `Actor::require_capability` (`Manage`, `ManageUnscoped` or
+  `SessionOnly`); a refusal names the `manage` permission. A `manage` token that
+  is limited to specific bases is additionally refused everything that reaches
+  beyond a single base (workspaces, workspace members and invites, admin).
+  Admin calls made with a token are written to the audit log as `admin_token_use`
+  with the token's id and the request. **Credentials are session-only
+  whatever the token's scope**: password change, 2FA setup / enable / disable,
+  the session list and revocation, and listing / creating / deleting tokens. A
+  leaked token, even a `manage` one, can therefore neither take over the account
+  nor mint a replacement that outlives its own revocation. Changing a password
+  deletes all of the owner's tokens. Treat a `manage` token like a signed-in
+  session of the same user: give it only to tools you fully trust (an AI agent,
+  for example), and prefer an expiry. `tests/token_capabilities.rs` checks every
+  manage-gated and session-only route against sessions, write, read-only and
+  `manage` tokens, per role.
 - **Read-only tokens** are refused on every state-changing request, in one place
   (the authentication extractor), apart from the view-query POST. A new mutating
   route is therefore safe by default; `tests/security_auth.rs` lists all mutating
