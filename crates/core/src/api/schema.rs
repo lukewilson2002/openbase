@@ -6,6 +6,7 @@ use crate::field::{Field, FieldKind};
 use crate::view::{ViewConfig, ViewType};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct View {
     pub id: String,
     pub table_id: String,
@@ -22,6 +23,7 @@ pub struct View {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Table {
     pub id: String,
     pub base_id: String,
@@ -37,6 +39,7 @@ pub struct Table {
 
 /// `GET /api/bases/{id}`: everything the client needs to render a base.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct BaseSchema {
     pub id: String,
     pub workspace_id: String,
@@ -50,11 +53,13 @@ pub struct BaseSchema {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateTable {
     pub name: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateTable {
     #[serde(default)]
     pub name: Option<String>,
@@ -65,6 +70,7 @@ pub struct UpdateTable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateField {
     pub name: String,
     #[serde(flatten)]
@@ -78,12 +84,20 @@ pub struct CreateField {
 
 /// Partial update. Changing `kind` to a different type converts existing data.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+// ts-rs cannot flatten an optional enum, so the generated type is `UpdateFieldBase`
+// (everything except `kind`) and `web/src/api/types/overrides.ts` defines `UpdateField`.
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, rename = "UpdateFieldBase", optional_fields = nullable)
+)]
 pub struct UpdateField {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default, flatten)]
+    #[cfg_attr(feature = "ts", ts(skip))]
     pub kind: Option<FieldKind>,
     /// Move the field after this field id in table order (None = unchanged).
     #[serde(default)]
@@ -91,11 +105,13 @@ pub struct UpdateField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SetPrimaryField {
     pub field_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateView {
     pub name: String,
     #[serde(rename = "type")]
@@ -108,6 +124,7 @@ pub struct CreateView {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateView {
     #[serde(default)]
     pub name: Option<String>,

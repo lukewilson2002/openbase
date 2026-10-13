@@ -13,6 +13,12 @@ use serde_json::Value as Json;
 /// `og_core::field`). System fields (created/modified time/by, autonumber)
 /// also appear in `values` under their field ids when the table has them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// Renamed in TypeScript so it does not shadow the built-in `Record<K, V>`.
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, rename = "TableRecord", optional_fields = nullable)
+)]
 pub struct Record {
     pub id: String,
     pub table_id: String,
@@ -28,6 +34,7 @@ pub struct Record {
 
 /// A linked record reference with its primary field text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LinkRef {
     pub id: String,
     pub name: String,
@@ -36,6 +43,7 @@ pub struct LinkRef {
 /// Restrict a query to records whose date field falls in [from, to]
 /// (calendar and timeline views). Dates are `YYYY-MM-DD`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct DateRange {
     pub field_id: String,
     /// Optional end-date field: a record matches if its span overlaps the range.
@@ -47,6 +55,7 @@ pub struct DateRange {
 
 /// `POST /api/views/{id}/query`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct QueryRequest {
     #[serde(default)]
     pub offset: usize,
@@ -68,6 +77,7 @@ pub struct QueryRequest {
 /// depth-first; `start` is the index (in the full ordered result) of the
 /// first record in the group.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct GroupHeader {
     /// 0-based nesting level.
     pub depth: usize,
@@ -84,6 +94,7 @@ pub struct GroupHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct QueryResponse {
     /// Number of records matching the filter and search.
     pub total: usize,
@@ -98,18 +109,21 @@ pub struct QueryResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AggregationsResponse {
     /// field id -> aggregated value for the view's configured summaries.
     pub values: BTreeMap<String, Json>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct NewRecord {
     #[serde(default)]
     pub values: BTreeMap<String, Json>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateRecords {
     pub records: Vec<NewRecord>,
     /// Coerce values leniently and create missing select choices.
@@ -121,6 +135,7 @@ pub struct CreateRecords {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct RecordPatch {
     pub id: String,
     /// Fields to set; JSON null clears a field. Fields not listed are unchanged.
@@ -128,6 +143,7 @@ pub struct RecordPatch {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateRecords {
     pub records: Vec<RecordPatch>,
     #[serde(default)]
@@ -135,17 +151,20 @@ pub struct UpdateRecords {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct RecordsResponse {
     pub records: Vec<Record>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct RecordIds {
     pub ids: Vec<String>,
 }
 
 /// Manual reorder: place `ids` (in the given order) before or after a record.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct MoveRecords {
     pub ids: Vec<String>,
     #[serde(default)]
@@ -156,11 +175,13 @@ pub struct MoveRecords {
 
 /// `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=` (link picker).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LinkCandidates {
     pub records: Vec<LinkRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FieldChange {
     #[serde(default)]
     pub old: Json,
@@ -169,6 +190,7 @@ pub struct FieldChange {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct HistoryEntry {
     pub id: i64,
     #[serde(default)]
@@ -183,6 +205,7 @@ pub struct HistoryEntry {
 
 /// Comment bodies are plain text; mentions are written `@[Name](usrXXXX)`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Comment {
     pub id: String,
     pub record_id: String,
@@ -196,11 +219,13 @@ pub struct Comment {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CommentBody {
     pub body: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TrashItem {
     /// workspace | base | table | field | view | record
     pub kind: String,
@@ -212,17 +237,20 @@ pub struct TrashItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TrashListing {
     pub items: Vec<TrashItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct RestoreRequest {
     pub kind: String,
     pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Notification {
     pub id: String,
     /// mention | assigned | invite | automation
@@ -234,12 +262,14 @@ pub struct Notification {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct NotificationsResponse {
     pub notifications: Vec<Notification>,
     pub unread: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct MarkRead {
     /// Empty = mark all read.
     #[serde(default)]

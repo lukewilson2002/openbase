@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub type RoleName = String;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct BaseSummary {
     pub id: String,
     pub workspace_id: String,
@@ -21,6 +22,7 @@ pub struct BaseSummary {
 /// membership without workspace membership) appear under their workspace
 /// with `role: None` on the workspace.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct WorkspaceSummary {
     pub id: String,
     pub name: String,
@@ -31,17 +33,20 @@ pub struct WorkspaceSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateWorkspace {
     pub name: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateWorkspace {
     #[serde(default)]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateBase {
     pub name: String,
     #[serde(default)]
@@ -51,6 +56,7 @@ pub struct CreateBase {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateBase {
     #[serde(default)]
     pub name: Option<String>,
@@ -63,6 +69,7 @@ pub struct UpdateBase {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct DuplicateBase {
     #[serde(default)]
     pub name: Option<String>,
@@ -71,6 +78,7 @@ pub struct DuplicateBase {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Member {
     pub user_id: String,
     pub name: String,
@@ -79,12 +87,14 @@ pub struct Member {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateMember {
     pub role: RoleName,
 }
 
 /// Someone who can see a base (for user fields and @mentions).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Collaborator {
     pub id: String,
     pub name: String,
