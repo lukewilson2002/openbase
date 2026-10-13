@@ -18,6 +18,13 @@ export const basePermissions = {
   },
   /** Lock or unlock a shared view. */
   lockView: (role: string, view: Pick<View, "personal">) => !view.personal && atLeast(role, "creator"),
+  /** Open the automations page, and create, edit, test, enable and delete automations. */
+  manageAutomations: (role: string) => atLeast(role, "creator"),
+  /**
+   * The server lets editors read an automation's run history, but listing automations (the only way to learn their ids)
+   * needs a creator, so the UI offers runs through the automations page to creators only.
+   */
+  viewAutomationRuns: (role: string) => atLeast(role, "editor"),
   /** See and change base-level members and invites. */
   manageSharing: (role: string) => atLeast(role, "creator"),
 };

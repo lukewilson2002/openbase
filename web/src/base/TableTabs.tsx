@@ -16,13 +16,14 @@ import { basePermissions } from "./permissions";
 export interface TableTabsProps {
   schema: BaseSchema;
   activeTableId: string | undefined;
-  onToggleSidebar: () => void;
-  sidebarOpen: boolean;
+  /** Omitted on pages without a view sidebar (automations). */
+  onToggleSidebar?: () => void;
+  sidebarOpen?: boolean;
 }
 
 type TableDialog = { kind: "create" } | { kind: "rename"; table: Table } | { kind: "delete"; table: Table };
 
-export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen }: TableTabsProps) {
+export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen = false }: TableTabsProps) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -57,9 +58,11 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
 
   return (
     <nav aria-label="Tables" className="flex h-10 shrink-0 items-center gap-1 border-b border-line bg-subtle px-2">
-      <IconButton label={sidebarOpen ? "Hide views" : "Show views"} size="sm" onClick={onToggleSidebar} className="md:hidden" aria-expanded={sidebarOpen}>
-        <PanelLeft aria-hidden className="size-4" />
-      </IconButton>
+      {onToggleSidebar && (
+        <IconButton label={sidebarOpen ? "Hide views" : "Show views"} size="sm" onClick={onToggleSidebar} className="md:hidden" aria-expanded={sidebarOpen}>
+          <PanelLeft aria-hidden className="size-4" />
+        </IconButton>
+      )}
       <ul className="flex min-w-0 flex-1 items-end gap-0.5 self-end overflow-x-auto [scrollbar-width:none]">
         {schema.tables.map((t) => {
           const active = t.id === activeTableId;

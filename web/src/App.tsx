@@ -59,6 +59,14 @@ export function AppRoutes() {
           }
         />
         <Route
+          path="/base/:baseId/automations/:automationId?/:tab?"
+          element={
+            <RequireAuth>
+              <BaseShell section="automations" />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/base/:baseId/:tableId?/:viewId?"
           element={
             <RequireAuth>
