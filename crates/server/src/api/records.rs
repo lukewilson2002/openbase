@@ -22,7 +22,8 @@ use og_core::api::records::{
 use serde::Deserialize;
 use serde_json::{Value as Json2, json};
 
-use crate::api::schema_support::{ApiJson, publish};
+use crate::api::schema_support::{publish};
+use crate::extract::ApiJson;
 use crate::auth::Actor;
 use crate::engine::query;
 use crate::engine::write::{self, CreateOpts, WriteCtx, WriteOutcome, WriteSource};

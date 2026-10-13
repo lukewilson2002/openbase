@@ -8,7 +8,8 @@ use axum::routing::{patch, post};
 use axum::{Json, Router};
 use og_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
 
-use crate::api::schema_support::{ApiJson, OptionalJson, ok, publish_schema};
+use crate::api::schema_support::{OptionalJson, ok, publish_schema};
+use crate::extract::ApiJson;
 use crate::auth::Actor;
 use crate::error::AppResult;
 use crate::perm::{self, Role};

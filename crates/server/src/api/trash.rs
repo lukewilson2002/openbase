@@ -11,7 +11,8 @@ use og_core::api::events::BaseEvent;
 use og_core::api::records::{RestoreRequest, TrashListing};
 use serde_json::json;
 
-use crate::api::schema_support::{ApiJson, publish, publish_schema};
+use crate::api::schema_support::{publish, publish_schema};
+use crate::extract::ApiJson;
 use crate::auth::Actor;
 use crate::error::AppResult;
 use crate::perm::{self, Role};

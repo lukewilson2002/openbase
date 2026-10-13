@@ -10,7 +10,8 @@ use og_core::api::schema::{
 };
 use serde_json::{Value as Json2, json};
 
-use crate::api::schema_support::{ApiJson, publish_schema};
+use crate::api::schema_support::{publish_schema};
+use crate::extract::ApiJson;
 use crate::auth::Actor;
 use crate::engine::recompute::{self, DEFAULT_MAX_EVALS, Session};
 use crate::engine::write;

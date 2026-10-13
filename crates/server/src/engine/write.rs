@@ -371,6 +371,10 @@ struct Writer<'a> {
     out: WriteOutcome,
     collaborators: Option<HashSet<String>>,
     notices: Vec<Notice>,
+    /// `records.data` of each directly edited record as it was before this
+    /// write touched it (first edit wins), per table. Feeds the `before`
+    /// snapshot of [`RecordChanges`].
+    before: HashMap<(String, String), Map<String, Json>>,
 }
 
 fn field_error(field: &Field, msg: impl std::fmt::Display) -> AppError {
@@ -397,6 +401,7 @@ impl<'a> Writer<'a> {
             out,
             collaborators: None,
             notices: Vec::new(),
+            before: HashMap::new(),
         })
     }
 
@@ -729,6 +734,9 @@ impl<'a> Writer<'a> {
         changed: &[String],
     ) -> AppResult<()> {
         let at = self.ctx.now_ms();
+        self.before
+            .entry((row.table_id.clone(), row.id.clone()))
+            .or_insert_with(|| row.data.clone());
         records::save_edit(self.conn(), &row.id, &data, at, self.ctx.actor_str())?;
         history::record(
             self.conn(),
@@ -879,6 +887,14 @@ impl<'a> Writer<'a> {
                 form_view_id: form_view.map(str::to_string),
                 user_id: self.ctx.actor.clone(),
             });
+            let before: Vec<(String, Map<String, Json>)> = edited
+                .iter()
+                .filter_map(|(id, _)| {
+                    self.before
+                        .get(&(t.table_id.clone(), id.clone()))
+                        .map(|d| (id.clone(), d.clone()))
+                })
+                .collect();
             automations::on_records_changed(
                 self.tx,
                 &RecordChanges {
@@ -888,6 +904,8 @@ impl<'a> Writer<'a> {
                     updated: &edited,
                     form_view_id: form_view,
                     user_id: self.ctx.actor_str(),
+                    by_automation: matches!(self.ctx.source, WriteSource::Automation),
+                    before: &before,
                 },
             )?;
         }
