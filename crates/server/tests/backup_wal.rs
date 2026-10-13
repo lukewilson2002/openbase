@@ -54,3 +54,33 @@ async fn cleanly_closed_database_leaves_no_wal_so_restore_proceeds() {
         .unwrap();
     assert_eq!(n, 0, "restored database replaced the old one");
 }
+
+#[tokio::test]
+async fn an_explicit_checkpoint_empties_the_wal_while_handles_are_still_open() {
+    // A running server keeps database handles alive in background tasks, so
+    // the checkpoint-on-drop never happens; shutdown calls `checkpoint`.
+    let target = tempfile::tempdir().unwrap();
+    let state = AppState::open(Config::for_tests(target.path())).unwrap();
+    state
+        .db
+        .write(|tx| {
+            tx.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let wal = target.path().join("opengrid.db-wal");
+    let wal_len = || std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
+    assert!(wal_len() > 0, "the write should sit in the WAL");
+    state.db.checkpoint().unwrap();
+    assert_eq!(wal_len(), 0);
+    // Still usable afterwards.
+    state
+        .db
+        .write(|tx| {
+            tx.execute("INSERT INTO settings (key, value) VALUES ('k2', 'v')", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}

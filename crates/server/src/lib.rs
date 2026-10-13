@@ -31,6 +31,7 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     let bind = config.bind.clone();
     let state = AppState::open(config)?;
     tasks::spawn_all(&state);
+    let (events, db) = (state.events.clone(), state.db.clone());
     let app = http::router(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!("OpenGrid listening on http://{}", listener.local_addr()?);
@@ -38,8 +39,17 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // Open event streams never end by themselves; without this the
+        // server would wait for them until it is killed.
+        events.begin_shutdown();
+    })
     .await?;
+    // Leave an empty WAL behind (see `Db::checkpoint`).
+    if let Err(e) = db.checkpoint() {
+        tracing::warn!(error = %e, "could not checkpoint the database on shutdown");
+    }
     Ok(())
 }
 
