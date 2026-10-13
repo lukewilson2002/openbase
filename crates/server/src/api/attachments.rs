@@ -16,9 +16,10 @@
 //! [`save_upload`] / [`save_stream`] are public so public form uploads can
 //! reuse the same pipeline after their own checks.
 
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Request, State};
@@ -27,20 +28,26 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::{Stream, StreamExt};
-use og_core::field::AttachmentRef;
+use og_core::api::records::QueryRequest;
+use og_core::api::sharing::ShareKind;
+use og_core::field::{AttachmentRef, FieldKind};
 use serde::Deserialize;
+use serde_json::Value as Json2;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Semaphore;
 
-use crate::auth::{Actor, MaybeActor};
+use crate::auth::{Actor, ClientInfo, MaybeActor};
 use crate::db::now_ms;
+use crate::engine::query;
 use crate::error::{AppError, AppResult};
 use crate::extract::ApiQuery;
 use crate::ids::new_id;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::attachments::{self as store, Attachment};
+use crate::store::sharing::{self, Resolved};
+use crate::store::{records, schema};
 
 /// Allowance for multipart framing on top of the per-file limit.
 const MULTIPART_OVERHEAD: u64 = 64 * 1024;
@@ -337,11 +344,110 @@ struct ShareQuery {
     share: Option<String>,
 }
 
-/// Load an attachment the caller may read: Viewer on its base, or a valid
-/// view share link of its base. Every denial is a 404.
+/// Download requests per client IP per minute that carry a share token. Own
+/// bucket, and generous: one shared gallery page loads dozens of thumbnails.
+pub const SHARE_IP_LIMIT: u32 = 600;
+/// Download requests per share token per minute.
+pub const SHARE_TOKEN_LIMIT: u32 = 2400;
+/// Password verifications per (client IP, token) per minute: the same bucket
+/// and limit as the public share endpoints in [`crate::api::sharing`], so
+/// guesses cannot be spread across the two.
+const SHARE_PASSWORD_LIMIT: u32 = crate::api::sharing::PASSWORD_LIMIT;
+const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
+/// Views whose allowed-attachment sets are kept.
+const SHARE_SET_ENTRIES: usize = 64;
+
+/// What a shared view exposes: attachment ids in visible attachment fields
+/// of the live records the view's filter lets through. Keyed by view; valid
+/// for one data version of the base, one view config and one day (relative
+/// date filters).
+type ShareSets = HashMap<String, (u64, u64, chrono::NaiveDate, Arc<HashSet<String>>)>;
+static SHARE_SETS: LazyLock<Mutex<ShareSets>> = LazyLock::new(Mutex::default);
+
+fn config_hash(config: &og_core::view::ViewConfig) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    serde_json::to_string(config)
+        .unwrap_or_default()
+        .hash(&mut h);
+    h.finish()
+}
+
+/// Every attachment id a public viewer of `r` can see (see [`ShareSets`]).
+fn exposed_attachment_ids(
+    conn: &rusqlite::Connection,
+    state: &AppState,
+    r: &Resolved,
+) -> AppResult<Arc<HashSet<String>>> {
+    let base_id = r.table.base_id.as_str();
+    // Version first, data second (see store::versions).
+    let version = state.events.versions().current(base_id);
+    let hash = config_hash(&r.view.view.config);
+    let day = chrono::Utc::now().date_naive();
+    {
+        let sets = SHARE_SETS.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some((v, h, d, set)) = sets.get(&r.view.view.id)
+            && (*v, *h, *d) == (version, hash, day)
+        {
+            return Ok(set.clone());
+        }
+    }
+    let fields = schema::table_fields(conn, &r.table.id)?;
+    let visible = sharing::visible_fields(&r.view.view.config, &fields);
+    let attachment_fields: Vec<&str> = visible
+        .iter()
+        .filter(|f| matches!(f.kind, FieldKind::Attachment(_)))
+        .map(|f| f.id.as_str())
+        .collect();
+    let mut out = HashSet::new();
+    if !attachment_fields.is_empty() {
+        // Same query as the public records endpoint: the view's own filter,
+        // no signed-in user.
+        let req = QueryRequest::default();
+        let entry = query::query_ids(
+            conn,
+            &state.query_cache,
+            state.events.versions(),
+            "",
+            &r.view,
+            &req,
+        )?;
+        for chunk in entry.ids.chunks(500) {
+            for row in records::get_many(conn, chunk)? {
+                if row.table_id != r.table.id || !row.is_live() {
+                    continue;
+                }
+                for f in &attachment_fields {
+                    let Some(Json2::Array(items)) = row.data.get(*f) else {
+                        continue;
+                    };
+                    out.extend(
+                        items
+                            .iter()
+                            .filter_map(|i| i.get("id").and_then(Json2::as_str))
+                            .map(str::to_string),
+                    );
+                }
+            }
+        }
+    }
+    let out = Arc::new(out);
+    let mut sets = SHARE_SETS.lock().unwrap_or_else(|p| p.into_inner());
+    if sets.len() >= SHARE_SET_ENTRIES {
+        sets.clear();
+    }
+    sets.insert(r.view.view.id.clone(), (version, hash, day, out.clone()));
+    Ok(out)
+}
+
+/// Load an attachment the caller may read: Viewer on its base, or a live,
+/// read-only view share link whose view shows it (in a visible attachment
+/// field of a record the view lists). Every denial is a 404; share-token
+/// requests are rate limited like the public share endpoints.
 async fn authorize(
     state: &AppState,
     actor: Option<Actor>,
+    client: &ClientInfo,
     share: Option<String>,
     headers: &HeaderMap,
     id: String,
@@ -367,20 +473,50 @@ async fn authorize(
     let Some(token) = share.filter(|t| !t.is_empty() && t.len() <= 256) else {
         return Err(not_found());
     };
-    let password_hash = state
+    state
+        .limiter
+        .check("public_attachment_ip", &client.ip, SHARE_IP_LIMIT, MINUTE)?;
+    let t = token.clone();
+    let resolved = state
         .db
-        .read(move |c| store::view_share_for_base(c, &token, &base_id))
-        .await?
-        .ok_or_else(not_found)?;
-    if let Some(hash) = password_hash {
+        .read(move |c| sharing::resolve(c, &t, ShareKind::View))
+        .await
+        .map_err(|e| match e {
+            AppError::NotFound(_) => not_found(),
+            other => other,
+        })?;
+    state
+        .limiter
+        .check("public_attachment_token", &token, SHARE_TOKEN_LIMIT, MINUTE)?;
+    if resolved.table.base_id != base_id {
+        return Err(not_found());
+    }
+    if let Some(hash) = resolved.share.password_hash.clone() {
         let given = headers
             .get("x-share-password")
             .and_then(|v| v.to_str().ok())
             .unwrap_or_default()
             .to_string();
-        if given.is_empty() || !crate::auth::password::verify_async(given, hash).await? {
+        if given.is_empty() {
             return Err(not_found());
         }
+        state.limiter.check(
+            "share_password",
+            &format!("{}|{token}", client.ip),
+            SHARE_PASSWORD_LIMIT,
+            MINUTE,
+        )?;
+        if !crate::auth::password::verify_async(given, hash).await? {
+            return Err(not_found());
+        }
+    }
+    let (st, att_id) = (state.clone(), row.id.clone());
+    let exposed = state
+        .db
+        .read(move |c| Ok(exposed_attachment_ids(c, &st, &resolved)?.contains(&att_id)))
+        .await?;
+    if !exposed {
+        return Err(not_found());
     }
     Ok(row)
 }
@@ -388,11 +524,12 @@ async fn authorize(
 async fn download(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
+    client: ClientInfo,
     UrlPath((id, _filename)): UrlPath<(String, String)>,
     ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
-    let row = authorize(&state, actor, q.share, &headers, id).await?;
+    let row = authorize(&state, actor, &client, q.share, &headers, id).await?;
     let path = store::blob_path(&state.config.attachments_dir(), &row.sha256)?;
     let (content_type, disposition) = if store::is_inline(&row.mime) {
         (row.mime.as_str(), "inline")
@@ -410,11 +547,12 @@ async fn download(
 async fn thumbnail(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
+    client: ClientInfo,
     UrlPath(id): UrlPath<String>,
     ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
-    let row = authorize(&state, actor, q.share, &headers, id).await?;
+    let row = authorize(&state, actor, &client, q.share, &headers, id).await?;
     if !row.has_thumb {
         return Err(AppError::not_found("thumbnail"));
     }

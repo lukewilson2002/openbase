@@ -83,6 +83,32 @@ fn grant(app: &TestApp, base: &str, user: &Client, role: &str) {
         .unwrap();
 }
 
+/// Give the view's table an attachment field and a record that holds `att`.
+fn show_in_view(app: &TestApp, view: &str, field: &str, att: &str) {
+    let (view, field, att) = (view.to_string(), field.to_string(), att.to_string());
+    app.state
+        .db
+        .write_sync(|tx| {
+            let table: String =
+                tx.query_row("SELECT table_id FROM views WHERE id = ?1", [&view], |r| {
+                    r.get(0)
+                })?;
+            tx.execute(
+                "INSERT INTO fields (id, table_id, name, type, options, position, created_at)
+                 VALUES (?1, ?2, 'Files', 'attachment', '{}', 1, 1)",
+                rusqlite::params![field, table],
+            )?;
+            let data = serde_json::json!({ field.clone(): [{ "id": att, "filename": "pic.png" }] });
+            tx.execute(
+                "INSERT INTO records (id, table_id, data, position, autonumber, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 1, 1, 1, 1)",
+                rusqlite::params![new_id("rec"), table, data.to_string()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+}
+
 fn add_share(
     app: &TestApp,
     view: &str,
@@ -559,11 +585,12 @@ async fn deleted_base_hides_attachments() {
 }
 
 #[tokio::test]
-async fn share_token_grants_access_to_attachments_of_its_base_only() {
+async fn share_token_grants_access_to_the_attachments_its_view_shows() {
     let app = TestApp::new();
     let fx = Fixture::new(&app);
     let res = upload(&app, &fx.owner, &fx.base, "pic.png", &png(10, 10)).await;
     let id = res.body["id"].as_str().unwrap().to_string();
+    show_in_view(&app, &fx.view, "fldFiles", &id);
     let path = |t: &str| format!("/api/attachments/{id}/pic.png?share={t}");
     let anon = app.anon();
 

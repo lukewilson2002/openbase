@@ -190,29 +190,6 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Option<Attachment>> {
         .optional()?)
 }
 
-/// Whether an enabled read-only view share (`kind = 'view'`) with `token`
-/// exists for a live view in a live table of `base_id`. Returns
-/// `Some(password_hash)` when it does (`Some(None)` = no password).
-pub fn view_share_for_base(
-    conn: &Connection,
-    token: &str,
-    base_id: &str,
-) -> AppResult<Option<Option<String>>> {
-    Ok(conn
-        .query_row(
-            "SELECT s.password_hash FROM share_links s
-             JOIN views v ON v.id = s.view_id
-             JOIN tables t ON t.id = v.table_id
-             JOIN bases b ON b.id = t.base_id
-             WHERE s.token = ?1 AND s.kind = 'view' AND s.enabled = 1
-               AND v.deleted_at IS NULL AND t.deleted_at IS NULL AND b.deleted_at IS NULL
-               AND t.base_id = ?2",
-            [token, base_id],
-            |r| r.get::<_, Option<String>>(0),
-        )
-        .optional()?)
-}
-
 /// Attachment ids look like `att` + 14 base62 characters.
 const ID_PREFIX: &str = og_core::ids::ATTACHMENT;
 const ID_SUFFIX_LEN: usize = 14;
