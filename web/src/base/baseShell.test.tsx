@@ -10,6 +10,12 @@ vi.mock("@/views/grid/GridView", async () => {
   return { default: PlaceholderView };
 });
 
+// Same for the kanban view (its own tests live in src/views/kanban).
+vi.mock("@/views/kanban/KanbanView", async () => {
+  const { PlaceholderView } = await import("@/views/PlaceholderView");
+  return { default: PlaceholderView };
+});
+
 afterEach(() => vi.unstubAllGlobals());
 
 function openBase(role: string, extra: Record<string, unknown> = {}, route = "/base/app1") {
