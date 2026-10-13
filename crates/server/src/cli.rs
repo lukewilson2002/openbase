@@ -49,6 +49,7 @@ pub fn reset_password(state: &AppState, email: &str, pw: &str) -> AppResult<()> 
             rusqlite::params![hash, now_ms(), id],
         )?;
         session::delete_all_for_user(tx, &id, None)?;
+        crate::store::tokens::delete_all_for_user(tx, &id)?;
         Ok(())
     })
 }

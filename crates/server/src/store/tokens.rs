@@ -152,6 +152,13 @@ pub fn delete(conn: &Connection, user_id: &str, token_id: &str) -> AppResult<()>
     Ok(())
 }
 
+/// Delete every token of a user (password change or reset: a token minted
+/// during a compromise must not outlive the credential change). Returns how
+/// many were deleted.
+pub fn delete_all_for_user(conn: &Connection, user_id: &str) -> AppResult<usize> {
+    Ok(conn.execute("DELETE FROM api_tokens WHERE user_id = ?1", [user_id])?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

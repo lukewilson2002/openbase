@@ -30,7 +30,7 @@ use crate::extract::ApiJson;
 use crate::ids::hash_token;
 use crate::state::AppState;
 use crate::store::audit::{self, actions};
-use crate::store::{invites, users};
+use crate::store::{invites, tokens, users};
 
 const MINUTE: Duration = Duration::from_secs(60);
 const HOUR: Duration = Duration::from_secs(3600);
@@ -498,12 +498,13 @@ async fn change_password(
         .write(move |tx| {
             users::set_password_hash(tx, &actor.user_id, &hash)?;
             session::delete_all_for_user(tx, &actor.user_id, actor.session_hash.as_deref())?;
+            let revoked = tokens::delete_all_for_user(tx, &actor.user_id)?;
             audit::record(
                 tx,
                 Some(&actor.user_id),
                 actions::PASSWORD_CHANGE,
                 None,
-                None,
+                Some(json!({ "api_tokens_revoked": revoked })),
                 Some(&client.ip),
             )
         })
@@ -596,12 +597,13 @@ async fn reset_confirm(
             };
             users::set_password_hash(tx, &uid, &hash)?;
             session::delete_all_for_user(tx, &uid, None)?;
+            let revoked = tokens::delete_all_for_user(tx, &uid)?;
             audit::record(
                 tx,
                 Some(&uid),
                 actions::PASSWORD_RESET,
                 None,
-                None,
+                Some(json!({ "api_tokens_revoked": revoked })),
                 Some(&client.ip),
             )
         })

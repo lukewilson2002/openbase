@@ -131,6 +131,84 @@ fn audit_log_rows_are_bounded_and_expire() {
     assert_eq!(purged, 0);
 }
 
+// ------------------------------------------- API tokens vs credential changes
+
+fn bearer(token: &str) -> Client {
+    Client {
+        bearer: Some(token.to_string()),
+        ..Default::default()
+    }
+}
+
+async fn make_token(app: &TestApp, user: &Client, write: bool) -> String {
+    let res = app
+        .post(user, "/api/tokens", json!({"name": "t", "write": write}))
+        .await;
+    res.assert_status(201);
+    res.body["token"].as_str().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn password_change_revokes_api_tokens() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let token = make_token(&app, &user, true).await;
+    app.get(&bearer(&token), "/api/tokens/whoami")
+        .await
+        .assert_status(200);
+    app.post(
+        &user,
+        "/api/auth/password",
+        json!({"current_password": PW, "new_password": "a brand new password"}),
+    )
+    .await
+    .assert_status(200);
+    app.get(&bearer(&token), "/api/tokens/whoami")
+        .await
+        .assert_status(401);
+    // Other users' tokens are untouched.
+    let other = app.user("b@example.com", "B");
+    let other_token = make_token(&app, &other, true).await;
+    app.get(&bearer(&other_token), "/api/tokens/whoami")
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn password_reset_link_revokes_api_tokens() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let token = make_token(&app, &user, true).await;
+    let uid = user.user_id.clone().unwrap();
+    let (reset, _) = app
+        .state
+        .db
+        .write_sync(|tx| opengrid::store::users::create_reset_token(tx, &uid, 3_600_000))
+        .unwrap();
+    app.post(
+        &app.anon(),
+        "/api/auth/password-reset/confirm",
+        json!({"token": reset, "new_password": "a brand new password"}),
+    )
+    .await
+    .assert_status(200);
+    app.get(&bearer(&token), "/api/tokens/whoami")
+        .await
+        .assert_status(401);
+    assert_eq!(app.query_i64("SELECT count(*) FROM api_tokens", &[]), 0);
+}
+
+#[tokio::test]
+async fn cli_password_reset_revokes_api_tokens() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let token = make_token(&app, &user, true).await;
+    opengrid::cli::reset_password(&app.state, "a@example.com", "a brand new password").unwrap();
+    app.get(&bearer(&token), "/api/tokens/whoami")
+        .await
+        .assert_status(401);
+}
+
 // ------------------------------------------------------------------ 2FA
 
 mod second_factor {
