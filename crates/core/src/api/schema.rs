@@ -136,3 +136,38 @@ pub struct UpdateView {
     #[serde(default)]
     pub position: Option<f64>,
 }
+
+/// `POST /api/tables/{id}/duplicate` (body optional).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicateTable {
+    /// Name of the copy; defaults to "<name> copy" (made unique).
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Copy records too (default true).
+    #[serde(default = "default_true")]
+    pub include_records: bool,
+}
+
+impl Default for DuplicateTable {
+    fn default() -> Self {
+        Self {
+            name: None,
+            include_records: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// `POST /api/views/{id}/duplicate` (body optional).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DuplicateView {
+    /// Name of the copy; defaults to "<name> copy".
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Make the copy a personal view (always true when the source is personal).
+    #[serde(default)]
+    pub personal: bool,
+}
