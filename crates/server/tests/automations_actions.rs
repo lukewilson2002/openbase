@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 
 fn notifications(env: &Env) -> Vec<(String, Value)> {
     schema_support::sql(&env.f.app, |tx| {
-        let mut stmt = tx.prepare("SELECT user_id, payload FROM notifications WHERE kind = 'automation' ORDER BY created_at, id")?;
+        let mut stmt = tx.prepare("SELECT user_id, payload FROM notifications WHERE kind = 'automation' ORDER BY created_at, rowid")?;
         let rows = stmt
             .query_map([], |r| {
                 let payload: String = r.get(1)?;
@@ -551,10 +551,7 @@ async fn mail_server_trouble_is_retried() {
         inner: Default::default(),
     });
     env.f.app.state.mailer = mailer.clone();
-    env.runner = Runner::new(
-        env.f.app.state.clone(),
-        instant_opts(),
-    );
+    env.runner = Runner::new(env.f.app.state.clone(), instant_opts());
     let (_, _, run) = run_once(
         &env,
         json!([{ "type": "send_email", "to": "a@example.com", "subject": "s", "body": "b" }]),

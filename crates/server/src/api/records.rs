@@ -5,8 +5,13 @@
 //! `POST /api/tables/{id}/records/move`. All writes go through `engine::write`
 //! in one transaction and events are published after it commits.
 //!
+//! Responses: create (201), update, restore and move answer
+//! `RecordsResponse` (the affected records, in request order); delete answers
+//! 204 (batches are all-or-nothing, so the request's ids are the deleted ids).
+//!
 //! Read endpoints (Viewer), backed by `engine::query`:
-//! `POST /api/views/{id}/query`, `GET /api/views/{id}/aggregations`,
+//! `POST /api/views/{id}/query`,
+//! `GET /api/views/{id}/aggregations?timezone=&search=&transient=`,
 //! `GET /api/tables/{id}/records/{rid}`,
 //! `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=` (link picker) and
 //! `GET /api/records/{id}/history?before=&limit=`.
@@ -17,18 +22,16 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use og_core::api::records::{
     AggregationsResponse, CreateRecords, HistoryEntry, LinkCandidates, MoveRecords, QueryRequest,
-    QueryResponse, Record, RecordIds, RecordsResponse, UpdateRecords,
+    QueryResponse, Record, RecordIds, RecordsResponse, TransientConfig, UpdateRecords,
 };
 use serde::Deserialize;
-use serde_json::{Value as Json2, json};
 
-use crate::api::schema_support::{publish};
-use crate::extract::ApiJson;
+use crate::api::schema_support::publish;
 use crate::auth::Actor;
 use crate::engine::query;
 use crate::engine::write::{self, CreateOpts, WriteCtx, WriteOutcome, WriteSource};
 use crate::error::{AppError, AppResult};
-use crate::extract::ApiQuery;
+use crate::extract::{ApiJson, ApiQuery};
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::{history, records as record_store};
@@ -84,6 +87,7 @@ async fn create(
             let ctx = editor_ctx(tx, &actor, &table_id)?.typecast(body.typecast);
             let opts = CreateOpts {
                 after_record_id: body.after_record_id,
+                before_record_id: body.before_record_id,
             };
             let outcome = write::create_records(tx, &ctx, &table_id, body.records, &opts)?;
             let ids = outcome.target().created.to_vec();
@@ -123,7 +127,7 @@ async fn remove(
     headers: HeaderMap,
     Path(table_id): Path<String>,
     ApiJson(body): ApiJson<RecordIds>,
-) -> AppResult<Json<Json2>> {
+) -> AppResult<StatusCode> {
     let who = actor.clone();
     let outcome = state
         .db
@@ -133,9 +137,7 @@ async fn remove(
         })
         .await?;
     publish_outcome(&state, &headers, &who, &outcome);
-    Ok(Json(
-        json!({ "ok": true, "ids": outcome.target().deleted.to_vec() }),
-    ))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn restore(
@@ -166,17 +168,28 @@ async fn move_records(
     headers: HeaderMap,
     Path(table_id): Path<String>,
     ApiJson(body): ApiJson<MoveRecords>,
-) -> AppResult<Json<Json2>> {
+) -> AppResult<Json<RecordsResponse>> {
     let who = actor.clone();
-    let outcome = state
+    let (outcome, records) = state
         .db
         .write(move |tx| {
             let ctx = editor_ctx(tx, &actor, &table_id)?;
-            write::move_records(tx, &ctx, &table_id, &body)
+            let outcome = write::move_records(tx, &ctx, &table_id, &body)?;
+            // The moved records in the order they were asked for (duplicates
+            // collapse to their first mention).
+            let mut seen = std::collections::HashSet::new();
+            let ids: Vec<String> = body
+                .ids
+                .iter()
+                .filter(|id| seen.insert(id.as_str()))
+                .cloned()
+                .collect();
+            let records = record_store::load_dtos(tx, &table_id, &ids, ctx.timezone)?;
+            Ok((outcome, records))
         })
         .await?;
     publish_outcome(&state, &headers, &who, &outcome);
-    Ok(Json(json!({ "ok": true })))
+    Ok(Json(RecordsResponse { records }))
 }
 
 async fn get_one(
@@ -224,22 +237,51 @@ struct AggregationsParams {
     /// IANA zone for relative dates in the view filter.
     #[serde(default)]
     timezone: Option<String>,
+    /// Summarise only records matching this search (same semantics as the
+    /// `search` of a view query).
+    #[serde(default)]
+    search: Option<String>,
+    /// JSON-encoded [`TransientConfig`]: a one-off filter override, never
+    /// saved.
+    #[serde(default)]
+    transient: Option<String>,
 }
 
-/// `GET /api/views/{id}/aggregations`.
+/// The longest accepted `transient` query parameter.
+const MAX_TRANSIENT_PARAM: usize = 16 * 1024;
+
+fn parse_transient(raw: Option<&str>) -> AppResult<Option<TransientConfig>> {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    if raw.len() > MAX_TRANSIENT_PARAM {
+        return Err(AppError::bad_request("the transient parameter is too long"));
+    }
+    serde_json::from_str(raw)
+        .map(Some)
+        .map_err(|e| AppError::bad_request(format!("invalid transient parameter: {e}")))
+}
+
+/// `GET /api/views/{id}/aggregations?timezone=&search=&transient=`.
 async fn aggregations(
     State(state): State<AppState>,
     actor: Actor,
     Path(view_id): Path<String>,
     ApiQuery(params): ApiQuery<AggregationsParams>,
 ) -> AppResult<Json<AggregationsResponse>> {
+    let transient = parse_transient(params.transient.as_deref())?;
     let response = state
         .db
         .read(move |conn| {
             let base = perm::base_of_view(conn, &view_id)?;
             perm::require_base(conn, &actor, &base, Role::Viewer)?;
             let view = query::visible_view(conn, &actor.user_id, &view_id)?;
-            query::run_aggregations(conn, &actor.user_id, &view, params.timezone.as_deref())
+            let opts = query::AggregationOpts {
+                timezone: params.timezone.as_deref(),
+                search: params.search.as_deref(),
+                transient: transient.as_ref(),
+            };
+            query::run_aggregations(conn, &actor.user_id, &view, &opts)
         })
         .await?;
     Ok(Json(response))
@@ -323,7 +365,10 @@ async fn record_history(
                 .limit
                 .unwrap_or(HISTORY_DEFAULT)
                 .clamp(1, HISTORY_MAX);
-            history::list_page(conn, &record_id, params.before, limit)
+            let tz = write::user_timezone(conn, &actor.user_id);
+            let mut entries = history::list_page(conn, &record_id, params.before, limit)?;
+            history::resolve_link_names(conn, &record_id, &mut entries, tz)?;
+            Ok(entries)
         })
         .await?;
     Ok(Json(entries))

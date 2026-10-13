@@ -55,6 +55,7 @@ use chrono::{NaiveDate, Utc};
 use chrono_tz::Tz;
 use og_core::api::records::{
     AggregationsResponse, DateRange, GroupHeader, LinkRef, QueryRequest, QueryResponse, Record,
+    TransientConfig,
 };
 use og_core::cell::{NoNames, display_text, to_value};
 use og_core::field::{Field, FieldKind, ValueFormat};
@@ -726,6 +727,40 @@ pub fn visible_view(conn: &Connection, user_id: &str, view_id: &str) -> AppResul
     }
 }
 
+/// The config a request runs with: the view's saved config with the parts
+/// named by a [`TransientConfig`] replaced. The override is validated like a
+/// saved config (only the parts it carries, so stale references elsewhere in
+/// the saved config do not matter) and is never stored.
+pub fn effective_config(
+    conn: &Connection,
+    view: &ViewRow,
+    transient: Option<&TransientConfig>,
+) -> AppResult<ViewConfig> {
+    let mut config = view.view.config.clone();
+    let Some(t) = transient else {
+        return Ok(config);
+    };
+    let fields = schema::table_fields(conn, &view.view.table_id)?;
+    let only_the_override = ViewConfig {
+        filter: t.filter.clone(),
+        sorts: t.sorts.clone().unwrap_or_default(),
+        groups: t.groups.clone().unwrap_or_default(),
+        ..ViewConfig::default()
+    };
+    crate::store::views::validate_config(&fields, &only_the_override)
+        .map_err(|e| AppError::bad_request(format!("transient: {e}")))?;
+    if let Some(f) = &t.filter {
+        config.filter = Some(f.clone());
+    }
+    if let Some(s) = &t.sorts {
+        config.sorts = s.clone();
+    }
+    if let Some(g) = &t.groups {
+        config.groups = g.clone();
+    }
+    Ok(config)
+}
+
 /// Run a view query (see the module docs). The caller has checked that the
 /// user may read the view's base.
 pub fn run_query(
@@ -739,7 +774,8 @@ pub fn run_query(
     let table_id = view.view.table_id.as_str();
     let table = schema::live_table(conn, table_id)?;
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
-    let plan = Plan::build(conn, table_id, &view.view.config, Some(req), user_id, tz)?;
+    let config = effective_config(conn, view, req.transient.as_ref())?;
+    let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz)?;
     let limit = req
         .limit
         .unwrap_or(DEFAULT_PAGE_SIZE)
@@ -749,7 +785,8 @@ pub fn run_query(
     let version = versions.current(&table.base_id);
     let key = CacheKey {
         view_id: view.view.id.clone(),
-        config_hash: config_hash(&view.view.config),
+        // The effective config, so a transient override has its own entries.
+        config_hash: config_hash(&config),
         search: plan.search.clone(),
         range: req.range.as_ref().map(|r| {
             (
@@ -783,7 +820,7 @@ pub fn run_query(
     let start = req.offset.min(total);
     let end = start.saturating_add(limit).min(total);
     let page_ids = &entry.ids[start..end];
-    let (records, colors) = load_page(conn, &plan, &view.view.config, page_ids, table_id)?;
+    let (records, colors) = load_page(conn, &plan, &config, page_ids, table_id)?;
     Ok(QueryResponse {
         total,
         offset: req.offset,
@@ -873,21 +910,37 @@ fn row_colors(
 
 // ----------------------------------------------------------- aggregations
 
+/// Options of [`run_aggregations`] besides the view itself.
+#[derive(Debug, Default, Clone)]
+pub struct AggregationOpts<'a> {
+    /// IANA zone for relative dates (default: the user's, then UTC).
+    pub timezone: Option<&'a str>,
+    /// The same search as the grid's search box: only matching records are
+    /// summarised.
+    pub search: Option<&'a str>,
+    /// A one-off filter override (sorts and groups are accepted and ignored).
+    pub transient: Option<&'a TransientConfig>,
+}
+
 /// The summary-bar values of a view: each configured aggregation over the
-/// records that pass the view filter (search and date range do not apply).
+/// records that pass the view filter and the optional search (the date range
+/// of calendar queries does not apply).
 pub fn run_aggregations(
     conn: &Connection,
     user_id: &str,
     view: &ViewRow,
-    timezone: Option<&str>,
+    opts: &AggregationOpts,
 ) -> AppResult<AggregationsResponse> {
-    let tz = viewer_timezone(conn, user_id, timezone)?;
+    let tz = viewer_timezone(conn, user_id, opts.timezone)?;
     let table_id = view.view.table_id.as_str();
-    let plan = Plan::build(conn, table_id, &view.view.config, None, user_id, tz)?;
+    let config = effective_config(conn, view, opts.transient)?;
+    let req = QueryRequest {
+        search: opts.search.map(str::to_string),
+        ..QueryRequest::default()
+    };
+    let plan = Plan::build(conn, table_id, &config, Some(&req), user_id, tz)?;
     // Summaries in field-id order, each with a usable aggregation.
-    let summaries: Vec<(Field, Aggregation)> = view
-        .view
-        .config
+    let summaries: Vec<(Field, Aggregation)> = config
         .summaries
         .iter()
         .filter(|(_, agg)| **agg != Aggregation::None)
@@ -901,10 +954,17 @@ pub fn run_aggregations(
     let names = NameCache::new(conn, tz);
     let mut ids: HashSet<String> = plan.filter.field_ids().into_iter().collect();
     ids.extend(summaries.iter().map(|(f, _)| f.id.clone()));
+    ids.extend(plan.search_fields.iter().map(|f| f.id.clone()));
     let needed = Needed::of(plan.fields.iter().filter(|f| ids.contains(&f.id)));
+    let search_refs: Vec<&Field> = plan.search_fields.iter().collect();
     let mut columns: Vec<Vec<Option<Json>>> = vec![Vec::new(); summaries.len()];
     scan_rows(conn, table_id, &needed, &names, |row| {
         if !matches(&plan.filter, &row, &plan.ctx, &names) {
+            return Ok(true);
+        }
+        if !plan.search.is_empty()
+            && !matches_search(&row, &search_refs, &plan.search, &names, plan.tz)
+        {
             return Ok(true);
         }
         for (i, (f, _)) in summaries.iter().enumerate() {

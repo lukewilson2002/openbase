@@ -48,6 +48,12 @@
 //!    created records and the directly edited records (with the editable
 //!    fields that changed). Records that only had computed values recomputed
 //!    appear in [`TableOutcome::updated`] but not in `edited`.
+//!    The call carries `by_automation` (the write's source is
+//!    [`WriteSource::Automation`]; record triggers ignore such writes), the
+//!    form view id of [`WriteSource::Form`] and, for every edited record, its
+//!    `records.data` as it was before this write touched it, so
+//!    `record_matches` triggers see exact "started matching" transitions
+//!    (computed fields included).
 //!
 //! Deletes are soft (`deleted_at`); the trash purge job removes them for real
 //! (and strips their ids from link arrays).
@@ -168,6 +174,9 @@ pub fn user_timezone(conn: &Connection, user_id: &str) -> Tz {
 pub struct CreateOpts {
     /// Insert after this record in manual order (default: at the end).
     pub after_record_id: Option<String>,
+    /// Insert before this record in manual order; not together with
+    /// `after_record_id`.
+    pub before_record_id: Option<String>,
 }
 
 // ------------------------------------------------------------------ outcome
@@ -924,6 +933,11 @@ pub fn create_records(
     new_records: Vec<NewRecord>,
     opts: &CreateOpts,
 ) -> AppResult<WriteOutcome> {
+    if opts.after_record_id.is_some() && opts.before_record_id.is_some() {
+        return Err(AppError::bad_request(
+            "give either before_record_id or after_record_id, not both",
+        ));
+    }
     let mut w = Writer::begin(tx, ctx, table_id)?;
     w.check_batch(new_records.len(), "record")?;
     let live = records::live_count(w.conn(), table_id)?;
@@ -953,9 +967,13 @@ pub fn create_records(
 
     let n = prepared.len();
     let exclude = HashSet::new();
-    let place = match opts.after_record_id.as_deref() {
-        Some(anchor) => Place::After(anchor),
-        None => Place::End,
+    let place = match (
+        opts.after_record_id.as_deref(),
+        opts.before_record_id.as_deref(),
+    ) {
+        (Some(anchor), _) => Place::After(anchor),
+        (None, Some(anchor)) => Place::Before(anchor),
+        (None, None) => Place::End,
     };
     let positions = records::positions_for(w.conn(), table_id, place, n, &exclude)?;
     let first_auto = records::reserve_autonumbers(w.conn(), table_id, n)?;

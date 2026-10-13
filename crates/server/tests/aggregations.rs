@@ -136,7 +136,7 @@ async fn aggregations_ignore_trashed_records_and_follow_edits() {
     assert_eq!(p.f.aggregations(p.view()).await[&p.age], 126);
     p.f.delete_records(&p.f.table_id, &[&p.ids[2]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert_eq!(p.f.aggregations(p.view()).await[&p.age], 85);
     p.f.set(&p.f.table_id, &p.ids[0], json!({ &p.age: 100 }))
         .await;
@@ -182,7 +182,7 @@ async fn link_cells_count_live_links_only() {
     // Trashing the only linked customer leaves no live link on o1.
     f.delete_records(&customers, &[&c1])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert_eq!(f.aggregations(&view).await[&link_id], 0);
 }
 
@@ -419,7 +419,7 @@ async fn lookup_hides_trashed_records_and_checks_the_role() {
     let p = people().await;
     p.f.delete_records(&p.f.table_id, &[&p.ids[0]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert_eq!(
         lookup_names(&lookup(&p, "").await),
         ["bob", "Carol", "dave", "Eve"]

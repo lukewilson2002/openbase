@@ -120,6 +120,7 @@ export type { TimeFormat } from "./TimeFormat";
 export type { TimelineConfig } from "./TimelineConfig";
 export type { TimelineScale } from "./TimelineScale";
 export type { TokenInfo } from "./TokenInfo";
+export type { TransientConfig } from "./TransientConfig";
 export type { TrashItem } from "./TrashItem";
 export type { TrashListing } from "./TrashListing";
 export type { Trigger } from "./Trigger";

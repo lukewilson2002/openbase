@@ -177,4 +177,3 @@ impl Stream {
 }
 
 pub const SOON: Duration = Duration::from_secs(5);
-

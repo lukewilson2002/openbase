@@ -352,7 +352,7 @@ async fn deleting_and_restoring_linked_records_updates_counts_lookups_and_rollup
     let ct: &'static str = Box::leak(ct.to_string().into_boxed_str());
     assert_eq!(read(ct).await, 2);
 
-    f.delete_records(&l.t2, &[&o1]).await.assert_status(200);
+    f.delete_records(&l.t2, &[&o1]).await.assert_status(204);
     assert_eq!(read(ct).await, 1, "trashed records are not counted");
     assert_eq!(read(lk).await, json!([20]));
     assert_eq!(read(ru).await, 20);
@@ -369,7 +369,7 @@ async fn deleting_and_restoring_linked_records_updates_counts_lookups_and_rollup
 
     // deleting the customer: its orders stop counting it
     assert_eq!(f.get(&l.t2, &o1).await["values"][sid(&inv_count["id"])], 1);
-    f.delete_records(&l.t1, &[&c]).await.assert_status(200);
+    f.delete_records(&l.t1, &[&c]).await.assert_status(204);
     let v = f.get(&l.t2, &o1).await["values"][sid(&inv_count["id"])].clone();
     assert!(v.is_null() || v == 0, "{v}");
     f.restore_records(&l.t1, &[&c]).await.assert_status(200);
@@ -386,7 +386,7 @@ async fn restoring_a_record_refreshes_its_stale_computed_fields() {
     let pid = sid(&l.price["id"]);
     let o = sid(&f.create(&l.t2, json!({ pid: 10 })).await["id"]).to_string();
     let c = sid(&f.create(&l.t1, json!({ sid(&l.link["id"]): [o] })).await["id"]).to_string();
-    f.delete_records(&l.t1, &[&c]).await.assert_status(200);
+    f.delete_records(&l.t1, &[&c]).await.assert_status(204);
     // while the customer is trashed its order changes; its materialized total goes stale
     f.set(&l.t2, &o, json!({ pid: 99 })).await;
     f.restore_records(&l.t1, &[&c]).await.assert_status(200);
@@ -600,12 +600,12 @@ async fn formula_over_lookup_over_rollup_across_three_tables() {
     assert_eq!(f.get(&customers, &c).await["values"][bg], "no");
 
     // deleting and restoring the line two hops away
-    f.delete_records(&lines, &[&l3]).await.assert_status(200);
+    f.delete_records(&lines, &[&l3]).await.assert_status(204);
     assert_eq!(f.get(&customers, &c).await["values"][sp], 20);
     f.restore_records(&lines, &[&l3]).await.assert_status(200);
     assert_eq!(f.get(&customers, &c).await["values"][sp], 90);
     // deleting the order in the middle
-    f.delete_records(&orders, &[&o2]).await.assert_status(200);
+    f.delete_records(&orders, &[&o2]).await.assert_status(204);
     assert_eq!(f.get(&customers, &c).await["values"][sp], 20);
 }
 
@@ -632,7 +632,7 @@ async fn formulas_over_links_show_primary_text_and_follow_renames() {
     assert_eq!(f.get(&l.t1, &c).await["values"][jid], "gamma, beta");
     assert_eq!(f.get(&l.t1, &c).await["values"][sh], "GAMMA, BETA");
     // trashed linked records drop out
-    f.delete_records(&l.t2, &[&o2]).await.assert_status(200);
+    f.delete_records(&l.t2, &[&o2]).await.assert_status(204);
     assert_eq!(f.get(&l.t1, &c).await["values"][jid], "gamma");
     f.restore_records(&l.t2, &[&o2]).await.assert_status(200);
     assert_eq!(f.get(&l.t1, &c).await["values"][jid], "gamma, beta");
@@ -866,7 +866,7 @@ async fn creating_a_formula_materializes_it_for_every_record_including_trashed_o
     let b = f.create(&t, json!({ nid: 2 })).await;
     f.delete_records(&t, &[sid(&b["id"])])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let dbl = f.formula(&t, "Double", "{N} * 2").await;
     assert_eq!(f.stored(sid(&a["id"]), sid(&dbl["id"])), 2);
     assert_eq!(

@@ -91,8 +91,7 @@ async fn api_set(env: &Env, id: &str, values: Value) {
 // ------------------------------------------------------------- the chain
 
 #[tokio::test]
-async fn api_create_fires_an_automation_that_writes_another_table_with_recompute_event_and_view()
-{
+async fn api_create_fires_an_automation_that_writes_another_table_with_recompute_event_and_view() {
     let env = Env::new().await;
     let log = log_table(&env).await;
     let a = env
@@ -199,7 +198,10 @@ async fn an_update_action_recomputes_dependents_and_tells_subscribers() {
     let resp = env.f.query_view(&log.view, json!({})).await;
     assert_eq!(resp["records"][0]["values"][&log.amount], 21);
     assert_eq!(resp["records"][0]["values"][&log.double], 42);
-    assert_eq!(updated_in(&drain_events(&mut rx), &log.id), [log_rec.clone()]);
+    assert_eq!(
+        updated_in(&drain_events(&mut rx), &log.id),
+        std::slice::from_ref(&log_rec)
+    );
     let hist = env.f.history(&log_rec);
     assert_eq!(hist.len(), 2, "create + the automation's update");
     assert_eq!(hist[1].0, "update");
@@ -275,21 +277,30 @@ async fn actions_behave_like_api_writes_typecast_links_and_choices() {
 
     // Link pair maintained on both sides.
     let parent_rec = env.f.get(env.table(), &parent).await;
-    assert_eq!(link_ids_of(&parent_rec["values"][&link_id]), [log_rec.clone()]);
+    assert_eq!(
+        link_ids_of(&parent_rec["values"][&link_id]),
+        std::slice::from_ref(&log_rec)
+    );
     let log_row = env.f.get(&log.id, &log_rec).await;
-    assert_eq!(link_ids_of(&log_row["values"][&inverse]), [parent.clone()]);
+    assert_eq!(
+        link_ids_of(&log_row["values"][&inverse]),
+        std::slice::from_ref(&parent)
+    );
 
     // Events: a schema change for the new choice, records for both tables.
     let events = drain_events(&mut rx);
     assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, BaseEvent::SchemaChanged { table_id: Some(t) } if t == env.table())),
+        events.iter().any(
+            |e| matches!(e, BaseEvent::SchemaChanged { table_id: Some(t) } if t == env.table())
+        ),
         "{events:?}"
     );
-    assert_eq!(created_in(&events, &log.id), [log_rec.clone()]);
+    assert_eq!(created_in(&events, &log.id), std::slice::from_ref(&log_rec));
     assert!(created_in(&events, env.table()).contains(&child));
-    assert!(updated_in(&events, &log.id).contains(&log_rec), "{events:?}");
+    assert!(
+        updated_in(&events, &log.id).contains(&log_rec),
+        "{events:?}"
+    );
     // History for the link edit.
     assert!(env.f.history(&parent).iter().any(|h| h.0 == "update"));
 }
@@ -346,7 +357,10 @@ async fn record_updated_with_a_field_filter_through_the_api() {
     assert_eq!((env.run_count(&wa), env.run_count(&any)), (1, 2));
     let run = env.only_run(&wa).await;
     assert_eq!(run["status"], "succeeded", "{run:#}");
-    assert_eq!(run["trigger_data"]["changed_field_ids"], json!([env.amount]));
+    assert_eq!(
+        run["trigger_data"]["changed_field_ids"],
+        json!([env.amount])
+    );
     let logs = env.f.query_view(&log.view, json!({})).await;
     assert_eq!(logs["total"], 1);
     assert_eq!(logs["records"][0]["values"][&log.name], "amount: Ada");
@@ -473,7 +487,11 @@ async fn form_submissions_fire_form_and_created_triggers_through_the_engine() {
         )
         .await;
     let created = env
-        .create("created", env.trigger_created(), json!([env.notify_action("c")]))
+        .create(
+            "created",
+            env.trigger_created(),
+            json!([env.notify_action("c")]),
+        )
         .await;
     // A form-source write straight through the engine (the public form
     // endpoint belongs to W7): the engine passes the form view id on.
@@ -522,7 +540,11 @@ async fn a_webhook_updates_a_record_through_the_engine() {
     let aid = a["id"].as_str().unwrap().to_string();
     // A record automation proves the hook's write does not loop.
     let watcher = env
-        .create("watch", env.trigger_updated(&[]), json!([env.notify_action("w")]))
+        .create(
+            "watch",
+            env.trigger_updated(&[]),
+            json!([env.notify_action("w")]),
+        )
         .await;
     let r = api_create(&env, json!({ &env.name: "Ada" })).await;
     env.drain().await;
@@ -545,7 +567,10 @@ async fn a_webhook_updates_a_record_through_the_engine() {
     let rec = env.f.get(env.table(), &r).await;
     assert_eq!(rec["values"][&env.status], env.doing.as_str());
     assert_eq!(rec["values"][&env.amount], 7);
-    assert_eq!(updated_in(&drain_events(&mut rx), env.table()), [r.clone()]);
+    assert_eq!(
+        updated_in(&drain_events(&mut rx), env.table()),
+        std::slice::from_ref(&r)
+    );
     assert_eq!(env.f.history(&r).last().unwrap().0, "update");
     assert_eq!(
         env.run_count(watcher["id"].as_str().unwrap()),
@@ -567,7 +592,10 @@ async fn a_webhook_updates_a_record_through_the_engine() {
     let runs = env.runs(&aid).await;
     assert_eq!(runs.last().unwrap()["status"], "failed");
     assert!(
-        runs.last().unwrap()["error"].as_str().unwrap().contains("Amount"),
+        runs.last().unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .contains("Amount"),
         "{runs:#?}"
     );
     assert_eq!(env.f.value(env.table(), &r, &env.amount).await, 7);
@@ -588,7 +616,10 @@ async fn a_due_schedule_enqueues_and_runs_through_the_engine() {
     let aid = a["id"].as_str().unwrap();
     let due = a["next_run_at"].as_i64().expect("a next run time");
     assert_eq!(env.runner.enqueue_due_schedules(due - 1).await.unwrap(), 0);
-    assert_eq!(env.runner.enqueue_due_schedules(due + 1000).await.unwrap(), 1);
+    assert_eq!(
+        env.runner.enqueue_due_schedules(due + 1000).await.unwrap(),
+        1
+    );
     assert_eq!(env.drain().await, 1);
     let run = env.only_run(aid).await;
     assert_eq!(run["status"], "succeeded", "{run:#}");

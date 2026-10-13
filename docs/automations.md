@@ -32,7 +32,19 @@ trigger; when it does not match the action is skipped.
 
 Values of `create_record` / `update_record` are keyed by field id or field
 name (names are replaced by ids when saved) and written like Airtable's
-`typecast`: `"12"` for a number field, a choice name for a select.
+`typecast`: `"12"` for a number field, a choice name for a select (a name that
+does not exist yet becomes a new choice).
+
+These two actions go through the same record write engine as the API
+(`engine::write`, source `automation`): values are validated the same way,
+link cells keep both sides in sync, computed fields are recomputed, record
+history is written (as the automation's creator) and the usual events are
+published after the write commits, so open grids update and cached view
+queries are invalidated. A record trigger only fires for writes that do not
+come from an automation. The record trigger's `record_matches` check compares
+the record's data before and after the write, so an edit that merely changes a
+value inside the filter, or a recompute that makes a computed field match,
+is judged exactly.
 
 ## Templates
 

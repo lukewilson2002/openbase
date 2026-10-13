@@ -10,16 +10,13 @@ mod sse_support;
 
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use common::{Client, TestApp};
-use http_body_util::BodyExt;
+use axum::http::{StatusCode, header};
+use common::Client;
 use og_core::api::events::BaseEvent;
 use opengrid::perm::Role;
 use query_support::*;
-use sse_support::*;
 use serde_json::{Value, json};
-use tower::ServiceExt;
+use sse_support::*;
 
 // ------------------------------------------------------------------ basics
 
@@ -95,7 +92,7 @@ async fn updates_and_deletes_are_reported_per_table() {
     assert_eq!(data["event"]["updated"], json!([id]));
     f.delete_records(&f.table_id, &[&id])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let (_, data) = s.next_event().await;
     assert_eq!(data["event"]["deleted"], json!([id]));
 }

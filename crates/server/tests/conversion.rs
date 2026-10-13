@@ -261,7 +261,7 @@ async fn links_become_text_with_the_linked_primary_names() {
     let o3 = sid(&f.create(&l.t2, json!({ &t2p: "Order C" })).await["id"]).to_string();
     let lid = sid(&l.link["id"]).to_string();
     let c = sid(&f.create(&l.t1, json!({ &lid: [o1, o2, o3] })).await["id"]).to_string();
-    f.delete_records(&l.t2, &[&o2]).await.assert_status(200);
+    f.delete_records(&l.t2, &[&o2]).await.assert_status(204);
     let r = convert(f, &l.link, json!({ "type": "long_text", "options": {} })).await;
     r.assert_status(200);
     assert_eq!(
