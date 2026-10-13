@@ -13,7 +13,7 @@ React 19 + TypeScript (strict) single-page app, built with Vite and embedded int
 | Server state | TanStack Query v5 (SSE events invalidate queries) |
 | Routing | React Router v8, library mode |
 | Contract | TypeScript types generated from the Rust DTOs by ts-rs into `src/api/types` |
-| Tests | Vitest + Testing Library + jsdom; Playwright skeleton in `e2e/` |
+| Tests | Vitest + Testing Library + jsdom; live contract tests against the real server (`contract/`); Playwright end-to-end tests in Chrome (`e2e/`) |
 
 Dependencies are deliberately few (9 runtime): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
@@ -54,22 +54,48 @@ too (see the conventions in `crates/core/src/api/mod.rs`); response fields stay 
 
 ### Live contract tests
 
-`npm run test:contract` runs the real API client (`src/api/endpoints.ts`) against a real `target/debug/opengrid`
-started on a free port with a throwaway data directory (`contract/globalSetup.ts` builds it with `cargo build`).
-Every response is checked against the generated bindings (`contract/typecheck.ts` reads `src/api/types/*.ts`), so
-a server/client mismatch fails here rather than in a browser. Node has no cookie jar, so `contract/cookieJar.ts`
-wraps `fetch` (tests only) and `setApiBase()` points the client at the server. Set
-`OPENGRID_CONTRACT_SKIP_BUILD=1` to reuse already built binaries. Covered: setup, signup, login/logout, 2FA,
-sessions, tokens, invites, admin users, audit paging, backups, and the error envelope. Workspaces, bases,
-tables, views and records are added as their endpoints land. Invites need a workspace, which cannot be created
-over the API yet, so `crates/server/examples/contract_seed.rs` inserts one; drop it once the workspace API exists.
+`npm run test:contract` runs the real API client (`src/api/endpoints.ts`, `src/api/records.ts`,
+`src/api/events.ts`) against a real `target/debug/opengrid` started on a free port with a throwaway
+data directory (`contract/globalSetup.ts` builds it with `cargo build --features debug-embed`, the same
+binary the end-to-end tests use). Every response is checked against the generated bindings
+(`contract/typecheck.ts` reads `src/api/types/*.ts`), so a server/client mismatch fails here rather than
+in a browser. Node has no cookie jar, so `contract/cookieJar.ts` wraps `fetch` (tests only), and
+`contract/support.ts` gives each test file its own workspace and users (`Profile`, `createWorld`).
+
+Two servers run: a fresh one for the first-run flow (`flow.contract.test.ts`: setup, login, 2FA, sessions,
+tokens, invites, admin, audit, backups, `errors.contract.test.ts`: the error envelope) and a second one whose
+administrator already exists for the data plane:
+
+| File | Covers |
+|---|---|
+| `workspaces.contract.test.ts` | workspaces (create, rename, members, delete + restore), bases (schema, rename, duplicate, collaborators, members), tables |
+| `fields.contract.test.ts` | every type the field dialog can create with its defaults, link pairs, formulas and the live check, lookup / rollup / count, type changes, delete + restore |
+| `views.contract.test.ts` | every view type, config replacement, personal and locked views, duplicate, delete |
+| `records.contract.test.ts` | create / update / delete / restore / move, typecast, links from both sides, `before_record_id`, view query (filter, sort, group, search, range, paging, colors, `transient`), aggregations, link lookup, history |
+| `collab.contract.test.ts` | comments, mentions and notifications, trash, automations (CRUD, dry-run test, webhook runs, run history) |
+| `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
+
+`OPENGRID_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
 
 ### End-to-end tests
 
+Playwright drives the real stack in the locally installed Google Chrome (no browser download):
+
 ```sh
-npx playwright install chromium     # once; npm ci does not download browsers
-OPENGRID_E2E=1 OPENGRID_E2E_URL=http://127.0.0.1:8080 npm run e2e
+OPENGRID_E2E=1 npm run e2e
 ```
+
+`e2e/globalSetup.ts` builds the web client, builds the server with `web/dist` embedded at compile time
+(`--features debug-embed`), starts it on a temporary data directory and a free port, and checks that it serves
+the app with `web/dist` moved away. The projects run in order on that one instance: `smoke` (the embedded
+build loads `/` without console errors or CSP violations), `journey` (first-run setup, workspace and base, rename a
+table, add number / single select / date / formula fields through the dialog, add records and edit cells,
+filter and sort, expanded record and a comment, log out and in) and `grid` (`grid.spec.ts`: cell editing,
+undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records). Every test
+fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
+The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
+are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
+reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENGRID_E2E=1` is set.
 
 ## Layout
 
