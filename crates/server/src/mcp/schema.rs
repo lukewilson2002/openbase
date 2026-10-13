@@ -176,7 +176,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "name": string("New name."),
                     "description": string("New description."),
                     "type": ftype,
-                    "options": options,
+                    "options": free_object("Options to change, in the shape of create_field's `options` (merged into the current ones; names accepted). Needed with `type` for types that require options."),
                     "confirm_conversion": boolean("Set true to confirm a type change that converts existing data."),
                 }),
                 &["base_id", "table", "field"],
@@ -326,7 +326,9 @@ fn table_out(v: &Value) -> Value {
             .map(|x| {
                 let mut o = json!({ "id": x["id"], "name": x["name"], "type": x["type"] });
                 if with_options
-                    && let Some(opts) = x.get("options").filter(|o| o.as_object().is_none_or(|m| !m.is_empty()))
+                    && let Some(opts) = x
+                        .get("options")
+                        .filter(|o| o.as_object().is_none_or(|m| !m.is_empty()))
                 {
                     o["options"] = opts.clone();
                 }
@@ -872,41 +874,218 @@ const VALUE_FORMAT: &str = "format?: {kind: number|percent, precision} | {kind: 
 
 /// (type, label, computed, options help, value help, example options).
 fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)> {
-    let e = |t: &'static str,
-             l: &'static str,
-             c: bool,
-             options: &str,
-             value: &str,
-             example: Value| (t, l, c, options.to_string(), value.to_string(), example);
+    let e =
+        |t: &'static str, l: &'static str, c: bool, options: &str, value: &str, example: Value| {
+            (t, l, c, options.to_string(), value.to_string(), example)
+        };
     vec![
-        e("single_line_text", "Single line text", false, "{default?: string}", "string", json!({})),
-        e("long_text", "Long text", false, "{rich?: boolean} rich = markdown", "string", json!({"rich": true})),
-        e("number", "Number", false, "{precision: 0-8 (0), allow_negative: true, default?: number}", "number", json!({"precision": 2})),
-        e("currency", "Currency", false, "{precision: 2, symbol: \"$\", allow_negative: true}", "number", json!({"symbol": "EUR "})),
-        e("percent", "Percent", false, "{precision: 0, allow_negative: true, default?}", "fraction: 0.25 is 25%", json!({"precision": 1})),
-        e("duration", "Duration", false, "{format: h_mm | h_mm_ss | h_mm_ss_s | h_mm_ss_ss | h_mm_ss_sss}", "seconds as a number; with typecast also \"1:30:00\"", json!({"format": "h_mm_ss"})),
-        e("rating", "Rating", false, "{max: 1-10 (5), icon: \"star\", color: \"yellow\"}", "integer 1..max", json!({"max": 5})),
-        e("checkbox", "Checkbox", false, "{icon: \"check\", color: \"green\"}", "true or false", json!({})),
-        e("single_select", "Single select", false, "{choices: [\"Todo\", {name: \"Done\", color: \"green\"}]} choices are names or {name, color?}; colours: blue cyan teal green yellow orange red pink purple gray (+ _dark)", "choice name; with typecast a missing choice is created", json!({"choices": ["Todo", "Doing", {"name": "Done", "color": "green"}]})),
-        e("multiple_select", "Multiple select", false, "same as single_select", "array of choice names", json!({"choices": ["Urgent", "Billing"]})),
-        e("date", "Date", false, DATE_OPTS, "\"YYYY-MM-DD\", or an ISO datetime when include_time", json!({"include_time": false, "date_format": "iso"})),
+        e(
+            "single_line_text",
+            "Single line text",
+            false,
+            "{default?: string}",
+            "string",
+            json!({}),
+        ),
+        e(
+            "long_text",
+            "Long text",
+            false,
+            "{rich?: boolean} rich = markdown",
+            "string",
+            json!({"rich": true}),
+        ),
+        e(
+            "number",
+            "Number",
+            false,
+            "{precision: 0-8 (0), allow_negative: true, default?: number}",
+            "number",
+            json!({"precision": 2}),
+        ),
+        e(
+            "currency",
+            "Currency",
+            false,
+            "{precision: 2, symbol: \"$\", allow_negative: true}",
+            "number",
+            json!({"symbol": "EUR "}),
+        ),
+        e(
+            "percent",
+            "Percent",
+            false,
+            "{precision: 0, allow_negative: true, default?}",
+            "fraction: 0.25 is 25%",
+            json!({"precision": 1}),
+        ),
+        e(
+            "duration",
+            "Duration",
+            false,
+            "{format: h_mm | h_mm_ss | h_mm_ss_s | h_mm_ss_ss | h_mm_ss_sss}",
+            "seconds as a number; with typecast also \"1:30:00\"",
+            json!({"format": "h_mm_ss"}),
+        ),
+        e(
+            "rating",
+            "Rating",
+            false,
+            "{max: 1-10 (5), icon: \"star\", color: \"yellow\"}",
+            "integer 1..max",
+            json!({"max": 5}),
+        ),
+        e(
+            "checkbox",
+            "Checkbox",
+            false,
+            "{icon: \"check\", color: \"green\"}",
+            "true or false",
+            json!({}),
+        ),
+        e(
+            "single_select",
+            "Single select",
+            false,
+            "{choices: [\"Todo\", {name: \"Done\", color: \"green\"}]} choices are names or {name, color?}; colours: blue cyan teal green yellow orange red pink purple gray (+ _dark)",
+            "choice name; with typecast a missing choice is created",
+            json!({"choices": ["Todo", "Doing", {"name": "Done", "color": "green"}]}),
+        ),
+        e(
+            "multiple_select",
+            "Multiple select",
+            false,
+            "same as single_select",
+            "array of choice names",
+            json!({"choices": ["Urgent", "Billing"]}),
+        ),
+        e(
+            "date",
+            "Date",
+            false,
+            DATE_OPTS,
+            "\"YYYY-MM-DD\", or an ISO datetime when include_time",
+            json!({"include_time": false, "date_format": "iso"}),
+        ),
         e("email", "Email", false, "{}", "string", json!({})),
         e("url", "URL", false, "{}", "string", json!({})),
         e("phone", "Phone number", false, "{}", "string", json!({})),
-        e("attachment", "Attachment", false, "{}", "array of {id}: upload with upload_attachment (same base), then write the returned reference", json!({})),
-        e("link", "Link to another record", false, "{linked_table: name or id, single?: boolean (one record only), picker_view?: view of the linked table}. Also pass inverse_name to create_field: the name of the matching field created in the other table (both sides are kept in sync)", "array of record ids of the linked table (results show {id, name})", json!({"linked_table": "Customers", "single": true})),
-        e("user", "User", false, "{multiple?: boolean, notify?: boolean}", "{id} or {email} (array for multiple); the person must have access to the base (list_collaborators)", json!({"multiple": false})),
-        e("formula", "Formula", true, &format!("{{expression: \"{{Price}} * {{Qty}}\", {VALUE_FORMAT}}}; reference fields as {{Field Name}}; check first with check_formula"), "not writable; computed", json!({"expression": "{Price} * {Qty}"})),
-        e("lookup", "Lookup", true, "{link_field: a link field of this table, target_field: a field of the linked table}", "not writable; an array of the linked records' values", json!({"link_field": "Customer", "target_field": "Email"})),
-        e("rollup", "Rollup", true, &format!("{{link_field, target_field, expression: \"SUM(values)\" (a formula over the array `values`, e.g. COUNTA(values), ARRAYJOIN(values, \", \")), {VALUE_FORMAT}}}"), "not writable; computed", json!({"link_field": "Orders", "target_field": "Total", "expression": "SUM(values)"})),
-        e("count", "Count", true, "{link_field: a link field of this table}", "not writable; number of linked records", json!({"link_field": "Orders"})),
-        e("created_time", "Created time", true, DATE_OPTS, "not writable; set when the record is created", json!({"include_time": true})),
-        e("last_modified_time", "Last modified time", true, "{fields?: [names watched; empty = any editable field], date?: date options}", "not writable", json!({"fields": []})),
-        e("created_by", "Created by", true, "{}", "not writable", json!({})),
-        e("last_modified_by", "Last modified by", true, "{fields?: [names watched]}", "not writable", json!({})),
-        e("autonumber", "Autonumber", true, "{}", "not writable; 1, 2, 3, ... in creation order", json!({})),
-        e("barcode", "Barcode", false, "{}", "string or {text}", json!({})),
-        e("button", "Button", true, "{label: string, url_formula: formula producing an http(s) or mailto URL}", "not writable; opens the URL in the web app", json!({"label": "Open", "url_formula": "\"https://example.com/\" & {Name}"})),
+        e(
+            "attachment",
+            "Attachment",
+            false,
+            "{}",
+            "array of {id}: upload with upload_attachment (same base), then write the returned reference",
+            json!({}),
+        ),
+        e(
+            "link",
+            "Link to another record",
+            false,
+            "{linked_table: name or id, single?: boolean (one record only), picker_view?: view of the linked table}. Also pass inverse_name to create_field: the name of the matching field created in the other table (both sides are kept in sync)",
+            "array of record ids of the linked table (results show {id, name})",
+            json!({"linked_table": "Customers", "single": true}),
+        ),
+        e(
+            "user",
+            "User",
+            false,
+            "{multiple?: boolean, notify?: boolean}",
+            "{id} or {email} (array for multiple); the person must have access to the base (list_collaborators)",
+            json!({"multiple": false}),
+        ),
+        e(
+            "formula",
+            "Formula",
+            true,
+            &format!(
+                "{{expression: \"{{Price}} * {{Qty}}\", {VALUE_FORMAT}}}; reference fields as {{Field Name}}; check first with check_formula"
+            ),
+            "not writable; computed",
+            json!({"expression": "{Price} * {Qty}"}),
+        ),
+        e(
+            "lookup",
+            "Lookup",
+            true,
+            "{link_field: a link field of this table, target_field: a field of the linked table}",
+            "not writable; an array of the linked records' values",
+            json!({"link_field": "Customer", "target_field": "Email"}),
+        ),
+        e(
+            "rollup",
+            "Rollup",
+            true,
+            &format!(
+                "{{link_field, target_field, expression: \"SUM(values)\" (a formula over the array `values`, e.g. COUNTA(values), ARRAYJOIN(values, \", \")), {VALUE_FORMAT}}}"
+            ),
+            "not writable; computed",
+            json!({"link_field": "Orders", "target_field": "Total", "expression": "SUM(values)"}),
+        ),
+        e(
+            "count",
+            "Count",
+            true,
+            "{link_field: a link field of this table}",
+            "not writable; number of linked records",
+            json!({"link_field": "Orders"}),
+        ),
+        e(
+            "created_time",
+            "Created time",
+            true,
+            DATE_OPTS,
+            "not writable; set when the record is created",
+            json!({"include_time": true}),
+        ),
+        e(
+            "last_modified_time",
+            "Last modified time",
+            true,
+            "{fields?: [names watched; empty = any editable field], date?: date options}",
+            "not writable",
+            json!({"fields": []}),
+        ),
+        e(
+            "created_by",
+            "Created by",
+            true,
+            "{}",
+            "not writable",
+            json!({}),
+        ),
+        e(
+            "last_modified_by",
+            "Last modified by",
+            true,
+            "{fields?: [names watched]}",
+            "not writable",
+            json!({}),
+        ),
+        e(
+            "autonumber",
+            "Autonumber",
+            true,
+            "{}",
+            "not writable; 1, 2, 3, ... in creation order",
+            json!({}),
+        ),
+        e(
+            "barcode",
+            "Barcode",
+            false,
+            "{}",
+            "string or {text}",
+            json!({}),
+        ),
+        e(
+            "button",
+            "Button",
+            true,
+            "{label: string, url_formula: formula producing an http(s) or mailto URL}",
+            "not writable; opens the URL in the web app",
+            json!({"label": "Open", "url_formula": "\"https://example.com/\" & {Name}"}),
+        ),
     ]
 }
 
@@ -951,7 +1130,11 @@ mod tests {
         let helped: Vec<&str> = catalogue().iter().map(|e| e.0).collect();
         let all = type_names();
         assert_eq!(all.len(), 28);
-        assert_eq!(helped, all.to_vec(), "field_types must list the 28 types in order");
+        assert_eq!(
+            helped,
+            all.to_vec(),
+            "field_types must list the 28 types in order"
+        );
     }
 
     #[test]

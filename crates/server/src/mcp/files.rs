@@ -137,7 +137,9 @@ async fn upload_attachment(ctx: &McpCtx, a: UploadArgs) -> ToolResult {
             return ToolResult::error("Give either content_base64 or url, not both.");
         }
         (None, None) => {
-            return ToolResult::error("Give the file as content_base64 (with filename) or as a public url.");
+            return ToolResult::error(
+                "Give the file as content_base64 (with filename) or as a public url.",
+            );
         }
         (Some(b64), None) => {
             let Some(name) = a.filename.as_deref().filter(|n| !n.trim().is_empty()) else {
@@ -161,7 +163,8 @@ async fn upload_attachment(ctx: &McpCtx, a: UploadArgs) -> ToolResult {
             (bytes, None, clean_filename(name))
         }
         (None, Some(url)) => {
-            let fetched = download::download(url, ctx.state.config.allow_private_webhooks, max).await;
+            let fetched =
+                download::download(url, ctx.state.config.allow_private_webhooks, max).await;
             match fetched {
                 Ok(d) => {
                     let name = a
@@ -297,7 +300,11 @@ async fn export_csv(ctx: &McpCtx, a: ExportArgs) -> ToolResult {
     }
     let raw = res.text.clone().unwrap_or_default();
     let full = strip_bom(&raw);
-    let shown = if res.truncated { cut_to_rows(full) } else { full };
+    let shown = if res.truncated {
+        cut_to_rows(full)
+    } else {
+        full
+    };
     let rows = count_records(shown).unwrap_or(0).saturating_sub(1);
     // The exact total, from the same view query the app uses (a count-only request).
     let total = match fetch(
@@ -486,7 +493,10 @@ mod tests {
         let csv = "Name,Notes\r\nAda,\"multi\r\nline\"\r\nBob,x\r\nCarl,partial";
         assert_eq!(count_records("Name\r\nA\r\n"), Some(2));
         // Cut inside the last row: that row is dropped.
-        assert_eq!(cut_to_rows(csv), "Name,Notes\r\nAda,\"multi\r\nline\"\r\nBob,x\r\n");
+        assert_eq!(
+            cut_to_rows(csv),
+            "Name,Notes\r\nAda,\"multi\r\nline\"\r\nBob,x\r\n"
+        );
         // Cut inside a quoted cell: stepping back until the text parses.
         let inside = "Name,Notes\r\nAda,x\r\nBob,\"multi\r\nli";
         assert_eq!(cut_to_rows(inside), "Name,Notes\r\nAda,x\r\n");

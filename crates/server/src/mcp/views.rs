@@ -11,8 +11,7 @@ use serde_json::{Map, Value, json};
 
 use super::McpCtx;
 use super::resolve::{
-    Mode, Xlate, find_view, load_people, load_schema, merge_config, value_for_model,
-    view_for_model,
+    Mode, Xlate, find_view, load_people, load_schema, merge_config, value_for_model, view_for_model,
 };
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
@@ -23,7 +22,7 @@ const VIEW_TYPES: &[&str] = &[
 const DEFAULT_ROWS: usize = 50;
 const MAX_ROWS: usize = 200;
 
-const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|exact_date, date}|{mode: past_week|next_month|past_number_of_days, days}). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: count/sum/avg/min/max/empty/filled/... per field). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
+const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|exact_date, date}|{mode: past_week|next_month|past_number_of_days, days}). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
 
 pub fn definitions() -> Vec<ToolDef> {
     let view_types = enumeration(VIEW_TYPES, "View type.");
@@ -69,7 +68,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                     "name": string("New name."),
                     "locked": boolean("Lock the view so only creators can reconfigure it."),
-                    "config": free_object(CONFIG_HELP),
+                    "config": free_object("The parts to change, in the shape of create_view's `config` (field names accepted)."),
                 }),
                 &["base_id", "view"],
             ),

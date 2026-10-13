@@ -5,9 +5,11 @@
 use serde_json::{Value, json};
 
 mod live;
+#[allow(unused_imports)]
 pub use live::*;
 
 mod rig;
+#[allow(unused_imports)]
 pub use rig::*;
 
 use crate::common::{Client, Response, TestApp};

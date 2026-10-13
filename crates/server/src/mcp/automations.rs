@@ -60,11 +60,11 @@ pub fn definitions() -> Vec<ToolDef> {
                     "automation_id": string("Automation id."),
                     "name": string("New name."),
                     "enabled": boolean("Turn it on or off."),
-                    "trigger": free_object(TRIGGER_HELP),
+                    "trigger": free_object("Replaces the trigger; same shape as create_automation's `trigger`."),
                     "actions": json!({
                         "type": "array",
                         "items": { "type": "object" },
-                        "description": format!("Replaces ALL actions. {ACTIONS_HELP}"),
+                        "description": "Replaces ALL actions; same shape as create_automation's `actions`.",
                     }),
                     "rotate_webhook_token": boolean("Webhook triggers: issue a new token (the old one stops working)."),
                 }),
@@ -374,8 +374,14 @@ async fn update_automation(ctx: &McpCtx, a: UpdateAutomation) -> ToolResult {
     }
     if a.trigger.is_some() || a.actions.is_some() {
         // Names need the base: read the automation (this also checks the caller may see it).
-        let current = match fetch(ctx, "GET", &automation_path(&a.automation_id, ""), None, None)
-            .await
+        let current = match fetch(
+            ctx,
+            "GET",
+            &automation_path(&a.automation_id, ""),
+            None,
+            None,
+        )
+        .await
         {
             Ok(v) => v,
             Err(e) => return e,
@@ -560,9 +566,13 @@ mod tests {
     #[test]
     fn triggers_and_actions_accept_names() {
         let s = schema();
-        let mut trigger = json!({"type": "record_updated", "table": "leads", "field_ids": ["Name"]});
+        let mut trigger =
+            json!({"type": "record_updated", "table": "leads", "field_ids": ["Name"]});
         let table = trigger_to_ids(&s, &mut trigger).unwrap().unwrap();
-        assert_eq!(trigger, json!({"type": "record_updated", "table_id": "tbl1", "field_ids": ["fld1"]}));
+        assert_eq!(
+            trigger,
+            json!({"type": "record_updated", "table_id": "tbl1", "field_ids": ["fld1"]})
+        );
         let mut actions = json!([
             {"type": "create_record", "table": "Leads", "values": {"Name": "x"},
              "condition": {"conjunction": "and", "items": [{"field": "Name", "op": "is_not_empty"}]}},
@@ -577,8 +587,12 @@ mod tests {
     #[test]
     fn mistakes_are_explained() {
         let s = schema();
-        let e = trigger_to_ids(&s, &mut json!({"type": "record_created", "table": "Nope"})).unwrap_err();
-        assert!(e.contains("Table 'Nope' not found") && e.contains("'Leads'"), "{e}");
+        let e = trigger_to_ids(&s, &mut json!({"type": "record_created", "table": "Nope"}))
+            .unwrap_err();
+        assert!(
+            e.contains("Table 'Nope' not found") && e.contains("'Leads'"),
+            "{e}"
+        );
         let e = trigger_to_ids(&s, &mut json!({"type": "sometimes"})).unwrap_err();
         assert!(e.contains("unknown trigger type"), "{e}");
         let e = trigger_to_ids(&s, &mut json!({"type": "record_created"})).unwrap_err();

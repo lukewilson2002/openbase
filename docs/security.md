@@ -97,7 +97,7 @@ disable 2FA, which is a path to any account.
   nearly everything you can in the app except change credentials; give agents the
   least permission that works (read-only, or write without `manage`), restrict
   them to the bases they need, set an expiry, and revoke the token when the work
-  is done. See [MCP](mcp.md#security).
+  is done. See [MCP](mcp.md#security-model).
 - **Lower the Airtable-compatible API limits** with `OPENGRID_V1_RATE_PER_TOKEN`
   (default 5 per second) and `OPENGRID_V1_RATE_PER_USER` (default 50 per second)
   on a small host.
@@ -127,7 +127,13 @@ disable 2FA, which is a path to any account.
   so permissions, validation and audit are the web app's; the paths are checked
   up front (only `/api/...`, no `..`, no `/mcp` recursion) and credential, session
   and token endpoints are refused before anything is sent. A test fails when a
-  route is registered without an entry in the endpoint catalogue.
+  route is registered without an entry in the endpoint catalogue. The curated
+  tools (bases, tables, fields, views, automations, share links, CSV, uploads, the
+  admin pages) run through the same router; none of them can set a password, switch
+  off 2FA or touch tokens, and `admin_*` tools exist only for a `manage` token of an
+  instance administrator. `upload_attachment` with a URL fetches through the same
+  SSRF guard as the automations' HTTP action (see [automations](automations.md#http-requests-and-ssrf)),
+  with a size limit and no redirects. Full details: [MCP](mcp.md#security-model).
 - **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenGrid-CSRF`
   header; no CORS is ever enabled, so cross-site pages cannot add it. Only a
   well-formed `Authorization: Bearer` header exempts a request; other

@@ -87,8 +87,14 @@ clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 **AI agents (MCP).** The server is also an MCP (Model Context Protocol) server at
 `/mcp`. An agent with a personal access token can do everything you can do in the
 web app, within that token's permissions, so you do not have to use the app
-yourself if you would rather not. Credentials, sessions and API tokens stay out
-of reach. See [docs/mcp.md](docs/mcp.md).
+yourself if you would rather not: build bases, tables, all 28 field types and views,
+edit records, run formulas, set up automations and public forms, invite people,
+import and export CSV, upload files, read history and notifications, and (for
+administrators) manage users and backups. About 65 tools, plus a generic request
+tool for anything else. **Account -> AI assistants** shows the address and
+copy-ready settings for Claude Code and other clients. Passwords, two-factor
+settings, sessions and API tokens stay out of reach of any token. See
+[docs/mcp.md](docs/mcp.md).
 
 **Operations.** CSV import and export. Daily automatic backups with retention,
 plus `opengrid backup` and `opengrid restore`. An automatic database snapshot
@@ -396,7 +402,9 @@ curl -H "Authorization: Bearer $TOKEN" https://grid.example.com/api/v1/meta/base
 
 [docs/api.md](docs/api.md) lists what is supported and how it differs from
 Airtable. Automation triggers, actions, templates and webhooks are in
-[docs/automations.md](docs/automations.md).
+[docs/automations.md](docs/automations.md). To let an AI assistant do the work
+instead of you, see [docs/mcp.md](docs/mcp.md) (setup per client, every tool, the
+scope and security model).
 
 ## Building from source
 

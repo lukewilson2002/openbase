@@ -4,9 +4,9 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::McpCtx;
+use super::resolve::{people_of, value_for_model};
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
-use super::resolve::{people_of, value_for_model};
 use crate::perm;
 use crate::store::{records, schema};
 
@@ -159,9 +159,10 @@ async fn restore_from_trash(ctx: &McpCtx, a: RestoreArgs) -> ToolResult {
     {
         Ok(v) => {
             let mut out = json!({ "restored": { "kind": a.kind, "id": a.id } });
-            if let Some(ids) = v.get("restored_field_ids").filter(|i| {
-                i.as_array().is_some_and(|a| !a.is_empty())
-            }) {
+            if let Some(ids) = v
+                .get("restored_field_ids")
+                .filter(|i| i.as_array().is_some_and(|a| !a.is_empty()))
+            {
                 out["restored_field_ids"] = ids.clone();
             }
             ToolResult::ok(out)
@@ -203,7 +204,10 @@ async fn get_record_history(ctx: &McpCtx, a: HistoryArgs) -> ToolResult {
                 return Ok((Vec::new(), Default::default()));
             };
             let base_id = perm::base_of_table(c, &rec.table_id)?;
-            Ok((schema::table_fields(c, &rec.table_id)?, people_of(c, &base_id)))
+            Ok((
+                schema::table_fields(c, &rec.table_id)?,
+                people_of(c, &base_id),
+            ))
         })
         .await
         .unwrap_or_default();

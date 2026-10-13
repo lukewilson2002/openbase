@@ -36,7 +36,10 @@ impl Rig {
         res.assert_status(200);
         let tok = live
             .app
-            .api_token(&admin, json!({"name": "agent", "write": true, "manage": true}))
+            .api_token(
+                &admin,
+                json!({"name": "agent", "write": true, "manage": true}),
+            )
             .await;
         let token = tok.bearer.clone().unwrap();
         let agent = live.agent(&token);
@@ -84,8 +87,7 @@ impl Rig {
     /// A second user with `role` on the whole workspace, and an agent with a token for them.
     pub async fn teammate(&self, email: &str, role: &str, scopes: Value) -> (Client, Agent) {
         let user = self.app().user(email, "Teammate");
-        self.app()
-            .grant_workspace_role(&user, &self.ws, role);
+        self.app().grant_workspace_role(&user, &self.ws, role);
         let mut body = json!({"name": "t"});
         for (k, v) in scopes.as_object().unwrap() {
             body[k] = v.clone();

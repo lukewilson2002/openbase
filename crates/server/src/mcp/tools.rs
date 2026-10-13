@@ -338,6 +338,35 @@ mod tests {
     }
 
     #[test]
+    fn admin_tools_need_manage_and_an_administrator() {
+        let admin_tools = |a: &Actor| -> Vec<String> {
+            names(a)
+                .into_iter()
+                .filter(|n| n.starts_with("admin_"))
+                .collect()
+        };
+        let mut admin = actor(true, true);
+        admin.is_admin = true;
+        assert_eq!(admin_tools(&admin).len(), 7);
+        assert!(
+            admin_tools(&actor(true, true)).is_empty(),
+            "not an administrator"
+        );
+        let mut write_only = actor(true, false);
+        write_only.is_admin = true;
+        assert!(admin_tools(&write_only).is_empty(), "no manage permission");
+        // Every admin tool is admin-level, and nothing else is.
+        for t in registry() {
+            assert_eq!(
+                t.name.starts_with("admin_"),
+                t.level == Level::Admin,
+                "{}",
+                t.name
+            );
+        }
+    }
+
+    #[test]
     fn bad_cursors_are_rejected() {
         let a = actor(true, true);
         assert!(list_page(&a, Some("!!"), 10).is_err());

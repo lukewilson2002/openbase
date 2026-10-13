@@ -23,7 +23,8 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     let b = r.base.as_str();
     r.table("Tasks").await;
     r.field("Tasks", "Points", "number", json!({})).await;
-    r.records("Tasks", json!([{"fields": {"Name": "t1", "Points": 3}}])).await;
+    r.records("Tasks", json!([{"fields": {"Name": "t1", "Points": 3}}]))
+        .await;
     a.call(
         "create_view",
         json!({"base_id": b, "table": "Tasks", "name": "Board", "type": "grid",
@@ -48,12 +49,19 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     assert!(url.starts_with(&format!("{}/s/", r.live.url)), "{url}");
     let token = share["token"].as_str().unwrap().to_string();
     let anon = r.app().anon();
-    let page = r.app().get(&anon, &format!("/api/public/shares/{token}")).await;
+    let page = r
+        .app()
+        .get(&anon, &format!("/api/public/shares/{token}"))
+        .await;
     page.assert_status(200);
     assert_eq!(page.body["name"], "Board");
     let q = r
         .app()
-        .post(&anon, &format!("/api/public/shares/{token}/query"), json!({}))
+        .post(
+            &anon,
+            &format!("/api/public/shares/{token}/query"),
+            json!({}),
+        )
         .await;
     q.assert_status(200);
     assert_eq!(q.body["total"], 1);
@@ -67,11 +75,21 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     // Password: set, required, removed.
     let id = share["id"].as_str().unwrap().to_string();
     let upd = a
-        .call("update_share_link", json!({"share_id": id, "password": "open sesame"}))
+        .call(
+            "update_share_link",
+            json!({"share_id": id, "password": "open sesame"}),
+        )
         .await;
     assert_eq!(upd["share_link"]["has_password"], true);
-    let denied = r.app().get(&anon, &format!("/api/public/shares/{token}")).await;
-    assert!(denied.status.as_u16() == 401 || denied.status.as_u16() == 403, "{}", denied.body);
+    let denied = r
+        .app()
+        .get(&anon, &format!("/api/public/shares/{token}"))
+        .await;
+    assert!(
+        denied.status.as_u16() == 401 || denied.status.as_u16() == 403,
+        "{}",
+        denied.body
+    );
     let ok = r
         .app()
         .request_with(
@@ -86,9 +104,15 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
         .await;
     ok.assert_status(200);
     let upd = a
-        .call("update_share_link", json!({"share_id": id, "password": null}))
+        .call(
+            "update_share_link",
+            json!({"share_id": id, "password": null}),
+        )
         .await;
-    assert_eq!(upd["share_link"]["has_password"], false, "null removes the password");
+    assert_eq!(
+        upd["share_link"]["has_password"], false,
+        "null removes the password"
+    );
     r.app()
         .get(&anon, &format!("/api/public/shares/{token}"))
         .await
@@ -96,7 +120,10 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
 
     // Disable, list, delete.
     let upd = a
-        .call("update_share_link", json!({"share_id": id, "enabled": false}))
+        .call(
+            "update_share_link",
+            json!({"share_id": id, "enabled": false}),
+        )
         .await;
     assert_eq!(upd["share_link"]["enabled"], false);
     assert_eq!(
@@ -126,18 +153,30 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
         )
         .await["share_link"]
         .clone();
-    assert_eq!(form["kind"], "form", "form views are shared as forms by default");
+    assert_eq!(
+        form["kind"], "form",
+        "form views are shared as forms by default"
+    );
     assert_eq!(form["has_password"], true);
     let e = a
-        .fails("create_share_link", json!({"base_id": b, "view": "Board", "kind": "form"}))
+        .fails(
+            "create_share_link",
+            json!({"base_id": b, "view": "Board", "kind": "form"}),
+        )
         .await;
     assert!(e.contains("not a form view"), "{e}");
     let e = a
-        .fails("create_share_link", json!({"base_id": b, "view": "Intake", "kind": "view"}))
+        .fails(
+            "create_share_link",
+            json!({"base_id": b, "view": "Intake", "kind": "view"}),
+        )
         .await;
     assert!(e.contains("form view") && e.contains("kind 'form'"), "{e}");
     let e = a
-        .fails("create_share_link", json!({"base_id": b, "view": "Board", "kind": "page"}))
+        .fails(
+            "create_share_link",
+            json!({"base_id": b, "view": "Board", "kind": "page"}),
+        )
         .await;
     assert!(e.contains("'view' or 'form'"), "{e}");
     assert!(
@@ -146,9 +185,12 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
             .contains("Give something")
     );
     assert!(
-        a.fails("update_share_link", json!({"share_id": "shrNope", "enabled": true}))
-            .await
-            .contains("not found")
+        a.fails(
+            "update_share_link",
+            json!({"share_id": "shrNope", "enabled": true})
+        )
+        .await
+        .contains("not found")
     );
 }
 
@@ -175,14 +217,24 @@ async fn automations_are_created_with_names_tested_and_run() {
                                 "values": {"Name": "Hook says {{trigger.body.text}}"}}]}),
         )
         .await;
-    let token = hook["automation"]["webhook_token"].as_str().unwrap().to_string();
+    let token = hook["automation"]["webhook_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert!(hook["note"].as_str().unwrap().contains("only now"));
     let id = hook["automation"]["id"].as_str().unwrap().to_string();
     let got = a.call("get_automation", json!({"automation_id": id})).await;
-    assert!(got["automation"]["webhook_token"].is_null(), "the token is not shown again");
+    assert!(
+        got["automation"]["webhook_token"].is_null(),
+        "the token is not shown again"
+    );
 
     r.app()
-        .post(&r.app().anon(), &format!("/api/hooks/{token}"), json!({"text": "hello"}))
+        .post(
+            &r.app().anon(),
+            &format!("/api/hooks/{token}"),
+            json!({"text": "hello"}),
+        )
         .await
         .assert_status(202);
     let mut seen = false;
@@ -199,14 +251,20 @@ async fn automations_are_created_with_names_tested_and_run() {
     }
     assert!(seen, "the webhook ran the automation");
     let runs = a
-        .call("list_automation_runs", json!({"automation_id": id, "limit": 1}))
+        .call(
+            "list_automation_runs",
+            json!({"automation_id": id, "limit": 1}),
+        )
         .await;
     assert_eq!(runs["total"], 1);
     assert_eq!(runs["runs"][0]["trigger_data"]["type"], "webhook");
 
     // Rotating the token invalidates the old one.
     let rot = a
-        .call("update_automation", json!({"automation_id": id, "rotate_webhook_token": true}))
+        .call(
+            "update_automation",
+            json!({"automation_id": id, "rotate_webhook_token": true}),
+        )
         .await;
     let new_token = rot["automation"]["webhook_token"].as_str().unwrap();
     assert_ne!(new_token, token);
@@ -258,28 +316,46 @@ async fn automations_are_created_with_names_tested_and_run() {
         rows[1]["id"].as_str().unwrap().to_string(),
     );
     let t = a
-        .call("test_automation", json!({"automation_id": id, "record_id": small, "dry_run": false}))
+        .call(
+            "test_automation",
+            json!({"automation_id": id, "record_id": small, "dry_run": false}),
+        )
         .await;
     assert_eq!(t["dry_run"], false);
-    assert_eq!(t["log"][0]["status"], "skipped", "the condition did not match: {t}");
+    assert_eq!(
+        t["log"][0]["status"], "skipped",
+        "the condition did not match: {t}"
+    );
     let t = a
-        .call("test_automation", json!({"automation_id": id, "record_id": big}))
+        .call(
+            "test_automation",
+            json!({"automation_id": id, "record_id": big}),
+        )
         .await;
     assert_eq!(t["dry_run"], true, "a dry run is the default");
     assert_eq!(t["log"][0]["status"], "succeeded");
     assert_ne!(
-        a.call("get_record", json!({"base_id": b, "table": "Orders", "record_id": big}))
-            .await["fields"]["Flag"],
+        a.call(
+            "get_record",
+            json!({"base_id": b, "table": "Orders", "record_id": big})
+        )
+        .await["fields"]["Flag"],
         true,
         "a dry run changes nothing"
     );
     let t = a
-        .call("test_automation", json!({"automation_id": id, "record_id": big, "dry_run": false}))
+        .call(
+            "test_automation",
+            json!({"automation_id": id, "record_id": big, "dry_run": false}),
+        )
         .await;
     assert_eq!(t["status"], "succeeded", "{t}");
     assert_eq!(
-        a.call("get_record", json!({"base_id": b, "table": "Orders", "record_id": big}))
-            .await["fields"]["Flag"],
+        a.call(
+            "get_record",
+            json!({"base_id": b, "table": "Orders", "record_id": big})
+        )
+        .await["fields"]["Flag"],
         true
     );
 
@@ -290,7 +366,10 @@ async fn automations_are_created_with_names_tested_and_run() {
             json!({"base_id": b, "name": "x", "trigger": {"type": "record_created", "table": "Nope"}, "actions": []}),
         )
         .await;
-    assert!(e.contains("Table 'Nope' not found") && e.contains("'Orders'"), "{e}");
+    assert!(
+        e.contains("Table 'Nope' not found") && e.contains("'Orders'"),
+        "{e}"
+    );
     let e = a
         .fails(
             "create_automation",
@@ -312,7 +391,10 @@ async fn automations_are_created_with_names_tested_and_run() {
             json!({"base_id": b, "name": "x", "trigger": {"type": "schedule", "cron": "* * * * *", "timezone": "UTC"}, "actions": []}),
         )
         .await;
-    assert!(e.to_lowercase().contains("5 minutes") || e.to_lowercase().contains("often"), "{e}");
+    assert!(
+        e.to_lowercase().contains("5 minutes") || e.to_lowercase().contains("often"),
+        "{e}"
+    );
     let e = a
         .fails(
             "create_automation",
@@ -320,17 +402,25 @@ async fn automations_are_created_with_names_tested_and_run() {
                    "actions": [{"type": "notify", "user_ids": [], "message": "m", "condition": {"items": []}}]}),
         )
         .await;
-    assert!(e.contains("conditions only work with record and form triggers"), "{e}");
+    assert!(
+        e.contains("conditions only work with record and form triggers"),
+        "{e}"
+    );
 
     // List, then delete.
     let list = a.call("list_automations", json!({"base_id": b})).await;
     assert_eq!(list["automations"].as_array().unwrap().len(), 1);
-    a.call("delete_automation", json!({"automation_id": id})).await;
+    a.call("delete_automation", json!({"automation_id": id}))
+        .await;
     assert_eq!(
         a.call("list_automations", json!({"base_id": b})).await["automations"],
         json!([])
     );
-    assert!(a.fails("get_automation", json!({"automation_id": id})).await.contains("not found"));
+    assert!(
+        a.fails("get_automation", json!({"automation_id": id}))
+            .await
+            .contains("not found")
+    );
 }
 
 // ----------------------------------------------------------------------------- files: upload
@@ -338,7 +428,10 @@ async fn automations_are_created_with_names_tested_and_run() {
 /// A throwaway file server on 127.0.0.1.
 async fn file_server() -> SocketAddr {
     async fn small() -> impl IntoResponse {
-        ([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], "downloaded bytes")
+        (
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            "downloaded bytes",
+        )
     }
     async fn png() -> impl IntoResponse {
         // A real 1x1 PNG, so the content is sniffed as an image.
@@ -348,7 +441,10 @@ async fn file_server() -> SocketAddr {
         ([(header::CONTENT_TYPE, "image/png")], bytes)
     }
     async fn big() -> impl IntoResponse {
-        ([(header::CONTENT_TYPE, "application/octet-stream")], vec![7u8; 2 * 1024 * 1024])
+        (
+            [(header::CONTENT_TYPE, "application/octet-stream")],
+            vec![7u8; 2 * 1024 * 1024],
+        )
     }
     async fn redirect() -> impl IntoResponse {
         (StatusCode::FOUND, [(header::LOCATION, "/small.txt")])
@@ -396,7 +492,10 @@ async fn attachments_upload_from_base64_and_from_urls() {
 
     // URL: name from the path, content fetched by the server
     let up = a
-        .call("upload_attachment", json!({"base_id": b, "url": url("/files/small.txt")}))
+        .call(
+            "upload_attachment",
+            json!({"base_id": b, "url": url("/files/small.txt")}),
+        )
         .await;
     assert_eq!(up["attachment"]["filename"], "small.txt");
     assert_eq!(up["attachment"]["size"], "downloaded bytes".len());
@@ -412,25 +511,40 @@ async fn attachments_upload_from_base64_and_from_urls() {
     // ...usable in a record, and downloadable with the token
     let att = up["attachment"]["id"].as_str().unwrap().to_string();
     let rec = r
-        .records("Docs", json!([{"fields": {"Name": "d", "File": [{"id": att}]}}]))
+        .records(
+            "Docs",
+            json!([{"fields": {"Name": "d", "File": [{"id": att}]}}]),
+        )
         .await;
     assert_eq!(rec[0]["fields"]["File"][0]["filename"], "dot.png");
 
     // Refusals
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "url": url("/files/big.bin")}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "url": url("/files/big.bin")}),
+        )
         .await;
     assert!(e.contains("larger than the upload limit of 1 MB"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "url": url("/redirect")}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "url": url("/redirect")}),
+        )
         .await;
     assert!(e.contains("redirect"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "url": url("/gone")}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "url": url("/gone")}),
+        )
         .await;
     assert!(e.contains("404"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "url": "ftp://example.com/x"}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "url": "ftp://example.com/x"}),
+        )
         .await;
     assert!(e.contains("http"), "{e}");
     let e = a
@@ -443,20 +557,32 @@ async fn attachments_upload_from_base64_and_from_urls() {
     let e = a.fails("upload_attachment", json!({"base_id": b})).await;
     assert!(e.contains("content_base64") && e.contains("url"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "content_base64": "e30="}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "content_base64": "e30="}),
+        )
         .await;
     assert!(e.contains("filename is required"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "filename": "x", "content_base64": "not base64!!"}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "filename": "x", "content_base64": "not base64!!"}),
+        )
         .await;
     assert!(e.contains("not valid base64"), "{e}");
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "filename": "x", "content_base64": ""}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "filename": "x", "content_base64": ""}),
+        )
         .await;
     assert!(e.contains("empty") || e.contains("filename"), "{e}");
     let too_big = base64::engine::general_purpose::STANDARD.encode(vec![1u8; 1024 * 1024 + 10]);
     let e = a
-        .fails("upload_attachment", json!({"base_id": b, "filename": "big.bin", "content_base64": too_big}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "filename": "big.bin", "content_base64": too_big}),
+        )
         .await;
     assert!(e.contains("larger than the upload limit of 1 MB"), "{e}");
     // The names that reach the file system and headers are cleaned.
@@ -467,14 +593,22 @@ async fn attachments_upload_from_base64_and_from_urls() {
         )
         .await;
     assert!(
-        !up["attachment"]["filename"].as_str().unwrap().contains(['/', '\\', '"']),
+        !up["attachment"]["filename"]
+            .as_str()
+            .unwrap()
+            .contains(['/', '\\', '"']),
         "{up}"
     );
 
     // A viewer cannot upload.
-    let (_, viewer) = r.teammate("v@example.com", "viewer", json!({"write": true})).await;
+    let (_, viewer) = r
+        .teammate("v@example.com", "viewer", json!({"write": true}))
+        .await;
     let e = viewer
-        .fails("upload_attachment", json!({"base_id": b, "filename": "x", "content_base64": "aGk="}))
+        .fails(
+            "upload_attachment",
+            json!({"base_id": b, "filename": "x", "content_base64": "aGk="}),
+        )
         .await;
     assert!(e.contains("editor role"), "{e}");
 }
@@ -527,19 +661,29 @@ async fn csv_exports_are_cut_at_row_boundaries_with_a_note() {
         ));
     }
     let imp = a
-        .call("import_csv", json!({"base_id": b, "new_table_name": "Big", "csv_text": csv}))
+        .call(
+            "import_csv",
+            json!({"base_id": b, "new_table_name": "Big", "csv_text": csv}),
+        )
         .await;
     assert_eq!(imp["created"], 600);
 
     let (is_error, text, meta) = a
-        .raw("export_csv", json!({"base_id": b, "table": "Big", "view": "Grid view"}))
+        .raw(
+            "export_csv",
+            json!({"base_id": b, "table": "Big", "view": "Grid view"}),
+        )
         .await;
     assert!(!is_error, "{text}");
     assert_eq!(meta["total_rows"], 600);
     assert_eq!(meta["truncated"], true);
     let rows = meta["rows"].as_u64().unwrap();
     assert!(rows > 100 && rows < 600, "{rows}");
-    assert!(text.len() < 90_000, "the text stays small: {} bytes", text.len());
+    assert!(
+        text.len() < 90_000,
+        "the text stays small: {} bytes",
+        text.len()
+    );
     let (body, note) = text.rsplit_once("[cut:").expect("the cut is announced");
     assert!(note.contains(&format!("{rows} of 600 rows")), "{note}");
     // Everything before the note is whole rows of valid CSV.
@@ -560,7 +704,10 @@ async fn csv_exports_are_cut_at_row_boundaries_with_a_note() {
     )
     .await;
     let (_, text, meta) = a
-        .raw("export_csv", json!({"base_id": b, "table": "Small", "view": "Grid view"}))
+        .raw(
+            "export_csv",
+            json!({"base_id": b, "table": "Small", "view": "Grid view"}),
+        )
         .await;
     assert_eq!(text, "Name,Text\r\nrow 0,a\r\nrow 1,b\r\n");
     assert_eq!(meta["truncated"], false);
@@ -575,7 +722,13 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
     let b = r.base.as_str();
     r.table("People").await;
     r.field("People", "Qty", "number", json!({})).await;
-    r.field("People", "Status", "single_select", json!({"choices": ["Open", "Done"]})).await;
+    r.field(
+        "People",
+        "Status",
+        "single_select",
+        json!({"choices": ["Open", "Done"]}),
+    )
+    .await;
     r.records(
         "People",
         json!([
@@ -586,12 +739,21 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
     )
     .await;
     let csv = a
-        .text("export_csv", json!({"base_id": b, "table": "People", "view": "Grid view"}))
+        .text(
+            "export_csv",
+            json!({"base_id": b, "table": "People", "view": "Grid view"}),
+        )
         .await;
-    assert!(csv.starts_with("Name,"), "the byte order mark is not part of the text");
+    assert!(
+        csv.starts_with("Name,"),
+        "the byte order mark is not part of the text"
+    );
     assert!(csv.contains("'=SUM(A1)"), "formulas are defused: {csv}");
     let copy = a
-        .call("import_csv", json!({"base_id": b, "new_table_name": "People copy", "csv_text": csv}))
+        .call(
+            "import_csv",
+            json!({"base_id": b, "new_table_name": "People copy", "csv_text": csv}),
+        )
         .await;
     assert_eq!(copy["created"], 3);
     let fields: Vec<(&str, &str)> = copy["fields"]
@@ -600,9 +762,15 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
         .iter()
         .map(|f| (f["name"].as_str().unwrap(), f["type"].as_str().unwrap()))
         .collect();
-    assert!(fields.contains(&("Qty", "number")), "types are inferred: {fields:?}");
+    assert!(
+        fields.contains(&("Qty", "number")),
+        "types are inferred: {fields:?}"
+    );
     let rows = a
-        .call("list_records", json!({"base_id": b, "table": "People copy"}))
+        .call(
+            "list_records",
+            json!({"base_id": b, "table": "People copy"}),
+        )
         .await;
     let names: Vec<&str> = rows["records"]
         .as_array()
@@ -626,7 +794,10 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
         .await;
     assert_eq!(into["created"], 2);
     let zed = a
-        .call("list_records", json!({"base_id": b, "table": "People", "filter_by_formula": "{Name} = 'Zed'"}))
+        .call(
+            "list_records",
+            json!({"base_id": b, "table": "People", "filter_by_formula": "{Name} = 'Zed'"}),
+        )
         .await;
     assert_eq!(zed["records"][0]["fields"]["Qty"], 7);
     // Without a header the mapping keys are column numbers.
@@ -645,7 +816,10 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
     )
     .await;
     let vic = a
-        .call("list_records", json!({"base_id": b, "table": "People", "filter_by_formula": "{Name} = 'Vic'"}))
+        .call(
+            "list_records",
+            json!({"base_id": b, "table": "People", "filter_by_formula": "{Name} = 'Vic'"}),
+        )
         .await;
     assert_eq!(vic["records"][0]["fields"]["Status"], "Blocked");
 }
@@ -685,31 +859,49 @@ async fn csv_imports_are_all_or_nothing_and_say_which_rows_failed() {
     let e = a.fails("import_csv", args(json!({}))).await;
     assert!(e.contains("table") && e.contains("new_table_name"), "{e}");
     let e = a
-        .fails("import_csv", args(json!({"table": "People", "new_table_name": "X"})))
+        .fails(
+            "import_csv",
+            args(json!({"table": "People", "new_table_name": "X"})),
+        )
         .await;
     assert!(e.contains("not both"), "{e}");
-    let e = a
-        .fails("import_csv", args(json!({"table": "Nope"})))
-        .await;
+    let e = a.fails("import_csv", args(json!({"table": "Nope"}))).await;
     assert!(e.contains("Table 'Nope' not found"), "{e}");
     let e = a
-        .fails("import_csv", args(json!({"table": "People", "mapping": {"Name": "Missing"}})))
+        .fails(
+            "import_csv",
+            args(json!({"table": "People", "mapping": {"Name": "Missing"}})),
+        )
         .await;
-    assert!(e.contains("mapping") && e.contains("Field 'Missing' not found"), "{e}");
+    assert!(
+        e.contains("mapping") && e.contains("Field 'Missing' not found"),
+        "{e}"
+    );
     let e = a
-        .fails("import_csv", args(json!({"table": "People", "mapping": "Name=Name"})))
+        .fails(
+            "import_csv",
+            args(json!({"table": "People", "mapping": "Name=Name"})),
+        )
         .await;
     assert!(e.contains("mapping must be an object"), "{e}");
     let e = a
-        .fails("import_csv", args(json!({"new_table_name": "X", "mapping": {"a": "b"}})))
+        .fails(
+            "import_csv",
+            args(json!({"new_table_name": "X", "mapping": {"a": "b"}})),
+        )
         .await;
     assert!(e.contains("mapping applies to an existing table"), "{e}");
     let e = a
-        .fails("import_csv", json!({"base_id": b, "table": "People", "csv_text": "  "}))
+        .fails(
+            "import_csv",
+            json!({"base_id": b, "table": "People", "csv_text": "  "}),
+        )
         .await;
     assert!(e.contains("csv_text is empty"), "{e}");
     // Viewers cannot import.
-    let (_, viewer) = r.teammate("v@example.com", "viewer", json!({"write": true})).await;
+    let (_, viewer) = r
+        .teammate("v@example.com", "viewer", json!({"write": true}))
+        .await;
     let e = viewer
         .fails("import_csv", args(json!({"table": "People"})))
         .await;
@@ -725,7 +917,9 @@ async fn history_pages_and_notifications_can_be_marked_read() {
     let b = r.base.as_str();
     r.table("T").await;
     r.field("T", "N", "number", json!({})).await;
-    let rec = r.records("T", json!([{"fields": {"Name": "x", "N": 0}}])).await[0]["id"]
+    let rec = r
+        .records("T", json!([{"fields": {"Name": "x", "N": 0}}]))
+        .await[0]["id"]
         .as_str()
         .unwrap()
         .to_string();
@@ -740,19 +934,36 @@ async fn history_pages_and_notifications_can_be_marked_read() {
         .call("get_record_history", json!({"record_id": rec, "limit": 2}))
         .await;
     assert_eq!(p1["count"], 2);
-    assert_eq!(p1["entries"][0]["changes"]["N"], json!({"old": 4, "new": 5}));
+    assert_eq!(
+        p1["entries"][0]["changes"]["N"],
+        json!({"old": 4, "new": 5})
+    );
     let before = p1["next_before"].as_i64().unwrap();
     let p2 = a
-        .call("get_record_history", json!({"record_id": rec, "limit": 2, "before": before}))
+        .call(
+            "get_record_history",
+            json!({"record_id": rec, "limit": 2, "before": before}),
+        )
         .await;
-    assert_eq!(p2["entries"][0]["changes"]["N"], json!({"old": 2, "new": 3}));
-    let all = a.call("get_record_history", json!({"record_id": rec})).await;
+    assert_eq!(
+        p2["entries"][0]["changes"]["N"],
+        json!({"old": 2, "new": 3})
+    );
+    let all = a
+        .call("get_record_history", json!({"record_id": rec}))
+        .await;
     assert_eq!(all["count"], 6, "create + 5 updates");
     assert!(all.get("next_before").is_none());
-    assert!(a.fails("get_record_history", json!({"record_id": "recNope"})).await.contains("not found"));
+    assert!(
+        a.fails("get_record_history", json!({"record_id": "recNope"}))
+            .await
+            .contains("not found")
+    );
 
     // Three mentions from a teammate; mark one, then the rest.
-    let (mate, _) = r.teammate("mate@example.com", "editor", json!({"write": true})).await;
+    let (mate, _) = r
+        .teammate("mate@example.com", "editor", json!({"write": true}))
+        .await;
     let me = r.admin.user_id.clone().unwrap();
     for i in 0..3 {
         r.app()
@@ -770,12 +981,17 @@ async fn history_pages_and_notifications_can_be_marked_read() {
     let first = n["notifications"][0]["id"].as_str().unwrap().to_string();
     let limited = a.call("list_notifications", json!({"limit": 1})).await;
     assert_eq!(limited["count"], 1);
-    assert_eq!(limited["unread"], 3, "the count is of all unread, not of the page");
+    assert_eq!(
+        limited["unread"], 3,
+        "the count is of all unread, not of the page"
+    );
     let m = a
         .call("mark_notifications_read", json!({"ids": [first]}))
         .await;
     assert_eq!(m["marked"], 1);
-    let n = a.call("list_notifications", json!({"unread_only": true})).await;
+    let n = a
+        .call("list_notifications", json!({"unread_only": true}))
+        .await;
     assert_eq!(n["unread"], 2);
     assert_eq!(n["count"], 2);
     a.call("mark_notifications_read", json!({})).await;
@@ -783,11 +999,17 @@ async fn history_pages_and_notifications_can_be_marked_read() {
 
     // Trash errors
     let e = a
-        .fails("restore_from_trash", json!({"kind": "spreadsheet", "id": "x"}))
+        .fails(
+            "restore_from_trash",
+            json!({"kind": "spreadsheet", "id": "x"}),
+        )
         .await;
     assert!(e.contains("Unknown kind") && e.contains("record"), "{e}");
     let e = a
-        .fails("restore_from_trash", json!({"kind": "record", "id": "recNope"}))
+        .fails(
+            "restore_from_trash",
+            json!({"kind": "record", "id": "recNope"}),
+        )
         .await;
     assert!(e.contains("not found"), "{e}");
     let e = a

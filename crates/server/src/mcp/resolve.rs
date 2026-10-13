@@ -154,7 +154,9 @@ pub fn find_view<'a>(
         1 => Ok(hits[0]),
         0 => Err(ToolResult::error(format!(
             "View '{key}' not found{}. Views: {}.",
-            table.map(|t| format!(" in table '{t}'")).unwrap_or_default(),
+            table
+                .map(|t| format!(" in table '{t}'"))
+                .unwrap_or_default(),
             list_names(tables.iter().flat_map(|t| {
                 t.views
                     .iter()
@@ -202,7 +204,12 @@ pub fn people_of(conn: &rusqlite::Connection, base_id: &str) -> People {
     bases::collaborators(conn, &base)
         .unwrap_or_default()
         .into_iter()
-        .map(|c| (c.id.clone(), json!({ "id": c.id, "name": c.name, "email": c.email })))
+        .map(|c| {
+            (
+                c.id.clone(),
+                json!({ "id": c.id, "name": c.name, "email": c.email }),
+            )
+        })
         .collect()
 }
 
@@ -223,7 +230,12 @@ pub async fn load_people(ctx: &McpCtx, base_id: &str) -> People {
 /// become `{id, name, email}`; everything else is unchanged. (The names direction of
 /// `list_records`, which speaks in names, so every tool shows the same values.)
 pub fn value_for_model(field: &Field, v: &Value, people: &People) -> Value {
-    let person = |id: &str| people.get(id).cloned().unwrap_or_else(|| json!({ "id": id }));
+    let person = |id: &str| {
+        people
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| json!({ "id": id }))
+    };
     match &field.kind {
         FieldKind::SingleSelect(o) | FieldKind::MultipleSelect(o) => {
             let name = |id: &str| {
@@ -428,7 +440,11 @@ impl Xlate<'_> {
     }
 
     /// `field_id` of a condition / sort: accepts the alias `field` as input.
-    fn field_ref(&self, obj: &mut Map<String, Value>, what: &str) -> Result<Option<&Field>, String> {
+    fn field_ref(
+        &self,
+        obj: &mut Map<String, Value>,
+        what: &str,
+    ) -> Result<Option<&Field>, String> {
         if self.mode == Mode::ToIds
             && !obj.contains_key("field_id")
             && let Some(v) = obj.remove("field")
@@ -475,7 +491,11 @@ impl Xlate<'_> {
         let Some(obj) = c.as_object_mut() else {
             return Err("a filter condition must be an object {field_id, op, value}".into());
         };
-        check_keys(obj, &["field_id", "field", "op", "value"], "a filter condition")?;
+        check_keys(
+            obj,
+            &["field_id", "field", "op", "value"],
+            "a filter condition",
+        )?;
         let field = self.field_ref(obj, "a filter condition")?.cloned();
         if let (Some(field), Some(value)) = (field, obj.get_mut("value"))
             && is_select(&field)
@@ -491,7 +511,9 @@ impl Xlate<'_> {
             Value::Array(items) => {
                 for item in items {
                     let Some(o) = item.as_object_mut() else {
-                        return Err(format!("each entry of {what} must be {{field_id, direction}}"));
+                        return Err(format!(
+                            "each entry of {what} must be {{field_id, direction}}"
+                        ));
                     };
                     check_keys(o, &["field_id", "field", "direction"], what)?;
                     self.field_ref(o, what)?;
@@ -541,7 +563,12 @@ impl Xlate<'_> {
         {
             self.kanban(k)?;
         }
-        self.settings(obj, "calendar", CALENDAR_KEYS, &["date_field_id", "end_field_id"])?;
+        self.settings(
+            obj,
+            "calendar",
+            CALENDAR_KEYS,
+            &["date_field_id", "end_field_id"],
+        )?;
         self.settings(obj, "gallery", GALLERY_KEYS, &["cover_field_id"])?;
         self.settings(
             obj,
@@ -563,13 +590,21 @@ impl Xlate<'_> {
             check_keys(fo, FORM_KEYS, "the form settings")?;
             if let Some(fields) = fo.get_mut("fields") {
                 let Some(list) = fields.as_array_mut() else {
-                    return Err("form.fields must be a list of {field_id, required, label, help}".into());
+                    return Err(
+                        "form.fields must be a list of {field_id, required, label, help}".into(),
+                    );
                 };
                 for item in list {
                     let Some(o) = item.as_object_mut() else {
-                        return Err("each form field must be {field_id, required?, label?, help?}".into());
+                        return Err(
+                            "each form field must be {field_id, required?, label?, help?}".into(),
+                        );
                     };
-                    check_keys(o, &["field_id", "field", "required", "label", "help"], "a form field")?;
+                    check_keys(
+                        o,
+                        &["field_id", "field", "required", "label", "help"],
+                        "a form field",
+                    )?;
                     self.field_ref(o, "a form field")?;
                 }
             }
@@ -655,9 +690,7 @@ impl Xlate<'_> {
                 }
             }
             _ => {
-                return Err(
-                    "row_color.mode must be \"by_select\" or \"by_conditions\"".into(),
-                );
+                return Err("row_color.mode must be \"by_select\" or \"by_conditions\"".into());
             }
         }
         Ok(())
@@ -870,7 +903,10 @@ fn select_choices(o: &mut Map<String, Value>, existing: Option<&Field>) -> Resul
         let Some(c) = item.as_object_mut() else {
             return Err("each choice must be a name or {name, color?}".into());
         };
-        let has_id = c.get("id").and_then(Value::as_str).is_some_and(|s| !s.is_empty());
+        let has_id = c
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.is_empty());
         if !has_id
             && let Some(name) = c.get("name").and_then(Value::as_str)
             && let Some(prev) = old
@@ -909,7 +945,11 @@ mod tests {
             description: None,
             primary_field_id: "fld1".into(),
             fields: vec![
-                field("fld1", "Name", FieldKind::SingleLineText(TextOptions::default())),
+                field(
+                    "fld1",
+                    "Name",
+                    FieldKind::SingleLineText(TextOptions::default()),
+                ),
                 field(
                     "fld2",
                     "Status",
@@ -947,8 +987,16 @@ mod tests {
             "kanban": {"stack_field_id": "Status", "stack_order": ["Done", "Todo"]},
             "row_color": {"mode": "by_select", "field": "Status"}
         });
-        Xlate { table: &t, mode: Mode::ToIds }.config(&mut cfg).unwrap();
-        assert_eq!(cfg["filter"]["items"][0], json!({"field_id": "fld2", "op": "is", "value": "selB"}));
+        Xlate {
+            table: &t,
+            mode: Mode::ToIds,
+        }
+        .config(&mut cfg)
+        .unwrap();
+        assert_eq!(
+            cfg["filter"]["items"][0],
+            json!({"field_id": "fld2", "op": "is", "value": "selB"})
+        );
         assert_eq!(cfg["filter"]["items"][1]["items"][0]["field_id"], "fld1");
         assert_eq!(cfg["sorts"][0]["field_id"], "fld1");
         assert_eq!(cfg["hidden_fields"], json!(["fld2"]));
@@ -957,7 +1005,12 @@ mod tests {
         assert_eq!(cfg["row_color"]["field_id"], "fld2");
         assert!(cfg["row_color"].get("field").is_none());
 
-        Xlate { table: &t, mode: Mode::ToNames }.config(&mut cfg).unwrap();
+        Xlate {
+            table: &t,
+            mode: Mode::ToNames,
+        }
+        .config(&mut cfg)
+        .unwrap();
         assert_eq!(cfg["filter"]["items"][0]["value"], "Done");
         assert_eq!(cfg["filter"]["items"][0]["field_id"], "Status");
         assert_eq!(cfg["kanban"]["stack_order"], json!(["Done", "Todo"]));
@@ -967,16 +1020,29 @@ mod tests {
     #[test]
     fn unknown_names_and_keys_are_explained() {
         let t = table();
-        let x = Xlate { table: &t, mode: Mode::ToIds };
-        let e = x.config(&mut json!({"sorts": [{"field": "Nope"}]})).unwrap_err();
-        assert!(e.contains("Field 'Nope' not found") && e.contains("'Status'"), "{e}");
+        let x = Xlate {
+            table: &t,
+            mode: Mode::ToIds,
+        };
+        let e = x
+            .config(&mut json!({"sorts": [{"field": "Nope"}]}))
+            .unwrap_err();
+        assert!(
+            e.contains("Field 'Nope' not found") && e.contains("'Status'"),
+            "{e}"
+        );
         let e = x.config(&mut json!({"sort": []})).unwrap_err();
-        assert!(e.contains("unknown key 'sort'") && e.contains("sorts"), "{e}");
+        assert!(
+            e.contains("unknown key 'sort'") && e.contains("sorts"),
+            "{e}"
+        );
         let e = x
             .config(&mut json!({"filter": {"items": [{"field": "Status", "op": "is", "value": "Nope"}]}}))
             .unwrap_err();
         assert!(e.contains("not a choice") && e.contains("'Todo'"), "{e}");
-        let e = x.config(&mut json!({"kanban": {"stack": "x"}})).unwrap_err();
+        let e = x
+            .config(&mut json!({"kanban": {"stack": "x"}}))
+            .unwrap_err();
         assert!(e.contains("unknown key 'stack'"), "{e}");
     }
 
@@ -988,7 +1054,10 @@ mod tests {
             &json!({"sorts": [2], "kanban": {"cover_field_id": "c", "hide_empty_stacks": null}, "filter": null}),
         );
         assert_eq!(merged["sorts"], json!([2]));
-        assert_eq!(merged["kanban"], json!({"stack_field_id": "a", "cover_field_id": "c"}));
+        assert_eq!(
+            merged["kanban"],
+            json!({"stack_field_id": "a", "cover_field_id": "c"})
+        );
         assert!(merged.get("filter").is_none());
     }
 
@@ -998,6 +1067,10 @@ mod tests {
         assert_eq!(field_lookup(&t, "fld2").unwrap().name, "Status");
         assert_eq!(field_lookup(&t, "Status").unwrap().id, "fld2");
         assert_eq!(field_lookup(&t, " status ").unwrap().id, "fld2");
-        assert!(field_lookup(&t, "Nope").unwrap_err().contains("Fields: 'Name', 'Status'"));
+        assert!(
+            field_lookup(&t, "Nope")
+                .unwrap_err()
+                .contains("Fields: 'Name', 'Status'")
+        );
     }
 }

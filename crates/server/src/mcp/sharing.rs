@@ -22,8 +22,7 @@ pub fn definitions() -> Vec<ToolDef> {
         &["view", "form"],
         "'view' = read-only public page of the records, 'form' = public form that creates records anonymously. Default: 'form' for form views, else 'view'.",
     );
-    create_props["password"] =
-        string("Optional password visitors must enter.");
+    create_props["password"] = string("Optional password visitors must enter.");
     vec![
         ToolDef::new(
             "create_share_link",

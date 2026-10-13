@@ -23,9 +23,7 @@ async fn workspaces_can_be_renamed_deleted_and_restored() {
         "Renamed"
     );
 
-    let extra = a
-        .call("create_workspace", json!({"name": "Scratch"}))
-        .await["workspace"]["id"]
+    let extra = a.call("create_workspace", json!({"name": "Scratch"})).await["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_string();
@@ -49,8 +47,11 @@ async fn workspaces_can_be_renamed_deleted_and_restored() {
             .any(|i| i["kind"] == "workspace" && i["id"] == extra),
         "{trash}"
     );
-    a.call("restore_from_trash", json!({"kind": "workspace", "id": extra}))
-        .await;
+    a.call(
+        "restore_from_trash",
+        json!({"kind": "workspace", "id": extra}),
+    )
+    .await;
     assert_eq!(
         a.call("list_workspaces", json!({})).await["workspaces"]
             .as_array()
@@ -60,7 +61,10 @@ async fn workspaces_can_be_renamed_deleted_and_restored() {
     );
     // Unknown ids and empty renames are explained.
     let e = a
-        .fails("rename_workspace", json!({"workspace_id": "wspNope", "name": "x"}))
+        .fails(
+            "rename_workspace",
+            json!({"workspace_id": "wspNope", "name": "x"}),
+        )
         .await;
     assert!(e.contains("not found"), "{e}");
 }
@@ -158,7 +162,13 @@ async fn members_and_invites_for_workspaces_and_bases() {
         )
         .await;
     let invite_id = invite["info"]["id"].as_str().unwrap().to_string();
-    let revoked_token = invite["url"].as_str().unwrap().rsplit('/').next().unwrap().to_string();
+    let revoked_token = invite["url"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
     let pending = a
         .call("list_invites", json!({"scope": "workspace", "id": r.ws}))
         .await;
@@ -169,7 +179,8 @@ async fn members_and_invites_for_workspaces_and_bases() {
             .iter()
             .any(|i| i["id"] == invite_id)
     );
-    a.call("revoke_invite", json!({"invite_id": invite_id})).await;
+    a.call("revoke_invite", json!({"invite_id": invite_id}))
+        .await;
     let pending = a
         .call("list_invites", json!({"scope": "workspace", "id": r.ws}))
         .await;
@@ -183,9 +194,17 @@ async fn members_and_invites_for_workspaces_and_bases() {
     );
     let (res, _) = r
         .app()
-        .signup("late@example.com", "late password 12345", Some(&revoked_token))
+        .signup(
+            "late@example.com",
+            "late password 12345",
+            Some(&revoked_token),
+        )
         .await;
-    assert!(res.status.as_u16() >= 400, "a revoked invite cannot be used: {}", res.body);
+    assert!(
+        res.status.as_u16() >= 400,
+        "a revoked invite cannot be used: {}",
+        res.body
+    );
 
     // Roles are validated, and a workspace keeps an owner.
     let e = a
@@ -194,7 +213,10 @@ async fn members_and_invites_for_workspaces_and_bases() {
             json!({"scope": "workspace", "id": r.ws, "role": "boss"}),
         )
         .await;
-    assert!(e.contains("Invalid arguments") || e.to_lowercase().contains("role"), "{e}");
+    assert!(
+        e.contains("Invalid arguments") || e.to_lowercase().contains("role"),
+        "{e}"
+    );
     let me = r.admin.user_id.clone().unwrap();
     let e = a
         .fails(
@@ -223,13 +245,25 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
     assert!(write_tools.contains(&"create_field".to_string()));
     assert!(!write_tools.contains(&"rename_workspace".to_string()));
     let e = read
-        .fails("create_field", json!({"base_id": b, "table": "T", "name": "X", "type": "number"}))
+        .fails(
+            "create_field",
+            json!({"base_id": b, "table": "T", "name": "X", "type": "number"}),
+        )
         .await;
-    assert!(e.contains("write access") && e.contains("not read-only"), "{e}");
+    assert!(
+        e.contains("write access") && e.contains("not read-only"),
+        "{e}"
+    );
     let e = write
-        .fails("rename_workspace", json!({"workspace_id": r.ws, "name": "x"}))
+        .fails(
+            "rename_workspace",
+            json!({"workspace_id": r.ws, "name": "x"}),
+        )
         .await;
-    assert!(e.contains("'manage' permission") && e.contains("Allow managing"), "{e}");
+    assert!(
+        e.contains("'manage' permission") && e.contains("Allow managing"),
+        "{e}"
+    );
     let e = write.fails("admin_stats", json!({})).await;
     assert!(e.contains("manage") && e.contains("administrator"), "{e}");
     // ...and nothing happened.
@@ -237,21 +271,37 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
     assert_eq!(schema["tables"][0]["fields"].as_array().unwrap().len(), 3);
 
     // -- role: a token only ever acts as its user
-    let (_, viewer) = r.teammate("viewer@example.com", "viewer", json!({"write": true})).await;
+    let (_, viewer) = r
+        .teammate("viewer@example.com", "viewer", json!({"write": true}))
+        .await;
     let e = viewer
-        .fails("create_field", json!({"base_id": b, "table": "T", "name": "X", "type": "number"}))
+        .fails(
+            "create_field",
+            json!({"base_id": b, "table": "T", "name": "X", "type": "number"}),
+        )
         .await;
     assert!(e.contains("requires the creator role"), "{e}");
     let e = viewer
-        .fails("create_records", json!({"base_id": b, "table": "T", "records": [{"fields": {"Name": "x"}}]}))
+        .fails(
+            "create_records",
+            json!({"base_id": b, "table": "T", "records": [{"fields": {"Name": "x"}}]}),
+        )
         .await;
     assert!(e.contains("editor role") || e.contains("requires"), "{e}");
-    let (_, editor) = r.teammate("editor@example.com", "editor", json!({"write": true})).await;
+    let (_, editor) = r
+        .teammate("editor@example.com", "editor", json!({"write": true}))
+        .await;
     editor
-        .call("create_records", json!({"base_id": b, "table": "T", "records": [{"fields": {"Name": "x"}}]}))
+        .call(
+            "create_records",
+            json!({"base_id": b, "table": "T", "records": [{"fields": {"Name": "x"}}]}),
+        )
         .await;
     let e = editor
-        .fails("update_field", json!({"base_id": b, "table": "T", "field": "N", "name": "M"}))
+        .fails(
+            "update_field",
+            json!({"base_id": b, "table": "T", "field": "N", "name": "M"}),
+        )
         .await;
     assert!(e.contains("requires the creator role"), "{e}");
     let e = editor
@@ -259,47 +309,67 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
         .await;
     assert!(e.contains("requires the creator role"), "{e}");
     let e = editor
-        .fails("create_automation", json!({"base_id": b, "name": "a", "trigger": {"type": "webhook"}, "actions": []}))
+        .fails(
+            "create_automation",
+            json!({"base_id": b, "name": "a", "trigger": {"type": "webhook"}, "actions": []}),
+        )
         .await;
     assert!(e.contains("creator role"), "{e}");
-    let e = editor
-        .fails("list_trash", json!({"base_id": b}))
-        .await;
+    let e = editor.fails("list_trash", json!({"base_id": b})).await;
     assert!(e.contains("creator role"), "{e}");
     // Manage token, but only a creator on the workspace: owner-only actions are refused.
     let (_, creator) = r
-        .teammate("creator@example.com", "creator", json!({"write": true, "manage": true}))
+        .teammate(
+            "creator@example.com",
+            "creator",
+            json!({"write": true, "manage": true}),
+        )
         .await;
     let e = creator
-        .fails("rename_workspace", json!({"workspace_id": r.ws, "name": "x"}))
+        .fails(
+            "rename_workspace",
+            json!({"workspace_id": r.ws, "name": "x"}),
+        )
         .await;
     assert!(e.contains("requires the owner role"), "{e}");
-    let e = creator
-        .fails("delete_base", json!({"base_id": b}))
-        .await;
+    let e = creator.fails("delete_base", json!({"base_id": b})).await;
     assert!(e.contains("owner role"), "{e}");
     let e = creator
-        .fails("set_member_role", json!({"scope": "base", "id": b, "user_id": "usrX", "role": "viewer"}))
+        .fails(
+            "set_member_role",
+            json!({"scope": "base", "id": b, "user_id": "usrX", "role": "viewer"}),
+        )
         .await;
     assert!(e.contains("owner role"), "{e}");
     // A user without any access cannot even tell the base exists.
     let outsider = r.app().user("outsider@example.com", "Outsider");
     let tok = r
         .app()
-        .api_token(&outsider, json!({"name": "o", "write": true, "manage": true}))
+        .api_token(
+            &outsider,
+            json!({"name": "o", "write": true, "manage": true}),
+        )
         .await;
     let out = r.live.agent(tok.bearer.as_deref().unwrap());
     for tool in ["get_base_schema", "list_collaborators"] {
         let e = out.fails(tool, json!({"base_id": b})).await;
-        assert!(e.contains("not found, or you have no access") || e.contains("not found"), "{tool}: {e}");
+        assert!(
+            e.contains("not found, or you have no access") || e.contains("not found"),
+            "{tool}: {e}"
+        );
     }
-    let e = out.fails("create_table", json!({"base_id": b, "name": "Sneaky"})).await;
+    let e = out
+        .fails("create_table", json!({"base_id": b, "name": "Sneaky"}))
+        .await;
     assert!(e.contains("not found"), "{e}");
 
     // -- a token limited to one base
     let other = r
         .agent
-        .call("create_base", json!({"workspace_id": r.ws, "name": "Other"}))
+        .call(
+            "create_base",
+            json!({"workspace_id": r.ws, "name": "Other"}),
+        )
         .await["base"]["id"]
         .as_str()
         .unwrap()
@@ -315,7 +385,9 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
         .map(|x| x["id"].as_str().unwrap())
         .collect();
     assert_eq!(seen, [b]);
-    let e = limited.fails("get_base_schema", json!({"base_id": other})).await;
+    let e = limited
+        .fails("get_base_schema", json!({"base_id": other}))
+        .await;
     assert!(e.contains("not found"), "{e}");
     let e = limited
         .fails("create_workspace", json!({"name": "Nope"}))
@@ -368,7 +440,10 @@ async fn credentials_sessions_and_tokens_are_out_of_reach() {
             json!({"email": "x@example.com", "name": "X", "password": "hunter2hunter2"}),
         )
         .await;
-    assert!(e.contains("Invalid arguments") && e.contains("password"), "{e}");
+    assert!(
+        e.contains("Invalid arguments") && e.contains("password"),
+        "{e}"
+    );
     // The generic tool refuses them too.
     for (m, p) in [
         ("POST", "/api/auth/password"),
@@ -418,7 +493,10 @@ async fn admin_tools_manage_users_without_touching_credentials() {
         )
         .await
         .assert_status(200);
-    let (login, person) = r.app().login("new.person@example.com", "a brand new password 99").await;
+    let (login, person) = r
+        .app()
+        .login("new.person@example.com", "a brand new password 99")
+        .await;
     login.assert_status(200);
     let ptoken = r
         .app()
@@ -433,43 +511,68 @@ async fn admin_tools_manage_users_without_touching_credentials() {
             json!({"email": "new.person@example.com", "name": "Again"}),
         )
         .await;
-    assert!(e.to_lowercase().contains("already") || e.to_lowercase().contains("exists"), "{e}");
+    assert!(
+        e.to_lowercase().contains("already") || e.to_lowercase().contains("exists"),
+        "{e}"
+    );
 
     let users = a.call("admin_list_users", json!({})).await;
     assert_eq!(users["users"].as_array().unwrap().len(), 2);
 
     // Deactivating cuts off the user's tokens; reactivating restores them.
     let off = a
-        .call("admin_update_user", json!({"user_id": new_id, "is_active": false}))
+        .call(
+            "admin_update_user",
+            json!({"user_id": new_id, "is_active": false}),
+        )
         .await;
     assert_eq!(off["user"]["is_active"], false);
     let (status, _) = person_agent.rpc("tools/list", json!({})).await;
     assert_eq!(status, 401, "a deactivated user's token stops working");
-    a.call("admin_update_user", json!({"user_id": new_id, "is_active": true}))
-        .await;
+    a.call(
+        "admin_update_user",
+        json!({"user_id": new_id, "is_active": true}),
+    )
+    .await;
     let (status, _) = person_agent.rpc("tools/list", json!({})).await;
     assert_eq!(status, 200);
 
     // Promote, rename, demote; the last administrator cannot be demoted.
     let up = a
-        .call("admin_update_user", json!({"user_id": new_id, "is_admin": true, "name": "Boss"}))
+        .call(
+            "admin_update_user",
+            json!({"user_id": new_id, "is_admin": true, "name": "Boss"}),
+        )
         .await;
     assert_eq!(up["user"]["is_admin"], true);
     assert_eq!(up["user"]["name"], "Boss");
-    a.call("admin_update_user", json!({"user_id": new_id, "is_admin": false}))
-        .await;
+    a.call(
+        "admin_update_user",
+        json!({"user_id": new_id, "is_admin": false}),
+    )
+    .await;
     let me = r.admin.user_id.clone().unwrap();
     let e = a
-        .fails("admin_update_user", json!({"user_id": me, "is_admin": false}))
+        .fails(
+            "admin_update_user",
+            json!({"user_id": me, "is_admin": false}),
+        )
         .await;
     assert!(e.to_lowercase().contains("admin"), "{e}");
-    assert!(a.fails("admin_update_user", json!({"user_id": new_id})).await.contains("Give something"));
+    assert!(
+        a.fails("admin_update_user", json!({"user_id": new_id}))
+            .await
+            .contains("Give something")
+    );
 
     // Audit log and stats; every admin call by token was audited, naming the token.
     let log = a.call("admin_audit_log", json!({"limit": 5})).await;
     let entries = log["entries"].as_array().unwrap();
     assert!(entries.len() <= 5);
-    assert!(entries.iter().any(|e| e["action"] == "admin_token_use"), "{log}");
+    assert!(
+        entries.iter().any(|e| e["action"] == "admin_token_use"),
+        "{log}"
+    );
     let all = a.call("admin_audit_log", json!({"limit": 200})).await;
     let actions: Vec<&str> = all["entries"]
         .as_array()
@@ -477,13 +580,19 @@ async fn admin_tools_manage_users_without_touching_credentials() {
         .iter()
         .map(|e| e["action"].as_str().unwrap())
         .collect();
-    assert!(actions.contains(&"admin_user_create") && actions.contains(&"admin_user_update"), "{actions:?}");
+    assert!(
+        actions.contains(&"admin_user_create") && actions.contains(&"admin_user_update"),
+        "{actions:?}"
+    );
     let stats = a.call("admin_stats", json!({})).await;
     assert_eq!(stats["stats"]["users"], 2);
     assert_eq!(stats["stats"]["workspaces"], 1);
 
     // Backups
-    assert_eq!(a.call("admin_list_backups", json!({})).await["backups"], json!([]));
+    assert_eq!(
+        a.call("admin_list_backups", json!({})).await["backups"],
+        json!([])
+    );
     let b = a.call("admin_create_backup", json!({})).await;
     let name = b["backup"]["name"].as_str().unwrap();
     assert!(!name.is_empty());
@@ -497,7 +606,11 @@ async fn admin_tools_need_an_administrator_with_a_manage_token() {
     let r = Rig::new().await;
     // A non-administrator with a manage token does not see (or get) the admin tools.
     let (_, mate) = r
-        .teammate("mate@example.com", "owner", json!({"write": true, "manage": true}))
+        .teammate(
+            "mate@example.com",
+            "owner",
+            json!({"write": true, "manage": true}),
+        )
         .await;
     let tools = mate.tool_names().await;
     assert!(tools.contains(&"create_workspace".to_string()));
@@ -505,7 +618,12 @@ async fn admin_tools_need_an_administrator_with_a_manage_token() {
         !tools.iter().any(|t| t.starts_with("admin_")),
         "no admin tools for a non-administrator: {tools:?}"
     );
-    for t in ["admin_list_users", "admin_stats", "admin_create_backup", "admin_audit_log"] {
+    for t in [
+        "admin_list_users",
+        "admin_stats",
+        "admin_create_backup",
+        "admin_audit_log",
+    ] {
         let e = mate.fails(t, json!({})).await;
         assert!(e.contains("instance administrator"), "{t}: {e}");
     }
@@ -519,11 +637,20 @@ async fn admin_tools_need_an_administrator_with_a_manage_token() {
         .collect();
     assert_eq!(admin_tools.len(), 7, "{admin_tools:?}");
     let write_only = r.agent_with(json!({"write": true})).await;
-    assert!(!write_only.tool_names().await.iter().any(|t| t.starts_with("admin_")));
+    assert!(
+        !write_only
+            .tool_names()
+            .await
+            .iter()
+            .any(|t| t.starts_with("admin_"))
+    );
     // A manage token limited to a base is refused workspace-level and admin actions.
     let limited = r
         .agent_with(json!({"write": true, "manage": true, "base_ids": [r.base]}))
         .await;
     let e = limited.fails("admin_stats", json!({})).await;
-    assert!(e.contains("limited to specific bases") || e.contains("beyond single bases"), "{e}");
+    assert!(
+        e.contains("limited to specific bases") || e.contains("beyond single bases"),
+        "{e}"
+    );
 }

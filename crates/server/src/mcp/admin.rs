@@ -177,15 +177,7 @@ async fn update_user(ctx: &McpCtx, a: UpdateUser) -> ToolResult {
         return ToolResult::error("Give something to change: name, is_active or is_admin.");
     }
     let path = format!("/api/admin/users/{}", encode_segment(&a.user_id));
-    fetch_as(
-        ctx,
-        "PATCH",
-        &path,
-        None,
-        Some(Value::Object(body)),
-        "user",
-    )
-    .await
+    fetch_as(ctx, "PATCH", &path, None, Some(Value::Object(body)), "user").await
 }
 
 #[derive(Deserialize)]

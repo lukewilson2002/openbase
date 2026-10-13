@@ -59,12 +59,19 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
         "create_workspace",
         "admin_stats",
     ] {
-        assert!(names.iter().any(|n| n == expected), "{expected} in {names:?}");
+        assert!(
+            names.iter().any(|n| n == expected),
+            "{expected} in {names:?}"
+        );
     }
     assert!(names.len() > 60, "{} tools", names.len());
     let create_field = tools.iter().find(|t| t.name == "create_field").unwrap();
     assert!(
-        create_field.description.as_deref().unwrap().contains("28 types"),
+        create_field
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("28 types"),
         "descriptions survive the trip"
     );
     assert_eq!(
@@ -83,9 +90,10 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
     assert_eq!(bases["workspaces"][0]["bases"][0]["id"], r.base.as_str());
 
     let created = client
-        .call_tool(CallToolRequestParams::new("create_table").with_arguments(args(
-            json!({"base_id": r.base, "name": "Orders"}),
-        )))
+        .call_tool(
+            CallToolRequestParams::new("create_table")
+                .with_arguments(args(json!({"base_id": r.base, "name": "Orders"}))),
+        )
         .await
         .expect("create_table");
     assert_ne!(created.is_error, Some(true), "{created:?}");
@@ -103,20 +111,24 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
         assert_ne!(f.is_error, Some(true), "{name}: {f:?}");
     }
     let recs = client
-        .call_tool(CallToolRequestParams::new("create_records").with_arguments(args(
-            json!({"base_id": r.base, "table": "Orders", "records": [
-                {"fields": {"Name": "a", "Qty": 3, "Price": 2.5}},
-                {"fields": {"Name": "b", "Qty": 1, "Price": 10}},
-            ]}),
-        )))
+        .call_tool(
+            CallToolRequestParams::new("create_records").with_arguments(args(
+                json!({"base_id": r.base, "table": "Orders", "records": [
+                    {"fields": {"Name": "a", "Qty": 3, "Price": 2.5}},
+                    {"fields": {"Name": "b", "Qty": 1, "Price": 10}},
+                ]}),
+            )),
+        )
         .await
         .expect("create_records");
     assert_eq!(structured(&recs)["created"][0]["fields"]["Total"], 7.5);
 
     let q = client
-        .call_tool(CallToolRequestParams::new("query_view").with_arguments(args(
-            json!({"base_id": r.base, "table": "Orders", "view": "Grid view"}),
-        )))
+        .call_tool(
+            CallToolRequestParams::new("query_view").with_arguments(args(
+                json!({"base_id": r.base, "table": "Orders", "view": "Grid view"}),
+            )),
+        )
         .await
         .expect("query_view");
     let q = structured(&q);
@@ -125,9 +137,10 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
 
     // Errors are tool results the model can read, not transport failures.
     let bad = client
-        .call_tool(CallToolRequestParams::new("get_base_schema").with_arguments(args(
-            json!({"base_id": "appNope"}),
-        )))
+        .call_tool(
+            CallToolRequestParams::new("get_base_schema")
+                .with_arguments(args(json!({"base_id": "appNope"}))),
+        )
         .await
         .expect("a tool error is still a result");
     assert_eq!(bad.is_error, Some(true));

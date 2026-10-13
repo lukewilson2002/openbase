@@ -57,9 +57,15 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .signup("admin@acme.test", "correct horse battery staple", None)
         .await;
     res.assert_status(200);
-    assert_eq!(res.body["is_admin"], true, "the first account is the administrator");
+    assert_eq!(
+        res.body["is_admin"], true,
+        "the first account is the administrator"
+    );
     let token = app
-        .api_token(&admin, json!({"name": "agent", "write": true, "manage": true}))
+        .api_token(
+            &admin,
+            json!({"name": "agent", "write": true, "manage": true}),
+        )
         .await;
     let agent = live.agent(token.bearer.as_deref().unwrap());
 
@@ -83,7 +89,10 @@ async fn an_agent_runs_the_business_without_the_ui() {
         "list_notifications",
         "admin_list_users",
     ] {
-        assert!(tools.iter().any(|t| t == expected), "{expected} in {tools:?}");
+        assert!(
+            tools.iter().any(|t| t == expected),
+            "{expected} in {tools:?}"
+        );
     }
 
     // ---- 1. a workspace, and a teammate invited into it
@@ -115,7 +124,11 @@ async fn an_agent_runs_the_business_without_the_ui() {
 
     // fixture: the invited person signs up with the link
     let (res, teammate) = app
-        .signup("teammate@acme.test", "teammate password 123", Some(&invite_token))
+        .signup(
+            "teammate@acme.test",
+            "teammate password 123",
+            Some(&invite_token),
+        )
         .await;
     res.assert_status(200);
     let teammate_id = teammate.user_id.clone().unwrap();
@@ -170,10 +183,16 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .await;
     assert_eq!(renamed["table"]["name"], "Customers");
     agent
-        .call("create_table", json!({"base_id": base_id, "name": "Orders"}))
+        .call(
+            "create_table",
+            json!({"base_id": base_id, "name": "Orders"}),
+        )
         .await;
     agent
-        .call("create_table", json!({"base_id": base_id, "name": "Activity log"}))
+        .call(
+            "create_table",
+            json!({"base_id": base_id, "name": "Activity log"}),
+        )
         .await;
 
     // Customers
@@ -206,9 +225,17 @@ async fn an_agent_runs_the_business_without_the_ui() {
     assert_eq!(link["field"]["inverse"]["name"], "Orders", "{link}");
     for (name, ty, options) in [
         ("Qty", "number", json!({"precision": 0})),
-        ("Unit price", "currency", json!({"precision": 2, "symbol": "$"})),
+        (
+            "Unit price",
+            "currency",
+            json!({"precision": 2, "symbol": "$"}),
+        ),
         ("Due", "date", json!({"date_format": "iso"})),
-        ("Status", "single_select", json!({"choices": ["Open", "Paid"]})),
+        (
+            "Status",
+            "single_select",
+            json!({"choices": ["Open", "Paid"]}),
+        ),
         ("Invoice", "attachment", json!({})),
     ] {
         agent
@@ -234,10 +261,18 @@ async fn an_agent_runs_the_business_without_the_ui() {
         )
         .await;
     assert_eq!(bad["ok"], false);
-    assert!(bad["error"]["message"].as_str().unwrap().contains("Nope"), "{bad}");
+    assert!(
+        bad["error"]["message"].as_str().unwrap().contains("Nope"),
+        "{bad}"
+    );
 
     for (table, name, ty, options) in [
-        ("Orders", "Total", "formula", json!({"expression": "{Qty} * {Unit price}"})),
+        (
+            "Orders",
+            "Total",
+            "formula",
+            json!({"expression": "{Qty} * {Unit price}"}),
+        ),
         (
             "Orders",
             "Customer tier",
@@ -250,7 +285,12 @@ async fn an_agent_runs_the_business_without_the_ui() {
             "rollup",
             json!({"link_field": "Orders", "target_field": "Total", "expression": "SUM(values)"}),
         ),
-        ("Customers", "Order count", "count", json!({"link_field": "Orders"})),
+        (
+            "Customers",
+            "Order count",
+            "count",
+            json!({"link_field": "Orders"}),
+        ),
     ] {
         let f = agent
             .call(
@@ -287,7 +327,17 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .collect();
     assert_eq!(
         order_fields,
-        ["Name", "Customer", "Qty", "Unit price", "Due", "Status", "Invoice", "Total", "Customer tier"]
+        [
+            "Name",
+            "Customer",
+            "Qty",
+            "Unit price",
+            "Due",
+            "Status",
+            "Invoice",
+            "Total",
+            "Customer tier"
+        ]
     );
 
     // ---- 3. records, with links; computed values come back immediately
@@ -302,7 +352,11 @@ async fn an_agent_runs_the_business_without_the_ui() {
         )
         .await;
     let rec_id = |created: &Value, i: usize| id_of(created, &format!("/created/{i}/id"));
-    let (ada, bob, cy) = (rec_id(&customers, 0), rec_id(&customers, 1), rec_id(&customers, 2));
+    let (ada, bob, cy) = (
+        rec_id(&customers, 0),
+        rec_id(&customers, 1),
+        rec_id(&customers, 2),
+    );
 
     let new_orders = agent
         .call(
@@ -322,8 +376,15 @@ async fn an_agent_runs_the_business_without_the_ui() {
     );
     let o1_fields = &new_orders["created"][0]["fields"];
     assert_eq!(o1_fields["Total"], 100, "formula: 2 x 50");
-    assert_eq!(o1_fields["Customer"][0]["name"], "Ada Lovelace", "links show names");
-    assert_eq!(o1_fields["Customer tier"], json!(["Gold"]), "lookup through the link");
+    assert_eq!(
+        o1_fields["Customer"][0]["name"], "Ada Lovelace",
+        "links show names"
+    );
+    assert_eq!(
+        o1_fields["Customer tier"],
+        json!(["Gold"]),
+        "lookup through the link"
+    );
 
     let customer_rows = agent
         .call(
@@ -331,8 +392,13 @@ async fn an_agent_runs_the_business_without_the_ui() {
             json!({"base_id": base_id, "table": "Customers", "sort": [{"field": "Name"}]}),
         )
         .await;
-    let value = |name: &str, field: &str| record(&customer_rows["records"], name)["fields"][field].clone();
-    assert_eq!(value("Ada Lovelace", "Lifetime value"), 130, "rollup SUM of 100 + 30");
+    let value =
+        |name: &str, field: &str| record(&customer_rows["records"], name)["fields"][field].clone();
+    assert_eq!(
+        value("Ada Lovelace", "Lifetime value"),
+        130,
+        "rollup SUM of 100 + 30"
+    );
     assert_eq!(value("Ada Lovelace", "Order count"), 2);
     assert_eq!(value("Bob Builder", "Lifetime value"), 50);
     assert_eq!(value("Cy Young", "Lifetime value"), 75);
@@ -356,7 +422,10 @@ async fn an_agent_runs_the_business_without_the_ui() {
                    }}),
         )
         .await;
-    assert_eq!(grid["view"]["config"]["sorts"][0]["field_id"], "Total", "config reads back with names");
+    assert_eq!(
+        grid["view"]["config"]["sorts"][0]["field_id"], "Total",
+        "config reads back with names"
+    );
     let board = agent
         .call(
             "create_view",
@@ -379,18 +448,31 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .iter()
         .map(|r| r["fields"]["Name"].as_str().unwrap())
         .collect();
-    assert_eq!(order, ["O-1", "O-4", "O-3"], "sorted by total, descending: 100, 75, 50");
+    assert_eq!(
+        order,
+        ["O-1", "O-4", "O-3"],
+        "sorted by total, descending: 100, 75, 50"
+    );
     assert_eq!(q["records"][0]["fields"]["Total"], 100);
-    assert_eq!(q["records"][0]["fields"]["Status"], "Open", "select values are names");
+    assert_eq!(
+        q["records"][0]["fields"]["Status"], "Open",
+        "select values are names"
+    );
     assert_eq!(q["groups"].as_array().unwrap().len(), 1);
     assert_eq!(q["groups"][0]["label"], "Open");
     assert_eq!(q["groups"][0]["count"], 3);
     let columns = names(&q, "/columns");
-    assert!(!columns.contains(&"Due".to_string()), "hidden fields stay hidden: {columns:?}");
+    assert!(
+        !columns.contains(&"Due".to_string()),
+        "hidden fields stay hidden: {columns:?}"
+    );
     assert_eq!(columns[0], "Name");
 
     let b = agent
-        .call("query_view", json!({"base_id": base_id, "view": "Order board"}))
+        .call(
+            "query_view",
+            json!({"base_id": base_id, "view": "Order board"}),
+        )
         .await;
     assert_eq!(b["total"], 4);
     assert_eq!(b["view_type"], "kanban");
@@ -433,9 +515,15 @@ async fn an_agent_runs_the_business_without_the_ui() {
     assert_eq!(upd["updated"][0]["fields"]["Total"], 110, "2 x 55");
     assert_eq!(upd["updated"][1]["fields"]["Total"], 60, "6 x 10");
     let bob_row = agent
-        .call("get_record", json!({"base_id": base_id, "table": "Customers", "record_id": bob}))
+        .call(
+            "get_record",
+            json!({"base_id": base_id, "table": "Customers", "record_id": bob}),
+        )
         .await;
-    assert_eq!(bob_row["fields"]["Lifetime value"], 60, "the rollup followed");
+    assert_eq!(
+        bob_row["fields"]["Lifetime value"], 60,
+        "the rollup followed"
+    );
 
     agent
         .call(
@@ -444,32 +532,54 @@ async fn an_agent_runs_the_business_without_the_ui() {
         )
         .await;
     let cy_row = agent
-        .call("get_record", json!({"base_id": base_id, "table": "Customers", "record_id": cy}))
+        .call(
+            "get_record",
+            json!({"base_id": base_id, "table": "Customers", "record_id": cy}),
+        )
         .await;
     assert!(
-        cy_row["fields"].get("Lifetime value").is_none_or(|v| v == 0),
+        cy_row["fields"]
+            .get("Lifetime value")
+            .is_none_or(|v| v == 0),
         "Cy has no orders any more: {cy_row}"
     );
     assert_eq!(
         agent
-            .call("query_view", json!({"base_id": base_id, "view": "Order board"}))
+            .call(
+                "query_view",
+                json!({"base_id": base_id, "view": "Order board"})
+            )
             .await["total"],
         3
     );
     let trash = agent.call("list_trash", json!({"base_id": base_id})).await;
     let trashed = trash["items"].as_array().unwrap();
-    assert!(trashed.iter().any(|i| i["kind"] == "record" && i["id"] == o4), "{trash}");
+    assert!(
+        trashed
+            .iter()
+            .any(|i| i["kind"] == "record" && i["id"] == o4),
+        "{trash}"
+    );
     let restored = agent
         .call("restore_from_trash", json!({"kind": "record", "id": o4}))
         .await;
     assert_eq!(restored["restored"]["id"], o4);
     let cy_row = agent
-        .call("get_record", json!({"base_id": base_id, "table": "Customers", "record_id": cy}))
+        .call(
+            "get_record",
+            json!({"base_id": base_id, "table": "Customers", "record_id": cy}),
+        )
         .await;
-    assert_eq!(cy_row["fields"]["Lifetime value"], 75, "restored with its link");
+    assert_eq!(
+        cy_row["fields"]["Lifetime value"], 75,
+        "restored with its link"
+    );
     assert_eq!(
         agent
-            .call("query_view", json!({"base_id": base_id, "view": "Order board"}))
+            .call(
+                "query_view",
+                json!({"base_id": base_id, "view": "Order board"})
+            )
             .await["total"],
         4
     );
@@ -480,10 +590,14 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .await;
     let entries = hist["entries"].as_array().unwrap();
     assert_eq!(entries[0]["kind"], "update", "newest first: {hist}");
-    assert_eq!(entries[0]["changes"]["Unit price"], json!({"old": 50, "new": 55}));
+    assert_eq!(
+        entries[0]["changes"]["Unit price"],
+        json!({"old": 50, "new": 55})
+    );
     assert_eq!(entries.last().unwrap()["kind"], "create");
     assert_eq!(
-        entries.last().unwrap()["changes"]["Status"]["new"], "Open",
+        entries.last().unwrap()["changes"]["Status"]["new"],
+        "Open",
         "history shows choice names, not ids"
     );
     let o4_hist = agent
@@ -530,17 +644,20 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .call(
             "create_view",
             json!({"base_id": base_id, "table": "Orders", "name": "Order request", "type": "form",
-                   "config": {"form": {
-                       "title": "Request an order",
-                       "fields": [
-                           {"field_id": "Name", "required": true, "label": "Reference"},
-                           {"field_id": "Qty", "required": true},
-                           {"field_id": "Unit price"}
-                       ]
-                   }}}),
+            "config": {"form": {
+                "title": "Request an order",
+                "fields": [
+                    {"field_id": "Name", "required": true, "label": "Reference"},
+                    {"field_id": "Qty", "required": true},
+                    {"field_id": "Unit price"}
+                ]
+            }}}),
         )
         .await;
-    assert_eq!(form["view"]["config"]["form"]["fields"][0]["field_id"], "Name");
+    assert_eq!(
+        form["view"]["config"]["form"]["fields"][0]["field_id"],
+        "Name"
+    );
     let share = agent
         .call(
             "create_share_link",
@@ -589,24 +706,30 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .call(
             "create_automation",
             json!({"base_id": base_id, "name": "Log new orders", "enabled": true,
-                   "trigger": {"type": "record_created", "table": "Orders"},
-                   "actions": [{
-                       "type": "create_record", "table": "Activity log",
-                       "values": {"Name": "New order {{trigger.record.fields.Name}}",
-                                  "Detail": "Qty {{trigger.record.fields.Qty}}"}
-                   }]}),
+            "trigger": {"type": "record_created", "table": "Orders"},
+            "actions": [{
+                "type": "create_record", "table": "Activity log",
+                "values": {"Name": "New order {{trigger.record.fields.Name}}",
+                           "Detail": "Qty {{trigger.record.fields.Qty}}"}
+            }]}),
         )
         .await;
     let auto_id = id_of(&dry_target, "/automation/id");
     assert_eq!(dry_target["automation"]["enabled"], true);
     // A dry run renders but changes nothing.
     let dry = agent
-        .call("test_automation", json!({"automation_id": auto_id, "record_id": o1}))
+        .call(
+            "test_automation",
+            json!({"automation_id": auto_id, "record_id": o1}),
+        )
         .await;
     assert_eq!(dry["dry_run"], true);
     assert_eq!(dry["status"], "succeeded", "{dry}");
     let log_rows = agent
-        .call("list_records", json!({"base_id": base_id, "table": "Activity log"}))
+        .call(
+            "list_records",
+            json!({"base_id": base_id, "table": "Activity log"}),
+        )
         .await;
     assert_eq!(log_rows["count"], 0, "a dry run writes nothing");
 
@@ -632,14 +755,20 @@ async fn an_agent_runs_the_business_without_the_ui() {
     assert_eq!(run["status"], "succeeded", "the automation ran: {run}");
     assert_eq!(run["log"][0]["action"], "create_record");
     let log_rows = agent
-        .call("list_records", json!({"base_id": base_id, "table": "Activity log"}))
+        .call(
+            "list_records",
+            json!({"base_id": base_id, "table": "Activity log"}),
+        )
         .await;
     assert_eq!(log_rows["count"], 1);
     assert_eq!(log_rows["records"][0]["fields"]["Name"], "New order O-5");
     assert_eq!(log_rows["records"][0]["fields"]["Detail"], "Qty 1");
     // Switching it off and listing it.
     let off = agent
-        .call("update_automation", json!({"automation_id": auto_id, "enabled": false}))
+        .call(
+            "update_automation",
+            json!({"automation_id": auto_id, "enabled": false}),
+        )
         .await;
     assert_eq!(off["automation"]["enabled"], false);
     let autos = agent
@@ -667,7 +796,10 @@ async fn an_agent_runs_the_business_without_the_ui() {
             ]}),
         )
         .await;
-    assert_eq!(with_file["updated"][0]["fields"]["Invoice"][0]["filename"], "invoice.txt");
+    assert_eq!(
+        with_file["updated"][0]["fields"]["Invoice"][0]["filename"],
+        "invoice.txt"
+    );
 
     // ---- 10. CSV out and back in as a new table
     let csv = agent
@@ -693,10 +825,16 @@ async fn an_agent_runs_the_business_without_the_ui() {
         .await;
     assert_eq!(imported["created"], 4, "{imported}");
     let archive_rows = agent
-        .call("list_records", json!({"base_id": base_id, "table": "Orders archive"}))
+        .call(
+            "list_records",
+            json!({"base_id": base_id, "table": "Orders archive"}),
+        )
         .await;
     assert_eq!(archive_rows["count"], 4);
-    assert_eq!(record(&archive_rows["records"], "O-1")["fields"]["Customer"], "Ada Lovelace");
+    assert_eq!(
+        record(&archive_rows["records"], "O-1")["fields"]["Customer"],
+        "Ada Lovelace"
+    );
     // ...and into an existing table, with a mapping
     let into = agent
         .call(
@@ -734,5 +872,8 @@ async fn an_agent_runs_the_business_without_the_ui() {
             json!({"method": "POST", "path": "/api/tokens", "body": {"name": "x", "write": true}}),
         )
         .await;
-    assert!(is_error && text.contains("not available through MCP"), "{text}");
+    assert!(
+        is_error && text.contains("not available through MCP"),
+        "{text}"
+    );
 }
