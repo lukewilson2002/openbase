@@ -18,8 +18,8 @@ function listing(): NotificationsResponse {
   return {
     unread: 3,
     notifications: [
-      note("n1", "mention", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Launch plan", snippet: "please review", actor_name: "Grace" }),
-      note("n2", "assigned", { base_id: "app1", table_id: "tbl1", record_id: "rec2", record_name: "Fix login", actor_name: "Ada" }, false, 3 * 3600_000),
+      note("n1", "mention", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Launch plan", snippet: "please review", author_name: "Grace" }),
+      note("n2", "assigned", { base_id: "app1", table_id: "tbl1", record_id: "rec2", record_name: "Fix login", assigned_by: "usr3" }, false, 3 * 3600_000),
       note("n3", "automation", { message: "Weekly digest sent" }),
       note("n4", "invite", { actor_name: "Alan", base_name: "Roadmap", token: "tok1" }, true, 2 * 86400_000),
     ],
@@ -52,7 +52,7 @@ describe("NotificationBell", () => {
     const list = within(popup.closest("div")!.parentElement!);
     expect(list.getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
     expect(list.getByText("please review")).toBeInTheDocument();
-    expect(list.getByText("Ada assigned you to Fix login")).toBeInTheDocument();
+    expect(list.getByText("You were assigned to Fix login")).toBeInTheDocument();
     expect(list.getByText("Automation notification")).toBeInTheDocument(); // payload without a name
     expect(list.getByText("Weekly digest sent")).toBeInTheDocument();
     expect(list.getByText("Alan invited you to Roadmap")).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("NotificationBell", () => {
     });
     renderBell();
     await user.click(await screen.findByRole("button", { name: /Notifications, 3 unread/ }));
-    await user.click(await screen.findByRole("button", { name: /Mark "Ada assigned you to Fix login" as read/ }));
+    await user.click(await screen.findByRole("button", { name: /Mark "You were assigned to Fix login" as read/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n2"] });
     // The optimistic update drops the count straight away.
