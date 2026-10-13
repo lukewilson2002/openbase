@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ellipsis, Link2, ShieldCheck, ShieldOff, UserCheck, UserPlus, UserX } from "lucide-react";
+import { Ellipsis, KeyRound, Link2, ShieldCheck, ShieldOff, UserCheck, UserPlus, UserX } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { AdminCreatedUser, AdminUpdateUser, AdminUser, ResetLink } from "@/api/types";
@@ -33,6 +33,7 @@ export function UsersTab() {
   const [creating, setCreating] = useState(false);
   const [link, setLink] = useState<{ user: AdminUser; link: ResetLink } | null>(null);
   const [confirm2fa, setConfirm2fa] = useState<AdminUser | null>(null);
+  const [confirmPasskeys, setConfirmPasskeys] = useState<AdminUser | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: keys.adminUsers });
 
   const update = useMutation({
@@ -92,7 +93,8 @@ export function UsersTab() {
                       {u.is_admin && <Badge tone="good">Admin</Badge>}
                       {!u.is_active && <Badge tone="bad">Deactivated</Badge>}
                       {u.totp_enabled && <Badge>2FA</Badge>}
-                      {u.is_active && !u.is_admin && !u.totp_enabled && <span className="text-muted">Active</span>}
+                      {u.passkey_count > 0 && <Badge>{u.passkey_count === 1 ? "1 passkey" : `${u.passkey_count} passkeys`}</Badge>}
+                      {u.is_active && !u.is_admin && !u.totp_enabled && u.passkey_count === 0 && <span className="text-muted">Active</span>}
                     </div>
                   </td>
                   <td className="hidden whitespace-nowrap px-3 py-2 text-muted md:table-cell">{formatDateTime(u.created_at)}</td>
@@ -111,6 +113,11 @@ export function UsersTab() {
                         {u.totp_enabled && (
                           <DropdownMenuItem onSelect={() => setConfirm2fa(u)}>
                             <ShieldOff aria-hidden className="size-4" /> Disable two-factor
+                          </DropdownMenuItem>
+                        )}
+                        {u.passkey_count > 0 && (
+                          <DropdownMenuItem onSelect={() => setConfirmPasskeys(u)}>
+                            <KeyRound aria-hidden className="size-4" /> Remove passkeys
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
@@ -173,6 +180,20 @@ export function UsersTab() {
           if (!confirm2fa) return;
           await api.admin.updateUser(confirm2fa.id, { disable_2fa: true });
           void refresh();
+        }}
+      />
+      <ConfirmDialog
+        open={!!confirmPasskeys}
+        onOpenChange={(o) => !o && setConfirmPasskeys(null)}
+        title={`Remove all passkeys of ${confirmPasskeys?.name ?? "user"}?`}
+        description="They can no longer sign in with a passkey (for example after losing a device) and use their password instead. Their sessions stay signed in. They can add new passkeys afterwards."
+        confirmLabel="Remove passkeys"
+        destructive
+        onConfirm={async () => {
+          if (!confirmPasskeys) return;
+          const { removed } = await api.admin.removePasskeys(confirmPasskeys.id);
+          void refresh();
+          toast.toast({ title: removed === 1 ? "1 passkey removed" : `${removed} passkeys removed`, variant: "success" });
         }}
       />
     </div>

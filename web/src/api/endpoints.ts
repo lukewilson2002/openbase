@@ -37,6 +37,12 @@ import type {
   Member,
   NotificationsResponse,
   OkResponse,
+  PasskeyChallenge,
+  PasskeyInfo,
+  PasskeyLoginFinish,
+  PasskeyRegisterFinish,
+  PasskeyRegisterStart,
+  PasskeysRemoved,
   RestoreRequest,
   RestoreResponse,
   RunsPage,
@@ -105,6 +111,20 @@ export const api = {
     sessions: () => http.get<SessionInfo[]>("/api/auth/sessions"),
     revokeSession: (id: string) => http.delete<void>(`/api/auth/sessions/${enc(id)}`),
     revokeOtherSessions: () => http.post<OkResponse>("/api/auth/sessions/revoke-others"),
+
+    /** The caller's passkeys, oldest first. */
+    passkeys: () => http.get<PasskeyInfo[]>("/api/auth/passkeys"),
+    /**
+     * Start registering a passkey. Answers 403 `reauth_required` for a session older than 10
+     * minutes unless the account `password` is sent.
+     */
+    passkeyRegisterStart: (body: PasskeyRegisterStart = {}) => http.post<PasskeyChallenge>("/api/auth/passkeys/register/start", body),
+    passkeyRegisterFinish: (body: PasskeyRegisterFinish) => http.post<PasskeyInfo>("/api/auth/passkeys/register/finish", body),
+    renamePasskey: (id: string, name: string) => http.patch<PasskeyInfo>(`/api/auth/passkeys/${enc(id)}`, { name }),
+    removePasskey: (id: string) => http.delete<void>(`/api/auth/passkeys/${enc(id)}`),
+    /** Signing in with a passkey: anonymous, a challenge first and then the browser's answer. */
+    passkeyLoginStart: () => http.post<PasskeyChallenge>("/api/auth/passkey-login/start", {}, { skipAuthRedirect: true }),
+    passkeyLoginFinish: (body: PasskeyLoginFinish) => http.post<LoginResponse>("/api/auth/passkey-login/finish", body, { skipAuthRedirect: true }),
   },
 
   tokens: {
@@ -146,6 +166,8 @@ export const api = {
     createUser: (body: AdminCreateUser) => http.post<AdminCreatedUser>("/api/admin/users", body),
     updateUser: (id: string, body: AdminUpdateUser) => http.patch<AdminUser>(`/api/admin/users/${enc(id)}`, body),
     resetLink: (id: string) => http.post<ResetLink>(`/api/admin/users/${enc(id)}/reset-link`),
+    /** Remove every passkey of a user (a lost device). */
+    removePasskeys: (id: string) => http.delete<PasskeysRemoved>(`/api/admin/users/${enc(id)}/passkeys`),
     /** Newest first. Pass the previous page's `next_before` as `before` for the next (older) page. */
     audit: (opts: { before?: number | null; limit?: number } = {}) =>
       http.get<AuditPage>("/api/admin/audit", { query: { before: opts.before, limit: opts.limit } }),

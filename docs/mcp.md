@@ -16,11 +16,11 @@ yourself if you would rather describe the work to an agent.
 - **Nothing to install.** No extra process, port or dependency. The endpoint is on
   your normal public URL, behind your normal HTTPS. The sign-in for apps such as Claude
   and ChatGPT is built in too (see [Connect with OAuth](#connect-with-oauth-sign-in)).
-- **Not for account takeover.** Passwords, two-factor authentication, sessions and
+- **Not for account takeover.** Passwords, two-factor authentication, passkeys, sessions and
   API tokens can never be read or changed through a token, whatever its scope. The
   tools cannot create, list or delete tokens either. Even an administrator's token cannot
-  create a password-reset link, switch off someone's 2FA, give a new user a password or
-  set the SMTP password.
+  create a password-reset link, switch off someone's 2FA, remove someone's passkeys, give a
+  new user a password or set the SMTP password.
 
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
 [Connect with OAuth](#connect-with-oauth-sign-in) · [Choose a token](#choose-a-token) · [How access works](#how-access-works) · [How an agent works here](#how-an-agent-works-here) ·
@@ -251,8 +251,8 @@ The permission table, route by route, is in [api.md](api.md#token-permissions).
 - You choose its access when you approve it (OAuth) or create the token: read only,
   read and edit, or full control, on all bases or only the ones you tick.
 - Its changes show in the record history under your name.
-- Passwords, two-factor settings, sessions, API tokens and backup downloads stay out of
-  its reach, whatever access it has.
+- Passwords, two-factor settings, passkeys, sessions, API tokens and backup downloads stay
+  out of its reach, whatever access it has.
 - Revoke an app under **Account → AI assistants → Connected apps**, or a token under
   **Account → API tokens**; it stops working at once. Changing your password
   disconnects everything; turning on two-factor authentication and "sign out other
@@ -461,7 +461,7 @@ password in the app, then `admin_send_test_email`.
 
 | Tool | What it does |
 |---|---|
-| `admin_list_users` | All users with role, status and 2FA flag |
+| `admin_list_users` | All users with role, status, 2FA flag and passkey count |
 | `admin_create_user` | New account (name, email, optional administrator role) **without a usable password**: the tool cannot set one or return a reset link (see below) |
 | `admin_update_user` | Rename, deactivate or reactivate, grant or revoke the administrator role (no way to switch off someone's 2FA) |
 | `admin_get_email_settings` | The SMTP settings: on or off, host, port, security, username, sender, whether a password is stored (never the password), where each setting comes from, and the read-only email budgets |
@@ -494,7 +494,7 @@ Details:
 - **Responses:** JSON and text up to 100,000 bytes (then cut, with `truncated: true`).
   Small binary files (up to 64 KB) come back as `body_base64`.
 - **Refused up front** with a message: anything that is not `/api/...`; `/mcp` itself;
-  credential, 2FA, session and token endpoints; sign-in flows; and the endless
+  credential, 2FA, passkey, session and token endpoints; sign-in flows (password and passkey); and the endless
   live-update stream.
 
 The catalogue lives in `crates/server/src/mcp/catalogue.rs`. A test scans the source
@@ -539,9 +539,12 @@ have no access" (the base is outside the user's or the token's reach).
   page cannot be framed. All of it, with the threats it answers, is in
   [security.md](security.md#oauth-connected-apps).
 - **Credentials stay out of reach.** No tool changes a password, two-factor setting,
-  session or API token, and `api_request` refuses those endpoints. Administrators
-  cannot set another user's password, create a reset link for anyone, switch off their 2FA
-  or set the SMTP password through MCP; a user created through MCP has no usable password
+  passkey, session or API token, and `api_request` refuses those endpoints (registering,
+  listing, renaming and removing passkeys, and an administrator's removal of a user's
+  passkeys, are **session-only**: `Access` = `session-only` in the catalogue, refused for
+  personal access tokens of every scope, for OAuth grants and for `api_request`). Administrators
+  cannot set another user's password, create a reset link for anyone, switch off their 2FA,
+  remove their passkeys or set the SMTP password through MCP; a user created through MCP has no usable password
   until a person sets one in the web app. The server enforces this on the REST API itself,
   so `api_request` cannot get around it (`403` "API tokens can never ...", and nothing is
   changed).

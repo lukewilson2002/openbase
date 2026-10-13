@@ -16,7 +16,7 @@ You run it on a small server you control, and your data stays in one folder.
   (axum + SQLite) with the web app compiled into it. The database
   (`openbase.db`), uploaded files (`attachments/`) and backups (`backups/`) all
   live in one directory. No Postgres, no Redis, no Node at runtime.
-- **Built for a small VPS.** Idle, the server uses about 16 MB of memory; a
+- **Built for a small VPS.** Idle, the server uses about 18 MB of memory; a
   50,000-record table stayed under about 105 MB in our tests
   ([measured numbers](#resource-usage-and-scale), taken on a fast laptop, not on a
   $5 VPS).
@@ -41,8 +41,10 @@ You run it on a small server you control, and your data stays in one folder.
 **Accounts and admin.** First-run setup (the first user becomes admin).
 Invite-only or open signup. Sessions you can list and revoke. Password change
 and password reset, by email when SMTP is configured, otherwise through an admin
-reset link or `openbase reset-password`. TOTP two-factor authentication,
-profiles with time zones, and personal access tokens (read or write, optionally
+reset link or `openbase reset-password`. Passkey sign-in (Touch ID, Windows Hello,
+a phone, a security key or a password manager: no username, no password, and no
+two-factor code, because a passkey is verified on the device), TOTP two-factor
+authentication, profiles with time zones, and personal access tokens (read or write, optionally
 limited to some bases). Admin pages cover users, outgoing email (SMTP settings
 and a "Send test email" button, no restart needed), instance stats, the audit log
 and backups (list, create now, download).
@@ -103,7 +105,7 @@ administrators) manage users, email settings and backups. Workspaces, bases and
 tables can be given icons. About 70 tools, plus a generic request tool for anything
 else. **Account -> AI assistants** shows the address and short steps for Claude, ChatGPT and
 other clients, and lists the connected apps you signed in with, each revocable. Passwords (including the SMTP password and
-password-reset links), two-factor settings, sessions and API tokens stay out of
+password-reset links), two-factor settings, passkeys, sessions and API tokens stay out of
 reach of any token. See [docs/mcp.md](docs/mcp.md).
 
 **Operations.** CSV import and export. Daily automatic backups with retention,
@@ -121,7 +123,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 | Built-in AI features (chat, generated content) | They depend on external paid model APIs. Bring your own agent instead: the built-in [MCP server](docs/mcp.md) and the REST API let any AI tool do whatever you can do in the app. |
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
-| SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords plus TOTP 2FA are solid. |
+| SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords, passkeys and TOTP 2FA are solid. |
 | Field- and table-level permissions | Every write path would need an extra check. Five roles plus per-base sharing are enough for small teams. |
 | S3 storage, multiple nodes, Postgres | Each adds a moving part. The design is one node, local disk and backups. |
 | Excel (.xlsx) and Airtable-base import | CSV covers it, since both Airtable and Excel export CSV. |
@@ -191,7 +193,7 @@ read -rs OPENBASE_ADMIN_PASSWORD && export OPENBASE_ADMIN_PASSWORD
 openbase create-admin --email you@example.com --name "Your Name"
 ```
 
-Then turn on two-factor authentication under **Account -> Security**, and set up
+Then add a passkey or turn on two-factor authentication under **Account -> Security**, and set up
 offsite backups (below). The full walkthrough, SMTP setup, recovery and
 troubleshooting are in [docs/self-hosting.md](docs/self-hosting.md).
 
@@ -221,7 +223,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 |---|---|---|
 | `OPENBASE_DATA_DIR` | `./data` (`/data` in the image) | Directory for the database, attachments and backups. |
 | `OPENBASE_BIND` | `127.0.0.1:8080` (`0.0.0.0:8080` in the image) | Address to listen on. |
-| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenBase at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. |
+| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenBase at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. Passkeys are tied to its host: pick the final domain before people add passkeys, because changing the host makes them unusable (see [Security](docs/security.md#passkeys)). |
 | `OPENBASE_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
 | `OPENBASE_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenBase can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
 | `OPENBASE_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
@@ -344,9 +346,9 @@ it on your own server.
 
 | | Measured |
 |---|---|
-| Release binary (web client embedded), macOS arm64 | 24.1 MB |
+| Release binary (web client embedded), macOS arm64 | 26.1 MB |
 | Docker image, linux/arm64 | 184 MB on disk, 41.5 MB compressed; the binary in it is 25.3 MB |
-| Server idle, release binary, right after start (RSS) | 16.1 MB |
+| Server idle, release binary, right after start (RSS) | 17.6 MB |
 | Container idle (`/proc` RSS of the server / `docker stats`) | 19.9 MB / 6.4 MiB (`docker stats` leaves out page cache) |
 | After the first password sign-in (a password hash uses 19 MiB while it runs) | 38 MB on macOS; 18 MB in the Linux container |
 | 50,000-record table loaded through the API, 11 fields incl. a formula | 58 MB |
@@ -356,8 +358,10 @@ it on your own server.
 
 (`scripts/smoke-install.sh` with `SEED_RECORDS=50000`, which runs
 `scripts/loadtest.sh`; the container run used `docker run --cpus=1 --memory=1g`.
-The binary and image sizes and the idle rows were re-measured after the rename to OpenBase
-(2026-10-13); the 50,000-record rows are from the build before it and were not repeated.)
+The macOS binary and idle rows were re-measured on 2026-10-13 after OAuth and passkeys were added
+(passkeys bring in `webauthn-rs` and its pure-Rust crypto: no OpenSSL); the Docker image rows are
+from the build after the rename, before those two, and the 50,000-record rows are from before the
+rename; neither was repeated. Sizes are in MB of 10^6 bytes.)
 
 ### Measured: speed at 50,000 records
 
@@ -396,7 +400,7 @@ we have not measured.
 |---|---|
 | Grid page fetch (cached), p95 under 50 ms at 50k rows | met (1.4 ms) |
 | View re-query after a write, under 1 s at 50k rows | met (about 0.1 s) |
-| Memory, under 60 MB idle | met (16 MB) |
+| Memory, under 60 MB idle | met (18 MB) |
 | Memory, under 300 MB under load at 50k rows | met (at most 104 MB over HTTP) |
 
 Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users,
@@ -413,7 +417,7 @@ database plus attachments.
 ## Security
 
 OpenBase is designed to face the internet behind HTTPS: invite-only sign-up by
-default, Argon2id passwords, optional TOTP 2FA, revocable sessions and tokens, CSRF
+default, Argon2id passwords, optional passkeys and TOTP 2FA, revocable sessions and tokens, CSRF
 protection, per-role access checks on every route, rate limits on every
 unauthenticated surface, and SSRF protection for automation HTTP requests. The
 threat model, every limit, the administrator checklist and the accepted risks are

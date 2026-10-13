@@ -292,6 +292,9 @@ async fn a_full_control_grant_manages_workspaces_but_never_credentials() {
             "/api/auth/password",
             Some(json!({"current_password": "password1234", "new_password": "another password 1"})),
         ),
+        ("GET", "/api/auth/passkeys", None),
+        ("DELETE", "/api/auth/passkeys/pkyNope", None),
+        ("DELETE", "/api/admin/users/usrNope/passkeys", None),
         ("GET", "/api/oauth/grants", None),
         ("DELETE", "/api/oauth/grants/grtNope", None),
         (

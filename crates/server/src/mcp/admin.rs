@@ -20,7 +20,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "admin_list_users",
             "List all users",
-            "List every user of the instance: id, email, name, whether they are an administrator or deactivated, whether they use two-factor authentication, creation and last login. Instance administrators only.",
+            "List every user of the instance: id, email, name, whether they are an administrator or deactivated, whether they use two-factor authentication, how many passkeys they have, creation and last login. Instance administrators only.",
             object(json!({}), &[]),
         )
         .admin(),

@@ -48,6 +48,9 @@ import type {
   Member,
   NotificationsResponse,
   OkResponse,
+  PasskeyChallenge,
+  PasskeyInfo,
+  PasskeysRemoved,
   PublicForm,
   PublicQueryResponse,
   PublicView,
@@ -107,6 +110,9 @@ export interface TypeMap {
   Member: Member;
   NotificationsResponse: NotificationsResponse;
   OkResponse: OkResponse;
+  PasskeyChallenge: PasskeyChallenge;
+  PasskeyInfo: PasskeyInfo;
+  PasskeysRemoved: PasskeysRemoved;
   PublicForm: PublicForm;
   PublicQueryResponse: PublicQueryResponse;
   PublicView: PublicView;

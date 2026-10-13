@@ -35,6 +35,10 @@ pub struct SetupStatus {
     /// page builds the MCP address from it, because the browser may be on another address (a proxy,
     /// a tunnel) than the one AI assistants must use.
     pub public_url: String,
+    /// Passkey sign-in is available: the public URL's host is a domain name (WebAuthn does not
+    /// work for an IP address).
+    #[serde(default)]
+    pub passkeys_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -249,6 +253,9 @@ pub struct AdminUser {
     pub is_admin: bool,
     pub is_active: bool,
     pub totp_enabled: bool,
+    /// How many passkeys the user has registered.
+    #[serde(default)]
+    pub passkey_count: i64,
     pub created_at: i64,
     #[serde(default)]
     pub last_login_at: Option<i64>,

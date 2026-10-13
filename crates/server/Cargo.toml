@@ -66,9 +66,16 @@ tar = "0.4"
 url = "2"
 http-body-util = "0.1"
 unicode-normalization = "0.1.25"
+webauthn-rs = { version = "=0.6.1-dev", default-features = false, features = ["conditional-ui"] }
 
 [dev-dependencies]
 tempfile = "3"
 http-body-util = "0.1"
 proptest = "1"
 rmcp = { version = "3.5", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest"] }
+# Passkey tests: SoftPasskey from webauthn-authenticator-rs is an independent implementation of
+# the authenticator side (an interop check); tests/passkey_support is the authenticator the other
+# tests use, because it can also hold discoverable credentials and set the signature counter.
+webauthn-authenticator-rs = { version = "=0.6.1-dev", default-features = false, features = ["softpasskey"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+serde_cbor_2 = "0.13"

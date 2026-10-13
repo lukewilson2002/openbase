@@ -8,6 +8,7 @@ memory and start over when the server restarts.
 Contents: [Threat model](#threat-model) · [Checklist for administrators](#checklist-for-administrators) ·
 [Built-in protections](#built-in-protections) ·
 [Sign-in, sessions, tokens, invites and email](#sign-in-sessions-tokens-invites-and-email) ·
+[Passkeys](#passkeys) ·
 [Share links, forms, uploads, CSV and webhooks](#share-links-forms-uploads-csv-and-webhooks) ·
 [Formula, query and API cost limits](#formula-query-and-api-cost-limits) ·
 [Accepted risks](#accepted-risks) · [Reporting a problem](#reporting-a-problem)
@@ -106,7 +107,12 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   hashes). Protect and encrypt offsite copies; see
   [self-hosting](self-hosting.md#6-backups).
 - **Turn on 2FA** for administrators and other important accounts (Account →
-  Security).
+  Security), or give them a passkey: a passkey sign-in already includes a second
+  factor (see [Passkeys](#passkeys)).
+- **Choose the final domain before anyone adds a passkey.** A passkey is bound to the
+  host of `OPENBASE_PUBLIC_URL`; changing that host makes every passkey unusable (people
+  fall back to their password and add new ones). Passkeys made on a `localhost` test install
+  do not carry over to production. See [Passkeys](#passkeys).
 - **Public HTTPS for OAuth.** Set `OPENBASE_PUBLIC_URL` to the public `https://` address.
   OpenBase serves the OAuth sign-in only over HTTPS (or on a localhost address), so
   codes and tokens never travel in clear text; Claude and ChatGPT reach it from the
@@ -125,7 +131,8 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   (default 5 per second) and `OPENBASE_V1_RATE_PER_USER` (default 50 per second)
   on a small host.
 - **Review the audit log** (Admin → Audit, `GET /api/admin/audit`) for
-  `login_failed`, `login_2fa_failed` and `password_reset_request` bursts. Rows are
+  `login_failed`, `login_2fa_failed`, `passkey_login_failed` (a `counter_regression`
+  reason means a passkey may have been cloned) and `password_reset_request` bursts. Rows are
   kept for `OPENBASE_AUDIT_DAYS` (default 365).
 - **`OPENBASE_ALLOW_PRIVATE_WEBHOOKS`** stays `false` unless automations must call
   services on your own network; see [automations](automations.md#http-requests-and-ssrf).
@@ -138,7 +145,8 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 - **Sessions** are opaque server-side tokens (only the SHA-256 is stored), sent as
   `HttpOnly`, `SameSite=Lax` cookies, `Secure` when the public URL is `https`.
   Optional TOTP two-factor authentication; turning it on signs out the account's
-  other sessions and ends its connected apps (OAuth grants).
+  other sessions and ends its connected apps (OAuth grants). Optional passkeys (WebAuthn),
+  see [Passkeys](#passkeys).
 - **MCP endpoint (`/mcp`).** Bearer tokens only (personal access tokens, and OAuth
   access tokens, see [OAuth](#oauth-connected-apps)): a session cookie
   is refused with 401, which is why the route needs no CSRF header. A request with
@@ -233,6 +241,12 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 | Second-factor attempts, per client address | 30 per 10 minutes (counted before anything is looked up) |
 | Second-factor attempts, per pending sign-in | 10 per 10 minutes (counted only for real pending sessions) |
 | Second-factor attempts, per account across sign-ins | 10 per hour (reset on success) |
+| Passkey sign-in attempts (finishing), per client address | 10 per minute, counted before anything is looked up |
+| Passkey sign-in challenges requested, per client address | 30 per minute (the login page asks for one when it opens) |
+| Passkey changes (start / finish of a registration, rename, remove), per user | 60 per 10 minutes |
+| Passwords typed to confirm a passkey registration, per user | 10 per 10 minutes |
+| Pending passkey ceremonies | 5 minutes each, used once, at most 10,000 of each kind in memory |
+| Passkeys per account | 20 |
 | Sign-up, per client address | 10 per hour |
 | Password-reset requests, per client address / per mailbox | 5 per hour / 3 per hour (extra requests are answered 200 and send nothing) |
 | Invite and automation emails | `OPENBASE_EMAIL_PER_USER_HOUR` (100) per user and `OPENBASE_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
@@ -264,10 +278,12 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   Admin calls made with a token are written to the audit log as `admin_token_use`
   with the token's id and the request. **Credentials are session-only
   whatever the token's scope**: password change, 2FA setup / enable / disable,
-  the session list and revocation, and listing / creating / deleting tokens. An
+  passkeys (list, register, rename, remove), the session list and revocation, and
+  listing / creating / deleting tokens. An
   instance administrator's `manage` token is no exception: it cannot create a
   password-reset link for a user (`POST /api/admin/users/{id}/reset-link`, which would
-  be an account takeover), cannot switch off a user's 2FA (`disable_2fa`), cannot give a
+  be an account takeover), cannot switch off a user's 2FA (`disable_2fa`), cannot remove a user's
+  passkeys (`DELETE /api/admin/users/{id}/passkeys`), cannot give a
   new user a password or receive their reset link (`POST /api/admin/users` creates the
   account without a usable password; a person sends the invitation from the web app), and
   cannot set or remove the SMTP password. It also cannot re-point a stored SMTP password:
@@ -292,6 +308,37 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   the workspace (Creator of the base) holding the invited role, and cannot be
   accepted by their creator. Removing or demoting someone therefore voids what
   they had pending.
+
+## Passkeys
+
+A passkey is a public-key credential held by the person's device or password manager (Touch ID,
+Windows Hello, a phone, a security key). The server stores only the public key. A passkey signs a
+person in with no username and no password, and because OpenBase always asks the authenticator for
+**user verification** (fingerprint, face, PIN or screen lock) a passkey sign-in already is a
+possession-plus-verification sign-in: **it does not ask for the TOTP code**. Signing in with the
+password still does, when the account has 2FA. Passwords are not removed; there are no
+passwordless-only accounts. The library is `webauthn-rs` (its pure-Rust crypto build; OpenSSL is not
+used), and the browser side is the plain WebAuthn API.
+
+| Topic | What OpenBase does |
+|---|---|
+| Relying party | The RP ID is the host of `OPENBASE_PUBLIC_URL` (`base.example.com`, or `localhost`), and the only accepted origin is that URL's origin (scheme, host and port). A server whose public URL is an IP address cannot use passkeys: WebAuthn needs a domain name, and `GET /api/setup` says `passkeys_enabled: false`. |
+| **Changing the domain** | Browsers file every passkey under the RP ID it was made for. If the host of `OPENBASE_PUBLIC_URL` changes, **every existing passkey stops working** (the browser no longer offers it, or the server refuses it); people sign in with their password and add new ones, and the old rows can be deleted. Passkeys made while testing on `localhost` do not exist for the production domain. Choose the final domain before enabling passkeys for people. A different scheme or port on the same host is refused too (the origin must match exactly). |
+| Registering | `POST /api/auth/passkeys/register/start` + `finish`, signed in. **Re-authentication:** the session must have been created within the last 10 minutes (signing up, or signing in with a password, a 2FA code or a passkey, all count), or the request must carry the account password; otherwise `403 reauth_required`. So a stolen but older session cookie cannot plant a passkey without the password (password guesses for this are limited to 10 per 10 minutes). Credentials are requested as discoverable (resident), with user verification required and no attestation (the server does not ask which device made it). The challenge is bound to the user and to the session that started it. |
+| Signing in | Anonymous. `passkey-login/start` returns a challenge and an opaque id; `finish` checks the signature, challenge, origin, RP ID, the user-verified flag and the signature counter, and that the credential's user handle belongs to the same account. The state of a ceremony is kept in memory, is good for one attempt (a wrong answer spends it) and for 5 minutes. A restart drops pending ceremonies; the person just tries again. |
+| Same answer for every refusal | An unknown credential, a wrong signature and a replayed challenge all answer 401 and look alike to the caller; the audit log records the real reason (`unknown_credential`, `invalid_response`, `counter_regression`, `deactivated`). |
+| Clone detection | The authenticator's signature counter must increase. If it does not (and either value is above zero) the sign-in is refused and audited as `counter_regression` with the passkey's id. The passkey is **not** deleted automatically (only a holder of the key can trigger this, and deleting it would lock the owner out of that passkey); the owner or an administrator should remove it and add a fresh one. Synced passkeys (iCloud Keychain, Google Password Manager, password managers) report a counter of 0 and are not affected. |
+| Deactivated users | A deactivated account cannot sign in with a passkey (403, audited); reactivating restores it. |
+| Session-only | Registering, listing, renaming and removing passkeys, and the administrator's removal of all of a user's passkeys, are refused for every kind of token: personal access tokens (also with `manage`), OAuth grants, and MCP `api_request` (which refuses them up front, and the router refuses them again). A token that could add a passkey could plant a credential that outlives its own revocation. |
+| Password change / reset | Passkeys are separate credentials and **survive** a password change or reset (which deletes API tokens and other sessions). If an account may have been compromised, also review its passkeys (Account → Security) or ask an administrator to remove them all. Passkeys are deleted with the user (foreign key cascade). |
+| Removing | The owner removes one passkey from Account → Security; an administrator removes all of a user's passkeys from Admin → Users (lost device). Neither ends sessions that are already signed in. The person's device may still list the passkey; they should delete it there too. |
+| Audit | `passkey_add`, `passkey_rename`, `passkey_remove`, `passkey_login`, `passkey_login_failed` (with the reason), `admin_passkeys_remove` (with how many). |
+
+What is not covered: a passkey protected only by a weak device PIN or an unlocked device, malware
+on the device that uses the authenticator while it is unlocked, and the loss of every device
+together with the password (an administrator can create a reset link). Passkeys do not make a
+stolen session cookie harmless: a session lives for 30 days however it was created. The WebAuthn
+ceremony state (not the credentials) is kept in memory, which suits the single-node design.
 
 ## Share links, forms, uploads, CSV and webhooks
 
@@ -392,6 +439,15 @@ Authentication and email:
   creator added them.
 - Reactivating a deactivated user restores their API tokens (see above); their connected
   apps (OAuth grants) were deleted when the account was deactivated.
+- **A passkey planted with a stolen session outlives a password reset.** Registering needs the
+  password or a sign-in from the last 10 minutes, so an attacker holding only an older cookie
+  cannot do it, but someone who stole a *fresh* session can add their own passkey before the
+  owner notices, and a password change does not remove passkeys (they are separate
+  credentials). The audit log shows `passkey_add`; after a suspected compromise remove unknown
+  passkeys, or have an administrator remove them all.
+- **Ceremony state is in memory.** A restart cancels registrations and sign-ins in progress
+  (the person starts again); a flood of challenge requests is limited per address and capped
+  at 10,000 waiting ceremonies per kind, oldest dropped first.
 
 Shares, uploads and imports:
 

@@ -114,6 +114,8 @@ impl UserRow {
         }
     }
 
+    /// The admin view of the user, with a passkey count of 0: callers that show it to an
+    /// administrator fill the real count in ([`admin_view`]).
     pub fn to_admin(&self) -> AdminUser {
         AdminUser {
             id: self.id.clone(),
@@ -122,10 +124,18 @@ impl UserRow {
             is_admin: self.is_admin,
             is_active: self.is_active,
             totp_enabled: self.totp_enabled,
+            passkey_count: 0,
             created_at: self.created_at,
             last_login_at: self.last_login_at,
         }
     }
+}
+
+/// [`UserRow::to_admin`] with the user's real passkey count.
+pub fn admin_view(conn: &Connection, user: &UserRow) -> AppResult<AdminUser> {
+    let mut view = user.to_admin();
+    view.passkey_count = crate::store::passkeys::count(conn, &user.id)?;
+    Ok(view)
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Option<UserRow>> {
@@ -243,9 +253,8 @@ pub fn list_admin(conn: &Connection) -> AppResult<Vec<AdminUser>> {
         "SELECT {COLUMNS} FROM users ORDER BY created_at, id"
     ))?;
     let rows = stmt.query_map([], UserRow::from_row)?;
-    Ok(rows
-        .map(|r| r.map(|u| u.to_admin()))
-        .collect::<Result<Vec<_>, _>>()?)
+    let users = rows.collect::<Result<Vec<_>, _>>()?;
+    users.iter().map(|u| admin_view(conn, u)).collect()
 }
 
 fn other_active_admins(conn: &Connection, except_id: &str) -> AppResult<i64> {
@@ -333,7 +342,7 @@ pub fn admin_update(
         changes.insert("disable_2fa".into(), json!(true));
     }
     let updated = require(conn, target_id)?;
-    Ok((updated.to_admin(), Value::Object(changes)))
+    Ok((admin_view(conn, &updated)?, Value::Object(changes)))
 }
 
 /// Create a single-use password-reset token for `user_id` valid for `ttl_ms`.

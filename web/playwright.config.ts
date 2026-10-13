@@ -31,7 +31,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     // Set by globalSetup before the workers start.
-    baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080",
+    baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -49,8 +49,11 @@ export default defineConfig({
     { name: "oauth", testMatch: /oauth\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The account page's AI assistants tab: instructions per assistant, copy buttons, phone width, both themes.
     { name: "assistants", testMatch: /assistants\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // Passkeys with Chrome's virtual authenticator: add, sign in without a password, skip 2FA, remove,
+    // and an administrator removing another user's passkeys; signs up its own users.
+    { name: "passkeys", testMatch: /passkeys\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "oauth", "assistants"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "oauth", "assistants", "passkeys"] },
   ],
 });

@@ -4,6 +4,7 @@
 //! use `Authorization: Bearer <api token>`. Both resolve to an [`Actor`].
 //! Only SHA-256 hashes of tokens are stored.
 
+pub mod passkey;
 pub mod password;
 pub mod session;
 pub mod totp;

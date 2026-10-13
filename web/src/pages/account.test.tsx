@@ -30,7 +30,7 @@ describe("account", () => {
 
   it("changes the password after local validation", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "POST /api/auth/password": { ok: true } });
+    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/auth/passkeys": [], "POST /api/auth/password": { ok: true } });
     renderApp({ route: "/account?tab=security" });
 
     await user.type(await screen.findByLabelText("Current password"), "oldpassword1");
@@ -53,6 +53,7 @@ describe("account", () => {
     let enabled = false;
     const api = mockApi({
       "GET /api/auth/me": () => ({ ...USER, totp_enabled: enabled }),
+      "GET /api/auth/passkeys": [],
       "POST /api/auth/2fa/setup": { secret: "JBSWY3DPEHPK3PXP", otpauth_url: "otpauth://totp/OpenBase:ada@example.com?secret=JBSWY3DPEHPK3PXP&issuer=OpenBase" },
       "POST /api/auth/2fa/enable": () => {
         enabled = true;
@@ -79,7 +80,7 @@ describe("account", () => {
 
   it("disables two-factor with password and code", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": { ...USER, totp_enabled: true }, "POST /api/auth/2fa/disable": USER });
+    const api = mockApi({ "GET /api/auth/me": { ...USER, totp_enabled: true }, "GET /api/auth/passkeys": [], "POST /api/auth/2fa/disable": USER });
     renderApp({ route: "/account?tab=security" });
     await user.click(await screen.findByRole("button", { name: "Disable" }));
     const dialog = await screen.findByRole("dialog", { name: /Disable two-factor/ });

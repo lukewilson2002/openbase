@@ -10,4 +10,9 @@ needs_setup: boolean, open_signup: boolean, email_enabled: boolean,
  * page builds the MCP address from it, because the browser may be on another address (a proxy,
  * a tunnel) than the one AI assistants must use.
  */
-public_url: string, };
+public_url: string, 
+/**
+ * Passkey sign-in is available: the public URL's host is a domain name (WebAuthn does not
+ * work for an IP address).
+ */
+passkeys_enabled: boolean, };

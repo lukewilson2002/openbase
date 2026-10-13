@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_icons.sql"),
     include_str!("../migrations/0003_oauth.sql"),
+    include_str!("../migrations/0004_passkeys.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -337,7 +338,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 3);
+        assert_eq!(schema_version(), 4);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -418,7 +419,7 @@ mod tests {
         let files = snapshots(&dir.path().join("backups"));
         assert_eq!(files.len(), 1, "{files:?}");
         assert!(files[0].starts_with("pre-migration-v2-"));
-        assert_eq!(file_schema_version(&path).unwrap(), 3);
+        assert_eq!(file_schema_version(&path).unwrap(), schema_version());
         let conn = Connection::open(&path).unwrap();
         for table in [
             "oauth_clients",
@@ -436,6 +437,87 @@ mod tests {
             .query_row("SELECT count(*) FROM users", [], |r| r.get(0))
             .unwrap();
         assert_eq!(users, 1, "existing data is kept");
+    }
+
+    #[test]
+    fn v3_database_gets_the_passkey_tables_and_is_snapshotted_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("openbase.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+            migrate_with(&conn, &MIGRATIONS[..3], None).unwrap();
+            conn.execute_batch(
+                "INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
+                     VALUES ('u1', 'a@example.com', 'A', '!', 1, 1);
+                 INSERT INTO oauth_clients (id, source, name, redirect_uris, created_at)
+                     VALUES ('c1', 'dcr', 'App', '[]', 1);",
+            )
+            .unwrap();
+        }
+        assert_eq!(file_schema_version(&path).unwrap(), 3);
+        let db = Db::open(&path).unwrap();
+        drop(db);
+        let files = snapshots(&dir.path().join("backups"));
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert!(files[0].starts_with("pre-migration-v3-"));
+        assert_eq!(file_schema_version(&path).unwrap(), 4);
+        // The snapshot is the v3 database, without the new tables.
+        let snap = Connection::open(dir.path().join("backups").join(&files[0])).unwrap();
+        let has = |c: &Connection, t: &str| -> i64 {
+            c.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name = ?1",
+                [t],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(has(&snap, "passkeys"), 0);
+        assert_eq!(has(&snap, "oauth_clients"), 1);
+
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        for table in ["passkeys", "passkey_user_handles"] {
+            let n: i64 = conn
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 0, "{table}");
+        }
+        // Existing data is intact.
+        let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert_eq!(count("SELECT count(*) FROM users"), 1);
+        assert_eq!(count("SELECT count(*) FROM oauth_clients"), 1);
+        // The new tables work, and are tied to the user.
+        conn.execute_batch(
+            "INSERT INTO passkey_user_handles (user_id, handle) VALUES ('u1', x'00112233445566778899aabbccddeeff');
+             INSERT INTO passkeys (id, user_id, credential_id, credential, name, created_at)
+                 VALUES ('pky1', 'u1', 'cred1', '{}', 'Laptop', 1);",
+        )
+        .unwrap();
+        assert!(
+            conn.execute(
+                "INSERT INTO passkeys (id, user_id, credential_id, credential, name, created_at)
+                 VALUES ('pky2', 'u1', 'cred1', '{}', 'Same credential', 1)",
+                [],
+            )
+            .is_err(),
+            "a credential id is unique"
+        );
+        assert!(
+            conn.execute(
+                "INSERT INTO passkeys (id, user_id, credential_id, credential, name, created_at)
+                 VALUES ('pky3', 'nobody', 'cred3', '{}', 'Orphan', 1)",
+                [],
+            )
+            .is_err(),
+            "a passkey needs its user"
+        );
+        conn.execute("DELETE FROM users WHERE id = 'u1'", [])
+            .unwrap();
+        assert_eq!(count("SELECT count(*) FROM passkeys"), 0);
+        assert_eq!(count("SELECT count(*) FROM passkey_user_handles"), 0);
+        // Migrating again is a no-op.
+        migrate(&conn).unwrap();
     }
 
     #[test]

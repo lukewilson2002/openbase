@@ -10,6 +10,8 @@ export const keys = {
   setup: ["setup"] as const,
   me: ["me"] as const,
   sessions: ["sessions"] as const,
+  /** The caller's passkeys. */
+  passkeys: ["passkeys"] as const,
   tokens: ["tokens"] as const,
   /** The caller's connected apps (OAuth grants). */
   oauthGrants: ["oauth", "grants"] as const,

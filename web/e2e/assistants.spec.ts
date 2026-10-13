@@ -20,7 +20,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 let session: Cookie[] = [];
 
 test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080", storageState: { cookies: [], origins: [] } });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080", storageState: { cookies: [], origins: [] } });
   const email = `e2e-assistants-${randomBytes(4).toString("hex")}@example.com`;
   const res = await ctx.request.post("/api/auth/signup", { data: { email, name: "Assistants E2E", password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();

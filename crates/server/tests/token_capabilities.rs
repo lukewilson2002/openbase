@@ -7,7 +7,7 @@
 //! - admin routes work for an administrator's `manage` token, are audited, and are refused for
 //!   everyone else;
 //! - the credential parts of the admin routes (password-reset links, a user's password and 2FA,
-//!   the SMTP password) are session-only even for an administrator's `manage` token.
+//!   passkeys, the SMTP password) are session-only even for an administrator's `manage` token.
 //!
 //! `CASES`, `SESSION_ONLY`, `ADMIN_SESSION_ONLY` and `ADMIN` are also compared with the endpoint catalogue of the MCP
 //! server (`mcp::catalogue`), so a route cannot change its capability without this test (and the
@@ -447,6 +447,31 @@ const SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
         "/api/oauth/requests/oarNope/decision",
         Some(r#"{"decision":"approve","access":"manage"}"#),
     ),
+    ("GET", "/api/auth/passkeys", "/api/auth/passkeys", None),
+    (
+        "POST",
+        "/api/auth/passkeys/register/start",
+        "/api/auth/passkeys/register/start",
+        Some(r#"{"password":"password1234"}"#),
+    ),
+    (
+        "POST",
+        "/api/auth/passkeys/register/finish",
+        "/api/auth/passkeys/register/finish",
+        Some(r#"{"challenge_id":"pkc_nope","credential":{}}"#),
+    ),
+    (
+        "PATCH",
+        "/api/auth/passkeys/{id}",
+        "/api/auth/passkeys/pkyNope",
+        Some(r#"{"name":"renamed"}"#),
+    ),
+    (
+        "DELETE",
+        "/api/auth/passkeys/{id}",
+        "/api/auth/passkeys/pkyNope",
+        None,
+    ),
     ("GET", "/api/auth/sessions", "/api/auth/sessions", None),
     (
         "POST",
@@ -476,6 +501,13 @@ const ADMIN_SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
         "GET",
         "/api/admin/backups/{name}",
         "/api/admin/backups/openbase-20200101-000000.tar.gz",
+        None,
+    ),
+    // A user's passkeys are credentials: removing them all is as sensitive as a reset link.
+    (
+        "DELETE",
+        "/api/admin/users/{id}/passkeys",
+        "/api/admin/users/usrNope/passkeys",
         None,
     ),
     // Connected apps are credentials too: no token lists or revokes them.
