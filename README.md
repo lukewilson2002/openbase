@@ -67,7 +67,9 @@ create record, update record, send email, HTTP request (with SSRF
 protection) and in-app notification. Runs are logged and retried.
 
 **API.** An Airtable-compatible REST API under `/api/v1`. Existing Airtable
-clients and n8n/Make/Zapier HTTP steps work once you change the base URL.
+clients and n8n/Make/Zapier HTTP steps work once you change the base URL;
+see [docs/api.md](docs/api.md) for what is supported and how it differs from
+Airtable.
 
 **Operations.** CSV import and export. Daily automatic backups with
 retention. `opengrid backup` and `opengrid restore` commands. An automatic

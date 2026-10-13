@@ -657,7 +657,15 @@ async fn error_row_numbers_match_the_spreadsheet_row() {
                fine too,3\r\n\
                last bad,??\r\n";
     let map = json!({ "n": p.name, "age": p.age });
-    let r = import_to(&f.app, &f.owner, &f.table_id, csv.as_bytes(), Some(map), None).await;
+    let r = import_to(
+        &f.app,
+        &f.owner,
+        &f.table_id,
+        csv.as_bytes(),
+        Some(map),
+        None,
+    )
+    .await;
     r.assert_status(422);
     let rows: Vec<i64> = r.body["error"]["rows"]
         .as_array()
