@@ -58,6 +58,20 @@ pub struct Config {
     #[arg(long, env = "OPENGRID_HISTORY_DAYS", default_value_t = 365)]
     pub history_days: u32,
 
+    /// Days of audit log (logins, password and token changes, invites, admin
+    /// actions) to keep (0 = forever).
+    #[arg(long, env = "OPENGRID_AUDIT_DAYS", default_value_t = 365)]
+    pub audit_days: u32,
+
+    /// Emails one user may cause per hour (invites and automation emails).
+    #[arg(long, env = "OPENGRID_EMAIL_PER_USER_HOUR", default_value_t = 100)]
+    pub email_per_user_hour: u32,
+
+    /// Emails the whole instance may send per hour on behalf of users
+    /// (invites and automation emails; password resets have their own limits).
+    #[arg(long, env = "OPENGRID_EMAIL_PER_HOUR", default_value_t = 500)]
+    pub email_per_hour: u32,
+
     /// SMTP server for outgoing email (invites, password resets, automations).
     /// Email features are disabled when unset.
     #[arg(long, env = "OPENGRID_SMTP_HOST")]
@@ -138,6 +152,9 @@ impl Config {
             backup_keep: 3,
             trash_days: 30,
             history_days: 365,
+            audit_days: 365,
+            email_per_user_hour: 100,
+            email_per_hour: 500,
             smtp_host: None,
             smtp_port: 587,
             smtp_user: None,

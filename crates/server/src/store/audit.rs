@@ -31,6 +31,9 @@ pub mod actions {
     pub const ADMIN_RESET_LINK: &str = "admin_reset_link";
 }
 
+/// Largest `detail` JSON stored in one row; bigger ones are replaced by a marker.
+pub const MAX_DETAIL_BYTES: usize = 2048;
+
 /// Append one audit entry.
 pub fn record(
     conn: &Connection,
@@ -40,7 +43,15 @@ pub fn record(
     detail: Option<Value>,
     ip: Option<&str>,
 ) -> AppResult<()> {
-    let detail = detail.map(|d| d.to_string());
+    // Detail can echo caller-supplied text; never let one row grow large.
+    let detail = detail.map(|d| {
+        let s = d.to_string();
+        if s.len() > MAX_DETAIL_BYTES {
+            r#"{"truncated":true}"#.to_string()
+        } else {
+            s
+        }
+    });
     conn.execute(
         "INSERT INTO audit_log (user_id, action, target, detail, ip, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",

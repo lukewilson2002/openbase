@@ -94,6 +94,43 @@ async fn one_client_is_limited_per_email_even_across_minutes() {
     app.login("b@example.com", PW).await.0.assert_status(200);
 }
 
+#[test]
+fn audit_log_rows_are_bounded_and_expire() {
+    let app = TestApp::new();
+    app.state
+        .db
+        .write_sync(|tx| {
+            use opengrid::store::audit;
+            let huge = json!({ "email": "x".repeat(100_000) });
+            audit::record(tx, None, audit::actions::LOGIN_FAILED, None, Some(huge), None)?;
+            // One old row and one fresh row.
+            tx.execute(
+                "INSERT INTO audit_log (action, created_at) VALUES ('login', 1)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let max: i64 = app.query_i64("SELECT max(length(detail)) FROM audit_log", &[]);
+    assert!(max <= 2048, "stored {max} bytes of audit detail");
+
+    let now = opengrid::db::now_ms();
+    let purged = app
+        .state
+        .db
+        .write_sync(|tx| opengrid::tasks::purge_audit(tx, 365, now))
+        .unwrap();
+    assert_eq!(purged, 1);
+    assert_eq!(app.query_i64("SELECT count(*) FROM audit_log", &[]), 1);
+    // 0 keeps everything.
+    let purged = app
+        .state
+        .db
+        .write_sync(|tx| opengrid::tasks::purge_audit(tx, 0, now + 10_000_000_000_000))
+        .unwrap();
+    assert_eq!(purged, 0);
+}
+
 // ------------------------------------------------------------------ 2FA
 
 mod second_factor {
