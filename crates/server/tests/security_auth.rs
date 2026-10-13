@@ -209,6 +209,287 @@ async fn cli_password_reset_revokes_api_tokens() {
         .assert_status(401);
 }
 
+// ------------------------------------------------- client IP / CSRF handling
+
+#[tokio::test]
+async fn client_supplied_forwarded_for_entries_cannot_dodge_per_ip_limits() {
+    // A proxy that appends (nginx's $proxy_add_x_forwarded_for) leaves the
+    // client's own value on the left; only the last entry is trustworthy.
+    let app = TestApp::with_config(|c| c.trust_proxy = true);
+    app.user("a@example.com", "A");
+    for i in 0..10 {
+        let xff = format!("198.51.100.{i}, 203.0.113.7");
+        app.request_with(
+            &app.anon(),
+            "POST",
+            "/api/auth/login",
+            Some(json!({"email": format!("u{i}@example.com"), "password": "wrong password!"})),
+            &[("x-forwarded-for", xff.as_str())],
+            true,
+            None,
+        )
+        .await
+        .assert_status(401);
+    }
+    let res = app
+        .request_with(
+            &app.anon(),
+            "POST",
+            "/api/auth/login",
+            Some(json!({"email": "a@example.com", "password": "wrong password!"})),
+            &[("x-forwarded-for", "198.51.100.99, 203.0.113.7")],
+            true,
+            None,
+        )
+        .await;
+    res.assert_status(429);
+    // Audit rows carry the proxy-observed address, not the spoofed one.
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM audit_log WHERE ip LIKE '198.51.100.%'",
+            &[]
+        ),
+        0
+    );
+    assert!(app.query_i64("SELECT count(*) FROM audit_log WHERE ip = '203.0.113.7'", &[]) > 0);
+}
+
+#[tokio::test]
+async fn non_bearer_authorization_headers_do_not_bypass_csrf() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let token = user.cookie.clone().unwrap();
+    for auth in ["Basic dXNlcjpwYXNz", "Digest abc", "bearer lowercase", "Bearer"] {
+        let res = app
+            .request_with(
+                &Client {
+                    cookie: Some(token.clone()),
+                    ..Client::default()
+                },
+                "POST",
+                "/api/auth/password",
+                Some(json!({"current_password": PW, "new_password": "a brand new password"})),
+                &[("authorization", auth)],
+                false,
+                None,
+            )
+            .await;
+        res.assert_status(403);
+        assert_eq!(res.body["error"]["message"], "missing CSRF header", "{auth}");
+    }
+    // The password was not changed and the session still works.
+    app.get(&user, "/api/auth/me").await.assert_status(200);
+    app.login("a@example.com", PW).await.0.assert_status(200);
+}
+
+// ------------------------------------------------ read-only and scoped tokens
+
+/// Every state-changing route of the internal API (method, path with made-up
+/// ids). A read-only token must be refused on all of them, before the handler
+/// looks at the ids. Add new mutating routes here.
+const MUTATING_ROUTES: &[(&str, &str)] = &[
+    ("POST", "/api/admin/users"),
+    ("PATCH", "/api/admin/users/usrX"),
+    ("POST", "/api/admin/users/usrX/reset-link"),
+    ("POST", "/api/admin/backups"),
+    ("POST", "/api/bases/appX/automations"),
+    ("PATCH", "/api/automations/autX"),
+    ("DELETE", "/api/automations/autX"),
+    ("POST", "/api/automations/autX/test"),
+    ("PATCH", "/api/auth/me"),
+    ("POST", "/api/auth/password"),
+    ("POST", "/api/auth/2fa/setup"),
+    ("POST", "/api/auth/2fa/enable"),
+    ("POST", "/api/auth/2fa/disable"),
+    ("POST", "/api/auth/sessions/revoke-others"),
+    ("DELETE", "/api/auth/sessions/0123456789abcdef"),
+    ("POST", "/api/workspaces/wspX/bases"),
+    ("PATCH", "/api/bases/appX"),
+    ("DELETE", "/api/bases/appX"),
+    ("POST", "/api/bases/appX/duplicate"),
+    ("PATCH", "/api/bases/appX/members/usrX"),
+    ("DELETE", "/api/bases/appX/members/usrX"),
+    ("POST", "/api/records/recX/comments"),
+    ("PATCH", "/api/comments/cmtX"),
+    ("DELETE", "/api/comments/cmtX"),
+    ("POST", "/api/tables/tblX/formula/check"),
+    ("POST", "/api/tables/tblX/fields"),
+    ("PATCH", "/api/fields/fldX"),
+    ("DELETE", "/api/fields/fldX"),
+    ("POST", "/api/tables/tblX/primary-field"),
+    ("POST", "/api/tables/tblX/import"),
+    ("POST", "/api/bases/appX/import"),
+    ("POST", "/api/workspaces/wspX/invites"),
+    ("POST", "/api/bases/appX/invites"),
+    ("DELETE", "/api/invites/invX"),
+    ("POST", "/api/invites/by-token/inv_x/accept"),
+    ("POST", "/api/notifications/read"),
+    ("POST", "/api/tables/tblX/records"),
+    ("PATCH", "/api/tables/tblX/records"),
+    ("DELETE", "/api/tables/tblX/records"),
+    ("POST", "/api/tables/tblX/records/restore"),
+    ("POST", "/api/tables/tblX/records/move"),
+    ("POST", "/api/bases/appX/tables"),
+    ("PATCH", "/api/tables/tblX"),
+    ("DELETE", "/api/tables/tblX"),
+    ("POST", "/api/tables/tblX/duplicate"),
+    ("POST", "/api/tokens"),
+    ("DELETE", "/api/tokens/tokX"),
+    ("POST", "/api/trash/restore"),
+    ("POST", "/api/tables/tblX/views"),
+    ("PATCH", "/api/views/viwX"),
+    ("DELETE", "/api/views/viwX"),
+    ("POST", "/api/views/viwX/duplicate"),
+    ("POST", "/api/views/viwX/shares"),
+    ("PATCH", "/api/shares/shrX"),
+    ("DELETE", "/api/shares/shrX"),
+    ("POST", "/api/workspaces"),
+    ("PATCH", "/api/workspaces/wspX"),
+    ("DELETE", "/api/workspaces/wspX"),
+    ("PATCH", "/api/workspaces/wspX/members/usrX"),
+    ("DELETE", "/api/workspaces/wspX/members/usrX"),
+    ("POST", "/api/bases/appX/attachments"),
+];
+
+#[tokio::test]
+async fn read_only_tokens_cannot_call_any_mutating_route() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let ro = bearer(&make_token(&app, &user, false).await);
+    for (method, path) in MUTATING_ROUTES {
+        let body = (*method != "DELETE").then(|| json!({}));
+        let res = app.request(&ro, method, path, body).await;
+        assert_eq!(res.status, 403, "{method} {path}: {}", res.body);
+        let msg = res.body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            msg.contains("read-only"),
+            "{method} {path} was refused for another reason: {msg}"
+        );
+    }
+    // Reads, and the read-only POST that runs a view query, still pass the guard
+    // (the made-up ids then answer 404).
+    app.get(&ro, "/api/tokens/whoami").await.assert_status(200);
+    app.get(&ro, "/api/notifications").await.assert_status(200);
+    app.post(&ro, "/api/views/viwX/query", json!({}))
+        .await
+        .assert_status(404);
+}
+
+#[tokio::test]
+async fn write_tokens_are_not_blocked_by_the_read_only_rule() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let rw = bearer(&make_token(&app, &user, true).await);
+    for (method, path) in MUTATING_ROUTES {
+        let body = (*method != "DELETE").then(|| json!({}));
+        let res = app.request(&rw, method, path, body).await;
+        let msg = res.body["error"]["message"].as_str().unwrap_or_default();
+        assert!(!msg.contains("read-only"), "{method} {path}: {msg}");
+    }
+}
+
+#[tokio::test]
+async fn read_only_token_cannot_mark_notifications_read() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let (_ws, base) = app.workspace_with_base(&user, "Acme");
+    let ro = bearer(&make_token(&app, &user, false).await);
+    let uid = user.user_id.clone().unwrap();
+    let nid = opengrid::ids::new_id(og_core::ids::NOTIFICATION);
+    {
+        let (nid, uid, base) = (nid.clone(), uid.clone(), base.clone());
+        app.state
+            .db
+            .write_sync(move |tx| {
+                tx.execute(
+                    "INSERT INTO notifications (id, user_id, kind, payload, created_at)
+                     VALUES (?1, ?2, 'mention', ?3, 1)",
+                    rusqlite::params![nid, uid, json!({ "base_id": base }).to_string()],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+    app.post(&ro, "/api/notifications/read", json!({"ids": [nid]}))
+        .await
+        .assert_status(403);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM notifications WHERE read_at IS NOT NULL",
+            &[]
+        ),
+        0
+    );
+}
+
+#[tokio::test]
+async fn base_limited_tokens_only_see_and_mark_their_bases_notifications() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let (_w1, base_a) = app.workspace_with_base(&user, "A");
+    let (_w2, base_b) = app.workspace_with_base(&user, "B");
+    let uid = user.user_id.clone().unwrap();
+    let mut ids = Vec::new();
+    for (i, base) in [&base_a, &base_b].into_iter().enumerate() {
+        let id = opengrid::ids::new_id(og_core::ids::NOTIFICATION);
+        ids.push(id.clone());
+        let (uid, base) = (uid.clone(), base.clone());
+        app.state
+            .db
+            .write_sync(move |tx| {
+                tx.execute(
+                    "INSERT INTO notifications (id, user_id, kind, payload, created_at)
+                     VALUES (?1, ?2, 'mention', ?3, ?4)",
+                    rusqlite::params![
+                        id,
+                        uid,
+                        json!({ "base_id": base, "snippet": "secret" }).to_string(),
+                        10 + i as i64
+                    ],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+    let res = app
+        .post(
+            &user,
+            "/api/tokens",
+            json!({"name": "lim", "write": true, "base_ids": [base_a]}),
+        )
+        .await;
+    res.assert_status(201);
+    let lim = bearer(res.body["token"].as_str().unwrap());
+
+    let listed = app.get(&lim, "/api/notifications").await;
+    listed.assert_status(200);
+    let items = listed.body["notifications"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{}", listed.body);
+    assert_eq!(items[0]["id"], ids[0]);
+    assert_eq!(listed.body["unread"], 1);
+
+    // Marking everything read only touches the token's base; naming the other
+    // base's notification is ignored.
+    app.post(&lim, "/api/notifications/read", json!({"ids": [ids[1]]}))
+        .await
+        .assert_status(200);
+    app.post(&lim, "/api/notifications/read", json!({}))
+        .await
+        .assert_status(200);
+    let all = app.get(&user, "/api/notifications").await;
+    let by_id = |id: &str| {
+        all.body["notifications"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    assert!(by_id(&ids[0])["read_at"].is_i64());
+    assert!(by_id(&ids[1])["read_at"].is_null());
+}
+
 // ------------------------------------------------------------------ 2FA
 
 mod second_factor {

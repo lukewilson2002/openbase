@@ -43,6 +43,9 @@ pub struct Actor {
     pub token_scope: Option<TokenScope>,
     /// SHA-256 of the session token when authenticated by session (for logout).
     pub session_hash: Option<String>,
+    /// SHA-256 of the API token when authenticated by token (so long-lived
+    /// connections can notice the token being revoked or expiring).
+    pub token_hash: Option<String>,
 }
 
 impl Actor {
@@ -70,8 +73,9 @@ impl Actor {
 /// Where a request came from, for audit entries, sessions and rate limits.
 #[derive(Debug, Clone)]
 pub struct ClientInfo {
-    /// Client IP: the first `X-Forwarded-For` entry when `trust_proxy` is on,
-    /// else the TCP peer address, else `"unknown"` (in-process tests).
+    /// Client IP: the last `X-Forwarded-For` entry (the one the trusted proxy
+    /// added) when `trust_proxy` is on, else the TCP peer address, else
+    /// `"unknown"` (in-process tests).
     pub ip: String,
     pub user_agent: Option<String>,
 }
@@ -79,11 +83,16 @@ pub struct ClientInfo {
 /// Compute the client IP from the request parts (see [`ClientInfo::ip`]).
 pub fn client_ip(parts: &Parts, trust_proxy: bool) -> String {
     if trust_proxy {
+        // Entries left of the last one may have been written by the client; a
+        // proxy that appends (nginx) or overwrites (Caddy) makes the last
+        // entry the address it actually saw.
         let forwarded = parts
             .headers
-            .get("x-forwarded-for")
+            .get_all("x-forwarded-for")
+            .iter()
+            .next_back()
             .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.split(',').next())
+            .and_then(|v| v.rsplit(',').next())
             .map(str::trim)
             .and_then(|v| v.parse::<std::net::IpAddr>().ok());
         if let Some(ip) = forwarded {
@@ -153,6 +162,7 @@ pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Ac
         is_admin,
         token_scope: None,
         session_hash: Some(hash),
+        token_hash: None,
     }))
 }
 
@@ -192,17 +202,51 @@ pub fn actor_from_api_token(conn: &Connection, token: &str) -> AppResult<Option<
         is_admin,
         token_scope: Some(scope),
         session_hash: None,
+        token_hash: Some(hash),
     }))
 }
 
-/// The token of an `Authorization: Bearer <token>` header.
-pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
-    let v = parts
-        .headers
+/// The token of an `Authorization: Bearer <token>` header. Any other
+/// `Authorization` value is ignored (the request is then judged by its
+/// cookie, and so is subject to the CSRF check).
+pub(crate) fn bearer_from_headers(headers: &axum::http::HeaderMap) -> Option<&str> {
+    let v = headers
         .get(axum::http::header::AUTHORIZATION)?
         .to_str()
         .ok()?;
     v.strip_prefix("Bearer ").map(str::trim)
+}
+
+pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
+    bearer_from_headers(&parts.headers)
+}
+
+/// POST routes that only read, so read-only tokens may call them (matched
+/// route patterns).
+const READ_ONLY_POSTS: &[&str] = &["/api/views/{id}/query"];
+
+/// A read-only API token acts as a Viewer and may only read: refuse every
+/// state-changing request here, in the one place all authenticated routes
+/// pass through, instead of relying on each handler to ask for a role above
+/// Viewer (several act on the caller's own data at Viewer level: deleting
+/// their comments or personal views, marking notifications read).
+fn enforce_read_only(parts: &Parts, actor: &Actor) -> AppResult<()> {
+    let Some(scope) = &actor.token_scope else {
+        return Ok(());
+    };
+    if scope.write || matches!(parts.method.as_str(), "GET" | "HEAD" | "OPTIONS") {
+        return Ok(());
+    }
+    let route = parts
+        .extensions
+        .get::<axum::extract::MatchedPath>()
+        .map(|m| m.as_str());
+    if route.is_some_and(|r| READ_ONLY_POSTS.contains(&r)) {
+        return Ok(());
+    }
+    Err(AppError::forbidden(
+        "this API token is read-only; use a token with write access",
+    ))
 }
 
 impl FromRequestParts<AppState> for Actor {
@@ -219,6 +263,7 @@ impl FromRequestParts<AppState> for Actor {
                 .read(move |c| actor_from_api_token(c, &token))
                 .await?;
             if let Some(a) = &actor {
+                enforce_read_only(parts, a)?;
                 let id = a.user_id.clone();
                 let hash = hash_token(bearer(parts).unwrap_or_default());
                 // Best-effort usage stamp; never fail the request over it.
