@@ -10,7 +10,7 @@
 #   prepare  checks the tag is vX.Y.Z[-pre], equals the version in Cargo.toml / Cargo.lock /
 #            web/package.json, is on main, and decides the image tags (scripts/release-info.sh).
 #   checks   the full CI suite (ci.yml): rustfmt, clippy, tests, generated files, web, contract
-#            tests, Playwright end-to-end tests.
+#            tests, Playwright end-to-end tests. Here a test that only passes on its retry fails the run.
 #   web      builds the web client once; both architectures embed this same web/dist.
 #   build    per architecture (linux/amd64, linux/arm64): the release binary, the runtime image
 #            (pushed to GHCR by digest only, no tag yet) with provenance and SBOM attestations, and a
@@ -168,6 +168,9 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       ref: refs/tags/${{ needs.prepare.outputs.tag }}
+      # Nothing is published on a test that only passed on its retry (CI on a pull request retries once
+      # and merely reports it): a release run has no second chance to hide behind.
+      fail_on_flaky: true
 
   # ---------------------------------------------------------------------- web
   web:
