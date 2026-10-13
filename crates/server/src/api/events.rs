@@ -20,6 +20,7 @@
 //!   request that caused it) so a client can skip its own changes.
 
 use std::convert::Infallible;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use axum::Router;
@@ -43,6 +44,20 @@ use crate::state::AppState;
 pub const KEEP_ALIVE: Duration = Duration::from_secs(15);
 /// How often access is re-checked even when no event arrives.
 pub const RECHECK: Duration = Duration::from_secs(60);
+
+static KEEP_ALIVE_MS: AtomicU64 = AtomicU64::new(KEEP_ALIVE.as_millis() as u64);
+static RECHECK_MS: AtomicU64 = AtomicU64::new(RECHECK.as_millis() as u64);
+
+/// Shorten the keep-alive and access re-check intervals for every stream
+/// opened afterwards (process-wide; for tests, which cannot wait a minute).
+pub fn set_timing_for_tests(keep_alive: Duration, recheck: Duration) {
+    KEEP_ALIVE_MS.store(keep_alive.as_millis().max(1) as u64, Ordering::Relaxed);
+    RECHECK_MS.store(recheck.as_millis().max(1) as u64, Ordering::Relaxed);
+}
+
+fn recheck_interval() -> Duration {
+    Duration::from_millis(RECHECK_MS.load(Ordering::Relaxed))
+}
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/api/bases/{id}/events", get(stream_events))
@@ -87,7 +102,7 @@ struct Feed {
 
 impl Feed {
     async fn still_allowed(&mut self) -> bool {
-        self.next_recheck = Instant::now() + RECHECK;
+        self.next_recheck = Instant::now() + recheck_interval();
         let (actor, base) = (self.actor.clone(), self.base_id.clone());
         self.state
             .db
@@ -179,9 +194,11 @@ async fn stream_events(
         base_id,
         rx,
         greeted: false,
-        next_recheck: Instant::now() + RECHECK,
+        next_recheck: Instant::now() + recheck_interval(),
     };
-    Ok(Sse::new(feed_stream(feed)).keep_alive(KeepAlive::new().interval(KEEP_ALIVE)))
+    Ok(Sse::new(feed_stream(feed)).keep_alive(
+        KeepAlive::new().interval(Duration::from_millis(KEEP_ALIVE_MS.load(Ordering::Relaxed))),
+    ))
 }
 
 fn subscribe(bus: &EventBus, base_id: &str) -> broadcast::Receiver<std::sync::Arc<EventEnvelope>> {
