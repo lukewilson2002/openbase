@@ -1,9 +1,10 @@
 # OpenBase MCP server
 
 OpenBase contains an [MCP](https://modelcontextprotocol.io) (Model Context Protocol)
-server in the same binary, at `/mcp`. An AI agent that holds one of your personal
-access tokens can do **everything you can do in the web app**, within that token's
-permissions: build bases, tables, fields of all 28 types and views, fill in and edit
+server in the same binary, at `/mcp`. An AI agent that you connected with a personal
+access token, or by signing in to OpenBase from the agent's own connector screen
+(OAuth), can do **everything you can do in the web app**, within the permissions you
+gave it: build bases, tables, fields of all 28 types and views, fill in and edit
 records, run formulas and rollups, set up automations and public forms, invite
 people, import and export CSV, upload files, read history and notifications, and
 (for administrators) manage users and backups. You do not have to open the app
@@ -13,7 +14,8 @@ yourself if you would rather describe the work to an agent.
   validation, history, live updates and automations as a click in the browser.
   Record changes are attributed to you in the record history.
 - **Nothing to install.** No extra process, port or dependency. The endpoint is on
-  your normal public URL, behind your normal HTTPS.
+  your normal public URL, behind your normal HTTPS. The sign-in for apps such as Claude
+  and ChatGPT is built in too (see [Connect with OAuth](#connect-with-oauth-sign-in)).
 - **Not for account takeover.** Passwords, two-factor authentication, sessions and
   API tokens can never be read or changed through a token, whatever its scope. The
   tools cannot create, list or delete tokens either. Even an administrator's token cannot
@@ -21,44 +23,57 @@ yourself if you would rather describe the work to an agent.
   set the SMTP password.
 
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
-[Choose a token](#choose-a-token) · [How an agent works here](#how-an-agent-works-here) ·
+[Connect with OAuth](#connect-with-oauth-sign-in) · [Choose a token](#choose-a-token) · [How an agent works here](#how-an-agent-works-here) ·
 [Tools](#tools) · [Reaching everything: api_reference and api_request](#reaching-everything-api_reference-and-api_request) ·
 [Scope model](#scope-model) · [Security model](#security-model) · [Limits and settings](#limits-and-settings) ·
 [Protocol](#protocol) · [What has been tested](#what-has-been-tested) · [Troubleshooting](#troubleshooting)
 
 ## Quick start
 
-1. Open **Account → AI assistants** in OpenBase. It shows your endpoint address and
-   copy-ready settings (the same ones as below).
-2. **Account → API tokens → New token.** Give it a name. Tick "Allow writes" if the
+Open **Account → AI assistants** in OpenBase for your endpoint address and copy-ready
+settings, then pick one way in:
+
+**Sign in (Claude, ChatGPT, anything with a connector screen).** Add the server address
+`https://base.example.com/mcp` as a custom connector. Your browser opens OpenBase, you
+sign in, choose **Read only**, **Read & edit** or **Full control**, and approve. Nothing
+to copy or paste. This needs OpenBase on a public HTTPS address; steps per app are
+below.
+
+**Token (scripts, Claude Code, any client that can send a header).**
+
+1. **Account → API tokens → New token.** Give it a name. Tick "Allow writes" if the
    assistant should change things, and (only for an assistant that should also manage
    workspaces and members) "Allow managing workspaces, members and settings". You can
    limit the token to chosen bases and give it an expiry. Copy the token; it is shown
    once.
-3. Add the server to your assistant. For Claude Code:
+2. Add the server to your assistant. For Claude Code:
 
    ```sh
    claude mcp add --transport http openbase https://base.example.com/mcp \
      --header "Authorization: Bearer YOUR_TOKEN"
    ```
 
-4. Ask it to do something: "Create a base for tracking customers and orders, with a
-   rollup of each customer's lifetime value, and add three sample customers."
+Then ask it to do something: "Create a base for tracking customers and orders, with a
+rollup of each customer's lifetime value, and add three sample customers."
 
 ## Set up your client
 
-The server speaks the *Streamable HTTP* transport at `https://<your OpenBase>/mcp` and
-authenticates with a bearer header, `Authorization: Bearer <token>`. It does not
-support OAuth sign-in, so a client that can only connect through an OAuth flow (for
-example the connector directories of some chat apps) cannot use it.
+The server speaks the *Streamable HTTP* transport at `https://<your OpenBase>/mcp`. It
+accepts two kinds of bearer credential: a personal access token you paste
+(`Authorization: Bearer <token>`), and an OAuth access token the built-in authorization
+server issues after you approve an app. A client that does OAuth finds everything it
+needs from the server address alone.
 
 | Client | How | Checked |
 |---|---|---|
-| **Claude Code** | `claude mcp add --transport http openbase <url> --header "Authorization: Bearer <token>"` (this project and you; add `--scope user` for all your projects). Check with `claude mcp list`: it shows `openbase ... Connected`. | yes, CLI 2.1.285: `scripts/mcp-claude-check.sh` |
-| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. Keep the token out of git (`"Authorization": "Bearer ${OPENBASE_TOKEN}"` expands an environment variable). Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
-| **Any client with a JSON file** (Cursor, Windsurf, Cline, ...) | The `mcpServers` object below. Cursor calls the file `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` with a top-level `servers` key instead of `mcpServers`. | format only |
-| **Claude Desktop** | Its connector settings are for OAuth servers. Use a local bridge that adds the header: `"command": "npx", "args": ["-y", "mcp-remote", "<url>", "--header", "Authorization:${AUTH}"]` with `"env": {"AUTH": "Bearer <token>"}` in `claude_desktop_config.json`. | no |
-| **Your own program** | Any MCP SDK with a Streamable HTTP client and custom headers: set the URL and the `Authorization` header. The official Rust SDK (`rmcp`) is tested against this server in both protocol generations. | yes (`rmcp`) |
+| **Claude** (claude.ai, Claude Desktop, Cowork) | **Customize → Connectors → Add custom connector**. Name it, paste `https://<your OpenBase>/mcp`, leave the advanced settings alone (OpenBase supports both "Use Claude's published identity" and "Register automatically"), click **Connect**, sign in to OpenBase and approve. Claude connects **from Anthropic's cloud**, so OpenBase must be reachable at a public HTTPS address. | not run against claude.ai; discovery and the whole flow are tested with other clients (below) |
+| **Claude Code** | `claude mcp add --transport http openbase <url>`, then start `claude`, run `/mcp`, pick **openbase** and **Authenticate**: your browser opens OpenBase (a loopback address receives the answer, so this works against `http://localhost` too). Or skip OAuth and send a token: `claude mcp add --transport http openbase <url> --header "Authorization: Bearer <token>"` (add `--scope user` for all your projects). | CLI 2.1.285: with a token `claude mcp list` shows `Connected` (`scripts/mcp-claude-check.sh`); without one it finds the sign-in and shows `Needs authentication`. The browser step itself is interactive and was not run |
+| **ChatGPT** | Needs developer mode (Plus, Pro, Business, Enterprise and Edu plans). Under **Settings → Apps / Connectors** (the menu has moved more than once; look for developer mode or "Advanced") create a custom connector, paste the server address, choose **OAuth** as authentication, then sign in and approve. ChatGPT cannot send a fixed token, and it also connects from OpenAI's cloud, so a public HTTPS address is needed. | not run against ChatGPT |
+| **Other clients that support OAuth** (MCP Inspector, Cursor, VS Code, ...) | Give them the server address; they register themselves (or identify themselves with a metadata document) and open the browser. | the official MCP TypeScript SDK client: full flow, in `web/contract/oauth.contract.test.ts` |
+| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. With a token, keep it out of git (`"Authorization": "Bearer ${OPENBASE_TOKEN}"` expands an environment variable); with OAuth every person authenticates once. Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
+| **Any client with a JSON file** (Cursor, Windsurf, Cline, ...) | The `mcpServers` object below, with a token. Cursor calls the file `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` with a top-level `servers` key instead of `mcpServers`. | format only |
+| **Claude Desktop through a local bridge** | Only needed when you cannot make OpenBase public: `"command": "npx", "args": ["-y", "mcp-remote", "<url>", "--header", "Authorization:${AUTH}"]` with `"env": {"AUTH": "Bearer <token>"}` in `claude_desktop_config.json`. | no |
+| **Your own program** | Any MCP SDK with a Streamable HTTP client: use its OAuth support, or set the URL and the `Authorization` header. The official Rust SDK (`rmcp`) is tested against this server in both protocol generations. | yes (`rmcp`, TypeScript SDK) |
 
 ```json
 {
@@ -73,8 +88,10 @@ example the connector directories of some chat apps) cannot use it.
 ```
 
 "Checked: format only" means the configuration follows the client's documented shape
-but this project has not run that client. A quick check from a shell works for any
-setup:
+but this project has not run that client. The steps for Claude and ChatGPT follow what
+their vendors document (October 2026); menus change, so if a label differs, look for
+"custom connector" or "MCP server" in the app's settings. A quick check from a shell
+works for any setup:
 
 ```sh
 curl -s https://base.example.com/mcp \
@@ -82,6 +99,102 @@ curl -s https://base.example.com/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+## Connect with OAuth (sign in)
+
+Apps that connect through a "custom connector" screen cannot take a pasted token, so
+OpenBase has an OAuth 2.1 authorization server built in, following the MCP authorization
+specification. The app opens your browser; you sign in to OpenBase as usual (with 2FA if
+you use it), see **who is asking and where the access would go**, choose what to allow,
+and approve. The app then holds a short-lived access token for `/mcp`.
+
+**What you choose on the approval page**
+
+| Choice | What the app can do | Same as a token with |
+|---|---|---|
+| Read only | read bases, schema, records, views, history | read-only |
+| Read & edit | also create, change and delete content in your bases | "Allow writes" |
+| Full control | also manage workspaces, members, invites and settings (and the admin pages for an administrator) | "Allow managing ..." |
+
+Plus **All bases** or **only the bases you tick**. An app that asked for less than you
+could give is offered only what it asked for. The page preselects Read only, or Read &
+edit when the app asked for write; it never preselects Full control. It shows the app's
+name (written by the app itself, so not proof of anything) and the address the answer
+goes to, and warns when the app runs on your own computer, when OpenBase cannot verify
+the address, and when an app calls itself "Claude" or "ChatGPT" but is not connecting from
+`claude.ai`, `chatgpt.com` or `openai.com`. The same permission checks as for a token
+apply afterwards: the grant becomes the same scope (`write`, `manage`, bases), so the
+rules in [Scope model](#scope-model) hold unchanged, credentials, sessions and tokens
+stay out of reach, and what you can do in a base limits what the app can do.
+
+**Managing connections.** **Account → API tokens → Connected apps** lists every app with
+its access, bases, where it connects from, when it connected and when it was last used,
+with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
+under **Admin → Connected apps**. Changing your password disconnects all your apps.
+
+**Lifetimes.** Authorization codes live 60 seconds and work once. Access tokens live one
+hour. Refresh tokens rotate on every use and expire after 30 idle days, so an app that is
+used keeps working and an abandoned connection lapses by itself. If an old refresh token
+is ever presented again (a copy was kept somewhere), the whole connection is revoked and
+the app has to be approved again. Using a code twice revokes what it issued.
+
+**Where it works.**
+
+- Over HTTPS (`OPENBASE_PUBLIC_URL=https://...`), or on a loopback address
+  (`http://localhost`, `http://127.0.0.1`), which is enough to try Claude Code or the MCP
+  Inspector on the same machine. On any other plain `http://` address OpenBase does not
+  advertise or serve OAuth at all, because codes and tokens would cross the network in
+  clear text.
+- Claude (claude.ai, Desktop, Cowork) and ChatGPT connect from their providers' servers,
+  so OpenBase must be reachable from the internet at the public HTTPS address, with a
+  certificate they trust. A server on a private network or `localhost` cannot be reached by
+  them; use a personal access token with a local client instead.
+- **OAuth tokens work on `/mcp` only**, never on `/api/*` or the Airtable-compatible
+  `/api/v1`. The `api_request` tool still reaches the REST API as you (inside the
+  server), with the grant's permissions.
+
+**Endpoints** (all derived from `OPENBASE_PUBLIC_URL`; nothing to configure):
+
+| Endpoint | What it is |
+|---|---|
+| `/.well-known/oauth-protected-resource` and `.../mcp` | RFC 9728 metadata of the MCP server; a `401` from `/mcp` points here with `WWW-Authenticate: Bearer resource_metadata="..."` |
+| `/.well-known/oauth-authorization-server` | RFC 8414 metadata: endpoints, `S256` only, grant types, `client_id_metadata_document_supported`, `scopes_supported` |
+| `POST /oauth/register` | RFC 7591 dynamic client registration (public clients; `client_secret_post` on request) |
+| `GET /oauth/authorize` | starts the flow: checks everything, stores the request on the server, sends the browser to `/oauth/consent?request=<id>` in the web app |
+| `POST /oauth/token` | `authorization_code` (PKCE `S256` required, `redirect_uri` and `resource` checked) and `refresh_token` |
+| `POST /oauth/revoke` | RFC 7009; revoking either token ends the connection |
+
+Scopes: `openbase:read`, `openbase:write`, `openbase:manage` (what the app *asks* for
+sets the ceiling of what the page offers; what you *choose* decides what it gets, and the
+token response says which).
+
+**How apps identify themselves.** Three ways, all supported:
+
+1. **Client ID Metadata Documents.** The `client_id` is an HTTPS URL; OpenBase fetches
+   the JSON document there (name, redirect addresses) through the same SSRF guard as
+   automations (public addresses only, no redirects, 5 s, 16 KB, cached for an hour) and
+   checks that its `client_id` is that URL. This is what "Use Claude's published identity"
+   uses.
+2. **Dynamic registration** at `/oauth/register` ("Register automatically", Claude Code,
+   ChatGPT). Bounded: 30 registrations per address per hour, redirect addresses validated,
+   identical registrations share one client, and a client nobody ever used is forgotten
+   after 7 days. `OPENBASE_OAUTH_REGISTRATION=false` turns registration off; apps that
+   publish a metadata document, and clients you add by hand, still work.
+3. **By hand:** `openbase oauth-client add --name "My app" --redirect-uri https://...`
+   prints a `client_id` (and with `--confidential` a secret, shown once, for apps that
+   authenticate with `client_secret_post`: "Use your own OAuth client" in Claude).
+   `openbase oauth-client list` and `remove` manage them.
+
+**Redirect addresses** must be `https`, or `http` on `127.0.0.1`, `[::1]` or `localhost`
+(any port, as native apps pick a free one). No other `http`, no custom schemes, no
+`javascript:`, credentials, fragments or wildcards, and a requested address must equal a
+registered one exactly. Every answer to the app carries `iss` (RFC 9207).
+
+**Differences from a token.** A tool the grant's scope does not allow is answered with
+HTTP `403` and `WWW-Authenticate: Bearer error="insufficient_scope", scope="..."`
+(an MCP client can then ask you for more access); a token that is wrong, expired,
+revoked or meant for another server is `401` with `error="invalid_token"`. Personal
+access tokens keep getting a tool error that names the permission they lack.
 
 ## Choose a token
 
@@ -341,7 +454,9 @@ for every registered route and fails if one is missing from it.
 ## Scope model
 
 Four things decide whether a call works, all enforced by the server on every call (the
-tool list is only a convenience):
+tool list is only a convenience). An OAuth grant is the same model: "Read only", "Read &
+edit" and "Full control" are a token without write, with write, and with write and
+`manage`, optionally limited to bases.
 
 1. **The token's user and their role.** A token never has more rights than its owner
    has on the base: viewer, commenter, editor, creator or owner.
@@ -363,6 +478,15 @@ have no access" (the base is outside the user's or the token's reach).
 - **Bearer tokens only.** A session cookie is never looked at: a request without a
   valid `Authorization: Bearer` header is `401` with `WWW-Authenticate`. That is the
   reason `/mcp` is exempt from the cookie CSRF header.
+- **OAuth.** Access tokens are random and stored only as hashes; they are bound to this
+  server's `/mcp` address and are not accepted on `/api/*`, `/api/v1` or anywhere else.
+  Authorization codes are single use, last 60 seconds, require PKCE `S256` and are bound
+  to the client, the exact redirect address, the resource and the access you chose.
+  The pending request lives on the server, so the app cannot change it between the steps;
+  approving needs your signed-in session and the CSRF header, so a page cannot approve for
+  you, and approving or revoking is never possible with a token or a grant. The approval
+  page cannot be framed. All of it, with the threats it answers, is in
+  [security.md](security.md#oauth-connected-apps).
 - **Credentials stay out of reach.** No tool changes a password, two-factor setting,
   session or API token, and `api_request` refuses those endpoints. Administrators
   cannot set another user's password, create a reset link for anyone, switch off their 2FA
@@ -405,6 +529,8 @@ More in [security.md](security.md).
 | `OPENBASE_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
 | `OPENBASE_MCP_RATE_PER_USER` | 100 | requests per second per user |
 | `OPENBASE_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
+| `OPENBASE_OAUTH_REGISTRATION` | true | let apps register themselves at `/oauth/register`; `false` keeps only metadata-document and hand-added clients |
+| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | also the OAuth issuer; OAuth is served only for `https://` or loopback addresses |
 | `OPENBASE_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
 | `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
 | `OPENBASE_TRASH_DAYS` | 30 | how long deleted items can be restored |
@@ -436,6 +562,12 @@ answer `405`. Two protocol generations are served on the same endpoint:
 Only the `tools` capability is offered; `tools/list` is paginated by an opaque
 `cursor`. JSON-RPC batches are not accepted.
 
+Authentication answers follow the MCP authorization specification: `401` with
+`WWW-Authenticate: Bearer realm="OpenBase MCP", resource_metadata="<issuer>/.well-known/oauth-protected-resource/mcp"`
+(plus `error="invalid_token"` for a bad, expired or revoked token), and `403` with
+`error="insufficient_scope"` and the scope that would suffice when an OAuth grant calls a
+tool above its access. `resource_metadata` is left out when OAuth is not available.
+
 ## What has been tested
 
 - `crates/server/tests/mcp_agent.rs`: an agent runs a small business **only** through
@@ -464,17 +596,44 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
   Claude configuration alone.
 - `web/contract/mcp.contract.test.ts`: handshake, `tools/list` and tool calls against
   the live server, read back through the web client's REST API.
+- OAuth, in `crates/server/tests/oauth_*.rs`: discovery documents and when OAuth is
+  advertised; registration (every unsafe redirect address and malformed document),
+  metadata documents fetched from a local test server (cache, stale fallback, SSRF
+  refusals, timeout), clients added by hand; authorization requests, consent approve and
+  deny, the access ceiling and bases; code exchange with right and wrong PKCE verifiers,
+  redirect addresses and clients, expiry and replay; refresh rotation, reuse detection and
+  idle expiry; revocation; scope mapping enforced on tools (read-only, write, manage,
+  base-limited), 401 versus 403, audience, expiry, deactivation and password change;
+  rejection of OAuth tokens on `/api/*` and `/api/v1`; connected-apps lists and the audit
+  trail; no secret stored in the clear; a whole flow over real HTTP.
+- `web/contract/oauth.contract.test.ts`: the **official MCP TypeScript SDK client**
+  (`@modelcontextprotocol/sdk`, its `OAuthClientProvider`) discovers, registers, runs PKCE,
+  connects, calls tools, refreshes an expired token by itself and is cut off by a
+  revocation. `web/e2e/oauth.spec.ts` (Playwright in Chrome): a client registers with a
+  loopback redirect, the browser logs in and approves "Read & edit", the loopback listener
+  captures the code, `tools/list` and a write tool work, the app is revoked from the
+  account page and its tokens stop working. Component tests cover the approval page and
+  the connected-apps lists.
+- Not tested: signing in from **claude.ai**, **Claude Desktop** or **ChatGPT** themselves
+  (they need a public HTTPS server and an account), and the interactive browser step of
+  `claude` (`/mcp` → Authenticate); `claude mcp list` was checked up to the point where it
+  reports "Needs authentication".
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
-| `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens) |
+| `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens). For an OAuth app: its access token expired and it did not refresh, or you revoked the connection; connect it again |
+| `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; disconnect it under Connected apps and connect it again with more access |
+| the connector says it cannot reach or sign in to the server | Claude and ChatGPT connect from the internet: OpenBase needs a public `https://` address (`OPENBASE_PUBLIC_URL` set to it) with a valid certificate; `curl https://<your OpenBase>/.well-known/oauth-protected-resource/mcp` should answer JSON |
+| `404` `oauth_disabled` | `OPENBASE_PUBLIC_URL` is plain `http://` on a public address; OAuth is only served over HTTPS (or on localhost) |
+| the approval page says "This request has expired" | the page waited more than 10 minutes, or it was already used; start again from the app |
+| the app says `invalid_grant` after working for a while | its refresh token was used twice (the connection was revoked for safety) or was idle 30 days; connect it again |
 | `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENBASE_MCP_ALLOWED_ORIGINS` |
 | `429` | rate limit; retry after the `Retry-After` seconds |
 | a tool is missing from the list | the token lacks write or `manage`, or its owner is not an administrator (`admin_*`); create another token |
 | "not found, or you have no access" | wrong id, or the base is outside the token's base list or the owner's access |
 | "Several tables have a view named ..." | view names repeat across tables (every table starts with "Grid view"); pass `table` |
 | `claude mcp list` says "Pending approval" | a project-scoped `.mcp.json` server has to be approved once; start `claude` in the project, or add the server with `claude mcp add` |
-| the client says the server is not an MCP server | it expects OAuth, or a proxy buffers or rewrites `/mcp`; check with the `curl` command above |
+| the client says the server is not an MCP server | a proxy buffers or rewrites `/mcp`, or the client is an old one that wants a different transport; check with the `curl` command above |

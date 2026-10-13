@@ -93,15 +93,17 @@ retried. See [docs/automations.md](docs/automations.md).
 clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 
 **AI agents (MCP).** The server is also an MCP (Model Context Protocol) server at
-`/mcp`. An agent with a personal access token can do everything you can do in the
-web app, within that token's permissions, so you do not have to use the app
+`/mcp`. An agent that you connect with a personal access token, or by signing in
+from its connector screen (Claude, ChatGPT; OAuth is built in), can do everything
+you can do in the web app, within the access you give it, so you do not have to use the app
 yourself if you would rather not: build bases, tables, all 28 field types and views,
 edit records, run formulas, set up automations and public forms, invite people,
 import and export CSV, upload files, read history and notifications, and (for
 administrators) manage users, email settings and backups. Workspaces, bases and
 tables can be given icons. About 70 tools, plus a generic request tool for anything
 else. **Account -> AI assistants** shows the address and copy-ready settings for
-Claude Code and other clients. Passwords (including the SMTP password and
+Claude Code and other clients, and **Account -> API tokens -> Connected apps** lists
+the apps you signed in with, each revocable. Passwords (including the SMTP password and
 password-reset links), two-factor settings, sessions and API tokens stay out of
 reach of any token. See [docs/mcp.md](docs/mcp.md).
 
@@ -202,6 +204,7 @@ openbase migrate                           apply database migrations and exit
 openbase create-admin --email E --name N   (password from OPENBASE_ADMIN_PASSWORD)
 openbase reset-password --email E          (password from OPENBASE_NEW_PASSWORD)
 openbase disable-2fa --email E             turn off 2FA for a user who lost their device
+openbase oauth-client add|list|remove      OAuth clients added by hand (see docs/mcp.md)
 openbase backup [--out FILE]               write a backup archive
 openbase restore ARCHIVE [--force]         restore an archive (server must be stopped)
 openbase healthcheck                       exit 0 if the server answers /api/health
@@ -241,6 +244,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 | `OPENBASE_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
 | `OPENBASE_MCP_RATE_PER_TOKEN` | `30` | Requests per second one API token may make to the MCP endpoint `/mcp`; more answer `429`. |
 | `OPENBASE_MCP_RATE_PER_USER` | `100` | Requests per second all tokens of one user may make to `/mcp` together. |
+| `OPENBASE_OAUTH_REGISTRATION` | `true` | Let apps register themselves for the OAuth sign-in of the MCP endpoint. Turn off to allow only apps that publish a client metadata document and clients added with `openbase oauth-client add`. OAuth is served only when `OPENBASE_PUBLIC_URL` is `https://` (or a localhost address). |
 | `OPENBASE_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
 | `OPENBASE_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
 | `OPENBASE_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |

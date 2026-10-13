@@ -24,6 +24,9 @@ icon"), and `ui/entity-select.tsx` is the select used where a table is chosen by
 icons). `fullSet.ts` globs `lucide-react/dist/esm/icons/*.mjs` and reads Lucide's `__iconData` export; `icons.test.ts`
 fails if a Lucide upgrade removes it or renames one of the popular 20.
 
+`@modelcontextprotocol/sdk` (exact version, dev dependency, about 90 packages in the lockfile) is used only by
+`contract/oauth.contract.test.ts`, to run the official MCP OAuth client against the server; nothing of it is bundled.
+
 Dependencies are deliberately few (9 runtime for the shell): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
 The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and react-responsive-carousel) and dompurify,
@@ -88,6 +91,7 @@ administrator already exists for the data plane:
 | `automations.contract.test.ts` | what the automations UI relies on: every trigger and action type as the editor sends it, the `action N: ...` error wording, on/off rules, `next_run_at`, real test runs in the history, roles |
 | `email.contract.test.ts` | Administration -> Email: the effective settings and their sources, saving (never a host: the shared server keeps email off), the write-only password, validation errors, the test-email answer, closed to regular users |
 | `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a base built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
+| `oauth.contract.test.ts` | OAuth for the MCP endpoint, driven by the official `@modelcontextprotocol/sdk` client (`OAuthClientProvider`): discovery from the 401, dynamic registration, PKCE, code exchange, tools, automatic refresh with rotation, revocation from the connected-apps list, `insufficient_scope`, OAuth tokens refused on the REST API; the consent and grant responses are checked against the generated bindings |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
 `OPENBASE_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
@@ -111,6 +115,7 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and base, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
 | `grid` | `grid.spec.ts` | journey | cell editing, undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
+| `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> API tokens -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `admin-email` | `adminEmail.spec.ts` | sharing, automations, views | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
@@ -131,7 +136,7 @@ src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE)
 src/auth/       current-user hooks and route guards
 src/base/       base shell: top bar, table tabs, view sidebar, permission rules
 src/components/ design-system primitives (ui/) and shared dialogs
-src/pages/      setup, login, signup, invite, password reset, home, account/, admin/
+src/pages/      setup, login, signup, invite, password reset, home, account/, admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/ConnectedAppsSection and admin/ConnectedAppsTab list and revoke connected apps)
 src/theme/      light/dark theme provider (the pre-paint script is public/theme-init.js)
 src/views/      ViewHost + registry.ts: the extension point where grid/kanban/... plug in
 src/automations/ the automations page (list, editor, test panel, run history); its own lazy chunk

@@ -91,6 +91,20 @@ EOF
 PROJECT_LINE="$(timeout 90 claude mcp list 2>&1 | grep -E '^openbase:' || true)"
 echo "project-scoped .mcp.json: ${PROJECT_LINE:-<not listed>}"
 
+# 3. No token at all: the server answers 401 with a pointer to its OAuth metadata, so Claude Code
+#    should find the authorization server and report "Needs authentication" (the sign-in itself
+#    needs an interactive browser step, `/mcp` inside a session, so it is not run here).
+#    Informational: it does not change the exit status.
+rm -f "$TMP/project/.mcp.json"
+claude mcp add --transport http openbase-oauth "$URL/mcp" >/dev/null
+OAUTH_LINE="$(timeout 90 claude mcp list 2>&1 | grep -E '^openbase-oauth:' || true)"
+echo "OAuth, no token: ${OAUTH_LINE:-<not listed>}"
+if echo "$OAUTH_LINE" | grep -qi 'needs auth'; then
+  echo "OK: Claude Code found the OAuth sign-in (it asks to authenticate instead of failing)"
+else
+  echo "NOTE: Claude Code did not report 'Needs authentication' for the server without a token" >&2
+fi
+
 if echo "$LINE" | grep -qi 'connected' && ! echo "$LINE" | grep -qiE 'fail|needs auth|error|pending'; then
   echo "OK: claude mcp list shows openbase connected"
   exit 0

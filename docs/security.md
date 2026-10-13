@@ -45,6 +45,12 @@ We defend against:
   per token and per user. An AI agent connected through MCP is such a token holder:
   anything it may do, it may also do wrongly or because text it read told it to
   (prompt injection), so scope its token to what the task needs.
+- **Connected apps (OAuth).** An app that signs in through the built-in OAuth server
+  holds a grant with the same kind of scope, valid on `/mcp` only. In scope: a malicious
+  app asking for access (consent phishing, look-alike names, redirect tricks), a stolen
+  authorization code or refresh token, a page that tries to approve for a signed-in user
+  or to frame the approval page, registration abuse, and server-side request forgery
+  through client metadata URLs. See [OAuth](#oauth-connected-apps).
 
 Not defended against: an administrator or anyone with shell access to the server
 (they own the database), a compromised reverse proxy or host, a stolen session
@@ -101,6 +107,11 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   [self-hosting](self-hosting.md#6-backups).
 - **Turn on 2FA** for administrators and other important accounts (Account →
   Security).
+- **Public HTTPS for OAuth.** Set `OPENBASE_PUBLIC_URL` to the public `https://` address.
+  OpenBase serves the OAuth sign-in only over HTTPS (or on a localhost address), so
+  codes and tokens never travel in clear text; Claude and ChatGPT reach it from the
+  internet. Look at **Admin → Connected apps** now and then, and revoke what nobody
+  uses. `OPENBASE_OAUTH_REGISTRATION=false` stops apps from registering themselves.
 - **Treat MCP tokens like sessions.** An AI agent holding a `manage` token can do
   nearly everything you can in the app except change credentials; give agents the
   least permission that works (read-only, or write without `manage`), restrict
@@ -143,7 +154,9 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   SSRF guard as the automations' HTTP action (see [automations](automations.md#http-requests-and-ssrf)),
   with a size limit and no redirects. Full details: [MCP](mcp.md#security-model).
 - **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenBase-CSRF`
-  header; no CORS is ever enabled, so cross-site pages cannot add it. Only a
+  header; no CORS is enabled for any cookie-authenticated route, so cross-site pages
+  cannot add it. (The only cross-origin answers are the OAuth discovery, registration,
+  token and revocation endpoints, which never read cookies; see [OAuth](#oauth-connected-apps).) Only a
   well-formed `Authorization: Bearer` header exempts a request; other
   `Authorization` values (such as Basic auth added by a proxy) do not. The
   Airtable-compatible `/api/v1` reads bearer tokens only and never the cookie.
@@ -167,6 +180,37 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 - **Dependencies**: the server uses rustls (no OpenSSL); the web client is built
   with a committed lockfile, `npm ci --ignore-scripts` and no runtime CDN.
 
+## OAuth (connected apps)
+
+OpenBase is its own OAuth 2.1 authorization server for the MCP endpoint (MCP
+authorization specification; how to use it: [MCP](mcp.md#connect-with-oauth-sign-in)).
+The design was checked against the OAuth 2.1 security best current practice (RFC 9700):
+
+| Threat | What stops it |
+|---|---|
+| Open redirect, redirect URI tampering | Redirect URIs are `https` or loopback `http` only, no wildcards, fragments, credentials or other schemes, and the requested address must equal a registered one exactly (loopback ports excepted, RFC 8252). A bad client or address is shown to the user as an error and **never redirected to**; only after both are verified do errors go back to the client. |
+| Authorization code injection and interception | PKCE `S256` is required (plain is refused, so there is no downgrade); the code is bound to the client, the exact redirect address, the PKCE challenge, the resource and the access the user chose; it lives 60 seconds and works once. A code is spent the moment it is presented, even when PKCE or the redirect check then fails, and presenting a spent code revokes the grant it created. |
+| Mix-up attacks | Every authorization response carries `iss` (RFC 9207) and the metadata says so; there is one issuer, the public origin. |
+| Parameter tampering between steps | The whole authorization request is stored on the server; the browser carries only an unguessable id (`oar` + 43 random characters, 10 minutes). The approval page shows what the server stored, never what the URL says. |
+| CSRF on the approval | Approving needs the signed-in session **and** the `X-OpenBase-CSRF` header (a cross-site page cannot add it and no CORS preflight is answered for `/api`); a token or an OAuth grant can never approve (session-only). A request is approved once and then gone. |
+| Clickjacking | The approval page is a page of the app: `frame-ancestors 'none'` and `X-Frame-Options: DENY` like every page. |
+| Consent phishing, look-alike apps | The page leads with the redirect host (who receives the access), shows the app's name as plain text, warns for loopback and unverified hosts, and flags names that imitate Claude or ChatGPT unless the redirect host is `claude.ai`, `chatgpt.com` or `openai.com` (digit and look-alike-letter swaps are normalized). Read only is preselected; Full control is never preselected and is not offered to an app that asked for less. A name is not a credential: nothing is trusted because of it. |
+| Stolen access token | Opaque 256-bit tokens, stored as SHA-256 only, one hour, valid on `/mcp` only: not on `/api/*` or `/api/v1`, which cannot even be used to list, create or revoke grants. The audience (`resource`) is checked on every use. |
+| Stolen refresh token | Rotation on every use with reuse detection (a second use revokes the grant); 30 days idle expiry; bound to the client; the grant ends with the password (a change or reset deletes all grants and tokens) and with the user's deactivation. A client that loses a refresh response has to be approved again: deliberate. |
+| Token leakage | Tokens are never in URLs (codes only in the redirect, by design), never logged, never in the audit log (it names the app, host, access and bases), and token responses are `no-store`. Secrets in the database are hashes; a test greps every OAuth table and the audit log for the raw values. |
+| Registration abuse (DCR) | 30 registrations per address per hour, 16 KB bodies, validated names (100 characters, control characters stripped) and redirect addresses, identical registrations share one client, at most 5,000 self-registered clients, and clients never used are deleted after 7 days. A registration grants nothing. `OPENBASE_OAUTH_REGISTRATION=false` turns it off. |
+| Server-side request forgery through `client_id` URLs | Client metadata documents are fetched through the automations' SSRF guard (public addresses only, resolved and pinned, no redirects), with a 5 second deadline, a 16 KB limit, JSON only, the document's `client_id` must equal the URL, and no secrets or secret-based authentication are accepted in it. Plain `http` client ids exist only for loopback hosts when the operator already allows private addresses (tests, local development). |
+| Denial of service | Per-address limits: 60 authorization requests per minute, 300 token and 300 revocation requests per minute (separate buckets); at most 5,000 waiting authorization requests, 5,000 cached documents, 100 connected apps per user; expired data is removed hourly. |
+| Cross-origin use | Discovery, registration, token and revocation answer any origin (`Access-Control-Allow-Origin: *`, no credentials) so browser-based MCP clients work; none of them reads a cookie. `/oauth/authorize` and `/api/oauth/*` are not cross-origin APIs. |
+| Plain HTTP | OAuth is not advertised or served on `http://` except for loopback addresses (`localhost`, `127.0.0.1`, `[::1]`). |
+
+Everything is audited (`oauth_approve`, `oauth_deny`, `oauth_grant_create`,
+`oauth_grant_revoke` with who revoked it, `oauth_code_replay`, `oauth_refresh_reuse`), and
+`tests/oauth_*.rs` covers each row. Not covered: what an approved app does with its access
+(see the prompt-injection note above), a user who approves a malicious app that has a
+convincing name on an address they do not look at, and a compromised provider (Claude's or
+ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
+
 ## Sign-in, sessions, tokens, invites and email
 
 ### Limits in place
@@ -184,13 +228,14 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 | Password-reset requests, per client address / per mailbox | 5 per hour / 3 per hour (extra requests are answered 200 and send nothing) |
 | Invite and automation emails | `OPENBASE_EMAIL_PER_USER_HOUR` (100) per user and `OPENBASE_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
 | Airtable-compatible API (`/api/v1`) | `OPENBASE_V1_RATE_PER_TOKEN` (5 per second) per token and `OPENBASE_V1_RATE_PER_USER` (50 per second) per user; over the limit answers 429 |
+| OAuth (`/oauth/*`) | per client address: 30 registrations per hour, 60 authorization requests per minute, 300 token requests per minute, 300 revocations per minute; codes live 60 s, access tokens 1 h, refresh tokens 30 days idle |
 | MCP endpoint (`/mcp`) | `OPENBASE_MCP_RATE_PER_TOKEN` (30 per second) per token and `OPENBASE_MCP_RATE_PER_USER` (100 per second) per user, one JSON-RPC message per request; body up to 8 MB; over the limit answers 429 with `Retry-After` |
 | Audit log | detail capped at 2 KiB per row; rows older than `OPENBASE_AUDIT_DAYS` (365) deleted daily |
 
 ### Behaviour worth knowing
 
-- **API tokens** are deleted when their owner changes their password, uses a
-  reset link, or an operator runs `reset-password`. Deactivating a user blocks
+- **API tokens** (and OAuth connected apps) are deleted when their owner changes their
+  password, uses a reset link, or an operator runs `reset-password`. Deactivating a user blocks
   their tokens but does not delete them (reactivation restores them); reset the
   password when reactivating an account you think was compromised.
 - **The `manage` permission** (off by default, needs `write`) lets a token do the
@@ -289,6 +334,21 @@ its own link field (self-linked tables) correctly.
 ## Accepted risks
 
 Authentication and email:
+
+- **Anyone can register an OAuth client** (dynamic registration is open by design: that is
+  how Claude Code and others work). A registration alone gives nothing, but it lets a
+  stranger create an approval request that shows *their* chosen app name to a user who
+  opens the link. The page shows where the access would go and warns about look-alikes;
+  a person who ignores that can still approve a bad app. Turn registration off with
+  `OPENBASE_OAUTH_REGISTRATION=false` if you only use apps that publish a metadata
+  document or that you added by hand.
+- **Authorization requests can be created by anonymous visitors** (the sign-in happens on
+  the approval page), so they are limited per address and capped at 5,000 waiting
+  requests; a determined flood can fill that cap for ten minutes and make new approvals
+  answer 503 meanwhile.
+- Refresh token reuse detection ends the connection even when the "reuse" is an app that
+  retried after a lost network response; the cost is one new approval.
+- Rate limits for OAuth are per client address and in memory like the others.
 
 - The email settings let an administrator (or an administrator's `manage` token, which
   may change host and port while no SMTP password is in use) make the server open a
