@@ -12,7 +12,7 @@
 
 [Unit]
 Description=OpenBase (self-hosted Airtable alternative)
-Documentation=https://github.com/openbase/openbase
+Documentation=https://github.com/lukewilson2002/openbase
 After=network-online.target
 Wants=network-online.target
 

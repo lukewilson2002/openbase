@@ -4,6 +4,8 @@ description = "OpenBase server: a self-hosted Airtable alternative in a single b
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 rust-version.workspace = true
 default-run = "openbase"
 
