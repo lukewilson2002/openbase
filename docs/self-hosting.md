@@ -26,10 +26,11 @@ attachment**, so with `OPENBASE_BACKUP_KEEP=7` you need room for about 8x
 (database + attachments). The server does not check free disk space: keep an eye
 on it, especially if you store many large files.
 
-Use any 64-bit Linux with Docker (the image is built for the architecture of the
-machine that builds it; it was tested as linux/arm64 and the Dockerfile has no
-architecture-specific steps, but an amd64 build was not run). Open ports 80 and
-443 in your firewall; OpenBase itself is never exposed directly.
+Use any 64-bit Linux with Docker. The published image supports linux/amd64
+(ordinary VPS) and linux/arm64 (Ampere, Graviton, Raspberry Pi 4/5 with a 64-bit OS); Docker
+picks the right one. Both were built and run through the container smoke test
+(`scripts/smoke-docker.sh`); the memory and size measurements in the README were taken on arm64
+only. Open ports 80 and 443 in your firewall; OpenBase itself is never exposed directly.
 
 ## 2. Docker Compose with Caddy (recommended)
 
@@ -41,19 +42,24 @@ automatically. OpenBase listens only on the internal Docker network.
    `dig +short base.example.com` returns the server's IP.
 2. Install Docker Engine and the Compose plugin
    (https://docs.docker.com/engine/install/).
-3. Get the code and configure it:
+3. Get the Compose files and configure them. The clone is only for `deploy/`
+   (the Compose file, the Caddyfile and `.env.example`); nothing is built from it:
 
    ```sh
-   git clone <repository-url> openbase
+   git clone https://github.com/lukewilson2002/openbase openbase
    cd openbase/deploy
    cp .env.example .env
    nano .env            # set OPENBASE_DOMAIN, TZ and optionally SMTP
    ```
 
-4. Build and start:
+   The repository's `main` branch is the development branch. To get the Compose files of a
+   specific release instead, `git checkout vX.Y.Z` (or download the source archive of that
+   release); the image you run is chosen by `OPENBASE_VERSION` in `.env`, not by the checkout.
+
+4. Download the image and start:
 
    ```sh
-   docker compose up -d --build
+   docker compose up -d
    docker compose ps        # openbase should become "healthy"
    docker compose logs -f   # Ctrl-C to stop following
    ```
@@ -63,10 +69,11 @@ automatically. OpenBase listens only on the internal Docker network.
 
 What runs where:
 
-- `openbase` uses the image built from `deploy/Dockerfile`: a Node 24 stage builds
-  the web client, a `rust:1-bookworm` stage builds the server with the client
-  embedded, and the final stage is `debian:bookworm-slim` with only the binary,
-  CA certificates and time zone data. It runs as the unprivileged user
+- `openbase` uses the image `ghcr.io/lukewilson2002/openbase:${OPENBASE_VERSION}`
+  (default `latest`), built by the release workflow from `deploy/Dockerfile`: the web client
+  is built with Node 24, the server with `rust:1-bookworm` (the client embedded), and the final
+  image is `debian:bookworm-slim` with only the binary, CA certificates and time zone data.
+  Every image has provenance and SBOM attestations. It runs as the unprivileged user
   `openbase` (uid 10001), keeps its data in the `openbase-data` volume (mounted at
   `/data`), and has a built-in health check (`openbase healthcheck`, every 30 s).
 - `caddy` uses the official `caddy:2` image configured by
@@ -78,7 +85,7 @@ What runs where:
 - Everything in `deploy/.env` is passed to the `openbase` container, so any
   `OPENBASE_*` option from the [README](../README.md#configuration) works there.
 
-The Compose file, the image build, first-run signup, data surviving
+The Compose file, the image build (arm64 and amd64), first-run signup, data surviving
 `docker compose restart` / a re-created container, `openbase backup` and the
 restore procedure below were all run end to end. A real Let's Encrypt
 certificate could not be: it needs a public domain, so that step is untested here.
@@ -93,13 +100,25 @@ plain HTTP and skips certificates), the published port becomes `127.0.0.1:8088`,
 ```sh
 cd openbase/deploy
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 open http://localhost:8088       # first account becomes the administrator
 docker compose -f docker-compose.yml -f docker-compose.local.yml down -v   # removes the volumes too
 ```
 
 Use this only on your own machine: there is no TLS. `docker compose config` accepts
-both files together with the shipped `.env.example`.
+every combination of the override files with the shipped `.env.example`.
+
+### Building the image yourself
+
+`docker-compose.build.yml` replaces the published image with one built from your checkout
+(tagged `openbase:local`, never pushed). Use it for unreleased changes, for contributing, or on an
+architecture other than amd64 and arm64:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# and for a trial on your own machine without a domain:
+docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.local.yml up -d --build
+```
 
 Run CLI commands inside the container like this:
 
@@ -109,16 +128,29 @@ docker compose exec openbase openbase --help
 
 ## 3. Alternative: the binary with systemd
 
-1. Build the binary (needs Rust and Node 24):
+1. Get the binary. Either download a release (Linux, amd64 or arm64; needs glibc 2.36 or newer,
+   so Debian 12, Ubuntu 22.04 or later):
+
+   ```sh
+   V=0.1.0   # the release you want, without the "v"
+   A=amd64   # or arm64
+   curl -fsSLO https://github.com/lukewilson2002/openbase/releases/download/v$V/openbase-$V-linux-$A.tar.gz
+   curl -fsSLO https://github.com/lukewilson2002/openbase/releases/download/v$V/SHA256SUMS
+   sha256sum --check --ignore-missing SHA256SUMS
+   tar xzf openbase-$V-linux-$A.tar.gz        # openbase-$V-linux-$A/openbase and openbase.service
+   ```
+
+   (On a public repository you can also verify where it was built:
+   `gh attestation verify openbase-$V-linux-$A.tar.gz --repo lukewilson2002/openbase`.)
+   Or build it yourself (needs Rust and Node 24):
 
    ```sh
    (cd web && npm ci --ignore-scripts && npm run build)
    cargo build --release --locked -p openbase
    ```
 
-   Or copy a release binary to the server.
-
-2. Install the binary, create a user and install the unit:
+2. Install the binary, create a user and install the unit (use `openbase-$V-linux-$A/openbase` and
+   `openbase-$V-linux-$A/openbase.service` from the download, or the paths below from a checkout):
 
    ```sh
    sudo install -m 0755 target/release/openbase /usr/local/bin/openbase
@@ -377,17 +409,66 @@ the data directory is still empty) and start the server.
 
 ## 8. Upgrading
 
+Releases are published on the [releases page](https://github.com/lukewilson2002/openbase/releases)
+and listed in [CHANGELOG.md](../CHANGELOG.md). A push to `main` never changes what you run: the
+image is built and the tags move only when a release is published.
+
 1. Read the release notes.
-2. Take a manual backup and make sure a recent offsite copy exists.
+2. Take a manual backup and make sure a recent offsite copy exists:
+
+   ```sh
+   docker compose exec openbase openbase backup
+   ```
+
 3. Update and restart:
 
    ```sh
-   cd openbase && git pull
-   cd deploy && docker compose up -d --build
+   cd openbase/deploy
+   docker compose pull
+   docker compose up -d
+   docker compose ps                         # healthy again?
+   docker compose exec openbase openbase --version
    ```
 
-   With systemd: replace `/usr/local/bin/openbase` and run
+   `docker compose pull` fetches what your `OPENBASE_VERSION` now points to (see below); `up -d`
+   re-creates only the containers whose image changed. Built from source instead? `git pull`, then
+   `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`. With systemd:
+   replace `/usr/local/bin/openbase` with the new release binary and run
    `sudo systemctl restart openbase`.
+
+### Which version do I follow?
+
+`OPENBASE_VERSION` in `deploy/.env` (default `latest`) selects the image tag:
+
+| Value | You get | Choose it when |
+|---|---|---|
+| `1.4.2` | exactly that release, forever | you want to decide every update, or you are rolling back |
+| `1.4` | patch releases of 1.4 (`1.4.3`, ...) | you want bug and security fixes only |
+| `1` | every `1.x.y` release (no breaking changes by the project's versioning rules) | you want new features without surprises (once 1.0 exists) |
+| `latest` | every stable release, including a new major version | you read the notes before each `pull` |
+
+Pre-releases (`1.5.0-rc.1`) have only their exact tag; no moving tag ever points at one. Until
+1.0, a minor version (`0.2.0`) may break things: there is no `0` tag, so follow `latest` or pin a
+minor such as `0.1`.
+
+### Automatic updates (optional)
+
+Off by default. If you want them, add `docker-compose.autoupdate.yml`, which runs
+[Watchtower](https://github.com/nicholas-fedor/watchtower) once a day (04:30, after the 03:00 backup):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.autoupdate.yml up -d
+```
+
+It updates only containers labelled `com.centurylinklabs.watchtower.enable=true`, which is the
+`openbase` container and nothing else, and only to what your `OPENBASE_VERSION` tag points at.
+So the safe setup is a major or minor tag (`1`, or `0.1` while OpenBase is 0.x), not `latest`.
+Understand the trade-offs: updates then happen while nobody reads the release notes (a schema
+change still gets its pre-migration snapshot, and OpenBase refuses to start if it cannot write
+it); and Watchtower needs the Docker socket, which is root-equivalent on that machine. The
+alternative without it is a cron job: `30 4 * * * cd /path/to/openbase/deploy && docker compose pull openbase && docker compose up -d`.
+
+### Schema changes and snapshots
 
 When the new version needs to change the database schema, OpenBase first
 writes a **pre-migration snapshot**,
@@ -402,12 +483,32 @@ already current: it takes no snapshot and writes nothing. That was checked with
 the release binary; a snapshot taken *because migrations were pending* is covered
 by unit tests only, since schema version 1 is the only version so far.
 
-To **roll back** an upgrade: stop the server, reinstall the previous
-version, and restore your pre-upgrade backup archive with `openbase restore
---force`. You can also copy the `pre-migration-*.db` file over
-`openbase.db` (with the server stopped, after deleting `openbase.db-wal`
-and `openbase.db-shm`). OpenBase refuses to open a database written by a
-newer version, so it cannot be downgraded by accident.
+### Rolling back
+
+A newer version never goes backwards on its own: OpenBase refuses to open a database written by a
+newer version ("schema version N is newer than this binary supports"). If an update that did not
+change the schema misbehaves, pin the previous version and you are done. If it did change the
+schema, you need the data from before the update too:
+
+1. Stop following the new version: set `OPENBASE_VERSION` in `deploy/.env` to the **previous
+   release** (for example `OPENBASE_VERSION=0.1.0`; the releases page lists them).
+2. Stop the server and restore the data from before the update: your pre-update backup archive
+   (the normal way, section 7):
+
+   ```sh
+   docker compose stop openbase
+   docker compose run --rm --no-deps openbase restore /data/backups/openbase-20261012-030000.tar.gz --force
+   ```
+
+   `docker compose run` starts the image your `.env` now names, so do step 1 first. The
+   pre-migration snapshot the new version wrote is the alternative if you have no archive: it is a
+   plain SQLite file, so with the server stopped delete `openbase.db-wal` and `openbase.db-shm`
+   and copy the snapshot over `openbase.db`, then start the previous version.
+3. `docker compose pull && docker compose up -d`, and check `openbase --version`.
+
+Anything written after the backup was taken is lost by a restore; that is the price of a schema
+change, which is why the backup comes before the update. systemd: reinstall the previous release
+binary instead of step 1, then restore the same way.
 
 ## 9. Account recovery
 
@@ -459,7 +560,7 @@ keeps passkeys.
 | Symptom | What to check |
 |---|---|
 | Browser shows a certificate error or Caddy logs `challenge failed` | DNS must point at this server, and ports 80 and 443 must be reachable from the internet. Check with `docker compose logs caddy`. |
-| `openbase` container keeps restarting | `docker compose logs openbase`. The most common cause is a database from a newer OpenBase ("schema version N is newer than this binary supports"): upgrade, or restore an older backup. |
+| `openbase` container keeps restarting | `docker compose logs openbase`. The most common cause is a database from a newer OpenBase ("schema version N is newer than this binary supports"): upgrade (set `OPENBASE_VERSION` back to the newer version), or restore an older backup. |
 | `unhealthy` in `docker compose ps` | `docker compose exec openbase openbase healthcheck` prints the reason. |
 | Login works but you are logged out immediately | `OPENBASE_PUBLIC_URL` must match the URL in the browser exactly, including `https://`. |
 | "Add a passkey" is greyed out, or a passkey is refused | Passkeys work only at the exact address in `OPENBASE_PUBLIC_URL`, whose host must be a domain name (not an IP address), over `https://` or on `localhost`. After changing the host, old passkeys no longer work: sign in with the password and add new ones. |

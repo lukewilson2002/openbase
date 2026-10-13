@@ -34,7 +34,7 @@ You run it on a small server you control, and your data stays in one folder.
 [Configuration](#configuration) · [Backups and restore](#backups-and-restore) ·
 [Upgrading](#upgrading) · [Resource usage and scale](#resource-usage-and-scale) ·
 [Security](#security) · [API](#api) · [Building from source](#building-from-source) ·
-[Tests](#running-the-tests) · [License](#license)
+[Tests](#running-the-tests) · [Contributing](#contributing-security-and-releases) · [License](#license)
 
 ## Features
 
@@ -144,40 +144,73 @@ passwords and session cookies would travel unencrypted.
 ### Docker Compose with automatic HTTPS (recommended)
 
 You need a server with Docker (Engine and the Compose plugin) and a domain whose
-DNS already points at it, with ports 80 and 443 open.
+DNS already points at it, with ports 80 and 443 open. This uses the published
+image, `ghcr.io/lukewilson2002/openbase`; nothing is compiled on your server.
 
 ```sh
-git clone <repository-url> openbase
+git clone https://github.com/lukewilson2002/openbase
 cd openbase/deploy
 cp .env.example .env        # set OPENBASE_DOMAIN=base.example.com (and TZ)
-docker compose up -d --build
+docker compose up -d
 docker compose ps           # openbase should become "healthy"
 ```
 
 Open `https://base.example.com`. Caddy obtains and renews the certificate
-automatically. The first build compiles the Rust server and the web client inside
-Docker and needs no Rust or Node on the host. It took 2 minutes 12 seconds on the
-laptop described under [Resource usage](#resource-usage-and-scale), including
-pulling the base images; expect much longer on a small VPS.
+automatically. (The clone is only for the Compose file, the Caddyfile and `.env`; you can
+also copy those three files from the [latest release](https://github.com/lukewilson2002/openbase/releases/latest).)
 
 To try the same stack on your own computer without a domain, add the local
 override, which serves plain HTTP on `http://localhost:8088`:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
+
+#### Versions, tags and updates
+
+Images are built only when a [GitHub Release](https://github.com/lukewilson2002/openbase/releases)
+is published, never for a plain push to `main`, so you never get an untested build.
+`OPENBASE_VERSION` in `deploy/.env` picks what you follow:
+
+| Tag | Means | Moves when |
+|---|---|---|
+| `latest` (default) | the newest stable release | every stable release |
+| `1` | the newest `1.x.y` | a new `1.x` or `1.x.y` release (not before 1.0) |
+| `0.1` | the newest `0.1.y` | a new patch release of 0.1 |
+| `1.4.2` | exactly that release | never |
+| `1.5.0-rc.1` | a pre-release | never (pre-releases get no moving tags) |
+
+While OpenBase is 0.x, a new minor version may contain breaking changes, so there is no `0` tag:
+follow `latest` and read the release notes, or pin a minor such as `0.1`.
+
+Nothing updates by itself. To update to what your tag now points at:
+
+```sh
+docker compose exec openbase openbase backup    # take a backup first
+docker compose pull && docker compose up -d
+```
+
+For automatic updates (optional, limited to the `openbase` container, off by default) and for rolling
+back, see [docs/self-hosting.md](docs/self-hosting.md#8-upgrading). Images are published for
+`linux/amd64` and `linux/arm64`, and carry provenance and SBOM attestations.
+
+To build the image from your own checkout instead (contributors, unreleased changes, other
+architectures): `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 ### Single binary with systemd
 
-There are no prebuilt release binaries yet; build one (see
-[Building from source](#building-from-source)), copy `target/release/openbase` to
-the server, and follow [docs/self-hosting.md](docs/self-hosting.md#3-alternative-the-binary-with-systemd)
+Download `openbase-X.Y.Z-linux-amd64.tar.gz` (or `-arm64`) from the
+[releases page](https://github.com/lukewilson2002/openbase/releases/latest) and check it against
+`SHA256SUMS` (`sha256sum --check --ignore-missing SHA256SUMS`). The archive holds the binary and
+`openbase.service`; the binary needs glibc 2.36 or newer (Debian 12, Ubuntu 22.04 and later). Or
+build one yourself (see [Building from source](#building-from-source)). Then follow
+[docs/self-hosting.md](docs/self-hosting.md#3-alternative-the-binary-with-systemd)
 for the service user, `deploy/openbase.service` and a TLS reverse proxy.
 
 To just try it locally:
 
 ```sh
-OPENBASE_DATA_DIR=./data ./target/release/openbase
+OPENBASE_DATA_DIR=./data ./openbase
 # Listening on http://127.0.0.1:8080
 ```
 
@@ -308,18 +341,23 @@ changed in the environment. See [docs/self-hosting.md](docs/self-hosting.md#5-em
 
 ## Upgrading
 
-Take a manual backup and make sure you have a recent offsite copy, then:
+Read the [release notes](https://github.com/lukewilson2002/openbase/releases) (and
+[CHANGELOG.md](CHANGELOG.md)), take a manual backup and make sure you have a recent offsite copy, then:
 
 ```sh
-cd openbase && git pull
-cd deploy && docker compose up -d --build
+cd openbase/deploy
+docker compose exec openbase openbase backup
+docker compose pull && docker compose up -d
 ```
 
-(systemd: replace `/usr/local/bin/openbase` and `systemctl restart openbase`.)
+(Built from source instead? `git pull` and `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+systemd: replace `/usr/local/bin/openbase` with the new release binary and `systemctl restart openbase`.)
+`openbase --version` and `/api/health` tell you which version is running.
 When a new version changes the database schema, OpenBase first writes a
 pre-migration snapshot (`backups/pre-migration-v<old>-<timestamp>.db`) and refuses
 to start if it cannot. It never opens a database written by a newer version.
-Rolling back means restoring your pre-upgrade backup. Details in
+Rolling back means running the previous version again (pin `OPENBASE_VERSION=<previous release>`)
+and restoring your pre-upgrade backup. Details, and the optional automatic updates, in
 [docs/self-hosting.md](docs/self-hosting.md#8-upgrading).
 
 ## Resource usage and scale
@@ -404,8 +442,9 @@ we have not measured.
 | Memory, under 300 MB under load at 50k rows | met (at most 104 MB over HTTP) |
 
 Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users,
-upload-heavy workloads, long-running memory growth, or an amd64 build. The
-systemd unit passes `systemd-analyze verify` but has not been run on a real systemd
+upload-heavy workloads, long-running memory growth, or the speed of an amd64 build (the
+amd64 image does build and passes `scripts/smoke-docker.sh`, run under emulation on an arm64
+laptop; its size and memory were not measured). The systemd unit passes `systemd-analyze verify` but has not been run on a real systemd
 host. The container build and the full install / backup / restore lifecycle were
 run end to end on the laptop (`scripts/smoke-docker.sh`, `scripts/smoke-install.sh`).
 
@@ -449,6 +488,9 @@ cargo build --release --locked -p openbase
 ./target/release/openbase --help
 ```
 
+Or build the container image from the checkout (no Rust or Node needed on the host):
+`docker build -f deploy/Dockerfile -t openbase:local .`
+
 Without `web/dist` the server still builds and runs, and shows a "web client not
 built" page at `/`. Docker users need neither Rust nor Node: `deploy/Dockerfile`
 builds both inside the image. The web client is described in
@@ -475,6 +517,17 @@ Other scripts:
 | `scripts/smoke-install.sh [binary]` | Fresh-install walkthrough of the release binary: migrate, create-admin, serve, log in, create data, backup, restore elsewhere, reset-password, healthcheck. `SEED_RECORDS=50000` adds the load test. |
 | `scripts/smoke-docker.sh [image]` | The same for the container image: health check, first-run signup, persistence across restarts, backup inside the container, image size and idle memory. |
 | `scripts/loadtest.sh` | Loads N records into a running instance over HTTP and times the common reads. |
+| `scripts/release.sh X.Y.Z` | Maintainer only: bumps the version, writes the changelog section, runs the checks, commits and tags. Pushes and publishes nothing ([docs/releasing.md](docs/releasing.md)). |
+| `scripts/release-info.sh vX.Y.Z` | Checks a tag against the versions in the tree and prints the image tags a release would get. Used by the release workflow. |
+
+GitHub Actions runs the same checks (plus the end-to-end tests) on every pull request and push to
+`main` (`.github/workflows/ci.yml`). It never publishes anything; only publishing a GitHub Release does.
+
+## Contributing, security and releases
+
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how to run the checks and how a release is made;
+[SECURITY.md](SECURITY.md) says how to report a vulnerability privately; the maintainer's release
+procedure is in [docs/releasing.md](docs/releasing.md).
 
 ## License
 
