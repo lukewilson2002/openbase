@@ -150,6 +150,7 @@ pub struct Env {
     pub done: String,
     pub todo: String,
     pub doing: String,
+    pub done_choice: String,
     pub form_view: String,
     pub runner: Runner,
 }
@@ -217,6 +218,7 @@ impl Env {
             done: done["id"].as_str().unwrap().into(),
             todo: choice(0),
             doing: choice(1),
+            done_choice: choice(2),
             form_view: r.body["id"].as_str().unwrap().into(),
             runner,
             f,
