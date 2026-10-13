@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use axum::http::{StatusCode, header};
 use common::Client;
-use og_core::api::events::BaseEvent;
-use opengrid::perm::Role;
+use ob_core::api::events::BaseEvent;
+use openbase::perm::Role;
 use query_support::*;
 use serde_json::{Value, json};
 use sse_support::*;
@@ -77,7 +77,7 @@ async fn a_write_by_another_client_is_delivered_with_its_envelope() {
     assert_eq!(data["event"]["table_id"], f.table_id);
     assert_eq!(data["event"]["created"], json!([created]));
     // The data parses back into the shared DTO.
-    let env: og_core::api::events::EventEnvelope = serde_json::from_value(data).unwrap();
+    let env: ob_core::api::events::EventEnvelope = serde_json::from_value(data).unwrap();
     assert!(matches!(env.event, BaseEvent::RecordsChanged { .. }));
 }
 
@@ -181,7 +181,7 @@ async fn volatile_refreshes_reach_subscribers() {
     f.create(&f.table_id, json!({ &f.primary_id: "a" })).await;
     let mut s = open(&f.app, &f.owner, &f.base_id).await.stream();
     let later = chrono::Utc::now() + chrono::Duration::minutes(10);
-    let changed = opengrid::tasks::refresh_volatile_formulas(&f.app.state, later).unwrap();
+    let changed = openbase::tasks::refresh_volatile_formulas(&f.app.state, later).unwrap();
     assert!(changed > 0);
     let (name, data) = s.next_event().await;
     assert_eq!(name, "records_changed");
@@ -246,7 +246,7 @@ async fn api_tokens_can_subscribe_within_their_scope() {
     // A token restricted to other bases is refused with a 404.
     let uid = f.owner.user_id.clone().unwrap();
     let token = "pat_events_scoped";
-    let hash = opengrid::ids::hash_token(token);
+    let hash = openbase::ids::hash_token(token);
     let scopes = json!({ "write": true, "base_ids": ["bseOther"] }).to_string();
     sql(&f.app, |tx| {
         tx.execute(
@@ -382,7 +382,7 @@ async fn revoked_or_expired_tokens_lose_their_stream() {
     // Expiry first: a second token for the same user, expired behind the back.
     let expiring = token_client(&f.app, &f.owner, false);
     let mut b = open(&f.app, &expiring, &f.base_id).await.stream();
-    let hash = opengrid::ids::hash_token(expiring.bearer.as_deref().unwrap());
+    let hash = openbase::ids::hash_token(expiring.bearer.as_deref().unwrap());
     sql(&f.app, |tx| {
         tx.execute(
             "UPDATE api_tokens SET expires_at = 1 WHERE token_hash = ?1",
@@ -393,7 +393,7 @@ async fn revoked_or_expired_tokens_lose_their_stream() {
 
     // Deleting the token closes its stream too, while the user's session
     // and other streams are unaffected.
-    let hash = opengrid::ids::hash_token(revoked.bearer.as_deref().unwrap());
+    let hash = openbase::ids::hash_token(revoked.bearer.as_deref().unwrap());
     sql(&f.app, |tx| {
         tx.execute("DELETE FROM api_tokens WHERE token_hash = ?1", [&hash])
     });

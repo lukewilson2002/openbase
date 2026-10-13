@@ -1,3 +1,5 @@
+> Note (2026-10-13): this project was renamed from OpenGrid to OpenBase after this note was written. The content below is unchanged and still says OpenGrid.
+
 # Airtable Feature Inventory (as of 2026-10-12)
 
 Research input for **OpenGrid**, a self-hosted, single-binary Rust Airtable clone aimed at a 1 vCPU / 512 MB to 1 GB VPS with 25 users or fewer.

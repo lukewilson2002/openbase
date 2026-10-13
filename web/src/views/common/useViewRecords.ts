@@ -10,7 +10,7 @@ import { recordKeys, recordsApi } from "@/api/records";
 import type { DateRange, GroupHeader, TableRecord, TransientConfig } from "@/api/types";
 import type { ViewRecordsData } from "./cache";
 
-/** Largest page the server returns (`og_core::limits::MAX_PAGE_SIZE`). */
+/** Largest page the server returns (`ob_core::limits::MAX_PAGE_SIZE`). */
 export const FETCH_PAGE = 1_000;
 /** Records a whole-view query loads before showing the "showing first N" notice. */
 export const RECORD_CAP = 5_000;

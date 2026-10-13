@@ -13,12 +13,12 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 
 const ENV_VARS = {
-  host: "OPENGRID_SMTP_HOST",
-  port: "OPENGRID_SMTP_PORT",
-  security: "OPENGRID_SMTP_SECURITY",
-  username: "OPENGRID_SMTP_USER",
-  password: "OPENGRID_SMTP_PASSWORD",
-  from: "OPENGRID_SMTP_FROM",
+  host: "OPENBASE_SMTP_HOST",
+  port: "OPENBASE_SMTP_PORT",
+  security: "OPENBASE_SMTP_SECURITY",
+  username: "OPENBASE_SMTP_USER",
+  password: "OPENBASE_SMTP_PASSWORD",
+  from: "OPENBASE_SMTP_FROM",
 } as const;
 
 type FieldName = keyof typeof ENV_VARS;
@@ -141,7 +141,7 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
                 setRemoving={setRemovingPassword}
               />
             </div>
-            <Field label="From address" hint={locked("from") ? <Locked field="from" /> : "Shown to recipients, for example OpenGrid <grid@example.com>."}>
+            <Field label="From address" hint={locked("from") ? <Locked field="from" /> : "Shown to recipients, for example OpenBase <base@example.com>."}>
               {(ctl) => <Input {...ctl} value={form.from} onChange={(e) => set({ from: e.target.value })} disabled={locked("from")} spellCheck={false} />}
             </Field>
             <div className="flex items-center justify-end gap-3">
@@ -162,14 +162,14 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
             <dt className="text-xs uppercase tracking-wide text-muted">Per user, per hour</dt>
             <dd className="mt-0.5 font-medium tabular-nums">{settings.budgets.per_user_hour}</dd>
             <dd className="text-xs text-muted">
-              <code>OPENGRID_EMAIL_PER_USER_HOUR</code>
+              <code>OPENBASE_EMAIL_PER_USER_HOUR</code>
             </dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">Whole server, per hour</dt>
             <dd className="mt-0.5 font-medium tabular-nums">{settings.budgets.per_hour}</dd>
             <dd className="text-xs text-muted">
-              <code>OPENGRID_EMAIL_PER_HOUR</code>
+              <code>OPENBASE_EMAIL_PER_HOUR</code>
             </dd>
           </div>
         </dl>

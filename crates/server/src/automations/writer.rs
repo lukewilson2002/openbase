@@ -18,7 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use og_core::api::records::{NewRecord, RecordPatch};
+use ob_core::api::records::{NewRecord, RecordPatch};
 use rusqlite::Transaction;
 use serde_json::Value as Json;
 

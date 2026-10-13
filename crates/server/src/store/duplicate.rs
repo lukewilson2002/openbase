@@ -13,9 +13,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use og_core::api::schema::View;
-use og_core::field::{Field, FieldKind, LinkOptions};
-use og_core::view::ViewConfig;
+use ob_core::api::schema::View;
+use ob_core::field::{Field, FieldKind, LinkOptions};
+use ob_core::view::ViewConfig;
 use rusqlite::{Transaction, params};
 use serde_json::{Map, Value as Json};
 
@@ -175,18 +175,18 @@ fn load_sources(tx: &Transaction, req: &CopyRequest) -> AppResult<Vec<Source>> {
 fn assign_ids(sources: &[Source]) -> HashMap<String, String> {
     let mut ids = HashMap::new();
     for s in sources {
-        ids.insert(s.table.id.clone(), new_id(og_core::ids::TABLE));
+        ids.insert(s.table.id.clone(), new_id(ob_core::ids::TABLE));
         for f in &s.fields {
-            ids.insert(f.field.id.clone(), new_id(og_core::ids::FIELD));
+            ids.insert(f.field.id.clone(), new_id(ob_core::ids::FIELD));
             if let FieldKind::SingleSelect(o) | FieldKind::MultipleSelect(o) = &f.field.kind {
                 for c in &o.choices {
                     ids.entry(c.id.clone())
-                        .or_insert_with(|| new_id(og_core::ids::CHOICE));
+                        .or_insert_with(|| new_id(ob_core::ids::CHOICE));
                 }
             }
         }
         for v in &s.views {
-            ids.insert(v.view.id.clone(), new_id(og_core::ids::VIEW));
+            ids.insert(v.view.id.clone(), new_id(ob_core::ids::VIEW));
         }
     }
     ids
@@ -204,7 +204,7 @@ pub fn copy_tables(tx: &Transaction, req: &CopyRequest) -> AppResult<CopyResult>
         for f in &s.fields {
             if let FieldKind::Link(l) = &f.field.kind {
                 if !copied_tables.contains(&l.linked_table_id) {
-                    external_inverse.insert(f.field.id.clone(), new_id(og_core::ids::FIELD));
+                    external_inverse.insert(f.field.id.clone(), new_id(ob_core::ids::FIELD));
                 }
             }
         }
@@ -333,7 +333,7 @@ fn insert_external_inverses(
                 continue;
             };
             let existing = schema::table_fields(tx, &l.linked_table_id)?;
-            if existing.len() >= og_core::limits::MAX_FIELDS_PER_TABLE {
+            if existing.len() >= ob_core::limits::MAX_FIELDS_PER_TABLE {
                 return Err(AppError::bad_request(
                     "the linked table already has the maximum number of fields",
                 ));
@@ -448,7 +448,7 @@ fn copy_records(
             tx.prepare("SELECT id FROM records WHERE table_id = ?1 AND deleted_at IS NULL")?;
         let rows = stmt.query_map([&s.table.id], |r| r.get::<_, String>(0))?;
         for id in rows {
-            ids.insert(id?, new_id(og_core::ids::RECORD));
+            ids.insert(id?, new_id(ob_core::ids::RECORD));
         }
     }
 
@@ -658,7 +658,7 @@ fn copy_attachments(
         let new_id = match cache.get(old_id) {
             Some(cached) => cached.clone(),
             None => {
-                let fresh = new_id(og_core::ids::ATTACHMENT);
+                let fresh = new_id(ob_core::ids::ATTACHMENT);
                 let n = tx.execute(
                     "INSERT INTO attachments (id, sha256, filename, mime, size, width, height,
                                               has_thumb, base_id, created_by, created_at)

@@ -4,7 +4,7 @@
 mod common;
 mod schema_support;
 
-use og_core::value::ResultType;
+use ob_core::value::ResultType;
 use schema_support::*;
 use serde_json::{Value, json};
 
@@ -382,7 +382,7 @@ async fn the_cycle_check_follows_formula_references_in_stored_form() {
         f.app
             .state
             .db
-            .write_sync(move |tx| opengrid::store::schema::check_base_acyclic(tx, &base))
+            .write_sync(move |tx| openbase::store::schema::check_base_acyclic(tx, &base))
     };
     assert!(check(base.clone()).is_ok(), "A -> B -> primary is acyclic");
     sql(&f.app, |tx| {

@@ -9,13 +9,13 @@
 
 use std::collections::HashSet;
 
-use og_core::api::schema::{CreateField, UpdateField};
-use og_core::field::{
+use ob_core::api::schema::{CreateField, UpdateField};
+use ob_core::field::{
     COLORS, DateOptions, Field, FieldKind, LastModifiedOptions, LinkOptions, SelectOptions,
     ValueFormat,
 };
-use og_core::limits;
-use og_core::value::ResultType;
+use ob_core::limits;
+use ob_core::value::ResultType;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{Map, Value as Json};
@@ -198,7 +198,7 @@ fn normalize_choices(o: &mut SelectOptions) -> AppResult<()> {
         }
         c.id = c.id.trim().to_string();
         if c.id.is_empty() {
-            c.id = new_id(og_core::ids::CHOICE);
+            c.id = new_id(ob_core::ids::CHOICE);
         } else if c.id.len() > 64
             || !c
                 .id
@@ -499,7 +499,7 @@ mod tests {
             ResultType::Bool
         );
         assert_eq!(
-            element_result_type(&f(FieldKind::Email(og_core::field::Empty {}))),
+            element_result_type(&f(FieldKind::Email(ob_core::field::Empty {}))),
             ResultType::Text
         );
     }

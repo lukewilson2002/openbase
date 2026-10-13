@@ -2,7 +2,7 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "og-theme";
+export const THEME_STORAGE_KEY = "ob-theme";
 
 export function readStoredMode(): ThemeMode {
   try {

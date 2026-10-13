@@ -1,10 +1,10 @@
-# OpenGrid behind Caddy (automatic HTTPS via Let's Encrypt).
+# OpenBase behind Caddy (automatic HTTPS via Let's Encrypt).
 #
 #   cd deploy
-#   cp .env.example .env      # set OPENGRID_DOMAIN (DNS must point here)
+#   cp .env.example .env      # set OPENBASE_DOMAIN (DNS must point here)
 #   docker compose up -d --build
 #
-# Data lives in named volumes: `opengrid-data` (database, attachments,
+# Data lives in named volumes: `openbase-data` (database, attachments,
 # backups) and `caddy-data` (TLS certificates). See docs/self-hosting.md.
 #
 # To try the stack on your own machine without a domain or certificates, add the
@@ -12,23 +12,23 @@
 # (serves plain HTTP on http://localhost:8088).
 
 services:
-  opengrid:
+  openbase:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: opengrid:latest
+    image: openbase:latest
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      OPENGRID_DATA_DIR: /data
-      OPENGRID_BIND: 0.0.0.0:8080
-      OPENGRID_PUBLIC_URL: https://${OPENGRID_DOMAIN:?set OPENGRID_DOMAIN in deploy/.env}
-      # Only Caddy can reach OpenGrid (no published port), so trust the client
+      OPENBASE_DATA_DIR: /data
+      OPENBASE_BIND: 0.0.0.0:8080
+      OPENBASE_PUBLIC_URL: https://${OPENBASE_DOMAIN:?set OPENBASE_DOMAIN in deploy/.env}
+      # Only Caddy can reach OpenBase (no published port), so trust the client
       # address it puts in X-Forwarded-For.
-      OPENGRID_TRUST_PROXY: "true"
+      OPENBASE_TRUST_PROXY: "true"
     volumes:
-      - opengrid-data:/data
+      - openbase-data:/data
     # Not published on the host: reachable only through Caddy.
     expose:
       - "8080"
@@ -37,19 +37,19 @@ services:
     image: caddy:2
     restart: unless-stopped
     depends_on:
-      - opengrid
+      - openbase
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     environment:
-      OPENGRID_DOMAIN: ${OPENGRID_DOMAIN:?set OPENGRID_DOMAIN in deploy/.env}
+      OPENBASE_DOMAIN: ${OPENBASE_DOMAIN:?set OPENBASE_DOMAIN in deploy/.env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
 
 volumes:
-  opengrid-data:
+  openbase-data:
   caddy-data:
   caddy-config:

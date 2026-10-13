@@ -1,4 +1,4 @@
-//! OpenGrid server library. `main.rs` is a thin CLI over this crate; tests
+//! OpenBase server library. `main.rs` is a thin CLI over this crate; tests
 //! build the router directly with [`http::router`].
 
 pub mod api;
@@ -36,7 +36,7 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     let (events, db) = (state.events.clone(), state.db.clone());
     let app = http::router(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
-    tracing::info!("OpenGrid listening on http://{}", listener.local_addr()?);
+    tracing::info!("OpenBase listening on http://{}", listener.local_addr()?);
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),

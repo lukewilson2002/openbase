@@ -89,7 +89,7 @@ const TOOLS_PAGE: usize = 100;
 
 /// Guidance shown to the model by clients (`instructions` of `initialize` / `server/discover`).
 const INSTRUCTIONS: &str = "\
-OpenGrid is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions: you can do everything the user can do in the web app. \
+OpenBase is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions: you can do everything the user can do in the web app. \
 Start with list_bases, then get_base_schema to learn table and field names. Tables, fields and views can be given by NAME or id. \
 Records: list_records, search_records, get_record, create_records, update_records, delete_records work with field NAMES (like the Airtable API); writes are limited to 10 records per call; deleted records go to the trash (restore_from_trash). \
 Structure: create_table, create_field (field_types explains all 28 types and their options), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups use field names), query_view reads a view as the app shows it. \
@@ -197,9 +197,9 @@ fn refuse(status: StatusCode, code: i64, message: &str) -> Response {
 fn unauthorized(message: &str, invalid_token: bool) -> Response {
     let mut res = refuse(StatusCode::UNAUTHORIZED, SERVER_REFUSAL, message);
     let challenge = if invalid_token {
-        "Bearer realm=\"OpenGrid MCP\", error=\"invalid_token\""
+        "Bearer realm=\"OpenBase MCP\", error=\"invalid_token\""
     } else {
-        "Bearer realm=\"OpenGrid MCP\""
+        "Bearer realm=\"OpenBase MCP\""
     };
     res.headers_mut().insert(
         header::WWW_AUTHENTICATE,
@@ -282,7 +282,7 @@ async fn handle(State(state): State<AppState>, req: Request) -> Response {
         return refuse(
             StatusCode::FORBIDDEN,
             SERVER_REFUSAL,
-            "this Origin is not allowed to use the MCP endpoint (set OPENGRID_MCP_ALLOWED_ORIGINS to allow it)",
+            "this Origin is not allowed to use the MCP endpoint (set OPENBASE_MCP_ALLOWED_ORIGINS to allow it)",
         );
     }
 
@@ -606,8 +606,8 @@ fn check_modern_headers(
 
 fn server_info() -> Value {
     json!({
-        "name": "opengrid",
-        "title": "OpenGrid",
+        "name": "openbase",
+        "title": "OpenBase",
         "version": env!("CARGO_PKG_VERSION"),
     })
 }

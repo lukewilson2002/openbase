@@ -11,7 +11,7 @@ use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
-use og_core::api::auth::BackupInfo;
+use ob_core::api::auth::BackupInfo;
 use tokio::sync::Mutex;
 
 use crate::auth::{Actor, ClientInfo, admin_guard};

@@ -20,7 +20,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use og_core::api::records::{
+use ob_core::api::records::{
     AggregationsResponse, CreateRecords, HistoryEntry, LinkCandidates, MoveRecords, QueryRequest,
     QueryResponse, Record, RecordIds, RecordsResponse, TransientConfig, UpdateRecords,
 };

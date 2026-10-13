@@ -21,10 +21,10 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use og_core::api::automations::{Action, ActionStep, HttpMethod, StepLog, StepStatus};
-use og_core::cell::{CellCtx, CellError, NoNames, normalize};
-use og_core::field::Field;
-use og_core::query::{OwnedRow, QueryCtx, compile_filter, matches};
+use ob_core::api::automations::{Action, ActionStep, HttpMethod, StepLog, StepStatus};
+use ob_core::cell::{CellCtx, CellError, NoNames, normalize};
+use ob_core::field::Field;
+use ob_core::query::{OwnedRow, QueryCtx, compile_filter, matches};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json, json};
 
@@ -521,7 +521,7 @@ impl Executor {
         {
             return Err(StepError::permanent(
                 "the hourly email limit was reached; the email was not sent \
-                 (see OPENGRID_EMAIL_PER_USER_HOUR / OPENGRID_EMAIL_PER_HOUR)",
+                 (see OPENBASE_EMAIL_PER_USER_HOUR / OPENBASE_EMAIL_PER_HOUR)",
             ));
         }
         for addr in &recipients {

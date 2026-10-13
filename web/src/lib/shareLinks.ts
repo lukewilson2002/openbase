@@ -7,7 +7,7 @@ export function publicPath(kind: ShareKind, token: string): string {
 }
 
 /**
- * The link to hand out: the server's configured public address (`OPENGRID_PUBLIC_URL`, which is
+ * The link to hand out: the server's configured public address (`OPENBASE_PUBLIC_URL`, which is
  * what `link.url` starts with) when it has one, else the address this page was opened on.
  */
 export function publicLink(link: Pick<ShareLink, "kind" | "token" | "url">, pageOrigin: string): string {

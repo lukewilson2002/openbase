@@ -200,11 +200,11 @@ describe("triggers round-trip into the update payload", () => {
   });
 
   it("webhook: switching the trigger type sends a bare webhook trigger and reveals the token the server returns", async () => {
-    const { api, onWebhookToken } = await setup(makeAutomation(), makeEnv(), { token: "ogh_secret" });
+    const { api, onWebhookToken } = await setup(makeAutomation(), makeEnv(), { token: "obh_secret" });
     await userEvent.selectOptions(screen.getByLabelText("When this happens"), "webhook");
     expect(screen.getByText("Save the automation to get its private webhook URL.")).toBeInTheDocument();
     expect((await save(api)).trigger).toEqual({ type: "webhook" });
-    await waitFor(() => expect(onWebhookToken).toHaveBeenCalledWith("ogh_secret"));
+    await waitFor(() => expect(onWebhookToken).toHaveBeenCalledWith("obh_secret"));
   });
 
   it("form_submitted cannot be chosen when the base has no form view", async () => {
@@ -465,26 +465,26 @@ describe("webhook panel", () => {
   it("shows the URL with the token once it is known, with a copy button", async () => {
     const api = mockApi({});
     void api;
-    renderWithEnv(<AutomationEditor automation={hook} tab="editor" onTabChange={() => {}} webhookToken="ogh_abc123" onWebhookToken={() => {}} />);
-    expect(screen.getByLabelText("Webhook URL")).toHaveValue(`${window.location.origin}/api/hooks/ogh_abc123`);
+    renderWithEnv(<AutomationEditor automation={hook} tab="editor" onTabChange={() => {}} webhookToken="obh_abc123" onWebhookToken={() => {}} />);
+    expect(screen.getByLabelText("Webhook URL")).toHaveValue(`${window.location.origin}/api/hooks/obh_abc123`);
     expect(screen.getByText(/Copy this URL now/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
   });
 
   it("without the token it explains that it was shown once, and rotating asks first, then shows the new token", async () => {
     const onWebhookToken = vi.fn();
-    mockApi({ [PATH]: { ...hook, webhook_token: "ogh_rotated" } });
+    mockApi({ [PATH]: { ...hook, webhook_token: "obh_rotated" } });
     renderWithEnv(<AutomationEditor automation={hook} tab="editor" onTabChange={() => {}} webhookToken={null} onWebhookToken={onWebhookToken} />);
     expect(screen.getByText(/shown once when it was created/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Rotate token" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/old URL stops working immediately/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Rotate token" }));
-    await waitFor(() => expect(onWebhookToken).toHaveBeenCalledWith("ogh_rotated"));
+    await waitFor(() => expect(onWebhookToken).toHaveBeenCalledWith("obh_rotated"));
   });
 
   it("sends rotate_webhook_token alone", async () => {
-    const api = mockApi({ [PATH]: { ...hook, webhook_token: "ogh_rotated" } });
+    const api = mockApi({ [PATH]: { ...hook, webhook_token: "obh_rotated" } });
     renderWithEnv(<AutomationEditor automation={hook} tab="editor" onTabChange={() => {}} webhookToken={null} onWebhookToken={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: "Rotate token" }));
     await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Rotate token" }));

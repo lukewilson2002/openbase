@@ -1,9 +1,9 @@
 {
-  "name": "opengrid-web",
+  "name": "openbase-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "OpenGrid web client (React + TypeScript SPA, embedded into the Rust server binary).",
+  "description": "OpenBase web client (React + TypeScript SPA, embedded into the Rust server binary).",
   "engines": {
     "node": ">=22.22.0"
   },

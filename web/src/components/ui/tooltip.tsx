@@ -11,7 +11,7 @@ export function Tooltip({ content, children, side = "bottom" }: { content: React
           <T.Content
             side={side}
             sideOffset={6}
-            className="og-fade-in z-[60] max-w-xs rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-pop"
+            className="ob-fade-in z-[60] max-w-xs rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-pop"
           >
             {content}
             <T.Arrow className="fill-fg" />

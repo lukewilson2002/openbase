@@ -12,7 +12,7 @@ fn random_base62(len: usize) -> String {
         .collect()
 }
 
-/// New prefixed id, e.g. `new_id(og_core::ids::RECORD)` -> `rec` + 14 chars
+/// New prefixed id, e.g. `new_id(ob_core::ids::RECORD)` -> `rec` + 14 chars
 /// (~83 bits of entropy: unguessable, so ids double as capability-free handles).
 pub fn new_id(prefix: &str) -> String {
     format!("{prefix}{}", random_base62(14))

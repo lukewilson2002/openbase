@@ -17,7 +17,7 @@ const contrast = (a: string, b: string) => {
 };
 
 describe("choice colours", () => {
-  it("matches og_core::field::COLORS in the Rust source", () => {
+  it("matches ob_core::field::COLORS in the Rust source", () => {
     const rust = read("../../../crates/core/src/field.rs");
     const block = /pub const COLORS: \[&str; (\d+)\] = \[([^\]]*)\]/.exec(rust);
     expect(block).not.toBeNull();

@@ -1,3 +1,5 @@
+> Note (2026-10-13): this project was renamed from OpenGrid to OpenBase after this note was written. The content below is unchanged and still says OpenGrid.
+
 # OpenGrid: Rust crate stack research
 
 Date: 2026-10-12. Toolchain on this machine: `rustc 1.99.0 (2026-09-28)` and `cargo 1.99.0`, on aarch64-apple-darwin.

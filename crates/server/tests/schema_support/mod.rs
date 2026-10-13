@@ -4,8 +4,8 @@
 //! for it does not exist yet (records).
 #![allow(dead_code)]
 
-use opengrid::config::Config;
-use opengrid::perm::Role;
+use openbase::config::Config;
+use openbase::perm::Role;
 use rusqlite::params;
 use serde_json::{Value, json};
 
@@ -27,7 +27,7 @@ pub fn new_app() -> TestApp {
 pub fn sql<T>(app: &TestApp, f: impl FnOnce(&rusqlite::Transaction) -> rusqlite::Result<T>) -> T {
     app.state
         .db
-        .write_sync(|tx| f(tx).map_err(opengrid::error::AppError::from))
+        .write_sync(|tx| f(tx).map_err(openbase::error::AppError::from))
         .unwrap()
 }
 
@@ -59,15 +59,15 @@ pub fn add_base_member(app: &TestApp, base: &str, user: &Client, role: Role) {
 
 /// A bearer-token client for `user` (API token, full write scope).
 pub fn token_client(app: &TestApp, user: &Client, write: bool) -> Client {
-    let token = format!("pat_test_{}", opengrid::ids::new_id("x"));
-    let hash = opengrid::ids::hash_token(&token);
+    let token = format!("pat_test_{}", openbase::ids::new_id("x"));
+    let hash = openbase::ids::hash_token(&token);
     let uid = user.user_id.clone().unwrap();
     let scopes = json!({ "write": write, "base_ids": null }).to_string();
     sql(app, |tx| {
         tx.execute(
             "INSERT INTO api_tokens (id, user_id, name, token_hash, scopes, created_at)
              VALUES (?1, ?2, 't', ?3, ?4, 1)",
-            params![opengrid::ids::new_id("pat"), uid, hash, scopes],
+            params![openbase::ids::new_id("pat"), uid, hash, scopes],
         )
     });
     Client {
@@ -231,7 +231,7 @@ impl Fixture {
 }
 
 pub fn insert_record(app: &TestApp, table_id: &str, data: Value) -> String {
-    let id = opengrid::ids::new_id("rec");
+    let id = openbase::ids::new_id("rec");
     let (rid, tid, data) = (id.clone(), table_id.to_string(), data.to_string());
     sql(app, |tx| {
         let pos: f64 = tx.query_row(
@@ -403,7 +403,7 @@ pub async fn rich_base() -> Rich {
     let parent = f.add_link(&t2, "Parent", &t2).await;
 
     // A formula in stored form: the placeholder API cannot make one, the real engine will.
-    let double_id = opengrid::ids::new_id("fld");
+    let double_id = openbase::ids::new_id("fld");
     {
         let (did, t2c, expr) = (
             double_id.clone(),
@@ -475,7 +475,7 @@ pub async fn rich_base() -> Rich {
         .assert_status(201);
 
     // Attachment and records.
-    let att_id = opengrid::ids::new_id("att");
+    let att_id = openbase::ids::new_id("att");
     {
         let (aid, base) = (att_id.clone(), f.base_id.clone());
         sql(&f.app, move |tx| {

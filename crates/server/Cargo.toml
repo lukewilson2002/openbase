@@ -1,28 +1,28 @@
 [package]
-name = "opengrid"
-description = "OpenGrid server: a self-hosted Airtable alternative in a single binary."
+name = "openbase"
+description = "OpenBase server: a self-hosted Airtable alternative in a single binary."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-default-run = "opengrid"
+default-run = "openbase"
 
 [lib]
-name = "opengrid"
+name = "openbase"
 path = "src/lib.rs"
 
 [[bin]]
-name = "opengrid"
+name = "openbase"
 path = "src/main.rs"
 
 [features]
 # Debug builds normally read web/dist from disk at run time (rust-embed's default); release builds
 # embed it at compile time. This makes debug builds embed too, which is how the end-to-end tests
-# exercise exactly what ships (`cargo build -p opengrid --features debug-embed`).
+# exercise exactly what ships (`cargo build -p openbase --features debug-embed`).
 debug-embed = ["rust-embed/debug-embed"]
 
 [dependencies]
-og-core = { path = "../core" }
+ob-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

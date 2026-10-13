@@ -7,7 +7,7 @@ mod records_support;
 mod schema_support;
 mod share_support;
 
-use opengrid::engine::write;
+use openbase::engine::write;
 use serde_json::{Value, json};
 use share_support::*;
 
@@ -55,7 +55,7 @@ async fn form() -> Form {
     form_with(|_| {}).await
 }
 
-async fn form_with(config: impl FnOnce(&mut opengrid::config::Config)) -> Form {
+async fn form_with(config: impl FnOnce(&mut openbase::config::Config)) -> Form {
     let p = people_with(config).await;
     let f = &p.f;
     let t = f.table_id.clone();
@@ -338,7 +338,7 @@ async fn submit_creates_an_anonymous_record() {
     assert_eq!(env.base_id, p.f.base_id);
     assert_eq!(env.user_id, None);
     match &env.event {
-        og_core::api::events::BaseEvent::RecordsChanged {
+        ob_core::api::events::BaseEvent::RecordsChanged {
             created, table_id, ..
         } => {
             assert_eq!(created, &vec![id.to_string()]);
@@ -664,7 +664,7 @@ async fn submissions_respect_the_table_record_limit() {
 #[tokio::test]
 async fn submissions_are_rate_limited_per_client_and_form() {
     let fm = form().await;
-    let limit = opengrid::api::sharing::SUBMIT_LIMIT as usize;
+    let limit = openbase::api::sharing::SUBMIT_LIMIT as usize;
     let body = json!({ "values": { &fm.p.name: "spam" } });
     for i in 0..limit {
         let r = anon(
@@ -907,7 +907,7 @@ async fn the_public_upload_cap_is_lower_than_the_configured_limit() {
 #[tokio::test]
 async fn uploads_are_rate_limited_and_protected_by_the_password() {
     let fm = form().await;
-    let limit = opengrid::api::sharing::UPLOAD_LIMIT as usize;
+    let limit = openbase::api::sharing::UPLOAD_LIMIT as usize;
     for i in 0..limit {
         let r = post_multipart(
             fm.app(),

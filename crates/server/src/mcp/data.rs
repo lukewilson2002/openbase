@@ -8,7 +8,7 @@
 //! and automations are identical; this module only translates arguments and results.
 
 use axum::http::HeaderMap;
-use og_core::view::Direction;
+use ob_core::view::Direction;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -238,7 +238,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "api_reference",
             "Look up REST endpoints",
-            "Catalogue of every REST endpoint of OpenGrid's internal API (what the web app uses): method, path, purpose, minimum role, required token permission and request/response summary. Without `area` it lists the areas; with one it lists that area's endpoints in detail. Use it before api_request.",
+            "Catalogue of every REST endpoint of OpenBase's internal API (what the web app uses): method, path, purpose, minimum role, required token permission and request/response summary. Without `area` it lists the areas; with one it lists that area's endpoints in detail. Use it before api_request.",
             object(
                 json!({ "area": string("Area to list in detail: workspaces, bases, tables, fields, views, records, comments, trash, csv, attachments, sharing, automations, invites, notifications, account, admin, airtable, system.") }),
                 &[],
@@ -577,7 +577,7 @@ fn with_icon(mut value: Value, icon: &Option<String>) -> Value {
     value
 }
 
-pub fn field_json(f: &og_core::field::Field) -> Value {
+pub fn field_json(f: &ob_core::field::Field) -> Value {
     let kind = serde_json::to_value(&f.kind).unwrap_or(Value::Null);
     let mut out = json!({
         "id": f.id,
@@ -979,7 +979,7 @@ async fn api_request(ctx: &McpCtx, a: RequestArgs) -> ToolResult {
 #[serde(deny_unknown_fields)]
 struct WorkspaceArgs {
     name: String,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 

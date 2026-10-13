@@ -40,9 +40,9 @@ describe("email settings", () => {
   it("saves settings (without a host) and keeps the password write-only", async () => {
     const saved = parse(
       "EmailSettings",
-      await admin.run(() => api.admin.updateEmail({ port: 2525, security: "tls", username: "mailer", from: "Grid <grid@example.test>", password: "contract-smtp-secret" })),
+      await admin.run(() => api.admin.updateEmail({ port: 2525, security: "tls", username: "mailer", from: "Base <base@example.test>", password: "contract-smtp-secret" })),
     );
-    expect(saved).toMatchObject({ enabled: false, port: 2525, security: "tls", username: "mailer", from: "Grid <grid@example.test>", password_set: true });
+    expect(saved).toMatchObject({ enabled: false, port: 2525, security: "tls", username: "mailer", from: "Base <base@example.test>", password_set: true });
     expect(saved.sources).toMatchObject({ port: "settings", security: "settings", username: "settings", password: "settings", from: "settings", host: "unset" });
     expect(JSON.stringify(saved)).not.toContain("contract-smtp-secret");
     expect(JSON.stringify(await settings())).not.toContain("contract-smtp-secret");

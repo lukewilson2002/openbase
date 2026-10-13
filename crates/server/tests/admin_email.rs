@@ -1,4 +1,4 @@
-//! The Admin -> Email settings: defaults, layering with the `OPENGRID_SMTP_*` environment,
+//! The Admin -> Email settings: defaults, layering with the `OPENBASE_SMTP_*` environment,
 //! write-only password, immediate effect, persistence across a restart, the test email (including
 //! the real error of an unreachable or refusing mail server), audit rows and who may do what.
 
@@ -7,9 +7,9 @@ mod common;
 use std::sync::Arc;
 
 use common::{Client, TestApp};
-use opengrid::config::Config;
-use opengrid::email::{CapturingMailer, RawSmtp, smtp_factory};
-use opengrid::state::AppState;
+use openbase::config::Config;
+use openbase::email::{CapturingMailer, RawSmtp, smtp_factory};
+use openbase::state::AppState;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -60,7 +60,7 @@ async fn a_fresh_instance_has_email_off_and_shows_defaults_and_budgets() {
     assert!(s["host"].is_null() && s["username"].is_null());
     assert_eq!(s["port"], 587);
     assert_eq!(s["security"], "starttls");
-    assert_eq!(s["from"], "OpenGrid <opengrid@localhost>");
+    assert_eq!(s["from"], "OpenBase <openbase@localhost>");
     assert_eq!(s["password_set"], false);
     assert_eq!(s["sources"]["host"], "unset");
     assert_eq!(s["sources"]["port"], "default");
@@ -151,7 +151,7 @@ async fn saved_settings_take_effect_immediately_without_a_restart() {
             json!({
                 "host": "smtp.example.com", "port": 2525, "security": "tls",
                 "username": "mailer", "password": SECRET,
-                "from": "Acme Grid <grid@example.com>"
+                "from": "Acme Base <base@example.com>"
             }),
         )
         .await;
@@ -162,7 +162,7 @@ async fn saved_settings_take_effect_immediately_without_a_restart() {
     assert_eq!(res.body["port"], 2525);
     assert_eq!(res.body["security"], "tls");
     assert_eq!(res.body["username"], "mailer");
-    assert_eq!(res.body["from"], "Acme Grid <grid@example.com>");
+    assert_eq!(res.body["from"], "Acme Base <base@example.com>");
     assert_eq!(res.body["password_set"], true);
     for k in ["host", "port", "security", "username", "password", "from"] {
         assert_eq!(res.body["sources"][k], "settings", "{k}");
@@ -233,9 +233,9 @@ async fn automations_see_email_turn_on_and_off() {
 #[tokio::test]
 async fn settings_survive_a_restart_and_the_environment_then_wins() {
     let dir = tempfile::tempdir().unwrap();
-    let factory = || -> opengrid::email::MailerFactory {
+    let factory = || -> openbase::email::MailerFactory {
         let m = Arc::new(CapturingMailer::default());
-        Arc::new(move |_| Ok(m.clone() as Arc<dyn opengrid::email::Mailer>))
+        Arc::new(move |_| Ok(m.clone() as Arc<dyn openbase::email::Mailer>))
     };
     let config = |f: &dyn Fn(&mut Config)| {
         let mut c = Config::for_tests(dir.path());
@@ -246,7 +246,7 @@ async fn settings_survive_a_restart_and_the_environment_then_wins() {
     // first run: save through the API
     {
         let state = AppState::open_with_mail(config(&|_| {}), factory()).unwrap();
-        let router = opengrid::http::router(state.clone());
+        let router = openbase::http::router(state.clone());
         let app = TestApp::from_parts(state, router);
         let admin = app.admin("admin@example.com", "Admin");
         app.patch(
@@ -290,7 +290,7 @@ async fn settings_survive_a_restart_and_the_environment_then_wins() {
         assert_eq!(resolved.sources.password, "environment");
         assert_eq!(resolved.sources.port, "settings");
         // the API shows it and refuses to change the locked fields
-        let router = opengrid::http::router(state.clone());
+        let router = openbase::http::router(state.clone());
         let app = TestApp::from_parts(state, router);
         let admin = app.login("admin@example.com", "password1234").await.1;
         let s = settings(&app, &admin).await;
@@ -325,11 +325,11 @@ async fn environment_settings_are_read_only_and_everything_else_stays_editable()
     assert!(!s.to_string().contains("env-secret"));
 
     for (body, var) in [
-        (json!({"host": "other.example.com"}), "OPENGRID_SMTP_HOST"),
-        (json!({"host": null}), "OPENGRID_SMTP_HOST"),
-        (json!({"port": 25}), "OPENGRID_SMTP_PORT"),
-        (json!({"password": "new"}), "OPENGRID_SMTP_PASSWORD"),
-        (json!({"password": null}), "OPENGRID_SMTP_PASSWORD"),
+        (json!({"host": "other.example.com"}), "OPENBASE_SMTP_HOST"),
+        (json!({"host": null}), "OPENBASE_SMTP_HOST"),
+        (json!({"port": 25}), "OPENBASE_SMTP_PORT"),
+        (json!({"password": "new"}), "OPENBASE_SMTP_PASSWORD"),
+        (json!({"password": null}), "OPENBASE_SMTP_PASSWORD"),
     ] {
         let res = app.patch(&admin, "/api/admin/email", body.clone()).await;
         assert_eq!(res.status.as_u16(), 400, "{body}: {}", res.body);
@@ -637,11 +637,11 @@ async fn an_admin_manage_token_reads_and_edits_but_never_touches_the_password() 
         .patch(
             &token,
             "/api/admin/email",
-            json!({"from": "Grid <grid@example.com>", "host": "smtp.example.com", "port": 587}),
+            json!({"from": "Base <base@example.com>", "host": "smtp.example.com", "port": 587}),
         )
         .await;
     res.assert_status(200);
-    assert_eq!(res.body["from"], "Grid <grid@example.com>");
+    assert_eq!(res.body["from"], "Base <base@example.com>");
     // switching email off sends the password nowhere, so a token may; pointing it at a host
     // again, with the password still stored, is refused
     let res = app

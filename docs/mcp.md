@@ -1,6 +1,6 @@
-# OpenGrid MCP server
+# OpenBase MCP server
 
-OpenGrid contains an [MCP](https://modelcontextprotocol.io) (Model Context Protocol)
+OpenBase contains an [MCP](https://modelcontextprotocol.io) (Model Context Protocol)
 server in the same binary, at `/mcp`. An AI agent that holds one of your personal
 access tokens can do **everything you can do in the web app**, within that token's
 permissions: build bases, tables, fields of all 28 types and views, fill in and edit
@@ -28,7 +28,7 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Quick start
 
-1. Open **Account → AI assistants** in OpenGrid. It shows your endpoint address and
+1. Open **Account → AI assistants** in OpenBase. It shows your endpoint address and
    copy-ready settings (the same ones as below).
 2. **Account → API tokens → New token.** Give it a name. Tick "Allow writes" if the
    assistant should change things, and (only for an assistant that should also manage
@@ -38,7 +38,7 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 3. Add the server to your assistant. For Claude Code:
 
    ```sh
-   claude mcp add --transport http opengrid https://grid.example.com/mcp \
+   claude mcp add --transport http openbase https://base.example.com/mcp \
      --header "Authorization: Bearer YOUR_TOKEN"
    ```
 
@@ -47,15 +47,15 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Set up your client
 
-The server speaks the *Streamable HTTP* transport at `https://<your OpenGrid>/mcp` and
+The server speaks the *Streamable HTTP* transport at `https://<your OpenBase>/mcp` and
 authenticates with a bearer header, `Authorization: Bearer <token>`. It does not
 support OAuth sign-in, so a client that can only connect through an OAuth flow (for
 example the connector directories of some chat apps) cannot use it.
 
 | Client | How | Checked |
 |---|---|---|
-| **Claude Code** | `claude mcp add --transport http opengrid <url> --header "Authorization: Bearer <token>"` (this project and you; add `--scope user` for all your projects). Check with `claude mcp list`: it shows `opengrid ... Connected`. | yes, CLI 2.1.285: `scripts/mcp-claude-check.sh` |
-| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. Keep the token out of git (`"Authorization": "Bearer ${OPENGRID_TOKEN}"` expands an environment variable). Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
+| **Claude Code** | `claude mcp add --transport http openbase <url> --header "Authorization: Bearer <token>"` (this project and you; add `--scope user` for all your projects). Check with `claude mcp list`: it shows `openbase ... Connected`. | yes, CLI 2.1.285: `scripts/mcp-claude-check.sh` |
+| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. Keep the token out of git (`"Authorization": "Bearer ${OPENBASE_TOKEN}"` expands an environment variable). Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
 | **Any client with a JSON file** (Cursor, Windsurf, Cline, ...) | The `mcpServers` object below. Cursor calls the file `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` with a top-level `servers` key instead of `mcpServers`. | format only |
 | **Claude Desktop** | Its connector settings are for OAuth servers. Use a local bridge that adds the header: `"command": "npx", "args": ["-y", "mcp-remote", "<url>", "--header", "Authorization:${AUTH}"]` with `"env": {"AUTH": "Bearer <token>"}` in `claude_desktop_config.json`. | no |
 | **Your own program** | Any MCP SDK with a Streamable HTTP client and custom headers: set the URL and the `Authorization` header. The official Rust SDK (`rmcp`) is tested against this server in both protocol generations. | yes (`rmcp`) |
@@ -63,9 +63,9 @@ example the connector directories of some chat apps) cannot use it.
 ```json
 {
   "mcpServers": {
-    "opengrid": {
+    "openbase": {
       "type": "http",
-      "url": "https://grid.example.com/mcp",
+      "url": "https://base.example.com/mcp",
       "headers": { "Authorization": "Bearer YOUR_TOKEN" }
     }
   }
@@ -77,8 +77,8 @@ but this project has not run that client. A quick check from a shell works for a
 setup:
 
 ```sh
-curl -s https://grid.example.com/mcp \
-  -H "Authorization: Bearer $OPENGRID_TOKEN" \
+curl -s https://base.example.com/mcp \
+  -H "Authorization: Bearer $OPENBASE_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
@@ -115,7 +115,7 @@ The permission table, route by route, is in [api.md](api.md#token-permissions).
   Select values, people and linked records read the same way in every tool.
 - **Deletions are recoverable.** Deleted records, fields, tables, views, bases and
   workspaces go to the trash and come back with `restore_from_trash` within
-  `OPENGRID_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
+  `OPENBASE_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
   the data and asks for confirmation first.
 - **Errors say how to fix them**: the valid names, the missing role ("requires the
   creator role on this base"), or the missing token permission ("needs an API token
@@ -289,10 +289,10 @@ inviting a new person: a new account has no data.
 without the web app, with one deliberate gap: **the SMTP password cannot be set or removed
 by a token** (the tool has no such argument, and `api_request` is refused with 403),
 because it is a credential; a person types it under **Admin → Email**. For the same reason,
-while an SMTP password is in use (stored, or from `OPENGRID_SMTP_PASSWORD`) a token cannot
+while an SMTP password is in use (stored, or from `OPENBASE_SMTP_PASSWORD`) a token cannot
 change the host, port, security mode or username: that would make the server send the
 password to a server of the agent's choosing. It can still change the sender address, and
-switch email off by clearing the host. Fields fixed by an `OPENGRID_SMTP_*` environment
+switch email off by clearing the host. Fields fixed by an `OPENBASE_SMTP_*` environment
 variable are read-only for everyone. A typical sequence is `admin_get_email_settings`,
 `admin_update_email_settings {host, port, security, username}`, a person enters the
 password in the app, then `admin_send_test_email`.
@@ -372,13 +372,13 @@ have no access" (the base is outside the user's or the token's reach).
   changed).
 - **Origin check (DNS rebinding).** A request carrying an `Origin` header (browsers
   always send one) is served only if the origin is the configured public URL or in
-  `OPENGRID_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
+  `OPENBASE_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
   `Origin` and are unaffected.
 - **Outbound fetches are guarded.** `upload_attachment` with a `url`, and the
   automations' HTTP action, go through one SSRF guard: http(s) only, no credentials in
   the URL, the host is resolved by the server and every address checked (loopback,
   private, link-local including cloud metadata addresses, and other reserved ranges
-  are refused unless `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` is set), the connection is
+  are refused unless `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` is set), the connection is
   pinned to the checked addresses, redirects are not followed, and the download is
   refused (not cut) beyond the upload limit.
 - **Limits.** Bodies up to 8 MB; per-token and per-user request rates; invalid tokens
@@ -402,12 +402,12 @@ More in [security.md](security.md).
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPENGRID_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
-| `OPENGRID_MCP_RATE_PER_USER` | 100 | requests per second per user |
-| `OPENGRID_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
-| `OPENGRID_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
-| `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
-| `OPENGRID_TRASH_DAYS` | 30 | how long deleted items can be restored |
+| `OPENBASE_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
+| `OPENBASE_MCP_RATE_PER_USER` | 100 | requests per second per user |
+| `OPENBASE_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
+| `OPENBASE_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
+| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
+| `OPENBASE_TRASH_DAYS` | 30 | how long deleted items can be restored |
 
 Fixed in code: 8 MB request body (so base64 uploads up to about 6 MB; URL uploads are
 limited only by the upload limit), 10 records per write call, 200 records per
@@ -471,7 +471,7 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
 | `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens) |
-| `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENGRID_MCP_ALLOWED_ORIGINS` |
+| `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENBASE_MCP_ALLOWED_ORIGINS` |
 | `429` | rate limit; retry after the `Retry-After` seconds |
 | a tool is missing from the list | the token lacks write or `manage`, or its owner is not an administrator (`admin_*`); create another token |
 | "not found, or you have no access" | wrong id, or the base is outside the token's base list or the owner's access |

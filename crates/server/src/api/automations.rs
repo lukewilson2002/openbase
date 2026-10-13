@@ -13,7 +13,7 @@ use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use og_core::api::automations::{
+use ob_core::api::automations::{
     Automation, CreateAutomation, RunStatus, RunsPage, TestAutomation, TestResult, Trigger,
     UpdateAutomation, WebhookAccepted,
 };
@@ -45,7 +45,7 @@ pub const WEBHOOK_BAD_TOKEN_PER_MINUTE: u32 = 30;
 /// Test runs per user per minute.
 const TEST_RATE_PER_MINUTE: u32 = 30;
 const MINUTE: Duration = Duration::from_secs(60);
-const TOKEN_PREFIX: &str = "ogh_";
+const TOKEN_PREFIX: &str = "obh_";
 const DEFAULT_RUNS_PAGE: u32 = 50;
 const MAX_RUNS_PAGE: u32 = 200;
 

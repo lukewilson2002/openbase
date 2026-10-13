@@ -7,8 +7,8 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, patch};
 use axum::{Json, Router};
-use og_core::api::events::BaseEvent;
-use og_core::api::workspaces::{
+use ob_core::api::events::BaseEvent;
+use ob_core::api::workspaces::{
     CreateWorkspace, Member, UpdateMember, UpdateWorkspace, WorkspaceSummary,
 };
 use rusqlite::Connection;

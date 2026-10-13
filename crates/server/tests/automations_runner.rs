@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use automations_support::*;
 use chrono::{TimeZone, Utc};
-use opengrid::automations::runner::MAX_ATTEMPTS;
+use openbase::automations::runner::MAX_ATTEMPTS;
 use serde_json::{Value, json};
 
 const DAY: i64 = 24 * 3600 * 1000;
@@ -430,7 +430,7 @@ async fn a_run_is_recovered_only_once() {
     // It is claimed again and the server dies again.
     let claimed = env
         .runner
-        .claim(opengrid::db::now_ms())
+        .claim(openbase::db::now_ms())
         .await
         .unwrap()
         .unwrap();

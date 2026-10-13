@@ -1,7 +1,7 @@
 /**
  * Chrome of the public pages (shared views and forms): outside the app shell, no account menu,
  * no navigation into the app. Header with what is shared, the content, and the "Powered by
- * OpenGrid" footer.
+ * OpenBase" footer.
  */
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Lock, TriangleAlert } from "lucide-react";
@@ -16,7 +16,7 @@ import type { PublicProblem } from "@/lib/publicErrors";
 export function PublicShell({ title, subtitle, children, wide }: { title?: string; subtitle?: ReactNode; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const previous = document.title;
-    document.title = title ? `${title} · OpenGrid` : "OpenGrid";
+    document.title = title ? `${title} · OpenBase` : "OpenBase";
     return () => {
       document.title = previous;
     };

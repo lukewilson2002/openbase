@@ -37,7 +37,7 @@ impl Drop for Inner {
     /// On shutdown, fold the WAL back into the database file and truncate it.
     /// SQLite only does this automatically when the *last* connection closes,
     /// and here that can be a read-only pool connection, which cannot. An
-    /// empty WAL after a clean stop is what `opengrid restore` relies on to
+    /// empty WAL after a clean stop is what `openbase restore` relies on to
     /// tell a stopped server from a running one.
     fn drop(&mut self) {
         let conn = self.writer.get_mut().unwrap_or_else(|p| p.into_inner());
@@ -171,7 +171,7 @@ impl Db {
     /// Fold the WAL back into the database file and truncate it (what
     /// dropping the last handle does). A server calls this explicitly on
     /// shutdown: background tasks keep handles alive until the process exits,
-    /// so the drop never runs, and `opengrid restore` treats a non-empty WAL
+    /// so the drop never runs, and `openbase restore` treats a non-empty WAL
     /// as "the server is still running".
     pub fn checkpoint(&self) -> AppResult<()> {
         let conn = self.inner.writer.lock().unwrap_or_else(|p| p.into_inner());
@@ -192,7 +192,7 @@ impl Db {
 }
 
 /// Apply pending migrations. Refuses to run against a database created by a
-/// newer OpenGrid (downgrades are not supported).
+/// newer OpenBase (downgrades are not supported).
 pub fn migrate(conn: &Connection) -> AppResult<()> {
     migrate_with(conn, MIGRATIONS, None)
 }
@@ -216,7 +216,7 @@ fn migrate_with(
     if current > target {
         return Err(AppError::internal(format!(
             "database schema version {current} is newer than this binary supports ({target}); \
-             upgrade OpenGrid or restore a backup"
+             upgrade OpenBase or restore a backup"
         )));
     }
     if current > 0 && current < target {
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn v1_file_database_is_snapshotted_before_the_icons_migration() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("opengrid.db");
+        let path = dir.path().join("openbase.db");
         {
             let conn = Connection::open(&path).unwrap();
             v1_database(&conn, None);
@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn db_open_uses_sibling_backups_dir_and_skips_fresh_db() {
         let dir = tempfile::tempdir().unwrap();
-        let db = Db::open(&dir.path().join("opengrid.db")).unwrap();
+        let db = Db::open(&dir.path().join("openbase.db")).unwrap();
         drop(db);
         assert!(snapshots(&dir.path().join("backups")).is_empty());
     }

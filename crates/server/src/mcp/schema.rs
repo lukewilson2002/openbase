@@ -7,8 +7,8 @@
 //! through the REST API, so roles, limits, validation, history, live updates and recomputation
 //! are the web UI's own.
 
-use og_core::api::schema::Table;
-use og_core::field::{Field, FieldType};
+use ob_core::api::schema::Table;
+use ob_core::field::{Field, FieldType};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -437,7 +437,7 @@ struct CreateBase {
     name: String,
     #[serde(default)]
     color: Option<String>,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 
@@ -464,7 +464,7 @@ struct RenameBase {
     name: Option<String>,
     #[serde(default)]
     color: Option<String>,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 
@@ -544,7 +544,7 @@ async fn delete_base(ctx: &McpCtx, a: BaseArg) -> ToolResult {
 struct CreateTable {
     base_id: String,
     name: String,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 
@@ -578,7 +578,7 @@ struct RenameTable {
     name: Option<String>,
     #[serde(default)]
     description: Option<String>,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 

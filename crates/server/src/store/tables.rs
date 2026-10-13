@@ -1,10 +1,10 @@
 //! Tables: create (with primary field and default view), rename, reorder,
 //! trash, duplicate, and the client-facing table DTO.
 
-use og_core::api::schema::{DuplicateTable, Table, UpdateTable, View};
-use og_core::field::{Field, FieldKind, TextOptions};
-use og_core::limits;
-use og_core::view::{ViewConfig, ViewType};
+use ob_core::api::schema::{DuplicateTable, Table, UpdateTable, View};
+use ob_core::field::{Field, FieldKind, TextOptions};
+use ob_core::limits;
+use ob_core::view::{ViewConfig, ViewType};
 use rusqlite::{Connection, Transaction, params};
 
 use crate::db::now_ms;
@@ -82,8 +82,8 @@ pub fn create(
     ensure_name_free(tx, base_id, &name, None)?;
 
     let now = now_ms();
-    let table_id = new_id(og_core::ids::TABLE);
-    let primary_id = new_id(og_core::ids::FIELD);
+    let table_id = new_id(ob_core::ids::TABLE);
+    let primary_id = new_id(ob_core::ids::FIELD);
     let position = schema::next_position(tx, PositionScope::TablesIn(base_id))?;
     tx.execute(
         "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at)
@@ -99,7 +99,7 @@ pub fn create(
     };
     schema::insert_field(tx, &primary, 1.0, now)?;
     let view = View {
-        id: new_id(og_core::ids::VIEW),
+        id: new_id(ob_core::ids::VIEW),
         table_id: table_id.clone(),
         name: DEFAULT_VIEW_NAME.to_string(),
         view_type: ViewType::Grid,

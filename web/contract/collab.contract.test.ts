@@ -221,7 +221,7 @@ describe("automations", () => {
 
     it("returns the webhook token once, on create", async () => {
       hook = parse("Automation", await w.owner.run(() => api.automations.create(w.baseId, { name: "Hook", enabled: true, trigger: { type: "webhook" }, actions: [notify("hooked {{trigger.body.sku}}")] })));
-      expect(hook.webhook_token).toMatch(/^ogh_/);
+      expect(hook.webhook_token).toMatch(/^obh_/);
       token = hook.webhook_token!;
       expect(parse("Automation", await w.owner.run(() => api.automations.get(hook.id))).webhook_token ?? null).toBeNull();
     });
@@ -271,7 +271,7 @@ describe("automations", () => {
 
     it("rotates the token: the old one stops working", async () => {
       const rotated = parse("Automation", await w.owner.run(() => api.automations.update(hook.id, { rotate_webhook_token: true })));
-      expect(rotated.webhook_token).toMatch(/^ogh_/);
+      expect(rotated.webhook_token).toMatch(/^obh_/);
       expect(rotated.webhook_token).not.toBe(token);
       const old = await rawFetch(`${seeded.baseUrl}/api/hooks/${token}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "10.30.0.2" }, body: "{}" });
       expect(old.status).toBe(404);

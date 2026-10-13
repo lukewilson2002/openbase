@@ -1,5 +1,5 @@
--- OpenGrid schema v1.
--- Conventions: ids are prefixed random strings (see og_core::ids); timestamps
+-- OpenBase schema v1.
+-- Conventions: ids are prefixed random strings (see ob_core::ids); timestamps
 -- are INTEGER unix milliseconds UTC; soft-deleted rows have deleted_at set and
 -- are purged by the trash job after the retention period.
 
@@ -131,7 +131,7 @@ CREATE TABLE fields (
     table_id     TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
     name         TEXT NOT NULL,
     type         TEXT NOT NULL,
-    options      TEXT NOT NULL,      -- JSON, shape per og_core::field::FieldKind
+    options      TEXT NOT NULL,      -- JSON, shape per ob_core::field::FieldKind
     description  TEXT,
     position     REAL NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL,
@@ -162,7 +162,7 @@ CREATE TABLE views (
     table_id     TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
     name         TEXT NOT NULL,
     type         TEXT NOT NULL,
-    config       TEXT NOT NULL DEFAULT '{}',   -- JSON og_core::view::ViewConfig
+    config       TEXT NOT NULL DEFAULT '{}',   -- JSON ob_core::view::ViewConfig
     position     REAL NOT NULL DEFAULT 0,
     -- personal views are visible only to their owner
     personal_owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,

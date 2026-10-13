@@ -11,7 +11,7 @@ use automations_support::*;
 use common::TestApp;
 use serde_json::json;
 
-fn mail_app(tweak: impl FnOnce(&mut opengrid::config::Config)) -> TestApp {
+fn mail_app(tweak: impl FnOnce(&mut openbase::config::Config)) -> TestApp {
     TestApp::with_config(|c| {
         c.smtp_host = Some("smtp.test.invalid".into());
         tweak(c);

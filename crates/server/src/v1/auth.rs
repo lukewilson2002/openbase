@@ -1,7 +1,7 @@
 //! Authentication, rate limiting and request extractors of `/api/v1`.
 //!
 //! Only `Authorization: Bearer <api token>` is accepted. A session cookie is
-//! never looked at, so a browser that is signed in to OpenGrid cannot be made
+//! never looked at, so a browser that is signed in to OpenBase cannot be made
 //! to call this API by a malicious page (no ambient credentials, hence no CSRF
 //! surface either).
 

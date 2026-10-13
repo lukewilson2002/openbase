@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
  * the first-run screen. The watchdog from ./fixtures fails the test on any console error, uncaught
  * exception, CSP violation or failed request.
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 
 test("loads / from the embedded build without console errors or CSP violations", async ({ page }) => {
   const res = await page.goto("/");
@@ -22,7 +22,7 @@ test("loads / from the embedded build without console errors or CSP violations",
   expect(res?.headers()["x-content-type-options"]).toBe("nosniff");
 
   // A fresh instance shows the first-run screen (an already configured one shows the login screen).
-  await expect(page.getByRole("heading", { name: /Set up OpenGrid|Log in/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in/ })).toBeVisible();
   // The stylesheet and script of the app were loaded from the server's own origin.
   const origins = await page.evaluate(() => [...document.querySelectorAll("script[src], link[rel=stylesheet]")].map((n) => (n as HTMLScriptElement).src || (n as HTMLLinkElement).href));
   expect(origins.length).toBeGreaterThan(0);
@@ -39,7 +39,7 @@ test("serves client-side routes from the app shell and real 404s for missing ass
   expect(missing.status()).toBe(404);
   expect(missing.headers()["content-type"] ?? "").not.toContain("text/html");
   await page.goto("/no/such/page");
-  await expect(page.getByRole("heading", { name: /Set up OpenGrid|Log in|Page not found/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in|Page not found/ })).toBeVisible();
 });
 
 test("unknown API paths return the JSON error format", async ({ request }) => {

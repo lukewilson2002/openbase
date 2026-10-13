@@ -9,8 +9,8 @@
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use og_core::api::auth::OkResponse;
-use og_core::api::records::{MarkRead, Notification, NotificationsResponse};
+use ob_core::api::auth::OkResponse;
+use ob_core::api::records::{MarkRead, Notification, NotificationsResponse};
 use rusqlite::types::Value as SqlValue;
 use rusqlite::{Connection, params_from_iter};
 use serde_json::Value as Json2;

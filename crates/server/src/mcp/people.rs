@@ -110,7 +110,7 @@ struct RenameWorkspace {
     workspace_id: String,
     #[serde(default)]
     name: Option<String>,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
 

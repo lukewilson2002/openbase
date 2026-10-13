@@ -16,7 +16,7 @@
 mod common;
 
 use common::{Client, TestApp};
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 
 const ROLES: [Role; 5] = [
@@ -115,7 +115,7 @@ impl Fx {
 
     /// A user with `role` on the workspaces and bases of the fixture.
     fn user_with(&self, role: Option<Role>) -> Client {
-        let n = opengrid::ids::new_id("u");
+        let n = openbase::ids::new_id("u");
         let u = self.app.user(&format!("{n}@example.com"), "Actor");
         if let Some(role) = role {
             for ws in [&self.ids.ws, &self.ids.ws_deleted] {
@@ -847,7 +847,7 @@ const ADMIN: &[AdminCase] = &[
         method: "PATCH",
         template: "/api/admin/email",
         path: |_| "/api/admin/email".into(),
-        body: |_, _| Some(json!({"from": "Grid <grid@example.com>"})),
+        body: |_, _| Some(json!({"from": "Base <base@example.com>"})),
         ok: 200,
     },
     AdminCase {
@@ -1213,7 +1213,7 @@ async fn admin_credential_actions_are_session_only() {
 /// `api_request` enforces up front) describe the same policy.
 #[test]
 fn the_capability_tables_match_the_endpoint_catalogue() {
-    use opengrid::mcp::catalogue::{Access, ENDPOINTS};
+    use openbase::mcp::catalogue::{Access, ENDPOINTS};
     use std::collections::BTreeSet;
 
     let key = |m: &str, p: &str| (m.to_string(), p.to_string());

@@ -27,7 +27,7 @@ impl Rig {
         Self::with(|_| {}).await
     }
 
-    pub async fn with(tweak: impl FnOnce(&mut opengrid::config::Config)) -> Rig {
+    pub async fn with(tweak: impl FnOnce(&mut openbase::config::Config)) -> Rig {
         let live = LiveApp::start_with(tweak).await;
         let (res, admin) = live
             .app

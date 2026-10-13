@@ -24,7 +24,7 @@ const secondEmail = `second-${rand()}@example.test`;
 const secondPassword = `pw-${rand()}-${rand()}`;
 
 /** Three browser profiles: the administrator, a regular user, and nobody. */
-// Each gets its own client address (the server runs with OPENGRID_TRUST_PROXY, loopback only), so
+// Each gets its own client address (the server runs with OPENBASE_TRUST_PROXY, loopback only), so
 // the per-IP rate limits of one profile never affect another.
 const admin = createCookieJar("10.1.0.1");
 const second = createCookieJar("10.1.0.2");
@@ -55,7 +55,7 @@ function expectError(e: ApiError, status: number, code: string): void {
   expect(e.message).not.toMatch(/^(Bad Request|Unprocessable Entity|Forbidden|Unauthorized)$/);
 }
 
-const sessionCookie = (jar: CookieJar) => jar.cookies.get("og_session");
+const sessionCookie = (jar: CookieJar) => jar.cookies.get("ob_session");
 
 let adminId = "";
 let secondId = "";

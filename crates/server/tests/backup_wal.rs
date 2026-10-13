@@ -4,9 +4,9 @@
 mod common;
 
 use common::TestApp;
-use opengrid::backup;
-use opengrid::config::Config;
-use opengrid::state::AppState;
+use openbase::backup;
+use openbase::config::Config;
+use openbase::state::AppState;
 
 #[tokio::test]
 async fn cleanly_closed_database_leaves_no_wal_so_restore_proceeds() {
@@ -33,7 +33,7 @@ async fn cleanly_closed_database_leaves_no_wal_so_restore_proceeds() {
             .unwrap();
         assert_eq!(n, 1);
     }
-    let wal = target.path().join("opengrid.db-wal");
+    let wal = target.path().join("openbase.db-wal");
     let wal_len = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
     assert_eq!(wal_len, 0, "a clean shutdown must checkpoint the WAL");
 
@@ -69,7 +69,7 @@ async fn an_explicit_checkpoint_empties_the_wal_while_handles_are_still_open() {
         })
         .await
         .unwrap();
-    let wal = target.path().join("opengrid.db-wal");
+    let wal = target.path().join("openbase.db-wal");
     let wal_len = || std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
     assert!(wal_len() > 0, "the write should sit in the WAL");
     state.db.checkpoint().unwrap();

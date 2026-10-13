@@ -14,7 +14,7 @@ interface Envelope {
 
 async function send(method: string, path: string, init: { body?: string; contentType?: string | null; csrf?: boolean; headers?: Record<string, string> } = {}) {
   const headers: Record<string, string> = { "x-forwarded-for": "10.2.0.1", ...init.headers };
-  if (init.csrf !== false) headers["x-opengrid-csrf"] = "1";
+  if (init.csrf !== false) headers["x-openbase-csrf"] = "1";
   if (init.contentType !== null) headers["content-type"] = init.contentType ?? "application/json";
   const res = await rawFetch(`${baseUrl}${path}`, { method, headers, body: init.body });
   const text = await res.text();
@@ -67,7 +67,7 @@ describe("error envelope", () => {
   });
 
   it("answers a cookie-authenticated write without the CSRF header with a 403 envelope", async () => {
-    const res = await send("POST", "/api/auth/logout", { body: "{}", csrf: false, headers: { cookie: "og_session=whatever" } });
+    const res = await send("POST", "/api/auth/logout", { body: "{}", csrf: false, headers: { cookie: "ob_session=whatever" } });
     expectEnvelope(res, 403, "forbidden");
   });
 

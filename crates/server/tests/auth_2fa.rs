@@ -66,10 +66,10 @@ async fn setup_returns_secret_and_otpauth_url_without_enabling() {
     assert!(Secret::try_from_base32(secret).is_ok());
     let url = res.body["otpauth_url"].as_str().unwrap();
     assert!(
-        url.starts_with("otpauth://totp/OpenGrid:a%40example.com?"),
+        url.starts_with("otpauth://totp/OpenBase:a%40example.com?"),
         "{url}"
     );
-    assert!(url.contains("issuer=OpenGrid"));
+    assert!(url.contains("issuer=OpenBase"));
     // Not enabled until a code is verified: login needs no second factor.
     let me = app.get(&user, "/api/auth/me").await;
     assert_eq!(me.body["totp_enabled"], false);

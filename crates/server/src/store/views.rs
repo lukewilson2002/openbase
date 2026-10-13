@@ -10,10 +10,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use og_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
-use og_core::field::{COLORS, Field};
-use og_core::limits;
-use og_core::view::{Filter, FilterItem, FormConfig, FormField, ViewConfig};
+use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
+use ob_core::field::{COLORS, Field};
+use ob_core::limits;
+use ob_core::view::{Filter, FilterItem, FormConfig, FormField, ViewConfig};
 use rusqlite::{Transaction, params};
 
 use crate::db::now_ms;
@@ -94,7 +94,7 @@ pub fn create(
         Some(c) => c.clone(),
         None => {
             let mut c = ViewConfig::default();
-            if input.view_type == og_core::view::ViewType::Form {
+            if input.view_type == ob_core::view::ViewType::Form {
                 c.form = default_form_config(&fields);
             }
             c
@@ -102,7 +102,7 @@ pub fn create(
     };
     validate_config(&fields, &config)?;
     let view = View {
-        id: new_id(og_core::ids::VIEW),
+        id: new_id(ob_core::ids::VIEW),
         table_id: table.id.clone(),
         name,
         view_type: input.view_type,
@@ -260,7 +260,7 @@ pub fn duplicate(
         }
     };
     let view = View {
-        id: new_id(og_core::ids::VIEW),
+        id: new_id(ob_core::ids::VIEW),
         table_id: row.view.table_id.clone(),
         name,
         view_type: row.view.view_type,
@@ -332,8 +332,8 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
         check(id, "summaries")?;
     }
     match &config.row_color {
-        Some(og_core::view::RowColor::BySelect { field_id }) => check(field_id, "row color")?,
-        Some(og_core::view::RowColor::ByConditions { rules }) => {
+        Some(ob_core::view::RowColor::BySelect { field_id }) => check(field_id, "row color")?,
+        Some(ob_core::view::RowColor::ByConditions { rules }) => {
             for rule in rules {
                 if !COLORS.contains(&rule.color.as_str()) {
                     return Err(AppError::bad_request(format!(
@@ -442,8 +442,8 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::FieldKind;
-    use og_core::view::{Condition, Conjunction, Direction, FilterOp, Sort};
+    use ob_core::field::FieldKind;
+    use ob_core::view::{Condition, Conjunction, Direction, FilterOp, Sort};
 
     fn field(id: &str, kind: FieldKind) -> Field {
         Field {
@@ -459,7 +459,7 @@ mod tests {
         vec![
             field("a", FieldKind::SingleLineText(Default::default())),
             field("b", FieldKind::Number(Default::default())),
-            field("c", FieldKind::Autonumber(og_core::field::Empty {})),
+            field("c", FieldKind::Autonumber(ob_core::field::Empty {})),
         ]
     }
 

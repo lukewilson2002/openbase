@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
-use og_core::api::schema::{CreateTable, DuplicateTable, Table, UpdateTable};
+use ob_core::api::schema::{CreateTable, DuplicateTable, Table, UpdateTable};
 
 use crate::api::schema_support::{OptionalJson, ok, publish_schema};
 use crate::auth::Actor;

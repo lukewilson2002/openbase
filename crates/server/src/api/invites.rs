@@ -9,7 +9,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use og_core::api::auth::{CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview};
+use ob_core::api::auth::{CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::json;
 
@@ -112,14 +112,14 @@ async fn create_invite(
     let url = invites::invite_url(&state.config.public_url, &token);
     if let (Some(to), true) = (&info.email, state.email.enabled()) {
         let body = format!(
-            "Hi,\n\n{inviter_name} invited you to \"{name}\" on OpenGrid as {role}.\n\
+            "Hi,\n\n{inviter_name} invited you to \"{name}\" on OpenBase as {role}.\n\
              Open this link within 7 days to accept:\n\n{url}\n",
             role = info.role,
         );
         email::send_in_background(
             state.mailer.clone(),
             to.clone(),
-            format!("{inviter_name} invited you to {name} on OpenGrid"),
+            format!("{inviter_name} invited you to {name} on OpenBase"),
             body,
         );
     }

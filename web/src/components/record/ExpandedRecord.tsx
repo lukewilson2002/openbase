@@ -263,7 +263,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     <EditorEnvProvider value={env}>
       <D.Root open onOpenChange={(o) => !o && onClose()}>
         <D.Portal>
-          <D.Overlay className="og-fade-in fixed inset-0 z-50 bg-overlay" />
+          <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
           <D.Content
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => {
@@ -273,7 +273,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               e.preventDefault();
               (e.currentTarget as HTMLElement).focus();
             }}
-            className="og-pop-in fixed inset-2 z-50 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-pop sm:inset-x-6 sm:inset-y-6"
+            className="ob-pop-in fixed inset-2 z-50 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-pop sm:inset-x-6 sm:inset-y-6"
             onInteractOutside={(e) => {
               // Pop-over editors render outside the dialog; clicking them must not dismiss it.
               if ((e.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();

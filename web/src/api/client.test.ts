@@ -20,9 +20,9 @@ describe("api client", () => {
     await http.delete("/api/x");
 
     const byMethod = Object.fromEntries(api.calls.map((c) => [c.method, c]));
-    expect(byMethod.GET?.headers.get("X-OpenGrid-CSRF")).toBeNull();
+    expect(byMethod.GET?.headers.get("X-OpenBase-CSRF")).toBeNull();
     for (const m of ["POST", "PATCH", "PUT", "DELETE"]) {
-      expect(byMethod[m]?.headers.get("X-OpenGrid-CSRF"), m).toBe("1");
+      expect(byMethod[m]?.headers.get("X-OpenBase-CSRF"), m).toBe("1");
     }
   });
 
@@ -42,7 +42,7 @@ describe("api client", () => {
     const first = getClientId();
     expect(first).toMatch(/^[0-9a-f-]{16,}$/i);
     expect(getClientId()).toBe(first);
-    expect(sessionStorage.getItem("og-client-id")).toBe(first);
+    expect(sessionStorage.getItem("ob-client-id")).toBe(first);
     sessionStorage.clear();
     expect(getClientId()).not.toBe(first);
   });

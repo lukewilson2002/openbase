@@ -160,6 +160,6 @@ describe("parseSaveError", () => {
 
 describe("webhookUrl", () => {
   it("joins origin and token", () => {
-    expect(webhookUrl("ogh_abc", "https://grid.example.com/")).toBe("https://grid.example.com/api/hooks/ogh_abc");
+    expect(webhookUrl("obh_abc", "https://base.example.com/")).toBe("https://base.example.com/api/hooks/obh_abc");
   });
 });

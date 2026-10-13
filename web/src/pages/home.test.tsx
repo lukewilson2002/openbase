@@ -186,7 +186,7 @@ describe("home", () => {
     expect(within(dialog).getByText(/Delete CRM/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Delete base" }));
     await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
-    expect(api.callsTo("DELETE /api/bases/app2")[0]?.headers.get("X-OpenGrid-CSRF")).toBe("1");
+    expect(api.callsTo("DELETE /api/bases/app2")[0]?.headers.get("X-OpenBase-CSRF")).toBe("1");
   });
 
   it("opens the members dialog with role changes and invite creation for an owner", async () => {

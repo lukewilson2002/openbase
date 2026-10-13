@@ -19,7 +19,7 @@
 //!
 //! # How it stays current
 //!
-//! The dependency graph ([`og_core::deps::DepGraph`] plus the "names" edges
+//! The dependency graph ([`ob_core::deps::DepGraph`] plus the "names" edges
 //! below) covers every field of a base. A write tells a [`Session`] which
 //! fields changed on which records ([`Session::mark_changed`]); the session
 //! queues the dependent (record, field) pairs: same-record dependents
@@ -56,11 +56,11 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use chrono::{DateTime, TimeZone, Utc};
 use chrono_tz::Tz;
-use og_core::cell::to_value;
-use og_core::deps::{DepGraph, Edge, EdgeKind};
-use og_core::field::{Field, FieldKind, ValueFormat};
-use og_core::formula::{self, EvalContext, Formula};
-use og_core::value::{ResultType, Value};
+use ob_core::cell::to_value;
+use ob_core::deps::{DepGraph, Edge, EdgeKind};
+use ob_core::field::{Field, FieldKind, ValueFormat};
+use ob_core::formula::{self, EvalContext, Formula};
+use ob_core::value::{ResultType, Value};
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
@@ -1068,7 +1068,7 @@ pub fn refresh_volatile(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{
+    use ob_core::field::{
         CountOptions, Empty, FormulaOptions, LinkOptions, LookupOptions, NumberOptions, TextOptions,
     };
     use serde_json::json;

@@ -3,7 +3,7 @@
 mod common;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::json;
 
@@ -83,7 +83,7 @@ async fn tables_per_base_are_limited() {
     let f = Fixture::new().await;
     let base_id = f.base_id.clone();
     sql(&f.app, |tx| {
-        for i in 0..(og_core::limits::MAX_TABLES_PER_BASE - 1) {
+        for i in 0..(ob_core::limits::MAX_TABLES_PER_BASE - 1) {
             tx.execute(
                 "INSERT INTO tables (id, base_id, name, position, primary_field_id, created_at)
                  VALUES (?1, ?2, ?3, ?4, 'x', 1)",
@@ -261,10 +261,10 @@ async fn schema_changes_publish_events_with_the_clients_id() {
         .uri(tables_url(&f))
         .header(
             "cookie",
-            format!("og_session={}", f.owner.cookie.clone().unwrap()),
+            format!("ob_session={}", f.owner.cookie.clone().unwrap()),
         )
         .header("content-type", "application/json")
-        .header("x-opengrid-csrf", "1")
+        .header("x-openbase-csrf", "1")
         .header("x-client-id", "client-42")
         .body(axum::body::Body::from(
             json!({ "name": "Evented" }).to_string(),
@@ -277,7 +277,7 @@ async fn schema_changes_publish_events_with_the_clients_id() {
     assert_eq!(env.user_id.as_deref(), f.owner.user_id.as_deref());
     assert_eq!(
         env.event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(res.body["id"].as_str().unwrap().to_string())
         }
     );

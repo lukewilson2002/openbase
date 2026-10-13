@@ -5,7 +5,7 @@ mod common;
 mod mcp_support;
 
 use mcp_support::*;
-use opengrid::email::{RawSmtp, smtp_factory};
+use openbase::email::{RawSmtp, smtp_factory};
 use serde_json::json;
 
 const SECRET: &str = "S3cr3t-smtp-pa55word!";
@@ -52,7 +52,7 @@ async fn an_agent_reads_and_changes_the_email_settings_but_not_the_password() {
             "admin_update_email_settings",
             json!({
                 "host": "smtp.example.com", "port": 465, "security": "tls",
-                "username": "mailer", "from": "OpenGrid <grid@example.com>"
+                "username": "mailer", "from": "OpenBase <base@example.com>"
             }),
         )
         .await;

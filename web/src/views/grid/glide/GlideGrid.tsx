@@ -248,7 +248,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   return (
     <DataEditor
       ref={gridRef}
-      className="og-glide"
+      className="ob-glide"
       width="100%"
       height="100%"
       columns={columns}

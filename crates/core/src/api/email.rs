@@ -1,7 +1,7 @@
 //! DTOs of the instance's outgoing-email (SMTP) settings: `GET|PATCH /api/admin/email` and
 //! `POST /api/admin/email/test`.
 //!
-//! Each setting comes from the environment (`OPENGRID_SMTP_*`, which wins and is read-only here),
+//! Each setting comes from the environment (`OPENBASE_SMTP_*`, which wins and is read-only here),
 //! from the settings saved through this API, or from a default. The SMTP password is write-only:
 //! it is never returned, only whether one is stored.
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Where the effective value of one setting comes from.
 pub mod source {
-    /// An `OPENGRID_SMTP_*` environment variable (or the matching command-line flag): read-only.
+    /// An `OPENBASE_SMTP_*` environment variable (or the matching command-line flag): read-only.
     pub const ENVIRONMENT: &str = "environment";
     /// Saved on the Email tab (or through the API).
     pub const SETTINGS: &str = "settings";
@@ -31,7 +31,7 @@ pub struct EmailSources {
     pub from: String,
 }
 
-/// The `OPENGRID_EMAIL_PER_*` budgets, shown read-only (they are set by the environment only).
+/// The `OPENBASE_EMAIL_PER_*` budgets, shown read-only (they are set by the environment only).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct EmailBudgets {
@@ -56,7 +56,7 @@ pub struct EmailSettings {
     pub security: String,
     #[serde(default)]
     pub username: Option<String>,
-    /// Sender address, e.g. `OpenGrid <opengrid@example.com>`.
+    /// Sender address, e.g. `OpenBase <openbase@example.com>`.
     pub from: String,
     /// A password is stored or provided by the environment. The password itself is never sent.
     pub password_set: bool,

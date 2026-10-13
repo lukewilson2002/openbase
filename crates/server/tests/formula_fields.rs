@@ -5,7 +5,7 @@ mod common;
 mod records_support;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use records_support::*;
 use serde_json::{Value, json};
 

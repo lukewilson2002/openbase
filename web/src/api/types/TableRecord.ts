@@ -7,7 +7,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * `values` is keyed by field id and contains every non-empty field,
  * including computed ones. Link fields are returned as `[{"id","name"}]`
  * ([`LinkRef`]); everything else in its canonical stored form (see
- * `og_core::field`). System fields (created/modified time/by, autonumber)
+ * `ob_core::field`). System fields (created/modified time/by, autonumber)
  * also appear in `values` under their field ids when the table has them.
  */
 export type TableRecord = { id: string, table_id: string, created_at: number, updated_at: number, created_by?: string | null, updated_by?: string | null, autonumber: number, values: { [key in string]: JsonValue }, };

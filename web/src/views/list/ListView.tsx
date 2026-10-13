@@ -25,7 +25,7 @@ function ListInner(props: ViewProps) {
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   // A group header already says the value of the field it groups by.
   const fields = useMemo(() => cardFields(table, config, new Set(config.groups.map((g) => g.field_id))), [table, config]);
-  const [collapsed, toggle, replace] = usePersistedSet(`og-list-collapsed:${view.id}`);
+  const [collapsed, toggle, replace] = usePersistedSet(`ob-list-collapsed:${view.id}`);
 
   const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
   const data = records.data;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fresh-install smoke test for the single-binary deployment.
 #
-#   scripts/smoke-install.sh [path/to/opengrid]      (default: target/release/opengrid)
+#   scripts/smoke-install.sh [path/to/openbase]      (default: target/release/openbase)
 #
 # Everything happens in a temporary directory and on a loopback port; nothing
 # outside it is touched. It walks the operator lifecycle with the real binary and
@@ -24,8 +24,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BIN=${1:-target/release/opengrid}
-[[ -x "$BIN" ]] || { echo "binary not found: $BIN (cargo build --release -p opengrid)" >&2; exit 2; }
+BIN=${1:-target/release/openbase}
+[[ -x "$BIN" ]] || { echo "binary not found: $BIN (cargo build --release -p openbase)" >&2; exit 2; }
 BIN=$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")
 PORT=${PORT:-$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}
 if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
@@ -36,7 +36,7 @@ URL=http://127.0.0.1:$PORT
 PASS='correct-horse-battery-staple'
 PASS2='another-long-passphrase-9'
 
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/opengrid-smoke.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/openbase-smoke.XXXXXX")
 SERVER_PID=""
 cleanup() {
   [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null || true
@@ -48,15 +48,15 @@ step() { printf '\n==> %s\n' "$*"; }
 ok() { printf '    ok: %s\n' "$*"; }
 die() { printf '    FAIL: %s\n' "$*" >&2; [[ -f "$TMP/server.log" ]] && tail -20 "$TMP/server.log" >&2; exit 1; }
 
-# Run the binary against one data directory. Usage: og DIR args...
-og() {
+# Run the binary against one data directory. Usage: ob DIR args...
+ob() {
   local dir=$1; shift
-  OPENGRID_DATA_DIR="$dir" OPENGRID_BIND=127.0.0.1:$PORT "$BIN" "$@"
+  OPENBASE_DATA_DIR="$dir" OPENBASE_BIND=127.0.0.1:$PORT "$BIN" "$@"
 }
 
 start_server() { # DIR
-  OPENGRID_DATA_DIR="$1" OPENGRID_BIND=127.0.0.1:$PORT OPENGRID_PUBLIC_URL=$URL \
-    OPENGRID_BACKUP_HOUR=-1 "$BIN" serve >"$TMP/server.log" 2>&1 &
+  OPENBASE_DATA_DIR="$1" OPENBASE_BIND=127.0.0.1:$PORT OPENBASE_PUBLIC_URL=$URL \
+    OPENBASE_BACKUP_HOUR=-1 "$BIN" serve >"$TMP/server.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 100); do
     curl -fsS "$URL/api/health" >/dev/null 2>&1 && return 0
@@ -80,10 +80,10 @@ JAR=$TMP/jar
 api() {
   local method=$1 path=$2 body=${3:-}
   if [[ -n "$body" ]]; then
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' \
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' \
       -H 'Content-Type: application/json' -d "$body" "$URL$path"
   else
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' "$URL$path"
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' "$URL$path"
   fi
 }
 
@@ -94,13 +94,13 @@ B=$TMP/b   # restore target
 
 step "version and migrate on an empty directory"
 "$BIN" --version
-og "$A" migrate | tee "$TMP/migrate1.txt"
+ob "$A" migrate | tee "$TMP/migrate1.txt"
 grep -q 'schema version' "$TMP/migrate1.txt" || die "migrate printed no schema version"
-[[ -f "$A/opengrid.db" ]] || die "migrate created no database"
+[[ -f "$A/openbase.db" ]] || die "migrate created no database"
 ok "database created"
 
 step "create-admin"
-OPENGRID_ADMIN_PASSWORD=$PASS og "$A" create-admin --email admin@example.com --name "Admin"
+OPENBASE_ADMIN_PASSWORD=$PASS og "$A" create-admin --email admin@example.com --name "Admin"
 
 step "serve"
 start_server "$A"
@@ -132,20 +132,20 @@ fi
 TOTAL=$(count)
 
 step "backup (server running)"
-og "$A" backup | tee "$TMP/backup.txt"
+ob "$A" backup | tee "$TMP/backup.txt"
 ARCHIVE=$(grep -o '[^ ]*\.tar\.gz' "$TMP/backup.txt" | head -1)
 [[ -f "$ARCHIVE" ]] && ok "archive: $(basename "$ARCHIVE") ($(du -h "$ARCHIVE" | cut -f1))" || die "archive not found"
 LISTING=$(tar -tzf "$ARCHIVE")
-echo "$LISTING" | grep -Eq '(^|/)opengrid\.db$' && ok "archive contains opengrid.db and manifest.json: $(echo "$LISTING" | tr '\n' ' ')" || die "no opengrid.db in archive: $LISTING"
+echo "$LISTING" | grep -Eq '(^|/)openbase\.db$' && ok "archive contains openbase.db and manifest.json: $(echo "$LISTING" | tr '\n' ' ')" || die "no openbase.db in archive: $LISTING"
 
 step "healthcheck"
-og "$A" healthcheck && ok "healthcheck exit 0 while running"
+ob "$A" healthcheck && ok "healthcheck exit 0 while running"
 stop_server
 ok "server stopped on SIGTERM"
 if og "$A" healthcheck 2>"$TMP/hc.err"; then die "healthcheck passed with no server"; else ok "healthcheck exit 1 with no server ($(cat "$TMP/hc.err"))"; fi
 
 step "restore into an empty directory and start it there"
-og "$B" restore "$ARCHIVE" | tee "$TMP/restore.txt"
+ob "$B" restore "$ARCHIVE" | tee "$TMP/restore.txt"
 start_server "$B"
 rm -f "$JAR"
 api POST /api/auth/login "{\"email\":\"admin@example.com\",\"password\":\"$PASS\"}" >/dev/null
@@ -155,10 +155,10 @@ BASE_B=$(api GET /api/workspaces | jq -r '.. | objects | select(.name? == "Order
 stop_server
 
 step "reset-password"
-OPENGRID_NEW_PASSWORD=$PASS2 og "$B" reset-password --email admin@example.com
+OPENBASE_NEW_PASSWORD=$PASS2 og "$B" reset-password --email admin@example.com
 start_server "$B"
 rm -f "$JAR"
-if curl -fsS -X POST -H 'X-OpenGrid-CSRF: 1' -H 'Content-Type: application/json' \
+if curl -fsS -X POST -H 'X-OpenBase-CSRF: 1' -H 'Content-Type: application/json' \
   -d "{\"email\":\"admin@example.com\",\"password\":\"$PASS\"}" "$URL/api/auth/login" >/dev/null 2>&1; then
   die "old password still works"
 else ok "old password rejected"; fi
@@ -166,18 +166,18 @@ api POST /api/auth/login "{\"email\":\"admin@example.com\",\"password\":\"$PASS2
 stop_server
 
 step "migrate on an up-to-date database is a no-op"
-before=$(shasum -a 256 "$B/opengrid.db" | cut -d' ' -f1)
+before=$(shasum -a 256 "$B/openbase.db" | cut -d' ' -f1)
 ls "$B/backups" > "$TMP/backups.before"
-og "$B" migrate
+ob "$B" migrate
 ls "$B/backups" > "$TMP/backups.after"
 sqlite_ver() { python3 -c "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('PRAGMA user_version').fetchone()[0])" "$1"; }
 cmp -s "$TMP/backups.before" "$TMP/backups.after" && ok "no snapshot taken (backups/ unchanged)" || die "migrate on a current database wrote something to backups/"
 ls "$B/backups" | grep -q '^pre-migration' && die "a pre-migration snapshot exists" || ok "no pre-migration-* file"
-ok "schema version still $(sqlite_ver "$B/opengrid.db")"
+ok "schema version still $(sqlite_ver "$B/openbase.db")"
 
 step "a database from a newer version is refused"
 cp -R "$B" "$TMP/c"
-python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA user_version=9999'); c.commit()" "$TMP/c/opengrid.db"
-if OPENGRID_DATA_DIR="$TMP/c" "$BIN" migrate 2>"$TMP/newer.err"; then die "migrate accepted a newer schema"; else ok "refused: $(tail -1 "$TMP/newer.err")"; fi
+python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA user_version=9999'); c.commit()" "$TMP/c/openbase.db"
+if OPENBASE_DATA_DIR="$TMP/c" "$BIN" migrate 2>"$TMP/newer.err"; then die "migrate accepted a newer schema"; else ok "refused: $(tail -1 "$TMP/newer.err")"; fi
 
 printf '\nAll install checks passed.\n'

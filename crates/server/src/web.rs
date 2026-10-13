@@ -28,7 +28,7 @@ struct Assets;
 const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 const NO_CACHE: &str = "no-cache";
 const NOT_BUILT: &str =
-    "OpenGrid web client not built. Run `npm ci && npm run build` in web/ and rebuild the server.";
+    "OpenBase web client not built. Run `npm ci && npm run build` in web/ and rebuild the server.";
 
 /// One embedded file.
 pub struct Asset {

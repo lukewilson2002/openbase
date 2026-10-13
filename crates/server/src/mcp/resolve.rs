@@ -10,8 +10,8 @@
 
 use std::collections::HashMap;
 
-use og_core::api::schema::{BaseSchema, Table, View};
-use og_core::field::{Field, FieldKind};
+use ob_core::api::schema::{BaseSchema, Table, View};
+use ob_core::field::{Field, FieldKind};
 use serde_json::{Map, Value, json};
 
 use super::McpCtx;
@@ -177,7 +177,7 @@ pub fn type_name(f: &Field) -> String {
 }
 
 /// Choices of a select field.
-fn choices(f: &Field) -> &[og_core::field::SelectChoice] {
+fn choices(f: &Field) -> &[ob_core::field::SelectChoice] {
     match &f.kind {
         FieldKind::SingleSelect(o) | FieldKind::MultipleSelect(o) => &o.choices,
         _ => &[],
@@ -895,7 +895,7 @@ fn select_choices(o: &mut Map<String, Value>, existing: Option<&Field>) -> Resul
     let Some(items) = list.as_array_mut() else {
         return Err("options.choices must be a list of names or {name, color?}".into());
     };
-    let old: &[og_core::field::SelectChoice] = existing.map(choices).unwrap_or(&[]);
+    let old: &[ob_core::field::SelectChoice] = existing.map(choices).unwrap_or(&[]);
     for item in items.iter_mut() {
         if let Value::String(name) = item {
             *item = json!({ "name": name });
@@ -925,7 +925,7 @@ fn select_choices(o: &mut Map<String, Value>, existing: Option<&Field>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{FieldKind, SelectChoice, SelectOptions, TextOptions};
+    use ob_core::field::{FieldKind, SelectChoice, SelectOptions, TextOptions};
 
     fn field(id: &str, name: &str, kind: FieldKind) -> Field {
         Field {

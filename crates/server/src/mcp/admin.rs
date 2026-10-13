@@ -59,7 +59,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "admin_get_email_settings",
             "Read the email settings",
-            "The outgoing-email (SMTP) settings: whether email is on, host, port, security (starttls | tls | none), username, sender address, whether a password is stored (never the password itself), where each setting comes from (environment = fixed by an OPENGRID_SMTP_* variable and read-only, settings = saved here, default, unset) and the read-only hourly email budgets. Instance administrators only.",
+            "The outgoing-email (SMTP) settings: whether email is on, host, port, security (starttls | tls | none), username, sender address, whether a password is stored (never the password itself), where each setting comes from (environment = fixed by an OPENBASE_SMTP_* variable and read-only, settings = saved here, default, unset) and the read-only hourly email budgets. Instance administrators only.",
             object(json!({}), &[]),
         )
         .admin(),
@@ -73,7 +73,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "port": integer("SMTP port, e.g. 587 (starttls), 465 (tls), 25.", 1, 65535),
                     "security": enumeration(&["starttls", "tls", "none"], "Connection security: starttls (usually port 587), tls (implicit TLS, usually 465) or none (a local relay only)."),
                     "username": json!({"type": ["string", "null"], "description": "SMTP username. null removes it."}),
-                    "from": string("Sender address, e.g. 'OpenGrid <opengrid@example.com>'."),
+                    "from": string("Sender address, e.g. 'OpenBase <openbase@example.com>'."),
                 }),
                 &[],
             ),
@@ -254,13 +254,13 @@ async fn audit_log(ctx: &McpCtx, a: AuditArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateEmail {
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     host: Option<Option<String>>,
     #[serde(default)]
     port: Option<u16>,
     #[serde(default)]
     security: Option<String>,
-    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
     username: Option<Option<String>>,
     #[serde(default)]
     from: Option<String>,

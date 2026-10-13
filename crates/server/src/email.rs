@@ -8,7 +8,7 @@
 //!
 //! `AppState::mailer` is the [`EmailService`], which sends through whichever of those matches the
 //! *current* settings, so an administrator's change on the Admin -> Email page takes effect at
-//! once, without a restart. The settings are layered per field: an `OPENGRID_SMTP_*` environment
+//! once, without a restart. The settings are layered per field: an `OPENBASE_SMTP_*` environment
 //! variable (or command-line flag) that is set wins and is read-only on that page; otherwise the
 //! value saved there (the `settings` table, see `store::email_settings`); otherwise the default.
 //!
@@ -25,7 +25,7 @@ use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use og_core::api::email::source;
+use ob_core::api::email::source;
 
 use crate::config::Config;
 use crate::error::{AppError, AppResult};
@@ -43,7 +43,7 @@ pub trait Mailer: Send + Sync {
 }
 
 pub const DEFAULT_PORT: u16 = 587;
-pub const DEFAULT_FROM: &str = "OpenGrid <opengrid@localhost>";
+pub const DEFAULT_FROM: &str = "OpenBase <openbase@localhost>";
 
 /// How the connection to the SMTP server is secured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,7 +126,7 @@ impl std::fmt::Debug for RawSmtp {
     }
 }
 
-/// Blank values count as not set (an empty `OPENGRID_SMTP_USER=` in an env file must not lock
+/// Blank values count as not set (an empty `OPENBASE_SMTP_USER=` in an env file must not lock
 /// the field).
 fn non_blank(v: &Option<String>) -> Option<String> {
     v.as_ref()
@@ -136,7 +136,7 @@ fn non_blank(v: &Option<String>) -> Option<String> {
 }
 
 impl RawSmtp {
-    /// What `OPENGRID_SMTP_*` (or the command-line flags) provide.
+    /// What `OPENBASE_SMTP_*` (or the command-line flags) provide.
     pub fn from_config(config: &Config) -> RawSmtp {
         RawSmtp {
             host: non_blank(&config.smtp_host),
@@ -150,7 +150,7 @@ impl RawSmtp {
     }
 }
 
-/// Which layer each effective setting comes from (`og_core::api::email::source`).
+/// Which layer each effective setting comes from (`ob_core::api::email::source`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sources {
     pub host: &'static str,
@@ -267,7 +267,7 @@ pub struct EmailService {
 impl EmailService {
     /// Build the service from the startup configuration and the stored settings, talking real
     /// SMTP. Fails when the environment's own settings are invalid (the server refuses to start
-    /// with a typo in `OPENGRID_SMTP_SECURITY`). Invalid *stored* settings cannot occur (they are
+    /// with a typo in `OPENBASE_SMTP_SECURITY`). Invalid *stored* settings cannot occur (they are
     /// validated when saved) but would be ignored with a warning.
     pub fn new(config: &Config, stored: &RawSmtp) -> AppResult<Arc<EmailService>> {
         Self::with_factory(config, stored, smtp_factory())
@@ -284,7 +284,7 @@ impl EmailService {
             Err(e) => {
                 // The environment alone must be valid: that is the operator's mistake to fix.
                 let c = build(&env, &RawSmtp::default(), &factory).map_err(|env_err| {
-                    AppError::internal(format!("invalid OPENGRID_SMTP_* settings: {env_err}"))
+                    AppError::internal(format!("invalid OPENBASE_SMTP_* settings: {env_err}"))
                 })?;
                 tracing::warn!(error = %e, "ignoring the saved email settings: they do not work");
                 c

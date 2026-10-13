@@ -1,6 +1,6 @@
 /**
  * Parse pasted or typed text into the canonical stored JSON for a field
- * (mirror of og_core::cell::parse_text; the server re-validates with `typecast: true`).
+ * (mirror of ob_core::cell::parse_text; the server re-validates with `typecast: true`).
  */
 import type { Field } from "@/api/types";
 import { fieldZone } from "./dates";

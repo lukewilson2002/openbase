@@ -1,3 +1,5 @@
+> Note (2026-10-13): this project was renamed from OpenGrid to OpenBase after this note was written. The content below is unchanged and still says OpenGrid.
+
 # Baserow and peers: lessons for OpenGrid
 
 Research date: 2026-10-12. Sources: vendor docs, community forums, and the GitHub source/API (repo metadata pulled with `gh api` on 2026-10-12). Any claim I could not confirm against a primary source is marked **[unverified]**.

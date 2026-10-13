@@ -3,24 +3,24 @@ import { expect, test } from "./fixtures";
 
 /**
  * Kanban, gallery, calendar, timeline and list views, plus the trash and the notification bell,
- * against a live server. Runs only with OPENGRID_E2E=1 (see playwright.config.ts: the stack is
+ * against a live server. Runs only with OPENBASE_E2E=1 (see playwright.config.ts: the stack is
  * built and started for you):
  *
- *   OPENGRID_E2E=1 npm run e2e -- --project=views --no-deps
+ *   OPENBASE_E2E=1 npm run e2e -- --project=views --no-deps
  *
  * It signs up its own user (the server started by globalSetup allows signup; on a server that does
- * not, set OPENGRID_E2E_EMAIL and OPENGRID_E2E_PASSWORD to an existing account). Results are
+ * not, set OPENBASE_E2E_EMAIL and OPENBASE_E2E_PASSWORD to an existing account). Results are
  * asserted against the server (the records API), not against pixels.
  *
  * Notifications: mentions and assignments skip their author, so the bell test makes an automation
  * ("record created" -> notify) tell the signed-in user about a record they create.
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.describe.configure({ mode: "serial" });
 
-const EMAIL = process.env["OPENGRID_E2E_EMAIL"] ?? "e2e-views@example.com";
-const PASSWORD = process.env["OPENGRID_E2E_PASSWORD"] ?? "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const EMAIL = process.env["OPENBASE_E2E_EMAIL"] ?? "e2e-views@example.com";
+const PASSWORD = process.env["OPENBASE_E2E_PASSWORD"] ?? "correct horse battery staple 42";
+const CSRF = { "X-OpenBase-CSRF": "1" };
 
 interface Fixture {
   baseId: string;
@@ -45,7 +45,7 @@ async function signIn(page: Page): Promise<void> {
   const signup = await page.request.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Views", password: PASSWORD }, headers: CSRF });
   if (signup.ok()) return;
   const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENGRID_E2E_EMAIL/OPENGRID_E2E_PASSWORD`).toBeTruthy();
+  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
 }
 
 type TableDto = { id: string; fields: { id: string; name: string }[]; views: { id: string }[] };
@@ -113,7 +113,7 @@ async function open(page: Page, view: keyof Fixture["views"]) {
 }
 
 test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENGRID_E2E_URL"] ?? "http://127.0.0.1:8080", storageState: { cookies: [], origins: [] } });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080", storageState: { cookies: [], origins: [] } });
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);

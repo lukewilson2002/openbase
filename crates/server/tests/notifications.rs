@@ -6,13 +6,13 @@ mod records_support;
 mod schema_support;
 
 use common::{Client, TestApp};
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use query_support::*;
 use serde_json::{Value, json};
 
 /// Insert a notification directly; `read` marks it already read.
 fn notify(app: &TestApp, user: &Client, kind: &str, n: i64, read: bool) -> String {
-    let id = opengrid::ids::new_id(og_core::ids::NOTIFICATION);
+    let id = openbase::ids::new_id(ob_core::ids::NOTIFICATION);
     let (nid, uid, kind) = (id.clone(), user.user_id.clone().unwrap(), kind.to_string());
     sql(app, |tx| {
         tx.execute(
@@ -65,7 +65,7 @@ async fn lists_newest_first_with_payloads_and_unread_count() {
         items[0]["id"]
             .as_str()
             .unwrap()
-            .starts_with(og_core::ids::NOTIFICATION)
+            .starts_with(ob_core::ids::NOTIFICATION)
     );
 }
 

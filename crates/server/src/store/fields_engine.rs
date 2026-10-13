@@ -1,9 +1,9 @@
 //! Integration points between the schema plane and the engines.
 //!
 //! The schema plane (`store::fields`, `store::field_kind`, `store::views`)
-//! reaches the formula engine (`og_core::formula`), the cell converter
-//! (`og_core::cell::convert`), the view-config validators
-//! (`og_core::query`) and the recompute engine
+//! reaches the formula engine (`ob_core::formula`), the cell converter
+//! (`ob_core::cell::convert`), the view-config validators
+//! (`ob_core::query`) and the recompute engine
 //! (`crate::engine::recompute`) only through this module.
 //!
 //! Formulas are stored with `{fldXXXX}` field-id references and shown to
@@ -18,14 +18,14 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use chrono_tz::Tz;
-use og_core::cell::{CellCtx, choices_needed_for_conversion, convert};
-use og_core::field::{COLORS, Field, FieldKind, SelectChoice};
-use og_core::formula::{self, FormulaError, TypeEnv};
-use og_core::ids;
-use og_core::limits;
-use og_core::query::{compile_filter, compile_row_color, validate_groups, validate_sorts};
-use og_core::value::ResultType;
-use og_core::view::{Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
+use ob_core::cell::{CellCtx, choices_needed_for_conversion, convert};
+use ob_core::field::{COLORS, Field, FieldKind, SelectChoice};
+use ob_core::formula::{self, FormulaError, TypeEnv};
+use ob_core::ids;
+use ob_core::limits;
+use ob_core::query::{compile_filter, compile_row_color, validate_groups, validate_sorts};
+use ob_core::value::ResultType;
+use ob_core::view::{Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
 use rusqlite::Transaction;
 use serde_json::Value as Json;
 
@@ -188,7 +188,7 @@ pub fn convert_value(from: &Field, to: &Field, stored: Option<&Json>) -> Option<
         to,
         stored,
         &CellCtx::utc(Utc::now()),
-        &og_core::cell::NoNames,
+        &ob_core::cell::NoNames,
     )
 }
 
@@ -507,7 +507,7 @@ pub fn validate_view_config_semantics(
         Some(RowColor::ByConditions { rules }) => {
             let pruned: Vec<_> = rules
                 .iter()
-                .map(|r| og_core::view::ColorRule {
+                .map(|r| ob_core::view::ColorRule {
                     color: r.color.clone(),
                     filter: prune_filter(&r.filter, fields, stale),
                 })
@@ -522,7 +522,7 @@ pub fn validate_view_config_semantics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{NumberOptions, SelectOptions, TextOptions};
+    use ob_core::field::{NumberOptions, SelectOptions, TextOptions};
 
     fn f(id: &str, name: &str, kind: FieldKind) -> Field {
         Field {

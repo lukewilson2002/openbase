@@ -224,11 +224,11 @@ async fn admin_can_demote_another_admin_but_last_admin_is_protected() {
         .state
         .db
         .write_sync(|tx| {
-            opengrid::store::users::admin_update(
+            openbase::store::users::admin_update(
                 tx,
                 &a_id,
                 &b_id,
-                &og_core::api::auth::AdminUpdateUser {
+                &ob_core::api::auth::AdminUpdateUser {
                     is_active: Some(false),
                     ..Default::default()
                 },
@@ -236,7 +236,7 @@ async fn admin_can_demote_another_admin_but_last_admin_is_protected() {
         })
         .unwrap_err();
     assert!(
-        matches!(err, opengrid::error::AppError::Conflict(_)),
+        matches!(err, openbase::error::AppError::Conflict(_)),
         "{err:?}"
     );
 }
@@ -332,5 +332,5 @@ async fn stats_report_counts_and_sizes() {
     std::fs::write(app.state.config.backups_dir().join("b.tar.gz"), b"x").unwrap();
     let res = app.get(&admin, "/api/admin/stats").await;
     let at = res.body["last_backup_at"].as_i64().unwrap();
-    assert!((opengrid::db::now_ms() - at).abs() < 60_000);
+    assert!((openbase::db::now_ms() - at).abs() < 60_000);
 }

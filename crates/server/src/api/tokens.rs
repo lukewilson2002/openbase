@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get};
 use axum::{Json, Router};
-use og_core::api::auth::{CreateTokenRequest, CreatedToken, TokenInfo, WhoAmI};
+use ob_core::api::auth::{CreateTokenRequest, CreatedToken, TokenInfo, WhoAmI};
 use serde_json::json;
 
 use crate::auth::{Actor, Capability, ClientInfo};

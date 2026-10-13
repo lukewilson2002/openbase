@@ -20,14 +20,14 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use og_core::api::records::{NewRecord, QueryRequest, RecordPatch, TransientConfig};
-use og_core::api::schema::View;
-use og_core::api::v1::{V1DeletedRecord, V1DeletedRecords, V1Record, V1Records};
-use og_core::cell::to_value;
-use og_core::field::Field;
-use og_core::formula::{self, EvalContext};
-use og_core::value::Value;
-use og_core::view::{Direction, Sort, ViewConfig, ViewType};
+use ob_core::api::records::{NewRecord, QueryRequest, RecordPatch, TransientConfig};
+use ob_core::api::schema::View;
+use ob_core::api::v1::{V1DeletedRecord, V1DeletedRecords, V1Record, V1Records};
+use ob_core::cell::to_value;
+use ob_core::field::Field;
+use ob_core::formula::{self, EvalContext};
+use ob_core::value::Value;
+use ob_core::view::{Direction, Sort, ViewConfig, ViewType};
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{Map, Value as Json};
@@ -197,10 +197,10 @@ impl ListParams {
                 }
             }
         }
-        if sorts.len() > og_core::limits::MAX_SORTS {
+        if sorts.len() > ob_core::limits::MAX_SORTS {
             return Err(V1Error::invalid(format!(
                 "at most {} sort levels are allowed",
-                og_core::limits::MAX_SORTS
+                ob_core::limits::MAX_SORTS
             )));
         }
         for (i, (field, dir)) in sorts {
@@ -1123,7 +1123,7 @@ pub async fn delete_one(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{FieldKind, TextOptions};
+    use ob_core::field::{FieldKind, TextOptions};
 
     /// A table with a text field and `n` records.
     fn fixture(n: usize) -> (Connection, TableRow, Vec<Field>, Vec<String>) {

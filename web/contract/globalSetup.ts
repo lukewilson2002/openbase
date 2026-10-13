@@ -3,8 +3,8 @@
  * port with a throwaway data directory, wait for /api/health, and stop it afterwards.
  *
  * Environment knobs:
- *   OPENGRID_CONTRACT_SKIP_BUILD=1   do not run `cargo build` (use binaries already built)
- *   OPENGRID_CONTRACT_KEEP_DATA=1    keep the temp data dir (its path is printed on teardown)
+ *   OPENBASE_CONTRACT_SKIP_BUILD=1   do not run `cargo build` (use binaries already built)
+ *   OPENBASE_CONTRACT_KEEP_DATA=1    keep the temp data dir (its path is printed on teardown)
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
@@ -17,7 +17,7 @@ import type { TestProject } from "vitest/node";
 export interface ServerEnv {
   /** e.g. `http://127.0.0.1:41234` */
   baseUrl: string;
-  /** OPENGRID_DATA_DIR of the running server. */
+  /** OPENBASE_DATA_DIR of the running server. */
   dataDir: string;
 }
 
@@ -60,7 +60,7 @@ function freePort(): Promise<number> {
 async function waitForHealth(baseUrl: string, child: ChildProcess, output: () => string): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`opengrid exited early (code ${child.exitCode}).\n${output()}`);
+    if (child.exitCode !== null) throw new Error(`openbase exited early (code ${child.exitCode}).\n${output()}`);
     try {
       const res = await fetch(`${baseUrl}/api/health`);
       if (res.ok) return;
@@ -69,7 +69,7 @@ async function waitForHealth(baseUrl: string, child: ChildProcess, output: () =>
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error(`opengrid did not answer ${baseUrl}/api/health within 30s.\n${output()}`);
+  throw new Error(`openbase did not answer ${baseUrl}/api/health within 30s.\n${output()}`);
 }
 
 interface Running extends ServerEnv {
@@ -77,7 +77,7 @@ interface Running extends ServerEnv {
 }
 
 async function startServer(bin: string, label: string): Promise<Running> {
-  const dataDir = mkdtempSync(join(tmpdir(), `opengrid-contract-${label}-`));
+  const dataDir = mkdtempSync(join(tmpdir(), `openbase-contract-${label}-`));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let log = "";
@@ -85,14 +85,14 @@ async function startServer(bin: string, label: string): Promise<Running> {
     cwd: dataDir,
     env: {
       ...process.env,
-      OPENGRID_DATA_DIR: dataDir,
-      OPENGRID_BIND: `127.0.0.1:${port}`,
-      OPENGRID_PUBLIC_URL: baseUrl,
-      OPENGRID_OPEN_SIGNUP: "false",
+      OPENBASE_DATA_DIR: dataDir,
+      OPENBASE_BIND: `127.0.0.1:${port}`,
+      OPENBASE_PUBLIC_URL: baseUrl,
+      OPENBASE_OPEN_SIGNUP: "false",
       // Loopback-only server: let each test profile present its own client address (see cookieJar.ts).
-      OPENGRID_TRUST_PROXY: "true",
-      OPENGRID_BACKUP_HOUR: "-1",
-      OPENGRID_LOG: "warn",
+      OPENBASE_TRUST_PROXY: "true",
+      OPENBASE_BACKUP_HOUR: "-1",
+      OPENBASE_LOG: "warn",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -109,7 +109,7 @@ async function startServer(bin: string, label: string): Promise<Running> {
     rmSync(dataDir, { recursive: true, force: true });
     throw e;
   }
-  console.log(`[contract] opengrid (${label}) listening on ${baseUrl} (data dir ${dataDir})`);
+  console.log(`[contract] openbase (${label}) listening on ${baseUrl} (data dir ${dataDir})`);
   return {
     baseUrl,
     dataDir,
@@ -121,7 +121,7 @@ async function startServer(bin: string, label: string): Promise<Running> {
         await exited;
         clearTimeout(timer);
       }
-      if (process.env["OPENGRID_CONTRACT_KEEP_DATA"]) console.log(`[contract] data dir kept: ${dataDir}`);
+      if (process.env["OPENBASE_CONTRACT_KEEP_DATA"]) console.log(`[contract] data dir kept: ${dataDir}`);
       else rmSync(dataDir, { recursive: true, force: true });
     },
   };
@@ -131,21 +131,21 @@ async function startServer(bin: string, label: string): Promise<Running> {
 async function signUpFirstAdmin(baseUrl: string, email: string, password: string): Promise<void> {
   const res = await fetch(`${baseUrl}/api/auth/signup`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-opengrid-csrf": "1", "x-forwarded-for": "10.0.0.1" },
+    headers: { "content-type": "application/json", "x-openbase-csrf": "1", "x-forwarded-for": "10.0.0.1" },
     body: JSON.stringify({ email, name: "Seeded Admin", password }),
   });
   if (!res.ok) throw new Error(`could not create the seeded administrator: ${res.status} ${await res.text()}`);
 }
 
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  if (!process.env["OPENGRID_CONTRACT_SKIP_BUILD"]) {
-    console.log("[contract] cargo build -p opengrid");
+  if (!process.env["OPENBASE_CONTRACT_SKIP_BUILD"]) {
+    console.log("[contract] cargo build -p openbase");
     // Same feature set as the end-to-end tests (e2e/globalSetup.ts), so both share one binary.
-    run("cargo", ["build", "-p", "opengrid", "--bin", "opengrid", "--features", "debug-embed"], "cargo build");
+    run("cargo", ["build", "-p", "openbase", "--bin", "openbase", "--features", "debug-embed"], "cargo build");
   }
   const meta = JSON.parse(run("cargo", ["metadata", "--format-version", "1", "--no-deps"], "cargo metadata")) as { target_directory: string };
-  const bin = join(meta.target_directory, "debug", `opengrid${exe}`);
-  if (!existsSync(bin)) throw new Error(`${bin} not found; run without OPENGRID_CONTRACT_SKIP_BUILD.`);
+  const bin = join(meta.target_directory, "debug", `openbase${exe}`);
+  if (!existsSync(bin)) throw new Error(`${bin} not found; run without OPENBASE_CONTRACT_SKIP_BUILD.`);
 
   const fresh = await startServer(bin, "fresh");
   let seeded: Running | undefined;

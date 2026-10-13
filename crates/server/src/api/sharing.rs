@@ -35,14 +35,14 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
-use og_core::api::records::{QueryRequest, TransientConfig};
-use og_core::api::sharing::{
+use ob_core::api::records::{QueryRequest, TransientConfig};
+use ob_core::api::sharing::{
     CreateShare, FormSubmission, PublicForm, PublicFormField, PublicQueryResponse, PublicView,
     ShareKind, ShareLink, UpdateShare,
 };
-use og_core::cell::{CellCtx, missing_choices, normalize};
-use og_core::field::{AttachmentRef, Field, FieldKind};
-use og_core::view::{Filter, FilterItem, RowColor};
+use ob_core::cell::{CellCtx, missing_choices, normalize};
+use ob_core::field::{AttachmentRef, Field, FieldKind};
+use ob_core::view::{Filter, FilterItem, RowColor};
 use serde_json::{Value as Json2, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 
@@ -517,7 +517,7 @@ fn form_error(field: &Field, msg: impl std::fmt::Display) -> AppError {
 
 /// Check a submission against the form and return the values to write.
 fn validate_submission(
-    cfg: &og_core::view::ViewConfig,
+    cfg: &ob_core::view::ViewConfig,
     fields: &[Field],
     submission: FormSubmission,
 ) -> AppResult<std::collections::BTreeMap<String, Json2>> {
@@ -602,7 +602,7 @@ async fn submit_form(
                 tx,
                 &ctx,
                 &r.table.id,
-                vec![og_core::api::records::NewRecord { values }],
+                vec![ob_core::api::records::NewRecord { values }],
                 &CreateOpts::default(),
             )
         })

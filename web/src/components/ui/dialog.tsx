@@ -22,10 +22,10 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="og-fade-in fixed inset-0 z-50 bg-overlay" />
+        <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
         <D.Content
           className={cn(
-            "og-pop-in fixed left-1/2 top-1/2 z-50 flex max-h-[min(90dvh,48rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line bg-surface shadow-pop",
+            "ob-pop-in fixed left-1/2 top-1/2 z-50 flex max-h-[min(90dvh,48rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line bg-surface shadow-pop",
             widths[size],
             className,
           )}

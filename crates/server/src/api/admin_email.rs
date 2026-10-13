@@ -2,7 +2,7 @@
 //! (SMTP) settings, for instance administrators (signed in, or an API token with the `manage`
 //! permission, whose use is audited).
 //!
-//! - Each setting comes from the environment (`OPENGRID_SMTP_*`, read-only here), from what is
+//! - Each setting comes from the environment (`OPENBASE_SMTP_*`, read-only here), from what is
 //!   saved here (the `settings` table), or from a default; see [`crate::email`].
 //! - A change applies at once, without a restart.
 //! - The password is write-only: no response, log line or audit row contains it.
@@ -20,7 +20,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use lettre::Address;
 use lettre::message::Mailbox;
-use og_core::api::email::{
+use ob_core::api::email::{
     EmailBudgets, EmailSettings, EmailSources, EmailTestResult, SendTestEmail, UpdateEmailSettings,
 };
 use serde_json::json;
@@ -136,7 +136,7 @@ fn validate_from(from: &str) -> AppResult<String> {
     from.parse::<Mailbox>().map_err(|e| {
         AppError::bad_request(format!(
             "invalid sender address '{from}': {e} (use name@example.com or \
-             OpenGrid <name@example.com>)"
+             OpenBase <name@example.com>)"
         ))
     })?;
     Ok(from.to_string())
@@ -185,7 +185,7 @@ fn apply_request(
         };
         match &env.host {
             Some(e) if new.as_deref() != Some(e.as_str()) => {
-                return Err(locked("host", "OPENGRID_SMTP_HOST"));
+                return Err(locked("host", "OPENBASE_SMTP_HOST"));
             }
             Some(_) => {}
             None => next.host = new,
@@ -196,7 +196,7 @@ fn apply_request(
             return Err(AppError::bad_request("the SMTP port must be 1 to 65535"));
         }
         match env.port {
-            Some(e) if e != port => return Err(locked("port", "OPENGRID_SMTP_PORT")),
+            Some(e) if e != port => return Err(locked("port", "OPENBASE_SMTP_PORT")),
             Some(_) => {}
             None => next.port = Some(port),
         }
@@ -205,7 +205,7 @@ fn apply_request(
         let new = SmtpSecurity::parse(security)?.as_str();
         match &env.security {
             Some(e) if !e.trim().eq_ignore_ascii_case(new) => {
-                return Err(locked("security mode", "OPENGRID_SMTP_SECURITY"));
+                return Err(locked("security mode", "OPENBASE_SMTP_SECURITY"));
             }
             Some(_) => {}
             None => next.security = Some(new.to_string()),
@@ -219,7 +219,7 @@ fn apply_request(
         };
         match &env.user {
             Some(e) if new.as_deref() != Some(e.as_str()) => {
-                return Err(locked("username", "OPENGRID_SMTP_USER"));
+                return Err(locked("username", "OPENBASE_SMTP_USER"));
             }
             Some(_) => {}
             None => next.user = new,
@@ -233,7 +233,7 @@ fn apply_request(
         };
         match &env.from {
             Some(e) if new.as_deref() != Some(e.as_str()) => {
-                return Err(locked("sender address", "OPENGRID_SMTP_FROM"));
+                return Err(locked("sender address", "OPENBASE_SMTP_FROM"));
             }
             Some(_) => {}
             None => next.from = new,
@@ -242,7 +242,7 @@ fn apply_request(
     match password {
         PasswordChange::Keep => {}
         PasswordChange::Set(_) | PasswordChange::Clear if env.password.is_some() => {
-            return Err(locked("password", "OPENGRID_SMTP_PASSWORD"));
+            return Err(locked("password", "OPENBASE_SMTP_PASSWORD"));
         }
         PasswordChange::Set(p) => next.password = Some(p),
         PasswordChange::Clear => next.password = None,
@@ -380,12 +380,12 @@ async fn send_test(
     } else {
         let mailer = state.email.mailer();
         let body = format!(
-            "This is a test email from OpenGrid at {}.\n\nIf you can read it, outgoing email \
+            "This is a test email from OpenBase at {}.\n\nIf you can read it, outgoing email \
              works: invitations, password resets and automation emails will be delivered.\n",
             state.config.public_url
         );
         let sent =
-            tokio::time::timeout(TEST_TIMEOUT, mailer.send(&to, "OpenGrid test email", &body))
+            tokio::time::timeout(TEST_TIMEOUT, mailer.send(&to, "OpenBase test email", &body))
                 .await;
         let error = match sent {
             Ok(Ok(())) => None,
@@ -467,7 +467,7 @@ mod tests {
     fn fields_are_validated_and_normalised() {
         let none = RawSmtp::default();
         let s = apply(
-            json!({"host": " smtp.example.com ", "port": 465, "security": "TLS", "username": " me ", "from": "OpenGrid <og@example.com>"}),
+            json!({"host": " smtp.example.com ", "port": 465, "security": "TLS", "username": " me ", "from": "OpenBase <openbase@example.com>"}),
             &none,
             &none,
         )
@@ -518,11 +518,11 @@ mod tests {
         let stored = RawSmtp::default();
         // a different value is refused and names the variable
         let e = apply(json!({"host": "other.example.com"}), &env, &stored).unwrap_err();
-        assert!(e.to_string().contains("OPENGRID_SMTP_HOST"), "{e}");
+        assert!(e.to_string().contains("OPENBASE_SMTP_HOST"), "{e}");
         assert!(apply(json!({"host": null}), &env, &stored).is_err());
         assert!(apply(json!({"port": 2525}), &env, &stored).is_err());
         let e = apply(json!({"password": "new"}), &env, &stored).unwrap_err();
-        assert!(e.to_string().contains("OPENGRID_SMTP_PASSWORD"), "{e}");
+        assert!(e.to_string().contains("OPENBASE_SMTP_PASSWORD"), "{e}");
         assert!(apply(json!({"password": null}), &env, &stored).is_err());
         // echoing the value in effect is accepted and changes nothing
         let s = apply(

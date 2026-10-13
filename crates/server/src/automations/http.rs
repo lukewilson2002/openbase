@@ -8,13 +8,13 @@
 
 use std::time::Duration;
 
-use og_core::api::automations::HttpMethod;
+use ob_core::api::automations::HttpMethod;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value as Json;
 
 use super::ssrf::{self, Resolver, SsrfError};
 
-pub const USER_AGENT: &str = "OpenGrid-Automations";
+pub const USER_AGENT: &str = "OpenBase-Automations";
 pub const TIMEOUT: Duration = Duration::from_secs(10);
 /// Bytes of a response body that are kept.
 pub const MAX_RESPONSE_BYTES: usize = 256 * 1024;
@@ -75,7 +75,7 @@ pub fn check_header(name: &str, value: &str) -> Result<(), String> {
     let lower = name.to_ascii_lowercase();
     if RESERVED_HEADERS.contains(&lower.as_str()) {
         return Err(format!(
-            "the {name} header is set by OpenGrid and cannot be overridden"
+            "the {name} header is set by OpenBase and cannot be overridden"
         ));
     }
     HeaderName::from_bytes(name.as_bytes())

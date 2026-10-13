@@ -1,11 +1,11 @@
 /**
- * Dev-only mock of the OpenGrid HTTP API for building and checking the grid without a server.
+ * Dev-only mock of the OpenBase HTTP API for building and checking the grid without a server.
  * Enabled with `VITE_MOCK=1 npm run dev` (see vite.config.ts); never part of a production build.
  *
  * It implements just enough of docs/plans §3.1 (auth, base schema, view queries with
  * filter/sort/group/search, record CRUD + restore + move, lookup, aggregations, comments, history,
  * attachments, fields, view config, SSE) to exercise every grid code path with realistic shapes.
- * Role is switchable with `?role=` on the base URL via the `og-mock-role` cookie
+ * Role is switchable with `?role=` on the base URL via the `ob-mock-role` cookie
  * (`/api/__mock/role/viewer`), and `/api/__mock/external-edit` simulates another client's write.
  *
  * The "Projects" table (tbl3, ~40 records) feeds the kanban, gallery, calendar, timeline and list
@@ -315,7 +315,7 @@ function tableDto(id: string): Obj {
 let roleOverride: string | null = null;
 
 function baseDto(req: IncomingMessage): Obj {
-  const cookie = /og-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
+  const cookie = /ob-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
   return { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE), tableDto(T_PROJECTS)] };
 }
 
@@ -808,7 +808,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
 
 export function mockApi(): Plugin {
   return {
-    name: "opengrid-mock-api",
+    name: "openbase-mock-api",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {

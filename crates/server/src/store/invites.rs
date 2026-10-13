@@ -2,7 +2,7 @@
 //! (`inv_` + 43 random chars); only its hash is stored. An invite is valid for
 //! 7 days, can be accepted once, and may be restricted to one email address.
 
-use og_core::api::auth::{InviteInfo, InvitePreview};
+use ob_core::api::auth::{InviteInfo, InvitePreview};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::db::now_ms;
@@ -76,7 +76,7 @@ pub fn create(
     email: Option<&str>,
     role: Role,
 ) -> AppResult<(String, InviteInfo)> {
-    let id = new_id(og_core::ids::INVITE);
+    let id = new_id(ob_core::ids::INVITE);
     let token = new_token("inv_");
     let now = now_ms();
     let (ws, base) = match target {

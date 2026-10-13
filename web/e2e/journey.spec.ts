@@ -9,12 +9,12 @@ import { editorFocused, expect, gridFocused, hoverAt, redo, test, typeToEdit, un
  * and back in. Everything that matters is verified against the API, never against canvas pixels
  * (the grid is drawn on a canvas, so cells are operated by position, like grid.spec.ts does).
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.use({ viewport: { width: 1360, height: 820 } });
 
 const EMAIL = "journey-admin@example.com";
 const PASSWORD = "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (views/grid/cellModels.ts defaultWidth, GlideGrid.tsx): row marker, header, row height.
 const MARKER_W = 56;
@@ -102,7 +102,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     test.skip((await (await page.request.get("/api/setup")).json()).needs_setup === false, "this instance was already set up; the journey needs a fresh one");
     await page.goto("/");
     await expect(page).toHaveURL(/\/setup$/);
-    await expect(page.getByRole("heading", { name: "Set up OpenGrid" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Set up OpenBase" })).toBeVisible();
     // Mismatched passwords are caught before any request is made.
     await page.getByLabel("Your name").fill("Journey Admin");
     await page.getByLabel("Email").fill(EMAIL);

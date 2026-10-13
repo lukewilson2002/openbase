@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 # Smoke test for the container image. Nothing is pushed anywhere.
 #
-#   docker build -f deploy/Dockerfile -t opengrid:local .
-#   scripts/smoke-docker.sh [image]                    (default: opengrid:local)
+#   docker build -f deploy/Dockerfile -t openbase:local .
+#   scripts/smoke-docker.sh [image]                    (default: openbase:local)
 #
 # Starts a throwaway container with a throwaway named volume, publishes it on a
 # loopback port, and checks, in order: the HEALTHCHECK turns "healthy", /api/health
 # and /api/setup answer, first-run signup works (the first account becomes admin),
 # a workspace + base + table + records can be created, the data is still there after
 # `docker restart` and after removing and re-creating the container on the same
-# volume, `opengrid backup` inside the container writes an archive, and the process
+# volume, `openbase backup` inside the container writes an archive, and the process
 # runs as the unprivileged user. Prints the image size and idle memory
 # (`docker stats --no-stream`). Removes the container and volume at the end.
 #
 # PORT=18090 picks the host port (default: a free one). Needs docker, curl, jq and python3.
 set -euo pipefail
 
-IMAGE=${1:-opengrid:local}
+IMAGE=${1:-openbase:local}
 PORT=${PORT:-$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}
-NAME=opengrid-smoke-$$
-VOL=opengrid-smoke-data-$$
+NAME=openbase-smoke-$$
+VOL=openbase-smoke-data-$$
 URL=http://127.0.0.1:$PORT
 PASS='correct-horse-battery-staple'
 JAR=$(mktemp)
@@ -37,7 +37,7 @@ die() { printf '    FAIL: %s\n' "$*" >&2; docker logs "$NAME" 2>&1 | tail -20 >&
 
 run_container() {
   docker run -d --name "$NAME" -p "127.0.0.1:$PORT:8080" -v "$VOL:/data" \
-    -e OPENGRID_PUBLIC_URL="$URL" "$IMAGE" >/dev/null
+    -e OPENBASE_PUBLIC_URL="$URL" "$IMAGE" >/dev/null
 }
 
 wait_healthy() { # up to 90 s
@@ -51,9 +51,9 @@ wait_healthy() { # up to 90 s
 api() { # METHOD PATH [JSON]
   local method=$1 path=$2 body=${3:-}
   if [[ -n "$body" ]]; then
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' -H 'Content-Type: application/json' -d "$body" "$URL$path"
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' -H 'Content-Type: application/json' -d "$body" "$URL$path"
   else
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' "$URL$path"
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' "$URL$path"
   fi
 }
 
@@ -102,8 +102,8 @@ rm -f "$JAR"
 api POST /api/auth/login "{\"email\":\"owner@example.com\",\"password\":\"$PASS\"}" >/dev/null
 [[ "$(count)" == 3 ]] && ok "3 records in a fresh container on the same volume" || die "data lost"
 
-step "opengrid backup inside the container"
-OUT=$(docker exec "$NAME" opengrid backup)
+step "openbase backup inside the container"
+OUT=$(docker exec "$NAME" openbase backup)
 echo "    $OUT"
 FILE=${OUT##* }
 docker exec "$NAME" ls -l "$FILE" && ok "archive exists in the volume" || die "archive missing"

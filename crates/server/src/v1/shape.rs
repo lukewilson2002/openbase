@@ -22,10 +22,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use og_core::api::records::Record;
-use og_core::api::v1::V1Record;
-use og_core::field::{Field, FieldKind};
-use og_core::value::ResultType;
+use ob_core::api::records::Record;
+use ob_core::api::v1::V1Record;
+use ob_core::field::{Field, FieldKind};
+use ob_core::value::ResultType;
 use rusqlite::Connection;
 use serde_json::{Map, Value as Json, json};
 
@@ -359,8 +359,8 @@ mod tests {
     #[test]
     fn attachment_urls_are_absolute_and_escaped() {
         assert_eq!(
-            attachment_url("https://grid.example.com", "attX", "my file#1.png", false),
-            "https://grid.example.com/api/attachments/attX/my%20file%231.png"
+            attachment_url("https://base.example.com", "attX", "my file#1.png", false),
+            "https://base.example.com/api/attachments/attX/my%20file%231.png"
         );
         assert_eq!(
             attachment_url("http://localhost:8080/", "attX", "a/b.png", false),

@@ -21,7 +21,7 @@
 //! 1. Unknown or computed fields are rejected with a 400 naming the field.
 //! 2. With `typecast`, select names that do not exist yet become choices
 //!    (the table is reported in [`WriteOutcome::schema_changed`]).
-//! 3. Values go through `og_core::cell::normalize`; link ids must be live
+//! 3. Values go through `ob_core::cell::normalize`; link ids must be live
 //!    records of the linked table, user ids must be collaborators of the base
 //!    (ids already in the cell are always accepted), attachment ids must be
 //!    uploads of this base (the stored reference is rebuilt from the
@@ -64,12 +64,12 @@ use std::sync::{LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use og_core::api::events::BaseEvent;
-use og_core::api::records::{MoveRecords, NewRecord, RecordPatch};
-use og_core::cell::{CellCtx, missing_choices, normalize};
-use og_core::field::{COLORS, Field, FieldKind, SelectChoice};
-use og_core::ids;
-use og_core::limits;
+use ob_core::api::events::BaseEvent;
+use ob_core::api::records::{MoveRecords, NewRecord, RecordPatch};
+use ob_core::cell::{CellCtx, missing_choices, normalize};
+use ob_core::field::{COLORS, Field, FieldKind, SelectChoice};
+use ob_core::ids;
+use ob_core::limits;
 use rusqlite::{Connection, Transaction};
 use serde_json::{Map, Value as Json, json};
 

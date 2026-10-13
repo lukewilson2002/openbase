@@ -8,10 +8,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use og_core::api::schema::{CreateField, UpdateField};
-use og_core::deps::DepGraph;
-use og_core::field::{Field, FieldKind, LinkOptions};
-use og_core::limits;
+use ob_core::api::schema::{CreateField, UpdateField};
+use ob_core::deps::DepGraph;
+use ob_core::field::{Field, FieldKind, LinkOptions};
+use ob_core::limits;
 use rusqlite::{Transaction, params};
 use serde_json::{Map, Value as Json};
 
@@ -99,7 +99,7 @@ pub fn create(tx: &Transaction, table_id: &str, input: &CreateField) -> AppResul
         "description",
     )?;
 
-    let field_id = new_id(og_core::ids::FIELD);
+    let field_id = new_id(ob_core::ids::FIELD);
     let ctx = KindCtx {
         conn: tx,
         table: &table,
@@ -108,7 +108,7 @@ pub fn create(tx: &Transaction, table_id: &str, input: &CreateField) -> AppResul
         previous: None,
     };
     let mut kind = normalize_kind(&ctx, input.kind.clone())?;
-    let inverse_id = new_id(og_core::ids::FIELD);
+    let inverse_id = new_id(ob_core::ids::FIELD);
     if let FieldKind::Link(l) = &mut kind {
         l.inverse_field_id = inverse_id.clone();
     }
@@ -342,7 +342,7 @@ fn plan_link_change(old: &Field, kind: &mut FieldKind) -> LinkPlan {
     if let FieldKind::Link(l) = kind {
         match (&plan, link_options(old)) {
             (LinkPlan::Keep, Some(prev)) => l.inverse_field_id = prev.inverse_field_id.clone(),
-            _ => l.inverse_field_id = new_id(og_core::ids::FIELD),
+            _ => l.inverse_field_id = new_id(ob_core::ids::FIELD),
         }
     }
     plan

@@ -10,7 +10,7 @@ export function Logo({ className, showName = true }: { className?: string; showN
           <path d="M7 13h18M7 19h18M13 7v18" />
         </g>
       </svg>
-      {showName && <span>OpenGrid</span>}
+      {showName && <span>OpenBase</span>}
     </span>
   );
 }

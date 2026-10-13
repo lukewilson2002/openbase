@@ -1,8 +1,8 @@
 /**
- * Minimal typed fetch wrapper for the OpenGrid JSON API.
+ * Minimal typed fetch wrapper for the OpenBase JSON API.
  *
  * - same-origin cookies (`credentials: "same-origin"`), JSON in and out
- * - `X-OpenGrid-CSRF: 1` on every non-GET request (server rejects cookie-authenticated
+ * - `X-OpenBase-CSRF: 1` on every non-GET request (server rejects cookie-authenticated
  *   unsafe requests without it; see crates/server/src/http.rs)
  * - `X-Client-Id` (per tab) on every request so SSE echoes of our own writes can be skipped
  * - errors normalised to {@link ApiError} from `{"error": {"code", "message"}}`
@@ -15,9 +15,9 @@
  * error is `{"error": {"code", "message"}}`.
  */
 
-export const CSRF_HEADER = "X-OpenGrid-CSRF";
+export const CSRF_HEADER = "X-OpenBase-CSRF";
 export const CLIENT_ID_HEADER = "X-Client-Id";
-const CLIENT_ID_KEY = "og-client-id";
+const CLIENT_ID_KEY = "ob-client-id";
 
 export class ApiError extends Error {
   readonly status: number;

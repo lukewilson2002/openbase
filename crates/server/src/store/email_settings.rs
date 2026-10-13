@@ -1,6 +1,6 @@
 //! The SMTP settings saved on the Admin -> Email page: six rows of the `settings` table.
 //!
-//! These are the *stored* layer only; `email::resolve` layers the `OPENGRID_SMTP_*` environment
+//! These are the *stored* layer only; `email::resolve` layers the `OPENBASE_SMTP_*` environment
 //! over them. The password row is written and read here and nowhere else sends it anywhere but
 //! to the SMTP library: no API returns it, no log or audit row contains it. It sits in the
 //! database in clear text (the server must present it to the mail server), so backups contain
@@ -84,7 +84,7 @@ mod tests {
             security: Some("tls".into()),
             user: Some("mailer".into()),
             password: Some("p@ss word".into()),
-            from: Some("OpenGrid <og@example.com>".into()),
+            from: Some("OpenBase <openbase@example.com>".into()),
         };
         save(&c, &s).unwrap();
         assert_eq!(load(&c).unwrap(), s);

@@ -18,7 +18,7 @@ async fn admin_can_create_list_and_download_backups() {
         .await;
     res.assert_status(200);
     let name = res.body["name"].as_str().unwrap().to_string();
-    assert!(opengrid::backup::is_backup_name(&name), "{name}");
+    assert!(openbase::backup::is_backup_name(&name), "{name}");
     assert!(res.body["size"].as_u64().unwrap() > 0);
     assert!(res.body["created_at"].as_i64().unwrap() > 0);
 
@@ -101,7 +101,7 @@ async fn non_admins_and_tokens_are_refused() {
         app.state
             .config
             .backups_dir()
-            .join("opengrid-20261012-030000.tar.gz"),
+            .join("openbase-20261012-030000.tar.gz"),
         b"x",
     )
     .unwrap();
@@ -113,17 +113,17 @@ async fn non_admins_and_tokens_are_refused() {
         app.post(c, "/api/admin/backups", serde_json::json!({}))
             .await
             .assert_status(expected);
-        app.get(c, "/api/admin/backups/opengrid-20261012-030000.tar.gz")
+        app.get(c, "/api/admin/backups/openbase-20261012-030000.tar.gz")
             .await
             .assert_status(expected);
     }
 
     // An admin's API token cannot reach admin endpoints.
     let admin = app.admin("admin@example.com", "Admin");
-    let token = opengrid::ids::new_token("pat");
+    let token = openbase::ids::new_token("pat");
     let (uid, hash) = (
         admin.user_id.clone().unwrap(),
-        opengrid::ids::hash_token(&token),
+        openbase::ids::hash_token(&token),
     );
     app.state
         .db
@@ -153,17 +153,17 @@ async fn download_rejects_names_outside_the_pattern() {
     std::fs::write(app.state.config.backups_dir().join("notes.txt"), b"x").unwrap();
     for bad in [
         "notes.txt",
-        "..%2Fopengrid.db",
+        "..%2Fopenbase.db",
         "%2E%2E",
-        "opengrid.db",
+        "openbase.db",
         "..%2F..%2Fetc%2Fpasswd",
-        "opengrid-20261012-030000.tar.gz.partial",
+        "openbase-20261012-030000.tar.gz.partial",
     ] {
         let res = app.get(&admin, &format!("/api/admin/backups/{bad}")).await;
         assert_eq!(res.status.as_u16(), 404, "{bad}");
     }
     // Valid pattern but missing file.
-    app.get(&admin, "/api/admin/backups/opengrid-20000101-000000.tar.gz")
+    app.get(&admin, "/api/admin/backups/openbase-20000101-000000.tar.gz")
         .await
         .assert_status(404);
 }

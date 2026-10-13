@@ -217,7 +217,7 @@ async fn reset_request_without_email_configured_is_silent() {
 async fn password_reset_full_flow_by_email() {
     let app = TestApp::with_config(|c| {
         c.smtp_host = Some("smtp.example.com".into());
-        c.public_url = "https://grid.example.com".into();
+        c.public_url = "https://base.example.com".into();
     });
     let user = app.user("a@example.com", "Ann");
     let (_, other_device) = app.login("a@example.com", PW).await;
@@ -247,7 +247,7 @@ async fn password_reset_full_flow_by_email() {
     assert!(
         sent[0]
             .body
-            .contains("https://grid.example.com/reset-password?token=rst_")
+            .contains("https://base.example.com/reset-password?token=rst_")
     );
     assert!(sent[0].body.contains("Ann"));
     let token = extract_token(&sent[0].body);
@@ -391,7 +391,7 @@ async fn admin_reset_link_works_without_email() {
     res.assert_status(200);
     let url = res.body["url"].as_str().unwrap();
     assert!(url.starts_with("http://localhost:8080/reset-password?token=rst_"));
-    assert!(res.body["expires_at"].as_i64().unwrap() > opengrid::db::now_ms() + 23 * 3600 * 1000);
+    assert!(res.body["expires_at"].as_i64().unwrap() > openbase::db::now_ms() + 23 * 3600 * 1000);
     let token = extract_token(url);
     app.post(
         &app.anon(),

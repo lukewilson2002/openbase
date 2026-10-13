@@ -8,12 +8,12 @@ import { expect, test } from "./fixtures";
  *
  * The journey spec created the first administrator; this one runs after all the others.
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.use({ viewport: { width: 1360, height: 860 } });
 
 const EMAIL = "journey-admin@example.com";
 const PASSWORD = "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const CSRF = { "X-OpenBase-CSRF": "1" };
 const SECRET = "e2e-smtp-secret-9f3a";
 
 test("an administrator sets up email, sees a test email fail with the real error, and turns it off", async ({ page }) => {

@@ -55,7 +55,7 @@ export function EntitySelect({ id, value, onValueChange, options, disabled, clas
         <S.Content
           position="popper"
           sideOffset={4}
-          className="og-pop-in z-50 max-h-[min(20rem,var(--radix-select-content-available-height))] w-[var(--radix-select-trigger-width)] min-w-44 overflow-hidden rounded-md border border-line bg-surface shadow-pop"
+          className="ob-pop-in z-50 max-h-[min(20rem,var(--radix-select-content-available-height))] w-[var(--radix-select-trigger-width)] min-w-44 overflow-hidden rounded-md border border-line bg-surface shadow-pop"
         >
           <S.Viewport className="p-1">
             {options.map((o) => (

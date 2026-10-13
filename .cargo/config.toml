@@ -1,5 +1,5 @@
 # Environment for ts-rs TypeScript export (`scripts/gen-types.sh`).
-# Only read when og-core is built with `--features ts`.
+# Only read when ob-core is built with `--features ts`.
 [env]
 # Generated bindings land in the web client, next to the code that imports them.
 TS_RS_EXPORT_DIR = { value = "web/src/api/types", relative = true }

@@ -8,16 +8,16 @@ import { expect, hoverAt, gridFocused, test, typeToEdit } from "./fixtures";
  * record exists. Then run it for real from the Test panel against the named record and check
  * that the template produced that name.
  *
- *   OPENGRID_E2E=1 npm run e2e -- --project=automations --no-deps
+ *   OPENBASE_E2E=1 npm run e2e -- --project=automations --no-deps
  *
  * It signs up its own user. Results are asserted against the API, not pixels.
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.describe.configure({ mode: "serial" });
 
-const EMAIL = process.env["OPENGRID_E2E_EMAIL"] ?? "e2e-automations@example.com";
-const PASSWORD = process.env["OPENGRID_E2E_PASSWORD"] ?? "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const EMAIL = process.env["OPENBASE_E2E_EMAIL"] ?? "e2e-automations@example.com";
+const PASSWORD = process.env["OPENBASE_E2E_PASSWORD"] ?? "correct horse battery staple 42";
+const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (see grid.spec.ts): the Name column of a fresh table starts after the row marker.
 const MARKER_W = 56;
@@ -46,7 +46,7 @@ async function signIn(page: Page): Promise<void> {
   const signup = await page.request.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Automations", password: PASSWORD }, headers: CSRF });
   if (signup.ok()) return;
   const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENGRID_E2E_EMAIL/OPENGRID_E2E_PASSWORD`).toBeTruthy();
+  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
 }
 
 async function seed(page: Page): Promise<Fixture> {
@@ -79,7 +79,7 @@ async function runs(page: Page, automationId: string): Promise<RunDto[]> {
 }
 
 test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENGRID_E2E_URL"] ?? "http://127.0.0.1:8080" });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080" });
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);

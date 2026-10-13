@@ -41,7 +41,7 @@ function freePort(): Promise<number> {
 async function waitForHealth(baseUrl: string, child: ChildProcess, output: () => string): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`opengrid exited early (code ${child.exitCode}).\n${output()}`);
+    if (child.exitCode !== null) throw new Error(`openbase exited early (code ${child.exitCode}).\n${output()}`);
     try {
       if ((await fetch(`${baseUrl}/api/health`)).ok) return;
     } catch {
@@ -49,7 +49,7 @@ async function waitForHealth(baseUrl: string, child: ChildProcess, output: () =>
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error(`opengrid did not answer ${baseUrl}/api/health within 30s.\n${output()}`);
+  throw new Error(`openbase did not answer ${baseUrl}/api/health within 30s.\n${output()}`);
 }
 
 /** GET `/` with Node's http (no keep-alive), returning the status and body. */
@@ -87,26 +87,26 @@ async function assertEmbedded(baseUrl: string): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<(() => Promise<void>) | undefined> {
-  if (!process.env["OPENGRID_E2E"]) return undefined;
-  if (process.env["OPENGRID_E2E_URL"]) {
-    console.log(`[e2e] using the server at ${process.env["OPENGRID_E2E_URL"]}`);
+  if (!process.env["OPENBASE_E2E"]) return undefined;
+  if (process.env["OPENBASE_E2E_URL"]) {
+    console.log(`[e2e] using the server at ${process.env["OPENBASE_E2E_URL"]}`);
     return undefined;
   }
 
-  if (!process.env["OPENGRID_E2E_SKIP_BUILD"]) {
+  if (!process.env["OPENBASE_E2E_SKIP_BUILD"]) {
     run("npm", ["run", "build"], webDir, "build the web client");
     // rust-embed tracks the files it embedded, not new ones: make sure the crate is rebuilt.
     const webRs = join(repoRoot, "crates/server/src/web.rs");
     const now = new Date();
     utimesSync(webRs, now, now);
-    run("cargo", ["build", "-p", "opengrid", "--bin", "opengrid", "--features", "debug-embed"], repoRoot, "build the server");
+    run("cargo", ["build", "-p", "openbase", "--bin", "openbase", "--features", "debug-embed"], repoRoot, "build the server");
   }
   const meta = JSON.parse(run("cargo", ["metadata", "--format-version", "1", "--no-deps"], repoRoot, "locate the target directory")) as { target_directory: string };
-  const bin = join(meta.target_directory, "debug", `opengrid${exe}`);
-  if (!existsSync(bin)) throw new Error(`${bin} not found; run without OPENGRID_E2E_SKIP_BUILD.`);
-  if (!existsSync(join(webDir, "dist", "index.html"))) throw new Error("web/dist/index.html is missing; run without OPENGRID_E2E_SKIP_BUILD.");
+  const bin = join(meta.target_directory, "debug", `openbase${exe}`);
+  if (!existsSync(bin)) throw new Error(`${bin} not found; run without OPENBASE_E2E_SKIP_BUILD.`);
+  if (!existsSync(join(webDir, "dist", "index.html"))) throw new Error("web/dist/index.html is missing; run without OPENBASE_E2E_SKIP_BUILD.");
 
-  const dataDir = mkdtempSync(join(tmpdir(), "opengrid-e2e-"));
+  const dataDir = mkdtempSync(join(tmpdir(), "openbase-e2e-"));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let log = "";
@@ -114,13 +114,13 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | und
     cwd: dataDir,
     env: {
       ...process.env,
-      OPENGRID_DATA_DIR: dataDir,
-      OPENGRID_BIND: `127.0.0.1:${port}`,
-      OPENGRID_PUBLIC_URL: baseUrl,
+      OPENBASE_DATA_DIR: dataDir,
+      OPENBASE_BIND: `127.0.0.1:${port}`,
+      OPENBASE_PUBLIC_URL: baseUrl,
       // grid.spec.ts signs up its own user after the journey has created the administrator.
-      OPENGRID_OPEN_SIGNUP: "true",
-      OPENGRID_BACKUP_HOUR: "-1",
-      OPENGRID_LOG: "warn",
+      OPENBASE_OPEN_SIGNUP: "true",
+      OPENBASE_BACKUP_HOUR: "-1",
+      OPENBASE_LOG: "warn",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -139,8 +139,8 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | und
     cleanup();
     throw e;
   }
-  process.env["OPENGRID_E2E_URL"] = baseUrl;
-  console.log(`[e2e] opengrid listening on ${baseUrl} (data dir ${dataDir}); web client served from the embedded build`);
+  process.env["OPENBASE_E2E_URL"] = baseUrl;
+  console.log(`[e2e] openbase listening on ${baseUrl} (data dir ${dataDir}); web client served from the embedded build`);
 
   return async () => {
     if (child.exitCode === null) {
@@ -150,7 +150,7 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | und
       await exited;
       clearTimeout(timer);
     }
-    if (process.env["OPENGRID_E2E_KEEP_DATA"]) console.log(`[e2e] data dir kept: ${dataDir}`);
+    if (process.env["OPENBASE_E2E_KEEP_DATA"]) console.log(`[e2e] data dir kept: ${dataDir}`);
     else cleanup();
   };
 }

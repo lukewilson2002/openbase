@@ -4,9 +4,9 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
-use og_core::api::events::BaseEvent;
-use og_core::api::schema::BaseSchema;
-use og_core::api::workspaces::{
+use ob_core::api::events::BaseEvent;
+use ob_core::api::schema::BaseSchema;
+use ob_core::api::workspaces::{
     Collaborator, CreateBase, DuplicateBase, Member, UpdateBase, UpdateMember,
 };
 

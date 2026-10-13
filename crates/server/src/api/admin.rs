@@ -14,7 +14,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
-use og_core::api::auth::{
+use ob_core::api::auth::{
     AdminCreateUser, AdminCreatedUser, AdminUpdateUser, AdminUser, AuditPage, InstanceStats,
     ResetLink,
 };

@@ -4,8 +4,8 @@
 mod common;
 mod schema_support;
 
-use og_core::field::{FieldKind, FieldType};
-use opengrid::perm::Role;
+use ob_core::field::{FieldKind, FieldType};
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::{Value, json};
 
@@ -176,7 +176,7 @@ async fn fields_per_table_are_limited() {
     let f = Fixture::new().await;
     let table = f.table_id.clone();
     sql(&f.app, |tx| {
-        for i in 0..(og_core::limits::MAX_FIELDS_PER_TABLE - 2) {
+        for i in 0..(ob_core::limits::MAX_FIELDS_PER_TABLE - 2) {
             tx.execute(
                 "INSERT INTO fields (id, table_id, name, type, options, position, created_at)
                  VALUES (?1, ?2, ?3, 'number', '{}', ?4, 1)",
@@ -339,7 +339,7 @@ async fn select_choices_get_ids_colours_and_are_validated() {
     );
     assert_eq!(choices[1]["name"], "Doing");
     assert_eq!(choices[1]["color"], "orange");
-    assert!(og_core::field::COLORS.contains(&choices[0]["color"].as_str().unwrap()));
+    assert!(ob_core::field::COLORS.contains(&choices[0]["color"].as_str().unwrap()));
 
     let bad = [
         json!([{ "name": "A" }, { "name": "a" }]),
@@ -763,7 +763,7 @@ async fn field_changes_publish_schema_events() {
     let env = rx.try_recv().unwrap();
     assert_eq!(
         env.event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(f.table_id.clone())
         }
     );

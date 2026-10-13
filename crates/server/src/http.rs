@@ -17,8 +17,8 @@ use crate::state::AppState;
 
 /// Header every cookie-authenticated state-changing request must carry.
 /// Browsers cannot attach custom headers to cross-site requests without a
-/// CORS preflight, and OpenGrid never answers preflights, so this blocks CSRF.
-pub const CSRF_HEADER: &str = "x-opengrid-csrf";
+/// CORS preflight, and OpenBase never answers preflights, so this blocks CSRF.
+pub const CSRF_HEADER: &str = "x-openbase-csrf";
 
 /// Default JSON body limit; upload routes set their own.
 const JSON_BODY_LIMIT: usize = 4 * 1024 * 1024;

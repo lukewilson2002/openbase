@@ -1,13 +1,13 @@
-# OpenGrid
+# OpenBase
 
-OpenGrid is a self-hosted alternative to Airtable for individuals and very small
+OpenBase is a self-hosted alternative to Airtable for individuals and very small
 businesses: tables, linked records, formulas, grid / kanban / calendar / gallery /
 timeline / list / form views, automations, sharing and an Airtable-compatible API.
 You run it on a small server you control, and your data stays in one folder.
 
 - **One process, one data directory.** The server is a single Rust program
   (axum + SQLite) with the web app compiled into it. The database
-  (`opengrid.db`), uploaded files (`attachments/`) and backups (`backups/`) all
+  (`openbase.db`), uploaded files (`attachments/`) and backups (`backups/`) all
   live in one directory. No Postgres, no Redis, no Node at runtime.
 - **Built for a small VPS.** Idle, the server uses about 15 MB of memory; a
   50,000-record table stayed under about 105 MB in our tests
@@ -34,7 +34,7 @@ You run it on a small server you control, and your data stays in one folder.
 **Accounts and admin.** First-run setup (the first user becomes admin).
 Invite-only or open signup. Sessions you can list and revoke. Password change
 and password reset, by email when SMTP is configured, otherwise through an admin
-reset link or `opengrid reset-password`. TOTP two-factor authentication,
+reset link or `openbase reset-password`. TOTP two-factor authentication,
 profiles with time zones, and personal access tokens (read or write, optionally
 limited to some bases). Admin pages cover users, outgoing email (SMTP settings
 and a "Send test email" button, no restart needed), instance stats, the audit log
@@ -99,7 +99,7 @@ password-reset links), two-factor settings, sessions and API tokens stay out of
 reach of any token. See [docs/mcp.md](docs/mcp.md).
 
 **Operations.** CSV import and export. Daily automatic backups with retention,
-plus `opengrid backup` and `opengrid restore`. An automatic database snapshot
+plus `openbase backup` and `openbase restore`. An automatic database snapshot
 before a schema upgrade. A trash that keeps deleted items for 30 days. Record
 history and audit-log retention. A health endpoint, a Docker image, a
 docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
@@ -127,7 +127,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 
 ## Quick start
 
-Two supported ways to run it. Both end with OpenGrid on `127.0.0.1:8080` or
+Two supported ways to run it. Both end with OpenBase on `127.0.0.1:8080` or
 behind Caddy; **never expose the plain HTTP port to the internet**, because
 passwords and session cookies would travel unencrypted.
 
@@ -137,14 +137,14 @@ You need a server with Docker (Engine and the Compose plugin) and a domain whose
 DNS already points at it, with ports 80 and 443 open.
 
 ```sh
-git clone <repository-url> opengrid
-cd opengrid/deploy
-cp .env.example .env        # set OPENGRID_DOMAIN=grid.example.com (and TZ)
+git clone <repository-url> openbase
+cd openbase/deploy
+cp .env.example .env        # set OPENBASE_DOMAIN=base.example.com (and TZ)
 docker compose up -d --build
-docker compose ps           # opengrid should become "healthy"
+docker compose ps           # openbase should become "healthy"
 ```
 
-Open `https://grid.example.com`. Caddy obtains and renews the certificate
+Open `https://base.example.com`. Caddy obtains and renews the certificate
 automatically. The first build compiles the Rust server and the web client inside
 Docker and needs no Rust or Node on the host. It took 2 minutes 12 seconds on the
 laptop described under [Resource usage](#resource-usage-and-scale), including
@@ -160,14 +160,14 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 ### Single binary with systemd
 
 There are no prebuilt release binaries yet; build one (see
-[Building from source](#building-from-source)), copy `target/release/opengrid` to
+[Building from source](#building-from-source)), copy `target/release/openbase` to
 the server, and follow [docs/self-hosting.md](docs/self-hosting.md#3-alternative-the-binary-with-systemd)
-for the service user, `deploy/opengrid.service` and a TLS reverse proxy.
+for the service user, `deploy/openbase.service` and a TLS reverse proxy.
 
 To just try it locally:
 
 ```sh
-OPENGRID_DATA_DIR=./data ./target/release/opengrid
+OPENBASE_DATA_DIR=./data ./target/release/openbase
 # Listening on http://127.0.0.1:8080
 ```
 
@@ -175,12 +175,12 @@ OPENGRID_DATA_DIR=./data ./target/release/opengrid
 
 Open the site: the first account you create becomes the administrator. Do this
 before you share the URL. Afterwards new accounts need an invite unless you set
-`OPENGRID_OPEN_SIGNUP=true`. For scripted installs you can create the
+`OPENBASE_OPEN_SIGNUP=true`. For scripted installs you can create the
 administrator on the command line instead:
 
 ```sh
-read -rs OPENGRID_ADMIN_PASSWORD && export OPENGRID_ADMIN_PASSWORD
-opengrid create-admin --email you@example.com --name "Your Name"
+read -rs OPENBASE_ADMIN_PASSWORD && export OPENBASE_ADMIN_PASSWORD
+openbase create-admin --email you@example.com --name "Your Name"
 ```
 
 Then turn on two-factor authentication under **Account -> Security**, and set up
@@ -190,84 +190,84 @@ troubleshooting are in [docs/self-hosting.md](docs/self-hosting.md).
 ### Command line
 
 ```
-opengrid [serve]                           run the server (default)
-opengrid migrate                           apply database migrations and exit
-opengrid create-admin --email E --name N   (password from OPENGRID_ADMIN_PASSWORD)
-opengrid reset-password --email E          (password from OPENGRID_NEW_PASSWORD)
-opengrid disable-2fa --email E             turn off 2FA for a user who lost their device
-opengrid backup [--out FILE]               write a backup archive
-opengrid restore ARCHIVE [--force]         restore an archive (server must be stopped)
-opengrid healthcheck                       exit 0 if the server answers /api/health
+openbase [serve]                           run the server (default)
+openbase migrate                           apply database migrations and exit
+openbase create-admin --email E --name N   (password from OPENBASE_ADMIN_PASSWORD)
+openbase reset-password --email E          (password from OPENBASE_NEW_PASSWORD)
+openbase disable-2fa --email E             turn off 2FA for a user who lost their device
+openbase backup [--out FILE]               write a backup archive
+openbase restore ARCHIVE [--force]         restore an archive (server must be stopped)
+openbase healthcheck                       exit 0 if the server answers /api/health
 ```
 
-With Docker, run them as `docker compose exec opengrid opengrid <command>`.
+With Docker, run them as `docker compose exec openbase openbase <command>`.
 
 ## Configuration
 
 Every option is a command-line flag (`--data-dir`) and an environment variable
-(`OPENGRID_DATA_DIR`); `opengrid --help` lists them. With Docker Compose put them
-in `deploy/.env`; with systemd in `/etc/opengrid/opengrid.env`.
+(`OPENBASE_DATA_DIR`); `openbase --help` lists them. With Docker Compose put them
+in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OPENGRID_DATA_DIR` | `./data` (`/data` in the image) | Directory for the database, attachments and backups. |
-| `OPENGRID_BIND` | `127.0.0.1:8080` (`0.0.0.0:8080` in the image) | Address to listen on. |
-| `OPENGRID_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenGrid at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. |
-| `OPENGRID_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
-| `OPENGRID_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenGrid can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
-| `OPENGRID_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
-| `OPENGRID_BACKUP_HOUR` | `3` | Hour (0-23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
-| `OPENGRID_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
-| `OPENGRID_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |
-| `OPENGRID_HISTORY_DAYS` | `365` | Days of record history to keep (`0` = forever). Attachments mentioned in retained history are kept on disk. |
-| `OPENGRID_AUDIT_DAYS` | `365` | Days of audit log (logins, password and token changes, invites, admin actions) to keep (`0` = forever). |
-| `OPENGRID_EMAIL_PER_USER_HOUR` | `100` | Invite and automation emails one user can cause per hour. |
-| `OPENGRID_EMAIL_PER_HOUR` | `500` | Invite and automation emails the whole instance sends per hour on behalf of users. |
-| `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when no host is set here or on **Admin -> Email**. Do not set the other `OPENGRID_SMTP_*` variables to empty values, leave them out. |
-| `OPENGRID_SMTP_PORT` | `587` | SMTP port. |
-| `OPENGRID_SMTP_USER` | *(unset)* | SMTP username. |
-| `OPENGRID_SMTP_PASSWORD` | *(unset)* | SMTP password. |
-| `OPENGRID_SMTP_SECURITY` | `starttls` | `starttls`, `tls` (implicit TLS, usually port 465) or `none` (local relay only). |
-| `OPENGRID_SMTP_FROM` | `OpenGrid <opengrid@localhost>` | Sender address. |
-| `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. |
-| `OPENGRID_V1_RATE_PER_TOKEN` | `5` | Requests per second one API token may make to `/api/v1`; more answer `429`. |
-| `OPENGRID_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
-| `OPENGRID_MCP_RATE_PER_TOKEN` | `30` | Requests per second one API token may make to the MCP endpoint `/mcp`; more answer `429`. |
-| `OPENGRID_MCP_RATE_PER_USER` | `100` | Requests per second all tokens of one user may make to `/mcp` together. |
-| `OPENGRID_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
-| `OPENGRID_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
-| `OPENGRID_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
-| `OPENGRID_ADMIN_PASSWORD` | – | Password for `create-admin`. |
-| `OPENGRID_NEW_PASSWORD` | – | Password for `reset-password`. |
+| `OPENBASE_DATA_DIR` | `./data` (`/data` in the image) | Directory for the database, attachments and backups. |
+| `OPENBASE_BIND` | `127.0.0.1:8080` (`0.0.0.0:8080` in the image) | Address to listen on. |
+| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenBase at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. |
+| `OPENBASE_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
+| `OPENBASE_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenBase can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
+| `OPENBASE_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
+| `OPENBASE_BACKUP_HOUR` | `3` | Hour (0-23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
+| `OPENBASE_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
+| `OPENBASE_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |
+| `OPENBASE_HISTORY_DAYS` | `365` | Days of record history to keep (`0` = forever). Attachments mentioned in retained history are kept on disk. |
+| `OPENBASE_AUDIT_DAYS` | `365` | Days of audit log (logins, password and token changes, invites, admin actions) to keep (`0` = forever). |
+| `OPENBASE_EMAIL_PER_USER_HOUR` | `100` | Invite and automation emails one user can cause per hour. |
+| `OPENBASE_EMAIL_PER_HOUR` | `500` | Invite and automation emails the whole instance sends per hour on behalf of users. |
+| `OPENBASE_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when no host is set here or on **Admin -> Email**. Do not set the other `OPENBASE_SMTP_*` variables to empty values, leave them out. |
+| `OPENBASE_SMTP_PORT` | `587` | SMTP port. |
+| `OPENBASE_SMTP_USER` | *(unset)* | SMTP username. |
+| `OPENBASE_SMTP_PASSWORD` | *(unset)* | SMTP password. |
+| `OPENBASE_SMTP_SECURITY` | `starttls` | `starttls`, `tls` (implicit TLS, usually port 465) or `none` (local relay only). |
+| `OPENBASE_SMTP_FROM` | `OpenBase <openbase@localhost>` | Sender address. |
+| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. |
+| `OPENBASE_V1_RATE_PER_TOKEN` | `5` | Requests per second one API token may make to `/api/v1`; more answer `429`. |
+| `OPENBASE_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
+| `OPENBASE_MCP_RATE_PER_TOKEN` | `30` | Requests per second one API token may make to the MCP endpoint `/mcp`; more answer `429`. |
+| `OPENBASE_MCP_RATE_PER_USER` | `100` | Requests per second all tokens of one user may make to `/mcp` together. |
+| `OPENBASE_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
+| `OPENBASE_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
+| `OPENBASE_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
+| `OPENBASE_ADMIN_PASSWORD` | – | Password for `create-admin`. |
+| `OPENBASE_NEW_PASSWORD` | – | Password for `reset-password`. |
 
-`TZ` (not an `OPENGRID_` variable) sets the time zone for `OPENGRID_BACKUP_HOUR`
+`TZ` (not an `OPENBASE_` variable) sets the time zone for `OPENBASE_BACKUP_HOUR`
 and for log timestamps.
 
 **Email can also be set up in the app.** An administrator finds the same six SMTP
 settings under **Admin -> Email**, with a "Send test email" button that shows the mail
 server's own error when delivery fails. Changes apply at once, without a restart, and
 are saved in the database (so backups contain them, the SMTP password included). Each
-setting that has an `OPENGRID_SMTP_*` variable set **wins over the saved value and is
+setting that has an `OPENBASE_SMTP_*` variable set **wins over the saved value and is
 shown there as read-only ("set by environment")**; settings without a variable stay
 editable, so you can fix the host and password in the environment and leave the sender
 address to the page. The SMTP password can be typed only by a signed-in person (never by
 an API token or an AI agent), is never shown again ("Saved", with Replace and Remove)
 and never appears in logs or the audit log. The email limits
-(`OPENGRID_EMAIL_PER_USER_HOUR`, `OPENGRID_EMAIL_PER_HOUR`) are shown there but only
+(`OPENBASE_EMAIL_PER_USER_HOUR`, `OPENBASE_EMAIL_PER_HOUR`) are shown there but only
 changed in the environment. See [docs/self-hosting.md](docs/self-hosting.md#5-email-smtp).
 
 ## Backups and restore
 
-- **Automatic.** Every day at `OPENGRID_BACKUP_HOUR` the server writes
-  `backups/opengrid-auto-<UTC timestamp>.tar.gz` and keeps the newest
-  `OPENGRID_BACKUP_KEEP`. If the server was down at that hour, the backup runs as
+- **Automatic.** Every day at `OPENBASE_BACKUP_HOUR` the server writes
+  `backups/openbase-auto-<UTC timestamp>.tar.gz` and keeps the newest
+  `OPENBASE_BACKUP_KEEP`. If the server was down at that hour, the backup runs as
   soon as it is back up that day (so a brand-new instance writes one at its
   first start after the hour has passed).
-- **Manual.** **Admin -> Backups -> Create backup now**, or `opengrid backup [--out FILE]`.
+- **Manual.** **Admin -> Backups -> Create backup now**, or `openbase backup [--out FILE]`.
   Works while the server is running (the database is copied with SQLite's
   `VACUUM INTO`).
-- **What is inside.** `opengrid.db`, every attachment, and a `manifest.json`
-  (OpenGrid version and schema version). Archives are not encrypted and contain
+- **What is inside.** `openbase.db`, every attachment, and a `manifest.json`
+  (OpenBase version and schema version). Archives are not encrypted and contain
   password hashes.
 - **Copy them off the server.** Backups on the same disk do not protect you from
   losing the server. For example, with [rclone](https://rclone.org) (any S3
@@ -275,18 +275,18 @@ changed in the environment. See [docs/self-hosting.md](docs/self-hosting.md#5-em
   hour:
 
   ```cron
-  30 4 * * * rclone copy --max-age 48h /var/lib/docker/volumes/deploy_opengrid-data/_data/backups b2:my-opengrid-backups
+  30 4 * * * rclone copy --max-age 48h /var/lib/docker/volumes/deploy_openbase-data/_data/backups b2:my-openbase-backups
   ```
 
-  (`/var/lib/opengrid/backups` for a systemd install; use an encrypted remote.)
+  (`/var/lib/openbase/backups` for a systemd install; use an encrypted remote.)
   The offsite examples were not run against a real remote storage service; check
   that your copy job works and that you can restore from a copy.
 - **Restore** (server stopped; the current database is moved aside, not deleted):
 
   ```sh
-  docker compose stop opengrid
-  docker compose run --rm --no-deps opengrid restore /data/backups/opengrid-auto-20261012-030000.tar.gz --force
-  docker compose start opengrid
+  docker compose stop openbase
+  docker compose run --rm --no-deps openbase restore /data/backups/openbase-auto-20261012-030000.tar.gz --force
+  docker compose start openbase
   ```
 
   Restoring onto a new server, from a file on the host, and with systemd are
@@ -298,12 +298,12 @@ changed in the environment. See [docs/self-hosting.md](docs/self-hosting.md#5-em
 Take a manual backup and make sure you have a recent offsite copy, then:
 
 ```sh
-cd opengrid && git pull
+cd openbase && git pull
 cd deploy && docker compose up -d --build
 ```
 
-(systemd: replace `/usr/local/bin/opengrid` and `systemctl restart opengrid`.)
-When a new version changes the database schema, OpenGrid first writes a
+(systemd: replace `/usr/local/bin/openbase` and `systemctl restart openbase`.)
+When a new version changes the database schema, OpenBase first writes a
 pre-migration snapshot (`backups/pre-migration-v<old>-<timestamp>.db`) and refuses
 to start if it cannot. It never opens a database written by a newer version.
 Rolling back means restoring your pre-upgrade backup. Details in
@@ -325,7 +325,7 @@ it on your own server.
 | Records per table | 50,000 comfortable, 100,000 hard cap | 50,000 measured; the 100,000 cap is enforced but not benchmarked |
 | Fields per table | 500 | enforced |
 | Tables per base | 200 | enforced |
-| Upload size | 100 MB per file (`OPENGRID_MAX_UPLOAD_MB`) | enforced |
+| Upload size | 100 MB per file (`OPENBASE_MAX_UPLOAD_MB`) | enforced |
 | CSV import | 100,000 rows, 20 MB, 3,000,000 cells | enforced |
 | Concurrent active users | about 25 | design target, not load-tested |
 
@@ -348,7 +348,7 @@ it on your own server.
 
 ### Measured: speed at 50,000 records
 
-From the in-process scale test (`cargo test -p opengrid --release --test scale --
+From the in-process scale test (`cargo test -p openbase --release --test scale --
 --ignored --nocapture`, three runs; 50,000 orders with 11 fields incl. a link, a
 lookup and a formula, plus 1,000 customers):
 
@@ -394,12 +394,12 @@ run end to end on the laptop (`scripts/smoke-docker.sh`, `scripts/smoke-install.
 
 Disk: the 50,000-record test database with 11 fields compressed to a 5.7 MB
 backup archive. Each backup holds the database **and every attachment**, so
-with the default `OPENGRID_BACKUP_KEEP=7` plan for roughly eight times your
+with the default `OPENBASE_BACKUP_KEEP=7` plan for roughly eight times your
 database plus attachments.
 
 ## Security
 
-OpenGrid is designed to face the internet behind HTTPS: invite-only sign-up by
+OpenBase is designed to face the internet behind HTTPS: invite-only sign-up by
 default, Argon2id passwords, optional TOTP 2FA, revocable sessions and tokens, CSRF
 protection, per-role access checks on every route, rate limits on every
 unauthenticated surface, and SSRF protection for automation HTTP requests. The
@@ -412,7 +412,7 @@ The Airtable-compatible API lives under `/api/v1` and takes personal access
 tokens (create one under **Account -> Tokens**):
 
 ```sh
-curl -H "Authorization: Bearer $TOKEN" https://grid.example.com/api/v1/meta/bases
+curl -H "Authorization: Bearer $TOKEN" https://base.example.com/api/v1/meta/bases
 ```
 
 [docs/api.md](docs/api.md) lists what is supported and how it differs from
@@ -428,15 +428,15 @@ server embeds `web/dist` when it is compiled, so build the web client first:
 
 ```sh
 (cd web && npm ci && npm run build)       # produces web/dist
-cargo build --release --locked -p opengrid
-./target/release/opengrid --help
+cargo build --release --locked -p openbase
+./target/release/openbase --help
 ```
 
 Without `web/dist` the server still builds and runs, and shows a "web client not
 built" page at `/`. Docker users need neither Rust nor Node: `deploy/Dockerfile`
 builds both inside the image. The web client is described in
 [web/README.md](web/README.md), the design in
-[docs/plans/2026-10-12-opengrid.md](docs/plans/2026-10-12-opengrid.md).
+[docs/plans/2026-10-12-openbase.md](docs/plans/2026-10-12-openbase.md).
 
 ## Running the tests
 
@@ -444,7 +444,7 @@ builds both inside the image. The web client is described in
 (cd web && npm ci --ignore-scripts)    # once
 scripts/check.sh                       # rustfmt, clippy -D warnings, cargo test, generated types,
                                        # tsc, Vitest, production build, live API contract tests
-OPENGRID_E2E=1 scripts/check.sh        # the same plus the Playwright end-to-end tests
+OPENBASE_E2E=1 scripts/check.sh        # the same plus the Playwright end-to-end tests
 ```
 
 The end-to-end tests drive the real server in Google Chrome (installed Chrome via

@@ -19,7 +19,7 @@ source: string, host?: string | null, port: number,
  */
 security: string, username?: string | null, 
 /**
- * Sender address, e.g. `OpenGrid <opengrid@example.com>`.
+ * Sender address, e.g. `OpenBase <openbase@example.com>`.
  */
 from: string, 
 /**

@@ -1,4 +1,4 @@
--- OpenGrid schema v2: icons for workspaces and tables.
+-- OpenBase schema v2: icons for workspaces and tables.
 -- An icon is a Lucide icon name in kebab-case ("briefcase", "chart-column");
 -- NULL means "none" and clients fall back to the first letter of the name.
 -- Additive: two nullable columns, plus clearing any v1 base icon that is not a

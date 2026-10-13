@@ -309,10 +309,10 @@ async fn links_collaborators_and_attachments_are_written_in_airtable_shapes() {
     let path = format!("/api/v1/{}/Everything", v.base_id());
     let ann =
         v.p.f
-            .member("ann@example.com", opengrid::perm::Role::Editor);
+            .member("ann@example.com", openbase::perm::Role::Editor);
     let bob =
         v.p.f
-            .member("bob@example.com", opengrid::perm::Role::Viewer);
+            .member("bob@example.com", openbase::perm::Role::Viewer);
     let file = v.p.f.upload("note.txt", b"hello").await;
     let r = v
         .app()
@@ -454,7 +454,7 @@ async fn created_records_publish_events_and_show_up_in_cached_queries() {
     let id = r.body["id"].as_str().unwrap();
     let env = rx.try_recv().expect("an event was published");
     match &env.event {
-        og_core::api::events::BaseEvent::RecordsChanged {
+        ob_core::api::events::BaseEvent::RecordsChanged {
             created, table_id, ..
         } => {
             assert_eq!(created, &[id.to_string()]);
@@ -706,7 +706,7 @@ async fn updates_record_history_and_publish_events() {
         .assert_status(200);
     let env = rx.try_recv().expect("event");
     match &env.event {
-        og_core::api::events::BaseEvent::RecordsChanged { updated, .. } => {
+        ob_core::api::events::BaseEvent::RecordsChanged { updated, .. } => {
             assert_eq!(updated, std::slice::from_ref(id))
         }
         other => panic!("{other:?}"),
@@ -965,7 +965,7 @@ async fn deleted_records_can_be_restored_from_the_trash_and_cleanup_links() {
     let mut rx = v.app().state.events.subscribe(v.base_id());
     v.delete(&[&v.p.ids[2]]).await.assert_status(200);
     match &rx.try_recv().unwrap().event {
-        og_core::api::events::BaseEvent::RecordsChanged { deleted, .. } => {
+        ob_core::api::events::BaseEvent::RecordsChanged { deleted, .. } => {
             assert_eq!(deleted, &[v.p.ids[2].clone()])
         }
         other => panic!("{other:?}"),
@@ -979,7 +979,7 @@ async fn writes_respect_the_table_record_limit() {
     let v = v1_people().await;
     let t = v.table_id().to_string();
     // Fill the table up to its cap with direct inserts.
-    let cap = og_core::limits::MAX_RECORDS_PER_TABLE;
+    let cap = ob_core::limits::MAX_RECORDS_PER_TABLE;
     let t2 = t.clone();
     sql(v.app(), move |tx| {
         let mut stmt = tx.prepare(
@@ -1010,7 +1010,7 @@ async fn writes_respect_the_table_record_limit() {
 #[tokio::test]
 async fn long_text_over_the_cell_limit_is_rejected() {
     let v = v1_people().await;
-    let huge = "x".repeat(og_core::limits::MAX_TEXT_CELL_LEN + 1);
+    let huge = "x".repeat(ob_core::limits::MAX_TEXT_CELL_LEN + 1);
     let r = v.post(json!({ "fields": { "Name": huge } })).await;
     assert_v1_error(&r, 422, "INVALID_VALUE_FOR_COLUMN");
     let _ = sse_support::fast;

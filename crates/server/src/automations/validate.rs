@@ -16,11 +16,11 @@ use std::str::FromStr;
 
 use chrono::Utc;
 use chrono_tz::Tz;
-use og_core::api::automations::{Action, ActionStep, MAX_ACTIONS, Trigger};
-use og_core::cell::{CellCtx, CellError, normalize};
-use og_core::field::Field;
-use og_core::query::compile_filter;
-use og_core::view::ViewType;
+use ob_core::api::automations::{Action, ActionStep, MAX_ACTIONS, Trigger};
+use ob_core::cell::{CellCtx, CellError, normalize};
+use ob_core::field::Field;
+use ob_core::query::compile_filter;
+use ob_core::view::ViewType;
 use rusqlite::Connection;
 use serde_json::Value as Json;
 use url::Url;
@@ -318,7 +318,7 @@ fn check_step(
                 if b.len() > MAX_REQUEST_BODY_BYTES {
                     return Err(bad("the request body is too large"));
                 }
-                if *method == og_core::api::automations::HttpMethod::Get && !b.is_empty() {
+                if *method == ob_core::api::automations::HttpMethod::Get && !b.is_empty() {
                     return Err(bad("a GET request cannot have a body"));
                 }
                 template(b, shape, index, "body")?;

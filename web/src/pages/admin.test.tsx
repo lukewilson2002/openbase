@@ -130,15 +130,15 @@ describe("admin", () => {
 
   it("lists backups with download links and creates one on demand", async () => {
     const user = userEvent.setup();
-    const backups = [{ name: "opengrid-2026-10-11.tar.gz", size: 2048, created_at: 1_700_000_000_000 }];
+    const backups = [{ name: "openbase-2026-10-11.tar.gz", size: 2048, created_at: 1_700_000_000_000 }];
     const api = mockApi({
       "GET /api/auth/me": ADMIN,
       "GET /api/admin/backups": backups,
-      "POST /api/admin/backups": { name: "opengrid-2026-10-12.tar.gz", size: 4096, created_at: 1_700_000_100_000 },
+      "POST /api/admin/backups": { name: "openbase-2026-10-12.tar.gz", size: 4096, created_at: 1_700_000_100_000 },
     });
     renderApp({ route: "/admin?tab=backups" });
     const link = await screen.findByRole("link", { name: /Download/ });
-    expect(link).toHaveAttribute("href", "/api/admin/backups/opengrid-2026-10-11.tar.gz");
+    expect(link).toHaveAttribute("href", "/api/admin/backups/openbase-2026-10-11.tar.gz");
     await user.click(screen.getByRole("button", { name: /Create backup now/ }));
     await waitFor(() => expect(api.callsTo("POST /api/admin/backups")).toHaveLength(1));
   });

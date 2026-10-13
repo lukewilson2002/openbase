@@ -4,7 +4,7 @@
 mod common;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::{Value, json};
 
@@ -429,7 +429,7 @@ async fn restore_publishes_events() {
         .assert_status(200);
     assert_eq!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(sid(&t2["id"]).to_string())
         }
     );
@@ -443,7 +443,7 @@ async fn restore_publishes_events() {
         .assert_status(200);
     assert_eq!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::BaseChanged
+        ob_core::api::events::BaseEvent::BaseChanged
     );
 }
 

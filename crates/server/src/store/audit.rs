@@ -1,7 +1,7 @@
 //! Audit log of security-relevant events (logins, password and 2FA changes,
 //! tokens, invites, admin actions). Rows are append-only.
 
-use og_core::api::auth::{AuditEntry, AuditPage};
+use ob_core::api::auth::{AuditEntry, AuditPage};
 use rusqlite::{Connection, params};
 use serde_json::Value;
 

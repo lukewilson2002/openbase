@@ -4,23 +4,23 @@ import { editorFocused, expect, gridFocused, hoverAt, redo, test, typeToEdit, un
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
  * search, hide fields, add a field, expanded record with comments, add/delete records.
- * Runs only with OPENGRID_E2E=1 (see playwright.config.ts: the stack is built and started for you):
+ * Runs only with OPENBASE_E2E=1 (see playwright.config.ts: the stack is built and started for you):
  *
- *   OPENGRID_E2E=1 npm run e2e -- --project=grid --no-deps
+ *   OPENBASE_E2E=1 npm run e2e -- --project=grid --no-deps
  *
  * It signs up its own user (the server started by globalSetup allows signup; on a server that does
- * not, set OPENGRID_E2E_EMAIL and OPENGRID_E2E_PASSWORD to an existing account).
+ * not, set OPENBASE_E2E_EMAIL and OPENBASE_E2E_PASSWORD to an existing account).
  *
  * Glide draws on a canvas, so cells are operated by position (column widths and row heights are
  * the grid's defaults) with real mouse and keyboard input, and results are asserted against the
  * server (`rows()`), never against pixels.
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.describe.configure({ mode: "serial" });
 
-const EMAIL = process.env["OPENGRID_E2E_EMAIL"] ?? "e2e-grid@example.com";
-const PASSWORD = process.env["OPENGRID_E2E_PASSWORD"] ?? "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const EMAIL = process.env["OPENBASE_E2E_EMAIL"] ?? "e2e-grid@example.com";
+const PASSWORD = process.env["OPENBASE_E2E_PASSWORD"] ?? "correct horse battery staple 42";
+const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (see views/grid/cellModels.ts defaultWidth and the Glide setup in GlideGrid.tsx).
 const MARKER_W = 56;
@@ -51,7 +51,7 @@ async function signIn(page: Page): Promise<void> {
   const signup = await req.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Grid", password: PASSWORD }, headers: CSRF });
   if (signup.ok()) return;
   const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENGRID_E2E_EMAIL/OPENGRID_E2E_PASSWORD`).toBeTruthy();
+  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
 }
 
 type TableDto = { id: string; fields: { id: string; name: string }[]; views: { id: string }[] };
@@ -116,7 +116,7 @@ async function clickCell(page: Page, col: keyof typeof WIDTHS, row: number, opts
   }
 }
 
-async function openGrid(page: Page) {
+async function gotoGrid(page: Page) {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.viewId}`);
   await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
   await expect(page.getByText(/\d+ records?/)).toBeVisible();
@@ -124,7 +124,7 @@ async function openGrid(page: Page) {
 }
 
 test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENGRID_E2E_URL"] ?? "http://127.0.0.1:8080" });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080" });
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);
@@ -139,13 +139,13 @@ test.beforeEach(async ({ context }) => {
 test.use({ viewport: { width: 1360, height: 820 } });
 
 test("shows the seeded records and the record count", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await expect(page.getByText("5 records")).toBeVisible();
   expect((await rows(page)).map((r) => r.name)).toEqual(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
 });
 
 test("edits a text cell, saves it on the server, and undoes and redoes it", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await clickCell(page, "name", 0, { double: true });
   await page.keyboard.press("End");
   await page.keyboard.type(" edited");
@@ -161,7 +161,7 @@ test("edits a text cell, saves it on the server, and undoes and redoes it", asyn
 });
 
 test("type-to-edit replaces a number; text that is not a number is rejected", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await clickCell(page, "qty", 1);
   await typeToEdit(page, "77");
   await page.keyboard.press("Enter");
@@ -175,7 +175,7 @@ test("type-to-edit replaces a number; text that is not a number is rejected", as
 });
 
 test("picks a single select option from the editor", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await clickCell(page, "status", 0, { double: true });
   await page.getByRole("combobox", { name: /Find an option/ }).fill("Done");
   await page.getByRole("option", { name: "Done" }).click();
@@ -183,7 +183,7 @@ test("picks a single select option from the editor", async ({ page }) => {
 });
 
 test("clears selected cells with Delete and fills down with Ctrl+D", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await clickCell(page, "qty", 2);
   await page.keyboard.press("Delete");
   await expect.poll(async () => (await rows(page))[2]!.qty).toBeUndefined();
@@ -192,7 +192,7 @@ test("clears selected cells with Delete and fills down with Ctrl+D", async ({ pa
 });
 
 test("filters by a text condition and shows the record count", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.getByRole("button", { name: /^Filter/ }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await page.getByLabel("Operator").selectOption("contains");
@@ -205,7 +205,7 @@ test("filters by a text condition and shows the record count", async ({ page }) 
 });
 
 test("sorts by a field descending from the toolbar", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.getByRole("button", { name: /^Sort/ }).click();
   await page.getByRole("button", { name: "Add sort" }).click();
   await page.getByLabel("Direction for sort 1").selectOption("desc");
@@ -215,7 +215,7 @@ test("sorts by a field descending from the toolbar", async ({ page }) => {
 });
 
 test("searches with Ctrl+F", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.keyboard.press("Control+F");
   await page.getByRole("searchbox", { name: "Search records" }).fill("char");
   await expect(page.getByText(/1 record found/)).toBeVisible();
@@ -224,7 +224,7 @@ test("searches with Ctrl+F", async ({ page }) => {
 });
 
 test("hides a field and shows it again", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.getByRole("button", { name: /Hide fields/ }).click();
   await page.getByRole("switch", { name: "Qty" }).click();
   await page.keyboard.press("Escape");
@@ -236,7 +236,7 @@ test("hides a field and shows it again", async ({ page }) => {
 });
 
 test("adds a field from the dialog", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.getByRole("button", { name: "Add field" }).click();
   await page.getByLabel("Field name").fill("Remarks");
   await page.getByRole("option", { name: /Long text/ }).click();
@@ -248,7 +248,7 @@ test("adds a field from the dialog", async ({ page }) => {
 });
 
 test("opens the expanded record with Shift+Space, comments, and the link is shareable", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await clickCell(page, "name", 1);
   await page.keyboard.press("Shift+Space");
   await expect(page).toHaveURL(/[?&]record=rec/);
@@ -267,7 +267,7 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
 });
 
 test("adds and deletes records, with undo", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
   await expect(page.getByText("6 records")).toBeVisible();
   // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
@@ -318,7 +318,7 @@ async function markerInk(page: Page, row: number | "summary"): Promise<string> {
 const inked = (map: string): boolean => map.includes("1");
 
 test("the marker column numbers the records and leaves the pinned summary row without a number", async ({ page }) => {
-  await openGrid(page);
+  await gotoGrid(page);
   const n = (await rows(page)).length;
   expect(inked(await markerInk(page, 0)), "record 1 shows its number").toBe(true);
   expect(inked(await markerInk(page, n - 1)), `record ${n} shows its number`).toBe(true);
@@ -340,7 +340,7 @@ test("in a grouped view the marker column numbers the records, not the group hea
   const displayRow = (i: number) => i + grouped.groups.filter((g) => g.start <= i).length;
 
   // Reference glyphs: the same numbers in the ungrouped view.
-  await openGrid(page);
+  await gotoGrid(page);
   const plain: string[] = [];
   for (let i = 0; i < grouped.total; i++) plain.push(await markerInk(page, i));
 

@@ -21,7 +21,7 @@
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
-use og_core::api::automations::{RunStatus, Trigger};
+use ob_core::api::automations::{RunStatus, Trigger};
 use tokio::sync::{Notify, Semaphore};
 
 use super::actions::{Executor, RunInput, RunResult};
@@ -252,7 +252,7 @@ async fn process(exec: Arc<Executor>, opts: RunnerOpts, run: RunRow) {
 async fn process_inner(exec: Arc<Executor>, opts: RunnerOpts, run: RunRow) {
     let run_id = run.id;
     let mut log = run.log.clone();
-    let fail = |msg: String, log: Vec<og_core::api::automations::StepLog>| {
+    let fail = |msg: String, log: Vec<ob_core::api::automations::StepLog>| {
         let exec = exec.clone();
         async move {
             let r = exec

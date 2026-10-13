@@ -41,7 +41,7 @@ async fn cookie_post_without_csrf_header_is_rejected() {
         .uri("/api/health")
         .header(
             header::COOKIE,
-            format!("og_session={}", user.cookie.unwrap()),
+            format!("ob_session={}", user.cookie.unwrap()),
         )
         .body(Body::empty())
         .unwrap();

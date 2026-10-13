@@ -1,7 +1,7 @@
 //! The Airtable-compatible API under `/api/v1` (documented in `docs/api.md`).
 //!
 //! Existing Airtable client libraries and scripts should work against
-//! `https://<your server>/api/v1` with an OpenGrid API token in place of an
+//! `https://<your server>/api/v1` with an OpenBase API token in place of an
 //! Airtable personal access token. Routes:
 //!
 //! - `GET  /api/v1/meta/bases`, `GET /api/v1/meta/bases/{baseId}/tables`

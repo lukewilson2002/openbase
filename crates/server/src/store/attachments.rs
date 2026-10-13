@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use og_core::field::AttachmentRef;
+use ob_core::field::AttachmentRef;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::error::{AppError, AppResult};
@@ -191,7 +191,7 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Option<Attachment>> {
 }
 
 /// Attachment ids look like `att` + 14 base62 characters.
-const ID_PREFIX: &str = og_core::ids::ATTACHMENT;
+const ID_PREFIX: &str = ob_core::ids::ATTACHMENT;
 const ID_SUFFIX_LEN: usize = 14;
 
 /// Every attachment-id-shaped token in `text`.

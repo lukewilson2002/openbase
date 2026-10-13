@@ -15,8 +15,8 @@ mod sse_support;
 use base64::Engine;
 use common::Client;
 use mcp_support::*;
-use og_core::api::events::BaseEvent;
-use opengrid::mcp::catalogue::{Access, ENDPOINTS};
+use ob_core::api::events::BaseEvent;
+use openbase::mcp::catalogue::{Access, ENDPOINTS};
 use query_support::*;
 use serde_json::{Value, json};
 

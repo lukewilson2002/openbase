@@ -1,4 +1,4 @@
-//! A real OpenGrid on a TCP port, and an agent that talks to it the way an MCP client does:
+//! A real OpenBase on a TCP port, and an agent that talks to it the way an MCP client does:
 //! JSON-RPC over HTTP with a bearer token. Used by the end-to-end agent tests.
 #![allow(dead_code)]
 
@@ -6,8 +6,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opengrid::automations::runner::{Runner, RunnerOpts};
-use opengrid::config::Config;
+use openbase::automations::runner::{Runner, RunnerOpts};
+use openbase::config::Config;
 use serde_json::{Value, json};
 
 use crate::common::TestApp;

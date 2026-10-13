@@ -67,7 +67,7 @@ describe("MCP endpoint", () => {
     expect(wrong.status).toBe(401);
     expect(wrong.headers.get("www-authenticate")).toContain("invalid_token");
     // A session cookie is not an MCP credential.
-    const cookie = await rpc(null, "tools/list", {}, { cookie: "og_session=whatever" });
+    const cookie = await rpc(null, "tools/list", {}, { cookie: "ob_session=whatever" });
     expect(cookie.status).toBe(401);
     expect(cookie.body.error.message).toContain("personal access tokens only");
     // No event stream and no sessions to end.
@@ -78,7 +78,7 @@ describe("MCP endpoint", () => {
   it("answers initialize with the server's identity and guidance", async () => {
     const res = await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract", version: "1" } });
     expect(res.status).toBe(200);
-    expect(res.body.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "opengrid" }, capabilities: { tools: {} } });
+    expect(res.body.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "openbase" }, capabilities: { tools: {} } });
     expect(res.body.result.instructions).toContain("list_bases");
     // The stateless revision needs no handshake at all.
     const discover = await rpc(

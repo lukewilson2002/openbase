@@ -6,9 +6,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use common::TestApp;
-use opengrid::backup;
-use opengrid::config::Config;
-use opengrid::state::AppState;
+use openbase::backup;
+use openbase::config::Config;
+use openbase::state::AppState;
 
 const BLOB_SHA: &str = "ab0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd";
 
@@ -99,7 +99,7 @@ fn valid_db_bytes() -> Vec<u8> {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("x.db");
     let conn = rusqlite::Connection::open(&p).unwrap();
-    opengrid::db::migrate(&conn).unwrap();
+    openbase::db::migrate(&conn).unwrap();
     drop(conn);
     std::fs::read(p).unwrap()
 }
@@ -111,19 +111,19 @@ fn create_writes_archive_with_manifest_db_and_attachments() {
     let path = backup::create(&app.state, None).unwrap();
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
     assert!(backup::is_backup_name(&name), "{name}");
-    assert!(name.starts_with("opengrid-") && name.ends_with(".tar.gz"));
+    assert!(name.starts_with("openbase-") && name.ends_with(".tar.gz"));
     assert_eq!(path.parent().unwrap(), app.state.config.backups_dir());
 
     let entries = archive_entries(&path);
     let names: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
     assert_eq!(names[0], "manifest.json", "{names:?}");
-    assert!(names.contains(&"opengrid.db"));
+    assert!(names.contains(&"openbase.db"));
     let blob_entry = format!("attachments/{}/{}", &BLOB_SHA[..2], BLOB_SHA);
     let blob = entries.iter().find(|(p, _)| *p == blob_entry).unwrap();
     assert_eq!(blob.1, b"attachment bytes");
 
     let m: serde_json::Value = serde_json::from_slice(&entries[0].1).unwrap();
-    assert_eq!(m["schema_version"], opengrid::db::schema_version());
+    assert_eq!(m["schema_version"], openbase::db::schema_version());
     assert_eq!(m["app_version"], env!("CARGO_PKG_VERSION"));
     assert!(m["created_at"].as_str().unwrap().contains('T'));
 
@@ -197,7 +197,7 @@ fn restore_refuses_existing_database_without_force_and_keeps_it_with_force() {
     let names = files_in(target.path());
     let aside: Vec<&String> = names
         .iter()
-        .filter(|n| n.starts_with("opengrid.db.pre-restore-") && !n.ends_with("-wal"))
+        .filter(|n| n.starts_with("openbase.db.pre-restore-") && !n.ends_with("-wal"))
         .collect();
     assert_eq!(aside.len(), 1, "{names:?}");
     // The set-aside copy still holds the old data.
@@ -221,7 +221,7 @@ fn restore_refuses_while_wal_is_non_empty() {
     let target = tempfile::tempdir().unwrap();
     let config = Config::for_tests(target.path());
     std::fs::write(config.db_path(), b"").unwrap();
-    std::fs::write(target.path().join("opengrid.db-wal"), b"pretend wal").unwrap();
+    std::fs::write(target.path().join("openbase.db-wal"), b"pretend wal").unwrap();
     let err = backup::restore(&config, &archive, false).unwrap_err();
     assert!(err.to_string().contains("stop the server"), "{err}");
 }
@@ -229,11 +229,11 @@ fn restore_refuses_while_wal_is_non_empty() {
 #[test]
 fn restore_rejects_path_traversal_and_links() {
     let db = valid_db_bytes();
-    let m = manifest(opengrid::db::schema_version());
+    let m = manifest(openbase::db::schema_version());
     let cases: Vec<(&str, tar::EntryType)> = vec![
         ("../escaped", tar::EntryType::Regular),
         ("attachments/../../escaped", tar::EntryType::Regular),
-        ("/tmp/opengrid-absolute-escape", tar::EntryType::Regular),
+        ("/tmp/openbase-absolute-escape", tar::EntryType::Regular),
         ("attachments/link", tar::EntryType::Symlink),
     ];
     for (bad, kind) in cases {
@@ -245,7 +245,7 @@ fn restore_rejects_path_traversal_and_links() {
             &archive,
             &[
                 ("manifest.json", &m, tar::EntryType::Regular),
-                ("opengrid.db", &db, tar::EntryType::Regular),
+                ("openbase.db", &db, tar::EntryType::Regular),
                 (bad, b"pwned", kind),
             ],
         );
@@ -257,7 +257,7 @@ fn restore_rejects_path_traversal_and_links() {
         );
         assert!(!work.path().join("escaped").exists(), "{bad}");
         assert!(
-            !data.join("opengrid.db").exists(),
+            !data.join("openbase.db").exists(),
             "{bad}: nothing restored"
         );
         let names = files_in(&data);
@@ -266,35 +266,35 @@ fn restore_rejects_path_traversal_and_links() {
             "{names:?}"
         );
     }
-    assert!(!Path::new("/tmp/opengrid-absolute-escape").exists());
+    assert!(!Path::new("/tmp/openbase-absolute-escape").exists());
 }
 
 #[test]
 fn restore_rejects_newer_schema_and_missing_parts() {
     let db = valid_db_bytes();
-    let newer = manifest(opengrid::db::schema_version() + 1);
-    let ok = manifest(opengrid::db::schema_version());
+    let newer = manifest(openbase::db::schema_version() + 1);
+    let ok = manifest(openbase::db::schema_version());
     let cases: Vec<(&str, Vec<RawEntry>)> = vec![
         (
             "newer",
             vec![
                 ("manifest.json", &newer, tar::EntryType::Regular),
-                ("opengrid.db", &db, tar::EntryType::Regular),
+                ("openbase.db", &db, tar::EntryType::Regular),
             ],
         ),
         (
             "manifest",
-            vec![("opengrid.db", &db, tar::EntryType::Regular)],
+            vec![("openbase.db", &db, tar::EntryType::Regular)],
         ),
         (
-            "opengrid.db",
+            "openbase.db",
             vec![("manifest.json", &ok, tar::EntryType::Regular)],
         ),
         (
             "manifest",
             vec![
                 ("manifest.json", b"not json", tar::EntryType::Regular),
-                ("opengrid.db", &db, tar::EntryType::Regular),
+                ("openbase.db", &db, tar::EntryType::Regular),
             ],
         ),
         (
@@ -302,7 +302,7 @@ fn restore_rejects_newer_schema_and_missing_parts() {
             vec![
                 ("manifest.json", &ok, tar::EntryType::Regular),
                 (
-                    "opengrid.db",
+                    "openbase.db",
                     b"definitely not sqlite",
                     tar::EntryType::Regular,
                 ),
@@ -320,7 +320,7 @@ fn restore_rejects_newer_schema_and_missing_parts() {
             err.to_string().contains(expect),
             "expected '{expect}' in: {err}"
         );
-        assert!(!data.join("opengrid.db").exists());
+        assert!(!data.join("openbase.db").exists());
     }
 }
 
@@ -361,13 +361,13 @@ fn restore_merges_attachments_with_existing_ones() {
 fn automatic_backups_use_their_own_name_and_retention_keeps_newest_n() {
     let dir = tempfile::tempdir().unwrap();
     let names = [
-        "opengrid-auto-20261001-030000.tar.gz",
-        "opengrid-auto-20261002-030000.tar.gz",
-        "opengrid-auto-20261003-030000.tar.gz",
-        "opengrid-auto-20261004-030000.tar.gz",
-        "opengrid-auto-20261005-030000.tar.gz",
+        "openbase-auto-20261001-030000.tar.gz",
+        "openbase-auto-20261002-030000.tar.gz",
+        "openbase-auto-20261003-030000.tar.gz",
+        "openbase-auto-20261004-030000.tar.gz",
+        "openbase-auto-20261005-030000.tar.gz",
         // Manual backups, snapshots and foreign files are never pruned.
-        "opengrid-20260101-120000.tar.gz",
+        "openbase-20260101-120000.tar.gz",
         "pre-migration-v1-20260101-120000.db",
         "notes.txt",
     ];
@@ -380,10 +380,10 @@ fn automatic_backups_use_their_own_name_and_retention_keeps_newest_n() {
         files_in(dir.path()),
         vec![
             "notes.txt",
-            "opengrid-20260101-120000.tar.gz",
-            "opengrid-auto-20261003-030000.tar.gz",
-            "opengrid-auto-20261004-030000.tar.gz",
-            "opengrid-auto-20261005-030000.tar.gz",
+            "openbase-20260101-120000.tar.gz",
+            "openbase-auto-20261003-030000.tar.gz",
+            "openbase-auto-20261004-030000.tar.gz",
+            "openbase-auto-20261005-030000.tar.gz",
             "pre-migration-v1-20260101-120000.db",
         ]
     );
@@ -391,9 +391,9 @@ fn automatic_backups_use_their_own_name_and_retention_keeps_newest_n() {
     backup::prune(dir.path(), 0).unwrap();
     let left: Vec<String> = files_in(dir.path())
         .into_iter()
-        .filter(|n| n.starts_with("opengrid-auto-"))
+        .filter(|n| n.starts_with("openbase-auto-"))
         .collect();
-    assert_eq!(left, vec!["opengrid-auto-20261005-030000.tar.gz"]);
+    assert_eq!(left, vec!["openbase-auto-20261005-030000.tar.gz"]);
 }
 
 #[test]
@@ -401,14 +401,14 @@ fn create_automatic_names_and_prunes() {
     let app = TestApp::with_config(|c| c.backup_keep = 2);
     let dir = app.state.config.backups_dir();
     for d in ["20200101", "20200102", "20200103"] {
-        std::fs::write(dir.join(format!("opengrid-auto-{d}-030000.tar.gz")), b"x").unwrap();
+        std::fs::write(dir.join(format!("openbase-auto-{d}-030000.tar.gz")), b"x").unwrap();
     }
     let path = backup::create_automatic(&app.state).unwrap();
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
-    assert!(name.starts_with("opengrid-auto-"), "{name}");
+    assert!(name.starts_with("openbase-auto-"), "{name}");
     let autos: Vec<String> = files_in(&dir)
         .into_iter()
-        .filter(|n| n.starts_with("opengrid-auto-"))
+        .filter(|n| n.starts_with("openbase-auto-"))
         .collect();
     assert_eq!(autos.len(), 2, "{autos:?}");
     assert!(autos.contains(&name));
@@ -417,8 +417,8 @@ fn create_automatic_names_and_prunes() {
 #[test]
 fn backup_names_are_validated_strictly() {
     for ok in [
-        "opengrid-20261012-030000.tar.gz",
-        "opengrid-auto-20261012-030000.tar.gz",
+        "openbase-20261012-030000.tar.gz",
+        "openbase-auto-20261012-030000.tar.gz",
         "pre-migration-v1-20261012-030000.db",
         "pre-migration-v12-20261012-030000-2.db",
     ] {
@@ -427,15 +427,15 @@ fn backup_names_are_validated_strictly() {
     for bad in [
         "",
         "..",
-        "../opengrid-20261012-030000.tar.gz",
-        "opengrid-20261012-030000.tar.gz/..",
-        "opengrid.db",
-        "opengrid-2026101-030000.tar.gz",
-        "opengrid-20261012-030000.tar.gz.partial",
-        ".opengrid-20261012-030000.tar.gz",
-        "opengrid-20261012-030000.TAR.GZ",
+        "../openbase-20261012-030000.tar.gz",
+        "openbase-20261012-030000.tar.gz/..",
+        "openbase.db",
+        "openbase-2026101-030000.tar.gz",
+        "openbase-20261012-030000.tar.gz.partial",
+        ".openbase-20261012-030000.tar.gz",
+        "openbase-20261012-030000.TAR.GZ",
         "pre-migration-v-20261012-030000.db",
-        "opengrid-２0261012-030000.tar.gz",
+        "openbase-２0261012-030000.tar.gz",
     ] {
         assert!(!backup::is_backup_name(bad), "{bad}");
     }
@@ -444,23 +444,23 @@ fn backup_names_are_validated_strictly() {
 #[test]
 fn list_returns_backups_newest_first() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("opengrid-20261001-030000.tar.gz"), b"12345").unwrap();
+    std::fs::write(dir.path().join("openbase-20261001-030000.tar.gz"), b"12345").unwrap();
     std::fs::write(
-        dir.path().join("opengrid-auto-20261002-030000.tar.gz"),
+        dir.path().join("openbase-auto-20261002-030000.tar.gz"),
         b"1",
     )
     .unwrap();
     std::fs::write(dir.path().join("pre-migration-v1-20261003-030000.db"), b"1").unwrap();
     std::fs::write(dir.path().join("random.tar.gz"), b"1").unwrap();
-    std::fs::write(dir.path().join(".opengrid-x.partial"), b"1").unwrap();
+    std::fs::write(dir.path().join(".openbase-x.partial"), b"1").unwrap();
     let list = backup::list(dir.path()).unwrap();
     let names: Vec<&str> = list.iter().map(|b| b.name.as_str()).collect();
     assert_eq!(
         names,
         vec![
             "pre-migration-v1-20261003-030000.db",
-            "opengrid-auto-20261002-030000.tar.gz",
-            "opengrid-20261001-030000.tar.gz",
+            "openbase-auto-20261002-030000.tar.gz",
+            "openbase-20261001-030000.tar.gz",
         ]
     );
     assert_eq!(list[2].size, 5);

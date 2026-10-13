@@ -1,5 +1,5 @@
 /**
- * Locale-free text parsing primitives (mirror of og_core::cell::parse): numbers, durations,
+ * Locale-free text parsing primitives (mirror of ob_core::cell::parse): numbers, durations,
  * checkbox words and comma lists. Every function is total: bad input yields `null`.
  */
 

@@ -19,7 +19,7 @@ const link = (over: Partial<ShareLink> = {}): ShareLink => ({
   kind: "view",
   token: "tok_abc",
   path: "/s/tok_abc",
-  url: "https://grid.example.com/s/tok_abc",
+  url: "https://base.example.com/s/tok_abc",
   enabled: true,
   has_password: false,
   created_by: "usr1",
@@ -54,10 +54,10 @@ describe("a read-only view link", () => {
   view.config.hidden_fields = ["f_secret"];
 
   it("lists the links with their public address and what they expose", async () => {
-    open(view, [link(), link({ id: "shr2", token: "tok_pw", has_password: true, enabled: false, url: "https://grid.example.com/s/tok_pw" })]);
+    open(view, [link(), link({ id: "shr2", token: "tok_pw", has_password: true, enabled: false, url: "https://base.example.com/s/tok_pw" })]);
     const dialog = await screen.findByRole("dialog", { name: "Share Team" });
     const addresses = await within(dialog).findAllByRole("textbox", { name: "View link" });
-    expect(addresses.map((a) => (a as HTMLInputElement).value)).toEqual(["https://grid.example.com/share/tok_abc", "https://grid.example.com/share/tok_pw"]);
+    expect(addresses.map((a) => (a as HTMLInputElement).value)).toEqual(["https://base.example.com/share/tok_abc", "https://base.example.com/share/tok_pw"]);
     expect(within(dialog).getByText("Password protected")).toBeInTheDocument();
     expect(within(dialog).getByText(/switched off/)).toBeInTheDocument();
     // The explanation names the visible fields and the hidden one.
@@ -135,7 +135,7 @@ describe("a read-only view link", () => {
   });
 
   it("stops at the server's limit of links per view", async () => {
-    const many = Array.from({ length: MAX_SHARES_PER_VIEW }, (_, i) => link({ id: `shr${i}`, token: `tok${i}`, url: `https://grid.example.com/s/tok${i}` }));
+    const many = Array.from({ length: MAX_SHARES_PER_VIEW }, (_, i) => link({ id: `shr${i}`, token: `tok${i}`, url: `https://base.example.com/s/tok${i}` }));
     open(view, many);
     expect(await screen.findByText(/at most 20 links/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create link" })).toBeDisabled();
@@ -156,13 +156,13 @@ describe("a form link", () => {
   ];
 
   it("explains what visitors can do and which fields are asked", async () => {
-    open(form, [link({ kind: "form", url: "https://grid.example.com/f/tok_abc", path: "/f/tok_abc" })]);
+    open(form, [link({ kind: "form", url: "https://base.example.com/f/tok_abc", path: "/f/tok_abc" })]);
     const dialog = await screen.findByRole("dialog", { name: "Share Sign up" });
     expect(within(dialog).getByText(/never see any record/)).toBeInTheDocument();
     expect(within(dialog).getByText(/1 field: Your name/)).toBeInTheDocument();
     expect(within(dialog).getByText(/1 more \(links and users\) are not collected publicly/)).toBeInTheDocument();
     const address = await within(dialog).findByRole("textbox", { name: "Form link" });
-    expect((address as HTMLInputElement).value).toBe("https://grid.example.com/form/tok_abc");
+    expect((address as HTMLInputElement).value).toBe("https://base.example.com/form/tok_abc");
   });
 
   it("creates a form link", async () => {

@@ -9,7 +9,7 @@ use super::McpCtx;
 use super::resolve::{Mode, Xlate, field_lookup, find_table, find_view, load_schema};
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
-use og_core::api::schema::{BaseSchema, Table};
+use ob_core::api::schema::{BaseSchema, Table};
 
 const TRIGGER_HELP: &str = "What starts it, by `type`: record_created {table}; record_updated {table, field_ids?: [field names; empty = any field]}; record_matches {table, filter: {conjunction, items: [{field_id: <field name>, op, value}]}} (fires when a record starts matching); form_submitted {view: <form view name or id>}; schedule {cron: '0 9 * * 1-5' (5 fields), timezone: IANA zone, at most every 5 minutes}; webhook {} (the token is returned once on create). `table` accepts a name or id.";
 const ACTIONS_HELP: &str = "Ordered list (max 25) of {type, ..., condition?}: create_record {table, values: {field name: value}}; update_record {table, record_id, values}; send_email {to, subject, body} (needs SMTP); http_request {method, url, headers?, body?} (public http(s) URLs only); notify {user_ids: [..], message}. Text may use templates: {{trigger.record.id}}, {{trigger.record.fields.<field name>}}, {{trigger.body.<path>}}, {{steps.<n>.record_id}}. `condition` is a filter ({conjunction, items}) on the triggering record; the action is skipped when it does not match.";
@@ -535,7 +535,7 @@ async fn list_runs(ctx: &McpCtx, a: RunsArgs) -> ToolResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{Field, FieldKind, TextOptions};
+    use ob_core::field::{Field, FieldKind, TextOptions};
 
     fn schema() -> BaseSchema {
         BaseSchema {

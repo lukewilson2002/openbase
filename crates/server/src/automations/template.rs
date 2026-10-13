@@ -3,7 +3,7 @@
 //! Templates are parsed once (at save time, to reject bad syntax early, and
 //! again when a run executes) into literal text and variable references. There
 //! is no expression language: a placeholder is one of a fixed set of variable
-//! paths (see `og_core::api::automations` for the table), substituted as plain
+//! paths (see `ob_core::api::automations` for the table), substituted as plain
 //! text. Missing values render as an empty string.
 //!
 //! Substitution can be escaped for the place it lands in: [`Escape::Json`] for
@@ -12,8 +12,8 @@
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use chrono_tz::Tz;
-use og_core::cell::{NoNames, display_text};
-use og_core::field::Field;
+use ob_core::cell::{NoNames, display_text};
+use ob_core::field::Field;
 use serde_json::{Map, Value as Json};
 
 /// Longest rendered string; protects the runner from template blow-up.
@@ -392,7 +392,7 @@ fn url_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{Empty, FieldKind, TextOptions};
+    use ob_core::field::{Empty, FieldKind, TextOptions};
     use serde_json::json;
 
     fn field(id: &str, name: &str, kind: FieldKind) -> Field {

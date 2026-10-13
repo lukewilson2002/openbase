@@ -314,7 +314,7 @@ async fn users_and_attachments_convert_to_text() {
         )
         .await;
     let (uid, fid) = (sid(&user["id"]).to_string(), sid(&files["id"]).to_string());
-    let alice = f.member("alice@example.com", opengrid::perm::Role::Editor);
+    let alice = f.member("alice@example.com", openbase::perm::Role::Editor);
     let alice_id = alice.user_id.clone().unwrap();
     sql(&f.app, {
         let id = alice_id.clone();

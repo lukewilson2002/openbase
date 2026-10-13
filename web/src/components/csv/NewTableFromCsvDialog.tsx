@@ -25,7 +25,7 @@ export interface NewTableFromCsvDialogProps {
 
 export function NewTableFromCsvDialog({ open, onOpenChange, baseId }: NewTableFromCsvDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title="New table from CSV" description="OpenGrid reads the file, picks a field type for each column and adds every row.">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title="New table from CSV" description="OpenBase reads the file, picks a field type for each column and adds every row.">
       {open && <Body baseId={baseId} onClose={() => onOpenChange(false)} />}
     </Dialog>
   );

@@ -7,8 +7,8 @@ mod common;
 use std::time::{Duration, SystemTime};
 
 use common::TestApp;
-use opengrid::store::attachments::{blob_path, thumb_path};
-use opengrid::tasks;
+use openbase::store::attachments::{blob_path, thumb_path};
+use openbase::tasks;
 
 fn put(dir: &std::path::Path, sha: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let blob = blob_path(dir, sha).unwrap();
@@ -80,7 +80,7 @@ fn sweep_deletes_old_files_without_rows_and_keeps_used_and_foreign_files() {
 
 #[test]
 fn sweep_never_deletes_anything_when_the_attachments_table_is_empty() {
-    // E.g. opengrid.db was replaced by a fresh database by mistake: the files
+    // E.g. openbase.db was replaced by a fresh database by mistake: the files
     // on disk are then the only copy left.
     let app = TestApp::new();
     let dir = app.state.config.attachments_dir();

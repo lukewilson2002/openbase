@@ -1,4 +1,4 @@
-/** Comment bodies are plain text; mentions are written `@[Name](usrXXXX)` (og_core::api::records::Comment). */
+/** Comment bodies are plain text; mentions are written `@[Name](usrXXXX)` (ob_core::api::records::Comment). */
 
 export interface Mention {
   userId: string;

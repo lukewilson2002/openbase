@@ -7,7 +7,7 @@ mod schema_support;
 
 use automations_support::*;
 use common::Client;
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::{ALL_ROLES, token_client};
 use serde_json::{Value, json};
 
@@ -126,7 +126,7 @@ async fn stored_definitions_use_the_documented_json_and_hash_the_token() {
         serde_json::from_str::<Value>(&trigger).unwrap(),
         json!({ "type": "webhook" })
     );
-    assert_eq!(hash.unwrap(), opengrid::ids::hash_token(token));
+    assert_eq!(hash.unwrap(), openbase::ids::hash_token(token));
     let leaked = env.f.app.query_i64(
         "SELECT count(*) FROM automations WHERE instr(\"trigger\" || actions || name || COALESCE(webhook_token_hash, ''), ?1) > 0",
         &[token],
@@ -943,7 +943,7 @@ async fn webhook_token_is_shown_once_and_can_be_rotated() {
         .await;
     let id = a["id"].as_str().unwrap();
     let token = a["webhook_token"].as_str().unwrap().to_string();
-    assert!(token.starts_with("ogh_") && token.len() >= 40, "{token}");
+    assert!(token.starts_with("obh_") && token.len() >= 40, "{token}");
 
     // Never shown again.
     let got = env.f.app.get(&env.f.owner, &auto_url(id)).await;
@@ -1194,7 +1194,7 @@ async fn unknown_disabled_and_malformed_tokens_are_all_404() {
     let id = a["id"].as_str().unwrap();
     let token = a["webhook_token"].as_str().unwrap();
     let anon = env.f.app.anon();
-    for t in ["ogh_doesnotexist", "x", &"y".repeat(500), "%00"] {
+    for t in ["obh_doesnotexist", "x", &"y".repeat(500), "%00"] {
         env.f
             .app
             .post(&anon, &format!("/api/hooks/{t}"), json!({}))
@@ -1206,7 +1206,7 @@ async fn unknown_disabled_and_malformed_tokens_are_all_404() {
         .app
         .post(
             &anon,
-            &format!("/api/hooks/{}", opengrid::ids::hash_token(token)),
+            &format!("/api/hooks/{}", openbase::ids::hash_token(token)),
             json!({}),
         )
         .await
@@ -1333,7 +1333,7 @@ async fn webhooks_stop_accepting_calls_when_the_queue_is_backed_up() {
                 "INSERT INTO automation_runs (automation_id, status, trigger_data, created_at)
                  VALUES (?1, 'queued', '{}', 1)",
             )?;
-            for _ in 0..opengrid::automations::store::MAX_QUEUED_WEBHOOK_RUNS {
+            for _ in 0..openbase::automations::store::MAX_QUEUED_WEBHOOK_RUNS {
                 stmt.execute([&aid])?;
             }
             Ok(())
@@ -1347,7 +1347,7 @@ async fn webhooks_stop_accepting_calls_when_the_queue_is_backed_up() {
     assert_eq!(r.status.as_u16(), 429);
     assert_eq!(
         env.run_count(&id),
-        opengrid::automations::store::MAX_QUEUED_WEBHOOK_RUNS
+        openbase::automations::store::MAX_QUEUED_WEBHOOK_RUNS
     );
 }
 

@@ -1,4 +1,4 @@
-# OpenGrid web client
+# OpenBase web client
 
 React 19 + TypeScript (strict) single-page app, built with Vite and embedded into the Rust server binary
 (`crates/server/src/web.rs` embeds `web/dist`). Self-hosters never need Node; only contributors do.
@@ -38,7 +38,7 @@ Install with the lockfile and without lifecycle scripts (enforced by `.npmrc`):
 ```sh
 cd web
 npm ci
-npm run dev          # http://localhost:5173, proxies /api to a running opengrid on :8080
+npm run dev          # http://localhost:5173, proxies /api to a running openbase on :8080
 npm run build        # type-check + production build into web/dist
 npm test -- --run    # unit and component tests (fetch is mocked)
 npm run test:contract  # the API client against the real server (needs cargo; see below)
@@ -66,7 +66,7 @@ too (see the conventions in `crates/core/src/api/mod.rs`); response fields stay 
 ### Live contract tests
 
 `npm run test:contract` runs the real API client (`src/api/endpoints.ts`, `src/api/records.ts`,
-`src/api/events.ts`) against a real `target/debug/opengrid` started on a free port with a throwaway
+`src/api/events.ts`) against a real `target/debug/openbase` started on a free port with a throwaway
 data directory (`contract/globalSetup.ts` builds it with `cargo build --features debug-embed`, the same
 binary the end-to-end tests use). Every response is checked against the generated bindings
 (`contract/typecheck.ts` reads `src/api/types/*.ts`), so a server/client mismatch fails here rather than
@@ -90,14 +90,14 @@ administrator already exists for the data plane:
 | `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a base built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
-`OPENGRID_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
+`OPENBASE_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
 
 ### End-to-end tests
 
 Playwright drives the real stack in the locally installed Google Chrome (no browser download):
 
 ```sh
-OPENGRID_E2E=1 npm run e2e
+OPENBASE_E2E=1 npm run e2e
 ```
 
 `e2e/globalSetup.ts` builds the web client, builds the server with `web/dist` embedded at compile time
@@ -121,8 +121,8 @@ other's data; they all hang off `grid` only to keep the order fixed on the share
 new line in `playwright.config.ts`, or it never runs). Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
-are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
-reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENGRID_E2E=1` is set.
+are asserted against the API. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
+reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENBASE_E2E=1` is set.
 
 ## Layout
 
@@ -151,7 +151,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 
 | Where | What |
 |---|---|
-| `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `og_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
+| `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |

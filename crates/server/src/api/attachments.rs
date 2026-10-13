@@ -28,9 +28,9 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::{Stream, StreamExt};
-use og_core::api::records::QueryRequest;
-use og_core::api::sharing::ShareKind;
-use og_core::field::{AttachmentRef, FieldKind};
+use ob_core::api::records::QueryRequest;
+use ob_core::api::sharing::ShareKind;
+use ob_core::field::{AttachmentRef, FieldKind};
 use serde::Deserialize;
 use serde_json::Value as Json2;
 use sha2::{Digest, Sha256};
@@ -226,7 +226,7 @@ where
     };
 
     let mut row = Attachment {
-        id: new_id(og_core::ids::ATTACHMENT),
+        id: new_id(ob_core::ids::ATTACHMENT),
         sha256: sha,
         filename,
         mime,
@@ -364,7 +364,7 @@ const SHARE_SET_ENTRIES: usize = 64;
 type ShareSets = HashMap<String, (u64, u64, chrono::NaiveDate, Arc<HashSet<String>>)>;
 static SHARE_SETS: LazyLock<Mutex<ShareSets>> = LazyLock::new(Mutex::default);
 
-fn config_hash(config: &og_core::view::ViewConfig) -> u64 {
+fn config_hash(config: &ob_core::view::ViewConfig) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     serde_json::to_string(config)

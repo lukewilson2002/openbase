@@ -4,8 +4,8 @@ mod common;
 
 use chrono::{Local, TimeZone};
 use common::TestApp;
-use opengrid::db::now_ms;
-use opengrid::tasks;
+use openbase::db::now_ms;
+use openbase::tasks;
 
 const HOUR: i64 = 3600 * 1000;
 const DAY: i64 = 24 * HOUR;
@@ -118,10 +118,10 @@ fn add_attachment(app: &TestApp, id: &str, sha: &str, created_at: i64) -> std::p
         rusqlite::params![id, sha, created_at],
     );
     let dir = app.state.config.attachments_dir();
-    let blob = opengrid::store::attachments::blob_path(&dir, sha).unwrap();
+    let blob = openbase::store::attachments::blob_path(&dir, sha).unwrap();
     std::fs::create_dir_all(blob.parent().unwrap()).unwrap();
     std::fs::write(&blob, b"x").unwrap();
-    let thumb = opengrid::store::attachments::thumb_path(&dir, sha).unwrap();
+    let thumb = openbase::store::attachments::thumb_path(&dir, sha).unwrap();
     std::fs::write(&thumb, b"t").unwrap();
     blob
 }
@@ -203,7 +203,7 @@ fn attachment_gc_deletes_unreferenced_rows_and_orphaned_files_only() {
     assert!(recent_blob.exists());
     assert!(!dead_blob.exists());
     let dead_thumb =
-        opengrid::store::attachments::thumb_path(&app.state.config.attachments_dir(), &sha('d'))
+        openbase::store::attachments::thumb_path(&app.state.config.attachments_dir(), &sha('d'))
             .unwrap();
     assert!(!dead_thumb.exists());
 
@@ -319,14 +319,14 @@ async fn tick_runs_every_job_and_survives_failures() {
 
     // A failing job is logged and reported, never propagated or panicking.
     let failed = tasks::run_job(&app.state, "always-fails", |_| {
-        Err::<(), _>(opengrid::error::AppError::internal("boom"))
+        Err::<(), _>(openbase::error::AppError::internal("boom"))
     })
     .await;
     assert!(!failed);
     let panicked = tasks::run_job(
         &app.state,
         "panics",
-        |_| -> opengrid::error::AppResult<()> { panic!("job panic") },
+        |_| -> openbase::error::AppResult<()> { panic!("job panic") },
     )
     .await;
     assert!(!panicked);

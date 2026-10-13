@@ -28,7 +28,7 @@ async fn world() -> World {
     world_with(|_| {}).await
 }
 
-async fn world_with(f: impl FnOnce(&mut opengrid::config::Config)) -> World {
+async fn world_with(f: impl FnOnce(&mut openbase::config::Config)) -> World {
     let app = TestApp::with_config(f);
     let owner = app.user("owner@example.com", "Owner");
     let (_ws, base) = app.workspace_with_base(&owner, "Acme");
@@ -71,7 +71,7 @@ async fn initialize_negotiates_the_protocol_version() {
         assert_eq!(r["protocolVersion"], v, "a version we speak is echoed");
         assert!(r["capabilities"]["tools"].is_object());
         assert!(r["capabilities"].get("resources").is_none());
-        assert_eq!(r["serverInfo"]["name"], "opengrid");
+        assert_eq!(r["serverInfo"]["name"], "openbase");
         assert!(
             r["instructions"].as_str().unwrap().contains("list_bases"),
             "server instructions guide the model"
@@ -227,7 +227,7 @@ async fn server_discover_and_stateless_requests() {
     assert!(r["instructions"].as_str().unwrap().contains("api_request"));
     assert_eq!(
         r["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
-        "opengrid"
+        "openbase"
     );
 
     let res = modern(&w.app, &w.manage, "tools/list", json!({})).await;
@@ -484,7 +484,7 @@ async fn content_type_accept_and_size_are_enforced() {
     // 8 MiB is the limit.
     let big = format!(
         r#"{{"jsonrpc":"2.0","id":1,"method":"ping","params":{{"pad":"{}"}}}}"#,
-        "x".repeat(opengrid::mcp::MAX_BODY_BYTES)
+        "x".repeat(openbase::mcp::MAX_BODY_BYTES)
     );
     let res = raw_post(&w, &w.write, "application/json", None, big.into_bytes()).await;
     res.assert_status(413);
@@ -523,7 +523,7 @@ async fn only_bearer_tokens_authenticate() {
     res.assert_status(401);
     assert_eq!(
         res.headers["www-authenticate"],
-        "Bearer realm=\"OpenGrid MCP\""
+        "Bearer realm=\"OpenBase MCP\""
     );
     // A signed-in session cookie is refused, with or without the CSRF header, and says why.
     for csrf in [false, true] {
@@ -612,7 +612,7 @@ async fn using_the_endpoint_stamps_the_token() {
 #[tokio::test]
 async fn browser_origins_other_than_the_public_url_are_refused() {
     let w = world_with(|c| {
-        c.public_url = "https://grid.example.com".into();
+        c.public_url = "https://base.example.com".into();
         c.mcp_allowed_origins = vec!["https://inspector.example.org/".into()];
     })
     .await;
@@ -637,18 +637,18 @@ async fn browser_origins_other_than_the_public_url_are_refused() {
         .await
         .assert_status(200);
     for ok in [
-        "https://grid.example.com",
+        "https://base.example.com",
         "https://GRID.example.com",
-        "https://grid.example.com/",
+        "https://base.example.com/",
         "https://inspector.example.org",
     ] {
         with_origin(ok).await.assert_status(200);
     }
     for bad in [
         "https://evil.example.com",
-        "http://grid.example.com",
-        "https://grid.example.com:8443",
-        "https://grid.example.com.evil.com",
+        "http://base.example.com",
+        "https://base.example.com:8443",
+        "https://base.example.com.evil.com",
         "null",
         "http://localhost:8080",
         "",

@@ -13,7 +13,7 @@ const OFF: EmailSettings = {
   port: 587,
   security: "starttls",
   username: null,
-  from: "OpenGrid <opengrid@localhost>",
+  from: "OpenBase <openbase@localhost>",
   password_set: false,
   sources: { host: "unset", port: "default", security: "default", username: "unset", password: "unset", from: "default" },
   budgets: { per_user_hour: 100, per_hour: 500 },
@@ -27,7 +27,7 @@ const ON: EmailSettings = {
   port: 465,
   security: "tls",
   username: "mailer",
-  from: "Grid <grid@example.com>",
+  from: "Base <base@example.com>",
   password_set: true,
   sources: { host: "settings", port: "settings", security: "settings", username: "settings", password: "settings", from: "settings" },
 };
@@ -52,7 +52,7 @@ describe("admin email tab", () => {
     expect(screen.getByLabelText("Host")).toHaveValue("");
     expect(screen.getByLabelText("Port")).toHaveValue("587");
     expect(screen.getByLabelText("Connection security")).toHaveValue("starttls");
-    expect(screen.getByLabelText("From address")).toHaveValue("OpenGrid <opengrid@localhost>");
+    expect(screen.getByLabelText("From address")).toHaveValue("OpenBase <openbase@localhost>");
     expect(screen.getByLabelText("Password")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     // no test email without a mail server
@@ -68,7 +68,7 @@ describe("admin email tab", () => {
     expect(screen.getByText("smtp.example.com")).toBeInTheDocument();
     expect(screen.getByLabelText("Host")).toHaveValue("smtp.example.com");
     expect(screen.getByLabelText("Username")).toHaveValue("mailer");
-    expect(screen.getByText("OPENGRID_EMAIL_PER_HOUR")).toBeInTheDocument();
+    expect(screen.getByText("OPENBASE_EMAIL_PER_HOUR")).toBeInTheDocument();
     expect(screen.getByText("500")).toBeInTheDocument();
     expect(screen.getByText("100")).toBeInTheDocument();
   });
@@ -143,8 +143,8 @@ describe("admin email tab", () => {
     renderApp({ route: "/admin?tab=email" });
     expect(await screen.findByText("Host set by environment")).toBeInTheDocument();
     expect(screen.getByLabelText("Host")).toBeDisabled();
-    expect(screen.getByText(/OPENGRID_SMTP_HOST/)).toBeInTheDocument();
-    expect(screen.getByText(/OPENGRID_SMTP_PASSWORD/)).toBeInTheDocument();
+    expect(screen.getByText(/OPENBASE_SMTP_HOST/)).toBeInTheDocument();
+    expect(screen.getByText(/OPENBASE_SMTP_PASSWORD/)).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
     // the others stay editable

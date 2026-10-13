@@ -216,7 +216,7 @@ describe("turning automations on and off", () => {
     const made = parse("Automation", await create("becomes hook", { trigger: { type: "record_created", table_id: tasks.id }, actions: [notify()] }));
     expect(made.webhook_token ?? null).toBeNull();
     const hook = parse("Automation", await w.owner.run(() => api.automations.update(made.id, { trigger: { type: "webhook" } })));
-    expect(hook.webhook_token).toMatch(/^ogh_/);
+    expect(hook.webhook_token).toMatch(/^obh_/);
     expect(parse("Automation", await w.owner.run(() => api.automations.get(made.id))).webhook_token ?? null).toBeNull();
   });
 });

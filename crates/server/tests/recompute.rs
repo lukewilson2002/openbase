@@ -17,11 +17,11 @@ type Events = std::collections::BTreeMap<String, (Vec<String>, Vec<String>, Vec<
 
 /// Drain the events of a base into table -> (created, updated, deleted).
 fn drain(
-    rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<og_core::api::events::EventEnvelope>>,
+    rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<ob_core::api::events::EventEnvelope>>,
 ) -> Events {
     let mut out: Events = Default::default();
     while let Ok(ev) = rx.try_recv() {
-        if let og_core::api::events::BaseEvent::RecordsChanged {
+        if let ob_core::api::events::BaseEvent::RecordsChanged {
             table_id,
             created,
             updated,
@@ -718,7 +718,7 @@ async fn system_fields_are_synthesized_not_stored() {
     }
 
     // another user edits: last modified moves, created stays
-    let other = f.member("editor2@example.com", opengrid::perm::Role::Editor);
+    let other = f.member("editor2@example.com", openbase::perm::Role::Editor);
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     let r = f
         .patch_as(&other, &t, rid, json!({ &f.primary_id: "y" }))
@@ -796,7 +796,7 @@ async fn watched_last_modified_fields_only_move_for_their_fields() {
     let t0 = rec["values"][sid(&watch["id"])].clone();
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     // editing another field does not move it
-    let other = f.member("ed@example.com", opengrid::perm::Role::Editor);
+    let other = f.member("ed@example.com", openbase::perm::Role::Editor);
     let r = f
         .patch_as(&other, &t, &rid, json!({ &f.primary_id: "name" }))
         .await;
@@ -1193,7 +1193,7 @@ async fn a_primary_formula_that_depends_on_a_formula_showing_its_own_name_is_a_c
 
 #[tokio::test]
 async fn a_runaway_cascade_fails_cleanly_with_a_conflict() {
-    use opengrid::engine::write::{self, WriteCtx, WriteSource};
+    use openbase::engine::write::{self, WriteCtx, WriteSource};
     let l = linked().await;
     let f = &l.f;
     let pid = sid(&l.price["id"]).to_string();
@@ -1217,7 +1217,7 @@ async fn a_runaway_cascade_fails_cleanly_with_a_conflict() {
                 tx,
                 &ctx,
                 &t2,
-                vec![og_core::api::records::RecordPatch {
+                vec![ob_core::api::records::RecordPatch {
                     id: o,
                     values: [(pid, json!(2))].into_iter().collect(),
                 }],
@@ -1240,7 +1240,7 @@ async fn a_runaway_cascade_fails_cleanly_with_a_conflict() {
                     tx,
                     &ctx,
                     &t2,
-                    vec![og_core::api::records::RecordPatch {
+                    vec![ob_core::api::records::RecordPatch {
                         id: o,
                         values: [(pid, json!(3))].into_iter().collect(),
                     }],
@@ -1249,7 +1249,7 @@ async fn a_runaway_cascade_fails_cleanly_with_a_conflict() {
             .unwrap_err()
     };
     assert!(
-        matches!(err, opengrid::error::AppError::Conflict(_)),
+        matches!(err, openbase::error::AppError::Conflict(_)),
         "{err:?}"
     );
     assert!(err.to_string().contains("recalculate"));
@@ -1263,7 +1263,7 @@ async fn a_runaway_cascade_fails_cleanly_with_a_conflict() {
 
 #[tokio::test]
 async fn the_default_cap_is_generous_for_normal_use() {
-    const { assert!(opengrid::engine::recompute::DEFAULT_MAX_EVALS >= 100_000) };
+    const { assert!(openbase::engine::recompute::DEFAULT_MAX_EVALS >= 100_000) };
 }
 
 #[allow(dead_code)]

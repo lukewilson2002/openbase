@@ -1,6 +1,6 @@
 # Security
 
-What OpenGrid defends against, the limits that are in place, what an
+What OpenBase defends against, the limits that are in place, what an
 administrator has to configure, and the risks that were looked at and accepted.
 The limits are the values in the code today; rate limits and budgets are in
 memory and start over when the server restarts.
@@ -14,7 +14,7 @@ Contents: [Threat model](#threat-model) · [Checklist for administrators](#check
 
 ## Threat model
 
-OpenGrid is one process (axum + SQLite) on one small server, reachable from the
+OpenBase is one process (axum + SQLite) on one small server, reachable from the
 internet behind a TLS reverse proxy. The sizing target is a single 1 vCPU / 1 GB
 host, so limits are set so that a handful of concurrent hostile requests cannot
 exhaust it.
@@ -39,7 +39,7 @@ We defend against:
   server down, they are not a boundary between roles.
 - **Stolen or leaked credentials**: a leaked API token, an old session or invite
   link, a compromised session that mints a token.
-- **Cross-site requests** from a browser that is signed in to OpenGrid.
+- **Cross-site requests** from a browser that is signed in to OpenBase.
 - **API tokens** (the Airtable-compatible `/api/v1`, the internal API and the MCP
   endpoint) act as their owner, limited by the token's scope, and are rate limited
   per token and per user. An AI agent connected through MCP is such a token holder:
@@ -56,12 +56,12 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 
 ## Checklist for administrators
 
-- **Run it behind HTTPS** and set `OPENGRID_PUBLIC_URL` to the exact public URL.
+- **Run it behind HTTPS** and set `OPENBASE_PUBLIC_URL` to the exact public URL.
   With an `https://` URL session cookies are marked `Secure`; the URL's origin is
   also what the CSRF `Origin` check compares against. The bundled Caddy setup
   does this for you.
-- **`OPENGRID_TRUST_PROXY=true` only behind a proxy, and only when OpenGrid is
-  reachable solely through it.** OpenGrid then takes the client address from the
+- **`OPENBASE_TRUST_PROXY=true` only behind a proxy, and only when OpenBase is
+  reachable solely through it.** OpenBase then takes the client address from the
   **last** `X-Forwarded-For` entry (the address the proxy saw); earlier entries
   are client-controlled. Caddy (default behaviour) and nginx with
   `proxy_set_header X-Forwarded-For $remote_addr;` or `$proxy_add_x_forwarded_for`
@@ -72,7 +72,7 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   while the port is reachable directly, anyone can pick their own address and
   escape the limits. The flag only affects `X-Forwarded-For`; `X-Forwarded-Proto`
   is not read.
-- **Keep `OPENGRID_OPEN_SIGNUP=false`** (the default) unless you want strangers
+- **Keep `OPENBASE_OPEN_SIGNUP=false`** (the default) unless you want strangers
   creating accounts. With open sign-up anyone can create a workspace, an
   automation and invites that send mail from your address, within the budgets
   below. Users then come in through invites.
@@ -81,10 +81,10 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   address), so a Creator can make it send mail to arbitrary people. Use a
   dedicated sender address on a domain with SPF/DKIM, an SMTP account or provider
   with its own sending caps and abuse monitoring, and lower
-  `OPENGRID_EMAIL_PER_USER_HOUR` / `OPENGRID_EMAIL_PER_HOUR` if you do not use
+  `OPENBASE_EMAIL_PER_USER_HOUR` / `OPENBASE_EMAIL_PER_HOUR` if you do not use
   email automations.
 - **Email settings are in the app.** Under **Admin → Email** an administrator
-  edits the SMTP settings; an `OPENGRID_SMTP_*` variable that is set wins for its field
+  edits the SMTP settings; an `OPENBASE_SMTP_*` variable that is set wins for its field
   and is read-only there. The SMTP password is stored in the database in clear text
   (the server must present it to the mail server), so it is in every backup: protect
   backups like the database. It is write-only (never returned by the API, never logged,
@@ -106,13 +106,13 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   least permission that works (read-only, or write without `manage`), restrict
   them to the bases they need, set an expiry, and revoke the token when the work
   is done. See [MCP](mcp.md#security-model).
-- **Lower the Airtable-compatible API limits** with `OPENGRID_V1_RATE_PER_TOKEN`
-  (default 5 per second) and `OPENGRID_V1_RATE_PER_USER` (default 50 per second)
+- **Lower the Airtable-compatible API limits** with `OPENBASE_V1_RATE_PER_TOKEN`
+  (default 5 per second) and `OPENBASE_V1_RATE_PER_USER` (default 50 per second)
   on a small host.
 - **Review the audit log** (Admin → Audit, `GET /api/admin/audit`) for
   `login_failed`, `login_2fa_failed` and `password_reset_request` bursts. Rows are
-  kept for `OPENGRID_AUDIT_DAYS` (default 365).
-- **`OPENGRID_ALLOW_PRIVATE_WEBHOOKS`** stays `false` unless automations must call
+  kept for `OPENBASE_AUDIT_DAYS` (default 365).
+- **`OPENBASE_ALLOW_PRIVATE_WEBHOOKS`** stays `false` unless automations must call
   services on your own network; see [automations](automations.md#http-requests-and-ssrf).
 
 ## Built-in protections
@@ -127,10 +127,10 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 - **MCP endpoint (`/mcp`).** Bearer personal access tokens only: a session cookie
   is refused with 401, which is why the route needs no CSRF header. A request with
   a browser `Origin` header is served only for the public URL's origin (or
-  `OPENGRID_MCP_ALLOWED_ORIGINS`), the MCP spec's DNS-rebinding protection;
+  `OPENBASE_MCP_ALLOWED_ORIGINS`), the MCP spec's DNS-rebinding protection;
   requests without `Origin` (every non-browser client) are unaffected. Bodies are
-  capped at 8 MB and every request counts against `OPENGRID_MCP_RATE_PER_TOKEN` /
-  `OPENGRID_MCP_RATE_PER_USER`. The tools `api_request` / `api_reference` run
+  capped at 8 MB and every request counts against `OPENBASE_MCP_RATE_PER_TOKEN` /
+  `OPENBASE_MCP_RATE_PER_USER`. The tools `api_request` / `api_reference` run
   catalogued REST requests through the real router with the caller's own token,
   so permissions, validation and audit are the web app's; the paths are checked
   up front (only `/api/...`, no `..`, no `/mcp` recursion) and credential, session
@@ -142,7 +142,7 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   instance administrator. `upload_attachment` with a URL fetches through the same
   SSRF guard as the automations' HTTP action (see [automations](automations.md#http-requests-and-ssrf)),
   with a size limit and no redirects. Full details: [MCP](mcp.md#security-model).
-- **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenGrid-CSRF`
+- **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenBase-CSRF`
   header; no CORS is ever enabled, so cross-site pages cannot add it. Only a
   well-formed `Authorization: Bearer` header exempts a request; other
   `Authorization` values (such as Basic auth added by a proxy) do not. The
@@ -182,10 +182,10 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 | Second-factor attempts, per account across sign-ins | 10 per hour (reset on success) |
 | Sign-up, per client address | 10 per hour |
 | Password-reset requests, per client address / per mailbox | 5 per hour / 3 per hour (extra requests are answered 200 and send nothing) |
-| Invite and automation emails | `OPENGRID_EMAIL_PER_USER_HOUR` (100) per user and `OPENGRID_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
-| Airtable-compatible API (`/api/v1`) | `OPENGRID_V1_RATE_PER_TOKEN` (5 per second) per token and `OPENGRID_V1_RATE_PER_USER` (50 per second) per user; over the limit answers 429 |
-| MCP endpoint (`/mcp`) | `OPENGRID_MCP_RATE_PER_TOKEN` (30 per second) per token and `OPENGRID_MCP_RATE_PER_USER` (100 per second) per user, one JSON-RPC message per request; body up to 8 MB; over the limit answers 429 with `Retry-After` |
-| Audit log | detail capped at 2 KiB per row; rows older than `OPENGRID_AUDIT_DAYS` (365) deleted daily |
+| Invite and automation emails | `OPENBASE_EMAIL_PER_USER_HOUR` (100) per user and `OPENBASE_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
+| Airtable-compatible API (`/api/v1`) | `OPENBASE_V1_RATE_PER_TOKEN` (5 per second) per token and `OPENBASE_V1_RATE_PER_USER` (50 per second) per user; over the limit answers 429 |
+| MCP endpoint (`/mcp`) | `OPENBASE_MCP_RATE_PER_TOKEN` (30 per second) per token and `OPENBASE_MCP_RATE_PER_USER` (100 per second) per user, one JSON-RPC message per request; body up to 8 MB; over the limit answers 429 with `Retry-After` |
+| Audit log | detail capped at 2 KiB per row; rows older than `OPENBASE_AUDIT_DAYS` (365) deleted daily |
 
 ### Behaviour worth knowing
 
@@ -294,7 +294,7 @@ Authentication and email:
   may change host and port while no SMTP password is in use) make the server open a
   connection to any host and port, and the test email shows whether it answered. That is a
   small port-probing ability from the server's network position, comparable to what an
-  administrator already has with `OPENGRID_ALLOW_PRIVATE_WEBHOOKS`; it is audited
+  administrator already has with `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`; it is audited
   (`admin_email_update`, `admin_email_test`).
 
 - A distributed attacker (many addresses) can still trip the 60-per-hour
@@ -317,7 +317,7 @@ Shares, uploads and imports:
   less uses up budget it did not use.
 - **Files removed from a cell are kept while the record history is.** Garbage
   collection treats an attachment id found in retained record history
-  (`OPENGRID_HISTORY_DAYS`, default 365) as referenced, so undo and "restore from
+  (`OPENBASE_HISTORY_DAYS`, default 365) as referenced, so undo and "restore from
   history" keep working. The cost is disk space for files that were deliberately
   cleared; lower the history retention if that matters.
 - **Share-scoped attachment checks scan the shared view once per data change.**
@@ -359,4 +359,4 @@ Formulas and queries:
 
 The project has no dedicated security contact or disclosure process yet. Until it
 does, report a vulnerability privately to the maintainer of the repository you
-installed OpenGrid from rather than in a public issue.
+installed OpenBase from rather than in a public issue.

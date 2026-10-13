@@ -1,4 +1,4 @@
-//! The Lucide icon names OpenGrid knows: `data/lucide-icons.txt`, generated from the
+//! The Lucide icon names OpenBase knows: `data/lucide-icons.txt`, generated from the
 //! `lucide-react` package by `scripts/gen-icons.sh` (the same package the web picker draws from).
 //!
 //! The REST API validates only the *format* of an icon name (lowercase letters, digits and `-`,

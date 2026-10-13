@@ -5,7 +5,7 @@
 //! workspace are all live. Everything else resolves to "not found", exactly as
 //! a token that never existed does.
 //!
-//! What a public viewer sees (see also `og_core::api::sharing`):
+//! What a public viewer sees (see also `ob_core::api::sharing`):
 //! - view shares expose the fields the view shows: all live fields minus
 //!   `hidden_fields`, in `field_order` then table order ([`visible_fields`]);
 //! - form shares expose the form's fields that exist, are editable and are
@@ -15,10 +15,10 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use og_core::api::records::Record;
-use og_core::api::sharing::{PublicField, PublicRecord, PublicViewConfig, ShareKind, ShareLink};
-use og_core::field::{Field, FieldKind};
-use og_core::view::{FormField, ViewConfig, ViewType};
+use ob_core::api::records::Record;
+use ob_core::api::sharing::{PublicField, PublicRecord, PublicViewConfig, ShareKind, ShareLink};
+use ob_core::field::{Field, FieldKind};
+use ob_core::view::{FormField, ViewConfig, ViewType};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use serde_json::{Value as Json, json};
 
@@ -143,7 +143,7 @@ pub fn create(
         )));
     }
     let row = ShareRow {
-        id: new_id(og_core::ids::SHARE),
+        id: new_id(ob_core::ids::SHARE),
         token: new_token(TOKEN_PREFIX),
         kind,
         view_id: view_id.to_string(),
@@ -168,7 +168,7 @@ pub fn create(
     Ok(row)
 }
 
-/// Apply a patch. `password` follows [`og_core::api::sharing::UpdateShare`]:
+/// Apply a patch. `password` follows [`ob_core::api::sharing::UpdateShare`]:
 /// `None` keeps it, `Some(None)` removes it, `Some(Some(hash))` replaces it.
 pub fn update(
     tx: &Transaction,
@@ -439,7 +439,7 @@ fn user_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{Empty, TextOptions};
+    use ob_core::field::{Empty, TextOptions};
 
     fn field(id: &str, kind: FieldKind) -> Field {
         Field {
@@ -480,7 +480,7 @@ mod tests {
             field("auto", FieldKind::Autonumber(Empty {})),
             field(
                 "who",
-                FieldKind::User(og_core::field::UserOptions::default()),
+                FieldKind::User(ob_core::field::UserOptions::default()),
             ),
         ];
         let mut config = ViewConfig::default();
@@ -512,10 +512,10 @@ mod tests {
     fn public_options_hide_formula_and_link_internals() {
         let formula = field(
             "f",
-            FieldKind::Formula(og_core::field::FormulaOptions {
+            FieldKind::Formula(ob_core::field::FormulaOptions {
                 expression: "{fldSecret} * 2".into(),
                 format: None,
-                result_type: og_core::value::ResultType::Number,
+                result_type: ob_core::value::ResultType::Number,
             }),
         );
         let opts = public_options(&formula);
@@ -523,7 +523,7 @@ mod tests {
         assert!(!opts.to_string().contains("fldSecret"));
         let link = field(
             "l",
-            FieldKind::Link(og_core::field::LinkOptions {
+            FieldKind::Link(ob_core::field::LinkOptions {
                 linked_table_id: "tblSecret".into(),
                 inverse_field_id: "fldInv".into(),
                 single: true,

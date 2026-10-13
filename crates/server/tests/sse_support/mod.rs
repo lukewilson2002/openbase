@@ -15,7 +15,7 @@ use crate::common::{Client, TestApp};
 
 /// Short keep-alive and access re-check intervals for every test here.
 pub fn fast() {
-    opengrid::api::events::set_timing_for_tests(
+    openbase::api::events::set_timing_for_tests(
         Duration::from_millis(200),
         Duration::from_millis(150),
     );
@@ -50,7 +50,7 @@ pub async fn open(app: &TestApp, client: &Client, base_id: &str) -> Opened {
     if let Some(c) = &client.cookie {
         req = req.header(
             header::COOKIE,
-            format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+            format!("{}={}", openbase::auth::SESSION_COOKIE, c),
         );
     }
     if let Some(t) = &client.bearer {

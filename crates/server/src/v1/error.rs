@@ -4,7 +4,7 @@
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use og_core::api::v1::{V1ErrorBody, V1ErrorDetail};
+use ob_core::api::v1::{V1ErrorBody, V1ErrorDetail};
 
 use crate::error::AppError;
 
