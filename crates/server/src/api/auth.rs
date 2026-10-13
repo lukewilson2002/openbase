@@ -35,6 +35,30 @@ use crate::store::{invites, users};
 const MINUTE: Duration = Duration::from_secs(60);
 const HOUR: Duration = Duration::from_secs(3600);
 
+/// Password attempts per minute from one client address.
+const LOGIN_IP_PER_MINUTE: u32 = 10;
+/// Password attempts per hour for one account from one client address.
+const LOGIN_EMAIL_IP_PER_HOUR: u32 = 10;
+/// Password attempts per hour for one account from anywhere. Deliberately
+/// well above the per-client limit: once it trips, the real owner is locked
+/// out too, so it only stops distributed guessing, not a single attacker.
+const LOGIN_EMAIL_PER_HOUR: u32 = 60;
+/// Second-factor attempts per client address per 10 minutes.
+const LOGIN_2FA_IP_PER_10_MIN: u32 = 30;
+/// Second-factor attempts per pending session per 10 minutes.
+const LOGIN_2FA_SESSION_PER_10_MIN: u32 = 10;
+/// Second-factor attempts per account per hour, across all pending sessions
+/// (each password login hands out a fresh pending session).
+const LOGIN_2FA_USER_PER_HOUR: u32 = 10;
+
+/// Forget the per-account login counters after a fully successful sign-in.
+fn reset_login_limits(state: &AppState, email_key: &str, ip: &str) {
+    state.limiter.reset("login_email", email_key);
+    state
+        .limiter
+        .reset("login_email_ip", &format!("{email_key}\0{ip}"));
+}
+
 /// Length of the public session id (a prefix of the token hash).
 pub const SESSION_ID_LEN: usize = 16;
 
@@ -174,9 +198,24 @@ async fn login(
     jar: CookieJar,
     ApiJson(req): ApiJson<LoginRequest>,
 ) -> AppResult<Response> {
-    let email_key = req.email.trim().to_lowercase();
-    state.limiter.check("login_ip", &client.ip, 10, MINUTE)?;
-    state.limiter.check("login_email", &email_key, 20, HOUR)?;
+    state
+        .limiter
+        .check("login_ip", &client.ip, LOGIN_IP_PER_MINUTE, MINUTE)?;
+    // The email becomes a rate-limiter key and an audit-log field, so it must
+    // be a plausible address (at most 254 bytes) before it is used for either.
+    let Ok(email) = users::normalize_email(&req.email) else {
+        return Ok(invalid_credentials());
+    };
+    let email_key = email.to_lowercase();
+    state.limiter.check(
+        "login_email_ip",
+        &format!("{email_key}\0{}", client.ip),
+        LOGIN_EMAIL_IP_PER_HOUR,
+        HOUR,
+    )?;
+    state
+        .limiter
+        .check("login_email", &email_key, LOGIN_EMAIL_PER_HOUR, HOUR)?;
 
     let lookup = email_key.clone();
     let user = state
@@ -251,7 +290,7 @@ async fn login(
             two_factor_required: true,
         }
     } else {
-        state.limiter.reset("login_email", &email_key);
+        reset_login_limits(&state, &email_key, &client.ip);
         LoginResponse {
             user: Some(user.to_api()),
             two_factor_required: false,
@@ -278,16 +317,20 @@ async fn login_2fa(
             "your sign-in attempt has expired; sign in again",
         )
     };
+    // Per client address first: anyone can send a made-up cookie, so nothing
+    // keyed by the cookie may be counted until the pending session is known to
+    // exist (that would let one client grow the limiter without bound).
+    state
+        .limiter
+        .check("login_2fa_ip", &client.ip, LOGIN_2FA_IP_PER_10_MIN, 10 * MINUTE)?;
     let Some(raw) = jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) else {
         return Ok(expired());
     };
     let pending_hash = hash_token(&raw);
-    state
-        .limiter
-        .check("login_2fa", &pending_hash, 10, 10 * MINUTE)?;
 
     let ip = client.ip.clone();
     let ua = client.user_agent.clone();
+    let limiter = state.limiter.clone();
     let outcome = state
         .db
         .write(move |tx| {
@@ -304,6 +347,13 @@ async fn login_2fa(
             let Some(uid) = uid else {
                 return Ok(SecondFactor::NoPendingSession);
             };
+            limiter.check(
+                "login_2fa",
+                &pending_hash,
+                LOGIN_2FA_SESSION_PER_10_MIN,
+                10 * MINUTE,
+            )?;
+            limiter.check("login_2fa_user", &uid, LOGIN_2FA_USER_PER_HOUR, HOUR)?;
             let user = users::require(tx, &uid)?;
             let Some(secret) = user.totp_secret.as_deref().filter(|_| user.totp_enabled) else {
                 return Ok(SecondFactor::NoPendingSession);
@@ -341,9 +391,8 @@ async fn login_2fa(
             "that code is not valid; check your authenticator app and try again",
         )),
         SecondFactor::Ok(user, token) => {
-            state
-                .limiter
-                .reset("login_email", &user.email.to_lowercase());
+            reset_login_limits(&state, &user.email.to_lowercase(), &client.ip);
+            state.limiter.reset("login_2fa_user", &user.id);
             let jar = jar.add(session::cookie(&state.config, token));
             let body = LoginResponse {
                 user: Some(user),

@@ -314,8 +314,8 @@ async fn login_rate_limited_per_ip() {
 async fn login_rate_limited_per_email_across_ips() {
     let app = TestApp::with_config(|c| c.trust_proxy = true);
     app.user("a@example.com", "A");
-    for i in 0..20 {
-        let ip = format!("10.0.0.{i}");
+    for i in 0..60 {
+        let ip = format!("10.0.{}.{}", i / 10, i % 10);
         let res = app
             .request_with(
                 &app.anon(),
