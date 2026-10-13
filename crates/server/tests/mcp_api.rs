@@ -643,6 +643,32 @@ async fn api_request_refuses_paths_agents_must_not_call() {
         ("POST", "/api/auth/password", "not available through MCP"),
         ("POST", "/api/auth/2fa/setup", "not available through MCP"),
         ("POST", "/api/auth/2fa/disable", "not available through MCP"),
+        ("GET", "/api/auth/passkeys", "not available through MCP"),
+        (
+            "POST",
+            "/api/auth/passkeys/register/start",
+            "not available through MCP",
+        ),
+        (
+            "PATCH",
+            "/api/auth/passkeys/pkyX",
+            "not available through MCP",
+        ),
+        (
+            "DELETE",
+            "/api/auth/passkeys/pkyX",
+            "not available through MCP",
+        ),
+        (
+            "DELETE",
+            "/api/admin/users/usrX/passkeys",
+            "not available through MCP",
+        ),
+        (
+            "POST",
+            "/api/auth/passkey-login/finish",
+            "not available through MCP",
+        ),
         ("GET", "/api/auth/sessions", "not available through MCP"),
         (
             "POST",

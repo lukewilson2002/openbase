@@ -96,7 +96,7 @@ fn ok() -> Json<OkResponse> {
 
 /// A 401 with a specific code and message (the generic `Unauthorized` error
 /// means "sign in first", which is wrong for a failed sign-in).
-fn unauthorized(code: &str, message: &str) -> Response {
+pub(crate) fn unauthorized(code: &str, message: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         Json(json!({ "error": { "code": code, "message": message } })),
@@ -116,7 +116,7 @@ fn usable_hash(phc: &str) -> bool {
 
 /// Verify `pw` against a user's stored hash in constant-ish time: unusable
 /// hashes are checked against the dummy hash so timing doesn't reveal them.
-async fn verify_user_password(pw: String, stored: &str) -> AppResult<bool> {
+pub(crate) async fn verify_user_password(pw: String, stored: &str) -> AppResult<bool> {
     if usable_hash(stored) {
         password::verify_async(pw, stored.to_string()).await
     } else {
@@ -132,6 +132,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
         open_signup: state.config.open_signup,
         email_enabled: state.email.enabled(),
         public_url: state.config.public_url.trim_end_matches('/').to_string(),
+        passkeys_enabled: state.passkeys.enabled(),
     }))
 }
 

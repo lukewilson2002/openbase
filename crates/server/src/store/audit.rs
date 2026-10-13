@@ -46,6 +46,18 @@ pub mod actions {
     pub const OAUTH_REFRESH_REUSE: &str = "oauth_refresh_reuse";
     /// An already used authorization code was presented: the grant created from it was revoked.
     pub const OAUTH_CODE_REPLAY: &str = "oauth_code_replay";
+    /// A passkey was registered (target: the passkey id; detail: its name).
+    pub const PASSKEY_ADD: &str = "passkey_add";
+    /// A passkey was renamed (detail: the new name).
+    pub const PASSKEY_RENAME: &str = "passkey_rename";
+    /// A passkey was removed by its owner (detail: its name).
+    pub const PASSKEY_REMOVE: &str = "passkey_remove";
+    /// Someone signed in with a passkey (target: the passkey id).
+    pub const PASSKEY_LOGIN: &str = "passkey_login";
+    /// A passkey sign-in was refused (detail: `reason`).
+    pub const PASSKEY_LOGIN_FAILED: &str = "passkey_login_failed";
+    /// An administrator removed all of a user's passkeys (target: the user; detail: how many).
+    pub const ADMIN_PASSKEYS_REMOVE: &str = "admin_passkeys_remove";
     /// An API token with the `manage` permission called an admin endpoint.
     pub const ADMIN_TOKEN_USE: &str = "admin_token_use";
 }

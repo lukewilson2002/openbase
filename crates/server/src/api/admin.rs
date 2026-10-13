@@ -4,7 +4,7 @@
 //!
 //! Whatever touches a credential is session-only, even for an administrator's `manage` token:
 //! `POST .../reset-link` (a password-reset link for any user is an account takeover),
-//! `disable_2fa` in `PATCH .../users/{id}`, and a `password` or the reset link in
+//! `DELETE .../users/{id}/passkeys`, `disable_2fa` in `PATCH .../users/{id}`, and a `password` or the reset link in
 //! `POST /api/admin/users` (a token may create the account but never learns or sets how to
 //! sign in to it).
 
@@ -12,12 +12,13 @@ use std::path::{Path as FsPath, PathBuf};
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, patch, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use ob_core::api::auth::{
     AdminCreateUser, AdminCreatedUser, AdminUpdateUser, AdminUser, AuditPage, InstanceStats,
     ResetLink,
 };
+use ob_core::api::passkeys::PasskeysRemoved;
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::json;
@@ -34,6 +35,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/users", get(list_users).post(create_user))
         .route("/api/admin/users/{id}", patch(update_user))
         .route("/api/admin/users/{id}/reset-link", post(reset_link))
+        .route("/api/admin/users/{id}/passkeys", delete(remove_passkeys))
         .route("/api/admin/audit", get(audit_log))
         .route("/api/admin/stats", get(stats))
 }
@@ -182,6 +184,43 @@ async fn reset_link(
         })
         .await?;
     Ok(Json(link))
+}
+
+/// Remove every passkey of a user (they lost the device, or the account may be compromised).
+/// Session-only like the other credential actions: a token that could do this could also lock
+/// an account out of its passkeys. The user's sessions and password are untouched; sign-in with
+/// the password works as before.
+async fn remove_passkeys(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+    Path(id): Path<String>,
+) -> AppResult<Json<PasskeysRemoved>> {
+    actor.require_capability(Capability::SessionOnly)?;
+    admin_guard(
+        &state,
+        &actor,
+        &client,
+        "DELETE /api/admin/users/{id}/passkeys",
+    )
+    .await?;
+    let removed = state
+        .db
+        .write(move |tx| {
+            let user = users::require(tx, &id)?;
+            let removed = crate::store::passkeys::delete_all_for_user(tx, &user.id)?;
+            audit::record(
+                tx,
+                Some(&actor.user_id),
+                actions::ADMIN_PASSKEYS_REMOVE,
+                Some(&user.id),
+                Some(json!({ "removed": removed })),
+                Some(&client.ip),
+            )?;
+            Ok(removed)
+        })
+        .await?;
+    Ok(Json(PasskeysRemoved { removed }))
 }
 
 #[derive(Debug, Deserialize)]

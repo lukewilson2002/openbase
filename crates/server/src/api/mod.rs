@@ -15,6 +15,7 @@ pub mod fields;
 pub mod invites;
 pub mod notifications;
 pub mod oauth;
+pub mod passkeys;
 pub mod records;
 pub mod schema_support;
 pub mod sharing;
@@ -32,6 +33,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .merge(auth::router())
+        .merge(passkeys::router())
         .merge(admin::router())
         .merge(admin_email::router())
         .merge(backups::router())

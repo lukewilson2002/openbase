@@ -17,7 +17,7 @@ async fn setup_reports_needs_setup_until_first_user() {
     res.assert_status(200);
     assert_eq!(
         res.body,
-        json!({"needs_setup": true, "open_signup": false, "email_enabled": false, "public_url": "http://localhost:8080"})
+        json!({"needs_setup": true, "open_signup": false, "email_enabled": false, "public_url": "http://localhost:8080", "passkeys_enabled": true})
     );
     app.signup("first@example.com", PW, None)
         .await

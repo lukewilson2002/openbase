@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use crate::auth::passkey::Passkeys;
 use crate::config::Config;
 use crate::db::Db;
 use crate::email::{EmailService, Mailer, MailerFactory};
@@ -16,6 +17,8 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub events: EventBus,
     pub limiter: RateLimiter,
+    /// The passkey (WebAuthn) relying party and its pending ceremonies.
+    pub passkeys: Arc<Passkeys>,
     /// Outgoing email: the [`EmailService`] as a [`Mailer`] (SMTP, or a no-op logger when SMTP
     /// is not configured; it follows the settings on the Admin -> Email page at once).
     pub mailer: Arc<dyn Mailer>,
@@ -49,11 +52,13 @@ impl AppState {
         let stored = db.write_sync(|tx| crate::store::email_settings::load(tx))?;
         let email = EmailService::with_factory(&config, &stored, mail)?;
         let mailer: Arc<dyn Mailer> = email.clone();
+        let passkeys = Arc::new(Passkeys::new(&config));
         Ok(AppState {
             db,
             config: Arc::new(config),
             events: EventBus::default(),
             limiter: RateLimiter::default(),
+            passkeys,
             mailer,
             email,
             query_cache: Arc::new(QueryCache::new()),
