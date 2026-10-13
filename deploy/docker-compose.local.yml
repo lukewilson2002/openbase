@@ -1,0 +1,22 @@
+# Local trial override: the same stack, plain HTTP on http://localhost:8088, no
+# domain and no certificates. Caddy cannot get a Let's Encrypt certificate for
+# localhost, so this serves HTTP only and publishes it on 127.0.0.1:8088.
+#
+#   cd deploy
+#   cp .env.example .env
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#   open http://localhost:8088
+#
+# Not for the internet: no TLS, so passwords and session cookies travel in clear.
+
+services:
+  opengrid:
+    environment:
+      OPENGRID_PUBLIC_URL: http://localhost:8088
+  caddy:
+    environment:
+      # An address that starts with http:// makes Caddy serve plain HTTP and
+      # skip certificate management for that site.
+      OPENGRID_DOMAIN: http://localhost
+    ports: !override
+      - "127.0.0.1:8088:80"

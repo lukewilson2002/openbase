@@ -27,8 +27,9 @@ pub struct Config {
     #[arg(long, env = "OPENGRID_OPEN_SIGNUP", default_value_t = false)]
     pub open_signup: bool,
 
-    /// Trust X-Forwarded-For / X-Forwarded-Proto from the reverse proxy.
-    /// Enable only when OpenGrid is reachable solely through that proxy.
+    /// Take the client address from the last X-Forwarded-For entry (the one
+    /// the reverse proxy added). Enable only when OpenGrid is reachable solely
+    /// through that proxy.
     #[arg(long, env = "OPENGRID_TRUST_PROXY", default_value_t = false)]
     pub trust_proxy: bool,
 

@@ -212,6 +212,8 @@ describe("a shared view, seen without an account", () => {
     expectError(await failure(anon.run(() => publicApi.query(link.token, { range: { field_id: secret, from: "2026-03-01", to: "2026-03-31" } }))), 400, "bad_request");
   });
 
+  // Fixed on the server (public group headers no longer carry user ids); this used to be an
+  // `it.fails` that documented the gap and went red the day the server was fixed.
   it("groups by a user field without handing out user ids", async () => {
     const grouped = await makeView("list", { groups: [{ field_id: owner, direction: "asc" }] });
     const l = await share(grouped, "view");

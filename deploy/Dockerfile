@@ -30,6 +30,10 @@ WORKDIR /src
 COPY . .
 # The server embeds web/dist at compile time (rust-embed).
 COPY --from=web /src/web/dist ./web/dist
+# The repo's rust-toolchain.toml asks for the wasm32 target (not needed for the
+# server) and would make rustup download a second toolchain on every cold build.
+# Use the toolchain that ships in the rust image instead.
+RUN rm -f rust-toolchain.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     set -eux; \
