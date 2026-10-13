@@ -35,14 +35,14 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
-use og_core::api::records::QueryRequest;
+use og_core::api::records::{QueryRequest, TransientConfig};
 use og_core::api::sharing::{
     CreateShare, FormSubmission, PublicForm, PublicFormField, PublicQueryResponse, PublicView,
     ShareKind, ShareLink, UpdateShare,
 };
 use og_core::cell::{CellCtx, missing_choices, normalize};
 use og_core::field::{AttachmentRef, Field, FieldKind};
-use og_core::view::RowColor;
+use og_core::view::{Filter, FilterItem, RowColor};
 use serde_json::{Value as Json2, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 
@@ -377,6 +377,11 @@ async fn public_query(
                     ));
                 }
             }
+            // A one-off filter/sort/group on a hidden field would be an
+            // oracle for its values, so it may only use shown fields.
+            if let Some(t) = &req.transient {
+                ensure_transient_visible(t, &ids)?;
+            }
             // No signed-in user: "me" filters match nobody and dates use UTC
             // unless the request names a zone.
             let mut resp = query::run_query(conn, &cache, &versions, "", &r.view, &req)?;
@@ -405,6 +410,32 @@ async fn public_query(
         })
         .await?;
     Ok(Json(response))
+}
+
+fn filter_field_ids<'a>(filter: &'a Filter, out: &mut Vec<&'a str>) {
+    for item in &filter.items {
+        match item {
+            FilterItem::Condition(c) => out.push(c.field_id.as_str()),
+            FilterItem::Group(g) => filter_field_ids(g, out),
+        }
+    }
+}
+
+/// Reject a transient override that names a field the visitor may not see.
+fn ensure_transient_visible(t: &TransientConfig, visible: &HashSet<&str>) -> AppResult<()> {
+    let mut used: Vec<&str> = Vec::new();
+    if let Some(f) = &t.filter {
+        filter_field_ids(f, &mut used);
+    }
+    for s in t.sorts.iter().chain(t.groups.iter()).flatten() {
+        used.push(s.field_id.as_str());
+    }
+    if used.iter().any(|id| !visible.contains(id)) {
+        return Err(AppError::bad_request(
+            "transient refers to a field that is not shown in this view",
+        ));
+    }
+    Ok(())
 }
 
 fn http_url(url: &Option<String>) -> Option<String> {

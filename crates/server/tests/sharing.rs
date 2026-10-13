@@ -981,6 +981,65 @@ async fn public_requests_are_rate_limited_per_client_address() {
 }
 
 #[tokio::test]
+async fn public_requests_are_rate_limited_per_token_across_addresses() {
+    let s = setup().await;
+    let app = s.app();
+    let per_ip = opengrid::api::sharing::IP_LIMIT as usize;
+    let limit = opengrid::api::sharing::TOKEN_LIMIT as usize;
+    let mut sent = 0;
+    let mut ip_n = 0;
+    while sent < limit {
+        ip_n += 1;
+        let ip = format!("192.0.2.{ip_n}");
+        for _ in 0..per_ip.min(limit - sent) {
+            let r = anon(app, "GET", &s.info_path(), None, &[], &ip).await;
+            assert_eq!(r.status, 200, "request {sent}");
+            sent += 1;
+        }
+    }
+    // A fresh address is under its own limit but the token is exhausted.
+    let r = anon(app, "GET", &s.info_path(), None, &[], "192.0.2.200").await;
+    r.assert_status(429);
+    assert_eq!(r.body["error"]["code"], "too_many_requests");
+    // Other tokens are unaffected.
+    let other = s.p.f.share(&s.view, "view", None).await;
+    let path = format!("/api/public/shares/{}", other["token"].as_str().unwrap());
+    anon(app, "GET", &path, None, &[], "192.0.2.200")
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn public_transient_overrides_may_only_use_shown_fields() {
+    let s = setup().await;
+    let q = s.query_path();
+    // Filtering, sorting or grouping by a hidden field would reveal its values.
+    let hidden_filter =
+        json!({ "transient": { "filter": and(vec![cond(&s.secret, "gt", json!(102))]) } });
+    let hidden_sort =
+        json!({ "transient": { "sorts": [{ "field_id": s.secret, "direction": "desc" }] } });
+    let hidden_group = json!({ "transient": { "groups": [{ "field_id": s.dbl }] } });
+    let nested = json!({ "transient": { "filter": and(vec![
+        or(vec![cond(&s.p.age, "gt", json!(1)), cond(&s.secret, "is", json!(103))]) ]) } });
+    for body in [hidden_filter, hidden_sort, hidden_group, nested] {
+        let r = pub_post(s.app(), &q, body).await;
+        r.assert_status(400);
+        assert!(r.body.get("records").is_none());
+    }
+    // The same override on a shown field works.
+    let r = pub_post(
+        s.app(),
+        &q,
+        json!({ "transient": {
+            "filter": and(vec![cond(&s.p.age, "gt", json!(29))]),
+            "sorts": [{ "field_id": s.p.age, "direction": "desc" }] } }),
+    )
+    .await;
+    r.assert_status(200);
+    assert_eq!(names(&s.p, &r.body), ["Carol", "Alice", "Eve"]);
+}
+
+#[tokio::test]
 async fn password_guessing_is_throttled() {
     let p = people().await;
     let view = p.f.new_view(&p.f.table_id, "Locked", json!({})).await;
