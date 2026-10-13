@@ -124,7 +124,11 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       focus: () => gridRef.current?.focus(),
       scrollToRow: (row) => gridRef.current?.scrollTo(0, row, "vertical"),
       selectCell: (col, row) => {
-        setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] } });
+        const next: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] } };
+        setSelection(next);
+        // Glide only reports selections the pointer or keyboard made; the grid view has to hear about
+        // this one too, or what it thinks is selected (and its "has the selection changed" checks) is stale.
+        pr.current.onSelectionChange(toInfo(next));
         gridRef.current?.scrollTo(col, row, "both");
       },
       clearSelection: () => setSelection(EMPTY_SELECTION),

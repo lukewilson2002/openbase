@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import type { APIRequestContext, Browser, BrowserContext, Cookie, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import type { APIRequestContext, Browser, BrowserContext, Cookie, Page, TestInfo } from "@playwright/test";
+import { expect, newClientContext, test } from "./fixtures";
 
 /**
  * Forms, share links and CSV against a live server, in Chrome:
@@ -89,8 +89,8 @@ async function seed(page: Page): Promise<Fixture> {
  * A browser with no cookies and no storage, as a stranger's would be. Problems the page logs
  * (console errors, CSP violations, failed requests) are collected so the test can assert on them.
  */
-async function stranger(browser: Browser, baseURL: string | undefined): Promise<{ context: BrowserContext; page: Page; problems: string[] }> {
-  const context = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] }, viewport: { width: 1280, height: 800 } });
+async function stranger(browser: Browser, testInfo: TestInfo, baseURL: string | undefined): Promise<{ context: BrowserContext; page: Page; problems: string[] }> {
+  const context = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] }, viewport: { width: 1280, height: 800 } }, "stranger");
   const problems: string[] = [];
   await context.addInitScript(() => {
     document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP violation: ${e.violatedDirective} blocked ${e.blockedURI || "inline"}`));
@@ -112,8 +112,8 @@ async function openView(page: Page, viewId = fx.viewId) {
   await expect(page.getByRole("toolbar", { name: /toolbar/ })).toBeVisible();
 }
 
-test.beforeAll(async ({ browser, baseURL }) => {
-  const ctx = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+test.beforeAll(async ({ browser, baseURL }, testInfo) => {
+  const ctx = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] } }, "seed");
   const page = await ctx.newPage();
   fx = await seed(page);
   session = await ctx.cookies();
@@ -124,7 +124,7 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies(session);
 });
 
-test("builds a form, shares it, and a stranger's submission shows up as a record", async ({ page, browser, baseURL }) => {
+test("builds a form, shares it, and a stranger's submission shows up as a record", async ({ page, browser, baseURL }, testInfo) => {
   test.setTimeout(120_000);
   let formViewId = "";
   let link = "";
@@ -176,7 +176,7 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   });
 
   await test.step("a stranger fills it in: no cookies, no login, no app shell", async () => {
-    const visitor = await stranger(browser, baseURL);
+    const visitor = await stranger(browser, testInfo, baseURL);
     const v = visitor.page;
     await v.goto(link);
     await expect(v.getByRole("heading", { name: "Join the waitlist" })).toBeVisible();
@@ -214,7 +214,7 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   });
 });
 
-test("shares a grid with a password: a stranger gets the rows, not the hidden field", async ({ page, browser, baseURL }) => {
+test("shares a grid with a password: a stranger gets the rows, not the hidden field", async ({ page, browser, baseURL }, testInfo) => {
   test.setTimeout(120_000);
   let link = "";
   let token = "";
@@ -240,7 +240,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
   });
 
   await test.step("the API itself refuses the page and the records without the password", async () => {
-    const anon = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+    const anon = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] } }, "anonymous");
     const r1 = await anon.request.get(`/api/public/shares/${token}`);
     expect(r1.status()).toBe(401);
     expect((await r1.json()).error.code).toBe("share_password_required");
@@ -250,7 +250,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
   });
 
   await test.step("a stranger opens the link, is asked for the password, and sees the shared rows", async () => {
-    const visitor = await stranger(browser, baseURL);
+    const visitor = await stranger(browser, testInfo, baseURL);
     const v = visitor.page;
     await v.goto(link);
     await expect(v.getByRole("heading", { name: "This page is password protected" })).toBeVisible();
@@ -289,7 +289,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
   await test.step("switching the link off closes it", async () => {
     const links = await call<{ id: string }[]>(page.request, "get", `/api/views/${viewId}/shares`);
     await call(page.request, "patch", `/api/shares/${links[0]!.id}`, { enabled: false });
-    const visitor = await stranger(browser, baseURL);
+    const visitor = await stranger(browser, testInfo, baseURL);
     await visitor.page.goto(link);
     await expect(visitor.page.getByRole("heading", { name: "This page is not available" })).toBeVisible();
     await visitor.context.close();
@@ -382,7 +382,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
   });
 });
 
-test("a viewer can filter and sort a board for themselves; the view stays as it was", async ({ page, browser, baseURL }) => {
+test("a viewer can filter and sort a board for themselves; the view stays as it was", async ({ page, browser, baseURL }, testInfo) => {
   test.setTimeout(120_000);
   const board = await call<{ id: string; config: Record<string, unknown> }>(page.request, "post", `/api/tables/${fx.tableId}/views`, {
     name: "Board",
@@ -393,7 +393,7 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
 
   // A second person joins the base as a viewer through an invite link.
   const invite = await call<{ url: string }>(page.request, "post", `/api/bases/${fx.baseId}/invites`, { role: "viewer", email: null });
-  const guest = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] }, viewport: { width: 1360, height: 860 } });
+  const guest = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] }, viewport: { width: 1360, height: 860 } }, "guest");
   const g = await guest.newPage();
   const email = `viewer-${Date.now()}@example.com`;
   const signup = await g.request.post("/api/auth/signup", { data: { email, name: "Viewer Vera", password: PASSWORD }, headers: CSRF });

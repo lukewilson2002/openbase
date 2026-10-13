@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Cookie } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, newClientContext, test } from "./fixtures";
 
 /**
  * The "AI assistants" tab of the account page against the real server: the MCP address comes from
@@ -19,8 +19,8 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 /** One signed-in session for all tests (signup is rate limited per address), added to each test's context. */
 let session: Cookie[] = [];
 
-test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080", storageState: { cookies: [], origins: [] } });
+test.beforeAll(async ({ browser }, testInfo) => {
+  const ctx = await newClientContext(browser, testInfo, { baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080", storageState: { cookies: [], origins: [] } }, "signup");
   const email = `e2e-assistants-${randomBytes(4).toString("hex")}@example.com`;
   const res = await ctx.request.post("/api/auth/signup", { data: { email, name: "Assistants E2E", password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();

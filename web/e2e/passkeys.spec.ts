@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import type { Browser, BrowserContext, CDPSession, Cookie, Page } from "@playwright/test";
+import type { Browser, BrowserContext, CDPSession, Cookie, Page, TestInfo } from "@playwright/test";
 import { totp } from "../contract/totp";
-import { expect, test } from "./fixtures";
+import { expect, newClientContext, test } from "./fixtures";
 
 /**
  * Passkeys in a real browser against the real server, with Chrome's virtual authenticator
@@ -65,50 +65,63 @@ async function virtualAuthenticator(page: Page): Promise<Virtual> {
 interface Account {
   email: string;
   name: string;
-  /** The session cookies of a fresh sign-in. */
+  /** The session cookies of the sign-up. */
   cookies: Cookie[];
 }
 
-/**
- * Accounts are made once, by the administrator the journey spec set up, and signed in once: the server
- * allows only 10 sign-ups an hour and 10 password sign-ins a minute from one address, and the other
- * specs use many of them. (Each test then starts from a stored session and signs out and in as it likes.)
- */
-let adminCookies: Cookie[] = [];
-const accounts: Record<"basic" | "twoFactor" | "lostDevice", Account> = {
-  basic: { email: `e2e-passkey-${rand()}@example.com`, name: "Passkey E2E", cookies: [] },
-  twoFactor: { email: `e2e-passkey-${rand()}@example.com`, name: "Passkey 2FA E2E", cookies: [] },
-  lostDevice: { email: `e2e-passkey-${rand()}@example.com`, name: "Lost Device", cookies: [] },
-};
-
-async function freshContext(browser: Browser): Promise<BrowserContext> {
-  return browser.newContext({ baseURL: baseUrl(), viewport: { width: 1280, height: 900 }, storageState: { cookies: [], origins: [] } });
+function freshContext(browser: Browser, testInfo: TestInfo, label: string): Promise<BrowserContext> {
+  return newClientContext(browser, testInfo, { baseURL: baseUrl(), viewport: { width: 1280, height: 900 }, storageState: { cookies: [], origins: [] } }, label);
 }
 
-test.beforeAll(async ({ browser }) => {
-  const adminContext = await freshContext(browser);
-  const login = await adminContext.request.post("/api/auth/login", { data: { email: ADMIN_EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), await login.text()).toBeTruthy();
-  for (const account of Object.values(accounts)) {
-    const created = await adminContext.request.post("/api/admin/users", {
-      data: { email: account.email, name: account.name, password: PASSWORD, is_admin: false },
-      headers: CSRF,
-    });
-    expect(created.ok(), await created.text()).toBeTruthy();
-    const ctx = await freshContext(browser);
-    const signedIn = await ctx.request.post("/api/auth/login", { data: { email: account.email, password: PASSWORD }, headers: CSRF });
-    expect(signedIn.ok(), await signedIn.text()).toBeTruthy();
-    account.cookies = await ctx.cookies();
-    await ctx.close();
-  }
-  adminCookies = await adminContext.cookies();
-  await adminContext.close();
-});
+/**
+ * A new account of this test, signed up through the API (the e2e server has open sign-up) from a
+ * throwaway browser profile. Every test makes its own: a retry then never meets what the failed
+ * attempt left behind (a passkey the server remembers, whose authenticator is gone). The sign-up
+ * and the sign-ins that follow are counted against this test's own client address, not the one the
+ * whole suite would share (see fixtures.ts).
+ */
+async function signUp(browser: Browser, testInfo: TestInfo, name: string): Promise<Account> {
+  const ctx = await freshContext(browser, testInfo, "sign-up");
+  const email = `e2e-passkey-${rand()}@example.com`;
+  const res = await ctx.request.post("/api/auth/signup", { data: { email, name, password: PASSWORD }, headers: CSRF });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  const cookies = await ctx.cookies();
+  await ctx.close();
+  return { email, name, cookies };
+}
 
-/** Click "Sign in with a passkey", then let the authenticator answer the prompt that opens. */
+/**
+ * Click "Sign in with a passkey" and let the authenticator answer the prompt that opens.
+ *
+ * The order matters, and it is not the order of the person's actions. Chrome's virtual authenticator
+ * decides about user presence when a request reaches it: a request that arrives while presence is
+ * off waits for good, switching presence on afterwards does not wake it. Switching it on right after
+ * the click is a race with the page (the click, the challenge request, `credentials.get()`), which a
+ * fast machine wins and a slow one loses: the prompt then never answers, the button stays on
+ * "Working", and the test waits for a sign-in or an error message that never comes. So the challenge
+ * request of the button is held until the authenticator is ready, and the page cannot ask it before
+ * that. (The login page's own background request is already waiting when this is called; the click
+ * cancels it.)
+ */
 async function signInWithButton(page: Page, auth: Virtual): Promise<void> {
-  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-  await auth.present(true);
+  const challenge = "**/api/auth/passkey-login/start";
+  let ready!: () => void;
+  const authenticatorReady = new Promise<void>((resolve) => (ready = resolve));
+  await page.route(challenge, async (route) => {
+    await authenticatorReady;
+    await route.continue();
+  });
+  try {
+    const answered = page.waitForResponse((r) => r.url().endsWith("/api/auth/passkey-login/start"));
+    answered.catch(() => {}); // reported by the await below, not as an unhandled rejection if the click fails first
+    await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+    await auth.present(true);
+    ready();
+    await answered;
+  } finally {
+    ready();
+    await page.unroute(challenge);
+  }
 }
 
 async function logOut(page: Page): Promise<void> {
@@ -129,11 +142,12 @@ async function addPasskey(page: Page, name: string): Promise<void> {
   await expect(page.getByRole("list", { name: "Your passkeys" })).toContainText(name);
 }
 
-test("a passkey is added in the account page, signs the person in without a password, and is removed again", async ({ page, context, diagnostics }) => {
+test("a passkey is added in the account page, signs the person in without a password, and is removed again", async ({ page, context, browser, diagnostics }, testInfo) => {
   // The refused sign-in at the end is a 401 on purpose; Chrome logs every failed fetch.
   diagnostics.allow(/status of 401.*\/api\/auth\/passkey-login\/finish/);
-  const { email } = accounts.basic;
-  await context.addCookies(accounts.basic.cookies);
+  const account = await signUp(browser, testInfo, "Passkey E2E");
+  const { email } = account;
+  await context.addCookies(account.cookies);
   const auth = await virtualAuthenticator(page);
 
   await addPasskey(page, "E2E laptop");
@@ -150,9 +164,12 @@ test("a passkey is added in the account page, signs the person in without a pass
   // Sign out and back in with the passkey alone: no email, no password. The authenticator leaves
   // prompts waiting, so the login page's background request does not sign anybody in by itself.
   await auth.present(false);
+  const backgroundRequest = page.waitForResponse((r) => r.url().endsWith("/api/auth/passkey-login/start"));
   await logOut(page);
   await expect(page.getByLabel("Email")).toHaveValue("");
   await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", /webauthn/); // the autofill list is offered
+  // The page has asked for its challenge: give the (absent) sign-in a moment to show itself.
+  await backgroundRequest;
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(/\/login/);
   await signInWithButton(page, auth);
@@ -193,9 +210,10 @@ test("a passkey is added in the account page, signs the person in without a pass
   await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
 });
 
-test("a sign-in with a passkey skips the two-factor code that a password sign-in still asks for", async ({ page, context }) => {
-  const { email } = accounts.twoFactor;
-  await context.addCookies(accounts.twoFactor.cookies);
+test("a sign-in with a passkey skips the two-factor code that a password sign-in still asks for", async ({ page, context, browser }, testInfo) => {
+  const account = await signUp(browser, testInfo, "Passkey 2FA E2E");
+  const { email } = account;
+  await context.addCookies(account.cookies);
   const auth = await virtualAuthenticator(page);
 
   // Two-factor on, set up through the API the way the account page does.
@@ -237,13 +255,14 @@ test("a sign-in with a passkey skips the two-factor code that a password sign-in
   expect((await (await page.request.get("/api/auth/me")).json()).email).toBe(email);
 });
 
-test("an administrator removes another user's passkeys, and that user falls back to their password", async ({ browser, diagnostics }) => {
+test("an administrator removes another user's passkeys, and that user falls back to their password", async ({ browser, diagnostics }, testInfo) => {
   diagnostics.allow(/status of 401.*\/api\/auth\/passkey-login\/finish/);
-  const { email, name } = accounts.lostDevice;
+  const account = await signUp(browser, testInfo, "Lost Device");
+  const { email, name } = account;
 
   // The user, in their own browser profile with a device that holds a passkey.
-  const userContext = await freshContext(browser);
-  await userContext.addCookies(accounts.lostDevice.cookies);
+  const userContext = await freshContext(browser, testInfo, "user");
+  await userContext.addCookies(account.cookies);
   const user = await userContext.newPage();
   const auth = await virtualAuthenticator(user);
   await addPasskey(user, "Lost phone");
@@ -251,8 +270,9 @@ test("an administrator removes another user's passkeys, and that user falls back
   await logOut(user);
 
   // The administrator (created by the journey spec) removes it on the Users page.
-  const adminContext = await freshContext(browser);
-  await adminContext.addCookies(adminCookies);
+  const adminContext = await freshContext(browser, testInfo, "admin");
+  const login = await adminContext.request.post("/api/auth/login", { data: { email: ADMIN_EMAIL, password: PASSWORD }, headers: CSRF });
+  expect(login.ok(), await login.text()).toBeTruthy();
   const admin = await adminContext.newPage();
   await admin.goto("/admin?tab=users");
   const row = admin.getByRole("row").filter({ hasText: email });

@@ -76,8 +76,9 @@ Done once, in this order. The repository is `https://github.com/lukewilson2002/o
 ## Making a release
 
 Before you start: `main` is where you want it, CI is green on it, and the notes for users are
-written under `## [Unreleased]` in `CHANGELOG.md` (if that is empty the script falls back to commit
-subjects, which is a poor changelog).
+written under `## [Unreleased]` in `CHANGELOG.md`. If that is empty the script refuses and says so;
+`--notes-from-commits` makes it use the commit subjects since the previous release tag instead
+(a poor changelog, but a changelog).
 
 1. **Prepare** (on `main`, clean tree):
 
@@ -87,14 +88,17 @@ subjects, which is a poor changelog).
    ```
 
    It bumps `Cargo.toml` (and `Cargo.lock`), `web/package.json` (and its lock file), turns the
-   Unreleased notes into `## [0.2.0] - <date>`, runs `scripts/check.sh`, commits **Release v0.2.0**
+   Unreleased notes into `## [0.2.0] - <date>` (and points the `[Unreleased]` and `[0.2.0]` links at
+   tags that exist: a comparison with the previous release tag, the previous stable one for a stable
+   release, or the release's own page when there is none), runs `scripts/check.sh`, commits **Release v0.2.0**
    and creates the annotated tag `v0.2.0` whose message is the changelog section. The binary's
    `--version` and `/api/health` report the Cargo version, so this is all they need. The script
    prints the next two commands and changes nothing outside your clone. Look at the result:
    `git show v0.2.0`. To undo: `git tag -d v0.2.0 && git reset --hard HEAD~1`.
 
-   The very first release is special: the tree is already at 0.1.0, so `scripts/release.sh 0.1.0`
-   skips the bump, stamps the date on the `## [0.1.0] - unreleased` section, commits and tags.
+   A changelog section written ahead of time (`## [0.1.0] - unreleased`, as for the first release)
+   is not rebuilt from the Unreleased notes: the script stamps the date on it (and skips the version
+   bump if `Cargo.toml` already has that version), commits and tags.
 
 2. **Push the commit and the tag.** This deploys nothing:
 
@@ -118,7 +122,9 @@ subjects, which is a poor changelog).
    release). Saving it as a **draft** does nothing; clicking **Publish** starts the workflow.
 
 4. **Watch it**: `gh run watch`, or Actions -> Release. About 20-40 minutes: the checks (with
-   Playwright) run first, then both architectures are compiled.
+   Playwright) run first, then both architectures are compiled. In a release run a test that fails
+   and only passes on its retry (a flaky one) fails the checks, so nothing is published on it; in CI
+   on a pull request the same test is only listed in the job summary.
 
 5. **Check the result** ([below](#verifying-a-release)). The release page now has
    `openbase-0.2.0-linux-amd64.tar.gz`, `openbase-0.2.0-linux-arm64.tar.gz` and `SHA256SUMS`, and the

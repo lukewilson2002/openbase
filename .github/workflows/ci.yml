@@ -10,7 +10,9 @@
 #           the generated-file checks (TypeScript bindings, Lucide icon list, brand files),
 #           tsc, Vitest, and the live contract tests (TypeScript client against the real server).
 #           It is the same script developers run locally, so CI cannot drift from it.
-#   e2e     the Playwright end-to-end tests against the real server in Google Chrome.
+#   e2e     the Playwright end-to-end tests against the real server in Google Chrome. A failed test is
+#           retried once; one that only passes on the retry is "flaky": it is listed in the job summary
+#           and as a warning, and it fails the job when `fail_on_flaky` is set (the release does).
 name: CI
 
 on:
@@ -23,6 +25,10 @@ on:
         description: "Git ref to check out (the release tag). Empty: the event's own commit."
         type: string
         default: ""
+      fail_on_flaky:
+        description: "Fail the end-to-end job when a test only passes on its retry (the release sets this)."
+        type: boolean
+        default: false
 
 # Read-only: nothing in here can write to the repository, packages or releases.
 permissions:
@@ -91,6 +97,10 @@ jobs:
       # repository variable OPENBASE_E2E_BROWSER to "chromium": this job then downloads
       # Playwright's own Chromium. Developer machines never download a browser.
       OPENBASE_E2E_BROWSER: ${{ vars.OPENBASE_E2E_BROWSER || 'chrome' }}
+      # Pull requests and pushes: one retry, and a test that needed it is reported but does not fail the
+      # run. A release (release.yml) must not go out on a test that is known to be unreliable, so there
+      # a test that only passed on its retry fails the run too.
+      OPENBASE_E2E_FAIL_ON_FLAKY: ${{ inputs.fail_on_flaky && '1' || '' }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,9 +144,35 @@ jobs:
         working-directory: web
         run: npm run e2e
 
-      # Playwright keeps a trace, a screenshot and the HTML report for every failed test.
+      # Tests that failed once and passed on the retry. They keep the job green on a pull request, so
+      # say so where people look: a warning on the run and a list in the job summary.
+      - name: Report flaky tests
+        id: flaky
+        if: ${{ !cancelled() }}
+        working-directory: web
+        run: |
+          report=test-results/report.json
+          if [[ ! -f "$report" ]]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          titles=$(jq -r '[.. | objects | select(has("tests") and has("title")) | select(any(.tests[]; .status == "flaky")) | "\(.file): \(.title)"] | unique | .[]' "$report")
+          count=$(grep -c . <<<"$titles" || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [[ "$count" -gt 0 ]]; then
+            while IFS= read -r t; do echo "::warning title=Flaky end-to-end test::$t failed and then passed on its retry"; done <<<"$titles"
+            {
+              echo "### Flaky end-to-end tests ($count)"
+              echo "These failed once and passed on the retry. Fix them: the traces of the failed attempts are in the playwright-traces artifact."
+              echo
+              while IFS= read -r t; do echo "- $t"; done <<<"$titles"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Playwright keeps a trace, a screenshot and the HTML report for every failed attempt, including
+      # the failed first attempt of a flaky test.
       - name: Upload Playwright traces and report
-        if: failure()
+        if: ${{ failure() || steps.flaky.outputs.count != '0' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-traces

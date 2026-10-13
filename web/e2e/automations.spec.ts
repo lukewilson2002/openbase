@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, hoverAt, gridFocused, test, typeToEdit } from "./fixtures";
+import { clickGrid, expect, newClientContext, test, typeToEdit } from "./fixtures";
 
 /**
  * The automations journey against a live server: build "when a record is created in Table 1,
@@ -78,8 +78,8 @@ async function runs(page: Page, automationId: string): Promise<RunDto[]> {
   return ((await res.json()) as { runs: RunDto[] }).runs;
 }
 
-test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080" });
+test.beforeAll(async ({ browser }, testInfo) => {
+  const ctx = await newClientContext(browser, testInfo, { baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080" }, "seed");
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);
@@ -161,9 +161,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     const box = (await canvas.boundingBox())!;
     const x = box.x + MARKER_W + NAME_W / 2;
     const y = box.y + HEADER_H + ROW_H / 2;
-    await hoverAt(page, x, y);
-    await page.mouse.click(x, y);
-    await gridFocused(page);
+    await clickGrid(page, x, y);
     await typeToEdit(page, "Alpha");
     await page.keyboard.press("Enter");
     await expect.poll(async () => names(page, fx.table1)).toEqual(["Alpha"]);

@@ -14,6 +14,11 @@ import { defineConfig, devices } from "@playwright/test";
  *   OPENBASE_E2E_URL=http://host:port   use a running server instead of starting one
  *   OPENBASE_E2E_SKIP_BUILD=1           reuse web/dist and target/debug/openbase as they are
  *   OPENBASE_E2E_KEEP_DATA=1            keep the temporary data directory (its path is printed)
+ *   OPENBASE_E2E_FAIL_ON_FLAKY=1        a test that fails and then passes on the retry fails the run (CI
+ *                                       retries once; a release must not go out on a test that is known
+ *                                       to be unreliable, so release.yml sets this)
+ *   OPENBASE_E2E_CPU_THROTTLE=4         run every page 4x slower (DevTools CPU throttling), to find tests
+ *                                       that depend on how fast the page is (see e2e/fixtures.ts)
  *
  * The projects depend on each other on purpose: they share one server and one data directory, and
  * the first one to run sees a fresh instance (smoke: the first-run screen), the second sets it up
@@ -32,9 +37,12 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // A pass on the retry is still reported as "flaky" (the CI job lists those); this makes it a failure.
+  failOnFlakyTests: !!process.env["OPENBASE_E2E_FAIL_ON_FLAKY"],
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // The JSON report is what the CI job reads to list flaky tests (they do not fail a normal run).
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }], ["json", { outputFile: "test-results/report.json" }]] : "list",
   use: {
     // Set by globalSetup before the workers start.
     baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080",
