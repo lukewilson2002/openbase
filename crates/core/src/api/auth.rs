@@ -31,6 +31,10 @@ pub struct SetupStatus {
     pub needs_setup: bool,
     pub open_signup: bool,
     pub email_enabled: bool,
+    /// The address users reach OpenBase at (`OPENBASE_PUBLIC_URL`, no trailing slash). The account
+    /// page builds the MCP address from it, because the browser may be on another address (a proxy,
+    /// a tunnel) than the one AI assistants must use.
+    pub public_url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

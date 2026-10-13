@@ -131,6 +131,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
         needs_setup: n == 0,
         open_signup: state.config.open_signup,
         email_enabled: state.email.enabled(),
+        public_url: state.config.public_url.trim_end_matches('/').to_string(),
     }))
 }
 
