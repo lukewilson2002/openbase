@@ -27,6 +27,12 @@ fails if a Lucide upgrade removes it or renames one of the popular 20.
 `@modelcontextprotocol/sdk` (exact version, dev dependency, about 90 packages in the lockfile) is used only by
 `contract/oauth.contract.test.ts`, to run the official MCP OAuth client against the server; nothing of it is bundled.
 
+Passkeys use the browser's WebAuthn API directly (`src/lib/webauthn.ts`, about 100 lines: base64url conversion of the
+server's JSON options and answers, support detection, error classification, a default passkey name). No library: the
+convenience of `@simplewebauthn/browser` is exactly these conversions plus polyfills for browsers older than
+`parseCreationOptionsFromJSON` / `toJSON()`, which would add a runtime dependency to every page load for code that is
+short and fully unit-tested here.
+
 Dependencies are deliberately few (9 runtime for the shell): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
 The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and react-responsive-carousel) and dompurify,
@@ -92,6 +98,7 @@ administrator already exists for the data plane:
 | `email.contract.test.ts` | Administration -> Email: the effective settings and their sources, saving (never a host: the shared server keeps email off), the write-only password, validation errors, the test-email answer, closed to regular users |
 | `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a base built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
 | `oauth.contract.test.ts` | OAuth for the MCP endpoint, driven by the official `@modelcontextprotocol/sdk` client (`OAuthClientProvider`): discovery from the 401, dynamic registration, PKCE, code exchange, tools, automatic refresh with rotation, revocation from the connected-apps list, `insufficient_scope`, OAuth tokens refused on the REST API; the consent and grant responses are checked against the generated bindings |
+| (in `flow.contract.test.ts`) | passkeys as far as a server on an IP address goes: `passkeys_enabled: false`, the "needs a domain name" answer, the empty list, session-only for tokens, the administrator's removal. The ceremonies need a domain name and a browser: they are covered by the server tests (`crates/server/tests/passkeys.rs`) and the `passkeys` end-to-end project |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
 `OPENBASE_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
@@ -117,7 +124,8 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
 | `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> AI assistants -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `assistants` | `assistants.spec.ts` | grid | Account -> AI assistants: the MCP address is the server's public URL and answers `401` with the sign-in metadata, Claude is open by default and the sections are an accordion (mouse and keyboard), the copy buttons write the real clipboard, the token variants are collapsed until opened, the plain-http server shows the public-address warning, and the tab fits 375 px in the light and dark themes |
-| `admin-email` | `adminEmail.spec.ts` | sharing, automations, views, oauth, assistants | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
+| `passkeys` | `passkeys.spec.ts` | grid | Chrome's virtual authenticator (CDP `WebAuthn.addVirtualAuthenticator`: CTAP2, internal transport, resident keys, user verification): add a passkey in Account -> Security, sign out, sign in with it and no password (the background request for the email field's autofill list stays pending until the button replaces it), rename and remove it, the removed passkey's leftover credential refused; a TOTP-enabled user signing in by passkey skips the code while the password still asks for it; the autofill request completing the sign-in; an administrator removing another user's passkeys |
+| `admin-email` | `adminEmail.spec.ts` | sharing, automations, views, oauth, assistants, passkeys | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
 
@@ -127,7 +135,7 @@ other's data; they all hang off `grid` only to keep the order fixed on the share
 new line in `playwright.config.ts`, or it never runs). Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
-are asserted against the API. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
+are asserted against the API. The server's public URL is `http://localhost:<port>` (not `127.0.0.1`): WebAuthn needs a domain name as the relying party, and `localhost` is the one browsers treat as a secure context over plain http. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
 reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENBASE_E2E=1` is set.
 
 ## Layout
@@ -137,7 +145,8 @@ src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE)
 src/auth/       current-user hooks and route guards
 src/base/       base shell: top bar, table tabs, view sidebar, permission rules
 src/components/ design-system primitives (ui/) and shared dialogs
-src/pages/      setup, login, signup, invite, password reset, home, account/, admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
+src/lib/webauthn.ts  the WebAuthn browser API <-> the server's JSON (base64url conversion, support checks, errors); `src/auth/usePasskeyLogin.ts` is the login page's passkey button and background autofill request
+src/pages/      setup, login, signup, invite, password reset, home, account/ (SecuritySection: password, PasskeysSection, two-factor), admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
 src/theme/      light/dark theme provider (the pre-paint script is public/theme-init.js)
 src/views/      ViewHost + registry.ts: the extension point where grid/kanban/... plug in
 src/automations/ the automations page (list, editor, test panel, run history); its own lazy chunk

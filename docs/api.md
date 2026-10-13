@@ -54,7 +54,7 @@ The class is decided in one place (`Actor::require_capability`), and
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Manage**: create / rename / delete / restore workspaces, workspace and base members (role changes, removal), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
-| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
+| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
 
 Apps that connected through OAuth (see [MCP](mcp.md#connect-with-oauth-sign-in)) hold a grant with
@@ -75,7 +75,7 @@ over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` re
 **Credentials and administrators.** The owner's rule is that a token never changes a
 credential, so an instance administrator's `manage` token cannot create a password-reset
 link for any user (that would be an account takeover), cannot switch off a user's
-two-factor authentication, and cannot set the SMTP password. `POST /api/admin/users` with a
+two-factor authentication, cannot remove a user's passkeys, and cannot set the SMTP password. `POST /api/admin/users` with a
 token creates the account (name, email, optional administrator role) but without a usable
 password: it refuses `password` and returns no `reset_link`; a signed-in administrator
 creates the reset link in the app, or the person uses "Forgot password" when email is on.
@@ -85,6 +85,26 @@ and cannot change the host, port, security mode or username while a password is 
 (that would send the password to a server of its choosing); it can switch email off.
 
 An AI agent can use all of this through the built-in MCP server; see [mcp.md](mcp.md).
+
+### Passkeys (internal API)
+
+Passkey sign-in uses the WebAuthn browser API; the endpoints below carry its JSON. All are JSON,
+cookie requests need the `X-OpenBase-CSRF: 1` header like every state-changing call, and all except
+the two sign-in calls are session-only.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/auth/passkeys` | The caller's passkeys: `[{id, name, created_at, last_used_at, transports, backup_eligible, backup_state}]`. Never the key or the credential id. |
+| `POST /api/auth/passkeys/register/start` | Body `{password?}`. Answers `{challenge_id, options}`: `options` is the `navigator.credentials.create()` argument with `challenge`, `user.id` and `excludeCredentials[].id` in base64url. `403 reauth_required` when the session is older than 10 minutes and no password is sent. |
+| `POST /api/auth/passkeys/register/finish` | Body `{challenge_id, name?, credential}` (the created credential with its binary members as base64url). `201` with the new passkey. |
+| `PATCH /api/auth/passkeys/{id}` | Body `{name}`. |
+| `DELETE /api/auth/passkeys/{id}` | `204`. |
+| `POST /api/auth/passkey-login/start` | Anonymous. Answers `{challenge_id, options}` for `navigator.credentials.get()` (no account named: the passkey identifies it). Limited per client address. |
+| `POST /api/auth/passkey-login/finish` | Anonymous. Body `{challenge_id, credential}`. Answers like a password login (`{user, two_factor_required: false}`) and sets the session cookie; passkey sign-in never asks for the TOTP code. `401 invalid_passkey` for any refusal, `401 passkey_expired` for an unknown or used challenge, `403` for a deactivated user, `429` over the per-address limit. |
+| `DELETE /api/admin/users/{id}/passkeys` | Administrators, signed in. Removes all of the user's passkeys; answers `{removed}`. |
+
+`GET /api/setup` reports `passkeys_enabled` (false when `OPENBASE_PUBLIC_URL` is an IP address).
+How passkeys are protected: [security.md](security.md#passkeys).
 
 ---
 

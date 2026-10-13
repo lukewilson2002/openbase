@@ -177,8 +177,18 @@ docker compose exec -e OPENBASE_ADMIN_PASSWORD openbase \
 unset OPENBASE_ADMIN_PASSWORD
 ```
 
-Then turn on two-factor authentication for the admin account under
-**Account → Security**.
+Then give the admin account a second factor under **Account → Security**: a
+passkey (Touch ID, Windows Hello, a phone or a security key; it also signs in
+without a password) or an authenticator app (TOTP).
+
+**Pick the final domain before enabling passkeys.** A passkey belongs to the host
+of `OPENBASE_PUBLIC_URL` (`base.example.com`). If that host ever changes, every
+passkey stops working and people have to sign in with their password and add
+new ones. Passkeys made while you try OpenBase on `http://localhost:8080` do not
+carry over to your real domain either. Passkeys also need an address with a
+domain name (not an IP address) and a browser on a secure origin (`https://`, or
+`localhost`); with an IP address as the public URL the Account page says they are
+off. See [security.md](security.md#passkeys).
 
 ## 5. Email (SMTP)
 
@@ -434,6 +444,12 @@ on an approval page after signing in; you can see and revoke everyone's connecti
 `OPENBASE_OAUTH_REGISTRATION=false`; `openbase oauth-client add --name N --redirect-uri URI`
 adds one by hand. Details: [mcp.md](mcp.md#connect-with-oauth-sign-in).
 
+**Lost passkey device.** The person signs in with their password (a passkey never
+replaces it) and removes the passkey under **Account → Security**. If they cannot,
+an administrator removes all of their passkeys under **Admin → Users → Remove
+passkeys**; this does not sign anyone out. A password reset or `reset-password`
+keeps passkeys.
+
 **The only administrator is locked out.** Use `reset-password` and/or
 `disable-2fa` above, or create another administrator with `create-admin`.
 
@@ -445,6 +461,7 @@ adds one by hand. Details: [mcp.md](mcp.md#connect-with-oauth-sign-in).
 | `openbase` container keeps restarting | `docker compose logs openbase`. The most common cause is a database from a newer OpenBase ("schema version N is newer than this binary supports"): upgrade, or restore an older backup. |
 | `unhealthy` in `docker compose ps` | `docker compose exec openbase openbase healthcheck` prints the reason. |
 | Login works but you are logged out immediately | `OPENBASE_PUBLIC_URL` must match the URL in the browser exactly, including `https://`. |
+| "Add a passkey" is greyed out, or a passkey is refused | Passkeys work only at the exact address in `OPENBASE_PUBLIC_URL`, whose host must be a domain name (not an IP address), over `https://` or on `localhost`. After changing the host, old passkeys no longer work: sign in with the password and add new ones. |
 | Requests rejected with "missing CSRF header" | A custom script is using a session cookie. Use a personal access token (`Authorization: Bearer ...`) instead. |
 | All users appear to come from one IP (rate limits hit) | Set `OPENBASE_TRUST_PROXY=true` when running behind a reverse proxy. Never enable it when OpenBase is reachable directly, and only behind a proxy that sets or appends the client address in `X-Forwarded-For` (OpenBase uses the last entry); see `docs/security.md`. |
 | Uploads fail with 413 | Raise `OPENBASE_MAX_UPLOAD_MB`. If you use a proxy other than Caddy, raise its body size limit too (nginx: `client_max_body_size`). |
