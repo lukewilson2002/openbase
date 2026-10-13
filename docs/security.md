@@ -45,6 +45,17 @@ disable 2FA, which is a path to any account.
 
 ### Behaviour worth knowing
 
+- **Turning on 2FA** signs the user out everywhere else: every other session is
+  deleted (the one that enabled it stays), because a session opened with only
+  the password must not outlive the second factor. API tokens are unaffected
+  (they are revoked by a password change, not by 2FA).
+- **`last_used_at` of an API token** is refreshed at most once a minute per token
+  (one implementation, shared by `/api/v1` and the session/token extractor), so
+  a busy integration does not put a write on SQLite's single writer for every
+  request. The value is therefore accurate to a minute.
+- **Deleted workspaces** can be listed by their owners (`GET /api/trash/workspaces`,
+  session only) so they can be restored; other roles, outsiders and API tokens
+  see nothing there.
 - **API tokens** are deleted when their owner changes their password, uses a
   reset link, or an operator runs `reset-password`. Deactivating a user blocks
   their tokens but does not delete them (reactivation restores them); reset the
@@ -87,7 +98,8 @@ disable 2FA, which is a path to any account.
 
 - A distributed attacker (many addresses) can still trip the 60-per-hour
   per-account login limit and lock the real owner out for up to an hour.
-  Existing sessions keep working. Enable 2FA on important accounts.
+  Existing sessions keep working. Enable 2FA on important accounts (enabling it
+  also ends the other sessions of that account).
 - Any signed-in user can create a workspace and so send invite and automation
   emails to arbitrary addresses within the budgets. There is no setting to
   restrict workspace creation to admins; keep sign-up invite-only.
