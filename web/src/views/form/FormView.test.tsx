@@ -63,7 +63,7 @@ describe("the builder", () => {
     const user = userEvent.setup();
     setup("creator");
     await screen.findByRole("heading", { name: "Form" });
-    expect(screen.getAllByText("Not on the public form")).toHaveLength(2); // Owner (user) and Depends on (link)
+    expect(screen.getAllByText("Not public")).toHaveLength(2); // Owner (user) and Depends on (link)
     expect(screen.getByText(/2 of 4 fields/)).toBeInTheDocument();
     const preview = screen.getByRole("region", { name: "Form preview" });
     expect(within(preview).getAllByText("Signed-in editors only")).toHaveLength(2);

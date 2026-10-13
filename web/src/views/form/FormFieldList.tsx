@@ -51,7 +51,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
         <span className="min-w-0 flex-1 basis-24 truncate text-[0.8125rem] font-medium">{field.name}</span>
         {!status.public && (
           <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs" title={status.message}>
-            <Lock aria-hidden className="size-3" /> Not on the public form
+            <Lock aria-hidden className="size-3" /> Not public
           </span>
         )}
         <Switch checked={entry.required} disabled={readOnly} onCheckedChange={(required) => patch({ required })} label="Required" />

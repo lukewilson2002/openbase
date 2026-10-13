@@ -409,7 +409,7 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   await g.getByRole("button", { name: /^Sort/ }).click();
   await g.getByRole("button", { name: "Add sort" }).click();
   await g.keyboard.press("Escape");
-  await expect(g.getByText("Not saved")).toBeVisible();
+  await expect(g.getByRole("status").filter({ hasText: "Not saved" })).toBeVisible();
   await g.getByRole("button", { name: /^Filter/ }).click();
   await g.getByRole("button", { name: "Add condition", exact: true }).click();
   await g.getByLabel("Operator").selectOption("contains");
@@ -424,6 +424,6 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
 
   await g.getByRole("button", { name: "Reset" }).click();
   await expect(g.getByRole("button", { name: "Bravo" })).toBeVisible();
-  await expect(g.getByText("Not saved")).toHaveCount(0);
+  await expect(g.getByRole("status").filter({ hasText: "Not saved" })).toHaveCount(0);
   await guest.close();
 });
