@@ -14,12 +14,12 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use axum_extra::extract::CookieJar;
 use og_core::api::auth::{
-    ChangePasswordRequest, LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest,
-    SessionInfo, SetupStatus, SignupRequest, TwoFactorCode, TwoFactorDisable, TwoFactorSetup,
-    UpdateMeRequest, User,
+    ChangePasswordRequest, LoginRequest, LoginResponse, OkResponse, PasswordResetConfirm,
+    PasswordResetRequest, SessionInfo, SetupStatus, SignupRequest, TwoFactorCode, TwoFactorDisable,
+    TwoFactorSetup, UpdateMeRequest, User,
 };
 use rusqlite::{OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::auth::password::{self, DUMMY_HASH};
 use crate::auth::{Actor, ClientInfo, SESSION_COOKIE, session, totp};
@@ -61,8 +61,8 @@ pub fn router() -> Router<AppState> {
 }
 
 /// `{"ok": true}` for actions with nothing else to return.
-fn ok() -> Json<Value> {
-    Json(json!({ "ok": true }))
+fn ok() -> Json<OkResponse> {
+    Json(OkResponse::new())
 }
 
 /// A 401 with a specific code and message (the generic `Unauthorized` error
@@ -360,7 +360,7 @@ async fn logout(
     State(state): State<AppState>,
     client: ClientInfo,
     jar: CookieJar,
-) -> AppResult<(CookieJar, Json<Value>)> {
+) -> AppResult<(CookieJar, Json<OkResponse>)> {
     if let Some(raw) = jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) {
         let hash = hash_token(&raw);
         state
@@ -432,7 +432,7 @@ async fn change_password(
     actor: Actor,
     client: ClientInfo,
     ApiJson(req): ApiJson<ChangePasswordRequest>,
-) -> AppResult<Json<Value>> {
+) -> AppResult<Json<OkResponse>> {
     actor.require_session()?;
     state
         .limiter
@@ -468,7 +468,7 @@ async fn reset_request(
     State(state): State<AppState>,
     client: ClientInfo,
     ApiJson(req): ApiJson<PasswordResetRequest>,
-) -> AppResult<Json<Value>> {
+) -> AppResult<Json<OkResponse>> {
     state.limiter.check("reset_request", &client.ip, 5, HOUR)?;
     if !state.config.email_enabled() {
         return Ok(ok());
@@ -516,7 +516,7 @@ async fn reset_confirm(
     State(state): State<AppState>,
     client: ClientInfo,
     ApiJson(req): ApiJson<PasswordResetConfirm>,
-) -> AppResult<Json<Value>> {
+) -> AppResult<Json<OkResponse>> {
     state.limiter.check("reset_confirm", &client.ip, 20, HOUR)?;
     password::validate_new_password(&req.new_password)?;
     let invalid = || AppError::bad_request("this reset link is invalid or has expired");
@@ -739,7 +739,7 @@ async fn revoke_other_sessions(
     State(state): State<AppState>,
     actor: Actor,
     client: ClientInfo,
-) -> AppResult<Json<Value>> {
+) -> AppResult<Json<OkResponse>> {
     actor.require_session()?;
     state
         .db

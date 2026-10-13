@@ -4,15 +4,12 @@
  * (records, aggregations, comments, ...) using the same `http` helpers.
  */
 import { http } from "./client";
-import {
-  listOf,
-  type AcceptInviteResult,
-  type AdminUpdateUserRequest,
-  type AuditPage,
-} from "./extra";
 import type {
   AdminCreateUser,
+  AdminCreatedUser,
+  AdminUpdateUser,
   AdminUser,
+  AuditPage,
   BackupInfo,
   BaseSchema,
   BaseSummary,
@@ -32,6 +29,7 @@ import type {
   LoginResponse,
   Member,
   NotificationsResponse,
+  OkResponse,
   PasswordResetConfirm,
   ResetLink,
   SessionInfo,
@@ -49,94 +47,96 @@ import type {
   UpdateWorkspace,
   User,
   View,
+  WhoAmI,
   WorkspaceSummary,
 } from "./types";
 
 const enc = encodeURIComponent;
 
-/** `GET /api/auth/me` may return the user directly or as `{ user }`. */
-function unwrapUser(res: unknown): User {
-  const obj = res as { user?: User } | User;
-  return "user" in obj && obj.user ? obj.user : (obj as User);
-}
-
+/**
+ * Response shapes are exactly what crates/server/src/api sends (see the live contract tests in
+ * web/contract, which run this client against the real server):
+ *   - list endpoints return a bare JSON array of the DTO;
+ *   - creates answer 201 with the DTO; deletes answer 204 (no body, `void` here);
+ *   - actions without a result answer `{"ok": true}` (`OkResponse`);
+ *   - `PATCH` answers the updated resource.
+ * Workspaces, bases and members are not implemented server-side yet; they follow the same
+ * conventions (bare arrays, no wrapper DTO exists in og_core::api::workspaces).
+ */
 export const api = {
   setup: {
     status: () => http.get<SetupStatus>("/api/setup", { skipAuthRedirect: true }),
   },
 
   auth: {
-    me: async () => unwrapUser(await http.get<unknown>("/api/auth/me", { skipAuthRedirect: true })),
-    updateMe: async (body: UpdateMeRequest) => unwrapUser(await http.patch<unknown>("/api/auth/me", body)),
-    signup: (body: SignupRequest) => http.post<LoginResponse | User>("/api/auth/signup", body, { skipAuthRedirect: true }),
+    me: () => http.get<User>("/api/auth/me", { skipAuthRedirect: true }),
+    updateMe: (body: UpdateMeRequest) => http.patch<User>("/api/auth/me", body),
+    /** Creates the account and signs in (the first account becomes the administrator). */
+    signup: (body: SignupRequest) => http.post<User>("/api/auth/signup", body, { skipAuthRedirect: true }),
+    /** `{ user }` when logged in, or `{ two_factor_required: true }` with a pending session cookie. */
     login: (body: LoginRequest) => http.post<LoginResponse>("/api/auth/login", body, { skipAuthRedirect: true }),
-    login2fa: (code: string) => http.post<LoginResponse | User>("/api/auth/login/2fa", { code }, { skipAuthRedirect: true }),
-    logout: () => http.post<void>("/api/auth/logout", undefined, { skipAuthRedirect: true }),
-    changePassword: (body: ChangePasswordRequest) => http.post<void>("/api/auth/password", body),
+    login2fa: (code: string) => http.post<LoginResponse>("/api/auth/login/2fa", { code }, { skipAuthRedirect: true }),
+    logout: () => http.post<OkResponse>("/api/auth/logout", undefined, { skipAuthRedirect: true }),
+    changePassword: (body: ChangePasswordRequest) => http.post<OkResponse>("/api/auth/password", body),
     requestPasswordReset: (email: string) =>
-      http.post<void>("/api/auth/password-reset/request", { email }, { skipAuthRedirect: true }),
+      http.post<OkResponse>("/api/auth/password-reset/request", { email }, { skipAuthRedirect: true }),
     confirmPasswordReset: (body: PasswordResetConfirm) =>
-      http.post<void>("/api/auth/password-reset/confirm", body, { skipAuthRedirect: true }),
+      http.post<OkResponse>("/api/auth/password-reset/confirm", body, { skipAuthRedirect: true }),
     twoFactorSetup: () => http.post<TwoFactorSetup>("/api/auth/2fa/setup"),
-    twoFactorEnable: (code: string) => http.post<void>("/api/auth/2fa/enable", { code }),
-    twoFactorDisable: (body: TwoFactorDisable) => http.post<void>("/api/auth/2fa/disable", body),
-    sessions: async () => listOf<SessionInfo>(await http.get<unknown>("/api/auth/sessions"), "sessions"),
+    /** Returns the updated user (`totp_enabled: true`). */
+    twoFactorEnable: (code: string) => http.post<User>("/api/auth/2fa/enable", { code }),
+    /** Returns the updated user (`totp_enabled: false`). */
+    twoFactorDisable: (body: TwoFactorDisable) => http.post<User>("/api/auth/2fa/disable", body),
+    sessions: () => http.get<SessionInfo[]>("/api/auth/sessions"),
     revokeSession: (id: string) => http.delete<void>(`/api/auth/sessions/${enc(id)}`),
-    revokeOtherSessions: () => http.post<void>("/api/auth/sessions/revoke-others"),
+    revokeOtherSessions: () => http.post<OkResponse>("/api/auth/sessions/revoke-others"),
   },
 
   tokens: {
-    list: async () => listOf<TokenInfo>(await http.get<unknown>("/api/tokens"), "tokens"),
+    list: () => http.get<TokenInfo[]>("/api/tokens"),
     create: (body: CreateTokenRequest) => http.post<CreatedToken>("/api/tokens", body),
     revoke: (id: string) => http.delete<void>(`/api/tokens/${enc(id)}`),
+    /** Works with a session or, when `bearer` is given, an API token. */
+    whoami: (bearer?: string) =>
+      http.get<WhoAmI>("/api/tokens/whoami", { headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined }),
   },
 
   invites: {
     preview: (token: string) =>
       http.get<InvitePreview>(`/api/invites/by-token/${enc(token)}`, { skipAuthRedirect: true }),
-    accept: (token: string) =>
-      http.post<AcceptInviteResult | undefined>(`/api/invites/by-token/${enc(token)}/accept`),
+    /** Returns the accepted invite (`workspace_id` or `base_id` says where to go next). */
+    accept: (token: string) => http.post<InviteInfo>(`/api/invites/by-token/${enc(token)}/accept`),
     remove: (id: string) => http.delete<void>(`/api/invites/${enc(id)}`),
-    forWorkspace: async (workspaceId: string) =>
-      listOf<InviteInfo>(await http.get<unknown>(`/api/workspaces/${enc(workspaceId)}/invites`), "invites"),
+    forWorkspace: (workspaceId: string) => http.get<InviteInfo[]>(`/api/workspaces/${enc(workspaceId)}/invites`),
     createForWorkspace: (workspaceId: string, body: CreateInviteRequest) =>
       http.post<CreatedInvite>(`/api/workspaces/${enc(workspaceId)}/invites`, body),
-    forBase: async (baseId: string) =>
-      listOf<InviteInfo>(await http.get<unknown>(`/api/bases/${enc(baseId)}/invites`), "invites"),
+    forBase: (baseId: string) => http.get<InviteInfo[]>(`/api/bases/${enc(baseId)}/invites`),
     createForBase: (baseId: string, body: CreateInviteRequest) =>
       http.post<CreatedInvite>(`/api/bases/${enc(baseId)}/invites`, body),
   },
 
   admin: {
-    users: async () => listOf<AdminUser>(await http.get<unknown>("/api/admin/users"), "users"),
-    createUser: (body: AdminCreateUser) =>
-      http.post<AdminUser & { reset_link?: ResetLink | null }>("/api/admin/users", body),
-    updateUser: (id: string, body: AdminUpdateUserRequest) =>
-      http.patch<AdminUser | undefined>(`/api/admin/users/${enc(id)}`, body),
+    users: () => http.get<AdminUser[]>("/api/admin/users"),
+    /** `reset_link` is present when no password was given. */
+    createUser: (body: AdminCreateUser) => http.post<AdminCreatedUser>("/api/admin/users", body),
+    updateUser: (id: string, body: AdminUpdateUser) => http.patch<AdminUser>(`/api/admin/users/${enc(id)}`, body),
     resetLink: (id: string) => http.post<ResetLink>(`/api/admin/users/${enc(id)}/reset-link`),
-    audit: async (limit: number, offset: number): Promise<AuditPage> => {
-      const res = await http.get<unknown>("/api/admin/audit", { query: { limit, offset } });
-      const entries = listOf<AuditPage["entries"][number]>(res, "entries", "items");
-      const total =
-        res && typeof res === "object" && !Array.isArray(res) && typeof (res as { total?: unknown }).total === "number"
-          ? (res as { total: number }).total
-          : undefined;
-      return { entries, total };
-    },
+    /** Newest first. Pass the previous page's `next_before` as `before` for the next (older) page. */
+    audit: (opts: { before?: number | null; limit?: number } = {}) =>
+      http.get<AuditPage>("/api/admin/audit", { query: { before: opts.before, limit: opts.limit } }),
     stats: () => http.get<InstanceStats>("/api/admin/stats"),
-    backups: async () => listOf<BackupInfo>(await http.get<unknown>("/api/admin/backups"), "backups"),
-    createBackup: () => http.post<BackupInfo | undefined>("/api/admin/backups"),
+    backups: () => http.get<BackupInfo[]>("/api/admin/backups"),
+    createBackup: () => http.post<BackupInfo>("/api/admin/backups"),
     /** Plain URL: downloads go through the browser (session cookie), not fetch. */
     backupUrl: (name: string) => `/api/admin/backups/${enc(name)}`,
   },
 
   workspaces: {
-    list: async () => listOf<WorkspaceSummary>(await http.get<unknown>("/api/workspaces"), "workspaces"),
+    list: () => http.get<WorkspaceSummary[]>("/api/workspaces"),
     create: (name: string) => http.post<WorkspaceSummary | undefined>("/api/workspaces", { name }),
     update: (id: string, body: UpdateWorkspace) => http.patch<void>(`/api/workspaces/${enc(id)}`, body),
     remove: (id: string) => http.delete<void>(`/api/workspaces/${enc(id)}`),
-    members: async (id: string) =>
-      listOf<Member>(await http.get<unknown>(`/api/workspaces/${enc(id)}/members`), "members"),
+    members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<void>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>
@@ -151,10 +151,8 @@ export const api = {
     remove: (id: string) => http.delete<void>(`/api/bases/${enc(id)}`),
     duplicate: (id: string, body: DuplicateBase) =>
       http.post<BaseSummary | BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
-    collaborators: async (id: string) =>
-      listOf<Collaborator>(await http.get<unknown>(`/api/bases/${enc(id)}/collaborators`), "collaborators"),
-    members: async (id: string) =>
-      listOf<Member>(await http.get<unknown>(`/api/bases/${enc(id)}/members`), "members"),
+    collaborators: (id: string) => http.get<Collaborator[]>(`/api/bases/${enc(id)}/collaborators`),
+    members: (id: string) => http.get<Member[]>(`/api/bases/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<void>(`/api/bases/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>

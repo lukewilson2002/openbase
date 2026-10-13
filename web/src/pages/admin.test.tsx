@@ -24,7 +24,7 @@ describe("admin", () => {
         { ...ADMIN_USER_ROW, id: "usr3", name: "Old Timer", email: "old@example.com", is_active: false, totp_enabled: false },
       ],
       "POST /api/admin/users/usr1/reset-link": { url: "/reset-password?token=zzz", expires_at: 1_800_000_000_000 },
-      "PATCH /api/admin/users/usr1": { status: 204 },
+      "PATCH /api/admin/users/usr1": { ...ADMIN_USER_ROW, is_admin: true },
     });
     renderApp({ route: "/admin" });
 
@@ -58,13 +58,13 @@ describe("admin", () => {
 
   it("disables a user's two-factor after confirmation", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": ADMIN, "GET /api/admin/users": [ADMIN_USER_ROW], "PATCH /api/admin/users/usr1": { status: 204 } });
+    const api = mockApi({ "GET /api/auth/me": ADMIN, "GET /api/admin/users": [ADMIN_USER_ROW], "PATCH /api/admin/users/usr1": { ...ADMIN_USER_ROW, totp_enabled: false } });
     renderApp({ route: "/admin" });
     await user.click(await screen.findByRole("button", { name: "Actions for Ada Lovelace" }));
     await user.click(await screen.findByRole("menuitem", { name: /Disable two-factor/ }));
     await user.click(await screen.findByRole("button", { name: "Disable two-factor" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/admin/users/usr1")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/admin/users/usr1")[0]?.body).toEqual({ disable_two_factor: true });
+    expect(api.callsTo("PATCH /api/admin/users/usr1")[0]?.body).toEqual({ disable_2fa: true });
   });
 
   it("creates a user and shows the reset link when no password was set", async () => {
@@ -72,7 +72,13 @@ describe("admin", () => {
     const api = mockApi({
       "GET /api/auth/me": ADMIN,
       "GET /api/admin/users": [],
-      "POST /api/admin/users": { ...ADMIN_USER_ROW, id: "usr7", name: "New Hire", email: "new@example.com", reset_link: { url: "https://og.example.com/reset-password?token=abc", expires_at: 1_800_000_000_000 } },
+      "POST /api/admin/users": {
+        status: 201,
+        json: {
+          user: { ...ADMIN_USER_ROW, id: "usr7", name: "New Hire", email: "new@example.com" },
+          reset_link: { url: "https://og.example.com/reset-password?token=abc", expires_at: 1_800_000_000_000 },
+        },
+      },
     });
     renderApp({ route: "/admin" });
     await user.click(await screen.findByRole("button", { name: /New user/ }));
@@ -84,25 +90,30 @@ describe("admin", () => {
     expect(api.callsTo("POST /api/admin/users")[0]?.body).toEqual({ name: "New Hire", email: "new@example.com", password: null, is_admin: false });
   });
 
-  it("pages through the audit log", async () => {
+  it("pages through the audit log with cursors", async () => {
     const user = userEvent.setup();
     const entry = (id: number) => ({ id, user_id: "usr0", user_email: "root@example.com", action: `action.${id}`, target: null, detail: null, ip: "127.0.0.1", created_at: 1_700_000_000_000 + id });
     const firstPage = Array.from({ length: AUDIT_PAGE_SIZE }, (_, i) => entry(200 - i));
     const secondPage = [entry(150), entry(149)];
     const api = mockApi({
       "GET /api/auth/me": ADMIN,
-      "GET /api/admin/audit": (call) => ({ entries: call.query.get("offset") === "0" ? firstPage : secondPage, total: AUDIT_PAGE_SIZE + 2 }),
+      "GET /api/admin/audit": (call) =>
+        call.query.get("before") === null ? { entries: firstPage, next_before: 151 } : { entries: secondPage, next_before: null },
     });
     renderApp({ route: "/admin?tab=audit" });
 
     expect(await screen.findByText("action.200")).toBeInTheDocument();
-    expect(screen.getByText(`1-${AUDIT_PAGE_SIZE} of ${AUDIT_PAGE_SIZE + 2}`)).toBeInTheDocument();
+    expect(screen.getByText(`Page 1 (${AUDIT_PAGE_SIZE} entries)`)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Newer/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /Older/ }));
     expect(await screen.findByText("action.150")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Older/ })).toBeDisabled();
-    expect(api.callsTo("GET /api/admin/audit").map((c) => c.query.get("offset"))).toEqual(["0", String(AUDIT_PAGE_SIZE)]);
+    expect(api.callsTo("GET /api/admin/audit").map((c) => c.query.get("before"))).toEqual([null, "151"]);
     expect(api.callsTo("GET /api/admin/audit")[0]?.query.get("limit")).toBe(String(AUDIT_PAGE_SIZE));
+    expect(api.callsTo("GET /api/admin/audit")[0]?.query.has("offset")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /Newer/ }));
+    expect(await screen.findByText("action.200")).toBeInTheDocument();
   });
 
   it("shows instance statistics", async () => {

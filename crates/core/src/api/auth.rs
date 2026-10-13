@@ -4,6 +4,26 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Response of actions with nothing else to return (logout, password change,
+/// password reset request/confirm, revoke other sessions): `{"ok": true}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct OkResponse {
+    pub ok: bool,
+}
+
+impl OkResponse {
+    pub fn new() -> Self {
+        OkResponse { ok: true }
+    }
+}
+
+impl Default for OkResponse {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SetupStatus {

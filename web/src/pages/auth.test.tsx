@@ -103,7 +103,7 @@ describe("setup", () => {
       "GET /api/auth/me": () => (signedIn ? { ...USER, is_admin: true } : LOGGED_OUT),
       "POST /api/auth/signup": () => {
         signedIn = true;
-        return { user: USER };
+        return { ...USER, is_admin: true };
       },
       "GET /api/workspaces": [],
     });
@@ -203,7 +203,7 @@ describe("signup and invites", () => {
 describe("password reset", () => {
   it("requests a reset link and never reveals whether the account exists", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/setup": { ...SETUP_DONE, email_enabled: true }, "GET /api/auth/me": LOGGED_OUT, "POST /api/auth/password-reset/request": { status: 204 } });
+    const api = mockApi({ "GET /api/setup": { ...SETUP_DONE, email_enabled: true }, "GET /api/auth/me": LOGGED_OUT, "POST /api/auth/password-reset/request": { ok: true } });
     renderApp({ route: "/forgot-password" });
     await user.type(await screen.findByLabelText("Email"), "ada@example.com");
     await user.click(screen.getByRole("button", { name: "Send reset link" }));
@@ -216,7 +216,7 @@ describe("password reset", () => {
     const api = mockApi({
       "GET /api/setup": SETUP_DONE,
       "GET /api/auth/me": LOGGED_OUT,
-      "POST /api/auth/password-reset/confirm": { status: 204 },
+      "POST /api/auth/password-reset/confirm": { ok: true },
     });
     renderApp({ route: "/reset-password?token=abc" });
     await user.type(await screen.findByLabelText("New password"), "longenough1");

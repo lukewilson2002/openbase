@@ -1,5 +1,5 @@
-/** Client-side minimum for early feedback; the server's policy is authoritative. */
-export const MIN_PASSWORD_LENGTH = 8;
+/** Client-side minimum for early feedback; mirrors og server MIN_PASSWORD_LEN (the server is authoritative). */
+export const MIN_PASSWORD_LENGTH = 10;
 
 /** Returns an error message, or null when the pair is acceptable. */
 export function validatePasswords(password: string, confirm: string): string | null {

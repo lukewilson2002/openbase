@@ -76,6 +76,7 @@ export type { NewRecord } from "./NewRecord";
 export type { Notification } from "./Notification";
 export type { NotificationsResponse } from "./NotificationsResponse";
 export type { NumberOptions } from "./NumberOptions";
+export type { OkResponse } from "./OkResponse";
 export type { PasswordResetConfirm } from "./PasswordResetConfirm";
 export type { PasswordResetRequest } from "./PasswordResetRequest";
 export type { QueryRequest } from "./QueryRequest";

@@ -81,7 +81,8 @@ function TwoFactor({ user }: { user: User }) {
     onSuccess: setEnabling,
     onError: (e) => toast({ title: "Could not start setup", description: errorMessage(e), variant: "error" }),
   });
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.me });
+  // Enable/disable answer with the updated user: put it straight into the cache.
+  const setMe = (updated: User) => qc.setQueryData(keys.me, updated);
 
   return (
     <Section title="Two-factor authentication" description="Require a code from an authenticator app (TOTP) in addition to your password.">
@@ -108,9 +109,9 @@ function TwoFactor({ user }: { user: User }) {
         <EnableDialog
           setup={enabling}
           onClose={() => setEnabling(null)}
-          onEnabled={() => {
+          onEnabled={(updated) => {
             setEnabling(null);
-            void refresh();
+            setMe(updated);
             toast({ title: "Two-factor authentication enabled", variant: "success" });
           }}
         />
@@ -118,9 +119,9 @@ function TwoFactor({ user }: { user: User }) {
       {disabling && (
         <DisableDialog
           onClose={() => setDisabling(false)}
-          onDisabled={() => {
+          onDisabled={(updated) => {
             setDisabling(false);
-            void refresh();
+            setMe(updated);
             toast({ title: "Two-factor authentication disabled", variant: "success" });
           }}
         />
@@ -129,7 +130,7 @@ function TwoFactor({ user }: { user: User }) {
   );
 }
 
-function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; onClose: () => void; onEnabled: () => void }) {
+function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; onClose: () => void; onEnabled: (user: User) => void }) {
   const [code, setCode] = useState("");
   const enable = useMutation({ mutationFn: () => api.auth.twoFactorEnable(code.trim()), onSuccess: onEnabled });
   const submit = (e: FormEvent) => {
@@ -161,7 +162,7 @@ function EnableDialog({ setup, onClose, onEnabled }: { setup: TwoFactorSetup; on
   );
 }
 
-function DisableDialog({ onClose, onDisabled }: { onClose: () => void; onDisabled: () => void }) {
+function DisableDialog({ onClose, onDisabled }: { onClose: () => void; onDisabled: (user: User) => void }) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const disable = useMutation({ mutationFn: () => api.auth.twoFactorDisable({ password, code: code.trim() }), onSuccess: onDisabled });

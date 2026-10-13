@@ -12,21 +12,26 @@ import { formatDateTime } from "@/lib/format";
 
 export const AUDIT_PAGE_SIZE = 50;
 
+/**
+ * The audit log is cursor-paged (`GET /api/admin/audit?before=<id>&limit=<n>`, newest first):
+ * each page returns `next_before`, the cursor for the next older page. `cursors` is the trail of
+ * cursors visited so "Newer" can step back (the first page's cursor is null).
+ */
 export function AuditTab() {
-  const [page, setPage] = useState(0);
+  const [cursors, setCursors] = useState<(number | null)[]>([null]);
+  const before = cursors[cursors.length - 1] ?? null;
+  const page = cursors.length - 1;
   const audit = useQuery({
-    queryKey: keys.adminAudit(page),
-    queryFn: () => api.admin.audit(AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE),
+    queryKey: keys.adminAudit(before),
+    queryFn: () => api.admin.audit({ before, limit: AUDIT_PAGE_SIZE }),
     placeholderData: keepPreviousData,
   });
 
   if (audit.isPending) return <PageSpinner label="Loading audit log" />;
   if (audit.isError) return <Notice tone="error">{errorMessage(audit.error)}</Notice>;
 
-  const { entries, total } = audit.data;
-  const from = page * AUDIT_PAGE_SIZE + 1;
-  const to = page * AUDIT_PAGE_SIZE + entries.length;
-  const hasNext = total !== undefined ? to < total : entries.length === AUDIT_PAGE_SIZE;
+  const { entries, next_before } = audit.data;
+  const older = next_before ?? null;
 
   if (entries.length === 0 && page === 0) return <EmptyState title="Nothing logged yet" description="Sign-ins and administrative actions appear here." />;
 
@@ -60,14 +65,13 @@ export function AuditTab() {
       </div>
       <div className="flex items-center justify-between text-[0.8125rem] text-muted">
         <span>
-          {entries.length > 0 ? `${from}-${to}` : "No entries"}
-          {total !== undefined ? ` of ${total}` : ""}
+          {entries.length > 0 ? `Page ${page + 1} (${entries.length} entries)` : "No entries"}
         </span>
         <div className="flex gap-2">
-          <Button size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+          <Button size="sm" disabled={page === 0} onClick={() => setCursors((c) => (c.length > 1 ? c.slice(0, -1) : c))}>
             <ChevronLeft aria-hidden className="size-4" /> Newer
           </Button>
-          <Button size="sm" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
+          <Button size="sm" disabled={older === null} onClick={() => older !== null && setCursors((c) => [...c, older])}>
             Older <ChevronRight aria-hidden className="size-4" />
           </Button>
         </div>

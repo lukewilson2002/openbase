@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getClientId, http, isPublicRoute, request, setUnauthorizedHandler, withQuery } from "./client";
+import { ApiError, getClientId, http, isPublicRoute, request, setApiBase, setUnauthorizedHandler, withQuery } from "./client";
 import { apiError, mockApi } from "@/test/utils";
 
 describe("api client", () => {
@@ -83,10 +83,26 @@ describe("api client", () => {
     expect(net.code).toBe("network");
   });
 
-  it("returns undefined for 204 and empty bodies", async () => {
-    mockApi({ "DELETE /api/z": { status: 204 }, "POST /api/z": { status: 200, text: "" } });
+  it("returns undefined for 204 without parsing a body", async () => {
+    mockApi({ "DELETE /api/z": { status: 204 } });
     expect(await http.delete("/api/z")).toBeUndefined();
-    expect(await http.post("/api/z")).toBeUndefined();
+  });
+
+  it("treats an empty 200 body as a broken response instead of guessing", async () => {
+    mockApi({ "POST /api/z": { status: 200, text: "" } });
+    await expect(http.post("/api/z")).rejects.toMatchObject({ code: "bad_response" });
+  });
+
+  it("prefixes paths with the configured base URL and sends extra headers", async () => {
+    const api = mockApi({ "GET /api/x": { ok: 1 } });
+    setApiBase("http://127.0.0.1:9999/");
+    try {
+      await http.get("/api/x", { headers: { Authorization: "Bearer t" } });
+    } finally {
+      setApiBase("");
+    }
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("http://127.0.0.1:9999/api/x");
+    expect(api.calls[0]?.headers.get("authorization")).toBe("Bearer t");
   });
 
   describe("401 handling", () => {
