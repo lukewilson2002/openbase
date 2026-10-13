@@ -1,0 +1,145 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError, getClientId, http, isPublicRoute, request, setUnauthorizedHandler, withQuery } from "./client";
+import { apiError, mockApi } from "@/test/utils";
+
+describe("api client", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+  afterEach(() => {
+    setUnauthorizedHandler(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the CSRF header on every non-GET request and not on GET", async () => {
+    const api = mockApi({ "GET /api/x": { ok: 1 }, "POST /api/x": {}, "PATCH /api/x": {}, "PUT /api/x": {}, "DELETE /api/x": { status: 204 } });
+    await http.get("/api/x");
+    await http.post("/api/x", { a: 1 });
+    await http.patch("/api/x", { a: 1 });
+    await http.put("/api/x", { a: 1 });
+    await http.delete("/api/x");
+
+    const byMethod = Object.fromEntries(api.calls.map((c) => [c.method, c]));
+    expect(byMethod.GET?.headers.get("X-OpenGrid-CSRF")).toBeNull();
+    for (const m of ["POST", "PATCH", "PUT", "DELETE"]) {
+      expect(byMethod[m]?.headers.get("X-OpenGrid-CSRF"), m).toBe("1");
+    }
+  });
+
+  it("sends same-origin credentials, JSON body and the per-tab client id", async () => {
+    const api = mockApi({ "POST /api/things": { id: "t1" } });
+    const fetchSpy = vi.mocked(fetch);
+    const out = await http.post<{ id: string }>("/api/things", { name: "n" });
+    expect(out).toEqual({ id: "t1" });
+    const call = api.calls[0]!;
+    expect(call.body).toEqual({ name: "n" });
+    expect(call.headers.get("Content-Type")).toBe("application/json");
+    expect(call.headers.get("X-Client-Id")).toBe(getClientId());
+    expect(fetchSpy.mock.calls[0]?.[1]?.credentials).toBe("same-origin");
+  });
+
+  it("keeps one client id per tab (sessionStorage) and generates a UUID-like value", () => {
+    const first = getClientId();
+    expect(first).toMatch(/^[0-9a-f-]{16,}$/i);
+    expect(getClientId()).toBe(first);
+    expect(sessionStorage.getItem("og-client-id")).toBe(first);
+    sessionStorage.clear();
+    expect(getClientId()).not.toBe(first);
+  });
+
+  it("falls back when crypto.randomUUID is unavailable (plain-http origins)", () => {
+    sessionStorage.clear();
+    vi.stubGlobal("crypto", { getRandomValues: (a: Uint8Array) => a.fill(7) });
+    expect(getClientId()).toBe("07".repeat(16));
+  });
+
+  it("does not set a JSON content type for GET requests without a body", async () => {
+    const api = mockApi({ "GET /api/y": [] });
+    await http.get("/api/y");
+    expect(api.calls[0]?.headers.get("Content-Type")).toBeNull();
+  });
+
+  it("maps {error:{code,message}} bodies to ApiError", async () => {
+    mockApi({ "POST /api/auth/login": apiError(400, "bad_request", "Email is invalid") });
+    const err = await http.post("/api/auth/login", {}).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    const e = err as ApiError;
+    expect(e.status).toBe(400);
+    expect(e.code).toBe("bad_request");
+    expect(e.message).toBe("Email is invalid");
+  });
+
+  it("maps non-JSON error bodies and network failures", async () => {
+    mockApi({ "GET /api/boom": { status: 502, text: "<html>Bad gateway</html>" } });
+    const bad = (await http.get("/api/boom").catch((e: unknown) => e)) as ApiError;
+    expect(bad).toBeInstanceOf(ApiError);
+    expect(bad.status).toBe(502);
+    expect(bad.code).toBe("http_502");
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const net = (await http.get("/api/anything").catch((e: unknown) => e)) as ApiError;
+    expect(net).toBeInstanceOf(ApiError);
+    expect(net.status).toBe(0);
+    expect(net.code).toBe("network");
+  });
+
+  it("returns undefined for 204 and empty bodies", async () => {
+    mockApi({ "DELETE /api/z": { status: 204 }, "POST /api/z": { status: 200, text: "" } });
+    expect(await http.delete("/api/z")).toBeUndefined();
+    expect(await http.post("/api/z")).toBeUndefined();
+  });
+
+  describe("401 handling", () => {
+    it("redirects to login with the current location when on a protected route", async () => {
+      window.history.replaceState(null, "", "/base/app1/tbl1?x=1");
+      mockApi({ "GET /api/bases/app1": apiError(401, "unauthorized", "authentication required") });
+      const handler = vi.fn();
+      setUnauthorizedHandler(handler);
+      await expect(http.get("/api/bases/app1")).rejects.toMatchObject({ status: 401 });
+      expect(handler).toHaveBeenCalledExactlyOnceWith("/base/app1/tbl1?x=1");
+    });
+
+    it.each(["/login", "/login/2fa", "/setup", "/signup", "/invite/abc", "/forgot-password", "/reset-password"])("does not redirect on public route %s", async (path) => {
+      window.history.replaceState(null, "", path);
+      mockApi({ "GET /api/anything": apiError(401, "unauthorized", "authentication required") });
+      const handler = vi.fn();
+      setUnauthorizedHandler(handler);
+      await expect(http.get("/api/anything")).rejects.toBeInstanceOf(ApiError);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("honours skipAuthRedirect", async () => {
+      window.history.replaceState(null, "", "/");
+      mockApi({ "GET /api/auth/me": apiError(401, "unauthorized", "authentication required") });
+      const handler = vi.fn();
+      setUnauthorizedHandler(handler);
+      await expect(request("/api/auth/me", { skipAuthRedirect: true })).rejects.toMatchObject({ isUnauthorized: true });
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("does not treat 403 or 404 as unauthenticated", async () => {
+      window.history.replaceState(null, "", "/");
+      mockApi({ "GET /api/a": apiError(403, "forbidden", "no"), "GET /api/b": apiError(404, "not_found", "gone") });
+      const handler = vi.fn();
+      setUnauthorizedHandler(handler);
+      await expect(http.get("/api/a")).rejects.toMatchObject({ isForbidden: true });
+      await expect(http.get("/api/b")).rejects.toMatchObject({ isNotFound: true });
+      expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  it("builds query strings, skipping undefined and null", () => {
+    expect(withQuery("/api/x", { a: 1, b: "two words", c: undefined, d: null, e: false })).toBe("/api/x?a=1&b=two+words&e=false");
+    expect(withQuery("/api/x")).toBe("/api/x");
+    expect(withQuery("/api/x?z=1", { a: 2 })).toBe("/api/x?z=1&a=2");
+  });
+
+  it("recognises public routes by prefix without matching lookalikes", () => {
+    expect(isPublicRoute("/login")).toBe(true);
+    expect(isPublicRoute("/login/2fa")).toBe(true);
+    expect(isPublicRoute("/invite/tok")).toBe(true);
+    expect(isPublicRoute("/loginx")).toBe(false);
+    expect(isPublicRoute("/")).toBe(false);
+    expect(isPublicRoute("/base/app1")).toBe(false);
+  });
+});

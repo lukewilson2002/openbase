@@ -1,0 +1,277 @@
+@import "tailwindcss";
+
+/*
+ * OpenGrid design tokens.
+ * Semantic colour variables are defined per theme on <html data-theme="...">
+ * (set before first paint by public/theme-init.js and kept in sync by
+ * src/theme/ThemeProvider.tsx). Tailwind utilities (bg-surface, text-muted,
+ * border-line, ...) are generated from them in the @theme block below.
+ */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --subtle: #f0f2f5;
+  --hover: #e8ebf0;
+  --line: #dfe3ea;
+  --line-strong: #c4cad4;
+  --fg: #1b1f27;
+  --muted: #566070;
+  --faint: #7a8494;
+  --primary: #2563eb;
+  --primary-hover: #1d4fd0;
+  --primary-fg: #ffffff;
+  --primary-soft: #e4ecff;
+  --danger: #c4261d;
+  --danger-hover: #a51d16;
+  --danger-fg: #ffffff;
+  --danger-soft: #fde8e6;
+  --success: #17803d;
+  --success-soft: #dcf5e4;
+  --warning-soft: #fff1cc;
+  --ring: #2563eb;
+  --overlay: rgb(15 20 30 / 0.45);
+  --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 4px 14px rgb(15 20 30 / 0.08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12151b;
+  --surface: #1a1e26;
+  --subtle: #232833;
+  --hover: #2c3240;
+  --line: #2f3542;
+  --line-strong: #444c5c;
+  --fg: #e8ebf1;
+  --muted: #a4adbd;
+  --faint: #7f8a9c;
+  --primary: #5b8cff;
+  --primary-hover: #7aa1ff;
+  --primary-fg: #0b1220;
+  --primary-soft: #1f2d52;
+  --danger: #ff7168;
+  --danger-hover: #ff8c84;
+  --danger-fg: #1f0907;
+  --danger-soft: #3d1f1f;
+  --success: #4cc577;
+  --success-soft: #16301f;
+  --warning-soft: #3a3010;
+  --ring: #7aa1ff;
+  --overlay: rgb(0 0 0 / 0.6);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.45);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --shadow-pop: var(--shadow);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root {
+    min-height: 100dvh;
+  }
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  a {
+    color: var(--primary);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--primary-soft);
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Dialog / popover animations (Radix data-state). */
+@keyframes og-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes og-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+@keyframes og-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+@keyframes og-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.og-fade-in {
+  animation: og-fade-in 120ms ease-out;
+}
+.og-pop-in {
+  animation: og-pop-in 120ms ease-out;
+}
+.og-slide-in {
+  animation: og-slide-in 160ms ease-out;
+}
+.og-spin {
+  animation: og-spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .og-fade-in,
+  .og-pop-in,
+  .og-slide-in {
+    animation: none;
+  }
+  .og-spin {
+    animation-duration: 2s;
+  }
+}
+
+/*
+ * Choice colours: one class per entry of og_core::field::COLORS (20 colours:
+ * ten light pills and ten saturated "_dark" variants). Text colours are chosen
+ * for >= 4.5:1 contrast (checked in src/lib/colors.test.ts). Used for select
+ * choices, bases, row colouring and swatches.
+ *   <span class="choice choice-blue">Todo</span>
+ */
+.choice {
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+.choice-blue {
+  --c-bg: #cfdfff;
+  --c-fg: #14315f;
+}
+.choice-cyan {
+  --c-bg: #c9eefc;
+  --c-fg: #0a3a52;
+}
+.choice-teal {
+  --c-bg: #bff3e8;
+  --c-fg: #0a3f37;
+}
+.choice-green {
+  --c-bg: #ccf4bd;
+  --c-fg: #163d0c;
+}
+.choice-yellow {
+  --c-bg: #ffe9a8;
+  --c-fg: #4a3500;
+}
+.choice-orange {
+  --c-bg: #fedcc8;
+  --c-fg: #5a2208;
+}
+.choice-red {
+  --c-bg: #ffd6df;
+  --c-fg: #6b0f26;
+}
+.choice-pink {
+  --c-bg: #ffd3f3;
+  --c-fg: #6b0f55;
+}
+.choice-purple {
+  --c-bg: #e6d9fe;
+  --c-fg: #3b1a7a;
+}
+.choice-gray {
+  --c-bg: #e4e6ea;
+  --c-fg: #2b303a;
+}
+.choice-blue_dark {
+  --c-bg: #1f5fcf;
+  --c-fg: #ffffff;
+}
+.choice-cyan_dark {
+  --c-bg: #1fb2ee;
+  --c-fg: #04283a;
+}
+.choice-teal_dark {
+  --c-bg: #1fcfc4;
+  --c-fg: #032d29;
+}
+.choice-green_dark {
+  --c-bg: #23b536;
+  --c-fg: #03260a;
+}
+.choice-yellow_dark {
+  --c-bg: #f5b400;
+  --c-fg: #2e2100;
+}
+.choice-orange_dark {
+  --c-bg: #f2641f;
+  --c-fg: #2e0e00;
+}
+.choice-red_dark {
+  --c-bg: #d6183f;
+  --c-fg: #ffffff;
+}
+.choice-pink_dark {
+  --c-bg: #c4078f;
+  --c-fg: #ffffff;
+}
+.choice-purple_dark {
+  --c-bg: #6d33d6;
+  --c-fg: #ffffff;
+}
+.choice-gray_dark {
+  --c-bg: #585e6b;
+  --c-fg: #ffffff;
+}
