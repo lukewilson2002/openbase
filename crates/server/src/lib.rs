@@ -20,6 +20,7 @@ pub mod ratelimit;
 pub mod state;
 pub mod store;
 pub mod tasks;
+pub mod v1;
 pub mod web;
 
 use config::Config;

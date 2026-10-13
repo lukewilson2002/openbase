@@ -21,6 +21,8 @@ pub struct AppState {
     /// Cached view-query results (ordered ids + group headers), invalidated
     /// by the per-base data versions of `events.versions()`.
     pub query_cache: Arc<QueryCache>,
+    /// Snapshots behind the `offset` of the Airtable-compatible list endpoint.
+    pub v1_cursors: Arc<crate::v1::cursor::Cursors>,
 }
 
 impl AppState {
@@ -39,6 +41,7 @@ impl AppState {
             limiter: RateLimiter::default(),
             mailer,
             query_cache: Arc::new(QueryCache::new()),
+            v1_cursors: Arc::default(),
         })
     }
 }

@@ -28,4 +28,5 @@ pub mod events;
 pub mod records;
 pub mod schema;
 pub mod sharing;
+pub mod v1;
 pub mod workspaces;

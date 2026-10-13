@@ -100,18 +100,30 @@ impl Db {
         T: Send + 'static,
         F: FnOnce(&Transaction) -> AppResult<T> + Send + 'static,
     {
+        self.write_as(f).await
+    }
+
+    /// [`write`](Self::write) for callers with their own error type (for
+    /// example the Airtable-compatible API's), which must be built from
+    /// [`AppError`] and is returned as is, rolling the transaction back.
+    pub async fn write_as<T, E, F>(&self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<AppError> + Send + 'static,
+        F: FnOnce(&Transaction) -> Result<T, E> + Send + 'static,
+    {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = inner.writer.lock().unwrap_or_else(|p| p.into_inner());
             let tx = conn
                 .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-                .map_err(AppError::internal)?;
+                .map_err(|e| E::from(AppError::internal(e)))?;
             let out = f(&tx)?;
-            tx.commit().map_err(AppError::internal)?;
+            tx.commit().map_err(|e| E::from(AppError::internal(e)))?;
             Ok(out)
         })
         .await
-        .map_err(AppError::internal)?
+        .map_err(|e| E::from(AppError::internal(e)))?
     }
 
     /// Run `f` with a read-only connection from the pool.
@@ -120,13 +132,26 @@ impl Db {
         T: Send + 'static,
         F: FnOnce(&Connection) -> AppResult<T> + Send + 'static,
     {
+        self.read_as(f).await
+    }
+
+    /// [`read`](Self::read) with the caller's own error type.
+    pub async fn read_as<T, E, F>(&self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<AppError> + Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, E> + Send + 'static,
+    {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = inner.readers.get().map_err(AppError::internal)?;
+            let conn = inner
+                .readers
+                .get()
+                .map_err(|e| E::from(AppError::internal(e)))?;
             f(&conn)
         })
         .await
-        .map_err(AppError::internal)?
+        .map_err(|e| E::from(AppError::internal(e)))?
     }
 
     /// Synchronous access to the writer for CLI commands and tests.

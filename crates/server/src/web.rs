@@ -63,6 +63,10 @@ pub fn respond(
 
     // The SPA never owns /api: keep the JSON error contract for unknown endpoints.
     if path == "api" || path.starts_with("api/") {
+        // The Airtable-compatible API answers in Airtable's error format.
+        if path == "api/v1" || path.starts_with("api/v1/") {
+            return crate::v1::error::V1Error::not_found("Endpoint").into_response();
+        }
         return crate::error::AppError::not_found("endpoint").into_response();
     }
     if method != Method::GET && method != Method::HEAD {
