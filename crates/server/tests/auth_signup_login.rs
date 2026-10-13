@@ -314,8 +314,8 @@ async fn login_rate_limited_per_ip() {
 async fn login_rate_limited_per_email_across_ips() {
     let app = TestApp::with_config(|c| c.trust_proxy = true);
     app.user("a@example.com", "A");
-    for i in 0..20 {
-        let ip = format!("10.0.0.{i}");
+    for i in 0..60 {
+        let ip = format!("10.0.{}.{}", i / 10, i % 10);
         let res = app
             .request_with(
                 &app.anon(),
@@ -388,7 +388,7 @@ async fn client_ip_comes_from_peer_or_trusted_proxy_header() {
         1
     );
 
-    // Trusted proxy: the first X-Forwarded-For entry wins; garbage falls back.
+    // Trusted proxy: the last X-Forwarded-For entry (added by the proxy) wins; garbage falls back.
     let app = TestApp::with_config(|c| c.trust_proxy = true);
     app.user("a@example.com", "A");
     app.request_with(
@@ -396,7 +396,7 @@ async fn client_ip_comes_from_peer_or_trusted_proxy_header() {
         "POST",
         "/api/auth/login",
         Some(json!({"email": "a@example.com", "password": "bad password"})),
-        &[("x-forwarded-for", "203.0.113.9, 10.0.0.1")],
+        &[("x-forwarded-for", "10.0.0.1, 203.0.113.9")],
         true,
         Some(peer),
     )

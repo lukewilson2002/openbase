@@ -12,7 +12,7 @@
 //!   whenever a `base_changed` event passes (membership, ownership or the base
 //!   itself changed), after a lag, and every [`RECHECK`]; the stream ends as
 //!   soon as access is gone (role revoked, base or workspace deleted, user
-//!   deactivated, session ended).
+//!   deactivated, session ended, API token deleted or expired).
 //! * **Lag.** The bus is a bounded broadcast channel. A client too slow to keep
 //!   up misses events; it is told with a synthetic `base_changed` event, which
 //!   by contract means "refetch everything".
@@ -64,7 +64,8 @@ pub fn router() -> Router<AppState> {
 }
 
 /// Whether the actor may still read the base: the user is active, a session
-/// actor's session is still valid, and the role is at least Viewer.
+/// actor's session (or a token actor's API token) is still valid, and the role
+/// is at least Viewer.
 fn access_ok(conn: &Connection, actor: &Actor, base_id: &str) -> bool {
     let active: bool = conn
         .query_row(
@@ -80,6 +81,20 @@ fn access_ok(conn: &Connection, actor: &Actor, base_id: &str) -> bool {
         let valid: bool = conn
             .query_row(
                 "SELECT count(*) > 0 FROM sessions WHERE token_hash = ?1 AND expires_at > ?2",
+                rusqlite::params![hash, now_ms()],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !valid {
+            return false;
+        }
+    }
+    if let Some(hash) = &actor.token_hash {
+        // A deleted or expired API token ends its streams like a ended session.
+        let valid: bool = conn
+            .query_row(
+                "SELECT count(*) > 0 FROM api_tokens
+                 WHERE token_hash = ?1 AND (expires_at IS NULL OR expires_at > ?2)",
                 rusqlite::params![hash, now_ms()],
                 |r| r.get(0),
             )

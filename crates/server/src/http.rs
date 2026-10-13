@@ -89,7 +89,10 @@ async fn csrf_guard(State(_state): State<AppState>, req: Request, next: Next) ->
             .iter()
             .filter_map(|v| v.to_str().ok())
             .any(|v| v.contains(crate::auth::SESSION_COOKIE));
-        let has_bearer = req.headers().contains_key(header::AUTHORIZATION);
+        // Exactly what the Actor extractor treats as a token: any other
+        // Authorization value (e.g. Basic auth added by a proxy) leaves the
+        // cookie in charge, so the CSRF header is still required.
+        let has_bearer = crate::auth::bearer_from_headers(req.headers()).is_some();
         let has_csrf = req.headers().get(CSRF_HEADER).is_some_and(|v| v == "1");
         if has_cookie && !has_bearer && !has_csrf {
             return AppError::forbidden("missing CSRF header").into_response();

@@ -36,7 +36,7 @@ function PasswordForm() {
       setCurrent("");
       setNext("");
       setConfirm("");
-      toast({ title: "Password changed", description: "Your other sessions may have been signed out.", variant: "success" });
+      toast({ title: "Password changed", description: "Your other sessions were signed out and your API tokens were revoked; create new tokens where you need them.", variant: "success" });
     },
   });
 

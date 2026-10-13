@@ -216,10 +216,15 @@ async fn authentication_is_required_and_tokens_work() {
     app.post(&app.anon(), "/api/notifications/read", json!({}))
         .await
         .assert_status(401);
-    // Session or token, read-only or not.
+    // Session or token; a read-only token can list but not mark read.
     let ro = token_client(&app, &u, false);
     assert_eq!(list(&app, &ro).await["unread"], 1);
     app.post(&ro, "/api/notifications/read", json!({}))
+        .await
+        .assert_status(403);
+    assert_eq!(list(&app, &u).await["unread"], 1);
+    let rw = token_client(&app, &u, true);
+    app.post(&rw, "/api/notifications/read", json!({}))
         .await
         .assert_status(200);
     assert_eq!(list(&app, &u).await["unread"], 0);

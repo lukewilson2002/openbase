@@ -11,6 +11,7 @@
 //! - attachment garbage collection + stale upload temp files (hourly)
 //! - orphaned attachment file sweep (daily)
 //! - record history retention (`history_days`, daily)
+//! - audit log retention (`audit_days`, daily)
 //! - trash purge (`trash_days`, daily)
 //! - volatile formula refresh (`NOW()`/`TODAY()`..., every 5 minutes)
 //! - daily automatic backup at `backup_hour` local time + retention
@@ -71,6 +72,7 @@ pub struct Clock {
     attachments: Option<Instant>,
     orphans: Option<Instant>,
     history: Option<Instant>,
+    audit: Option<Instant>,
     trash: Option<Instant>,
     volatile: Option<Instant>,
 }
@@ -123,6 +125,13 @@ pub async fn tick(state: &AppState, clock: &mut Clock) {
         run_job(state, "record history retention", |s| {
             let days = s.config.history_days;
             s.db.write_sync(|tx| purge_history(tx, days, now_ms()))
+        })
+        .await;
+    }
+    if due(&mut clock.audit, DAILY) {
+        run_job(state, "audit log retention", |s| {
+            let days = s.config.audit_days;
+            s.db.write_sync(|tx| purge_audit(tx, days, now_ms()))
         })
         .await;
     }
@@ -238,6 +247,16 @@ pub fn purge_history(conn: &Connection, history_days: u32, now_ms: i64) -> AppRe
     }
     let cutoff = now_ms - i64::from(history_days) * 24 * 3600 * 1000;
     Ok(conn.execute("DELETE FROM record_history WHERE created_at < ?1", [cutoff])?)
+}
+
+/// Delete audit-log rows older than `audit_days` (0 = keep forever). Failed
+/// sign-ins can be written by anyone, so the log must not grow without bound.
+pub fn purge_audit(conn: &Connection, audit_days: u32, now_ms: i64) -> AppResult<usize> {
+    if audit_days == 0 {
+        return Ok(0);
+    }
+    let cutoff = now_ms - i64::from(audit_days) * 24 * 3600 * 1000;
+    Ok(conn.execute("DELETE FROM audit_log WHERE created_at < ?1", [cutoff])?)
 }
 
 /// Result of [`gc_attachments`].

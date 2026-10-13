@@ -69,6 +69,8 @@ async fn create_invite(
         Some(e) => Some(users::normalize_email(e)?),
     };
     let inviter_name = actor.name.clone();
+    let will_email = email.is_some() && state.config.email_enabled();
+    let (limiter, config) = (state.limiter.clone(), state.config.clone());
     let (token, info, name) = state
         .db
         .write(move |tx| {
@@ -77,6 +79,14 @@ async fn create_invite(
                 return Err(AppError::forbidden(
                     "you cannot invite someone with a role above your own",
                 ));
+            }
+            if will_email {
+                // The invitee's address and the text around it come from the
+                // caller: keep invite emails inside the shared hourly budget
+                // (charged only once the caller is known to be allowed to
+                // invite, so outsiders cannot burn it; an error rolls the
+                // invite back).
+                crate::email::spend_budget(&limiter, &config, &actor.user_id, 1)?;
             }
             let (token, info) =
                 invites::create(tx, &actor.user_id, &target, email.as_deref(), role)?;

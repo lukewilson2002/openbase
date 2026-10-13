@@ -467,6 +467,24 @@ impl Executor {
                 "dry_run": true, "sent_to": recipients, "subject": subject, "body": body
             }));
         }
+        // Automations can email arbitrary addresses with templated text, so
+        // every recipient counts against the automation owner's hourly email
+        // budget and the instance-wide one (permanent: retrying within the
+        // same hour cannot succeed).
+        let owner = input
+            .automation
+            .created_by
+            .as_deref()
+            .unwrap_or("automation");
+        let count = u32::try_from(recipients.len()).unwrap_or(u32::MAX);
+        if crate::email::spend_budget(&self.state.limiter, &self.state.config, owner, count)
+            .is_err()
+        {
+            return Err(StepError::permanent(
+                "the hourly email limit was reached; the email was not sent \
+                 (see OPENGRID_EMAIL_PER_USER_HOUR / OPENGRID_EMAIL_PER_HOUR)",
+            ));
+        }
         for addr in &recipients {
             match tokio::time::timeout(EMAIL_TIMEOUT, self.state.mailer.send(addr, &subject, &body))
                 .await
