@@ -235,8 +235,8 @@ what most visits never use on demand: the grid, the other views, automations, ac
 dialogs behind a button (`ShareViewDialog`, `ImportCsvDialog`, `NewTableFromCsvDialog`, `TrashDialog`, `SharingDialog`) through
 `React.lazy` wrappers (`Lazy*.tsx`, `TrashButton.tsx`) that render nothing while the chunk loads, plus the one-off account pages (setup,
 sign-up, invite, password reset). Components that decide *whether* to show such a dialog import its small pure helpers instead
-(`components/share/shareView.ts`). Measured with `vite build` on 2026-10-13 (gzip of the files `index.html` loads: entry, shared chunks
-and CSS): entry chunk 121,137 -> 110,073 bytes, whole initial load 186,200 -> 174,544 bytes. React DOM, the router and TanStack Query are
+(`components/share/shareView.ts`). Measured on 2026-10-13 after `vite build` (gzip level 9 of the files `index.html` loads: entry, shared chunks
+and CSS; Vite's own report uses a lower level and differs by about 1%): entry chunk 121,137 -> 110,073 bytes, whole initial load 186,200 -> 174,544 bytes. React DOM, the router and TanStack Query are
 most of what is left.
 
 ### Grid marker column
