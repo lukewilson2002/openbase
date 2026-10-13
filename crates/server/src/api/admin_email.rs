@@ -10,7 +10,8 @@
 //!   username and sender address, and send a test email, but can never set or remove the
 //!   password, and cannot change where an existing password is sent (host, port, security,
 //!   username) while one is in use, because that would let it make the server hand the password
-//!   to a server of its choosing.
+//!   to a server of its choosing. (Switching email off by clearing the host sends it nowhere, so
+//!   a token may do that; pointing it at a host again is then the signed-in administrator's.)
 
 use std::time::Duration;
 
@@ -306,7 +307,7 @@ async fn update(
             let next = apply_request(&req, password, &env, &stored)?;
             let old = email.resolved();
             let new = email.preview(&next)?;
-            if by_token && old.password_set && target_changed(&old, &new) {
+            if by_token && old.password_set && new.smtp.is_some() && target_changed(&old, &new) {
                 return Err(AppError::forbidden(
                     "an SMTP password is in use, and changing the host, port, security mode or \
                      username would send it to a different server; API tokens can never do that. \

@@ -608,7 +608,6 @@ async fn an_admin_manage_token_reads_and_edits_but_never_touches_the_password() 
     // now the token must not be able to point the password at another server
     for body in [
         json!({"host": "evil.example.com"}),
-        json!({"host": null}),
         json!({"port": 25}),
         json!({"security": "none"}),
         json!({"username": "someone-else"}),
@@ -643,6 +642,22 @@ async fn an_admin_manage_token_reads_and_edits_but_never_touches_the_password() 
         .await;
     res.assert_status(200);
     assert_eq!(res.body["from"], "Grid <grid@example.com>");
+    // switching email off sends the password nowhere, so a token may; pointing it at a host
+    // again, with the password still stored, is refused
+    let res = app
+        .patch(&token, "/api/admin/email", json!({"host": null}))
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["enabled"], false);
+    assert_eq!(res.body["password_set"], true);
+    let res = app
+        .patch(
+            &token,
+            "/api/admin/email",
+            json!({"host": "smtp.example.com"}),
+        )
+        .await;
+    assert_eq!(res.status.as_u16(), 403, "{}", res.body);
     // the signed-in administrator can still move it
     app.patch(
         &admin,
