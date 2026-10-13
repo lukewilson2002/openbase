@@ -43,6 +43,10 @@
 .og-calendar .fc-button-primary:disabled {
   opacity: 0.5;
 }
+/* FullCalendar dims the days of the neighbouring months to 30% opacity: 1.9:1 on white, unreadable. */
+.og-calendar .fc .fc-day-other .fc-daygrid-day-top {
+  opacity: 0.68;
+}
 .og-calendar .fc-event {
   cursor: pointer;
 }

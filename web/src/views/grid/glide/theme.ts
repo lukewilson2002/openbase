@@ -19,12 +19,12 @@ const common: Partial<Theme> = {
 
 export const LIGHT_THEME: Partial<Theme> = {
   ...common,
-  accentColor: "#2563eb",
+  accentColor: "#1f5ae0",
   accentFg: "#ffffff",
   accentLight: "#e4ecff",
   textDark: "#1b1f27",
   textMedium: "#566070",
-  textLight: "#7a8494",
+  textLight: "#636d7e",
   textBubble: "#1b1f27",
   bgIconHeader: "#566070",
   fgIconHeader: "#ffffff",
@@ -44,12 +44,12 @@ export const LIGHT_THEME: Partial<Theme> = {
 
 export const DARK_THEME: Partial<Theme> = {
   ...common,
-  accentColor: "#5b8cff",
+  accentColor: "#6b97ff",
   accentFg: "#0b1220",
   accentLight: "#1f2d52",
   textDark: "#e8ebf1",
   textMedium: "#a4adbd",
-  textLight: "#7f8a9c",
+  textLight: "#8893a4",
   textBubble: "#e8ebf1",
   bgIconHeader: "#a4adbd",
   fgIconHeader: "#1a1e26",

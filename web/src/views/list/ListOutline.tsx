@@ -9,7 +9,7 @@ import type { Field, GroupHeader, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { paletteColor } from "@/lib/cells/palette";
+import { swatchColor } from "@/lib/cells/palette";
 import { cardTitle, fieldsToShow } from "../common/cardFields";
 import { buildOutline, flattenOutline, groupDefaults, type GroupNode } from "./outline";
 
@@ -55,7 +55,7 @@ function Row({ record, p }: { record: TableRecord; p: ListOutlineProps }) {
       }}
       className="relative flex min-h-9 cursor-pointer flex-wrap items-center gap-x-4 gap-y-0.5 border-b border-line py-1.5 pl-4 pr-3 outline-none hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
     >
-      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: paletteColor(color).bg }} />}
+      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: swatchColor(color) }} />}
       <span className="w-full min-w-0 truncate text-[0.8125rem] font-medium sm:w-72 sm:shrink-0">{cardTitle(p.primary, record, p.format)}</span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5">
         {shown.map((f) => (

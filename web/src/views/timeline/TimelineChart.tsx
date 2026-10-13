@@ -11,7 +11,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { TimelineScale } from "@/api/types";
 import { cn } from "@/lib/cn";
-import { paletteColor } from "@/lib/cells/palette";
+import { paletteColor, swatchColor } from "@/lib/cells/palette";
 import {
   BAR_HEIGHT,
   LANE_PAD,
@@ -301,7 +301,7 @@ export function TimelineChart(props: TimelineChartProps) {
               {showLabels && (
                 <div className="pointer-events-none sticky left-0 z-20 flex h-full flex-col gap-0.5 border-r border-line bg-surface px-2 py-2" style={{ width: LABEL_WIDTH }}>
                   <span className="flex items-center gap-1.5 text-[0.8125rem] font-medium">
-                    {lane.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: paletteColor(lane.color).bg }} />}
+                    {lane.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatchColor(lane.color) }} />}
                     <span className="truncate" title={lane.label}>
                       {lane.label}
                     </span>
