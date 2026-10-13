@@ -11,3 +11,4 @@
 /web/*.tsbuildinfo
 .DS_Store
 /.claude/worktrees
+/web/e2e/.grid-auth.json

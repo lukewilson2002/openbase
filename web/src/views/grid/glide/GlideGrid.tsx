@@ -205,7 +205,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       let tint = tintCache.current.get(key);
       if (!tint) {
         const pal = paletteColor(c);
-        tint = mixColors(pr.current.dark ? "#1a1e26" : "#ffffff", pal.bg, pr.current.dark ? 0.28 : 0.45);
+        tint = mixColors(pr.current.dark ? "#1a1e26" : "#ffffff", pal.bg, pr.current.dark ? 0.16 : 0.4);
         tintCache.current.set(key, tint);
       }
       return { bgCell: tint };

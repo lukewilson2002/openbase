@@ -17,6 +17,8 @@ React 19 + TypeScript (strict) single-page app, built with Vite and embedded int
 
 Dependencies are deliberately few (9 runtime): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
+The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and react-responsive-carousel) and dompurify,
+all loaded only with the lazy grid chunk.
 
 ## Commands
 
@@ -71,6 +73,26 @@ src/views/      ViewHost + registry.ts: the extension point where grid/kanban/..
 
 Implement a component taking `ViewProps` (`schema`, `table`, `view`, `role`) and point the matching line of
 `src/views/registry.ts` at it (use `React.lazy` to keep the shell bundle small).
+
+### The grid view (`src/views/grid`)
+
+The grid is [Glide Data Grid](https://github.com/glideapps/glide-data-grid) (canvas) pinned at exactly 6.0.3. Glide declares a
+React <= 18 peer range, so `package.json` has an `overrides` entry that points it at the app's React 19. It is wrapped behind
+`GridAdapter` (`views/grid/adapter.ts`); only `views/grid/glide/*` imports it, so it can be vendored or replaced by a DOM grid
+on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry.ts`.
+
+| Where | What |
+|---|---|
+| `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `og_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
+| `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config (`useViewConfig`) |
+| `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
+| `src/components/fields/` | Field create/edit dialog with options for all 28 types |
+| `src/components/viewbar/` | Toolbar, filter builder, pure `ViewConfig` mutations (`config.ts`) |
+| `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
+
+To work on the grid without a server run `VITE_MOCK=1 npm run dev`: `dev/mock-api.ts` is a Vite middleware that serves a
+3,000-record fixture base with every field type (it is never part of a production build). `/api/__mock/role/viewer` switches the
+caller's role and `POST /api/__mock/external-edit` simulates another client's write (live refresh).
 
 ### Conventions
 

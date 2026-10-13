@@ -3,15 +3,15 @@
  * targets (expand icon, rating stars, open-link icon, button). The handler bag is read lazily so
  * the renderer object itself stays stable across renders.
  */
-import type { CustomRenderer, DrawArgs } from "@glideapps/glide-data-grid";
+import { GridCellKind, type CustomRenderer, type DrawArgs } from "@glideapps/glide-data-grid";
 import { displayShapeOf } from "@/lib/cells/kinds";
-import { attachmentRefs, selectChoicesOf } from "@/lib/cells/kinds";
+import { attachmentRefs } from "@/lib/cells/kinds";
 import { isFormulaError } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
 import { attachmentsApi } from "@/api/records";
 import type { RecordCellModel } from "../adapter";
 import { isOgCell, withPending, type OgCell } from "./cells";
-import { DANGER, drawCellText, drawCheck, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fileExt, fitText, roundRectPath, type ChipDraw } from "./draw";
+import { DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fileExt, fitText, roundRectPath, type ChipDraw } from "./draw";
 import { mixColors, paletteColor, ratingColor } from "@/lib/cells/palette";
 
 export interface RendererContext {
@@ -194,7 +194,6 @@ function drawRecordCell(args: DrawArgs<OgCell>, m: RecordCellModel, rc: Renderer
       drawCellText(ctx, theme, rect, m.display, { color: isFormulaError(m.value) ? DANGER : textColor });
       break;
   }
-  void selectChoicesOf;
 }
 
 function drawGroup(args: DrawArgs<OgCell>, rc: RendererContext): void {
@@ -249,7 +248,7 @@ function drawSummary(args: DrawArgs<OgCell>, rc: RendererContext): void {
 
 export function createRenderer(getContext: () => RendererContext): CustomRenderer<OgCell> {
   return {
-    kind: "custom" as CustomRenderer<OgCell>["kind"],
+    kind: GridCellKind.Custom,
     isMatch: (cell): cell is OgCell => isOgCell(cell),
     needsHover: true,
     needsHoverPosition: true,
@@ -278,8 +277,6 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
         }
       }
       ctx.restore();
-      // Keep the unused-import linter honest about helpers other renderers share.
-      void drawCheck;
     },
     onClick(args) {
       const rc = getContext();
@@ -314,10 +311,5 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
       }
       return undefined;
     },
-    onDelete(cell) {
-      return cell;
-    },
-    provideEditor: undefined,
-    onPaste: undefined,
   };
 }

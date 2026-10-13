@@ -229,6 +229,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   const onPaste = useCallback(
     (target: GridPoint, rows: readonly (readonly string[])[]) => {
+      // The summary row is not data: pasting there must not create records.
+      if (target.row >= rowMapRef.current.length || !canEdit) return;
       void (async () => {
         const rd = readerRef.current;
         const lastRow = Math.min(rd.rowCount - 1, target.row + rows.length + 200);
@@ -277,7 +279,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         if (total > 0) await opsRef.current.applyChanges(plan.changes, total === 1 ? "Paste" : `Paste into ${total} cells`);
       })();
     },
-    [loadRows, parseCtx, toast],
+    [loadRows, parseCtx, toast, canEdit],
   );
 
   const onClear = useCallback(
@@ -329,18 +331,26 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     (index: number, width: number, final: boolean) => {
       const spec = columnsRef.current[index];
       if (!spec) return;
-      if (!final) {
-        setLiveWidths((w) => ({ ...w, [spec.id]: width }));
+      const commit = () => {
+        resizeTimer.current = null;
+        cfg.update((c) => setFieldWidth(c, spec.id, width));
+        setLiveWidths((w) => {
+          const { [spec.id]: _drop, ...rest } = w;
+          return rest;
+        });
+      };
+      if (resizeTimer.current) clearTimeout(resizeTimer.current);
+      if (final) {
+        commit();
         return;
       }
-      cfg.update((c) => setFieldWidth(c, spec.id, width));
-      setLiveWidths((w) => {
-        const { [spec.id]: _drop, ...rest } = w;
-        return rest;
-      });
+      setLiveWidths((w) => ({ ...w, [spec.id]: width }));
+      // Save once the drag pauses, in case the release event never reaches the grid.
+      resizeTimer.current = setTimeout(commit, 600);
     },
     [cfg],
   );
+  const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onColumnMove = useCallback(
     (from: number, to: number) => {
@@ -511,6 +521,17 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [onExpand],
   );
 
+  // Undo/redo also work while focus sits on the toolbar or footer instead of the canvas.
+  const onWrapperKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable) return;
+      if (onGridKey({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, cell: null })) e.preventDefault();
+    },
+    [onGridKey],
+  );
+
   useEffect(() => {
     // Ctrl/Cmd+F searches the view instead of the browser page.
     const handler = (e: KeyboardEvent) => {
@@ -587,7 +608,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     rowCount: rowCountForGrid,
     rowHeight,
     freezeColumns,
-    showSummary: hasSummary,
+    showSummary: true,
     showRowNumbers: !grouped,
     searchTerm: debouncedSearch,
     dark,
@@ -627,7 +648,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   return (
     <EditorEnvProvider value={editorEnv}>
-      <div ref={wrapperRef} className="flex h-full min-h-[24rem] flex-col">
+      <div ref={wrapperRef} className="flex h-full min-h-[24rem] flex-col" onKeyDown={onWrapperKeyDown}>
         <ViewBar
           schema={schema}
           table={table}
