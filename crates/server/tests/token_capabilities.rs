@@ -14,6 +14,7 @@
 //! documentation) noticing.
 
 mod common;
+mod mcp_support;
 
 use common::{Client, TestApp};
 use openbase::perm::Role;
@@ -470,6 +471,13 @@ const ADMIN_SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
         "/api/admin/users/usrNope/reset-link",
         Some("{}"),
     ),
+    // A backup archive holds every password hash, two-factor secret and the SMTP password.
+    (
+        "GET",
+        "/api/admin/backups/{name}",
+        "/api/admin/backups/openbase-20200101-000000.tar.gz",
+        None,
+    ),
     // Connected apps are credentials too: no token lists or revokes them.
     (
         "GET",
@@ -840,7 +848,6 @@ struct AdminCase {
 
 struct AdminIds {
     user: String,
-    backup: String,
 }
 
 const ADMIN: &[AdminCase] = &[
@@ -919,13 +926,6 @@ const ADMIN: &[AdminCase] = &[
         body: |_, _| Some(json!({})),
         ok: 200,
     },
-    AdminCase {
-        method: "GET",
-        template: "/api/admin/backups/{name}",
-        path: |i| format!("/api/admin/backups/{}", i.backup),
-        body: |_, _| None,
-        ok: 200,
-    },
 ];
 
 #[tokio::test]
@@ -934,11 +934,8 @@ async fn admin_routes_work_for_admin_manage_tokens_and_are_audited() {
         let app = TestApp::new();
         let admin = app.admin("admin@example.com", "Admin");
         let plain = app.user("plain@example.com", "Plain");
-        let backup = app.post(&admin, "/api/admin/backups", json!({})).await;
-        backup.assert_status(200);
         let ids = AdminIds {
             user: plain.user_id.clone().unwrap(),
-            backup: backup.body["name"].as_str().unwrap().to_string(),
         };
         let path = (case.path)(&ids);
         let attempt = std::cell::Cell::new(0usize);
@@ -1241,6 +1238,69 @@ async fn admin_credential_actions_are_session_only() {
     )
     .await;
     assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+}
+
+/// A backup archive is the whole database: password hashes, two-factor secrets, the SMTP
+/// password. Only a signed-in administrator downloads it; no token does, whatever its scope.
+#[tokio::test]
+async fn backup_archives_can_only_be_downloaded_with_a_session() {
+    let app = TestApp::new();
+    let admin = app.admin("admin@example.com", "Admin");
+    let backup = app.post(&admin, "/api/admin/backups", json!({})).await;
+    backup.assert_status(200);
+    let name = backup.body["name"].as_str().unwrap().to_string();
+    let path = format!("/api/admin/backups/{name}");
+
+    // The signed-in administrator gets the archive.
+    let res = app.request(&admin, "GET", &path, None).await;
+    res.assert_status(200);
+    assert!(!res.bytes.is_empty());
+
+    // No token does: not the administrator's `manage` token, not a base-limited one, not a
+    // write or read-only one. The refusal is the session-only capability.
+    let (_, base) = app.workspace_with_base(&admin, "Acme");
+    for (label, scope) in [
+        ("manage", json!({"name": "m", "write": true, "manage": true})),
+        (
+            "base-limited manage",
+            json!({"name": "l", "write": true, "manage": true, "base_ids": [base]}),
+        ),
+        ("write", json!({"name": "w", "write": true})),
+        ("read-only", json!({"name": "r", "write": false})),
+    ] {
+        let token = app.api_token(&admin, scope).await;
+        let res = app.request(&token, "GET", &path, None).await;
+        assert_eq!(res.status.as_u16(), 403, "{label}: {}", res.body);
+        assert!(
+            res.bytes.len() < 1024,
+            "{label}: the archive must not be sent"
+        );
+        let msg = res.body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            msg.contains("API tokens can never use this endpoint"),
+            "{label}: {msg:?}"
+        );
+    }
+
+    // Through MCP, with a personal access token: refused before anything is sent.
+    let manage = app
+        .api_token(&admin, json!({"name": "mcp", "write": true, "manage": true}))
+        .await;
+    let t = mcp_support::tool(
+        &app,
+        &manage,
+        "api_request",
+        json!({"method": "GET", "path": path}),
+    )
+    .await;
+    assert!(t.err().contains("not available through MCP"), "{}", t.text);
+    // Listing and creating stay available to a manage token: they reveal no archive content.
+    mcp_support::tool(&app, &manage, "admin_list_backups", json!({}))
+        .await
+        .ok();
+    mcp_support::tool(&app, &manage, "admin_create_backup", json!({}))
+        .await
+        .ok();
 }
 
 /// The tables above and the endpoint catalogue (which `api_reference` shows to agents and

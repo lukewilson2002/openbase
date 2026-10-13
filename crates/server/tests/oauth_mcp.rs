@@ -1247,3 +1247,37 @@ async fn the_whole_flow_over_real_http() {
     let (status, _) = agent.rpc("tools/list", json!({})).await;
     assert_eq!(status, 401);
 }
+
+#[tokio::test]
+async fn a_full_control_grant_of_an_administrator_cannot_fetch_a_backup_archive() {
+    let app = TestApp::new();
+    let admin = app.admin("root@example.com", "Root");
+    let grant = connect(&app, &admin, "Admin Agent", "manage", None).await;
+    let name = app
+        .post(&admin, "/api/admin/backups", json!({}))
+        .await
+        .body["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let path = format!("/api/admin/backups/{name}");
+
+    // The archive carries every password hash, two-factor secret and the SMTP password: even a
+    // grant with full control gets nothing of it, through the tool or any other way.
+    let (t, _) =
+        mcp_support::api(&app, &grant.bearer(), "GET", &path, Value::Null, Value::Null).await;
+    assert!(t.err().contains("not available through MCP"), "{}", t.text);
+    assert!(!t.raw.body.to_string().contains("body_base64"));
+    // Used as a bearer on the REST API directly, an OAuth token is refused anyway.
+    app.request(&grant.bearer(), "GET", &path, None)
+        .await
+        .assert_status(401);
+    // The signed-in administrator still downloads it.
+    app.request(&admin, "GET", &path, None)
+        .await
+        .assert_status(200);
+    // The tools that only list and create keep working for the grant.
+    tool(&app, &grant.bearer(), "admin_list_backups", json!({}))
+        .await
+        .ok();
+}
