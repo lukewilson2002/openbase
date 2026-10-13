@@ -272,8 +272,8 @@ fn insert_tables(
         };
         tx.execute(
             "INSERT INTO tables (id, base_id, name, description, position, primary_field_id,
-                                 next_autonumber, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                                 next_autonumber, created_at, icon)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 mapped(ids, &s.table.id)?,
                 req.dest_base_id,
@@ -282,7 +282,8 @@ fn insert_tables(
                 position,
                 primary,
                 next_autonumber,
-                now
+                now,
+                s.table.icon
             ],
         )?;
     }

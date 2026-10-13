@@ -274,6 +274,9 @@ pub struct TrashItem {
     pub kind: String,
     pub id: String,
     pub name: String,
+    /// Lucide icon name of a trashed workspace, base or table.
+    #[serde(default)]
+    pub icon: Option<String>,
     #[serde(default)]
     pub table_id: Option<String>,
     pub deleted_at: i64,

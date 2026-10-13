@@ -141,22 +141,25 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Name of the invite's target, if it (and its workspace) is not deleted.
-fn live_target_name(conn: &Connection, target: &InviteTarget) -> AppResult<Option<String>> {
+/// Name and icon of the invite's target, if it (and its workspace) is not deleted.
+fn live_target(
+    conn: &Connection,
+    target: &InviteTarget,
+) -> AppResult<Option<(String, Option<String>)>> {
     Ok(match target {
         InviteTarget::Workspace(w) => conn
             .query_row(
-                "SELECT name FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
+                "SELECT name, icon FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
                 [w],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?,
         InviteTarget::Base(b) => conn
             .query_row(
-                "SELECT b.name FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+                "SELECT b.name, b.icon FROM bases b JOIN workspaces w ON w.id = b.workspace_id
                  WHERE b.id = ?1 AND b.deleted_at IS NULL AND w.deleted_at IS NULL",
                 [b],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?,
     })
@@ -204,7 +207,7 @@ pub fn find_valid_by_token(conn: &Connection, token: &str) -> AppResult<Option<I
         )
         .optional()?;
     let Some(row) = row else { return Ok(None) };
-    if live_target_name(conn, &row.target()?)?.is_none() || !creator_may_still_invite(conn, &row)? {
+    if live_target(conn, &row.target()?)?.is_none() || !creator_may_still_invite(conn, &row)? {
         return Ok(None);
     }
     Ok(Some(row))
@@ -219,8 +222,8 @@ pub fn require_valid_by_token(conn: &Connection, token: &str) -> AppResult<Invit
 /// Public preview for the accept page.
 pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview> {
     let target = invite.target()?;
-    let target_name =
-        live_target_name(conn, &target)?.ok_or_else(|| AppError::not_found("invite"))?;
+    let (target_name, target_icon) =
+        live_target(conn, &target)?.ok_or_else(|| AppError::not_found("invite"))?;
     let invited_by: Option<String> = match &invite.created_by {
         Some(uid) => conn
             .query_row("SELECT name FROM users WHERE id = ?1", [uid], |r| r.get(0))
@@ -229,6 +232,7 @@ pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview
     };
     Ok(InvitePreview {
         target_name,
+        target_icon,
         target_kind: match target {
             InviteTarget::Workspace(_) => "workspace".into(),
             InviteTarget::Base(_) => "base".into(),

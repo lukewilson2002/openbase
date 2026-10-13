@@ -8,6 +8,10 @@ import type { BaseSummary } from "./BaseSummary";
  */
 export type WorkspaceSummary = { id: string, name: string, 
 /**
+ * Lucide icon name (kebab-case); the client falls back to the name's initial.
+ */
+icon?: string | null, 
+/**
  * Caller's workspace role; None when only individual bases are shared.
  */
 role?: string | null, bases: Array<BaseSummary>, };

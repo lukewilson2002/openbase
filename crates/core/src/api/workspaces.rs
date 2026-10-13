@@ -12,6 +12,7 @@ pub struct BaseSummary {
     pub workspace_id: String,
     pub name: String,
     pub color: String,
+    /// Lucide icon name (kebab-case); the client falls back to the name's initial.
     #[serde(default)]
     pub icon: Option<String>,
     /// Caller's effective role on the base.
@@ -26,6 +27,9 @@ pub struct BaseSummary {
 pub struct WorkspaceSummary {
     pub id: String,
     pub name: String,
+    /// Lucide icon name (kebab-case); the client falls back to the name's initial.
+    #[serde(default)]
+    pub icon: Option<String>,
     /// Caller's workspace role; None when only individual bases are shared.
     #[serde(default)]
     pub role: Option<RoleName>,
@@ -36,6 +40,8 @@ pub struct WorkspaceSummary {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateWorkspace {
     pub name: String,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -43,6 +49,14 @@ pub struct CreateWorkspace {
 pub struct UpdateWorkspace {
     #[serde(default)]
     pub name: Option<String>,
+    /// Lucide icon name (kebab-case). Absent = unchanged, `null` = clear.
+    #[serde(
+        default,
+        deserialize_with = "super::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub icon: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,8 +76,14 @@ pub struct UpdateBase {
     pub name: Option<String>,
     #[serde(default)]
     pub color: Option<String>,
-    #[serde(default)]
-    pub icon: Option<String>,
+    /// Lucide icon name (kebab-case). Absent = unchanged, `null` = clear.
+    #[serde(
+        default,
+        deserialize_with = "super::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub icon: Option<Option<String>>,
     #[serde(default)]
     pub position: Option<f64>,
 }

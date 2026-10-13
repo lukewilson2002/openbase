@@ -7,7 +7,7 @@ import type { ViewType } from "./ViewType";
 /**
  * `GET /api/public/shares/{token}`: a shared (read-only) view.
  */
-export type PublicView = { kind: ShareKind, name: string, type: ViewType, table_name: string, base_name: string, 
+export type PublicView = { kind: ShareKind, name: string, type: ViewType, table_name: string, table_icon?: string | null, base_name: string, base_icon?: string | null, 
 /**
  * Only the fields visible in the view, in the view's display order.
  */

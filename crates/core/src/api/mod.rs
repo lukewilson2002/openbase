@@ -30,3 +30,22 @@ pub mod schema;
 pub mod sharing;
 pub mod v1;
 pub mod workspaces;
+
+/// serde helper for "absent = unchanged, `null` = clear, value = set" PATCH
+/// fields typed `Option<Option<T>>`:
+///
+/// ```ignore
+/// #[serde(default, deserialize_with = "super::double_option", skip_serializing_if = "Option::is_none")]
+/// #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+/// pub icon: Option<Option<String>>,
+/// ```
+///
+/// A missing key leaves the default (`None`, unchanged); an explicit `null`
+/// becomes `Some(None)` (clear); a value becomes `Some(Some(v))`.
+pub fn double_option<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    serde::Deserialize::deserialize(de).map(Some)
+}

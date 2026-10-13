@@ -30,6 +30,9 @@ pub struct Table {
     pub id: String,
     pub base_id: String,
     pub name: String,
+    /// Lucide icon name (kebab-case); the client falls back to the name's initial.
+    #[serde(default)]
+    pub icon: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
     pub primary_field_id: String,
@@ -58,6 +61,8 @@ pub struct BaseSchema {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateTable {
     pub name: String,
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -65,6 +70,14 @@ pub struct CreateTable {
 pub struct UpdateTable {
     #[serde(default)]
     pub name: Option<String>,
+    /// Lucide icon name (kebab-case). Absent = unchanged, `null` = clear.
+    #[serde(
+        default,
+        deserialize_with = "super::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub icon: Option<Option<String>>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]

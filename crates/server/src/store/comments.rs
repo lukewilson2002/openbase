@@ -198,10 +198,12 @@ fn notify_mentions(
         |r| r.get(0),
     )?;
     let table = schema::live_table(conn, &table_id)?;
-    let base_name: String = conn
-        .query_row("SELECT name FROM bases WHERE id = ?1", [&base_id], |r| {
-            r.get(0)
-        })
+    let (base_name, base_icon): (String, Option<String>) = conn
+        .query_row(
+            "SELECT name, icon FROM bases WHERE id = ?1",
+            [&base_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap_or_default();
     let names = NameCache::new(conn, chrono_tz::Tz::UTC);
     let record_name = names.record_text(record_id).unwrap_or_default();
@@ -230,8 +232,10 @@ fn notify_mentions(
             &json!({
                 "base_id": base_id,
                 "base_name": base_name,
+                "base_icon": base_icon,
                 "table_id": table.id,
                 "table_name": table.name,
+                "table_icon": table.icon,
                 "record_id": record_id,
                 "record_name": record_name,
                 "comment_id": comment_id,
