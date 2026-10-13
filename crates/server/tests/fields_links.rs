@@ -533,3 +533,86 @@ async fn renaming_a_link_field_does_not_touch_its_inverse() {
     assert_eq!(r.body["inverse"]["name"], "Table 1");
     assert_eq!(r.body["options"]["inverse_field_id"], link["inverse"]["id"]);
 }
+
+#[tokio::test]
+async fn sending_back_options_that_mention_deleted_things_still_works() {
+    let f = Fixture::new().await;
+    let t2 = f.add_table("Orders").await;
+    let t2id = sid(&t2["id"]).to_string();
+
+    // a link whose picker view is later deleted
+    let view = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/tables/{t2id}/views"),
+            json!({ "name": "Open", "type": "grid" }),
+        )
+        .await;
+    let vid = sid(&view.body["id"]).to_string();
+    let link = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Orders", "type": "link", "options": { "linked_table_id": t2id, "picker_view_id": vid } }),
+        )
+        .await;
+    f.app
+        .delete(&f.owner, &format!("/api/views/{vid}"))
+        .await
+        .assert_status(200);
+    let r = f
+        .app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{}", sid(&link["id"])),
+            json!({ "type": "link", "options": { "linked_table_id": t2id, "picker_view_id": vid, "single": true } }),
+        )
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["options"]["single"], true);
+    assert!(
+        r.body["options"].get("picker_view_id").is_none()
+            || r.body["options"]["picker_view_id"].is_null()
+    );
+    // naming a view that never existed is still rejected
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{}", sid(&link["id"])),
+            json!({ "type": "link", "options": { "linked_table_id": t2id, "picker_view_id": "viwNEVER" } }),
+        )
+        .await
+        .assert_status(400);
+
+    // a last-modified field watching a field that is later deleted
+    let watched = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "W", "type": "number", "options": {} }),
+        )
+        .await;
+    let lm = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Edited", "type": "last_modified_time", "options": { "fields": [watched["id"], f.notes_id] } }),
+        )
+        .await;
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{}", sid(&watched["id"])))
+        .await
+        .assert_status(200);
+    let r = f
+        .app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{}", sid(&lm["id"])),
+            json!({ "type": "last_modified_time", "options": lm["options"].clone() }),
+        )
+        .await;
+    r.assert_status(200);
+    assert_eq!(
+        r.body["options"]["fields"],
+        json!([f.notes_id]),
+        "the deleted field is no longer watched"
+    );
+}

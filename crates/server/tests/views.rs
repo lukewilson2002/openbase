@@ -659,3 +659,67 @@ async fn view_changes_publish_schema_events() {
         }
     );
 }
+
+#[tokio::test]
+async fn configs_that_still_mention_deleted_fields_can_be_saved_again() {
+    let f = Fixture::new().await;
+    let doomed = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Doomed", "type": "number", "options": {} }),
+        )
+        .await;
+    let doomed_id = sid(&doomed["id"]).to_string();
+    let v = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "V", "type": "grid", "config": {
+                "hidden_fields": [doomed_id], "sorts": [ { "field_id": doomed_id } ],
+                "field_widths": { &doomed_id: 150 } } }),
+        )
+        .await;
+    v.assert_status(201);
+    let path = view_path(sid(&v.body["id"]));
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{doomed_id}"))
+        .await
+        .assert_status(200);
+
+    // the client sends back the config it was given (still naming the deleted field) with one more change
+    let mut config = v.body["config"].clone();
+    config["frozen_columns"] = json!(1);
+    f.app
+        .patch(&f.owner, &path, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+    // ... even after the field was purged for good
+    set_deleted_at(&f.app, "fields", &doomed_id, 1);
+    f.app
+        .state
+        .db
+        .write_sync(|tx| opengrid::store::trash::purge_expired(tx, 1000))
+        .unwrap();
+    config["frozen_columns"] = json!(2);
+    f.app
+        .patch(&f.owner, &path, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+
+    // but a *new* unknown id is still an error
+    config["hidden_fields"] = json!([doomed_id, "fldNEVERHEREE"]);
+    f.app
+        .patch(&f.owner, &path, json!({ "config": config }))
+        .await
+        .assert_status(400);
+    // and fresh views cannot start out referring to it
+    f.app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "W", "type": "grid", "config": { "hidden_fields": [doomed_id] } }),
+        )
+        .await
+        .assert_status(400);
+}

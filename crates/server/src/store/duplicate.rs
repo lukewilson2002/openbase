@@ -71,6 +71,13 @@ enum CellPlan {
     },
 }
 
+/// The copy's id for a source id. Every id that is looked up was assigned
+/// before copying started, so a miss means the source data is inconsistent.
+fn mapped<'a>(ids: &'a HashMap<String, String>, old: &str) -> AppResult<&'a String> {
+    ids.get(old)
+        .ok_or_else(|| AppError::internal(format!("no copy id assigned for {old}")))
+}
+
 /// Replace every string (and object key) found in `ids` by its mapping.
 pub fn remap_json(v: &Json, ids: &HashMap<String, String>) -> Json {
     match v {
@@ -215,19 +222,22 @@ pub fn copy_tables(tx: &Transaction, req: &CopyRequest) -> AppResult<CopyResult>
         copy_records(tx, req, &sources, &mut ids, &external_inverse, same_base)?;
     }
     for s in &sources {
-        let new_table = &ids[&s.table.id];
-        let computed: Vec<String> = s
+        let new_table = mapped(&ids, &s.table.id)?;
+        let computed = s
             .fields
             .iter()
             .filter(|f| f.field.field_type().is_computed())
-            .map(|f| ids[&f.field.id].clone())
-            .collect();
+            .map(|f| mapped(&ids, &f.field.id).cloned())
+            .collect::<AppResult<Vec<String>>>()?;
         if !computed.is_empty() {
             fields_engine::after_field_change(tx, &req.dest_base_id, new_table, &computed)?;
         }
     }
     Ok(CopyResult {
-        table_ids: sources.iter().map(|s| ids[&s.table.id].clone()).collect(),
+        table_ids: sources
+            .iter()
+            .map(|s| mapped(&ids, &s.table.id).cloned())
+            .collect::<AppResult<_>>()?,
         touched_tables,
     })
 }
@@ -265,7 +275,7 @@ fn insert_tables(
                                  next_autonumber, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                ids[&s.table.id],
+                mapped(ids, &s.table.id)?,
                 req.dest_base_id,
                 name,
                 s.table.description,
@@ -291,8 +301,8 @@ fn insert_fields(
         for rec in &s.fields {
             let f = &rec.field;
             let copy = Field {
-                id: ids[&f.id].clone(),
-                table_id: ids[&s.table.id].clone(),
+                id: mapped(ids, &f.id)?.clone(),
+                table_id: mapped(ids, &s.table.id)?.clone(),
                 name: f.name.clone(),
                 description: f.description.clone(),
                 kind: remap_kind(f, ids, copied_tables, external_inverse)?,
@@ -329,7 +339,7 @@ fn insert_external_inverses(
             }
             let new_table_name: String = tx.query_row(
                 "SELECT name FROM tables WHERE id = ?1",
-                [&ids[&s.table.id]],
+                [mapped(ids, &s.table.id)?],
                 |r| r.get(0),
             )?;
             let name = schema::uniquify(
@@ -342,8 +352,8 @@ fn insert_external_inverses(
                 name,
                 description: None,
                 kind: FieldKind::Link(LinkOptions {
-                    linked_table_id: ids[&s.table.id].clone(),
-                    inverse_field_id: ids[&rec.field.id].clone(),
+                    linked_table_id: mapped(ids, &s.table.id)?.clone(),
+                    inverse_field_id: mapped(ids, &rec.field.id)?.clone(),
                     single: false,
                     picker_view_id: None,
                 }),
@@ -368,8 +378,8 @@ fn insert_views(
     for s in sources {
         for v in &s.views {
             let copy = View {
-                id: ids[&v.view.id].clone(),
-                table_id: ids[&s.table.id].clone(),
+                id: mapped(ids, &v.view.id)?.clone(),
+                table_id: mapped(ids, &s.table.id)?.clone(),
                 name: v.view.name.clone(),
                 view_type: v.view.view_type,
                 config: remap_config(&v.view.config, ids)?,
@@ -474,14 +484,14 @@ fn copy_records(
                 )
             })
             .collect();
-        let new_table = ids[&s.table.id].clone();
+        let new_table = mapped(ids, &s.table.id)?.clone();
         let mut after = String::new();
         loop {
             let rows = fetch_record_chunk(tx, &s.table.id, &after)?;
             let Some(last) = rows.last() else { break };
             after = last.id.clone();
             for row in &rows {
-                let new_id = ids[&row.id].clone();
+                let new_id = mapped(ids, &row.id)?.clone();
                 let data = transform_data(
                     tx,
                     row,
@@ -565,7 +575,7 @@ fn transform_data(
         let Some(plan) = plans.get(key.as_str()) else {
             continue; // trashed or unknown field: not copied
         };
-        let new_key = ids[key].clone();
+        let new_key = mapped(ids, key)?.clone();
         let new_value = match plan {
             CellPlan::Plain => Some(value.clone()),
             CellPlan::Computed => Some(remap_json(value, ids)),

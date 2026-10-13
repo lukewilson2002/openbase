@@ -102,7 +102,10 @@ pub fn after_field_change(
 /// Check a view config against the field types of its table: operators that
 /// do not apply to a field's type, operand shapes, kanban stack field types,
 /// and so on. Structural checks (unknown field ids, limits) are done by the
-/// caller before this is invoked.
+/// caller before this is invoked. A saved config may still name fields that
+/// were deleted or changed type afterwards (the server lets a client send
+/// those back unchanged): ignore references to missing fields here instead of
+/// failing on them.
 ///
 /// PLACEHOLDER: accepts everything.
 /// REPLACE WITH: `og_core::query::validate_config`.

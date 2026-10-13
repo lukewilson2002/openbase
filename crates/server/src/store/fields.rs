@@ -105,6 +105,7 @@ pub fn create(tx: &Transaction, table_id: &str, input: &CreateField) -> AppResul
         table: &table,
         siblings: &siblings,
         field_id: &field_id,
+        previous: None,
     };
     let mut kind = normalize_kind(&ctx, input.kind.clone())?;
     let inverse_id = new_id(og_core::ids::FIELD);
@@ -234,6 +235,7 @@ pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResul
             table: &table,
             siblings: &siblings,
             field_id: &old.id,
+            previous: Some(&old.kind),
         };
         let mut kind = normalize_kind(&ctx, requested.clone())?;
         if table.primary_field_id == old.id && !kind.field_type().can_be_primary() {
@@ -861,8 +863,9 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
     // Drop dependents whose own references are not available.
     loop {
         let dropped = members.iter().position(|id| {
-            let f = &by_id[id.as_str()].field;
-            id != &root.field.id && !refs_available(f, &by_id, &member_set)
+            by_id.get(id.as_str()).is_some_and(|rec| {
+                id != &root.field.id && !refs_available(&rec.field, &by_id, &member_set)
+            })
         });
         match dropped {
             Some(i) => {
@@ -890,7 +893,10 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
     }
     let mut touched = Touched::default();
     for id in &members {
-        let f = &by_id[id.as_str()].field;
+        let f = &by_id
+            .get(id.as_str())
+            .ok_or_else(|| AppError::internal("restore member vanished"))?
+            .field;
         let n = counts.entry(f.table_id.clone()).or_default();
         *n += 1;
         if *n > limits::MAX_FIELDS_PER_TABLE {
@@ -917,7 +923,10 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
     schema::check_base_acyclic(tx, &table.base_id)?;
     let mut per_table: Vec<(String, Vec<String>)> = Vec::new();
     for id in &members {
-        let f = &by_id[id.as_str()].field;
+        let f = &by_id
+            .get(id.as_str())
+            .ok_or_else(|| AppError::internal("restore member vanished"))?
+            .field;
         if f.field_type().is_computed() {
             match per_table.iter_mut().find(|(t, _)| *t == f.table_id) {
                 Some((_, v)) => v.push(f.id.clone()),

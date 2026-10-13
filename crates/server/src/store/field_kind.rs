@@ -39,6 +39,10 @@ pub struct KindCtx<'a> {
     pub siblings: &'a [Field],
     /// Id of the field being created or updated.
     pub field_id: &'a str,
+    /// The field's current definition when updating. References it already
+    /// held to things that have since been deleted are dropped rather than
+    /// rejected, so a client sending its options back unchanged still works.
+    pub previous: Option<&'a FieldKind>,
 }
 
 /// Validate `kind` and return the normalized options to store.
@@ -214,8 +218,19 @@ fn check_last_modified(ctx: &KindCtx, o: &mut LastModifiedOptions) -> AppResult<
     check_date_options(&o.date)?;
     let mut seen = HashSet::new();
     o.fields.retain(|f| seen.insert(f.clone()));
+    let previously_watched = |id: &str| match ctx.previous {
+        Some(FieldKind::LastModifiedTime(p) | FieldKind::LastModifiedBy(p)) => {
+            p.fields.iter().any(|f| f == id)
+        }
+        _ => false,
+    };
+    let mut gone = Vec::new();
     for id in &o.fields {
         let Some(f) = ctx.siblings.iter().find(|f| &f.id == id) else {
+            if previously_watched(id) {
+                gone.push(id.clone()); // deleted since: stop watching it
+                continue;
+            }
             return Err(AppError::bad_request(format!(
                 "watched field '{id}' is not in this table"
             )));
@@ -227,10 +242,11 @@ fn check_last_modified(ctx: &KindCtx, o: &mut LastModifiedOptions) -> AppResult<
             )));
         }
     }
+    o.fields.retain(|id| !gone.contains(id));
     Ok(())
 }
 
-fn check_link(ctx: &KindCtx, o: &LinkOptions) -> AppResult<()> {
+fn check_link(ctx: &KindCtx, o: &mut LinkOptions) -> AppResult<()> {
     let target = schema::table_any(ctx.conn, &o.linked_table_id)?
         .filter(|t| t.deleted_at.is_none())
         .ok_or_else(|| AppError::bad_request("linked table not found"))?;
@@ -239,20 +255,28 @@ fn check_link(ctx: &KindCtx, o: &LinkOptions) -> AppResult<()> {
             "a link field can only link to a table in the same base",
         ));
     }
-    if let Some(view_id) = &o.picker_view_id {
+    if let Some(view_id) = o.picker_view_id.clone() {
         let ok: Option<i64> = ctx
             .conn
             .query_row(
                 "SELECT 1 FROM views WHERE id = ?1 AND table_id = ?2 AND deleted_at IS NULL
                  AND personal_owner_id IS NULL",
-                [view_id, &target.id],
+                [&view_id, &target.id],
                 |r| r.get(0),
             )
             .optional()?;
         if ok.is_none() {
-            return Err(AppError::bad_request(
-                "picker view must be a shared view of the linked table",
-            ));
+            let unchanged = matches!(
+                ctx.previous,
+                Some(FieldKind::Link(p)) if p.picker_view_id.as_deref() == Some(view_id.as_str())
+            );
+            if !unchanged {
+                return Err(AppError::bad_request(
+                    "picker view must be a shared view of the linked table",
+                ));
+            }
+            // The view it pointed at was deleted: the picker falls back to all records.
+            o.picker_view_id = None;
         }
     }
     Ok(())

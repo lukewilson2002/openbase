@@ -8,7 +8,7 @@
 //!   create or change, the owner may always delete);
 //! - a table always keeps at least one collaborative view.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use og_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
 use og_core::field::{COLORS, Field};
@@ -153,7 +153,7 @@ pub fn update(
     }
     if let Some(config) = &patch.config {
         let fields = schema::table_fields(tx, &row.view.table_id)?;
-        validate_config(&fields, config)?;
+        validate_config_with(&fields, config, &previously_referenced(&row.view.config))?;
         tx.execute(
             "UPDATE views SET config = ?2 WHERE id = ?1",
             params![view_id, serde_json::to_string(config)?],
@@ -252,9 +252,44 @@ pub fn duplicate(
 /// Operator-vs-type rules are delegated to
 /// [`fields_engine::validate_view_config_semantics`].
 pub fn validate_config(fields: &[Field], config: &ViewConfig) -> AppResult<()> {
+    validate_config_with(fields, config, &HashSet::new())
+}
+
+/// Every id-like string (values and object keys) in a stored config. Ids of
+/// fields that were deleted or changed type after the config was saved stay
+/// in it; a client sending its config back unchanged must not be rejected for
+/// them, so [`update`] grandfathers these.
+fn previously_referenced(config: &ViewConfig) -> HashSet<String> {
+    fn walk(v: &serde_json::Value, out: &mut HashSet<String>) {
+        match v {
+            serde_json::Value::String(s) => {
+                out.insert(s.clone());
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            serde_json::Value::Object(o) => {
+                for (k, x) in o {
+                    out.insert(k.clone());
+                    walk(x, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = HashSet::new();
+    if let Ok(v) = serde_json::to_value(config) {
+        walk(&v, &mut out);
+    }
+    out
+}
+
+fn validate_config_with(
+    fields: &[Field],
+    config: &ViewConfig,
+    stale_ok: &HashSet<String>,
+) -> AppResult<()> {
     let known: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let check = |id: &str, what: &str| -> AppResult<()> {
-        if known.contains_key(id) {
+        if known.contains_key(id) || stale_ok.contains(id) {
             Ok(())
         } else {
             Err(AppError::bad_request(format!(
@@ -332,7 +367,7 @@ pub fn validate_config(fields: &[Field], config: &ViewConfig) -> AppResult<()> {
             check(id, what)?;
         }
     }
-    check_form(&config.form, &known)?;
+    check_form(&config.form, &known, stale_ok)?;
     fields_engine::validate_view_config_semantics(fields, config)
 }
 
@@ -371,7 +406,11 @@ fn walk_filter(
     Ok(())
 }
 
-fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>) -> AppResult<()> {
+fn check_form(
+    form: &FormConfig,
+    known: &HashMap<&str, &Field>,
+    stale_ok: &HashSet<String>,
+) -> AppResult<()> {
     if form.title.chars().count() > limits::MAX_NAME_LEN
         || form.submit_label.chars().count() > limits::MAX_NAME_LEN
         || form.description.chars().count() > limits::MAX_DESCRIPTION_LEN
@@ -390,15 +429,19 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>) -> AppResult<()>
             ));
         }
     }
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     for f in &form.fields {
+        let stale = stale_ok.contains(&f.field_id);
         let Some(field) = known.get(f.field_id.as_str()) else {
+            if stale {
+                continue;
+            }
             return Err(AppError::bad_request(format!(
                 "form refers to an unknown field '{}'",
                 f.field_id
             )));
         };
-        if field.field_type().is_computed() {
+        if field.field_type().is_computed() && !stale {
             return Err(AppError::bad_request(format!(
                 "computed field '{}' cannot be part of a form",
                 field.name
