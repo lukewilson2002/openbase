@@ -270,13 +270,18 @@ test("adds and deletes records, with undo", async ({ page }) => {
   await openGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
   await expect(page.getByText("6 records")).toBeVisible();
+  // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
+  await expect.poll(async () => (await rows(page)).length).toBe(6);
   await undo(page);
   await expect(page.getByText("5 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(5);
   await clickCell(page, "name", 4, { right: true });
   await page.getByRole("menuitem", { name: /Delete record/ }).click();
   await expect(page.getByText("4 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(4);
   await undo(page);
   await expect(page.getByText("5 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(5);
 });
 
 /**
