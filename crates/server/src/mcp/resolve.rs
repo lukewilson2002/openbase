@@ -942,6 +942,7 @@ mod tests {
             id: "tbl1".into(),
             base_id: "app1".into(),
             name: "Tasks".into(),
+            icon: None,
             description: None,
             primary_field_id: "fld1".into(),
             fields: vec![
