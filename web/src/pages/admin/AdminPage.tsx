@@ -3,11 +3,12 @@ import { AppPage } from "@/components/layouts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditTab } from "./AuditTab";
 import { BackupsTab } from "./BackupsTab";
+import { ConnectedAppsTab } from "./ConnectedAppsTab";
 import { EmailTab } from "./EmailTab";
 import { StatsTab } from "./StatsTab";
 import { UsersTab } from "./UsersTab";
 
-const TABS = ["users", "email", "audit", "stats", "backups"] as const;
+const TABS = ["users", "email", "apps", "audit", "stats", "backups"] as const;
 type TabName = (typeof TABS)[number];
 
 export function AdminPage() {
@@ -20,6 +21,7 @@ export function AdminPage() {
         <TabsList aria-label="Administration sections">
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
+          <TabsTrigger value="apps">Connected apps</TabsTrigger>
           <TabsTrigger value="audit">Audit log</TabsTrigger>
           <TabsTrigger value="stats">Instance</TabsTrigger>
           <TabsTrigger value="backups">Backups</TabsTrigger>
@@ -29,6 +31,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="email">
           <EmailTab />
+        </TabsContent>
+        <TabsContent value="apps">
+          <ConnectedAppsTab />
         </TabsContent>
         <TabsContent value="audit">
           <AuditTab />

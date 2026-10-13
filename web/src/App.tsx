@@ -14,6 +14,8 @@ import { PageSpinner } from "@/components/ui/spinner";
 
 // Rarely visited pages load on demand to keep the first paint small.
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
+// The page an app's "connect" request lands on (opened by the server's /oauth/authorize).
+const OAuthConsentPage = lazy(() => import("@/pages/oauth/OAuthConsentPage").then((m) => ({ default: m.OAuthConsentPage })));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
 // Pages a person meets once (first-run setup, sign-up, an invite, a password reset) stay out of the shell too.
 const SetupPage = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
@@ -55,6 +57,15 @@ export function AppRoutes() {
           element={
             <RequireAuth>
               <AccountPage />
+            </RequireAuth>
+          }
+        />
+        {/* Behind the login like every app page: the login redirect brings the person back here. */}
+        <Route
+          path="/oauth/consent"
+          element={
+            <RequireAuth>
+              <OAuthConsentPage />
             </RequireAuth>
           }
         />
