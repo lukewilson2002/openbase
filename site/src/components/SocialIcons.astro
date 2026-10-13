@@ -1,0 +1,39 @@
+---
+// Header links: Docs and GitHub. (Starlight shows this group from tablet width up.)
+import config from "virtual:starlight/user-config";
+import { Icon } from "@astrojs/starlight/components";
+
+const github = (config.social || []).find((l) => l.icon === "github");
+---
+
+<nav class="links sl-flex" aria-label="Site">
+  <a href="/docs/">Docs</a>
+  {
+    github && (
+      <a href={github.href} rel="me" class="gh sl-flex">
+        <span class="sr-only">{github.label}</span>
+        <Icon name="github" />
+      </a>
+    )
+  }
+</nav>
+
+<style>
+  .links {
+    gap: 1.25rem;
+    align-items: center;
+  }
+  a {
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: var(--sl-text-sm);
+  }
+  a:hover {
+    color: var(--sl-color-white);
+  }
+  .gh {
+    padding: 0.4em;
+    margin: -0.4em;
+  }
+</style>

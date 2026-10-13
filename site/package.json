@@ -1,0 +1,27 @@
+{
+  "name": "openbase-site",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "node scripts/sync-docs.mjs && astro dev",
+    "build": "node scripts/sync-docs.mjs && astro build && node scripts/postbuild.mjs",
+    "preview": "astro preview",
+    "serve": "node scripts/serve-dist.mjs",
+    "check-links": "node scripts/check-links.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.6",
+    "astro": "7.3.8"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0",
+    "sharp": "0.35.5"
+  }
+}

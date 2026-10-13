@@ -1,0 +1,52 @@
+# Builds and checks the website (site/). It never deploys: Cloudflare Pages builds and publishes
+# myopenbase.app from main through its own Git integration (see site/README.md).
+name: site
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "brand/**"
+      - "CHANGELOG.md"
+      - ".github/workflows/site.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "brand/**"
+      - "CHANGELOG.md"
+      - ".github/workflows/site.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: site/.node-version
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install (lockfile, no lifecycle scripts)
+        run: npm ci
+      - name: Build (syncs docs/ and brand/, builds the pages and the search index)
+        run: npm run build
+      - name: Check links, anchors, headings, alt text and canonical URLs in the built pages
+        run: npm run check-links
+      - name: Browser smoke test with the real headers (CSP, search, no third-party requests)
+        run: npm run smoke

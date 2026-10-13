@@ -1,0 +1,246 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import LIcon from "../components/LIcon.astro";
+import markSvg from "../assets/brand/mark.svg?raw";
+
+const REPO = "https://github.com/lukewilson2002/openbase";
+const TITLE = "OpenBase: a self-hosted Airtable alternative";
+const DESCRIPTION =
+  "Your own Airtable. One small server, no subscriptions. OpenBase is a free, open source, self-hosted Airtable alternative with grid, kanban, calendar and timeline views, automations, an Airtable-compatible API and a built-in MCP server for AI assistants.";
+
+const features = [
+  {
+    icon: "layout-grid",
+    title: "Seven views",
+    text: "Grid, form, gallery, kanban, calendar, timeline with Gantt-style dependency arrows, and list. Nested filters, sorts, up to three grouping levels, row colours, summaries and CSV export.",
+  },
+  {
+    icon: "sigma",
+    title: "28 field types and real formulas",
+    text: "Linked records paired both ways, lookups, rollups, attachments, currency, dates with time zones and more. Formulas use Airtable's syntax and its full function list.",
+  },
+  {
+    icon: "zap",
+    title: "Automations",
+    text: "Start from a new record, a change, a form, a schedule or a webhook. Create or update records, send email, call an HTTP endpoint or notify people. Every run is logged and retried.",
+  },
+  {
+    icon: "users",
+    title: "Real-time collaboration",
+    text: "Edits appear in other open tabs within moments. If two people change the same cell, the last write wins and the record history keeps both versions.",
+  },
+  {
+    icon: "share-2",
+    title: "Share links and public forms",
+    text: "Share a read-only view with an optional password, or publish a form that writes straight into a table. Comments, @mentions and per-record history are built in.",
+  },
+  {
+    icon: "plug",
+    title: "Airtable-compatible REST API",
+    text: "A familiar API under /api/v1 with personal access tokens. Airtable clients and n8n, Make or Zapier HTTP steps work once you change the base URL.",
+  },
+  {
+    icon: "bot",
+    title: "Built-in MCP server",
+    text: "Claude, ChatGPT and other AI assistants can connect by signing in, then build bases, edit records and set up automations for you, with the access you grant: read only, read and edit, or full control.",
+  },
+  {
+    icon: "key-round",
+    title: "Passkeys, 2FA and roles",
+    text: "Passkey sign-in, TOTP two-factor authentication, five roles from owner to viewer, per-base sharing, and sessions and tokens you can revoke.",
+  },
+  {
+    icon: "database-backup",
+    title: "Backups you can restore",
+    text: "A daily automatic backup with retention, a backup and restore command, a snapshot before every schema upgrade, and a trash that keeps deleted items for 30 days.",
+  },
+];
+
+const shots = [
+  { key: "grid", title: "Grid with grouping and colours", alt: "OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar", themed: true },
+  { key: "kanban", title: "Kanban by status", alt: "OpenBase kanban view with order cards in New, Baking, Ready and Delivered columns", themed: true },
+  { key: "calendar", title: "Calendar by due date", alt: "OpenBase calendar view showing orders on their due dates", themed: false },
+  { key: "timeline", title: "Timeline with dependencies", alt: "OpenBase timeline view of a production plan with swimlanes and dependency arrows", themed: false },
+  { key: "gallery", title: "Gallery with photos", alt: "OpenBase gallery view of bakery products with photos, prices and allergens", themed: false },
+  { key: "form-builder", title: "Form builder with live preview", alt: "OpenBase form builder with a live preview of a wholesale enquiry form", themed: false },
+  { key: "automations", title: "Automations editor", alt: "OpenBase automation editor: a trigger, conditions and a list of actions", themed: false },
+  { key: "assistants", title: "AI assistants page", alt: "OpenBase account page with the MCP address and steps to connect Claude, ChatGPT and other assistants", themed: true },
+];
+const dims = (key: string) => (key === "timeline" ? [2400, 954] : [2400, 1477]);
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "OpenBase",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Linux, macOS (self-hosted)",
+  description: DESCRIPTION,
+  url: "https://myopenbase.app/",
+  license: "https://opensource.org/license/mit",
+  codeRepository: REPO,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+};
+---
+
+<StarlightPage
+  frontmatter={{
+    title: TITLE,
+    description: DESCRIPTION,
+    template: "splash",
+    head: [{ tag: "title", content: TITLE }, { tag: "script", attrs: { type: "application/ld+json" }, content: JSON.stringify(jsonLd) }],
+  }}
+>
+  <div class="ob-landing">
+    <section class="hero" aria-labelledby="_top">
+      <div class="hero-mark" set:html={markSvg} aria-hidden="true" />
+      <h1 id="_top">OpenBase</h1>
+      <p class="tagline">Your own Airtable. One small server, no subscriptions.</p>
+      <p class="sub">
+        A free, open source database with spreadsheet, kanban, calendar and form views. You run it on a server you control, and
+        your data stays in one folder.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="/docs/quickstart/">Get started</a>
+        <a class="btn" href={REPO}>GitHub</a>
+      </div>
+      <p class="status">Version 0.1.0. Not yet used in production by anyone but its authors.</p>
+      <figure class="hero-shot">
+        <img class="only-light" src="/screenshots/grid-light.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar" fetchpriority="high" />
+        <img class="only-dark" src="/screenshots/grid-dark.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar" loading="lazy" />
+      </figure>
+    </section>
+
+    <section class="block" aria-labelledby="what">
+      <h2 id="what">What it is</h2>
+      <p class="lead">
+        OpenBase is a self-hosted alternative to Airtable for individuals and very small businesses: tables, linked records,
+        formulas, many kinds of views, automations, sharing and an API. The server is a single Rust program with the web app
+        compiled in. The database, uploaded files and backups live in one directory, with no Postgres, no Redis and no Node at
+        runtime.
+      </p>
+    </section>
+
+    <section class="block" aria-labelledby="features">
+      <h2 id="features">What you get</h2>
+      <ul class="features">
+        {
+          features.map((f) => (
+            <li>
+              <span class="ficon">
+                <LIcon name={f.icon} />
+              </span>
+              <h3>{f.title}</h3>
+              <p>{f.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="block" aria-labelledby="screens">
+      <h2 id="screens">See it</h2>
+      <p class="lead">Real screenshots of OpenBase running a small demo bakery. The data is made up.</p>
+      <div class="shots">
+        {
+          shots.map((s) => {
+            const [w, h] = dims(s.key);
+            return (
+              <figure>
+                {s.themed ? (
+                  <>
+                    <a class="only-light" href={`/screenshots/${s.key}-light.webp`}>
+                      <img src={`/screenshots/${s.key}-light.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                    </a>
+                    <a class="only-dark" href={`/screenshots/${s.key}-dark.webp`}>
+                      <img src={`/screenshots/${s.key}-dark.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                    </a>
+                  </>
+                ) : (
+                  <a href={`/screenshots/${s.key}-light.webp`}>
+                    <img src={`/screenshots/${s.key}-light.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                  </a>
+                )}
+                <figcaption>{s.title}</figcaption>
+              </figure>
+            );
+          })
+        }
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="server">
+      <h2 id="server">Runs on a $5 server</h2>
+      <p class="lead">
+        OpenBase is built for a 1 vCPU, 1 GB VPS. These numbers are measured, but on a fast laptop (Apple M3 Max, 16 cores,
+        64 GB), <strong>not on a $5 VPS</strong>, so treat times as best case.
+      </p>
+      <dl class="stats">
+        <div>
+          <dt>Memory, idle</dt>
+          <dd>17.6 MB</dd>
+          <dd class="note">release binary, right after start</dd>
+        </div>
+        <div>
+          <dt>Memory, 50,000 records</dt>
+          <dd>at most 104 MB</dd>
+          <dd class="note">11 fields incl. a formula, over HTTP</dd>
+        </div>
+        <div>
+          <dt>Page of 100 rows, cached</dt>
+          <dd>1.4 ms</dd>
+          <dd class="note">p95, 50,000 records</dd>
+        </div>
+        <div>
+          <dt>Filter and two sorts, cold</dt>
+          <dd>91-96 ms</dd>
+          <dd class="note">18,006 matches of 50,000</dd>
+        </div>
+        <div>
+          <dt>Binary</dt>
+          <dd>26 MB</dd>
+          <dd class="note">web app embedded</dd>
+        </div>
+        <div>
+          <dt>Docker image</dt>
+          <dd>41.5 MB</dd>
+          <dd class="note">compressed, linux/arm64</dd>
+        </div>
+      </dl>
+      <p class="fine">
+        Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users, upload-heavy workloads, or an amd64 build.
+        The methods and every caveat are in the <a href={`${REPO}#resource-usage-and-scale`}>README</a>.
+      </p>
+    </section>
+
+    <section class="block" aria-labelledby="free">
+      <h2 id="free">No paywalls, no license keys</h2>
+      <p class="lead">
+        OpenBase is dual licensed under <a href={`${REPO}/blob/main/LICENSE-MIT`}>MIT</a> or <a href={`${REPO}/blob/main/LICENSE-APACHE`}>Apache-2.0</a>, at your option. There is no paid tier, no feature flags and
+        nothing to activate. Every feature on this page is in the download.
+      </p>
+      <p class="lead">
+        It is also deliberately small. There is no interface designer, no scripting extension, no SSO and no built-in AI: bring
+        your own assistant through the MCP server or the API. The full list, with reasons, is in the <a href={`${REPO}#what-is-deliberately-not-included`}>README</a>.
+      </p>
+    </section>
+
+    <section class="block" aria-labelledby="start">
+      <h2 id="start">Start in a few commands</h2>
+      <p class="lead">
+        You need a server with Docker and a domain pointing at it. Caddy gets the HTTPS certificate for you. The first account you
+        create becomes the administrator.
+      </p>
+      <pre class="snippet"><code>git clone https://github.com/lukewilson2002/openbase.git
+cd openbase/deploy
+cp .env.example .env        # set OPENBASE_DOMAIN=base.example.com
+docker compose up -d --build</code></pre>
+      <p class="fine">
+        That builds the image on your server. Starting with the first release, a prebuilt image, <code>ghcr.io/lukewilson2002/openbase</code>, is published too. The <a href="/docs/quickstart/">quickstart</a> covers DNS, the first admin, backups and connecting an AI assistant.
+      </p>
+      <p class="cta">
+        <a class="btn primary" href="/docs/quickstart/">Read the quickstart</a>
+        <a class="btn" href="/docs/self-hosting/">Self-hosting guide</a>
+      </p>
+    </section>
+  </div>
+</StarlightPage>

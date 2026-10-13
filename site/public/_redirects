@@ -1,0 +1,10 @@
+# Cloudflare Pages redirects (https://developers.cloudflare.com/pages/configuration/redirects/).
+# Short, memorable entry points. Pages redirects match on the path only, never on the host, so
+# www.myopenbase.app -> myopenbase.app cannot be done here: see site/README.md (a Cloudflare
+# Redirect Rule does it).
+/quickstart   /docs/quickstart/   301
+/install      /docs/quickstart/   301
+/mcp          /docs/mcp/          301
+/api          /docs/api/          301
+/security     /docs/security/     301
+/docs/index   /docs/              301
