@@ -1,0 +1,489 @@
+# Release: build, check and publish OpenBase. This is the ONLY workflow that publishes anything, and
+# it runs ONLY when someone publishes a GitHub Release (or re-runs one by hand). A push to main
+# never builds an image, never touches the container registry and never changes what users run.
+#
+#   scripts/release.sh X.Y.Z          bump versions, changelog, commit, tag      (on your machine)
+#   git push origin main --follow-tags
+#   gh release create vX.Y.Z --verify-tag --notes-from-tag                       <- starts this workflow
+#
+# What it does, in order (any failure stops everything before a tag is published):
+#   prepare  checks the tag is vX.Y.Z[-pre], equals the version in Cargo.toml / Cargo.lock /
+#            web/package.json, is on main, and decides the image tags (scripts/release-info.sh).
+#   checks   the full CI suite (ci.yml): rustfmt, clippy, tests, generated files, web, contract
+#            tests, Playwright end-to-end tests.
+#   web      builds the web client once; both architectures embed this same web/dist.
+#   build    per architecture (linux/amd64, linux/arm64): the release binary, the runtime image
+#            (pushed to GHCR by digest only, no tag yet) with provenance and SBOM attestations, and a
+#            smoke test of that exact image (scripts/smoke-docker.sh).
+#   publish  merges the two images into one multi-arch manifest and only now gives it its tags:
+#            X.Y.Z, X.Y, X, latest (stable releases) or just X.Y.Z-pre (pre-releases).
+#   assets   attaches openbase-X.Y.Z-linux-{amd64,arm64}.tar.gz and SHA256SUMS to the GitHub Release.
+#
+# Re-run for a tag that already exists (a failed run, or to rebuild): Actions -> Release -> Run
+# workflow -> the tag. It is safe to repeat: tags move to the new build and assets are replaced.
+#
+# arm64 build (repository variable OPENBASE_ARM64_BUILD, or the input of a manual run):
+#   native  (default) arm64 is built on GitHub's arm64 runner (ubuntu-24.04-arm). Free for public
+#           repositories. The binary is compiled inside rust:1-bookworm, the same as the image.
+#   cross   arm64 is cross-compiled on the amd64 runner with cargo-zigbuild against glibc 2.36
+#           (Debian 12), for private repositories that have no arm64 runner. Same speed class as
+#           native, but the arm64 binary comes from a different compiler pipeline than the amd64
+#           one. QEMU is used only to start the finished arm64 image for the smoke test.
+#   Compiling under QEMU emulation would also work and needs no cross toolchain, but takes an hour
+#   or more for this project, so it is not offered. See docs/releasing.md.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and publish again, for example v0.2.0 (its GitHub Release must exist)"
+        type: string
+        required: true
+      arm64_build:
+        description: "How to build arm64 (default: the OPENBASE_ARM64_BUILD variable, else native)"
+        type: choice
+        options: [default, native, cross]
+        default: default
+      allow_off_main:
+        description: "Allow a tag whose commit is not on main (hotfix branches). Be sure."
+        type: boolean
+        default: false
+
+# Nothing by default; each job asks for exactly what it needs.
+permissions: {}
+
+# One release run per tag at a time; never cancel a release half way.
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ------------------------------------------------------------------ prepare
+  prepare:
+    name: Verify the tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.info.outputs.tag }}
+      version: ${{ steps.info.outputs.version }}
+      prerelease: ${{ steps.info.outputs.prerelease }}
+      tags: ${{ steps.info.outputs.tags }}
+      image: ${{ steps.info.outputs.image }}
+      created: ${{ steps.info.outputs.created }}
+      matrix: ${{ steps.info.outputs.matrix }}
+    steps:
+      # Untrusted text (a tag name) only ever reaches the shell through environment variables.
+      - name: Validate the tag name
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a release tag (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-pre)."
+            exit 1
+          fi
+
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Tag, versions and image tags
+        id: info
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          ALLOW_OFF_MAIN: ${{ inputs.allow_off_main }}
+          ARM64_INPUT: ${{ inputs.arm64_build }}
+          ARM64_VAR: ${{ vars.OPENBASE_ARM64_BUILD }}
+        run: |
+          set -euo pipefail
+
+          # The release must exist (assets are attached to it) and tells us if it is a pre-release.
+          gh_pre=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease) \
+            || { echo "::error::There is no published GitHub Release for $TAG. Create it first: gh release create $TAG"; exit 1; }
+
+          # Tag format, version equality across Cargo.toml / Cargo.lock / web/package*.json, image tags.
+          scripts/release-info.sh "$TAG" --github-prerelease "$gh_pre" | tee info.txt
+          {
+            echo "tag=$TAG"
+            cat info.txt
+          } >> "$GITHUB_OUTPUT"
+
+          # Releases come from main: refuse a tag on a side branch unless explicitly allowed.
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            if [[ "$ALLOW_OFF_MAIN" == "true" ]]; then
+              echo "::warning::$TAG is not on main; continuing because allow_off_main is set."
+            else
+              echo "::error::$TAG (commit $(git rev-parse --short HEAD)) is not on main. Merge it first, or re-run manually with allow_off_main."
+              exit 1
+            fi
+          fi
+
+          # Image name: ghcr.io/<owner>/<repo>, lower-case as the registry requires.
+          image="ghcr.io/$(tr '[:upper:]' '[:lower:]' <<<"$GITHUB_REPOSITORY")"
+
+          # Which machines build which architecture.
+          mode=${ARM64_INPUT:-default}
+          if [[ "$mode" == default ]]; then mode=${ARM64_VAR:-native}; fi
+          case "$mode" in
+            native) arm_runner=ubuntu-24.04-arm ;;
+            cross)  arm_runner=ubuntu-24.04 ;;
+            *) echo "::error::OPENBASE_ARM64_BUILD must be 'native' or 'cross', not '$mode'."; exit 1 ;;
+          esac
+          matrix=$(jq -cn --arg runner "$arm_runner" --arg mode "$mode" '{include: [
+            {arch: "amd64", platform: "linux/amd64", runner: "ubuntu-24.04", mode: "native"},
+            {arch: "arm64", platform: "linux/arm64", runner: $runner,        mode: $mode}
+          ]}')
+
+          {
+            echo "image=$image"
+            echo "created=$(git log -1 --format=%cI HEAD)"
+            echo "matrix=$matrix"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release $TAG"
+            echo "- image: \`$image\`, tags: \`$(grep '^tags=' info.txt | cut -d= -f2)\`"
+            echo "- arm64 build: \`$mode\` on \`$arm_runner\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------------- checks
+  checks:
+    name: Checks
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: refs/tags/${{ needs.prepare.outputs.tag }}
+
+  # ---------------------------------------------------------------------- web
+  web:
+    name: Build the web client once
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web/dist
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          test -f dist/index.html
+
+      - name: Upload web/dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  # -------------------------------------------------------------------- build
+  build:
+    name: Build ${{ matrix.arch }} (${{ matrix.mode }})
+    needs: [prepare, checks, web]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      IMAGE: ${{ needs.prepare.outputs.image }}
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Download the web client
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-dist
+          path: .web-dist
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # ---- the binary, native: compiled in rust:1-bookworm (glibc 2.36) by the Dockerfile
+      - name: Build the binary (native)
+        if: matrix.mode == 'native'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: binary
+          platforms: ${{ matrix.platform }}
+          build-args: WEB_DIST=web-prebuilt
+          outputs: type=local,dest=release-bin/${{ matrix.arch }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=binary-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=binary-${{ matrix.arch }},ignore-error=true
+
+      # ---- the binary, cross-compiled (private repositories without an arm64 runner)
+      - name: Install the Rust toolchain (cross)
+        if: matrix.mode == 'cross'
+        run: |
+          rustup toolchain install --profile minimal
+          rustup target add aarch64-unknown-linux-gnu
+
+      - name: Install cargo-zigbuild and Zig (cross)
+        if: matrix.mode == 'cross'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zig"
+          "$RUNNER_TEMP/zig/bin/pip" install --no-cache-dir 'cargo-zigbuild==0.23.4' 'ziglang==0.15.2'
+          echo "$RUNNER_TEMP/zig/bin" >> "$GITHUB_PATH"
+
+      - name: Build the binary (cross, glibc 2.36)
+        if: matrix.mode == 'cross'
+        run: |
+          set -euxo pipefail
+          rm -rf web/dist
+          cp -R .web-dist web/dist
+          # ".2.36" pins the glibc symbol versions to Debian 12's, which the runtime image uses.
+          cargo zigbuild --release --locked -p openbase --target aarch64-unknown-linux-gnu.2.36
+          install -D -m 0755 target/aarch64-unknown-linux-gnu/release/openbase release-bin/arm64/openbase
+
+      - name: Package the binary
+        run: |
+          set -euo pipefail
+          test -x "release-bin/${{ matrix.arch }}/openbase"
+          name="openbase-${VERSION}-linux-${{ matrix.arch }}"
+          mkdir -p "dist-release/$name"
+          install -m 0755 "release-bin/${{ matrix.arch }}/openbase" "dist-release/$name/openbase"
+          cp LICENSE-MIT LICENSE-APACHE README.md deploy/openbase.service "dist-release/$name/"
+          # Same bytes for the same commit: fixed order, owner and times.
+          epoch=$(git log -1 --format=%ct HEAD)
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
+              -C dist-release -cf - "$name" | gzip -9n > "dist-release/$name.tar.gz"
+          rm -rf "dist-release/$name"
+          ls -l dist-release
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tarball-${{ matrix.arch }}
+          path: dist-release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+      # ---- the image around that binary
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU (only to start the cross-built arm64 image in the smoke test)
+        if: matrix.mode == 'cross'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      # Pushed by digest only: no tag points at it yet, so nobody can pull it by accident. The tags
+      # are added in the publish job, after both architectures built and passed the smoke test.
+      - name: Build and push the image by digest
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: runtime-prebuilt
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          labels: |
+            org.opencontainers.image.title=OpenBase
+            org.opencontainers.image.description=Self-hosted Airtable alternative in a single binary
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/${{ needs.prepare.outputs.tag }}/docs/self-hosting.md
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ needs.prepare.outputs.created }}
+            org.opencontainers.image.licenses=MIT OR Apache-2.0
+
+      - name: Smoke test the pushed image
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          docker pull --platform "$PLATFORM" "$IMAGE@$DIGEST"
+          docker tag "$IMAGE@$DIGEST" openbase:release-smoke
+          # The binary reports the release version (the same value /api/health returns).
+          got=$(docker run --rm --platform "$PLATFORM" openbase:release-smoke --version)
+          [[ "$got" == "openbase $VERSION" ]] || { echo "::error::--version printed '$got', expected 'openbase $VERSION'"; exit 1; }
+          scripts/smoke-docker.sh openbase:release-smoke
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 7
+
+  # ------------------------------------------------------------------ publish
+  publish:
+    name: Publish the multi-arch image
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      # Only used for the GitHub build attestation of public repositories (see below).
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      IMAGE: ${{ needs.prepare.outputs.image }}
+      TAGS: ${{ needs.prepare.outputs.tags }}
+    steps:
+      - name: Download the digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the multi-arch manifest and tag it
+        id: manifest
+        working-directory: digests
+        run: |
+          set -euo pipefail
+          files=(*)
+          [[ ${#files[@]} -eq 2 ]] || { echo "::error::expected 2 digests (amd64, arm64), found: ${files[*]}"; exit 1; }
+          refs=()
+          for f in "${files[@]}"; do refs+=("$IMAGE@sha256:$f"); done
+          args=()
+          IFS=, read -ra tags <<<"$TAGS"
+          for t in "${tags[@]}"; do args+=(-t "$IMAGE:$t"); done
+          src="${{ github.server_url }}/${{ github.repository }}"
+          docker buildx imagetools create "${args[@]}" \
+            --annotation "index:org.opencontainers.image.title=OpenBase" \
+            --annotation "index:org.opencontainers.image.source=$src" \
+            --annotation "index:org.opencontainers.image.version=$VERSION" \
+            --annotation "index:org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotation "index:org.opencontainers.image.licenses=MIT OR Apache-2.0" \
+            "${refs[@]}"
+          echo "digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify what was published
+        run: |
+          set -euo pipefail
+          raw=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --raw)
+          archs=$(jq -r '[.manifests[] | select(.platform.os == "linux") | .platform.architecture] | sort | join(",")' <<<"$raw")
+          [[ "$archs" == "amd64,arm64" ]] || { echo "::error::manifest has platforms '$archs', expected amd64,arm64"; exit 1; }
+          attestations=$(jq '[.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest")] | length' <<<"$raw")
+          echo "platforms: $archs; attestation manifests (provenance + SBOM per platform): $attestations"
+          [[ "$attestations" -ge 2 ]] || { echo "::error::expected provenance/SBOM attestations in the manifest list"; exit 1; }
+          IFS=, read -ra tags <<<"$TAGS"
+          {
+            echo "### Published $IMAGE"
+            for t in "${tags[@]}"; do echo "- \`$IMAGE:$t\`"; done
+            echo "- digest \`${{ steps.manifest.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # GitHub build attestations (verifiable with `gh attestation verify`) need a public repository
+      # (or GitHub Enterprise Cloud). Private repositories keep the BuildKit provenance and SBOM
+      # attestations that are already stored in the image.
+      - name: Attest the image (public repositories)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+
+  # ------------------------------------------------------------------- assets
+  assets:
+    name: Attach binaries to the release
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # upload release assets
+      id-token: write # attestation (public repositories only)
+      attestations: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the tarballs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: tarball-*
+          path: assets
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: assets
+        run: |
+          set -euo pipefail
+          tarballs=(./*.tar.gz)
+          [[ ${#tarballs[@]} -eq 2 ]] || { echo "::error::expected 2 tarballs, found: ${tarballs[*]}"; exit 1; }
+          sha256sum -- *.tar.gz | tee SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Attest the tarballs (public repositories)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: assets/*.tar.gz
+
+      - name: Upload to the GitHub Release
+        run: gh release upload "$TAG" assets/*.tar.gz assets/SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
