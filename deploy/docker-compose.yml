@@ -6,6 +6,10 @@
 #
 # Data lives in named volumes: `opengrid-data` (database, attachments,
 # backups) and `caddy-data` (TLS certificates). See docs/self-hosting.md.
+#
+# To try the stack on your own machine without a domain or certificates, add the
+# override: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# (serves plain HTTP on http://localhost:8088).
 
 services:
   opengrid:
@@ -20,8 +24,8 @@ services:
       OPENGRID_DATA_DIR: /data
       OPENGRID_BIND: 0.0.0.0:8080
       OPENGRID_PUBLIC_URL: https://${OPENGRID_DOMAIN:?set OPENGRID_DOMAIN in deploy/.env}
-      # Only Caddy can reach OpenGrid (no published port), so trust its
-      # X-Forwarded-For / X-Forwarded-Proto headers.
+      # Only Caddy can reach OpenGrid (no published port), so trust the client
+      # address it puts in X-Forwarded-For.
       OPENGRID_TRUST_PROXY: "true"
     volumes:
       - opengrid-data:/data
