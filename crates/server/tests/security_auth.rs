@@ -209,6 +209,121 @@ async fn cli_password_reset_revokes_api_tokens() {
         .assert_status(401);
 }
 
+// ------------------------------------------------------------------ invites
+
+fn token_of(url: &serde_json::Value) -> String {
+    url.as_str().unwrap().rsplit('/').next().unwrap().to_string()
+}
+
+async fn invite(app: &TestApp, by: &Client, target: &str, role: &str) -> String {
+    let res = app
+        .post(by, &format!("{target}/invites"), json!({ "role": role }))
+        .await;
+    res.assert_status(201);
+    token_of(&res.body["url"])
+}
+
+#[tokio::test]
+async fn invites_die_with_their_creators_deactivation() {
+    let app = TestApp::new();
+    let admin = app.admin("admin@example.com", "Admin");
+    let owner = app.user("owner@example.com", "Owner");
+    let (ws, _) = app.workspace_with_base(&owner, "Acme");
+    let token = invite(&app, &owner, &format!("/api/workspaces/{ws}"), "owner").await;
+    let preview = format!("/api/invites/by-token/{token}");
+    app.get(&app.anon(), &preview).await.assert_status(200);
+
+    app.patch(
+        &admin,
+        &format!("/api/admin/users/{}", owner.user_id.as_ref().unwrap()),
+        json!({"is_active": false}),
+    )
+    .await
+    .assert_status(200);
+
+    app.get(&app.anon(), &preview).await.assert_status(404);
+    let newcomer = app.user("new@example.com", "New");
+    app.post(&newcomer, &format!("{preview}/accept"), json!({}))
+        .await
+        .assert_status(404);
+    app.signup("fresh@example.com", "a long password!", Some(&token))
+        .await
+        .0
+        .assert_status(404);
+    assert_eq!(
+        app.query_i64("SELECT count(*) FROM workspace_members WHERE role = 'owner'", &[]),
+        1
+    );
+}
+
+#[tokio::test]
+async fn invites_die_when_their_creator_loses_the_role_to_grant_them() {
+    let app = TestApp::new();
+    let owner = app.user("owner@example.com", "Owner");
+    let second = app.user("second@example.com", "Second");
+    let (ws, _) = app.workspace_with_base(&owner, "Acme");
+    app.grant_workspace_role(&second, &ws, "owner");
+    let target = format!("/api/workspaces/{ws}");
+    let from_second = invite(&app, &second, &target, "owner").await;
+    let from_owner = invite(&app, &owner, &target, "owner").await;
+
+    // Demoted: no longer an Owner, so their pending invites stop working.
+    app.grant_workspace_role(&second, &ws, "editor");
+    let newcomer = app.user("new@example.com", "New");
+    app.post(
+        &newcomer,
+        &format!("/api/invites/by-token/{from_second}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(404);
+    // Removed from the workspace entirely: same.
+    app.state
+        .db
+        .write_sync(|tx| Ok(tx.execute("DELETE FROM workspace_members WHERE role = 'editor'", [])?))
+        .unwrap();
+    app.get(&app.anon(), &format!("/api/invites/by-token/{from_second}"))
+        .await
+        .assert_status(404);
+    // The remaining owner's invite is unaffected.
+    app.post(
+        &newcomer,
+        &format!("/api/invites/by-token/{from_owner}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(200);
+}
+
+#[tokio::test]
+async fn creators_cannot_accept_their_own_invites() {
+    let app = TestApp::new();
+    let owner = app.user("owner@example.com", "Owner");
+    let creator = app.user("creator@example.com", "Creator");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
+    app.grant_workspace_role(&creator, &ws, "creator");
+    let token = invite(&app, &creator, &format!("/api/bases/{base}"), "creator").await;
+    let res = app
+        .post(
+            &creator,
+            &format!("/api/invites/by-token/{token}/accept"),
+            json!({}),
+        )
+        .await;
+    res.assert_status(403);
+    // No standalone base grant that would outlive removal from the workspace.
+    assert_eq!(app.query_i64("SELECT count(*) FROM base_members", &[]), 0);
+    // Someone else can still use it.
+    let other = app.user("other@example.com", "Other");
+    app.post(
+        &other,
+        &format!("/api/invites/by-token/{token}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(200);
+}
+
 // ------------------------------------------------- client IP / CSRF handling
 
 #[tokio::test]

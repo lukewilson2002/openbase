@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::{hash_token, new_id, new_token};
-use crate::perm::Role;
+use crate::perm::{self, Role};
 
 /// Invites expire after 7 days.
 pub const INVITE_TTL_MS: i64 = 7 * 24 * 3600 * 1000;
@@ -162,7 +162,36 @@ fn live_target_name(conn: &Connection, target: &InviteTarget) -> AppResult<Optio
     })
 }
 
-/// An invite that can still be accepted: unexpired, unaccepted, target alive.
+/// Whether the invite's creator can still hand out its role: an active user
+/// who is currently an Owner of the workspace (or Creator of the base, the
+/// role needed to invite) and holds at least the invited role. An invite is
+/// only as good as its creator's standing, so removal, demotion or
+/// deactivation of the creator voids their pending invites.
+fn creator_may_still_invite(conn: &Connection, invite: &InviteRow) -> AppResult<bool> {
+    let Some(creator) = &invite.created_by else {
+        return Ok(false);
+    };
+    let active: bool = conn
+        .query_row(
+            "SELECT is_active FROM users WHERE id = ?1",
+            [creator],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    if !active {
+        return Ok(false);
+    }
+    let (held, needed) = match invite.target()? {
+        InviteTarget::Workspace(w) => (perm::workspace_role(conn, creator, &w)?, Role::Owner),
+        InviteTarget::Base(b) => (perm::base_role(conn, creator, &b)?, Role::Creator),
+    };
+    let needed = needed.max(invite.role()?);
+    Ok(held.is_some_and(|h| h >= needed))
+}
+
+/// An invite that can still be accepted: unexpired, unaccepted, target alive,
+/// creator still entitled to invite.
 pub fn find_valid_by_token(conn: &Connection, token: &str) -> AppResult<Option<InviteRow>> {
     let row = conn
         .query_row(
@@ -175,7 +204,7 @@ pub fn find_valid_by_token(conn: &Connection, token: &str) -> AppResult<Option<I
         )
         .optional()?;
     let Some(row) = row else { return Ok(None) };
-    if live_target_name(conn, &row.target()?)?.is_none() {
+    if live_target_name(conn, &row.target()?)?.is_none() || !creator_may_still_invite(conn, &row)? {
         return Ok(None);
     }
     Ok(Some(row))
@@ -248,6 +277,11 @@ pub fn accept(
     user_id: &str,
     user_email: &str,
 ) -> AppResult<InviteInfo> {
+    // An invite grants access to someone else. Letting its creator redeem it
+    // would mint a standalone grant that outlives their membership.
+    if invite.created_by.as_deref() == Some(user_id) {
+        return Err(AppError::forbidden("you cannot accept your own invite"));
+    }
     if let Some(email) = &invite.info.email {
         if !email.eq_ignore_ascii_case(user_email.trim()) {
             return Err(AppError::forbidden(
@@ -284,6 +318,11 @@ mod tests {
         let u = users::create(&c, "owner@example.com", "Owner", "!", false).unwrap();
         c.execute(
             "INSERT INTO workspaces (id, name, created_by, created_at) VALUES ('wsp1', 'Acme', ?1, 0)",
+            [&u],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES ('wsp1', ?1, 'owner', 0)",
             [&u],
         )
         .unwrap();
