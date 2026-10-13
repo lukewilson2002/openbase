@@ -688,3 +688,60 @@ async fn automations_cannot_trigger_each_other_through_engine_writes() {
     }
     assert_eq!(env.run_count(m["id"].as_str().unwrap()), 0);
 }
+
+#[tokio::test]
+async fn a_created_record_and_its_step_log_commit_together() {
+    let env = Env::new().await;
+    let log = log_table(&env).await;
+    let a = env
+        .create(
+            "log it",
+            env.trigger_created(),
+            json!([{ "type": "create_record", "table_id": log.id,
+                     "values": { "Name": "entry" } }]),
+        )
+        .await;
+    let aid = a["id"].as_str().unwrap().to_string();
+    let logged = |env: &Env| {
+        env.f.app.query_i64(
+            "SELECT count(*) FROM records WHERE table_id = ?1 AND deleted_at IS NULL",
+            &[&log.id],
+        )
+    };
+
+    // Saving the "succeeded" line of a create_record step fails (as if the
+    // process died right after the record's commit): no record may exist
+    // without the line that stops a resumed run from creating it again.
+    schema_support::sql(&env.f.app, |tx| {
+        tx.execute_batch(
+            "CREATE TRIGGER no_create_record_marker BEFORE UPDATE ON automation_runs
+             WHEN NEW.status = 'running'
+              AND NEW.log LIKE '%\"action\":\"create_record\",\"status\":\"succeeded\"%'
+             BEGIN SELECT RAISE(ABORT, 'cannot save the step log'); END",
+        )
+    });
+    env.f.create(env.table(), json!({ &env.name: "Ada" })).await;
+    env.drain().await;
+    assert_eq!(logged(&env), 0, "a record was created without its log line");
+    let runs = env.runs(&aid).await;
+    assert!(runs.iter().all(|r| r["status"] != "succeeded"), "{runs:#?}");
+
+    // Once saving works again a run creates its record exactly once and the
+    // log says so.
+    schema_support::sql(&env.f.app, |tx| {
+        tx.execute_batch("DROP TRIGGER no_create_record_marker")
+    });
+    env.f.create(env.table(), json!({ &env.name: "Bob" })).await;
+    env.drain().await;
+    assert_eq!(logged(&env), 1);
+    let runs = env.runs(&aid).await;
+    let run = runs.last().unwrap();
+    assert_eq!(run["status"], "succeeded", "{run:#}");
+    let succeeded = run["log"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["action"] == "create_record" && l["status"] == "succeeded")
+        .count();
+    assert_eq!(succeeded, 1, "{run:#}");
+}
