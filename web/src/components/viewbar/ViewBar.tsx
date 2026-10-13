@@ -58,8 +58,14 @@ export interface ViewBarProps {
   searchOpen: boolean;
   onSearchOpenChange: (open: boolean) => void;
   searchInputRef: RefObject<HTMLInputElement | null>;
-  onAddField: () => void;
+  onAddField?: () => void;
   canManageFields: boolean;
+  /** Toolbar sections a view type does not use can be switched off (all on by default). */
+  features?: { group?: boolean; color?: boolean; rowHeight?: boolean; shareView?: boolean };
+  /** Label of the hide-fields menu ("Hide fields" in the grid, "Card fields" on card views). */
+  hideFieldsNoun?: string;
+  /** View-type specific settings (stack field, date fields...), shown before the search box. */
+  extra?: React.ReactNode;
 }
 
 function ToolButton({ icon, label, active, children, disabledNote, wide }: { icon: React.ReactNode; label: string; active?: boolean; children: React.ReactNode; disabledNote?: string; wide?: boolean }) {
@@ -207,6 +213,7 @@ export function ViewBar(props: ViewBarProps) {
   const heights: RowHeight[] = ["short", "medium", "tall", "extra_tall"];
   const rowColorActive = !!config.row_color && (config.row_color.mode === "by_select" || config.row_color.rules.length > 0);
   const showSearch = searchOpen || search !== "";
+  const features = { group: true, color: true, rowHeight: true, shareView: true, ...props.features };
 
   return (
     <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-0.5 bg-surface px-2 py-1">
@@ -215,7 +222,7 @@ export function ViewBar(props: ViewBarProps) {
           <Lock aria-hidden className="size-3" /> Locked
         </span>
       )}
-      <ToolButton icon={<EyeOff aria-hidden className="size-4" />} label={hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : "Hide fields"} active={hiddenCount > 0}>
+      <ToolButton icon={<EyeOff aria-hidden className="size-4" />} label={hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : (props.hideFieldsNoun ?? "Hide fields")} active={hiddenCount > 0}>
         <HideFields table={table} config={config} update={update} />
       </ToolButton>
 
@@ -223,6 +230,7 @@ export function ViewBar(props: ViewBarProps) {
         <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={false} />
       </ToolButton>
 
+      {features.group && (
       <ToolButton icon={<Group aria-hidden className="size-4" />} label={config.groups.length > 0 ? `Grouped by ${config.groups.length} field${config.groups.length === 1 ? "" : "s"}` : "Group"} active={config.groups.length > 0} disabledNote={queryNote} wide>
         <SortListEditor
           noun="group"
@@ -236,6 +244,7 @@ export function ViewBar(props: ViewBarProps) {
           onMove={(a, b) => update((c) => moveSortLike(c, "groups", a, b))}
         />
       </ToolButton>
+      )}
 
       <ToolButton icon={<ListFilter aria-hidden className="size-4" />} label={config.sorts.length > 0 ? `Sorted by ${config.sorts.length} field${config.sorts.length === 1 ? "" : "s"}` : "Sort"} active={config.sorts.length > 0} disabledNote={queryNote} wide>
         <SortListEditor
@@ -251,10 +260,15 @@ export function ViewBar(props: ViewBarProps) {
         />
       </ToolButton>
 
+      {features.color && (
       <ToolButton icon={<PaintBucket aria-hidden className="size-4" />} label="Color" active={rowColorActive} disabledNote={colorNote} wide>
         <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} />
       </ToolButton>
+      )}
 
+      {props.extra}
+
+      {features.rowHeight && (
       <ToolButton icon={<Rows3 aria-hidden className="size-4" />} label="Row height">
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1 text-[0.8125rem] font-medium">Row height</legend>
@@ -265,6 +279,7 @@ export function ViewBar(props: ViewBarProps) {
           ))}
         </fieldset>
       </ToolButton>
+      )}
 
       {props.hasLocalQuery && !canConfigure && (
         <span role="status" className="ml-1 inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs" title="Your filters, sorts and groups are only applied for you">
@@ -276,7 +291,7 @@ export function ViewBar(props: ViewBarProps) {
       )}
 
       <div className="ml-auto flex items-center gap-1">
-        {props.canManageFields && (
+        {props.canManageFields && props.onAddField && (
           <Button size="sm" variant="ghost" onClick={props.onAddField} className="hidden md:inline-flex">
             <Plus aria-hidden className="size-4" /> Add field
           </Button>
@@ -309,9 +324,11 @@ export function ViewBar(props: ViewBarProps) {
             <Search aria-hidden className="size-4" />
           </IconButton>
         )}
-        <Button size="sm" variant="secondary" disabled title="Sharing arrives with the sharing workstream">
-          <Share2 aria-hidden className="size-4" /> <span className="hidden sm:inline">Share view</span>
-        </Button>
+        {features.shareView && (
+          <Button size="sm" variant="secondary" disabled title="Sharing arrives with the sharing workstream">
+            <Share2 aria-hidden className="size-4" /> <span className="hidden sm:inline">Share view</span>
+          </Button>
+        )}
       </div>
     </div>
   );

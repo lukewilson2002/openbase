@@ -1,0 +1,135 @@
+/**
+ * Swimlanes and date writes for the timeline: grouping records into lanes (by the view's group
+ * headers or client-side by the timeline's group field), and the field values a drag or a
+ * create-by-dragging produces.
+ */
+import type { DateOptions, Field, GroupHeader, TableRecord } from "@/api/types";
+import { displayText, type FormatCtx } from "@/lib/cells/format";
+import { kindClassOf, linkRefs, selectChoicesOf, stringItems } from "@/lib/cells/kinds";
+import type { DateFields } from "../common/dateFields";
+import { DAY_MS, wallToStored, wallYmd, type Span } from "../common/wallTime";
+import type { DragMode } from "./geometry";
+
+export interface Lane {
+  key: string;
+  label: string;
+  /** Palette colour (single select lanes). */
+  color?: string;
+  /** Cell value (view form) that puts a new record in this lane; undefined when it cannot be set. */
+  value?: unknown;
+  /** The field this lane groups by, when it groups. */
+  fieldId?: string;
+  records: TableRecord[];
+}
+
+const EMPTY_LABEL = "(Empty)";
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/** Lane identity and label of one record for a group field. */
+function laneOf(field: Field, record: TableRecord, ctx: FormatCtx): { key: string; label: string; color?: string; value?: unknown } {
+  const v = record.values[field.id];
+  const kind = kindClassOf(field);
+  switch (kind) {
+    case "select":
+    case "multi_select": {
+      const id = stringItems(v)[0];
+      const choice = id ? selectChoicesOf(field).find((c) => c.id === id) : undefined;
+      return choice ? { key: choice.id, label: choice.name, color: choice.color, value: kind === "select" ? choice.id : [choice.id] } : { key: "", label: EMPTY_LABEL, value: null };
+    }
+    case "user":
+    case "user_multi": {
+      const id = stringItems(v)[0];
+      return id ? { key: id, label: ctx.userName(id) ?? id, value: [id] } : { key: "", label: EMPTY_LABEL, value: null };
+    }
+    case "link": {
+      const ref = linkRefs(v)[0];
+      return ref ? { key: ref.id, label: ref.name || ref.id, value: [ref] } : { key: "", label: EMPTY_LABEL, value: null };
+    }
+    case "bool":
+      return v === true ? { key: "true", label: "Checked", value: true } : { key: "false", label: "Unchecked", value: null };
+    default: {
+      const text = displayText(field, v, ctx).trim();
+      // Text, numbers and dates can be written back as-is; computed fields cannot.
+      return text ? { key: text, label: text, value: field.type === "formula" || field.type === "lookup" || field.type === "rollup" ? undefined : v } : { key: "", label: EMPTY_LABEL, value: null };
+    }
+  }
+}
+
+/** Lane display order: choices in choice order, others by label, "(Empty)" last. */
+function compareLanes(field: Field, a: Lane, b: Lane): number {
+  if (a.key === "" || b.key === "") return a.key === b.key ? 0 : a.key === "" ? 1 : -1;
+  const choices = selectChoicesOf(field);
+  if (choices.length > 0) return choices.findIndex((c) => c.id === a.key) - choices.findIndex((c) => c.id === b.key);
+  if (field.type === "checkbox") return a.key === "false" ? -1 : 1;
+  return collator.compare(a.label, b.label);
+}
+
+/** Group records into lanes by a field, client-side. Records keep their order inside a lane. */
+export function groupIntoLanes(records: readonly TableRecord[], field: Field, ctx: FormatCtx): Lane[] {
+  const lanes = new Map<string, Lane>();
+  for (const r of records) {
+    const l = laneOf(field, r, ctx);
+    let lane = lanes.get(l.key);
+    if (!lane) {
+      lane = { key: l.key, label: l.label, color: l.color, value: l.value, fieldId: field.id, records: [] };
+      lanes.set(l.key, lane);
+    }
+    lane.records.push(r);
+  }
+  // Select lanes show every choice, even without records, so a record can be dragged into them.
+  for (const c of selectChoicesOf(field)) {
+    if (!lanes.has(c.id)) lanes.set(c.id, { key: c.id, label: c.name, color: c.color, value: field.type === "single_select" ? c.id : [c.id], fieldId: field.id, records: [] });
+  }
+  return [...lanes.values()].sort((a, b) => compareLanes(field, a, b));
+}
+
+/** Lanes from the first level of the view's own grouping (`QueryResponse.groups`). */
+export function lanesFromGroups(records: readonly TableRecord[], groups: readonly GroupHeader[]): Lane[] {
+  return groups
+    .filter((g) => g.depth === 0)
+    .map((g) => ({ key: g.key, label: g.label, value: g.value ?? undefined, fieldId: g.field_id, records: records.slice(g.start, g.start + g.count) }));
+}
+
+export const NO_LANE: Lane = { key: "", label: "", records: [] };
+
+// ---- date writes -------------------------------------------------------------------------------
+
+export type TimelineDateFields = DateFields;
+
+/** Stored value for an exclusive wall end, respecting a date-only end's inclusive last day. */
+function storeEnd(endExclusiveMs: number, end: { opts: DateOptions }, zone: string): string {
+  return end.opts.include_time ? wallToStored(endExclusiveMs, end.opts, zone) : wallToStored(Math.floor((endExclusiveMs - 1) / DAY_MS) * DAY_MS, end.opts, zone);
+}
+
+/** Field values to write after a drag: only the dates the drag actually changed. */
+export function dragWrites(before: Span, after: Span, mode: DragMode, fields: TimelineDateFields, zone: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if ((mode === "move" || mode === "start") && after.startMs !== before.startMs) out[fields.start.field.id] = wallToStored(after.startMs, fields.start.opts, zone);
+  if (fields.end && before.hasEnd && (mode === "move" || mode === "end") && after.endMs !== before.endMs) out[fields.end.field.id] = storeEnd(after.endMs, fields.end, zone);
+  return out;
+}
+
+/** Values for a record created by dragging across `fromDay..toDay` (day numbers, either order). */
+export function createWrites(fromDay: number, toDay: number, fields: TimelineDateFields, zone: string): Record<string, string> {
+  const first = Math.min(fromDay, toDay);
+  const last = Math.max(fromDay, toDay);
+  const startMs = first * DAY_MS + (fields.start.opts.include_time ? 9 * 3_600_000 : 0);
+  const out: Record<string, string> = { [fields.start.field.id]: wallToStored(startMs, fields.start.opts, zone) };
+  if (fields.end) {
+    const endMs = fields.end.opts.include_time ? last * DAY_MS + 17 * 3_600_000 : last * DAY_MS;
+    out[fields.end.field.id] = wallToStored(endMs, fields.end.opts, zone);
+  }
+  return out;
+}
+
+/** "Mar 3 – Mar 8" label shown on a bar while it is dragged. */
+export function spanLabel(span: Span): string {
+  const fmt = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()}`;
+  };
+  if (!span.hasEnd) return fmt(span.startMs);
+  const lastDay = span.startDateOnly ? span.endMs - DAY_MS : span.endMs;
+  return wallYmd(span.startMs) === wallYmd(lastDay) ? fmt(span.startMs) : `${fmt(span.startMs)} – ${fmt(lastDay)}`;
+}

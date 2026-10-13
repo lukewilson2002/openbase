@@ -7,6 +7,23 @@ import { USER, apiError, makeSchema, mockApi, renderApp } from "@/test/utils";
 // and has its own tests under src/views/grid, so the shell tests render the placeholder for it.
 vi.mock("@/views/grid/GridView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
+  const { useSearchParams } = await import("react-router");
+  // Shows the ?record= parameter so tests can see whether the shell's redirects keep it.
+  function Stub(props: Parameters<typeof PlaceholderView>[0]) {
+    const [params] = useSearchParams();
+    return (
+      <>
+        <PlaceholderView {...props} />
+        <output data-testid="record-param">{params.get("record")}</output>
+      </>
+    );
+  }
+  return { default: Stub };
+});
+
+// Same for the kanban view (its own tests live in src/views/kanban).
+vi.mock("@/views/kanban/KanbanView", async () => {
+  const { PlaceholderView } = await import("@/views/PlaceholderView");
   return { default: PlaceholderView };
 });
 
@@ -218,5 +235,28 @@ describe("base shell", () => {
       await user.click(await within(dialog).findByRole("button", { name: "Revoke invite" }));
       await waitFor(() => expect(api.callsTo("DELETE /api/invites/inv1")).toHaveLength(1));
     });
+  });
+});
+
+describe("top bar additions", () => {
+  it("shows the notification bell to everyone and the trash to creators only", async () => {
+    openBase("viewer", { "GET /api/notifications": { notifications: [], unread: 2 } });
+    await screen.findByText("Grid view coming soon");
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Trash" })).not.toBeInTheDocument();
+  });
+
+  it("opens the trash of the base for a creator", async () => {
+    const user = userEvent.setup();
+    openBase("creator", { "GET /api/bases/app1/trash": { items: [{ kind: "table", id: "tbl9", name: "Old budget", table_id: null, deleted_at: Date.now() - 86_400_000 }] } });
+    await user.click(await screen.findByRole("button", { name: "Trash" }));
+    const dialog = await screen.findByRole("dialog", { name: "Trash" });
+    expect(await within(dialog).findByText("Old budget")).toBeInTheDocument();
+  });
+
+  it("keeps ?record= when it canonicalises a link such as a notification's", async () => {
+    openBase("owner", {}, "/base/app1/tbl1?record=rec1");
+    expect(await screen.findByTestId("record-param")).toHaveTextContent("rec1");
+    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
   });
 });

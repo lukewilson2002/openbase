@@ -14,11 +14,11 @@ import type { ViewComponent } from "./types";
 export const viewRegistry: Record<ViewType, ViewComponent> = {
   grid: lazy(() => import("./grid/GridView")), // W9a
   form: PlaceholderView, // W9b
-  gallery: PlaceholderView, // W9b
-  kanban: PlaceholderView, // W9b
-  calendar: PlaceholderView, // W9b
-  timeline: PlaceholderView, // W9b
-  list: PlaceholderView, // W9b
+  gallery: lazy(() => import("./gallery/GalleryView")), // W9b
+  kanban: lazy(() => import("./kanban/KanbanView")), // W9b
+  calendar: lazy(() => import("./calendar/CalendarView")), // W9b
+  timeline: lazy(() => import("./timeline/TimelineView")), // W9b
+  list: lazy(() => import("./list/ListView")), // W9b
 };
 
 export function getViewComponent(type: ViewType): ViewComponent {

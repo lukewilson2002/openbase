@@ -7,6 +7,9 @@
  * attachments, fields, view config, SSE) to exercise every grid code path with realistic shapes.
  * Role is switchable with `?role=` on the base URL via the `og-mock-role` cookie
  * (`/api/__mock/role/viewer`), and `/api/__mock/external-edit` simulates another client's write.
+ *
+ * The "Projects" table (tbl3, ~40 records) feeds the kanban, gallery, calendar, timeline and list
+ * views; the trash and notification endpoints serve small fixtures.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
@@ -17,6 +20,7 @@ type Obj = Record<string, any>;
 const BASE_ID = "app1";
 const T_TASKS = "tbl1";
 const T_PEOPLE = "tbl2";
+const T_PROJECTS = "tbl3";
 const ME = "usr1";
 const USERS = [
   { id: "usr1", name: "Ada Lovelace", email: "ada@example.com" },
@@ -88,6 +92,36 @@ const peopleFields: Obj[] = [
   field("fld_p_tasks", "Tasks", "link", { linked_table_id: T_TASKS, inverse_field_id: "fld_owner", single: false }, T_PEOPLE),
 ];
 
+const PROJECT_STATUS = [
+  { id: "pst1", name: "Backlog", color: "gray" },
+  { id: "pst2", name: "Planned", color: "cyan" },
+  { id: "pst3", name: "In progress", color: "blue" },
+  { id: "pst4", name: "Review", color: "orange" },
+  { id: "pst5", name: "Shipped", color: "green" },
+];
+const TEAMS = [
+  { id: "pte1", name: "Platform", color: "purple" },
+  { id: "pte2", name: "Growth", color: "teal" },
+  { id: "pte3", name: "Design", color: "pink" },
+];
+const dateTimeOpts = { include_time: true, date_format: "friendly", time_format: "h12", timezone: "America/New_York" };
+
+const projectFields: Obj[] = [
+  field("fld_j_name", "Project", "single_line_text", {}, T_PROJECTS),
+  field("fld_j_status", "Status", "single_select", { choices: PROJECT_STATUS }, T_PROJECTS),
+  field("fld_j_team", "Team", "single_select", { choices: TEAMS }, T_PROJECTS),
+  field("fld_j_owner", "Owner", "user", { multiple: false, notify: false }, T_PROJECTS),
+  field("fld_j_start", "Start", "date", dateOpts, T_PROJECTS),
+  field("fld_j_end", "End", "date", dateOpts, T_PROJECTS),
+  field("fld_j_review", "Review meeting", "date", dateTimeOpts, T_PROJECTS),
+  field("fld_j_budget", "Budget", "currency", { precision: 0, symbol: "$", allow_negative: false }, T_PROJECTS),
+  field("fld_j_progress", "Progress", "percent", { precision: 0, allow_negative: false }, T_PROJECTS),
+  field("fld_j_cover", "Cover", "attachment", {}, T_PROJECTS),
+  field("fld_j_deps", "Depends on", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_blocks", single: false }, T_PROJECTS),
+  field("fld_j_blocks", "Blocks", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_deps", single: false }, T_PROJECTS),
+  field("fld_j_done", "Shipped", "checkbox", { icon: "check", color: "green" }, T_PROJECTS),
+];
+
 function emptyConfig(): Obj {
   return {
     filter: null,
@@ -113,6 +147,23 @@ const views: Obj[] = [
   { id: "viw1", table_id: T_TASKS, name: "All tasks", type: "grid", config: emptyConfig(), personal: false, locked: false },
   { id: "viw2", table_id: T_TASKS, name: "By status", type: "grid", config: { ...emptyConfig(), groups: [{ field_id: "fld_status", direction: "asc" }], row_color: { mode: "by_select", field_id: "fld_status" } }, personal: false, locked: false },
   { id: "viw3", table_id: T_PEOPLE, name: "Everyone", type: "grid", config: emptyConfig(), personal: false, locked: false },
+  { id: "viw10", table_id: T_PROJECTS, name: "All projects", type: "grid", config: emptyConfig(), personal: false, locked: false },
+  {
+    id: "viw11",
+    table_id: T_PROJECTS,
+    name: "Board",
+    type: "kanban",
+    config: { ...emptyConfig(), hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [] }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
+    personal: false,
+    locked: false,
+  },
+  { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [] }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
+  { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
+  { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
+  { id: "viw15", table_id: T_PROJECTS, name: "Review calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_review", end_field_id: null } }, personal: false, locked: false },
+  { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
+  { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
+  { id: "viw18", table_id: T_PROJECTS, name: "Unconfigured board", type: "kanban", config: emptyConfig(), personal: false, locked: false },
 ];
 
 interface Rec {
@@ -177,16 +228,86 @@ function seedData(): void {
 }
 seedData();
 
+const PROJECT_WORDS = ["Onboarding revamp", "Billing v2", "Search relevance", "Mobile beta", "Webhook retries", "Audit log", "SSO pilot", "Data export", "Dark mode", "Invoice templates", "Rate limiting", "Admin console", "Import wizard", "Usage dashboard", "Email digests", "Accessibility pass", "Perf budget", "Backup restore drill", "Docs site", "Partner API", "Notifications inbox", "Role editor", "Offline cache", "Release train", "Customer portal", "Referral program", "Pricing page", "Status page", "Load testing", "Security review", "Brand refresh", "Help center", "Roadmap board", "Churn survey", "Cohort reports", "Launch checklist", "Sandbox accounts", "Changelog", "Keyboard shortcuts", "Calendar sync"];
+
+function seedProjects(): void {
+  const DAY = 86_400_000;
+  const todayMs = Math.floor(Date.now() / DAY) * DAY;
+  const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const ids: string[] = [];
+  const endAt: (number | null)[] = [];
+  PROJECT_WORDS.forEach((name, i) => {
+    let start = todayMs + (Math.floor(rnd() * 100) - 40) * DAY;
+    const len = 2 + Math.floor(rnd() * 22);
+    // About half depend on an earlier project; most start after it ends, a few overlap (shown red).
+    const dep = i > 2 && rnd() > 0.5 ? Math.floor(rnd() * i) : -1;
+    if (dep >= 0 && endAt[dep] != null && rnd() > 0.3) start = endAt[dep]! + (1 + Math.floor(rnd() * 4)) * DAY;
+    const v: Obj = {
+      fld_j_name: name,
+      fld_j_status: PROJECT_STATUS[Math.min(4, Math.max(0, Math.floor((todayMs - start) / DAY / 12) + 1 + (rnd() > 0.7 ? 1 : 0)))]!.id,
+      fld_j_team: pick(TEAMS).id,
+      fld_j_budget: Math.round(rnd() * 90) * 1000 + 5000,
+      fld_j_progress: Math.round(rnd() * 100) / 100,
+    };
+    if (rnd() > 0.25) v.fld_j_owner = [pick(USERS).id];
+    // A handful have no dates (unscheduled), a few are milestones (start only).
+    let end: number | null = null;
+    if (i % 9 !== 4) {
+      v.fld_j_start = ymd(start);
+      if (i % 7 !== 3) {
+        end = start + len * DAY;
+        v.fld_j_end = ymd(end);
+      }
+    }
+    endAt.push(end);
+    if (i % 3 === 0) v.fld_j_review = new Date(start + (len > 8 ? 8 : 1) * DAY + 15 * 3_600_000).toISOString();
+    if (i % 3 === 1) v.fld_j_cover = [{ id: newId("att"), filename: `cover-${i}.png`, mime: "image/png", size: 54321, width: 800, height: 600 }];
+    if (v.fld_j_status === PROJECT_STATUS[4]!.id) v.fld_j_done = true;
+    // Dependencies point at earlier projects; some start before their predecessor ends (violated).
+    const deps: string[] = [];
+    if (dep >= 0) deps.push(ids[dep]!);
+    if (i > 5 && rnd() > 0.9) deps.push(ids[Math.floor(rnd() * i)]!);
+    if (deps.length) v.fld_j_deps = [...new Set(deps)];
+    ids.push(addRecord(T_PROJECTS, v).id);
+  });
+}
+seedProjects();
+
+// ---- notifications and trash fixtures -----------------------------------------------------------
+
+const notifications: Obj[] = [];
+function seedNotifications(): void {
+  const firstTask = [...records.values()].find((r) => r.table_id === T_TASKS)!;
+  const project = [...records.values()].find((r) => r.table_id === T_PROJECTS)!;
+  const now = Date.now();
+  notifications.push(
+    { id: "ntf1", kind: "mention", payload: { base_id: BASE_ID, table_id: T_PROJECTS, record_id: project.id, base_name: "Project tracker", table_name: "Projects", record_name: String(project.values.fld_j_name), comment_id: "cmt_demo", snippet: "@Ada can you confirm the launch date?", author_id: "usr2", author_name: "Grace Hopper" }, read_at: null, created_at: now - 12 * 60_000 },
+    { id: "ntf2", kind: "assigned", payload: { base_id: BASE_ID, table_id: T_TASKS, record_id: firstTask.id, base_name: "Project tracker", table_name: "Tasks", record_name: String(firstTask.values.fld_name), field_id: "fld_owner", field_name: "Owner", assigned_by: "usr3" }, read_at: null, created_at: now - 3 * 3_600_000 },
+    { id: "ntf3", kind: "automation", payload: { automation_name: "Weekly digest", message: "Sent the digest to 4 people", base_id: BASE_ID }, read_at: null, created_at: now - 26 * 3_600_000 },
+    { id: "ntf4", kind: "invite", payload: { actor_name: "Margaret Hamilton", base_name: "Roadmap", token: "demo-token" }, read_at: now - 86_400_000, created_at: now - 2 * 86_400_000 },
+  );
+}
+seedNotifications();
+
+/** Trashed schema items the records map does not model (records come from the soft-deleted flag). */
+const trashedExtras: Obj[] = [
+  { kind: "table", id: "tbl_old", name: "Old budget", table_id: null, deleted_at: Date.now() - 5 * 86_400_000 },
+  { kind: "field", id: "fld_old", name: "Legacy notes", table_id: T_TASKS, deleted_at: Date.now() - 3_600_000 },
+  { kind: "view", id: "viw_old", name: "Archive board", table_id: T_PROJECTS, deleted_at: Date.now() - 20 * 86_400_000 },
+];
+
 // ---- schema -----------------------------------------------------------------------------------
+
+const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fld_p_name", [T_PROJECTS]: "fld_j_name" };
 
 function tableDto(id: string): Obj {
   return {
     id,
     base_id: BASE_ID,
-    name: id === T_TASKS ? "Tasks" : "People",
+    name: id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People",
     description: null,
-    primary_field_id: id === T_TASKS ? "fld_name" : "fld_p_name",
-    fields: id === T_TASKS ? taskFields : peopleFields,
+    primary_field_id: PRIMARY[id]!,
+    fields: fieldsOf(id),
     views: views.filter((v) => v.table_id === id),
   };
 }
@@ -195,18 +316,18 @@ let roleOverride: string | null = null;
 
 function baseDto(req: IncomingMessage): Obj {
   const cookie = /og-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
-  return { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE)] };
+  return { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE), tableDto(T_PROJECTS)] };
 }
 
 function fieldsOf(table: string): Obj[] {
-  return table === T_TASKS ? taskFields : peopleFields;
+  return table === T_TASKS ? taskFields : table === T_PROJECTS ? projectFields : peopleFields;
 }
 
 // ---- record shaping ---------------------------------------------------------------------------
 
 function nameOf(recId: string): string {
   const r = records.get(recId);
-  return r ? String(r.values[r.table_id === T_TASKS ? "fld_name" : "fld_p_name"] ?? "") : "";
+  return r ? String(r.values[PRIMARY[r.table_id]!] ?? "") : "";
 }
 
 function shape(rec: Rec): Obj {
@@ -226,6 +347,11 @@ function shape(rec: Rec): Obj {
     values.fld_modifier = rec.updated_by;
     values.fld_auto = rec.autonumber;
     if (rec.values.fld_url) values.fld_btn = rec.values.fld_url;
+  } else if (rec.table_id === T_PROJECTS) {
+    const deps: string[] = rec.values.fld_j_deps ?? [];
+    if (deps.length) values.fld_j_deps = deps.filter((id) => records.get(id) && !records.get(id)!.deleted).map((id) => ({ id, name: nameOf(id) }));
+    const blocks = [...records.values()].filter((r) => !r.deleted && r.table_id === T_PROJECTS && (r.values.fld_j_deps ?? []).includes(rec.id));
+    if (blocks.length) values.fld_j_blocks = blocks.map((r) => ({ id: r.id, name: nameOf(r.id) }));
   } else {
     const tasks = [...records.values()].filter((r) => !r.deleted && r.table_id === T_TASKS && (r.values.fld_owner ?? []).includes(rec.id));
     values.fld_p_tasks = tasks.slice(0, 20).map((t) => ({ id: t.id, name: String(t.values.fld_name ?? "") }));
@@ -315,13 +441,28 @@ function runQuery(view: Obj, body: Obj): Obj {
   const fields = fieldsOf(view.table_id);
   const cfg = view.config;
   let rows = [...records.values()].filter((r) => !r.deleted && r.table_id === view.table_id).sort((a, b) => a.order - b.order).map(shape);
-  rows = rows.filter((r) => matchFilter(cfg.filter, r, fields));
+  // A transient override replaces the saved filter / sorts / groups for this request only.
+  const transient = (body.transient ?? {}) as Obj;
+  const filter = transient.filter ?? cfg.filter;
+  const sorts: Obj[] = transient.sorts ?? cfg.sorts;
+  const groupBy: Obj[] = transient.groups ?? cfg.groups;
+  rows = rows.filter((r) => matchFilter(filter, r, fields));
+  if (body.range) {
+    // Records whose [start, end] (end defaults to start) overlaps [from, to]; records without a start are left out.
+    const { field_id, end_field_id, from, to } = body.range as Obj;
+    rows = rows.filter((r) => {
+      const a = typeof r.values[field_id] === "string" ? (r.values[field_id] as string).slice(0, 10) : null;
+      if (!a) return false;
+      const b = end_field_id && typeof r.values[end_field_id] === "string" ? (r.values[end_field_id] as string).slice(0, 10) : a;
+      return a <= to && (b < a ? a : b) >= from;
+    });
+  }
   const search = String(body.search ?? "").trim().toLowerCase();
   if (search) {
     const visible = fields.filter((f) => !cfg.hidden_fields.includes(f.id));
     rows = rows.filter((r) => visible.some((f) => textOf(f, r.values[f.id]).toLowerCase().includes(search)));
   }
-  const keys = [...cfg.groups, ...cfg.sorts];
+  const keys = [...groupBy, ...sorts];
   if (keys.length) {
     rows.sort((a, b) => {
       for (const k of keys) {
@@ -334,10 +475,10 @@ function runQuery(view: Obj, body: Obj): Obj {
     });
   }
   const groups: Obj[] = [];
-  if (cfg.groups.length) {
+  if (groupBy.length) {
     const open: Obj[] = [];
     rows.forEach((r, i) => {
-      cfg.groups.forEach((g: Obj, depth: number) => {
+      groupBy.forEach((g: Obj, depth: number) => {
         const f = fields.find((x) => x.id === g.field_id)!;
         const raw = r.values[f.id];
         const key = Array.isArray(raw) ? raw.map((x: any) => x?.id ?? x).join(",") : String(raw ?? "");
@@ -500,7 +641,10 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (m === "POST") {
       const out: Obj[] = [];
       const after = body.after_record_id ? records.get(body.after_record_id) : null;
-      let o = after ? after.order + 0.001 : order++;
+      const before = body.before_record_id ? records.get(body.before_record_id) : null;
+      if (body.after_record_id && body.before_record_id) return err(res, 400, "bad_request", "give after_record_id or before_record_id, not both"), true;
+      if ((body.after_record_id && !after) || (body.before_record_id && !before)) return err(res, 400, "bad_request", "anchor is not a record of this table"), true;
+      let o = after ? after.order + 0.001 : before ? before.order - 0.001 : order++;
       for (const nr of body.records ?? []) {
         const rec = addRecord(table, {});
         rec.created_at = rec.updated_at = Date.now();
@@ -535,10 +679,13 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (m === "DELETE") {
       for (const id of body.ids ?? []) {
         const r = records.get(id);
-        if (r) r.deleted = true;
+        if (r) {
+          r.deleted = true;
+          r.updated_at = Date.now(); // doubles as the deletion time shown in the trash
+        }
       }
       emit({ client_id: clientId, event: { kind: "records_changed", table_id: table, created: [], updated: [], deleted: body.ids } });
-      return send(res, 200, { ok: true }), true;
+      return send(res, 204), true;
     }
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/restore$/.exec(p))) {
@@ -563,7 +710,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       });
     }
     emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: [], updated: body.ids, deleted: [] } });
-    return send(res, 200, { ok: true }), true;
+    return send(res, 200, { records: (body.ids as string[]).map((id) => records.get(id)).filter((r): r is Rec => !!r).map(shape) }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/lookup$/.exec(p))) {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
@@ -582,7 +729,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     return send(res, 201, f), true;
   }
   if ((g = /^\/api\/fields\/([^/]+)$/.exec(p))) {
-    const all = [...taskFields, ...peopleFields];
+    const all = [...taskFields, ...peopleFields, ...projectFields];
     const f = all.find((x) => x.id === g![1]);
     if (!f) return err(res, 404, "not_found", "field not found"), true;
     if (m === "PATCH") {
@@ -606,6 +753,33 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if ((g = /^\/api\/tables\/([^/]+)\/formula\/check$/.exec(p))) {
     const expr = String(body.expression ?? "");
     return send(res, 200, expr.includes("(") && !expr.includes(")") ? { ok: false, error: "Unbalanced parentheses" } : { ok: true, result_type: "text", preview: "42" }), true;
+  }
+  if (p === "/api/notifications" && m === "GET") {
+    const list = [...notifications].sort((a, b) => b.created_at - a.created_at);
+    return send(res, 200, { notifications: list, unread: list.filter((n) => n.read_at == null).length }), true;
+  }
+  if (p === "/api/notifications/read" && m === "POST") {
+    const ids: string[] = body.ids ?? [];
+    for (const n of notifications) if (n.read_at == null && (ids.length === 0 || ids.includes(n.id))) n.read_at = Date.now();
+    return send(res, 200, { ok: true }), true;
+  }
+  if (p === `/api/bases/${BASE_ID}/trash` && m === "GET") {
+    if (!["creator", "owner"].includes(baseDto(req).role)) return err(res, 403, "forbidden", "Only creators can see the trash"), true;
+    const deleted = [...records.values()].filter((r) => r.deleted).map((r) => ({ kind: "record", id: r.id, name: String(r.values[PRIMARY[r.table_id]!] ?? ""), table_id: r.table_id, deleted_at: r.updated_at }));
+    return send(res, 200, { items: [...deleted, ...trashedExtras].sort((a, b) => b.deleted_at - a.deleted_at) }), true;
+  }
+  if (p === "/api/trash/restore" && m === "POST") {
+    const rec = records.get(body.id);
+    if (body.kind === "record" && rec?.deleted) {
+      rec.deleted = false;
+      emit({ client_id: clientId, event: { kind: "records_changed", table_id: rec.table_id, created: [rec.id], updated: [], deleted: [] } });
+      return send(res, 200, { ok: true, restored_field_ids: [] }), true;
+    }
+    const i = trashedExtras.findIndex((x) => x.kind === body.kind && x.id === body.id);
+    if (i < 0) return err(res, 404, "not_found", "nothing to restore"), true;
+    trashedExtras.splice(i, 1);
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: T_TASKS } });
+    return send(res, 200, { ok: true, restored_field_ids: [] }), true;
   }
   if ((g = /^\/api\/records\/([^/]+)\/history$/.exec(p))) return send(res, 200, history.get(g[1]!) ?? []), true;
   if ((g = /^\/api\/records\/([^/]+)\/comments$/.exec(p))) {

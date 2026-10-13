@@ -15,10 +15,12 @@ React 19 + TypeScript (strict) single-page app, built with Vite and embedded int
 | Contract | TypeScript types generated from the Rust DTOs by ts-rs into `src/api/types` |
 | Tests | Vitest + Testing Library + jsdom; live contract tests against the real server (`contract/`); Playwright end-to-end tests in Chrome (`e2e/`) |
 
-Dependencies are deliberately few (9 runtime): react, react-dom, react-router, @tanstack/react-query, radix-ui,
+Dependencies are deliberately few (9 runtime for the shell): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
 The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and react-responsive-carousel) and dompurify,
-all loaded only with the lazy grid chunk.
+all loaded only with the lazy grid chunk. The other views add @dnd-kit/core, @dnd-kit/sortable and @dnd-kit/utilities
+(kanban) and FullCalendar 6.1.21, standard MIT packages only: core, react, daygrid, timegrid, list and interaction
+(calendar). Each is imported only by its lazy view chunk; the timeline is custom DOM + SVG with no dependency.
 
 ## Commands
 
@@ -133,6 +135,32 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 To work on the grid without a server run `VITE_MOCK=1 npm run dev`: `dev/mock-api.ts` is a Vite middleware that serves a
 3,000-record fixture base with every field type (it is never part of a production build). `/api/__mock/role/viewer` switches the
 caller's role and `POST /api/__mock/external-edit` simulates another client's write (live refresh).
+
+### The other views (`src/views/{kanban,gallery,calendar,timeline,list}`)
+
+All five get `{schema, table, view, role}`, are lazy chunks registered in `views/registry.ts`, and share `views/common/`:
+
+| Where | What |
+|---|---|
+| `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the saved view config (`grid/useViewConfig`), search, record writes and the `?record=` parameter |
+| `common/useViewRecords.ts` | Whole-view query: pages of 1,000 up to a 5,000 cap (`truncated` drives the "showing first N" notice), cached under `["records", tableId, viewId, "query", ...]` so SSE invalidation refetches it |
+| `common/useRecordWrites.ts`, `cache.ts` | Optimistic edits, manual-order moves and creates over every cached whole-view query of the table, rolled back when the server rejects them |
+| `common/ViewFrame.tsx` | The shared toolbar (`components/viewbar`, with `features`/`extra` props to drop grid-only controls and add view settings) plus `ExpandedRecord` for `?record=` |
+| `common/wallTime.ts` | Calendar/timeline time model: date cells are read as *wall time* (the wall-clock reading as UTC ms) in the field's zone, else the viewer's, so a day is always 86,400,000 ms and drags map back to stored values through `zonedToInstant` |
+
+- **Kanban** stacks by single select, single user or checkbox (`stacks.ts` is pure: bucketing, `stack_order`, drop planning). dnd-kit with pointer and keyboard sensors (Space picks up, arrows move, Space drops, Enter opens). A drop writes the stack field with `typecast` and, only when the view has no sorts, a manual-order move; both are optimistic with rollback.
+- **Gallery** pages the view query by offset (60 per page, IntersectionObserver plus a "Load more" button).
+- **Calendar** runs FullCalendar in its `UTC` mode on wall times, queries only the visible range (padded one day each side) and the viewer's zone, and builds the unscheduled list from a whole-view query with a `transient` filter override (the saved filter plus "start date is empty", `unscheduledTransient` in `eventMath.ts`). FullCalendar's prev/next buttons are text because its icon font is a `data:` URI that the server's CSP blocks.
+- **Timeline** (`geometry.ts`, `lanes.ts` are pure; `TimelineChart.tsx` is the DOM): scales day to year, a window that grows as you scroll near an edge, swimlanes, milestones, create by dragging, whole-day drag and resize, and dependency arrows (red when the predecessor ends after the successor starts; a date-only end counts through the end of its day).
+- **List** turns `QueryResponse.groups` into a collapsible outline (`outline.ts`).
+
+Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field with time stores the UTC instant of the wall time in the field's zone (DST gaps and overlaps resolve like the server's `store_date`). Computed date fields (created/modified time, formulas) can be shown but not dragged.
+
+`dev/mock-api.ts` also serves a "Projects" table (tbl3, 40 records with dates, owners, cover images and dependencies) with one configured view of each type, plus notifications and trash fixtures; open `/base/app1/tbl3/viw11` (Board), `viw13` (Gallery), `viw14` (Calendar), `viw16` (Timeline), `viw17` (Outline).
+
+### Trash and notifications
+
+`components/trash`: `TrashButton` in the base top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
 
 ### Conventions
 

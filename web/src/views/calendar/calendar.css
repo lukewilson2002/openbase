@@ -1,0 +1,72 @@
+/* FullCalendar (standard MIT build) themed with the app's tokens, light and dark. */
+.og-calendar {
+  --fc-border-color: var(--line);
+  --fc-page-bg-color: var(--surface);
+  --fc-neutral-bg-color: var(--subtle);
+  --fc-neutral-text-color: var(--muted);
+  --fc-today-bg-color: var(--primary-soft);
+  --fc-now-indicator-color: var(--danger);
+  --fc-event-bg-color: var(--primary);
+  --fc-event-border-color: var(--primary);
+  --fc-event-text-color: var(--primary-fg);
+  --fc-list-event-hover-bg-color: var(--hover);
+  --fc-highlight-color: var(--primary-soft);
+  --fc-non-business-color: var(--subtle);
+  --fc-more-link-bg-color: var(--subtle);
+  --fc-button-bg-color: var(--surface);
+  --fc-button-border-color: var(--line-strong);
+  --fc-button-text-color: var(--fg);
+  --fc-button-hover-bg-color: var(--hover);
+  --fc-button-hover-border-color: var(--line-strong);
+  --fc-button-active-bg-color: var(--primary-soft);
+  --fc-button-active-border-color: var(--primary);
+  color: var(--fg);
+  font-size: 0.8125rem;
+}
+.og-calendar .fc {
+  height: 100%;
+}
+.og-calendar .fc-toolbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.og-calendar .fc-button {
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.625rem;
+  text-transform: none;
+  box-shadow: none !important;
+}
+.og-calendar .fc-button-primary:not(:disabled).fc-button-active,
+.og-calendar .fc-button-primary:not(:disabled):active {
+  color: var(--primary);
+}
+.og-calendar .fc-button-primary:disabled {
+  opacity: 0.5;
+}
+.og-calendar .fc-event {
+  cursor: pointer;
+}
+.og-calendar .fc-daygrid-day-number,
+.og-calendar .fc-col-header-cell-cushion,
+.og-calendar .fc-list-day-text,
+.og-calendar .fc-list-day-side-text {
+  color: inherit;
+  text-decoration: none;
+}
+.og-calendar .fc-list-event-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.og-calendar .fc-list-event-dot {
+  border-color: var(--primary);
+}
+.og-calendar .fc-event:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+@media (max-width: 640px) {
+  .og-calendar .fc-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
