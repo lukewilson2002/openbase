@@ -8,14 +8,23 @@ use std::sync::{Arc, Mutex};
 use og_core::api::events::{BaseEvent, EventEnvelope};
 use tokio::sync::broadcast;
 
+use crate::store::versions::DataVersions;
+
 const CHANNEL_CAPACITY: usize = 256;
 
 #[derive(Clone, Default)]
 pub struct EventBus {
     channels: Arc<Mutex<HashMap<String, broadcast::Sender<Arc<EventEnvelope>>>>>,
+    versions: DataVersions,
 }
 
 impl EventBus {
+    /// The per-base data versions bumped by [`EventBus::publish`]; the view
+    /// query cache is keyed by them.
+    pub fn versions(&self) -> &DataVersions {
+        &self.versions
+    }
+
     pub fn subscribe(&self, base_id: &str) -> broadcast::Receiver<Arc<EventEnvelope>> {
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(base_id.to_string())
@@ -30,6 +39,10 @@ impl EventBus {
         user_id: Option<String>,
         event: BaseEvent,
     ) {
+        // Every committed mutation publishes; comments do not affect queries.
+        if !matches!(event, BaseEvent::CommentsChanged { .. }) {
+            self.versions.bump(base_id);
+        }
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(tx) = map.get(base_id) {
             let env = Arc::new(EventEnvelope {
@@ -73,5 +86,35 @@ mod tests {
         let bus = EventBus::default();
         bus.publish("app1", None, None, BaseEvent::BaseChanged);
         assert_eq!(bus.active_channels(), 0);
+    }
+
+    #[test]
+    fn publishing_bumps_the_data_version_except_for_comments() {
+        let bus = EventBus::default();
+        assert_eq!(bus.versions().current("app1"), 0);
+        bus.publish("app1", None, None, BaseEvent::BaseChanged);
+        assert_eq!(bus.versions().current("app1"), 1);
+        bus.publish(
+            "app1",
+            None,
+            None,
+            BaseEvent::RecordsChanged {
+                table_id: "tbl".into(),
+                created: vec![],
+                updated: vec!["rec".into()],
+                deleted: vec![],
+            },
+        );
+        assert_eq!(bus.versions().current("app1"), 2);
+        bus.publish(
+            "app1",
+            None,
+            None,
+            BaseEvent::CommentsChanged {
+                record_id: "rec".into(),
+            },
+        );
+        assert_eq!(bus.versions().current("app1"), 2);
+        assert_eq!(bus.versions().current("app2"), 0);
     }
 }

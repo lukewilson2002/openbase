@@ -51,25 +51,39 @@ pub fn change(old: Option<&Json>, new: Option<&Json>) -> Json {
 
 /// A record's history, newest first.
 pub fn list(conn: &Connection, record_id: &str, limit: usize) -> AppResult<Vec<HistoryEntry>> {
+    list_page(conn, record_id, None, limit)
+}
+
+/// A page of a record's history, newest first: entries with an id below
+/// `before` (the id of the last entry of the previous page), at most `limit`.
+pub fn list_page(
+    conn: &Connection,
+    record_id: &str,
+    before: Option<i64>,
+    limit: usize,
+) -> AppResult<Vec<HistoryEntry>> {
     let mut stmt = conn.prepare(
         "SELECT h.id, h.user_id, u.name, h.kind, h.changes, h.created_at
          FROM record_history h LEFT JOIN users u ON u.id = h.user_id
-         WHERE h.record_id = ?1 ORDER BY h.id DESC LIMIT ?2",
+         WHERE h.record_id = ?1 AND h.id < ?2 ORDER BY h.id DESC LIMIT ?3",
     )?;
     let rows = stmt
-        .query_map(params![record_id, limit as i64], |r| {
-            let raw: String = r.get(4)?;
-            let changes: BTreeMap<String, FieldChange> =
-                serde_json::from_str(&raw).unwrap_or_default();
-            Ok(HistoryEntry {
-                id: r.get(0)?,
-                user_id: r.get(1)?,
-                user_name: r.get(2)?,
-                kind: r.get(3)?,
-                changes,
-                created_at: r.get(5)?,
-            })
-        })?
+        .query_map(
+            params![record_id, before.unwrap_or(i64::MAX), limit as i64],
+            |r| {
+                let raw: String = r.get(4)?;
+                let changes: BTreeMap<String, FieldChange> =
+                    serde_json::from_str(&raw).unwrap_or_default();
+                Ok(HistoryEntry {
+                    id: r.get(0)?,
+                    user_id: r.get(1)?,
+                    user_name: r.get(2)?,
+                    kind: r.get(3)?,
+                    changes,
+                    created_at: r.get(5)?,
+                })
+            },
+        )?
         .collect::<Result<_, _>>()?;
     Ok(rows)
 }

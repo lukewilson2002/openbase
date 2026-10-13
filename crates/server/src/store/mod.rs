@@ -4,6 +4,7 @@
 pub mod attachments;
 pub mod audit;
 pub mod bases;
+pub mod comments;
 pub mod duplicate;
 pub mod field_kind;
 pub mod fields;
@@ -18,5 +19,6 @@ pub mod tables;
 pub mod tokens;
 pub mod trash;
 pub mod users;
+pub mod versions;
 pub mod views;
 pub mod workspaces;

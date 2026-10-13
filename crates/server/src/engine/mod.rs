@@ -7,8 +7,9 @@
 //!   used by the HTTP API and, later, forms, CSV import, the Airtable
 //!   compatible API and automations.
 //!
-//! View queries (filter/sort/group with a result cache) live next to these in
-//! a later workstream.
+//! - [`query`]: view queries (filter, search, sort, group, page, summaries and
+//!   the link picker lookup) with a bounded result cache.
 
+pub mod query;
 pub mod recompute;
 pub mod write;
