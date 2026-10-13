@@ -13,7 +13,8 @@
     "preview": "astro preview",
     "serve": "node scripts/serve-dist.mjs",
     "check-links": "node scripts/check-links.mjs",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.6",
