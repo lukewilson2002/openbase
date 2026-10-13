@@ -177,10 +177,7 @@ pub fn actor_from_api_token(conn: &Connection, token: &str) -> AppResult<Option<
 
 /// Like [`actor_from_api_token`], also returning the token's `last_used_at`
 /// (for [`stamp_token_use`]).
-pub fn lookup_api_token(
-    conn: &Connection,
-    token: &str,
-) -> AppResult<Option<(Actor, Option<i64>)>> {
+pub fn lookup_api_token(conn: &Connection, token: &str) -> AppResult<Option<(Actor, Option<i64>)>> {
     let hash = hash_token(token);
     let now = now_ms();
     let row = conn

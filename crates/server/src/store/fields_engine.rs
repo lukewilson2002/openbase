@@ -380,12 +380,24 @@ pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 9]
     [
         ("kanban stack field", config.kanban.stack_field_id.as_ref()),
         ("kanban cover field", config.kanban.cover_field_id.as_ref()),
-        ("calendar date field", config.calendar.date_field_id.as_ref()),
+        (
+            "calendar date field",
+            config.calendar.date_field_id.as_ref(),
+        ),
         ("calendar end field", config.calendar.end_field_id.as_ref()),
-        ("gallery cover field", config.gallery.cover_field_id.as_ref()),
-        ("timeline start field", config.timeline.start_field_id.as_ref()),
+        (
+            "gallery cover field",
+            config.gallery.cover_field_id.as_ref(),
+        ),
+        (
+            "timeline start field",
+            config.timeline.start_field_id.as_ref(),
+        ),
         ("timeline end field", config.timeline.end_field_id.as_ref()),
-        ("timeline group field", config.timeline.group_field_id.as_ref()),
+        (
+            "timeline group field",
+            config.timeline.group_field_id.as_ref(),
+        ),
         (
             "timeline dependency field",
             config.timeline.dependency_field_id.as_ref(),

@@ -283,11 +283,7 @@ pub fn validate_config(fields: &[Field], config: &ViewConfig) -> AppResult<()> {
     validate_config_with(fields, config, &Stale::none())
 }
 
-fn validate_config_with(
-    fields: &[Field],
-    config: &ViewConfig,
-    stale: &Stale,
-) -> AppResult<()> {
+fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) -> AppResult<()> {
     let known: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let check = |id: &str, what: &str| -> AppResult<()> {
         if known.contains_key(id) || stale.field(what, id) {
@@ -394,11 +390,7 @@ fn walk_filter(
     Ok(())
 }
 
-fn check_form(
-    form: &FormConfig,
-    known: &HashMap<&str, &Field>,
-    stale: &Stale,
-) -> AppResult<()> {
+fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -> AppResult<()> {
     if form.title.chars().count() > limits::MAX_NAME_LEN
         || form.submit_label.chars().count() > limits::MAX_NAME_LEN
         || form.description.chars().count() > limits::MAX_DESCRIPTION_LEN

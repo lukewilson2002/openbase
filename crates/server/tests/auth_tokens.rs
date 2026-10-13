@@ -325,7 +325,11 @@ async fn last_used_at_is_stamped_at_most_once_a_minute() {
     set(10_000);
     let before = stamp();
     app.get(&t, "/api/tokens/whoami").await.assert_status(200);
-    assert_eq!(stamp(), before, "a use 10 seconds after the last stamp wrote again");
+    assert_eq!(
+        stamp(),
+        before,
+        "a use 10 seconds after the last stamp wrote again"
+    );
 
     // A use after the minute refreshes it.
     set(120_000);

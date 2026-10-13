@@ -37,10 +37,8 @@ impl FromRequestParts<AppState> for V1Auth {
             ));
         };
         let lookup = token.clone();
-        let Some((actor, last_used_at)) = state
-            .db
-            .read(move |c| lookup_api_token(c, &lookup))
-            .await?
+        let Some((actor, last_used_at)) =
+            state.db.read(move |c| lookup_api_token(c, &lookup)).await?
         else {
             return Err(V1Error::auth_required(
                 "The API token is invalid or expired",

@@ -846,9 +846,7 @@ async fn only_stale_references_are_forgiven_not_everything_the_old_config_mentio
         )
         .await;
     let n_id = sid(&n["id"]).to_string();
-    let gt = |value: i64| {
-        json!({ "conjunction": "and", "items": [ { "field_id": n_id, "op": "gt", "value": value } ] })
-    };
+    let gt = |value: i64| json!({ "conjunction": "and", "items": [ { "field_id": n_id, "op": "gt", "value": value } ] });
     // The old config filters on Qty (valid for a number) and also hides it.
     let v = f
         .app
