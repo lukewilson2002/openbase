@@ -18,6 +18,8 @@ export const basePermissions = {
   },
   /** Lock or unlock a shared view. */
   lockView: (role: string, view: Pick<View, "personal">) => !view.personal && atLeast(role, "creator"),
+  /** Import a CSV file into a table (adds records). */
+  importRecords: (role: string) => atLeast(role, "editor"),
   /** See and change base-level members and invites. */
   manageSharing: (role: string) => atLeast(role, "creator"),
 };

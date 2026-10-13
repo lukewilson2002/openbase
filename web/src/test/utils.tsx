@@ -27,8 +27,8 @@ export interface MockApi {
   set: (key: string, handler: Handler) => void;
 }
 
-function isReplyObject(v: unknown): v is { status?: number; json?: unknown; text?: string } {
-  return !!v && typeof v === "object" && !Array.isArray(v) && ("status" in v || "json" in v || "text" in v) && Object.keys(v).every((k) => ["status", "json", "text"].includes(k));
+function isReplyObject(v: unknown): v is { status?: number; json?: unknown; text?: string; headers?: Record<string, string> } {
+  return !!v && typeof v === "object" && !Array.isArray(v) && ("status" in v || "json" in v || "text" in v) && Object.keys(v).every((k) => ["status", "json", "text", "headers"].includes(k));
 }
 
 /**
@@ -43,7 +43,9 @@ export function mockApi(routes: Record<string, Handler>): MockApi {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost");
     const method = (init?.method ?? "GET").toUpperCase();
     let body: unknown;
-    if (typeof init?.body === "string") {
+    // An upload is recorded as the FormData itself (tests read its parts with `.get`).
+    if (init?.body instanceof FormData) body = init.body;
+    else if (typeof init?.body === "string") {
       try {
         body = JSON.parse(init.body);
       } catch {
@@ -60,7 +62,7 @@ export function mockApi(routes: Record<string, Handler>): MockApi {
     const reply = isReplyObject(out) ? out : { json: out };
     const status = reply.status ?? 200;
     if (status === 204 || (reply.json === undefined && reply.text === undefined)) return new Response(null, { status });
-    return new Response(reply.text ?? JSON.stringify(reply.json), { status, headers: { "Content-Type": "application/json" } });
+    return new Response(reply.text ?? JSON.stringify(reply.json), { status, headers: { "Content-Type": "application/json", ...reply.headers } });
   };
   vi.stubGlobal("fetch", vi.fn(impl));
   return {

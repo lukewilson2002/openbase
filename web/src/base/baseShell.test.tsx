@@ -129,6 +129,36 @@ describe("base shell", () => {
     });
   });
 
+  describe("importing CSV", () => {
+    it("lets editors import into a table but not rename, duplicate or delete it", async () => {
+      const user = userEvent.setup();
+      openBase("editor");
+      await screen.findByText("Grid view coming soon");
+      await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+      expect(await screen.findByRole("menuitem", { name: /Import CSV/ })).toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Rename table" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Delete table" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("menuitem", { name: /Import CSV/ }));
+      expect(await screen.findByRole("dialog", { name: "Import CSV into Tasks" })).toBeInTheDocument();
+    });
+
+    it("keeps viewers and commenters out of it", async () => {
+      openBase("commenter");
+      await screen.findByText("Grid view coming soon");
+      expect(screen.queryByRole("button", { name: /Table options/ })).not.toBeInTheDocument();
+    });
+
+    it("offers creators a new table from CSV next to the empty one", async () => {
+      const user = userEvent.setup();
+      openBase("creator");
+      await screen.findByText("Grid view coming soon");
+      await user.click(screen.getByRole("button", { name: "Add table" }));
+      expect(await screen.findByRole("menuitem", { name: "New empty table" })).toBeInTheDocument();
+      await user.click(screen.getByRole("menuitem", { name: /New table from CSV/ }));
+      expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
+    });
+  });
+
   describe("creator", () => {
     it("can manage tables, rename the base and create each of the seven view types", async () => {
       openBase("creator");
@@ -198,6 +228,7 @@ describe("base shell", () => {
       });
       await screen.findByText("Grid view coming soon");
       await user.click(screen.getByRole("button", { name: "Add table" }));
+      await user.click(await screen.findByRole("menuitem", { name: "New empty table" }));
       await user.type(await screen.findByLabelText("Name"), "Projects");
       await user.click(screen.getByRole("button", { name: "Create table" }));
       await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));

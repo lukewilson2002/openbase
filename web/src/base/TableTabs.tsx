@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Copy, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, FileUp, PanelLeft, Pencil, Plus, Table2, Trash2 } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table } from "@/api/types";
+import { ImportCsvDialog } from "@/components/csv/ImportCsvDialog";
+import { NewTableFromCsvDialog } from "@/components/csv/NewTableFromCsvDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -20,7 +22,7 @@ export interface TableTabsProps {
   sidebarOpen: boolean;
 }
 
-type TableDialog = { kind: "create" } | { kind: "rename"; table: Table } | { kind: "delete"; table: Table };
+type TableDialog = { kind: "create" } | { kind: "create-from-csv" } | { kind: "import"; table: Table } | { kind: "rename"; table: Table } | { kind: "delete"; table: Table };
 
 export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen }: TableTabsProps) {
   const qc = useQueryClient();
@@ -28,6 +30,7 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
   const toast = useToast();
   const [dialog, setDialog] = useState<TableDialog | null>(null);
   const canManage = basePermissions.manageTables(schema.role);
+  const canImport = basePermissions.importRecords(schema.role);
   const refresh = () => qc.invalidateQueries({ queryKey: keys.base(schema.id) });
 
   const create = useMutation({
@@ -74,7 +77,7 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
                 <Link to={`/base/${schema.id}/${t.id}`} aria-current={active ? "page" : undefined} className="flex h-full max-w-48 items-center truncate px-3 text-inherit no-underline">
                   {t.name}
                 </Link>
-                {active && canManage && (
+                {active && (canManage || canImport) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className="-ml-1.5 mr-0.5 size-6">
@@ -82,16 +85,25 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
                       </IconButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", table: t })}>
-                        <Pencil aria-hidden className="size-4" /> Rename table
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
-                        <Copy aria-hidden className="size-4" /> Duplicate table
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => setDialog({ kind: "delete", table: t })}>
-                        <Trash2 aria-hidden className="size-4" /> Delete table
-                      </DropdownMenuItem>
+                      {canImport && (
+                        <DropdownMenuItem onSelect={() => setDialog({ kind: "import", table: t })}>
+                          <FileUp aria-hidden className="size-4" /> Import CSV…
+                        </DropdownMenuItem>
+                      )}
+                      {canManage && (
+                        <>
+                          <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", table: t })}>
+                            <Pencil aria-hidden className="size-4" /> Rename table
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
+                            <Copy aria-hidden className="size-4" /> Duplicate table
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => setDialog({ kind: "delete", table: t })}>
+                            <Trash2 aria-hidden className="size-4" /> Delete table
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -101,9 +113,21 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
         })}
       </ul>
       {canManage && (
-        <IconButton label="Add table" size="sm" onClick={() => setDialog({ kind: "create" })}>
-          <Plus aria-hidden className="size-4" />
-        </IconButton>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label="Add table" size="sm" noTooltip>
+              <Plus aria-hidden className="size-4" />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setDialog({ kind: "create" })}>
+              <Table2 aria-hidden className="size-4" /> New empty table
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDialog({ kind: "create-from-csv" })}>
+              <FileUp aria-hidden className="size-4" /> New table from CSV…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       <NameDialog
@@ -113,6 +137,8 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
         submitLabel="Create table"
         onSubmit={(name) => create.mutateAsync(name)}
       />
+      <NewTableFromCsvDialog open={dialog?.kind === "create-from-csv"} onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} />
+      {dialog?.kind === "import" && <ImportCsvDialog open onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} table={dialog.table} />}
       <NameDialog
         open={dialog?.kind === "rename"}
         onOpenChange={(o) => !o && setDialog(null)}
