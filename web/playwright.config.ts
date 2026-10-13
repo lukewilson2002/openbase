@@ -8,7 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
  *   OPENBASE_E2E=1 npm run e2e
  *
  * Browsers are NOT downloaded: the tests run in the locally installed Google Chrome
- * (`channel: "chrome"`). Knobs:
+ * (`channel: "chrome"`; GitHub's Ubuntu runners have it too). Knobs:
+ *   OPENBASE_E2E_BROWSER=chromium       use Playwright's own Chromium instead (CI fallback only; run
+ *                                       `npx playwright install chromium` first; never needed locally)
  *   OPENBASE_E2E_URL=http://host:port   use a running server instead of starting one
  *   OPENBASE_E2E_SKIP_BUILD=1           reuse web/dist and target/debug/openbase as they are
  *   OPENBASE_E2E_KEEP_DATA=1            keep the temporary data directory (its path is printed)
@@ -17,7 +19,11 @@ import { defineConfig, devices } from "@playwright/test";
  * the first one to run sees a fresh instance (smoke: the first-run screen), the second sets it up
  * through the UI (journey), the others work on that instance (grid, then sharing and automations).
  */
-const chrome = { ...devices["Desktop Chrome"], channel: "chrome" as const };
+const browser = process.env["OPENBASE_E2E_BROWSER"] ?? "chrome";
+if (browser !== "chrome" && browser !== "chromium") {
+  throw new Error(`OPENBASE_E2E_BROWSER must be "chrome" or "chromium", not "${browser}".`);
+}
+const chrome = { ...devices["Desktop Chrome"], ...(browser === "chrome" ? { channel: "chrome" as const } : {}) };
 
 export default defineConfig({
   testDir: "./e2e",
