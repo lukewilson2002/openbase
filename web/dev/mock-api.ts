@@ -281,8 +281,8 @@ function seedNotifications(): void {
   const project = [...records.values()].find((r) => r.table_id === T_PROJECTS)!;
   const now = Date.now();
   notifications.push(
-    { id: "ntf1", kind: "mention", payload: { base_id: BASE_ID, table_id: T_PROJECTS, record_id: project.id, record_name: String(project.values.fld_j_name), snippet: "@Ada can you confirm the launch date?", actor_name: "Grace Hopper" }, read_at: null, created_at: now - 12 * 60_000 },
-    { id: "ntf2", kind: "assigned", payload: { base_id: BASE_ID, table_id: T_TASKS, record_id: firstTask.id, record_name: String(firstTask.values.fld_name), actor_name: "Alan Turing" }, read_at: null, created_at: now - 3 * 3_600_000 },
+    { id: "ntf1", kind: "mention", payload: { base_id: BASE_ID, table_id: T_PROJECTS, record_id: project.id, base_name: "Project tracker", table_name: "Projects", record_name: String(project.values.fld_j_name), comment_id: "cmt_demo", snippet: "@Ada can you confirm the launch date?", author_id: "usr2", author_name: "Grace Hopper" }, read_at: null, created_at: now - 12 * 60_000 },
+    { id: "ntf2", kind: "assigned", payload: { base_id: BASE_ID, table_id: T_TASKS, record_id: firstTask.id, base_name: "Project tracker", table_name: "Tasks", record_name: String(firstTask.values.fld_name), field_id: "fld_owner", field_name: "Owner", assigned_by: "usr3" }, read_at: null, created_at: now - 3 * 3_600_000 },
     { id: "ntf3", kind: "automation", payload: { automation_name: "Weekly digest", message: "Sent the digest to 4 people", base_id: BASE_ID }, read_at: null, created_at: now - 26 * 3_600_000 },
     { id: "ntf4", kind: "invite", payload: { actor_name: "Margaret Hamilton", base_name: "Roadmap", token: "demo-token" }, read_at: now - 86_400_000, created_at: now - 2 * 86_400_000 },
   );
@@ -441,7 +441,12 @@ function runQuery(view: Obj, body: Obj): Obj {
   const fields = fieldsOf(view.table_id);
   const cfg = view.config;
   let rows = [...records.values()].filter((r) => !r.deleted && r.table_id === view.table_id).sort((a, b) => a.order - b.order).map(shape);
-  rows = rows.filter((r) => matchFilter(cfg.filter, r, fields));
+  // A transient override replaces the saved filter / sorts / groups for this request only.
+  const transient = (body.transient ?? {}) as Obj;
+  const filter = transient.filter ?? cfg.filter;
+  const sorts: Obj[] = transient.sorts ?? cfg.sorts;
+  const groupBy: Obj[] = transient.groups ?? cfg.groups;
+  rows = rows.filter((r) => matchFilter(filter, r, fields));
   if (body.range) {
     // Records whose [start, end] (end defaults to start) overlaps [from, to]; records without a start are left out.
     const { field_id, end_field_id, from, to } = body.range as Obj;
@@ -457,7 +462,7 @@ function runQuery(view: Obj, body: Obj): Obj {
     const visible = fields.filter((f) => !cfg.hidden_fields.includes(f.id));
     rows = rows.filter((r) => visible.some((f) => textOf(f, r.values[f.id]).toLowerCase().includes(search)));
   }
-  const keys = [...cfg.groups, ...cfg.sorts];
+  const keys = [...groupBy, ...sorts];
   if (keys.length) {
     rows.sort((a, b) => {
       for (const k of keys) {
@@ -470,10 +475,10 @@ function runQuery(view: Obj, body: Obj): Obj {
     });
   }
   const groups: Obj[] = [];
-  if (cfg.groups.length) {
+  if (groupBy.length) {
     const open: Obj[] = [];
     rows.forEach((r, i) => {
-      cfg.groups.forEach((g: Obj, depth: number) => {
+      groupBy.forEach((g: Obj, depth: number) => {
         const f = fields.find((x) => x.id === g.field_id)!;
         const raw = r.values[f.id];
         const key = Array.isArray(raw) ? raw.map((x: any) => x?.id ?? x).join(",") : String(raw ?? "");
@@ -636,7 +641,10 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (m === "POST") {
       const out: Obj[] = [];
       const after = body.after_record_id ? records.get(body.after_record_id) : null;
-      let o = after ? after.order + 0.001 : order++;
+      const before = body.before_record_id ? records.get(body.before_record_id) : null;
+      if (body.after_record_id && body.before_record_id) return err(res, 400, "bad_request", "give after_record_id or before_record_id, not both"), true;
+      if ((body.after_record_id && !after) || (body.before_record_id && !before)) return err(res, 400, "bad_request", "anchor is not a record of this table"), true;
+      let o = after ? after.order + 0.001 : before ? before.order - 0.001 : order++;
       for (const nr of body.records ?? []) {
         const rec = addRecord(table, {});
         rec.created_at = rec.updated_at = Date.now();
@@ -677,7 +685,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
         }
       }
       emit({ client_id: clientId, event: { kind: "records_changed", table_id: table, created: [], updated: [], deleted: body.ids } });
-      return send(res, 200, { ok: true }), true;
+      return send(res, 204), true;
     }
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/restore$/.exec(p))) {
@@ -702,7 +710,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       });
     }
     emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: [], updated: body.ids, deleted: [] } });
-    return send(res, 200, { ok: true }), true;
+    return send(res, 200, { records: (body.ids as string[]).map((id) => records.get(id)).filter((r): r is Rec => !!r).map(shape) }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/lookup$/.exec(p))) {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();

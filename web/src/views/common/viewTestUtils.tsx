@@ -2,6 +2,7 @@
 import type { ComponentType } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { render, type RenderResult } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, View, ViewType } from "@/api/types";
 import { keys } from "@/api/keys";
 import { Providers, createQueryClient } from "@/providers";
@@ -57,6 +58,7 @@ export function queryHandler(server: QueryServer, log?: QueryRequest[]): Handler
 
 export interface RenderedView extends RenderResult {
   api: MockApi;
+  client: QueryClient;
 }
 
 function Where() {
@@ -87,5 +89,5 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
       </MemoryRouter>
     </Providers>,
   );
-  return Object.assign(result, { api });
+  return Object.assign(result, { api, client });
 }
