@@ -82,8 +82,8 @@ export function AssistantsSection({ onOpenTokens }: { onOpenTokens: () => void }
             <span className="flex size-5 items-center justify-center rounded-full bg-subtle text-xs">3</span> Add it to your assistant
           </h3>
           <p className="text-[0.8125rem] text-muted">Replace YOUR_TOKEN with the token you created.</p>
-          <CopyBlock label="Claude Code command" value={claudeCodeCommand(endpoint)} />
-          <CopyBlock label="Generic MCP configuration" value={genericConfig(endpoint)} />
+          <CopyBlock label="Claude Code command" copyLabel="Copy command" value={claudeCodeCommand(endpoint)} />
+          <CopyBlock label="Generic MCP configuration" copyLabel="Copy configuration" value={genericConfig(endpoint)} />
           <p className="text-xs text-muted">
             The configuration works for clients that support remote MCP servers with custom headers (for example Cursor, Windsurf, VS Code and Claude Code's .mcp.json). Clients that
             only run local programs can use a bridge such as mcp-remote.

@@ -4,7 +4,7 @@ import { copyToClipboard } from "@/lib/format";
 import { Button } from "./ui/button";
 
 /** A read-only, scrollable block of text or code (commands, configuration) with a copy button. */
-export function CopyBlock({ value, label }: { value: string; label: string }) {
+export function CopyBlock({ value, label, copyLabel = "Copy" }: { value: string; label: string; copyLabel?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="rounded-md border border-line bg-subtle">
@@ -20,7 +20,7 @@ export function CopyBlock({ value, label }: { value: string; label: string }) {
           }}
         >
           {copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}
-          {copied ? "Copied" : `Copy ${label.toLowerCase()}`}
+          {copied ? "Copied" : copyLabel}
         </Button>
       </div>
       <pre tabIndex={0} aria-label={label} className="overflow-x-auto px-3 py-2.5 font-mono text-xs leading-relaxed">

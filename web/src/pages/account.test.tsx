@@ -225,14 +225,14 @@ describe("account", () => {
     // The Claude Code command is exactly what `claude mcp add` takes.
     const command = screen.getByLabelText("Claude Code command");
     expect(command).toHaveTextContent(`claude mcp add --transport http opengrid ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
-    await user.click(screen.getByRole("button", { name: "Copy claude code command" }));
+    await user.click(screen.getByRole("button", { name: "Copy command" }));
     expect(await navigator.clipboard.readText()).toBe(`claude mcp add --transport http opengrid ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
     expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
 
     // The generic configuration is valid JSON for clients with remote servers and headers.
     const config = JSON.parse(screen.getByLabelText("Generic MCP configuration").textContent ?? "");
     expect(config).toEqual({ mcpServers: { opengrid: { type: "http", url: endpoint, headers: { Authorization: "Bearer YOUR_TOKEN" } } } });
-    await user.click(screen.getByRole("button", { name: "Copy generic mcp configuration" }));
+    await user.click(screen.getByRole("button", { name: "Copy configuration" }));
     expect(JSON.parse(await navigator.clipboard.readText())).toEqual(config);
 
     // Guidance on the kinds of token, and what no token can do.
