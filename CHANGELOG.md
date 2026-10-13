@@ -11,6 +11,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- Release candidate for OpenBase 0.1.0, published to test the release pipeline end to end
+  (native amd64 and arm64 builds, the `ghcr.io/lukewilson2002/openbase` image with provenance
+  and SBOM attestations, and Linux binaries with checksums). It contains everything listed
+  under 0.1.0 below. Not recommended for production use yet.
+
 ## [0.1.0] - unreleased
 
 First release. OpenBase is a self-hosted alternative to Airtable for individuals and very
