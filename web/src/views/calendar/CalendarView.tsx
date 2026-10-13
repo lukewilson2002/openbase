@@ -25,6 +25,7 @@ import { ViewFrame } from "../common/ViewFrame";
 import { isDateLike, isWritableDate, wallNow } from "../common/wallTime";
 import type { ViewProps } from "../types";
 import "./calendar.css";
+import { removeIconFont } from "./iconFont";
 import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, unscheduledTransient, visibleRange } from "./eventMath";
 import { UnscheduledList } from "./UnscheduledList";
 
@@ -37,6 +38,9 @@ function setCalendar(c: ViewConfig, patch: Partial<ViewConfig["calendar"]>): Vie
 }
 
 const PLUGINS = [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin];
+
+// FullCalendar's stylesheet is in by now; its data: icon font would only trip the CSP (see iconFont.ts).
+removeIconFont();
 
 function CalendarInner(props: ViewProps) {
   const setup = useViewSetup(props);
@@ -165,7 +169,8 @@ function CalendarInner(props: ViewProps) {
             initialView="dayGridMonth"
             headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listMonth" }}
             // FullCalendar draws prev/next with an icon font it inlines as a data: URI, which the
-            // server's Content-Security-Policy (default-src 'self') blocks, so the buttons say it in words.
+            // server's Content-Security-Policy (default-src 'self') blocks, so the buttons say it in
+            // words (and iconFont.ts removes the font itself).
             buttonIcons={false}
             buttonText={{ prev: "Prev", next: "Next", today: "Today", month: "Month", week: "Week", list: "List" }}
             timeZone="UTC"

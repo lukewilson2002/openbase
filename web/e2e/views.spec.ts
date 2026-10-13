@@ -1,23 +1,25 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import type { APIRequestContext, Cookie, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * Kanban, gallery, calendar, timeline and list views, plus the trash and the notification bell,
- * against a live server. Runs only with OPENGRID_E2E=1:
+ * against a live server. Runs only with OPENGRID_E2E=1 (see playwright.config.ts: the stack is
+ * built and started for you):
  *
- *   OPENGRID_E2E=1 OPENGRID_E2E_URL=http://127.0.0.1:8080 npm run e2e -- views.spec.ts
+ *   OPENGRID_E2E=1 npm run e2e -- --project=views --no-deps
  *
- * The first run on an empty data directory signs up the first user; on a used instance set
- * OPENGRID_E2E_EMAIL and OPENGRID_E2E_PASSWORD. Results are asserted against the server (the
- * records API), not against pixels.
+ * It signs up its own user (the server started by globalSetup allows signup; on a server that does
+ * not, set OPENGRID_E2E_EMAIL and OPENGRID_E2E_PASSWORD to an existing account). Results are
+ * asserted against the server (the records API), not against pixels.
  *
  * Notifications: mentions and assignments skip their author, so the bell test makes an automation
  * ("record created" -> notify) tell the signed-in user about a record they create.
  */
-test.skip(!process.env.OPENGRID_E2E, "set OPENGRID_E2E=1 and start an opengrid server to run E2E tests");
+test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.describe.configure({ mode: "serial" });
 
-const EMAIL = process.env.OPENGRID_E2E_EMAIL ?? "e2e-views@example.com";
-const PASSWORD = process.env.OPENGRID_E2E_PASSWORD ?? "correct horse battery staple 42";
+const EMAIL = process.env["OPENGRID_E2E_EMAIL"] ?? "e2e-views@example.com";
+const PASSWORD = process.env["OPENGRID_E2E_PASSWORD"] ?? "correct horse battery staple 42";
 const CSRF = { "X-OpenGrid-CSRF": "1" };
 
 interface Fixture {
@@ -30,6 +32,8 @@ interface Fixture {
 }
 
 let fx: Fixture;
+/** The signed-in session, added to every test's fresh browser context. */
+let session: Cookie[] = [];
 
 async function call<T>(req: APIRequestContext, method: "post" | "patch" | "get" | "delete", path: string, data?: unknown): Promise<T> {
   const res = await req[method](path, { data, headers: CSRF });
@@ -109,16 +113,19 @@ async function open(page: Page, view: keyof Fixture["views"]) {
 }
 
 test.beforeAll(async ({ browser }) => {
-  // An empty storage state: the file-level test.use below points at a file this hook has yet to write.
-  const ctx = await browser.newContext({ baseURL: process.env.OPENGRID_E2E_URL ?? "http://127.0.0.1:8080", storageState: { cookies: [], origins: [] } });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENGRID_E2E_URL"] ?? "http://127.0.0.1:8080", storageState: { cookies: [], origins: [] } });
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);
-  await ctx.storageState({ path: "e2e/.views-auth.json" });
+  session = await ctx.cookies();
   await ctx.close();
 });
 
-test.use({ storageState: "e2e/.views-auth.json", viewport: { width: 1360, height: 820 } });
+test.beforeEach(async ({ context }) => {
+  await context.addCookies(session);
+});
+
+test.use({ viewport: { width: 1360, height: 820 } });
 
 test.describe("kanban", () => {
   test("stacks cards by status in choice order with counts", async ({ page }) => {
@@ -146,9 +153,11 @@ test.describe("kanban", () => {
   test("moves a card with the keyboard (Space, arrow, Space)", async ({ page }) => {
     await open(page, "kanban");
     await page.getByRole("button", { name: "Delta" }).focus();
-    // dnd-kit starts listening for the arrow keys a tick after the pick-up, so wait for each step to show.
+    // dnd-kit ignores arrow keys until it has measured the cards and announced what the picked-up card
+    // is over (the overlay shows earlier than that), so wait for the announcement, then for each step to show.
     await page.keyboard.press("Space");
     await expect(page.locator("[data-drag-overlay]")).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /moved over droppable area/ })).toBeAttached();
     await page.keyboard.press("ArrowLeft");
     await expect(page.getByRole("listitem", { name: "Stack: Doing" }).getByRole("button", { name: "Delta" })).toBeVisible();
     await page.keyboard.press("Space");
