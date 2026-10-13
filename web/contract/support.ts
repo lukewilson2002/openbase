@@ -17,7 +17,9 @@ export const seeded = env.seeded;
 
 export const rand = () => randomBytes(6).toString("hex");
 
-let nextIp = 10;
+// Random start: every test file builds its own profiles, and the first one of each file signs in as the
+// seeded administrator; the same address in more than ten files would trip the per-account login limit.
+let nextIp = 10 + Math.floor(Math.random() * 20_000);
 
 /** One browser profile: its own cookie jar and client address (rate-limit bucket). */
 export class Profile {

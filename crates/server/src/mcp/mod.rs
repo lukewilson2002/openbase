@@ -523,6 +523,13 @@ pub async fn process(
 /// (Personal access tokens keep getting a tool error that names the permission they lack.)
 fn insufficient_scope(ctx: &McpCtx, bytes: &[u8]) -> Option<(String, String)> {
     ctx.actor.oauth_grant_id.as_ref()?;
+    // Cheap pre-check, so that the large bodies of other calls (uploads) are not parsed twice.
+    if !bytes
+        .windows(b"tools/call".len())
+        .any(|w| w == b"tools/call")
+    {
+        return None;
+    }
     let msg: Value = serde_json::from_slice(bytes).ok()?;
     if msg.get("method").and_then(Value::as_str) != Some("tools/call") {
         return None;

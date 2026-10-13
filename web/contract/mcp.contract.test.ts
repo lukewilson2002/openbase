@@ -69,7 +69,7 @@ describe("MCP endpoint", () => {
     // A session cookie is not an MCP credential.
     const cookie = await rpc(null, "tools/list", {}, { cookie: "ob_session=whatever" });
     expect(cookie.status).toBe(401);
-    expect(cookie.body.error.message).toContain("personal access tokens only");
+    expect(cookie.body.error.message).toContain("session cookies are not accepted");
     // No event stream and no sessions to end.
     const get = await fetch(`${seeded.baseUrl}/mcp`, { headers: { authorization: `Bearer ${token}` } });
     expect(get.status).toBe(405);
