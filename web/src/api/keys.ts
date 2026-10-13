@@ -22,7 +22,8 @@ export const keys = {
   comments: (recordId: string) => ["comments", recordId] as const,
   invitePreview: (token: string) => ["invite", token] as const,
   adminUsers: ["admin", "users"] as const,
-  adminAudit: (page: number) => ["admin", "audit", page] as const,
+  /** `before` is the audit-log cursor (an entry id), null for the newest page. */
+  adminAudit: (before: number | null) => ["admin", "audit", before] as const,
   adminStats: ["admin", "stats"] as const,
   adminBackups: ["admin", "backups"] as const,
   notifications: ["notifications"] as const,

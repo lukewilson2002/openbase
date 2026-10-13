@@ -74,6 +74,7 @@ pub struct DuplicateBase {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub include_records: bool,
 }
 

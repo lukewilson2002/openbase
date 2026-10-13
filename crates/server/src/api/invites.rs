@@ -16,6 +16,7 @@ use serde_json::json;
 use crate::auth::{Actor, ClientInfo};
 use crate::email;
 use crate::error::{AppError, AppResult};
+use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::audit::{self, actions};
@@ -117,7 +118,7 @@ async fn create_workspace(
     actor: Actor,
     client: ClientInfo,
     Path(id): Path<String>,
-    Json(req): Json<CreateInviteRequest>,
+    ApiJson(req): ApiJson<CreateInviteRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedInvite>)> {
     create_invite(state, actor, client, InviteTarget::Workspace(id), req).await
 }
@@ -127,7 +128,7 @@ async fn create_base(
     actor: Actor,
     client: ClientInfo,
     Path(id): Path<String>,
-    Json(req): Json<CreateInviteRequest>,
+    ApiJson(req): ApiJson<CreateInviteRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedInvite>)> {
     create_invite(state, actor, client, InviteTarget::Base(id), req).await
 }

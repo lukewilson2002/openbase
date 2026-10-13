@@ -24,10 +24,8 @@ export function SetupPage() {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const create = useMutation({
-    mutationFn: async () => {
-      await api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: null });
-      return api.auth.me();
-    },
+    // The first signup creates the administrator and signs in; the response is the new user.
+    mutationFn: () => api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: null }),
     onSuccess: (user) => {
       setUser(user);
       void qc.invalidateQueries({ queryKey: keys.setup });

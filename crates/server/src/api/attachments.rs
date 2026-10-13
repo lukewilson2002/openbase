@@ -21,9 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use axum::body::{Body, Bytes};
-use axum::extract::{
-    DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Query, Request, State,
-};
+use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Request, State};
 use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -38,6 +36,7 @@ use tokio::sync::Semaphore;
 use crate::auth::{Actor, MaybeActor};
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
+use crate::extract::ApiQuery;
 use crate::ids::new_id;
 use crate::perm::{self, Role};
 use crate::state::AppState;
@@ -390,7 +389,7 @@ async fn download(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
     UrlPath((id, _filename)): UrlPath<(String, String)>,
-    Query(q): Query<ShareQuery>,
+    ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, q.share, &headers, id).await?;
@@ -412,7 +411,7 @@ async fn thumbnail(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
     UrlPath(id): UrlPath<String>,
-    Query(q): Query<ShareQuery>,
+    ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, q.share, &headers, id).await?;
@@ -458,6 +457,10 @@ async fn file_response(path: &Path, content_type: &str, disposition: &str) -> Ap
 }
 
 /// Stream a file as a response body in 64 KiB chunks.
+///
+/// The stream is fused: the compression layer (every browser sends `Accept-Encoding`)
+/// polls the body once more after the end, and a bare `unfold` panics when polled
+/// after it returned `None`, which used to cut off every compressed download.
 pub fn file_body(file: tokio::fs::File) -> Body {
     let stream = futures::stream::unfold(Some(file), |state| async move {
         let mut file = state?;
@@ -471,7 +474,7 @@ pub fn file_body(file: tokio::fs::File) -> Body {
             Err(e) => Some((Err(e), None)),
         }
     });
-    Body::from_stream(stream)
+    Body::from_stream(stream.fuse())
 }
 
 /// `Content-Disposition` with an ASCII fallback name and the exact UTF-8 name

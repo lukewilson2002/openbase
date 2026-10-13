@@ -27,6 +27,8 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/api/health", get(health))
         .merge(api::router())
+        // A known path with the wrong method: answer with the JSON error format too.
+        .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed })
         .layer(middleware::from_fn_with_state(state.clone(), csrf_guard))
         .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT));
 

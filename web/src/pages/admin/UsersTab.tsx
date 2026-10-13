@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Link2, ShieldCheck, ShieldOff, UserCheck, UserPlus, UserX } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { AdminUser, ResetLink } from "@/api/types";
+import type { AdminCreatedUser, AdminUpdateUser, AdminUser, ResetLink } from "@/api/types";
 import { errorMessage } from "@/api/client";
 import { useMe } from "@/auth/useAuth";
 import { CopyField } from "@/components/CopyField";
@@ -36,7 +36,7 @@ export function UsersTab() {
   const refresh = () => qc.invalidateQueries({ queryKey: keys.adminUsers });
 
   const update = useMutation({
-    mutationFn: (v: { id: string; body: { is_active?: boolean; is_admin?: boolean } }) => api.admin.updateUser(v.id, v.body),
+    mutationFn: (v: { id: string; body: AdminUpdateUser }) => api.admin.updateUser(v.id, v.body),
     onSuccess: refresh,
     onError: (e) => toast.error(e, "Could not update user"),
   });
@@ -138,10 +138,10 @@ export function UsersTab() {
       {creating && (
         <CreateUserDialog
           onClose={() => setCreating(false)}
-          onCreated={(user, resetLink) => {
+          onCreated={({ user, reset_link }) => {
             setCreating(false);
             void refresh();
-            if (resetLink) setLink({ user, link: resetLink });
+            if (reset_link) setLink({ user, link: reset_link });
             else toast.toast({ title: "User created", variant: "success" });
           }}
         />
@@ -171,7 +171,7 @@ export function UsersTab() {
         destructive
         onConfirm={async () => {
           if (!confirm2fa) return;
-          await api.admin.updateUser(confirm2fa.id, { disable_two_factor: true });
+          await api.admin.updateUser(confirm2fa.id, { disable_2fa: true });
           void refresh();
         }}
       />
@@ -179,14 +179,14 @@ export function UsersTab() {
   );
 }
 
-function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (user: AdminUser, link: ResetLink | null) => void }) {
+function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (created: AdminCreatedUser) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const create = useMutation({
     mutationFn: () => api.admin.createUser({ name: name.trim(), email: email.trim(), password: password || null, is_admin: isAdmin }),
-    onSuccess: (res) => onCreated(res, res.reset_link ?? null),
+    onSuccess: onCreated,
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();

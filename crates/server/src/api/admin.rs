@@ -3,7 +3,7 @@
 
 use std::path::{Path as FsPath, PathBuf};
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
@@ -17,6 +17,7 @@ use serde_json::json;
 
 use crate::auth::{Actor, ClientInfo, password};
 use crate::error::{AppError, AppResult};
+use crate::extract::{ApiJson, ApiQuery};
 use crate::state::AppState;
 use crate::store::audit::{self, actions};
 use crate::store::users;
@@ -50,7 +51,7 @@ async fn create_user(
     State(state): State<AppState>,
     actor: Actor,
     client: ClientInfo,
-    Json(req): Json<AdminCreateUser>,
+    ApiJson(req): ApiJson<AdminCreateUser>,
 ) -> AppResult<(StatusCode, Json<AdminCreatedUser>)> {
     actor.require_admin()?;
     let email = users::normalize_email(&req.email)?;
@@ -99,7 +100,7 @@ async fn update_user(
     actor: Actor,
     client: ClientInfo,
     Path(id): Path<String>,
-    Json(req): Json<AdminUpdateUser>,
+    ApiJson(req): ApiJson<AdminUpdateUser>,
 ) -> AppResult<Json<AdminUser>> {
     actor.require_admin()?;
     let user = state
@@ -165,7 +166,7 @@ struct AuditQuery {
 async fn audit_log(
     State(state): State<AppState>,
     actor: Actor,
-    Query(q): Query<AuditQuery>,
+    ApiQuery(q): ApiQuery<AuditQuery>,
 ) -> AppResult<Json<AuditPage>> {
     actor.require_admin()?;
     let limit = q.limit.unwrap_or(audit::DEFAULT_PAGE);

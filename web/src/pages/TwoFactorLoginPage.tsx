@@ -8,7 +8,6 @@ import { AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { safeNext } from "@/lib/format";
-import type { User } from "@/api/types";
 
 /** Second step of login when the account has TOTP enabled. */
 export function TwoFactorLoginPage() {
@@ -21,9 +20,9 @@ export function TwoFactorLoginPage() {
   const verify = useMutation({
     mutationFn: async () => {
       const res = await api.auth.login2fa(code.trim());
-      // The endpoint may answer with { user } or the user itself; fall back to /me.
-      const user = ("user" in res ? res.user : res) as User | null | undefined;
-      return user ?? (await api.auth.me());
+      // A successful second step always carries the user.
+      if (!res.user) throw new Error("The server did not complete the sign-in.");
+      return res.user;
     },
     onSuccess: (user) => {
       setUser(user);

@@ -4,4 +4,4 @@ export type MarkRead = {
 /**
  * Empty = mark all read.
  */
-ids: Array<string>, };
+ids?: Array<string>, };

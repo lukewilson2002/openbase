@@ -30,7 +30,7 @@ describe("account", () => {
 
   it("changes the password after local validation", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "POST /api/auth/password": { status: 204 } });
+    const api = mockApi({ "GET /api/auth/me": USER, "POST /api/auth/password": { ok: true } });
     renderApp({ route: "/account?tab=security" });
 
     await user.type(await screen.findByLabelText("Current password"), "oldpassword1");
@@ -56,7 +56,7 @@ describe("account", () => {
       "POST /api/auth/2fa/setup": { secret: "JBSWY3DPEHPK3PXP", otpauth_url: "otpauth://totp/OpenGrid:ada@example.com?secret=JBSWY3DPEHPK3PXP&issuer=OpenGrid" },
       "POST /api/auth/2fa/enable": () => {
         enabled = true;
-        return { status: 204 };
+        return { ...USER, totp_enabled: true };
       },
     });
     renderApp({ route: "/account?tab=security" });
@@ -79,7 +79,7 @@ describe("account", () => {
 
   it("disables two-factor with password and code", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": { ...USER, totp_enabled: true }, "POST /api/auth/2fa/disable": { status: 204 } });
+    const api = mockApi({ "GET /api/auth/me": { ...USER, totp_enabled: true }, "POST /api/auth/2fa/disable": USER });
     renderApp({ route: "/account?tab=security" });
     await user.click(await screen.findByRole("button", { name: "Disable" }));
     const dialog = await screen.findByRole("dialog", { name: /Disable two-factor/ });

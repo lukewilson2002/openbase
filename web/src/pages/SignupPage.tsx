@@ -33,10 +33,8 @@ export function SignupPage() {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const signup = useMutation({
-    mutationFn: async () => {
-      await api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: inviteToken });
-      return api.auth.me();
-    },
+    // Signing up also signs in; the response is the new user.
+    mutationFn: () => api.auth.signup({ name: name.trim(), email: email.trim(), password, invite_token: inviteToken }),
     onSuccess: (user) => {
       setUser(user);
       navigate("/", { replace: true });

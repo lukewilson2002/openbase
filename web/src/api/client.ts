@@ -6,7 +6,13 @@
  *   unsafe requests without it; see crates/server/src/http.rs)
  * - `X-Client-Id` (per tab) on every request so SSE echoes of our own writes can be skipped
  * - errors normalised to {@link ApiError} from `{"error": {"code", "message"}}`
- * - 401 -> redirect to /login unless already on a public/auth route
+ * - 401 -> redirect to /login unless already on a public/auth route (browser only)
+ * - optional base URL ({@link setApiBase}) for non-browser callers such as the live
+ *   contract tests (web/contract), which run this same client against a real server
+ *
+ * Response contract (crates/server/src/api): 200/201 carry a JSON body typed by the
+ * generated DTOs; DELETE routes answer 204 with no body (`undefined` here); every
+ * error is `{"error": {"code", "message"}}`.
  */
 
 export const CSRF_HEADER = "X-OpenGrid-CSRF";
@@ -71,6 +77,16 @@ export function getClientId(): string {
   }
 }
 
+let apiBase = "";
+
+/**
+ * Prefix for every request path, e.g. `http://127.0.0.1:8080`. Empty (the default) means
+ * same-origin relative URLs, which is what the browser app uses. Without a trailing slash.
+ */
+export function setApiBase(base: string): void {
+  apiBase = base.replace(/\/+$/, "");
+}
+
 /** Routes reachable without a session; a 401 there must not bounce to /login. */
 const PUBLIC_PREFIXES = [
   "/login",
@@ -88,6 +104,7 @@ export function isPublicRoute(pathname: string): boolean {
 type UnauthorizedHandler = (returnTo: string) => void;
 
 const defaultUnauthorizedHandler: UnauthorizedHandler = (returnTo) => {
+  if (typeof window === "undefined") return; // not in a browser: callers see the ApiError
   const target = returnTo && returnTo !== "/" ? `/login?next=${encodeURIComponent(returnTo)}` : "/login";
   window.location.assign(target);
 };
@@ -109,6 +126,8 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Do not redirect to /login on 401 (the caller handles it). */
   skipAuthRedirect?: boolean;
+  /** Extra request headers, e.g. `Authorization: Bearer <token>` for API-token callers. */
+  headers?: Record<string, string>;
 }
 
 export function withQuery(path: string, query?: Query): string {
@@ -145,6 +164,7 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
   const headers: Record<string, string> = {
     Accept: "application/json",
     [CLIENT_ID_HEADER]: getClientId(),
+    ...opts.headers,
   };
   if (method !== "GET") headers[CSRF_HEADER] = "1";
 
@@ -158,7 +178,7 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
 
   let res: Response;
   try {
-    res = await fetch(withQuery(path, opts.query), {
+    res = await fetch(apiBase + withQuery(path, opts.query), {
       method,
       headers,
       body,
@@ -172,15 +192,15 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
 
   if (!res.ok) {
     const err = await parseError(res);
-    if (err.status === 401 && !opts.skipAuthRedirect && !isPublicRoute(window.location.pathname)) {
+    if (err.status === 401 && !opts.skipAuthRedirect && typeof window !== "undefined" && !isPublicRoute(window.location.pathname)) {
       unauthorizedHandler(window.location.pathname + window.location.search);
     }
     throw err;
   }
 
+  // 204 No Content (DELETE routes): there is no body to parse.
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  if (!text) return undefined as T;
   try {
     return JSON.parse(text) as T;
   } catch {

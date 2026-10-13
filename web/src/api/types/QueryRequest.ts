@@ -4,7 +4,7 @@ import type { DateRange } from "./DateRange";
 /**
  * `POST /api/views/{id}/query`.
  */
-export type QueryRequest = { offset: number, 
+export type QueryRequest = { offset?: number, 
 /**
  * Defaults to 100, max `limits::MAX_PAGE_SIZE`.
  */

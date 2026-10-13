@@ -38,7 +38,7 @@ describe("safeNext", () => {
 
 describe("validatePasswords", () => {
   it("checks length and confirmation", () => {
-    expect(validatePasswords("short", "short")).toMatch(/at least 8/);
+    expect(validatePasswords("too short", "too short")).toMatch(/at least 10/);
     expect(validatePasswords("longenough1", "different1")).toMatch(/do not match/);
     expect(validatePasswords("longenough1", "longenough1")).toBeNull();
   });
