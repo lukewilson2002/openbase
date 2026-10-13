@@ -192,3 +192,53 @@ async fn the_tick_runs_the_new_jobs_and_runs_each_only_when_due() {
     tasks::tick(&f.app.state, &mut clock).await;
     assert_eq!(f.stored(&rec, sid(&today["id"])), "2000-01-01");
 }
+
+#[tokio::test]
+async fn one_failing_base_does_not_stop_the_volatile_refresh_of_the_others() {
+    let f = Fixture::new().await;
+    // Two bases, each with a clock formula and a record holding a stale value.
+    let second = schema_support::base(&f.app, &f.owner, &f.ws, "Second").await;
+    let second_base = sid(&second["id"]).to_string();
+    let second_table = {
+        let r = f
+            .app
+            .post(
+                &f.owner,
+                &format!("/api/bases/{second_base}/tables"),
+                json!({ "name": "T2" }),
+            )
+            .await;
+        r.assert_status(201);
+        sid(&r.body["id"]).to_string()
+    };
+    let mut bases = vec![(f.base_id.clone(), f.table_id.clone())];
+    bases.push((second_base, second_table));
+    // The refresh walks bases in id order: break the first, check the second.
+    bases.sort();
+    let mut stale = Vec::new();
+    for (_, table) in &bases {
+        let now_field = f.formula(table, "Now", "TODAY()").await;
+        let rec = f.create(table, json!({})).await;
+        let (rid, fid) = (
+            sid(&rec["id"]).to_string(),
+            sid(&now_field["id"]).to_string(),
+        );
+        set_data(&f.app, &rid, json!({ &fid: "2000-01-01" }));
+        stale.push((rid, fid));
+    }
+    let broken = bases[0].1.clone();
+    schema_support::sql(&f.app, move |tx| {
+        tx.execute_batch(&format!(
+            "CREATE TRIGGER break_refresh BEFORE UPDATE ON records
+             WHEN NEW.table_id = '{broken}'
+             BEGIN SELECT RAISE(ABORT, 'refresh of this base fails'); END"
+        ))
+    });
+
+    let now = Utc.with_ymd_and_hms(2030, 6, 15, 12, 0, 0).unwrap();
+    let changed = tasks::refresh_volatile_formulas(&f.app.state, now)
+        .expect("a failing base is logged, not fatal");
+    assert_eq!(changed, 1);
+    assert_eq!(f.stored(&stale[0].0, &stale[0].1), "2000-01-01");
+    assert_eq!(f.stored(&stale[1].0, &stale[1].1), "2030-06-15");
+}

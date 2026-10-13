@@ -208,9 +208,16 @@ pub fn refresh_volatile_formulas(state: &AppState, now: DateTime<chrono::Utc>) -
     let groups = state.db.write_sync(|tx| recompute::volatile_fields(tx))?;
     let mut changed = 0;
     for (base_id, field_ids) in groups {
-        let outcome = state
+        let outcome = match state
             .db
-            .write_sync(|tx| recompute::refresh_volatile(tx, &base_id, &field_ids, now))?;
+            .write_sync(|tx| recompute::refresh_volatile(tx, &base_id, &field_ids, now))
+        {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                tracing::error!(base = %base_id, error = %e, "volatile formula refresh failed for this base");
+                continue;
+            }
+        };
         for (table_id, ids) in outcome.updated {
             changed += ids.len();
             state.events.publish(
