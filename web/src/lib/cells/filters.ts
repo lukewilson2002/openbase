@@ -1,5 +1,5 @@
 /**
- * Filter operator tables per field type (mirror of og_core::query::filter_ops_for) and the
+ * Filter operator tables per field type (mirror of ob_core::query::filter_ops_for) and the
  * operand shapes the server accepts for each operator.
  */
 import type { Condition, DateOperand, Field, Filter, FilterItem, FilterOp } from "@/api/types";

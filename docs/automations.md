@@ -39,7 +39,7 @@ These two actions go through the same record write engine as the API
 (`engine::write`, source `automation`): values are validated the same way,
 link cells keep both sides in sync, computed fields are recomputed, record
 history is written (as the automation's creator) and the usual events are
-published after the write commits, so open grids update and cached view
+published after the write commits, so grids that are on screen update and cached view
 queries are invalidated. A record trigger only fires for writes that do not
 come from an automation. The record trigger's `record_matches` check compares
 the record's data before and after the write, so an edit that merely changes a
@@ -102,7 +102,7 @@ unique-local IPv6 ranges, and IPv6 forms embedding an IPv4 address are
 refused. The connection is pinned to the vetted address (DNS rebinding cannot
 swap it), redirects are not followed, the system proxy is ignored, requests
 time out after 10 s and only the first 256 KB of a response is kept. The user
-agent is `OpenGrid-Automations`. `OPENGRID_ALLOW_PRIVATE_WEBHOOKS=true`
+agent is `OpenBase-Automations`. `OPENBASE_ALLOW_PRIVATE_WEBHOOKS=true`
 switches the address check off for installations that need to call their LAN.
 
 ## API

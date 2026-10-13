@@ -10,13 +10,13 @@
 # Not for the internet: no TLS, so passwords and session cookies travel in clear.
 
 services:
-  opengrid:
+  openbase:
     environment:
-      OPENGRID_PUBLIC_URL: http://localhost:8088
+      OPENBASE_PUBLIC_URL: http://localhost:8088
   caddy:
     environment:
       # An address that starts with http:// makes Caddy serve plain HTTP and
       # skip certificate management for that site.
-      OPENGRID_DOMAIN: http://localhost
+      OPENBASE_DOMAIN: http://localhost
     ports: !override
       - "127.0.0.1:8088:80"

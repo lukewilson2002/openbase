@@ -11,7 +11,7 @@ use totp_rs::{Algorithm, Builder, Secret, Totp};
 
 use crate::error::{AppError, AppResult};
 
-pub const ISSUER: &str = "OpenGrid";
+pub const ISSUER: &str = "OpenBase";
 const DIGITS: u8 = 6;
 const STEP_SECS: u64 = 30;
 const SKEW: u16 = 1;
@@ -133,8 +133,8 @@ mod tests {
         let s = generate_secret();
         assert_eq!(Secret::try_from_base32(&s).unwrap().as_bytes().len(), 20);
         let url = otpauth_url(&s, "a@example.com").unwrap();
-        assert!(url.starts_with("otpauth://totp/OpenGrid:a%40example.com?"));
-        assert!(url.contains("issuer=OpenGrid"));
+        assert!(url.starts_with("otpauth://totp/OpenBase:a%40example.com?"));
+        assert!(url.contains("issuer=OpenBase"));
         assert!(url.contains(&format!("secret={s}")));
     }
 

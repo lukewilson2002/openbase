@@ -10,7 +10,7 @@ mod schema_support;
 
 use std::collections::BTreeMap;
 
-use opengrid::engine::recompute;
+use openbase::engine::recompute;
 use records_support::*;
 use serde_json::{Value, json};
 
@@ -167,8 +167,8 @@ fn full_recompute(w: &World) {
     let base = w.f.base_id.clone();
     let schema_json = w.f.app.state.db.write_sync(|tx| {
         let mut per_table = Vec::new();
-        for t in opengrid::store::schema::live_tables(tx, &base)? {
-            let ids: Vec<String> = opengrid::store::schema::table_fields(tx, &t.id)?
+        for t in openbase::store::schema::live_tables(tx, &base)? {
+            let ids: Vec<String> = openbase::store::schema::table_fields(tx, &t.id)?
                 .into_iter()
                 .map(|f| f.id)
                 .collect();
@@ -323,8 +323,8 @@ fn check(w: &World, seed: u64, step: usize) {
             .db
             .write_sync(|tx| {
                 let mut tables = Vec::new();
-                for t in opengrid::store::schema::live_tables(tx, &base)? {
-                    let fields = opengrid::store::schema::table_fields(tx, &t.id)?;
+                for t in openbase::store::schema::live_tables(tx, &base)? {
+                    let fields = openbase::store::schema::table_fields(tx, &t.id)?;
                     tables.push(json!({
                         "id": t.id,
                         "fields": fields.iter().map(|f| serde_json::to_value(f).unwrap()).collect::<Vec<_>>(),

@@ -76,7 +76,7 @@ describe("the list", () => {
   });
 
   it("explains an empty base, mentions the docs and creates the first automation", async () => {
-    const created = makeAutomation({ id: "aut9", name: "Hook", trigger: { type: "webhook" }, webhook_token: "ogh_new_token" });
+    const created = makeAutomation({ id: "aut9", name: "Hook", trigger: { type: "webhook" }, webhook_token: "obh_new_token" });
     let stored: Automation[] = [];
     const api = mockApi(
       routes([], {
@@ -102,7 +102,7 @@ describe("the list", () => {
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/automations")).toHaveLength(1));
     expect(api.callsTo("POST /api/bases/app1/automations")[0]!.body).toEqual({ name: "Hook", trigger: { type: "webhook" }, actions: [] });
     // It opens in the editor, with the one-time token on show.
-    expect(await screen.findByLabelText("Webhook URL")).toHaveValue(`${window.location.origin}/api/hooks/ogh_new_token`);
+    expect(await screen.findByLabelText("Webhook URL")).toHaveValue(`${window.location.origin}/api/hooks/obh_new_token`);
     expect(screen.getByLabelText("location")).toHaveTextContent("/base/app1/automations/aut9");
   });
 

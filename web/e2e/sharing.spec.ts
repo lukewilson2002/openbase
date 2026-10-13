@@ -13,15 +13,15 @@ import { expect, test } from "./fixtures";
  *   - a viewer can filter and sort a board for themselves ("Not saved") without changing the view.
  *
  * Results are asserted against the API where the grid (a canvas) would otherwise be the only
- * witness. Runs only with OPENGRID_E2E=1 (see playwright.config.ts).
+ * witness. Runs only with OPENBASE_E2E=1 (see playwright.config.ts).
  */
-test.skip(!process.env["OPENGRID_E2E"], "set OPENGRID_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
+test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 test.describe.configure({ mode: "serial" });
 test.use({ viewport: { width: 1360, height: 860 } });
 
-const EMAIL = process.env["OPENGRID_E2E_EMAIL"] ?? "e2e-sharing@example.com";
-const PASSWORD = process.env["OPENGRID_E2E_PASSWORD"] ?? "correct horse battery staple 42";
-const CSRF = { "X-OpenGrid-CSRF": "1" };
+const EMAIL = process.env["OPENBASE_E2E_EMAIL"] ?? "e2e-sharing@example.com";
+const PASSWORD = process.env["OPENBASE_E2E_PASSWORD"] ?? "correct horse battery staple 42";
+const CSRF = { "X-OpenBase-CSRF": "1" };
 
 interface Fixture {
   workspaceId: string;
@@ -58,7 +58,7 @@ async function seed(page: Page): Promise<Fixture> {
   const signup = await req.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Sharing", password: PASSWORD }, headers: CSRF });
   if (!signup.ok()) {
     const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-    expect(login.ok(), `login failed (${login.status()}): set OPENGRID_E2E_EMAIL/OPENGRID_E2E_PASSWORD`).toBeTruthy();
+    expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
   }
   const ws = await call<{ id: string }>(req, "post", "/api/workspaces", { name: `E2E sharing ${Date.now()}` });
   const base = await call<{ id: string; tables: TableDto[] }>(req, "post", `/api/workspaces/${ws.id}/bases`, { name: "Sharing E2E" });

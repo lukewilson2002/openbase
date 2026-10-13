@@ -6,7 +6,7 @@ mod common;
 mod records_support;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use records_support::*;
 use serde_json::{Value, json};
 
@@ -433,12 +433,12 @@ async fn typecast_creates_missing_select_choices_and_announces_the_schema_change
     let first = rx.try_recv().unwrap();
     assert!(matches!(
         first.event,
-        og_core::api::events::BaseEvent::SchemaChanged { ref table_id } if table_id.as_deref() == Some(s.table.as_str())
+        ob_core::api::events::BaseEvent::SchemaChanged { ref table_id } if table_id.as_deref() == Some(s.table.as_str())
     ));
     let second = rx.try_recv().unwrap();
     assert!(matches!(
         second.event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref created, .. } if created == &[rid.to_string()]
+        ob_core::api::events::BaseEvent::RecordsChanged { ref created, .. } if created == &[rid.to_string()]
     ));
     // names that exist already (any case) do not create choices
     s.typecast(json!({ s.id("single"): "todo" }))
@@ -616,7 +616,7 @@ async fn batch_size_limits() {
 #[tokio::test]
 async fn a_table_holds_at_most_the_maximum_number_of_records() {
     let f = Fixture::new().await;
-    let max = og_core::limits::MAX_RECORDS_PER_TABLE;
+    let max = ob_core::limits::MAX_RECORDS_PER_TABLE;
     let tid = f.table_id.clone();
     sql(&f.app, move |tx| {
         tx.execute(
@@ -1240,7 +1240,7 @@ async fn move_errors_and_effects() {
     let ev = rx.try_recv().unwrap();
     assert!(matches!(
         ev.event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref updated, .. } if updated == &[ids[0].clone()]
+        ob_core::api::events::BaseEvent::RecordsChanged { ref updated, .. } if updated == &[ids[0].clone()]
     ));
     // trashed records cannot be moved
     f.delete_records(&f.table_id, &[&ids[1]])
@@ -1269,14 +1269,14 @@ async fn events_are_published_after_commit_one_per_table() {
     assert_eq!(ev.user_id.as_deref(), f.owner.user_id.as_deref());
     assert!(matches!(
         ev.event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref table_id, ref created, ref updated, ref deleted }
+        ob_core::api::events::BaseEvent::RecordsChanged { ref table_id, ref created, ref updated, ref deleted }
             if *table_id == f.table_id && created.as_slice() == std::slice::from_ref(&aid) && updated.is_empty() && deleted.is_empty()
     ));
     f.set(&f.table_id, &aid, json!({ &f.primary_id: "b" }))
         .await;
     assert!(matches!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref updated, .. } if updated.as_slice() == std::slice::from_ref(&aid)
+        ob_core::api::events::BaseEvent::RecordsChanged { ref updated, .. } if updated.as_slice() == std::slice::from_ref(&aid)
     ));
     // a no-op update announces nothing
     f.set(&f.table_id, &aid, json!({ &f.primary_id: "b" }))
@@ -1287,14 +1287,14 @@ async fn events_are_published_after_commit_one_per_table() {
         .assert_status(204);
     assert!(matches!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref deleted, .. } if deleted.as_slice() == std::slice::from_ref(&aid)
+        ob_core::api::events::BaseEvent::RecordsChanged { ref deleted, .. } if deleted.as_slice() == std::slice::from_ref(&aid)
     ));
     f.restore_records(&f.table_id, &[&aid])
         .await
         .assert_status(200);
     assert!(matches!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::RecordsChanged { ref created, .. } if created.as_slice() == std::slice::from_ref(&aid)
+        ob_core::api::events::BaseEvent::RecordsChanged { ref created, .. } if created.as_slice() == std::slice::from_ref(&aid)
     ));
     // failed writes publish nothing
     f.create_as(&f.owner, &f.table_id, json!({ "fldNOPE": 1 }))
@@ -1497,8 +1497,8 @@ async fn read_only_tokens_cannot_write_but_can_read() {
 #[tokio::test]
 async fn a_token_limited_to_other_bases_cannot_reach_this_one() {
     let f = Fixture::new().await;
-    let token = format!("pat_test_{}", opengrid::ids::new_id("x"));
-    let hash = opengrid::ids::hash_token(&token);
+    let token = format!("pat_test_{}", openbase::ids::new_id("x"));
+    let hash = openbase::ids::hash_token(&token);
     let uid = f.owner.user_id.clone().unwrap();
     let scopes = json!({ "write": true, "base_ids": ["appSomethingElse"] }).to_string();
     sql(&f.app, move |tx| {

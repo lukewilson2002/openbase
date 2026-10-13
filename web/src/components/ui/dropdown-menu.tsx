@@ -14,7 +14,7 @@ export function DropdownMenuContent({ className, sideOffset = 4, align = "end", 
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          "og-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop",
+          "ob-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop",
           className,
         )}
         {...props}

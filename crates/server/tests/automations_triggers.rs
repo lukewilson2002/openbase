@@ -9,7 +9,7 @@ mod common;
 mod schema_support;
 
 use automations_support::*;
-use opengrid::automations::store::MAX_QUEUED_RUNS_PER_AUTOMATION;
+use openbase::automations::store::MAX_QUEUED_RUNS_PER_AUTOMATION;
 use serde_json::{Value, json};
 
 fn one_notify(env: &Env) -> Value {
@@ -62,9 +62,9 @@ async fn record_created_ignores_other_tables_updates_and_other_bases() {
         .state
         .db
         .write_sync(|tx| {
-            opengrid::automations::on_records_changed(
+            openbase::automations::on_records_changed(
                 tx,
-                &opengrid::automations::RecordChanges {
+                &openbase::automations::RecordChanges {
                     base_id: &base,
                     table_id: &other_id,
                     created: std::slice::from_ref(&rec),
@@ -87,9 +87,9 @@ async fn record_created_ignores_other_tables_updates_and_other_bases() {
         .state
         .db
         .write_sync(|tx| {
-            opengrid::automations::on_records_changed(
+            openbase::automations::on_records_changed(
                 tx,
-                &opengrid::automations::RecordChanges {
+                &openbase::automations::RecordChanges {
                     base_id: "appSomewhereElse",
                     table_id: &base,
                     created: std::slice::from_ref(&r),
@@ -481,16 +481,16 @@ async fn a_rolled_back_write_queues_nothing() {
     let r = env.rec(json!({}));
     let (base, table) = (env.base().to_string(), env.table().to_string());
     let res: Result<(), _> = env.f.app.state.db.write_sync(|tx| {
-        opengrid::automations::on_records_changed(
+        openbase::automations::on_records_changed(
             tx,
-            &opengrid::automations::RecordChanges {
+            &openbase::automations::RecordChanges {
                 base_id: &base,
                 table_id: &table,
                 created: std::slice::from_ref(&r),
                 ..Default::default()
             },
         )?;
-        Err(opengrid::error::AppError::bad_request(
+        Err(openbase::error::AppError::bad_request(
             "write failed afterwards",
         ))
     });

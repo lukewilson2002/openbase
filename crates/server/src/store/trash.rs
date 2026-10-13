@@ -7,8 +7,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use og_core::api::records::{TrashItem, TrashListing};
-use og_core::field::FieldKind;
+use ob_core::api::records::{TrashItem, TrashListing};
+use ob_core::field::FieldKind;
 use rusqlite::types::Value as SqlValue;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Map, Value as Json};
@@ -445,10 +445,10 @@ fn restore_table(tx: &Transaction, id: &str) -> AppResult<Restored> {
         .into_iter()
         .map(|t| t.name)
         .collect();
-    if live.len() >= og_core::limits::MAX_TABLES_PER_BASE {
+    if live.len() >= ob_core::limits::MAX_TABLES_PER_BASE {
         return Err(AppError::bad_request(format!(
             "a base can have at most {} tables",
-            og_core::limits::MAX_TABLES_PER_BASE
+            ob_core::limits::MAX_TABLES_PER_BASE
         )));
     }
     let taken = schema::name_keys(live.iter().map(String::as_str));
@@ -456,7 +456,7 @@ fn restore_table(tx: &Transaction, id: &str) -> AppResult<Restored> {
         let head: String = table
             .name
             .chars()
-            .take(og_core::limits::MAX_NAME_LEN - 16)
+            .take(ob_core::limits::MAX_NAME_LEN - 16)
             .collect();
         schema::uniquify(&taken, &format!("{head} (restored)"))
     } else {

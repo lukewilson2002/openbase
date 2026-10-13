@@ -7,8 +7,8 @@ use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use og_core::api::events::BaseEvent;
-use og_core::api::records::{RestoreRequest, RestoreResponse, TrashListing};
+use ob_core::api::events::BaseEvent;
+use ob_core::api::records::{RestoreRequest, RestoreResponse, TrashListing};
 
 use crate::api::schema_support::{publish, publish_schema};
 use crate::auth::{Actor, Capability};

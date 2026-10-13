@@ -11,7 +11,7 @@ export function mcpEndpoint(origin: string = window.location.origin): string {
 
 /** `claude mcp add ...` for Claude Code, with a placeholder where the token goes. */
 export function claudeCodeCommand(endpoint: string): string {
-  return `claude mcp add --transport http opengrid ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`;
+  return `claude mcp add --transport http openbase ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`;
 }
 
 /** A configuration file for MCP clients that support remote (Streamable HTTP) servers with headers. */
@@ -19,7 +19,7 @@ export function genericConfig(endpoint: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        opengrid: {
+        openbase: {
           type: "http",
           url: endpoint,
           headers: { Authorization: "Bearer YOUR_TOKEN" },
@@ -52,7 +52,7 @@ export function AssistantsSection({ onOpenTokens }: { onOpenTokens: () => void }
   return (
     <Section
       title="Connect an AI assistant (MCP)"
-      description="OpenGrid speaks the Model Context Protocol, so an AI assistant can do what you can do in the app: build tables, fill in records, run views, set up automations. You do not have to open the app yourself."
+      description="OpenBase speaks the Model Context Protocol, so an AI assistant can do what you can do in the app: build tables, fill in records, run views, set up automations. You do not have to open the app yourself."
     >
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">

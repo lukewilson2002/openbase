@@ -14,7 +14,7 @@ export function PopoverContent({ className, sideOffset = 6, align = "start", ...
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          "og-pop-in z-50 w-72 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-3 shadow-pop",
+          "ob-pop-in z-50 w-72 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-3 shadow-pop",
           className,
         )}
         {...props}

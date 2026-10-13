@@ -7,7 +7,7 @@ mod query_support;
 mod records_support;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use query_support::*;
 use serde_json::{Value, json};
 
@@ -88,7 +88,7 @@ async fn default_page_is_100_and_the_limit_is_capped_at_the_maximum() {
     let resp = f.query(json!({ "limit": 5_000 })).await;
     assert_eq!(
         resp["records"].as_array().unwrap().len(),
-        og_core::limits::MAX_PAGE_SIZE
+        ob_core::limits::MAX_PAGE_SIZE
     );
     // Manual order is position order: r0 first.
     assert_eq!(resp["records"][0]["values"][&f.primary_id], "r0");
@@ -1474,7 +1474,7 @@ async fn query_permissions() {
     let uid = p.f.owner.user_id.clone().unwrap();
     let scopes = json!({ "write": true, "base_ids": ["bseOther"] }).to_string();
     let token = "pat_scoped_token";
-    let hash = opengrid::ids::hash_token(token);
+    let hash = openbase::ids::hash_token(token);
     sql(&p.f.app, |tx| {
         tx.execute(
             "INSERT INTO api_tokens (id, user_id, name, token_hash, scopes, created_at)

@@ -9,7 +9,7 @@
 //! time recorded on the last log line (`retry_at`), so the whole queue state
 //! lives in the database and survives restarts.
 
-use og_core::api::automations::{
+use ob_core::api::automations::{
     ActionStep, Automation, AutomationRun, RunStatus, StepLog, Trigger,
 };
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
@@ -217,7 +217,7 @@ pub fn delete(tx: &Transaction, id: &str) -> AppResult<()> {
 }
 
 pub fn new_automation_id() -> String {
-    new_id(og_core::ids::AUTOMATION)
+    new_id(ob_core::ids::AUTOMATION)
 }
 
 /// Enabled schedule automations whose `next_run_at` has passed.
@@ -509,7 +509,7 @@ pub fn recover_interrupted(
         let already = log.iter().any(|l| l.action == RECOVERY_ACTION);
         if already || run.attempts >= max_attempts {
             log.push(recovery_line(
-                og_core::api::automations::StepStatus::Failed,
+                ob_core::api::automations::StepStatus::Failed,
                 "the server stopped while this run was in progress and it cannot be resumed again",
                 run.attempts,
             ));
@@ -524,7 +524,7 @@ pub fn recover_interrupted(
             failed += 1;
         } else {
             log.push(recovery_line(
-                og_core::api::automations::StepStatus::Skipped,
+                ob_core::api::automations::StepStatus::Skipped,
                 "the server stopped while this run was in progress; it was queued again",
                 run.attempts,
             ));
@@ -539,7 +539,7 @@ pub fn recover_interrupted(
 pub const RECOVERY_ACTION: &str = "recovery";
 
 fn recovery_line(
-    status: og_core::api::automations::StepStatus,
+    status: ob_core::api::automations::StepStatus,
     message: &str,
     attempt: u32,
 ) -> StepLog {

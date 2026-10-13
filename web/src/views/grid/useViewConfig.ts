@@ -31,11 +31,11 @@ export function canConfigureView(role: string, view: Pick<View, "personal" | "lo
 }
 
 function storageKey(viewId: string): string {
-  return `og-view-local:${viewId}`;
+  return `ob-view-local:${viewId}`;
 }
 
 function transientKey(viewId: string): string {
-  return `og-view-transient:${viewId}`;
+  return `ob-view-transient:${viewId}`;
 }
 
 const EMPTY_FILTER: Filter = { conjunction: "and", items: [] };

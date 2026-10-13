@@ -100,7 +100,7 @@ fn audit_log_rows_are_bounded_and_expire() {
     app.state
         .db
         .write_sync(|tx| {
-            use opengrid::store::audit;
+            use openbase::store::audit;
             let huge = json!({ "email": "x".repeat(100_000) });
             audit::record(
                 tx,
@@ -121,11 +121,11 @@ fn audit_log_rows_are_bounded_and_expire() {
     let max: i64 = app.query_i64("SELECT max(length(detail)) FROM audit_log", &[]);
     assert!(max <= 2048, "stored {max} bytes of audit detail");
 
-    let now = opengrid::db::now_ms();
+    let now = openbase::db::now_ms();
     let purged = app
         .state
         .db
-        .write_sync(|tx| opengrid::tasks::purge_audit(tx, 365, now))
+        .write_sync(|tx| openbase::tasks::purge_audit(tx, 365, now))
         .unwrap();
     assert_eq!(purged, 1);
     assert_eq!(app.query_i64("SELECT count(*) FROM audit_log", &[]), 1);
@@ -133,7 +133,7 @@ fn audit_log_rows_are_bounded_and_expire() {
     let purged = app
         .state
         .db
-        .write_sync(|tx| opengrid::tasks::purge_audit(tx, 0, now + 10_000_000_000_000))
+        .write_sync(|tx| openbase::tasks::purge_audit(tx, 0, now + 10_000_000_000_000))
         .unwrap();
     assert_eq!(purged, 0);
 }
@@ -190,7 +190,7 @@ async fn password_reset_link_revokes_api_tokens() {
     let (reset, _) = app
         .state
         .db
-        .write_sync(|tx| opengrid::store::users::create_reset_token(tx, &uid, 3_600_000))
+        .write_sync(|tx| openbase::store::users::create_reset_token(tx, &uid, 3_600_000))
         .unwrap();
     app.post(
         &app.anon(),
@@ -210,7 +210,7 @@ async fn cli_password_reset_revokes_api_tokens() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");
     let token = make_token(&app, &user, true).await;
-    opengrid::cli::reset_password(&app.state, "a@example.com", "a brand new password").unwrap();
+    openbase::cli::reset_password(&app.state, "a@example.com", "a brand new password").unwrap();
     app.get(&bearer(&token), "/api/tokens/whoami")
         .await
         .assert_status(401);
@@ -434,6 +434,8 @@ const MUTATING_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/admin/users"),
     ("PATCH", "/api/admin/users/usrX"),
     ("POST", "/api/admin/users/usrX/reset-link"),
+    ("PATCH", "/api/admin/email"),
+    ("POST", "/api/admin/email/test"),
     ("POST", "/api/admin/backups"),
     ("POST", "/api/bases/appX/automations"),
     ("PATCH", "/api/automations/autX"),
@@ -538,7 +540,7 @@ async fn read_only_token_cannot_mark_notifications_read() {
     let (_ws, base) = app.workspace_with_base(&user, "Acme");
     let ro = bearer(&make_token(&app, &user, false).await);
     let uid = user.user_id.clone().unwrap();
-    let nid = opengrid::ids::new_id(og_core::ids::NOTIFICATION);
+    let nid = openbase::ids::new_id(ob_core::ids::NOTIFICATION);
     {
         let (nid, uid, base) = (nid.clone(), uid.clone(), base.clone());
         app.state
@@ -574,7 +576,7 @@ async fn base_limited_tokens_only_see_and_mark_their_bases_notifications() {
     let uid = user.user_id.clone().unwrap();
     let mut ids = Vec::new();
     for (i, base) in [&base_a, &base_b].into_iter().enumerate() {
-        let id = opengrid::ids::new_id(og_core::ids::NOTIFICATION);
+        let id = openbase::ids::new_id(ob_core::ids::NOTIFICATION);
         ids.push(id.clone());
         let (uid, base) = (uid.clone(), base.clone());
         app.state

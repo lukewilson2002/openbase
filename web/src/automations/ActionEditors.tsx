@@ -83,7 +83,7 @@ export function SendEmailEditor({ action, onChange, ctx }: ActionEditorProps<"se
     <div className="flex flex-col gap-4">
       {!emailEnabled && (
         <Notice tone="warning">
-          Email is not configured on this server, so this action cannot be saved. An administrator can enable it by setting <code>OPENGRID_SMTP_HOST</code> (see the self-hosting guide).
+          Email is not configured on this server, so this action cannot be saved. An administrator can set up a mail server under Administration, Email.
         </Notice>
       )}
       <TemplateField label="To" value={action.to} onChange={(to) => onChange({ ...action, to })} ctx={ctx} placeholder="name@example.com, other@example.com" hint="One address or a comma-separated list of up to 10. Placeholders are allowed." />

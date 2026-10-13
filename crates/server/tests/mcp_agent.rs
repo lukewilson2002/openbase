@@ -71,7 +71,7 @@ async fn an_agent_runs_the_business_without_the_ui() {
 
     // ---- the handshake and the toolbox
     let init = agent.initialize().await;
-    assert_eq!(init["serverInfo"]["name"], "opengrid");
+    assert_eq!(init["serverInfo"]["name"], "openbase");
     let tools = agent.tool_names().await;
     for expected in [
         "create_workspace",

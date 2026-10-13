@@ -44,7 +44,7 @@ export function LoginPage() {
   return (
     <AuthLayout
       title="Log in"
-      subtitle="Welcome back to OpenGrid."
+      subtitle="Welcome back to OpenBase."
       footer={
         setup?.open_signup ? (
           <>

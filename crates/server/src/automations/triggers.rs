@@ -12,10 +12,10 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use og_core::api::automations::Trigger;
-use og_core::cell::NoNames;
-use og_core::field::Field;
-use og_core::query::{CompiledFilter, OwnedRow, QueryCtx, compile_filter, matches};
+use ob_core::api::automations::Trigger;
+use ob_core::cell::NoNames;
+use ob_core::field::Field;
+use ob_core::query::{CompiledFilter, OwnedRow, QueryCtx, compile_filter, matches};
 use rusqlite::{Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};

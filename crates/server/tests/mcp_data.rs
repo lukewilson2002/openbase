@@ -13,7 +13,7 @@ mod sse_support;
 
 use common::Client;
 use mcp_support::*;
-use og_core::api::events::BaseEvent;
+use ob_core::api::events::BaseEvent;
 use query_support::*;
 use serde_json::{Value, json};
 
@@ -699,7 +699,7 @@ async fn write_tools_enforce_roles_and_token_scope() {
     let t = tool(r.app(), &r.read, "create_records", write_args(r.base())).await;
     assert!(t.err().contains("write access"));
     // A write token of a user who is only a viewer: the precise role error.
-    let viewer = f.member("viewer@example.com", opengrid::perm::Role::Viewer);
+    let viewer = f.member("viewer@example.com", openbase::perm::Role::Viewer);
     let vt = r
         .app()
         .api_token(&viewer, json!({"name": "v", "write": true}))
@@ -809,7 +809,7 @@ async fn comments_can_be_added_and_listed() {
     .await;
     assert!(t.err().contains("not found"), "{}", t.text);
     // A commenter-level user may comment, a viewer may not.
-    let viewer = r.p.f.member("v@example.com", opengrid::perm::Role::Viewer);
+    let viewer = r.p.f.member("v@example.com", openbase::perm::Role::Viewer);
     let vt = r
         .app()
         .api_token(&viewer, json!({"name": "v", "write": true}))

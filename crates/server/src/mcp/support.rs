@@ -3,7 +3,7 @@
 //! so their permission checks, validation, events and side effects are the web UI's own).
 
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::McpCtx;
 use super::api::{self, ApiCall, ApiResponse};
@@ -31,6 +31,53 @@ pub fn string_list(description: &str) -> Value {
 /// A free-form JSON object argument.
 pub fn free_object(description: &str) -> Value {
     json!({ "type": "object", "description": description })
+}
+
+/// An `icon` argument: a Lucide name, or null to remove the icon.
+pub fn icon_schema(what: &str) -> Value {
+    json!({
+        "type": ["string", "null"],
+        "description": format!(
+            "Optional Lucide icon name in kebab-case for the {what}, e.g. 'briefcase', 'users', 'shopping-cart' \
+             (call list_icons to search the names). null removes the icon; leave it out to keep it."
+        ),
+    })
+}
+
+/// Put an `icon` argument into a request body: a name (checked against the Lucide list and
+/// stored under its canonical spelling), `null` to clear, nothing when it was not given.
+/// Returns a note to show the caller when the stored name differs from what was written.
+pub fn put_icon(
+    body: &mut Map<String, Value>,
+    icon: Option<Option<String>>,
+) -> Result<Option<String>, ToolResult> {
+    match icon {
+        None => Ok(None),
+        Some(None) => {
+            body.insert("icon".into(), Value::Null);
+            Ok(None)
+        }
+        Some(Some(name)) => {
+            let resolved = crate::icons::icons()
+                .check(&name)
+                .map_err(ToolResult::error)?;
+            body.insert("icon".into(), json!(resolved.name));
+            Ok(resolved.changed.then(|| {
+                format!(
+                    "Icon '{name}' was stored as '{}', its canonical name.",
+                    resolved.name
+                )
+            }))
+        }
+    }
+}
+
+/// `value` (an object) with a `note` added when there is one.
+pub fn with_note(mut value: Value, note: Option<String>) -> Value {
+    if let (Some(note), Some(o)) = (note, value.as_object_mut()) {
+        o.insert("note".into(), json!(note));
+    }
+    value
 }
 
 pub fn enumeration(values: &[&str], description: &str) -> Value {

@@ -10,10 +10,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use automations_support::*;
 use futures::future::BoxFuture;
-use opengrid::automations::runner::Runner;
-use opengrid::config::Config;
-use opengrid::email::Mailer;
-use opengrid::error::{AppError, AppResult};
+use openbase::automations::runner::Runner;
+use openbase::config::Config;
+use openbase::email::Mailer;
+use openbase::error::{AppError, AppResult};
 use serde_json::{Value, json};
 
 fn notifications(env: &Env) -> Vec<(String, Value)> {
@@ -392,7 +392,7 @@ async fn the_step_log_describes_every_action() {
 #[tokio::test]
 async fn notify_reaches_users_with_access_and_skips_the_rest() {
     let env = Env::new().await;
-    let editor = env.f.member("ed@example.com", opengrid::perm::Role::Editor);
+    let editor = env.f.member("ed@example.com", openbase::perm::Role::Editor);
     let outsider = env.f.app.user("out@example.com", "Out");
     let owner_id = env.f.owner.user_id.clone().unwrap();
     let ed_id = editor.user_id.clone().unwrap();
@@ -521,7 +521,7 @@ async fn send_email_fails_when_smtp_is_not_configured() {
 struct FlakyMailer {
     failures: u32,
     calls: AtomicU32,
-    inner: opengrid::email::CapturingMailer,
+    inner: openbase::email::CapturingMailer,
 }
 
 impl Mailer for FlakyMailer {
@@ -599,7 +599,7 @@ async fn http_request_sends_what_was_configured_with_safe_substitution() {
         "values are percent-encoded in URLs"
     );
     assert_eq!(h.headers["x-api-key"], format!("key-{rec}"));
-    assert_eq!(h.headers["user-agent"], "OpenGrid-Automations");
+    assert_eq!(h.headers["user-agent"], "OpenBase-Automations");
     assert_eq!(h.headers["content-type"], "application/json");
     let body: Value = serde_json::from_str(&h.body).expect("the JSON body stays valid JSON");
     assert_eq!(body, json!({ "name": tricky, "id": rec, "n": 3 }));
@@ -826,7 +826,7 @@ async fn a_retry_waits_for_its_back_off() {
     let env = Env::new().await;
     let runner = Runner::new(
         env.f.app.state.clone(),
-        opengrid::automations::runner::RunnerOpts {
+        openbase::automations::runner::RunnerOpts {
             retry_delays: [
                 std::time::Duration::from_secs(3600),
                 std::time::Duration::from_secs(3600),
@@ -927,7 +927,7 @@ async fn connections_are_pinned_to_the_vetted_address() {
     // "pinned.test" does not exist in DNS: the request only works because the
     // client connects to the address our resolver returned, which proves the
     // vetted address (not a second lookup) is what gets used.
-    use opengrid::automations::{http, ssrf};
+    use openbase::automations::{http, ssrf};
     use std::net::SocketAddr;
     struct Fixed(std::net::IpAddr);
     impl ssrf::Resolver for Fixed {
@@ -944,7 +944,7 @@ async fn connections_are_pinned_to_the_vetted_address() {
     }
     let server = TestServer::start().await;
     let req = |url: String| http::Request {
-        method: og_core::api::automations::HttpMethod::Get,
+        method: ob_core::api::automations::HttpMethod::Get,
         url,
         headers: vec![],
         body: None,

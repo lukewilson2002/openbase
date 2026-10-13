@@ -1,15 +1,15 @@
-//! `opengrid` command-line entry point: the server and its admin commands.
+//! `openbase` command-line entry point: the server and its admin commands.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-use opengrid::config::Config;
-use opengrid::state::AppState;
+use openbase::config::Config;
+use openbase::state::AppState;
 
 #[derive(Parser)]
-#[command(name = "opengrid", version, about = "Self-hosted Airtable alternative")]
+#[command(name = "openbase", version, about = "Self-hosted Airtable alternative")]
 struct Cli {
     #[command(flatten)]
     config: Config,
@@ -29,15 +29,15 @@ enum Command {
         email: String,
         #[arg(long)]
         name: String,
-        /// Read from OPENGRID_ADMIN_PASSWORD if not given.
-        #[arg(long, env = "OPENGRID_ADMIN_PASSWORD", hide_env_values = true)]
+        /// Read from OPENBASE_ADMIN_PASSWORD if not given.
+        #[arg(long, env = "OPENBASE_ADMIN_PASSWORD", hide_env_values = true)]
         password: String,
     },
     /// Set a new password for a user and sign them out everywhere.
     ResetPassword {
         #[arg(long)]
         email: String,
-        #[arg(long, env = "OPENGRID_NEW_PASSWORD", hide_env_values = true)]
+        #[arg(long, env = "OPENBASE_NEW_PASSWORD", hide_env_values = true)]
         password: String,
     },
     /// Turn off two-factor authentication for a user who lost their
@@ -49,11 +49,11 @@ enum Command {
     },
     /// Write a consistent backup archive (database + attachments).
     Backup {
-        /// Output file (.tar.gz). Defaults to <data_dir>/backups/opengrid-<timestamp>.tar.gz
+        /// Output file (.tar.gz). Defaults to <data_dir>/backups/openbase-<timestamp>.tar.gz
         #[arg(long)]
         out: Option<std::path::PathBuf>,
     },
-    /// Check that the server on OPENGRID_BIND answers /api/health (exit 0) or
+    /// Check that the server on OPENBASE_BIND answers /api/health (exit 0) or
     /// not (exit 1). Used by the Docker HEALTHCHECK.
     Healthcheck,
     /// Restore a backup archive into the data directory. The server must be stopped.
@@ -66,7 +66,7 @@ enum Command {
 }
 
 fn init_tracing(format: &str) {
-    let filter = tracing_subscriber::EnvFilter::try_from_env("OPENGRID_LOG")
+    let filter = tracing_subscriber::EnvFilter::try_from_env("OPENBASE_LOG")
         .unwrap_or_else(|_| "info,tower_http=info".into());
     let builder = tracing_subscriber::fmt().with_env_filter(filter);
     if format == "json" {
@@ -77,19 +77,19 @@ fn init_tracing(format: &str) {
 }
 
 /// Clear a user's TOTP secret and revoke their sessions (lost authenticator).
-fn disable_two_factor(state: &AppState, email: &str) -> opengrid::error::AppResult<()> {
+fn disable_two_factor(state: &AppState, email: &str) -> openbase::error::AppResult<()> {
     let email = email.trim().to_string();
     state.db.write_sync(|tx| {
         let id: String = tx
             .query_row("SELECT id FROM users WHERE email = ?1", [&email], |r| {
                 r.get(0)
             })
-            .map_err(|_| opengrid::error::AppError::not_found("user"))?;
+            .map_err(|_| openbase::error::AppError::not_found("user"))?;
         tx.execute(
             "UPDATE users SET totp_enabled = 0, totp_secret = NULL, updated_at = ?1 WHERE id = ?2",
-            rusqlite::params![opengrid::db::now_ms(), id],
+            rusqlite::params![openbase::db::now_ms(), id],
         )?;
-        opengrid::auth::session::delete_all_for_user(tx, &id, None)?;
+        openbase::auth::session::delete_all_for_user(tx, &id, None)?;
         Ok(())
     })
 }
@@ -173,12 +173,12 @@ fn main() -> anyhow::Result<()> {
 async fn run(cli: Cli) -> anyhow::Result<()> {
     let config = cli.config;
     match cli.command.unwrap_or(Command::Serve) {
-        Command::Serve => opengrid::serve(config).await,
+        Command::Serve => openbase::serve(config).await,
         Command::Migrate => {
             AppState::open(config)?;
             println!(
                 "database is at schema version {}",
-                opengrid::db::schema_version()
+                openbase::db::schema_version()
             );
             Ok(())
         }
@@ -188,7 +188,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             password,
         } => {
             let state = AppState::open(config)?;
-            let id = opengrid::cli::create_admin(&state, &email, &name, &password)?;
+            let id = openbase::cli::create_admin(&state, &email, &name, &password)?;
             println!("created administrator {email} ({id})");
             Ok(())
         }
@@ -200,20 +200,20 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Command::ResetPassword { email, password } => {
             let state = AppState::open(config)?;
-            opengrid::cli::reset_password(&state, &email, &password)?;
+            openbase::cli::reset_password(&state, &email, &password)?;
             println!("password updated for {email}; all sessions revoked");
             Ok(())
         }
         Command::Backup { out } => {
             let state = AppState::open(config)?;
-            let path = opengrid::backup::create(&state, out.as_deref())?;
+            let path = openbase::backup::create(&state, out.as_deref())?;
             println!("backup written to {}", path.display());
             Ok(())
         }
         // Handled in main() before the runtime starts.
         Command::Healthcheck => Ok(()),
         Command::Restore { archive, force } => {
-            opengrid::backup::restore(&config, &archive, force)?;
+            openbase::backup::restore(&config, &archive, force)?;
             println!(
                 "restored {} into {}",
                 archive.display(),
@@ -284,7 +284,7 @@ mod tests {
     async fn healthy_against_the_real_server() {
         let dir = tempfile::tempdir().unwrap();
         let state = AppState::open(Config::for_tests(dir.path())).unwrap();
-        let app = opengrid::http::router(state);
+        let app = openbase::http::router(state);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bind = listener.local_addr().unwrap().to_string();
         tokio::spawn(async move {
@@ -308,7 +308,7 @@ mod tests {
                      VALUES ('usr1', 'a@example.com', 'A', 'x', 'SECRET', 1, 0, 0)",
                     [],
                 )?;
-                opengrid::auth::session::create(tx, "usr1", false, None, None)?;
+                openbase::auth::session::create(tx, "usr1", false, None, None)?;
                 Ok(())
             })
             .unwrap();

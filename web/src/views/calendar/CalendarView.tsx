@@ -163,7 +163,7 @@ function CalendarInner(props: ViewProps) {
   } else {
     body = (
       <div className="absolute inset-0 flex">
-        <div className="og-calendar relative min-w-0 flex-1 p-2">
+        <div className="ob-calendar relative min-w-0 flex-1 p-2">
           <FullCalendar
             plugins={PLUGINS}
             initialView="dayGridMonth"

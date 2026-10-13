@@ -72,7 +72,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
     <div
       role={item.variant === "error" ? "alert" : "status"}
       className={cn(
-        "og-slide-in pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-lg border bg-surface p-3 shadow-pop",
+        "ob-slide-in pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-lg border bg-surface p-3 shadow-pop",
         item.variant === "error" ? "border-danger" : "border-line",
       )}
     >

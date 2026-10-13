@@ -4,7 +4,7 @@
 mod common;
 mod schema_support;
 
-use opengrid::store::trash::{PurgeStats, purge_expired};
+use openbase::store::trash::{PurgeStats, purge_expired};
 use schema_support::*;
 use serde_json::{Value, json};
 
@@ -365,7 +365,7 @@ async fn purging_a_table_cascades_and_strips_links_pointing_at_it() {
 async fn purging_a_base_and_a_workspace_cascades_everything() {
     let f = Fixture::new().await;
     let rec = f.insert_record(&f.table_id, json!({}));
-    f.base_guest("g@example.com", opengrid::perm::Role::Viewer);
+    f.base_guest("g@example.com", openbase::perm::Role::Viewer);
     sql(&f.app, |tx| {
         tx.execute("INSERT INTO record_history (record_id, table_id, kind, changes, created_at) VALUES (?1, ?2, 'create', '{}', 1)", [&rec, &f.table_id])?;
         tx.execute(
@@ -523,9 +523,9 @@ async fn the_expiry_job_can_run_against_a_real_clock() {
     // `now - trash_days`; make sure a plausible cutoff purges nothing fresh.
     let f = Fixture::new().await;
     let rec = f.insert_record(&f.table_id, json!({}));
-    trash_record(&f.app, &rec, opengrid::db::now_ms());
+    trash_record(&f.app, &rec, openbase::db::now_ms());
     let cutoff =
-        opengrid::db::now_ms() - i64::from(f.app.state.config.trash_days) * 24 * 3600 * 1000;
+        openbase::db::now_ms() - i64::from(f.app.state.config.trash_days) * 24 * 3600 * 1000;
     let stats = f
         .app
         .state

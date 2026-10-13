@@ -4,8 +4,8 @@
 mod common;
 mod schema_support;
 
-use og_core::view::ViewType;
-use opengrid::perm::Role;
+use ob_core::view::ViewType;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::{Value, json};
 
@@ -147,7 +147,7 @@ async fn views_per_table_are_limited() {
     let f = Fixture::new().await;
     let table = f.table_id.clone();
     sql(&f.app, |tx| {
-        for i in 0..(og_core::limits::MAX_VIEWS_PER_TABLE - 1) {
+        for i in 0..(ob_core::limits::MAX_VIEWS_PER_TABLE - 1) {
             tx.execute(
                 "INSERT INTO views (id, table_id, name, type, position, created_at) VALUES (?1, ?2, 'v', 'grid', ?3, 1)",
                 rusqlite::params![format!("viwfill{i}"), table, 10.0 + i as f64],
@@ -674,7 +674,7 @@ async fn view_changes_publish_schema_events() {
     let env = rx.try_recv().unwrap();
     assert_eq!(
         env.event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(f.table_id.clone())
         }
     );
@@ -719,7 +719,7 @@ async fn configs_that_still_mention_deleted_fields_can_be_saved_again() {
     f.app
         .state
         .db
-        .write_sync(|tx| opengrid::store::trash::purge_expired(tx, 1000))
+        .write_sync(|tx| openbase::store::trash::purge_expired(tx, 1000))
         .unwrap();
     config["frozen_columns"] = json!(2);
     f.app

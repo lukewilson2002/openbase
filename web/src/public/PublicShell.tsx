@@ -1,11 +1,11 @@
 /**
  * Chrome of the public pages (shared views and forms): outside the app shell, no account menu,
  * no navigation into the app. Header with what is shared, the content, and the "Powered by
- * OpenGrid" footer.
+ * OpenBase" footer.
  */
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Lock, TriangleAlert } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { BrandMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import type { PublicProblem } from "@/lib/publicErrors";
 export function PublicShell({ title, subtitle, children, wide }: { title?: string; subtitle?: ReactNode; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const previous = document.title;
-    document.title = title ? `${title} · OpenGrid` : "OpenGrid";
+    document.title = title ? `${title} · OpenBase` : "OpenBase";
     return () => {
       document.title = previous;
     };
@@ -34,7 +34,8 @@ export function PublicShell({ title, subtitle, children, wide }: { title?: strin
       </main>
       <footer className="border-t border-line px-4 py-3 text-center text-xs text-muted">
         <span className="inline-flex items-center gap-1.5">
-          Powered by <Logo className="text-xs" />
+          Powered by <BrandMark small className="size-4" />
+          <span className="font-medium text-fg">OpenBase</span>
         </span>
       </footer>
     </div>

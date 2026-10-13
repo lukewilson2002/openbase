@@ -31,7 +31,7 @@ function isExpired(attrs: string[]): boolean {
 
 /**
  * @param ip address to present as the client (X-Forwarded-For). The contract server runs with
- *   OPENGRID_TRUST_PROXY=true (it only listens on loopback), which gives every profile its own
+ *   OPENBASE_TRUST_PROXY=true (it only listens on loopback), which gives every profile its own
  *   rate-limit bucket and session `ip`.
  */
 export function createCookieJar(ip?: string, clientId?: string): CookieJar {

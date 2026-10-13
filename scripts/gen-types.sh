@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the TypeScript bindings in web/src/api/types from the Rust DTOs
-# (og-core, `ts` feature, via ts-rs). Output dir and number handling come from
+# (ob-core, `ts` feature, via ts-rs). Output dir and number handling come from
 # .cargo/config.toml (TS_RS_EXPORT_DIR, TS_RS_LARGE_INT).
 #
 #   scripts/gen-types.sh          regenerate files in place
@@ -30,7 +30,7 @@ rm -f "$OUT/index.ts"
 find "$OUT" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 mkdir -p "$OUT"
 
-cargo test -p og-core --features ts export_bindings
+cargo test -p ob-core --features ts export_bindings
 
 # Barrel file: one `export type` per generated type plus the hand-written overrides.
 {

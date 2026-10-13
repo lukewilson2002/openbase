@@ -9,9 +9,9 @@ describe("share link addresses", () => {
   });
 
   it("prefers the server's configured public address over the page's origin", () => {
-    const link = { kind: "view" as const, token: "tok", url: "https://grid.example.com/s/tok" };
-    expect(publicLink(link, "http://192.168.1.5:8080")).toBe("https://grid.example.com/share/tok");
-    expect(publicLink({ ...link, kind: "form" }, "http://x")).toBe("https://grid.example.com/form/tok");
+    const link = { kind: "view" as const, token: "tok", url: "https://base.example.com/s/tok" };
+    expect(publicLink(link, "http://192.168.1.5:8080")).toBe("https://base.example.com/share/tok");
+    expect(publicLink({ ...link, kind: "form" }, "http://x")).toBe("https://base.example.com/form/tok");
     expect(publicLink({ ...link, url: "/s/tok" }, "http://localhost:5173")).toBe("http://localhost:5173/share/tok");
   });
 

@@ -5,14 +5,14 @@
 //!
 //! ```text
 //! manifest.json              {app_version, schema_version, created_at}
-//! opengrid.db                consistent snapshot of the database
+//! openbase.db                consistent snapshot of the database
 //! attachments/<aa>/<sha256>  content-addressed files (+ <sha256>.thumb.png)
 //! ```
 //!
 //! File names in `<data_dir>/backups`:
-//! - `opengrid-YYYYmmdd-HHMMSS.tar.gz`: manual backups (CLI, admin "create now");
+//! - `openbase-YYYYmmdd-HHMMSS.tar.gz`: manual backups (CLI, admin "create now");
 //!   never pruned automatically.
-//! - `opengrid-auto-YYYYmmdd-HHMMSS.tar.gz`: daily automatic backups; only these
+//! - `openbase-auto-YYYYmmdd-HHMMSS.tar.gz`: daily automatic backups; only these
 //!   are pruned to `backup_keep`.
 //! - `pre-migration-vN-YYYYmmdd-HHMMSS.db`: raw database snapshots taken before
 //!   a schema upgrade (see [`crate::db`]).
@@ -26,7 +26,7 @@ use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
-use og_core::api::auth::BackupInfo;
+use ob_core::api::auth::BackupInfo;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -36,18 +36,18 @@ use crate::state::AppState;
 
 /// Name of the manifest entry in an archive.
 pub const MANIFEST: &str = "manifest.json";
-const DB_ENTRY: &str = "opengrid.db";
+const DB_ENTRY: &str = "openbase.db";
 const ATTACHMENTS_ENTRY: &str = "attachments";
-const AUTO_PREFIX: &str = "opengrid-auto-";
+const AUTO_PREFIX: &str = "openbase-auto-";
 
 static BACKUP_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"^(?:opengrid-(?:auto-)?[0-9]{8}-[0-9]{6}\.tar\.gz|pre-migration-v[0-9]{1,6}-[0-9]{8}-[0-9]{6}(?:-[0-9]{1,4})?\.db)$",
+        r"^(?:openbase-(?:auto-)?[0-9]{8}-[0-9]{6}\.tar\.gz|pre-migration-v[0-9]{1,6}-[0-9]{8}-[0-9]{6}(?:-[0-9]{1,4})?\.db)$",
     )
     .expect("valid regex")
 });
 static AUTO_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^opengrid-auto-[0-9]{8}-[0-9]{6}\.tar\.gz$").expect("valid regex")
+    Regex::new(r"^openbase-auto-[0-9]{8}-[0-9]{6}\.tar\.gz$").expect("valid regex")
 });
 static NAME_TS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([0-9]{8}-[0-9]{6})").expect("valid regex"));
@@ -61,7 +61,7 @@ pub struct Manifest {
     pub created_at: String,
 }
 
-/// Whether `name` is a backup file name OpenGrid creates (strict: this is the
+/// Whether `name` is a backup file name OpenBase creates (strict: this is the
 /// path-traversal guard for the download endpoint).
 pub fn is_backup_name(name: &str) -> bool {
     BACKUP_NAME.is_match(name)
@@ -93,7 +93,7 @@ impl Drop for TempPath {
 }
 
 /// Write a manual backup to `out`, or to
-/// `<data_dir>/backups/opengrid-<timestamp>.tar.gz` when `out` is None.
+/// `<data_dir>/backups/openbase-<timestamp>.tar.gz` when `out` is None.
 /// Blocking; call from `spawn_blocking` in async code.
 pub fn create(state: &AppState, out: Option<&Path>) -> AppResult<PathBuf> {
     let path = match out {
@@ -101,13 +101,13 @@ pub fn create(state: &AppState, out: Option<&Path>) -> AppResult<PathBuf> {
         None => state
             .config
             .backups_dir()
-            .join(format!("opengrid-{}.tar.gz", timestamp())),
+            .join(format!("openbase-{}.tar.gz", timestamp())),
     };
     write_archive(state, &path)?;
     Ok(path)
 }
 
-/// Write an automatic backup (`opengrid-auto-<timestamp>.tar.gz`) and prune
+/// Write an automatic backup (`openbase-auto-<timestamp>.tar.gz`) and prune
 /// old automatic backups beyond `config.backup_keep`.
 pub fn create_automatic(state: &AppState) -> AppResult<PathBuf> {
     let dir = state.config.backups_dir();
@@ -318,7 +318,7 @@ pub fn last_automatic_backup_ms(dir: &Path) -> Option<i64> {
 /// refuse to replace an existing database unless `force`; extract into a temp
 /// directory inside the data dir with strict path checks; validate the
 /// manifest, schema version and database; move the old database aside to
-/// `opengrid.db.pre-restore-<ts>` (with its WAL, so nothing is lost); move the
+/// `openbase.db.pre-restore-<ts>` (with its WAL, so nothing is lost); move the
 /// new database in; merge attachments (existing files are kept, since they are
 /// content-addressed).
 pub fn restore(config: &Config, archive: &Path, force: bool) -> AppResult<()> {
@@ -328,7 +328,7 @@ pub fn restore(config: &Config, archive: &Path, force: bool) -> AppResult<()> {
     let wal_len = std::fs::metadata(&wal).map(|m| m.len()).unwrap_or(0);
     if wal_len > 0 && !force {
         return Err(AppError::conflict(format!(
-            "{} is not empty, so OpenGrid looks like it is still running: stop the server first \
+            "{} is not empty, so OpenBase looks like it is still running: stop the server first \
              (use --force only if you are sure it is stopped)",
             wal.display()
         )));
@@ -336,7 +336,7 @@ pub fn restore(config: &Config, archive: &Path, force: bool) -> AppResult<()> {
     if db_path.exists() && !force {
         return Err(AppError::conflict(format!(
             "a database already exists at {}; pass --force to replace it \
-             (the current database is kept as opengrid.db.pre-restore-<timestamp>)",
+             (the current database is kept as openbase.db.pre-restore-<timestamp>)",
             db_path.display()
         )));
     }
@@ -395,7 +395,7 @@ fn sidecar(path: &Path, suffix: &str) -> PathBuf {
 }
 
 /// Extract the archive into `dest`, accepting only `manifest.json`,
-/// `opengrid.db` and regular files/directories under `attachments/`. Any
+/// `openbase.db` and regular files/directories under `attachments/`. Any
 /// absolute path, `..` component, link or special file aborts the restore.
 fn extract(file: File, dest: &Path) -> AppResult<()> {
     let bad = |e: io::Error| AppError::bad_request(format!("cannot read backup archive: {e}"));
@@ -462,21 +462,21 @@ fn extract(file: File, dest: &Path) -> AppResult<()> {
 fn validate_extracted(dir: &Path) -> AppResult<()> {
     let manifest_path = dir.join(MANIFEST);
     let raw = std::fs::read(&manifest_path).map_err(|_| {
-        AppError::bad_request("archive has no manifest.json; is this an OpenGrid backup?")
+        AppError::bad_request("archive has no manifest.json; is this an OpenBase backup?")
     })?;
     let manifest: Manifest = serde_json::from_slice(&raw)
         .map_err(|e| AppError::bad_request(format!("invalid manifest.json in archive: {e}")))?;
     let supported = crate::db::schema_version();
     if manifest.schema_version > supported {
         return Err(AppError::bad_request(format!(
-            "backup schema version {} is newer than this OpenGrid supports ({supported}); \
-             upgrade OpenGrid (to at least {}) before restoring",
+            "backup schema version {} is newer than this OpenBase supports ({supported}); \
+             upgrade OpenBase (to at least {}) before restoring",
             manifest.schema_version, manifest.app_version
         )));
     }
     let db = dir.join(DB_ENTRY);
     if !db.is_file() {
-        return Err(AppError::bad_request("archive has no opengrid.db"));
+        return Err(AppError::bad_request("archive has no openbase.db"));
     }
     let invalid =
         |e: rusqlite::Error| AppError::bad_request(format!("backup database is invalid: {e}"));

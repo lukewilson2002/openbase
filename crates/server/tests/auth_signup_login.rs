@@ -52,7 +52,7 @@ async fn first_user_becomes_admin_and_is_logged_in() {
         .get_all("set-cookie")
         .iter()
         .map(|v| v.to_str().unwrap().to_string())
-        .find(|v| v.starts_with("og_session="))
+        .find(|v| v.starts_with("ob_session="))
         .unwrap();
     assert!(cookie_header.contains("HttpOnly"));
     assert!(cookie_header.contains("SameSite=Lax"));
@@ -467,8 +467,8 @@ async fn logout_deletes_session_and_clears_cookie() {
     let res = app.post(&client, "/api/auth/logout", json!({})).await;
     res.assert_status(200);
     let cleared = res.headers.get_all("set-cookie").iter().any(|v| {
-        v.to_str().unwrap().starts_with("og_session=;")
-            || v.to_str().unwrap().starts_with("og_session=\"\"")
+        v.to_str().unwrap().starts_with("ob_session=;")
+            || v.to_str().unwrap().starts_with("ob_session=\"\"")
     });
     assert!(cleared, "logout must clear the cookie: {:?}", res.headers);
     assert!(res.session_cookie().is_none());

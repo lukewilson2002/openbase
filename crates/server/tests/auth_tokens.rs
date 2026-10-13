@@ -3,7 +3,7 @@
 mod common;
 
 use common::{Client, TestApp};
-use opengrid::perm::{self, Role};
+use openbase::perm::{self, Role};
 use serde_json::json;
 
 fn bearer(token: &str) -> Client {
@@ -41,7 +41,7 @@ async fn create_list_delete_tokens() {
     assert_eq!(
         app.query_i64(
             "SELECT count(*) FROM api_tokens WHERE token_hash = ?1",
-            &[&opengrid::ids::hash_token(&token)]
+            &[&openbase::ids::hash_token(&token)]
         ),
         1
     );
@@ -214,14 +214,14 @@ async fn read_only_and_base_limited_scopes_are_enforced_by_perm() {
     app.state
         .db
         .read(move |c| {
-            let ro = opengrid::auth::actor_from_api_token(c, &ro)?.unwrap();
+            let ro = openbase::auth::actor_from_api_token(c, &ro)?.unwrap();
             assert_eq!(perm::require_base(c, &ro, &b1, Role::Viewer)?, Role::Viewer);
             assert!(perm::require_base(c, &ro, &b1, Role::Editor).is_err());
-            let lim = opengrid::auth::actor_from_api_token(c, &limited)?.unwrap();
+            let lim = openbase::auth::actor_from_api_token(c, &limited)?.unwrap();
             assert_eq!(perm::require_base(c, &lim, &b1, Role::Editor)?, Role::Owner);
             assert!(matches!(
                 perm::require_base(c, &lim, &b2, Role::Viewer),
-                Err(opengrid::error::AppError::NotFound(_))
+                Err(openbase::error::AppError::NotFound(_))
             ));
             Ok(())
         })
@@ -309,7 +309,7 @@ async fn last_used_at_is_stamped_at_most_once_a_minute() {
             .write_sync(move |tx| {
                 tx.execute(
                     "UPDATE api_tokens SET last_used_at = ?1",
-                    [opengrid::db::now_ms() - ms_ago],
+                    [openbase::db::now_ms() - ms_ago],
                 )?;
                 Ok(())
             })

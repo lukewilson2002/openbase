@@ -10,7 +10,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, patch};
 use axum::{Json, Router};
-use og_core::api::records::{Comment, CommentBody};
+use ob_core::api::records::{Comment, CommentBody};
 
 use crate::api::schema_support::publish;
 use crate::auth::Actor;
@@ -20,7 +20,7 @@ use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::{comments, records};
-use og_core::api::events::BaseEvent;
+use ob_core::api::events::BaseEvent;
 
 pub fn router() -> Router<AppState> {
     Router::new()

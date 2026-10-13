@@ -1,6 +1,6 @@
 //! Authentication: who is calling.
 //!
-//! Browser clients use an opaque session cookie (`og_session`); integrations
+//! Browser clients use an opaque session cookie (`ob_session`); integrations
 //! use `Authorization: Bearer <api token>`. Both resolve to an [`Actor`].
 //! Only SHA-256 hashes of tokens are stored.
 
@@ -19,7 +19,7 @@ use crate::error::{AppError, AppResult};
 use crate::ids::hash_token;
 use crate::state::AppState;
 
-pub const SESSION_COOKIE: &str = "og_session";
+pub const SESSION_COOKIE: &str = "ob_session";
 
 /// Scope of an API token. Session-authenticated actors have no scope (full
 /// access as the user).
@@ -99,6 +99,19 @@ impl Actor {
                 Ok(())
             }
         }
+    }
+
+    /// A part of an otherwise token-accessible request that changes a credential (a password
+    /// being set, someone's two-factor being switched off): refused for every API token, whatever
+    /// its scope, with a message naming what was refused. Sessions pass.
+    pub fn require_session_for(&self, what: &str) -> AppResult<()> {
+        if self.token_scope.is_some() {
+            return Err(AppError::forbidden(format!(
+                "API tokens can never {what} (it changes credentials); do it in the web app \
+                 while signed in"
+            )));
+        }
+        Ok(())
     }
 
     /// Instance administrator: signed in, or a token with the `manage` permission whose user is

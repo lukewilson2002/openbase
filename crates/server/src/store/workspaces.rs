@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use og_core::api::workspaces::{BaseSummary, Member, WorkspaceSummary};
+use ob_core::api::workspaces::{BaseSummary, Member, WorkspaceSummary};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::db::now_ms;
@@ -114,7 +114,7 @@ pub fn create(
 ) -> AppResult<WorkspaceSummary> {
     let name = schema::validate_name(name, "workspace")?;
     let icon = schema::icon_on_create(icon)?;
-    let id = new_id(og_core::ids::WORKSPACE);
+    let id = new_id(ob_core::ids::WORKSPACE);
     let now = now_ms();
     tx.execute(
         "INSERT INTO workspaces (id, name, icon, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",

@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
 use chrono::{DateTime, Local, Timelike};
-use og_core::api::events::BaseEvent;
+use ob_core::api::events::BaseEvent;
 use rusqlite::{Connection, Transaction};
 
 use crate::auth::session;
@@ -324,7 +324,7 @@ pub fn gc_attachments(
 /// (a blob and its thumbnail count once).
 ///
 /// Two safety guards, because deleting files cannot be undone: nothing is
-/// deleted when the attachments table is empty (e.g. `opengrid.db` was
+/// deleted when the attachments table is empty (e.g. `openbase.db` was
 /// replaced by a fresh database by mistake: the files are then the only copy
 /// left), and only files last modified more than [`ORPHAN_GRACE`] before
 /// `now` are candidates (a just-restored or just-copied file is kept for a

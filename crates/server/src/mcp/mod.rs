@@ -89,14 +89,14 @@ const TOOLS_PAGE: usize = 100;
 
 /// Guidance shown to the model by clients (`instructions` of `initialize` / `server/discover`).
 const INSTRUCTIONS: &str = "\
-OpenGrid is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions: you can do everything the user can do in the web app. \
+OpenBase is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions: you can do everything the user can do in the web app. \
 Start with list_bases, then get_base_schema to learn table and field names. Tables, fields and views can be given by NAME or id. \
 Records: list_records, search_records, get_record, create_records, update_records, delete_records work with field NAMES (like the Airtable API); writes are limited to 10 records per call; deleted records go to the trash (restore_from_trash). \
 Structure: create_table, create_field (field_types explains all 28 types and their options), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups use field names), query_view reads a view as the app shows it. \
-Also: formulas (check_formula), comments, record history, trash, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
-Tokens with the 'manage' permission can also manage workspaces, members, invites and bases; instance administrators get admin_* tools (users, audit log, stats, backups). \
+Workspaces, bases and tables can have an icon (a Lucide name: pass `icon` to the create_* and rename_* tools, null removes it; list_icons searches the names). Also: formulas (check_formula), comments, record history, trash, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
+Tokens with the 'manage' permission can also manage workspaces, members, invites and bases; instance administrators get admin_* tools (users, email settings, audit log, stats, backups). \
 For anything else call api_reference to see every REST endpoint and api_request to call one; it runs through the same permission checks as the web app. \
-Credentials, sessions and API tokens can never be changed through MCP. \
+Credentials, sessions and API tokens can never be changed through MCP (also: no password-reset links, no switching off someone's 2FA, no SMTP password). \
 Errors name what to fix (valid table or field names, missing role or token permission).";
 
 /// Every tool, in the order `tools/list` shows them: the data tools first, then the
@@ -197,9 +197,9 @@ fn refuse(status: StatusCode, code: i64, message: &str) -> Response {
 fn unauthorized(message: &str, invalid_token: bool) -> Response {
     let mut res = refuse(StatusCode::UNAUTHORIZED, SERVER_REFUSAL, message);
     let challenge = if invalid_token {
-        "Bearer realm=\"OpenGrid MCP\", error=\"invalid_token\""
+        "Bearer realm=\"OpenBase MCP\", error=\"invalid_token\""
     } else {
-        "Bearer realm=\"OpenGrid MCP\""
+        "Bearer realm=\"OpenBase MCP\""
     };
     res.headers_mut().insert(
         header::WWW_AUTHENTICATE,
@@ -282,7 +282,7 @@ async fn handle(State(state): State<AppState>, req: Request) -> Response {
         return refuse(
             StatusCode::FORBIDDEN,
             SERVER_REFUSAL,
-            "this Origin is not allowed to use the MCP endpoint (set OPENGRID_MCP_ALLOWED_ORIGINS to allow it)",
+            "this Origin is not allowed to use the MCP endpoint (set OPENBASE_MCP_ALLOWED_ORIGINS to allow it)",
         );
     }
 
@@ -606,8 +606,8 @@ fn check_modern_headers(
 
 fn server_info() -> Value {
     json!({
-        "name": "opengrid",
-        "title": "OpenGrid",
+        "name": "openbase",
+        "title": "OpenBase",
         "version": env!("CARGO_PKG_VERSION"),
     })
 }

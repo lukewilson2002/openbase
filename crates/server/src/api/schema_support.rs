@@ -4,7 +4,7 @@
 use axum::body::Bytes;
 use axum::extract::{FromRequest, Request};
 use axum::http::HeaderMap;
-use og_core::api::events::BaseEvent;
+use ob_core::api::events::BaseEvent;
 use serde::de::DeserializeOwned;
 use serde_json::{Value as Json, json};
 

@@ -30,7 +30,7 @@ describe("login", () => {
     expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
     const login = api.callsTo("POST /api/auth/login")[0]!;
     expect(login.body).toEqual({ email: "ada@example.com", password: "correct horse" });
-    expect(login.headers.get("X-OpenGrid-CSRF")).toBe("1");
+    expect(login.headers.get("X-OpenBase-CSRF")).toBe("1");
   });
 
   it("shows the server's error message when the password is wrong", async () => {
@@ -84,7 +84,7 @@ describe("login", () => {
   it("sends first-time visitors to setup", async () => {
     mockApi({ "GET /api/setup": { needs_setup: true, open_signup: false, email_enabled: false }, "GET /api/auth/me": LOGGED_OUT });
     renderApp({ route: "/login" });
-    expect(await screen.findByRole("heading", { name: "Set up OpenGrid" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Set up OpenBase" })).toBeInTheDocument();
   });
 
   it("redirects protected routes to login when there is no session", async () => {
@@ -190,7 +190,7 @@ describe("signup and invites", () => {
     renderApp({ route: "/invite/tok123" });
     await user.click(await screen.findByRole("button", { name: "Accept invitation" }));
     await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
-    expect(api.callsTo("POST /api/invites/by-token/tok123/accept")[0]?.headers.get("X-OpenGrid-CSRF")).toBe("1");
+    expect(api.callsTo("POST /api/invites/by-token/tok123/accept")[0]?.headers.get("X-OpenBase-CSRF")).toBe("1");
   });
 
   it("explains an invalid invite", async () => {

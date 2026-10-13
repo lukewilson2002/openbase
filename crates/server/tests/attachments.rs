@@ -6,11 +6,11 @@ mod common;
 use axum::body::Body;
 use axum::http::{Request, header};
 use common::{Client, Response, TestApp};
-use opengrid::db::now_ms;
-use opengrid::ids::new_id;
+use openbase::db::now_ms;
+use openbase::ids::new_id;
 use sha2::{Digest, Sha256};
 
-const BOUNDARY: &str = "----opengridtestboundary7MA4YWxkTrZu0gW";
+const BOUNDARY: &str = "----openbasetestboundary7MA4YWxkTrZu0gW";
 
 /// Ids of the rows created by [`Fixture::new`].
 struct Fixture {
@@ -36,10 +36,10 @@ fn create_base(app: &TestApp, owner_id: &str) -> (String, String) {
         .db
         .write_sync(|tx| {
             let now = now_ms();
-            let ws = new_id(og_core::ids::WORKSPACE);
-            let base = new_id(og_core::ids::BASE);
-            let table = new_id(og_core::ids::TABLE);
-            let view = new_id(og_core::ids::VIEW);
+            let ws = new_id(ob_core::ids::WORKSPACE);
+            let base = new_id(ob_core::ids::BASE);
+            let table = new_id(ob_core::ids::TABLE);
+            let view = new_id(ob_core::ids::VIEW);
             tx.execute(
                 "INSERT INTO workspaces (id, name, created_by, created_at) VALUES (?1, 'WS', ?2, ?3)",
                 rusqlite::params![ws, owner_id, now],
@@ -116,8 +116,8 @@ fn add_share(
     password: Option<&str>,
     enabled: bool,
 ) -> String {
-    let token = opengrid::ids::new_token("shr_");
-    let hash = password.map(|p| opengrid::auth::password::hash(p).unwrap());
+    let token = openbase::ids::new_token("shr_");
+    let hash = password.map(|p| openbase::auth::password::hash(p).unwrap());
     let (view, kind, t) = (view.to_string(), kind.to_string(), token.clone());
     app.state
         .db
@@ -125,7 +125,7 @@ fn add_share(
             tx.execute(
                 "INSERT INTO share_links (id, token, kind, view_id, password_hash, enabled, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![new_id(og_core::ids::SHARE), t, kind, view, hash, enabled, now_ms()],
+                rusqlite::params![new_id(ob_core::ids::SHARE), t, kind, view, hash, enabled, now_ms()],
             )?;
             Ok(())
         })
@@ -163,13 +163,13 @@ fn with_auth(
     if let Some(c) = &client.cookie {
         req = req.header(
             header::COOKIE,
-            format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+            format!("{}={}", openbase::auth::SESSION_COOKIE, c),
         );
     }
     if let Some(t) = &client.bearer {
         req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
     }
-    req.header(opengrid::http::CSRF_HEADER, "1")
+    req.header(openbase::http::CSRF_HEADER, "1")
 }
 
 async fn upload_parts(
@@ -535,10 +535,10 @@ async fn permissions_viewer_downloads_but_cannot_upload_outsiders_get_404() {
 async fn read_only_token_can_download_but_not_upload() {
     let app = TestApp::new();
     let fx = Fixture::new(&app);
-    let token = opengrid::ids::new_token("pat");
+    let token = openbase::ids::new_token("pat");
     let (uid, hash) = (
         fx.owner.user_id.clone().unwrap(),
-        opengrid::ids::hash_token(&token),
+        openbase::ids::hash_token(&token),
     );
     app.state
         .db

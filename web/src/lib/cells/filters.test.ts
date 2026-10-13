@@ -5,7 +5,7 @@ import { dateModesFor, defaultOperand, filterOpsFor, isFilterable, isIncomplete,
 
 const ops = (t: FieldType) => filterOpsFor(ALL_FIELDS[t]);
 
-describe("operator tables (mirror of og_core::query::filter_ops_for)", () => {
+describe("operator tables (mirror of ob_core::query::filter_ops_for)", () => {
   it("text types", () => {
     for (const t of ["single_line_text", "long_text", "email", "url", "phone", "barcode"] as const) {
       expect(ops(t)).toEqual(["contains", "does_not_contain", "is", "is_not", "starts_with", "ends_with", "is_empty", "is_not_empty"]);

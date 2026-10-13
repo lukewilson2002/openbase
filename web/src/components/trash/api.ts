@@ -3,7 +3,7 @@ import type { RestoreRequest, TrashListing } from "@/api/types";
 
 const enc = encodeURIComponent;
 
-/** Days the server keeps deleted items unless the administrator changed `OPENGRID_TRASH_DAYS`. */
+/** Days the server keeps deleted items unless the administrator changed `OPENBASE_TRASH_DAYS`. */
 export const DEFAULT_RETENTION_DAYS = 30;
 
 export const trashKeys = {

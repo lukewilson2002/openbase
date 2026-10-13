@@ -2,6 +2,7 @@
 
 export type AdminCreateUser = { email: string, name: string, 
 /**
- * If omitted, a reset link is returned for the user to set their password.
+ * If omitted, a reset link is returned for the user to set their password (to a signed-in
+ * administrator only). Setting a password is not possible with an API token.
  */
 password?: string | null, is_admin?: boolean, };

@@ -12,7 +12,7 @@
 //! * `scale_50k` is `#[ignore]`d and asserts the budgets of the plan
 //!   (docs/plans §1.5). Run it in release mode and read the printed numbers:
 //!
-//!   `cargo test -p opengrid --release --test scale -- --ignored --nocapture`
+//!   `cargo test -p openbase --release --test scale -- --ignored --nocapture`
 //!
 //! Printed per run: seed time, cold query (filter + sort), cached page
 //! fetches (p50/p95), query after a single write, aggregations, a cold search
@@ -25,8 +25,8 @@ mod schema_support;
 
 use std::time::{Duration, Instant};
 
-use og_core::api::records::NewRecord;
-use opengrid::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
+use ob_core::api::records::NewRecord;
+use openbase::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
 use query_support::*;
 use serde_json::{Value, json};
 

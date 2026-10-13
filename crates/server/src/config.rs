@@ -1,4 +1,4 @@
-//! Runtime configuration. Every option is a CLI flag and an `OPENGRID_*`
+//! Runtime configuration. Every option is a CLI flag and an `OPENBASE_*`
 //! environment variable; nothing else is required to run.
 
 use std::path::PathBuf;
@@ -6,131 +6,131 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, clap::Args)]
 pub struct Config {
     /// Directory holding the database, attachments and backups.
-    #[arg(long, env = "OPENGRID_DATA_DIR", default_value = "./data")]
+    #[arg(long, env = "OPENBASE_DATA_DIR", default_value = "./data")]
     pub data_dir: PathBuf,
 
     /// Address to listen on.
-    #[arg(long, env = "OPENGRID_BIND", default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "OPENBASE_BIND", default_value = "127.0.0.1:8080")]
     pub bind: String,
 
-    /// Public URL users reach OpenGrid at, e.g. https://grid.example.com.
+    /// Public URL users reach OpenBase at, e.g. https://base.example.com.
     /// Used for links in emails, the Origin check and the Secure cookie flag.
     #[arg(
         long,
-        env = "OPENGRID_PUBLIC_URL",
+        env = "OPENBASE_PUBLIC_URL",
         default_value = "http://localhost:8080"
     )]
     pub public_url: String,
 
     /// Allow anyone to create an account. When false (default), new users
     /// need an invite; the very first account is always allowed and becomes admin.
-    #[arg(long, env = "OPENGRID_OPEN_SIGNUP", default_value_t = false)]
+    #[arg(long, env = "OPENBASE_OPEN_SIGNUP", default_value_t = false)]
     pub open_signup: bool,
 
     /// Take the client address from the last X-Forwarded-For entry (the one
-    /// the reverse proxy added). Enable only when OpenGrid is reachable solely
+    /// the reverse proxy added). Enable only when OpenBase is reachable solely
     /// through that proxy.
-    #[arg(long, env = "OPENGRID_TRUST_PROXY", default_value_t = false)]
+    #[arg(long, env = "OPENBASE_TRUST_PROXY", default_value_t = false)]
     pub trust_proxy: bool,
 
     /// Maximum size of one uploaded file, in megabytes.
-    #[arg(long, env = "OPENGRID_MAX_UPLOAD_MB", default_value_t = 100)]
+    #[arg(long, env = "OPENBASE_MAX_UPLOAD_MB", default_value_t = 100)]
     pub max_upload_mb: u64,
 
     /// Hour of day (0-23, server local time) to take the automatic daily backup.
     /// Set to -1 to disable automatic backups.
     #[arg(
         long,
-        env = "OPENGRID_BACKUP_HOUR",
+        env = "OPENBASE_BACKUP_HOUR",
         default_value_t = 3,
         allow_negative_numbers = true
     )]
     pub backup_hour: i32,
 
     /// Number of automatic backups to keep.
-    #[arg(long, env = "OPENGRID_BACKUP_KEEP", default_value_t = 7)]
+    #[arg(long, env = "OPENBASE_BACKUP_KEEP", default_value_t = 7)]
     pub backup_keep: usize,
 
     /// Days to keep deleted items in the trash before purging them.
-    #[arg(long, env = "OPENGRID_TRASH_DAYS", default_value_t = 30)]
+    #[arg(long, env = "OPENBASE_TRASH_DAYS", default_value_t = 30)]
     pub trash_days: u32,
 
     /// Days of record history to keep (0 = forever).
-    #[arg(long, env = "OPENGRID_HISTORY_DAYS", default_value_t = 365)]
+    #[arg(long, env = "OPENBASE_HISTORY_DAYS", default_value_t = 365)]
     pub history_days: u32,
 
     /// Days of audit log (logins, password and token changes, invites, admin
     /// actions) to keep (0 = forever).
-    #[arg(long, env = "OPENGRID_AUDIT_DAYS", default_value_t = 365)]
+    #[arg(long, env = "OPENBASE_AUDIT_DAYS", default_value_t = 365)]
     pub audit_days: u32,
 
     /// Emails one user may cause per hour (invites and automation emails).
-    #[arg(long, env = "OPENGRID_EMAIL_PER_USER_HOUR", default_value_t = 100)]
+    #[arg(long, env = "OPENBASE_EMAIL_PER_USER_HOUR", default_value_t = 100)]
     pub email_per_user_hour: u32,
 
     /// Emails the whole instance may send per hour on behalf of users
     /// (invites and automation emails; password resets have their own limits).
-    #[arg(long, env = "OPENGRID_EMAIL_PER_HOUR", default_value_t = 500)]
+    #[arg(long, env = "OPENBASE_EMAIL_PER_HOUR", default_value_t = 500)]
     pub email_per_hour: u32,
 
     /// SMTP server for outgoing email (invites, password resets, automations).
-    /// Email features are disabled when unset.
-    #[arg(long, env = "OPENGRID_SMTP_HOST")]
+    /// Email features are disabled when unset (unless a host is saved on the Admin -> Email page).
+    /// Every `OPENBASE_SMTP_*` option that is set wins over what is saved on that page and shows
+    /// there as read-only.
+    #[arg(long, env = "OPENBASE_SMTP_HOST")]
     pub smtp_host: Option<String>,
-    #[arg(long, env = "OPENGRID_SMTP_PORT", default_value_t = 587)]
-    pub smtp_port: u16,
-    #[arg(long, env = "OPENGRID_SMTP_USER")]
+    /// SMTP port (default 587).
+    #[arg(long, env = "OPENBASE_SMTP_PORT")]
+    pub smtp_port: Option<u16>,
+    #[arg(long, env = "OPENBASE_SMTP_USER")]
     pub smtp_user: Option<String>,
-    #[arg(long, env = "OPENGRID_SMTP_PASSWORD", hide_env_values = true)]
+    #[arg(long, env = "OPENBASE_SMTP_PASSWORD", hide_env_values = true)]
     pub smtp_password: Option<String>,
     /// starttls (default), tls (implicit, usually port 465) or none (local relay only).
-    #[arg(long, env = "OPENGRID_SMTP_SECURITY", default_value = "starttls")]
-    pub smtp_security: String,
-    #[arg(
-        long,
-        env = "OPENGRID_SMTP_FROM",
-        default_value = "OpenGrid <opengrid@localhost>"
-    )]
-    pub smtp_from: String,
+    #[arg(long, env = "OPENBASE_SMTP_SECURITY")]
+    pub smtp_security: Option<String>,
+    /// Sender address (default `OpenBase <openbase@localhost>`).
+    #[arg(long, env = "OPENBASE_SMTP_FROM")]
+    pub smtp_from: Option<String>,
 
     /// Allow automation webhooks to call private/loopback addresses
     /// (e.g. other services on your LAN). Off by default to prevent SSRF.
-    #[arg(long, env = "OPENGRID_ALLOW_PRIVATE_WEBHOOKS", default_value_t = false)]
+    #[arg(long, env = "OPENBASE_ALLOW_PRIVATE_WEBHOOKS", default_value_t = false)]
     pub allow_private_webhooks: bool,
 
     /// Requests per second one API token may make to the Airtable-compatible
     /// API (`/api/v1`). Excess requests answer 429 RATE_LIMIT_REACHED.
-    #[arg(long, env = "OPENGRID_V1_RATE_PER_TOKEN", default_value_t = 5)]
+    #[arg(long, env = "OPENBASE_V1_RATE_PER_TOKEN", default_value_t = 5)]
     pub v1_rate_per_token: u32,
 
     /// Requests per second all API tokens of one user may make to `/api/v1`
     /// together.
-    #[arg(long, env = "OPENGRID_V1_RATE_PER_USER", default_value_t = 50)]
+    #[arg(long, env = "OPENBASE_V1_RATE_PER_USER", default_value_t = 50)]
     pub v1_rate_per_user: u32,
 
     /// Requests per second one API token may make to the MCP endpoint (`/mcp`;
     /// every JSON-RPC call is one request). Excess requests answer 429.
-    #[arg(long, env = "OPENGRID_MCP_RATE_PER_TOKEN", default_value_t = 30)]
+    #[arg(long, env = "OPENBASE_MCP_RATE_PER_TOKEN", default_value_t = 30)]
     pub mcp_rate_per_token: u32,
 
     /// Requests per second all API tokens of one user may make to `/mcp` together.
-    #[arg(long, env = "OPENGRID_MCP_RATE_PER_USER", default_value_t = 100)]
+    #[arg(long, env = "OPENBASE_MCP_RATE_PER_USER", default_value_t = 100)]
     pub mcp_rate_per_user: u32,
 
     /// Extra browser origins (comma separated, e.g. https://inspector.example.com) allowed to
     /// call `/mcp`. The public URL's origin is always allowed; requests without an `Origin`
     /// header (every non-browser MCP client) are not affected.
-    #[arg(long, env = "OPENGRID_MCP_ALLOWED_ORIGINS", value_delimiter = ',')]
+    #[arg(long, env = "OPENBASE_MCP_ALLOWED_ORIGINS", value_delimiter = ',')]
     pub mcp_allowed_origins: Vec<String>,
 
     /// Log format: "pretty" or "json".
-    #[arg(long, env = "OPENGRID_LOG_FORMAT", default_value = "pretty")]
+    #[arg(long, env = "OPENBASE_LOG_FORMAT", default_value = "pretty")]
     pub log_format: String,
 }
 
 impl Config {
     pub fn db_path(&self) -> PathBuf {
-        self.data_dir.join("opengrid.db")
+        self.data_dir.join("openbase.db")
     }
     pub fn attachments_dir(&self) -> PathBuf {
         self.data_dir.join("attachments")
@@ -140,9 +140,6 @@ impl Config {
     }
     pub fn secure_cookies(&self) -> bool {
         self.public_url.starts_with("https://")
-    }
-    pub fn email_enabled(&self) -> bool {
-        self.smtp_host.is_some()
     }
     pub fn max_upload_bytes(&self) -> u64 {
         self.max_upload_mb.saturating_mul(1024 * 1024)
@@ -172,11 +169,11 @@ impl Config {
             email_per_user_hour: 100,
             email_per_hour: 500,
             smtp_host: None,
-            smtp_port: 587,
+            smtp_port: None,
             smtp_user: None,
             smtp_password: None,
-            smtp_security: "starttls".into(),
-            smtp_from: "OpenGrid <test@localhost>".into(),
+            smtp_security: None,
+            smtp_from: None,
             allow_private_webhooks: false,
             // Tests make many requests per second with one token; the limit
             // itself is tested with the real defaults.

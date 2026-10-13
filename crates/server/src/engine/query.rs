@@ -4,7 +4,7 @@
 //!
 //! `POST /api/views/{id}/query` streams the table's live records from a read
 //! connection in manual (`position`) order and presents each as an
-//! `og_core::query::Row`: the stored JSON of the fields the query needs, plus
+//! `ob_core::query::Row`: the stored JSON of the fields the query needs, plus
 //! the *system* fields (created/modified time/by, autonumber) synthesized from
 //! the record's columns ([`records::system_cell`], the same helper the write
 //! path uses) and link arrays reduced to **live** linked records (trashed ones
@@ -12,7 +12,7 @@
 //! Each row goes through
 //!
 //! 1. the optional [`DateRange`] (the record's span overlaps `[from, to]`),
-//! 2. the view filter (`og_core::query::compile_filter`; conditions on deleted
+//! 2. the view filter (`ob_core::query::compile_filter`; conditions on deleted
 //!    fields, or that no longer suit their field's type, are ignored),
 //! 3. the grid search over the view's visible fields,
 //!
@@ -53,21 +53,21 @@ use std::time::{Duration, Instant};
 
 use chrono::{NaiveDate, Utc};
 use chrono_tz::Tz;
-use og_core::api::records::{
+use ob_core::api::records::{
     AggregationsResponse, DateRange, GroupHeader, LinkRef, QueryRequest, QueryResponse, Record,
     TransientConfig,
 };
-use og_core::cell::{NoNames, display_text, to_value};
-use og_core::field::{Field, FieldKind, ValueFormat};
-use og_core::ids::FieldId;
-use og_core::limits;
-use og_core::query::{
+use ob_core::cell::{NoNames, display_text, to_value};
+use ob_core::field::{Field, FieldKind, ValueFormat};
+use ob_core::ids::FieldId;
+use ob_core::limits;
+use ob_core::query::{
     CompiledFilter, CompiledRowColor, OwnedRow, QueryCtx, Row, aggregate, aggregations_for,
     compile_filter, compile_row_color, group_spans, matches, matches_search, row_color_compiled,
     search_needle, sort_rows_with_groups,
 };
-use og_core::value::Value;
-use og_core::view::{Aggregation, Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
+use ob_core::value::Value;
+use ob_core::view::{Aggregation, Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
@@ -425,7 +425,7 @@ fn is_date_like(field: &Field) -> bool {
         FieldKind::Date(_) | FieldKind::CreatedTime(_) | FieldKind::LastModifiedTime(_) => true,
         FieldKind::Formula(o) => matches!(
             o.result_type,
-            og_core::value::ResultType::Date | og_core::value::ResultType::DateTime
+            ob_core::value::ResultType::Date | ob_core::value::ResultType::DateTime
         ),
         _ => false,
     }
@@ -993,7 +993,7 @@ fn compile_colors(config: &ViewConfig, plan: &Plan) -> Option<(CompiledRowColor,
         RowColor::ByConditions { rules } => RowColor::ByConditions {
             rules: rules
                 .iter()
-                .map(|r| og_core::view::ColorRule {
+                .map(|r| ob_core::view::ColorRule {
                     color: r.color.clone(),
                     filter: sanitize_filter(&r.filter, &plan.by_id),
                 })
@@ -1157,7 +1157,7 @@ pub fn lookup_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{DateOptions, Empty, TextOptions};
+    use ob_core::field::{DateOptions, Empty, TextOptions};
     use serde_json::{Map, json};
     use std::cell::RefCell;
 
@@ -1215,8 +1215,8 @@ mod tests {
     /// A table with a name and a note field, a view that filters on the note
     /// containing "x", and two records (note "x" and note "y").
     fn scan_fixture() -> (std::rc::Rc<Connection>, ViewRow) {
-        use og_core::api::schema::View;
-        use og_core::view::ViewType;
+        use ob_core::api::schema::View;
+        use ob_core::view::ViewType;
         let conn = Connection::open_in_memory().unwrap();
         crate::db::migrate(&conn).unwrap();
         conn.execute_batch(

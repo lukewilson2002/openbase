@@ -5,7 +5,7 @@ mod records_support;
 mod schema_support;
 
 use chrono::{TimeZone, Utc};
-use opengrid::tasks;
+use openbase::tasks;
 use records_support::*;
 use serde_json::json;
 
@@ -78,7 +78,7 @@ async fn volatile_formulas_are_refreshed_with_their_dependents_and_nothing_else(
     // subscribers hear about the changed records, per table
     let mut seen = std::collections::BTreeMap::new();
     while let Ok(ev) = rx.try_recv() {
-        if let og_core::api::events::BaseEvent::RecordsChanged {
+        if let ob_core::api::events::BaseEvent::RecordsChanged {
             table_id, updated, ..
         } = ev.event.clone()
         {
@@ -136,7 +136,7 @@ async fn trash_purge_job_removes_old_trash_and_keeps_recent() {
     f.delete_records(&l.t2, &[&o_old, &o_new])
         .await
         .assert_status(204);
-    let now = opengrid::db::now_ms();
+    let now = openbase::db::now_ms();
     set_deleted_at(&f.app, "records", &o_old, now - 31 * DAY);
     set_deleted_at(&f.app, "records", &o_new, now - 2 * DAY);
 
@@ -172,7 +172,7 @@ async fn the_tick_runs_the_new_jobs_and_runs_each_only_when_due() {
         &f.app,
         "records",
         &doomed,
-        opengrid::db::now_ms() - 40 * DAY,
+        openbase::db::now_ms() - 40 * DAY,
     );
     set_data(&f.app, &rec, json!({ sid(&today["id"]): "2000-01-01" }));
 

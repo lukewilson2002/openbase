@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Load a running OpenGrid with N records through the HTTP API and time the common reads.
+# Load a running OpenBase with N records through the HTTP API and time the common reads.
 #
 #   URL=http://127.0.0.1:8080 EMAIL=me@example.com PASSWORD=... RECORDS=50000 scripts/loadtest.sh
 #
@@ -32,9 +32,9 @@ rss() { [[ -n "$RSS_CMD" ]] && printf '%.1f MB' "$(eval "$RSS_CMD" | awk '{print
 api() { # METHOD PATH [JSON]
   local method=$1 path=$2 body=${3:-}
   if [[ -n "$body" ]]; then
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' -H 'Content-Type: application/json' -d "$body" "$URL$path"
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' -H 'Content-Type: application/json' -d "$body" "$URL$path"
   else
-    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenGrid-CSRF: 1' "$URL$path"
+    curl -fsS -X "$method" -b "$JAR" -c "$JAR" -H 'X-OpenBase-CSRF: 1' "$URL$path"
   fi
 }
 
@@ -67,7 +67,7 @@ while ((n < RECORDS)); do
       ($due): "2026-\(1 + ($i % 12) | two)-\(1 + ($i % 28) | two)"}
       + (if $i % 3 == 0 then {($notes): "note for order \($i)", ($tags): ["rush"]} else {} end)
       + (if $i % 4 == 0 then {($paid): true} else {} end))}]}' >"$TMP/batch.json"
-  curl -fsS -X POST -b "$JAR" -H 'X-OpenGrid-CSRF: 1' -H 'Content-Type: application/json' \
+  curl -fsS -X POST -b "$JAR" -H 'X-OpenBase-CSRF: 1' -H 'Content-Type: application/json' \
     --data-binary @"$TMP/batch.json" "$URL/api/tables/$TABLE/records" >/dev/null
   n=$((n + take))
 done
@@ -75,7 +75,7 @@ ok "inserted in $(($(date +%s) - start)) s; server RSS after the load: $(rss)"
 
 # milliseconds for one POST /api/views/{id}/query
 qms() {
-  curl -fsS -o /dev/null -w '%{time_total}' -X POST -b "$JAR" -H 'X-OpenGrid-CSRF: 1' \
+  curl -fsS -o /dev/null -w '%{time_total}' -X POST -b "$JAR" -H 'X-OpenBase-CSRF: 1' \
     -H 'Content-Type: application/json' -d "$1" "$URL/api/views/$VIEW/query" | awk '{printf "%.0f", $1*1000}'
 }
 printf '==> reads (nothing has been read since the load, so the first one is truly cold)\n'
@@ -92,7 +92,7 @@ ok "table holds $RECORDS records"
 
 export URL JAR VIEW
 par_start=$(python3 -c 'import time; print(time.time())')
-seq 1 8 | xargs -P 8 -I{} sh -c 'curl -fsS -o /dev/null -X POST -b "$JAR" -H "X-OpenGrid-CSRF: 1" -H "Content-Type: application/json" -d "{\"limit\":100,\"search\":\"order {}2{}\"}" "$URL/api/views/$VIEW/query"'
+seq 1 8 | xargs -P 8 -I{} sh -c 'curl -fsS -o /dev/null -X POST -b "$JAR" -H "X-OpenBase-CSRF: 1" -H "Content-Type: application/json" -d "{\"limit\":100,\"search\":\"order {}2{}\"}" "$URL/api/views/$VIEW/query"'
 par_end=$(python3 -c 'import time; print(time.time())')
 ok "8 simultaneous cold searches over all fields: $(awk -v a="$par_start" -v b="$par_end" 'BEGIN{printf "%.0f", (b-a)*1000}') ms wall   (server RSS after: $(rss))"
 sleep 5

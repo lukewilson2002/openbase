@@ -1,4 +1,4 @@
-//! OpenGrid core.
+//! OpenBase core.
 //!
 //! Everything in this crate is pure (no I/O, no clock reads except where a
 //! `now` is passed in) so it can be unit-tested exhaustively and compiled to

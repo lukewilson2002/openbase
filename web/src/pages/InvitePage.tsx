@@ -38,7 +38,7 @@ export function InvitePage() {
       <AuthLayout title="Invitation unavailable">
         <Notice tone="error">This invitation is invalid, has expired, or was already used.</Notice>
         <Button asChild variant="secondary" className="mt-4 w-full">
-          <Link to="/">Go to OpenGrid</Link>
+          <Link to="/">Go to OpenBase</Link>
         </Button>
       </AuthLayout>
     );

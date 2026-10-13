@@ -1,6 +1,6 @@
-# OpenGrid API
+# OpenBase API
 
-OpenGrid has three HTTP surfaces:
+OpenBase has three HTTP surfaces:
 
 | Surface | Prefix | Who uses it | Auth |
 |---|---|---|---|
@@ -8,7 +8,7 @@ OpenGrid has three HTTP surfaces:
 | Internal API | `/api/...` | the web client | session cookie or API token |
 | Public links | `/api/public/...` | share links and public forms | the unguessable link token (+ optional password) |
 
-The internal API is specified in `docs/plans/2026-10-12-opengrid.md` §3.1 and typed
+The internal API is specified in `docs/plans/2026-10-12-openbase.md` §3.1 and typed
 in `crates/core/src/api` (exported to TypeScript in `web/src/api/types`). This
 document covers the Airtable-compatible API in full, and summarises the public
 links and CSV endpoints.
@@ -53,8 +53,9 @@ The class is decided in one place (`Actor::require_capability`), and
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Manage**: create / rename / delete / restore workspaces, workspace and base members (role changes, removal), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone) | 403 | 403 | yes (the owner's role still applies) | yes |
-| **Admin** pages (`/api/admin/*`: users, reset links, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token) | administrators |
-| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}` | 403 | 403 | **403** | yes |
+| **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
+| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link` | 403 | 403 | **403** | yes |
+| **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
 
 A request that needs `manage` and does not have it answers `403` with a message that
 names the `manage` permission. Actions that reach beyond a single base (workspaces,
@@ -66,6 +67,18 @@ sessions and tokens are never reachable with a token, so a leaked token cannot t
 over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` reports
 `write` and `manage`.
 
+**Credentials and administrators.** The owner's rule is that a token never changes a
+credential, so an instance administrator's `manage` token cannot create a password-reset
+link for any user (that would be an account takeover), cannot switch off a user's
+two-factor authentication, and cannot set the SMTP password. `POST /api/admin/users` with a
+token creates the account (name, email, optional administrator role) but without a usable
+password: it refuses `password` and returns no `reset_link`; a signed-in administrator
+creates the reset link in the app, or the person uses "Forgot password" when email is on.
+Email settings (`GET|PATCH /api/admin/email`, `POST /api/admin/email/test`) are open to the
+administrator's `manage` token, except that it can neither set nor remove the SMTP password,
+and cannot change the host, port, security mode or username while a password is in use
+(that would send the password to a server of its choosing); it can switch email off.
+
 An AI agent can use all of this through the built-in MCP server; see [mcp.md](mcp.md).
 
 ---
@@ -73,26 +86,26 @@ An AI agent can use all of this through the built-in MCP server; see [mcp.md](mc
 ## 2. Airtable-compatible API (`/api/v1`)
 
 Point an Airtable client at `https://<your server>/api/v1` instead of
-`https://api.airtable.com/v0`, and use an OpenGrid token in place of an
+`https://api.airtable.com/v0`, and use an OpenBase token in place of an
 Airtable personal access token:
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://grid.example.com/api/v1/meta/bases"
+  "https://base.example.com/api/v1/meta/bases"
 
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://grid.example.com/api/v1/$BASE_ID/Tasks?filterByFormula=%7BStatus%7D%3D%27Todo%27&sort%5B0%5D%5Bfield%5D=Due"
+  "https://base.example.com/api/v1/$BASE_ID/Tasks?filterByFormula=%7BStatus%7D%3D%27Todo%27&sort%5B0%5D%5Bfield%5D=Due"
 ```
 
 ### 2.1 Authentication and rate limits
 
 - **Bearer tokens only.** The session cookie is never read, so a browser
-  signed in to OpenGrid cannot be driven through this API (no CSRF surface);
+  signed in to OpenBase cannot be driven through this API (no CSRF surface);
   a request with only a cookie is `401 AUTHENTICATION_REQUIRED`.
 - **Rate limits** (fixed one-second windows): **5 requests/second per token**
   and **50 requests/second per user** (all of a user's tokens together). Over the
   limit: `429 RATE_LIMIT_REACHED` with `Retry-After: 1`. Server operators can
-  change both with `OPENGRID_V1_RATE_PER_TOKEN` / `OPENGRID_V1_RATE_PER_USER`.
+  change both with `OPENBASE_V1_RATE_PER_TOKEN` / `OPENBASE_V1_RATE_PER_USER`.
   Unlike Airtable there is no 30 second penalty.
 - Requests with unknown or expired tokens are answered 401 before any limit is
   applied.
@@ -145,7 +158,7 @@ not listed. There is no pagination (no `offset`).
 
 Field `type` names and options:
 
-| Airtable type | OpenGrid field | `options` |
+| Airtable type | OpenBase field | `options` |
 |---|---|---|
 | `singleLineText`, `email`, `url`, `phoneNumber`, `barcode` | single line text, email, URL, phone, barcode | none |
 | `multilineText` / `richText` | long text / long text with markdown on | none |
@@ -170,7 +183,7 @@ Field `type` names and options:
 
 Views are the table's shared views plus the caller's own personal views. View
 types: `grid`, `form`, `gallery`, `kanban`, `calendar`, `timeline`, and `list`
-(OpenGrid's list view; Airtable has no equivalent).
+(OpenBase's list view; Airtable has no equivalent).
 
 ### 2.4 Listing records
 
@@ -205,7 +218,7 @@ An offset is only valid for the same user, table and parameters (`view`,
 may change); anything else is `422 LIST_RECORDS_ITERATOR_NOT_AVAILABLE`, and the
 client restarts the listing without an offset.
 
-**`filterByFormula`** uses OpenGrid's Airtable-compatible formula language
+**`filterByFormula`** uses OpenBase's Airtable-compatible formula language
 (`docs/plans`, section on formulas): `{Field Name}` references (or
 `{fldXXXX}` ids), the same functions and the same truthiness as Airtable (0, `""`,
 blank and `FALSE()` are false). It is evaluated for each record of the (view or
@@ -241,9 +254,9 @@ checkboxes are `true` or absent.
 | formula, lookup, rollup | the materialized value (formula errors are `{"error": "…"}`) |
 | button | `{label, url}` |
 
-Attachment `url`s are **absolute** (built from `OPENGRID_PUBLIC_URL`) and, unlike
+Attachment `url`s are **absolute** (built from `OPENBASE_PUBLIC_URL`) and, unlike
 Airtable's, need the same bearer token (or a signed-in session) to download.
-`thumbnails` (images only) has `small` and `large` pointing at OpenGrid's single
+`thumbnails` (images only) has `small` and `large` pointing at OpenBase's single
 400 px thumbnail and `full` at the original, each with `url`, `width`, `height`.
 
 ### 2.6 Writing records
@@ -298,7 +311,7 @@ are clamped, and **missing select options are created**.
   collaborator fields); the person must have access to the base;
 - attachments take `[{"id": "attXXXX"}]`, the id of a file uploaded to the same
   base with `POST /api/bases/{id}/attachments` (session or token with write
-  access). OpenGrid does **not** fetch `url`s on a client's behalf (SSRF), so
+  access). OpenBase does **not** fetch `url`s on a client's behalf (SSRF), so
   `[{"url": …}]` is a 422;
 - barcode takes `{"text"}` or a string;
 - computed fields (formula, lookup, rollup, count, created/modified time/by,
@@ -306,10 +319,10 @@ are clamped, and **missing select options are created**.
 
 ### 2.7 Differences from Airtable
 
-| Airtable | OpenGrid |
+| Airtable | OpenBase |
 |---|---|
 | `https://api.airtable.com/v0/…` | `https://<server>/api/v1/…`; base ids look like `bseXXXX`, table ids `tblXXXX`, field ids `fldXXXX`, record ids `recXXXX` |
-| personal access tokens with scopes | OpenGrid API tokens: read/write plus an optional base list; there is no schema scope because this API cannot change schema |
+| personal access tokens with scopes | OpenBase API tokens: read/write plus an optional base list; there is no schema scope because this API cannot change schema |
 | schema changes, webhooks, comments, collaborators API | not provided; use the internal API (`/api/...`) or automations |
 | `POST …/listRecords` | not provided (use `GET`) |
 | `performUpsert` | 422 (update by record id) |
@@ -322,7 +335,7 @@ are clamped, and **missing select options are created**.
 | rate limit 5 req/s per base, 30 s penalty | 5 req/s per token and 50 req/s per user; retry in the next second |
 | a read-only/unreachable base → 403 or 404 | an inaccessible base is always 404, a read-only token writing is 403 |
 | 2xx for create is 200 | same |
-| select colors like `blueLight2` | OpenGrid's palette names (`blue`, `blue_dark`, …) |
+| select colors like `blueLight2` | OpenBase's palette names (`blue`, `blue_dark`, …) |
 | barcode `{"type", "text"}` | `{"text"}` |
 | formula booleans as `1`/absent | booleans as `true`/`false` |
 | `lookup`/`rollup` `options.result` details | simplified: `{type, options?}` of the result type |

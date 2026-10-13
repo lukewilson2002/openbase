@@ -1,6 +1,6 @@
 //! Hard limits. The server enforces them; the UI mirrors them for early feedback.
 //! These are deliberately conservative for a 1 vCPU / 1 GB VPS; see
-//! docs/plans/2026-10-12-opengrid.md "Scale limits".
+//! docs/plans/2026-10-12-openbase.md "Scale limits".
 
 pub const MAX_NAME_LEN: usize = 255;
 pub const MAX_DESCRIPTION_LEN: usize = 20_000;

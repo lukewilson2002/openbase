@@ -1,5 +1,5 @@
 /**
- * Display formatting for cells (mirror of og_core::cell::present): numbers, currency, percent,
+ * Display formatting for cells (mirror of ob_core::cell::present): numbers, currency, percent,
  * durations, dates, selects, links, users, attachments and computed values.
  */
 import type { DateOptions, DurationFormat, Field, ResultType, ValueFormat } from "@/api/types";

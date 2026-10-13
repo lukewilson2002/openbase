@@ -15,7 +15,7 @@ pub fn create_admin(state: &AppState, email: &str, name: &str, pw: &str) -> AppR
         return Err(AppError::bad_request("name is required"));
     }
     state.db.write_sync(|tx| {
-        let id = new_id(og_core::ids::USER);
+        let id = new_id(ob_core::ids::USER);
         let now = now_ms();
         tx.execute(
             "INSERT INTO users (id, email, name, password_hash, is_admin, created_at, updated_at)

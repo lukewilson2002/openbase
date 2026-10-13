@@ -4,7 +4,7 @@
 mod common;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::json;
 
@@ -317,7 +317,7 @@ async fn deleting_a_base_hides_it_and_notifies_subscribers() {
         .await
         .assert_status(404);
     let env = rx.try_recv().unwrap();
-    assert_eq!(env.event, og_core::api::events::BaseEvent::BaseChanged);
+    assert_eq!(env.event, ob_core::api::events::BaseEvent::BaseChanged);
     // deleting again is a 404, not a second event
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))

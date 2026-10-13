@@ -7,7 +7,7 @@ import type { ResetLink } from "./ResetLink";
  */
 export type AdminCreatedUser = { user: AdminUser, 
 /**
- * Present when no password was given: send this link to the user so they
- * can choose one.
+ * Present when no password was given and the caller is signed in: send this link to the
+ * user so they can choose one. An API token never receives it.
  */
 reset_link?: ResetLink | null, };

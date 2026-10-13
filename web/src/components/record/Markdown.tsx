@@ -38,7 +38,7 @@ export function Markdown({ source, className }: { source: string; className?: st
   return (
     <div
       className={cn(
-        "og-markdown text-[0.8125rem] leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-subtle [&_code]:px-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-subtle [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-5",
+        "ob-markdown text-[0.8125rem] leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-subtle [&_code]:px-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-subtle [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-5",
         className,
       )}
       // Sanitized by DOMPurify in renderMarkdown.

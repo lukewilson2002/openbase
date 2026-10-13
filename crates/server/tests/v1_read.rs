@@ -51,10 +51,10 @@ async fn meta_lists_the_bases_a_token_can_reach_with_permission_levels() {
     let r = v.app().get(&ro, "/api/v1/meta/bases").await;
     assert_eq!(r.body["bases"][0]["permissionLevel"], "read");
     for (role, level) in [
-        (opengrid::perm::Role::Viewer, "read"),
-        (opengrid::perm::Role::Commenter, "comment"),
-        (opengrid::perm::Role::Editor, "edit"),
-        (opengrid::perm::Role::Creator, "create"),
+        (openbase::perm::Role::Viewer, "read"),
+        (openbase::perm::Role::Commenter, "comment"),
+        (openbase::perm::Role::Editor, "edit"),
+        (openbase::perm::Role::Creator, "create"),
     ] {
         let u =
             v.p.f
@@ -175,7 +175,7 @@ async fn meta_views_show_shared_views_and_only_the_callers_personal_ones() {
     // Someone else does not see it.
     let other =
         v.p.f
-            .member("other@example.com", opengrid::perm::Role::Editor);
+            .member("other@example.com", openbase::perm::Role::Editor);
     let tok = make_token(v.app(), &other, true, None, None);
     let meta = v
         .app()
@@ -607,7 +607,7 @@ async fn stale_offsets_are_422_iterator_not_available() {
         )
         .await;
     gone(r);
-    let editor = v.p.f.member("e@example.com", opengrid::perm::Role::Editor);
+    let editor = v.p.f.member("e@example.com", openbase::perm::Role::Editor);
     let tok = make_token(v.app(), &editor, true, None, None);
     let r = v
         .app()
@@ -1028,7 +1028,7 @@ async fn the_view_parameter_rejects_unknown_and_foreign_views() {
         422,
         "VIEW_NAME_NOT_FOUND",
     );
-    let guest = v.p.f.member("g@example.com", opengrid::perm::Role::Editor);
+    let guest = v.p.f.member("g@example.com", openbase::perm::Role::Editor);
     let personal = v
         .app()
         .post(
@@ -1303,7 +1303,7 @@ async fn attachments_have_absolute_urls_sizes_types_and_thumbnails() {
 
 #[tokio::test]
 async fn the_configured_public_url_prefixes_attachment_urls() {
-    let p = people_with(|c| c.public_url = "https://grid.example.com/".into()).await;
+    let p = people_with(|c| c.public_url = "https://base.example.com/".into()).await;
     let token = make_token(&p.f.app, &p.f.owner, true, None, None);
     let v = V1 { p, token };
     let e = everything(&v).await;
@@ -1317,7 +1317,7 @@ async fn the_configured_public_url_prefixes_attachment_urls() {
     let id = e.attachment["id"].as_str().unwrap();
     assert_eq!(
         r.body["fields"]["Files"][0]["url"],
-        format!("https://grid.example.com/api/attachments/{id}/pic.png")
+        format!("https://base.example.com/api/attachments/{id}/pic.png")
     );
 }
 
@@ -1327,7 +1327,7 @@ async fn collaborators_carry_id_email_and_name() {
     let e = everything(&v).await;
     let other =
         v.p.f
-            .member("ann@example.com", opengrid::perm::Role::Editor);
+            .member("ann@example.com", openbase::perm::Role::Editor);
     v.p.f
         .set(
             &e.table_id,

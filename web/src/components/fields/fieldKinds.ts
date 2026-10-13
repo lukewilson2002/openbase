@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the field dialog: default options per type (the `options: {}` defaults of
- * og_core::field::FieldKind::default_for plus sensible references for the types that need them),
+ * ob_core::field::FieldKind::default_for plus sensible references for the types that need them),
  * validation, the CreateField / UpdateField payloads, and a warning model for type changes.
  */
 import type { CreateField, Field, FieldKind, FieldType, Table, UpdateField } from "@/api/types";

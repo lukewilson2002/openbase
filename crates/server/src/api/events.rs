@@ -31,7 +31,7 @@ use axum::extract::{Path, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
 use futures::Stream;
-use og_core::api::events::{BaseEvent, EventEnvelope};
+use ob_core::api::events::{BaseEvent, EventEnvelope};
 use rusqlite::Connection;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::time::Instant;

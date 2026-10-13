@@ -321,7 +321,7 @@ async fn tables_without_links_copy_in_isolation_and_announce_just_the_new_table(
     res.assert_status(201);
     assert_eq!(
         rx.try_recv().unwrap().event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(sid(&res.body["id"]).to_string())
         }
     );

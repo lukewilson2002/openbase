@@ -18,14 +18,14 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use og_core::api::records::NewRecord;
-use og_core::api::sharing::ImportRowError;
-use og_core::cell::{CellCtx, normalize};
-use og_core::field::{
+use ob_core::api::records::NewRecord;
+use ob_core::api::sharing::ImportRowError;
+use ob_core::cell::{CellCtx, normalize};
+use ob_core::field::{
     CurrencyOptions, DateFormat, DateOptions, Field, FieldKind, NumberOptions, SelectChoice,
     SelectOptions, TextOptions, TimeFormat,
 };
-use og_core::limits;
+use ob_core::limits;
 use regex::Regex;
 use rusqlite::Transaction;
 use serde_json::Value as Json;
@@ -564,13 +564,13 @@ pub fn import_rows(
             limits::MAX_RECORDS_PER_TABLE
         )));
     }
-    exec(tx, "SAVEPOINT og_import")?;
+    exec(tx, "SAVEPOINT ob_import")?;
     let result = import_in_savepoint(tx, ctx, table_id, columns, rows);
     match &result {
-        Ok(ImportOutcome::Imported { .. }) => exec(tx, "RELEASE og_import")?,
+        Ok(ImportOutcome::Imported { .. }) => exec(tx, "RELEASE ob_import")?,
         _ => {
-            exec(tx, "ROLLBACK TO og_import")?;
-            exec(tx, "RELEASE og_import")?;
+            exec(tx, "ROLLBACK TO ob_import")?;
+            exec(tx, "RELEASE ob_import")?;
         }
     }
     result
@@ -606,18 +606,18 @@ fn try_rows(
     rows: &[CsvRow],
     scan: &mut Scan,
 ) -> AppResult<bool> {
-    exec(tx, "SAVEPOINT og_batch")?;
+    exec(tx, "SAVEPOINT ob_batch")?;
     let batch: Vec<NewRecord> = rows.iter().map(|r| new_record(columns, r)).collect();
     CREATE_CALLS.with(|c| c.set(c.get() + 1));
     match create_records(tx, ctx, table_id, batch, &CreateOpts::default()) {
         Ok(outcome) => {
-            exec(tx, "RELEASE og_batch")?;
+            exec(tx, "RELEASE ob_batch")?;
             scan.outcomes.push(outcome);
             Ok(false)
         }
         Err(AppError::BadRequest(message)) => {
-            exec(tx, "ROLLBACK TO og_batch")?;
-            exec(tx, "RELEASE og_batch")?;
+            exec(tx, "ROLLBACK TO ob_batch")?;
+            exec(tx, "RELEASE ob_batch")?;
             if let [row] = rows {
                 scan.errors.push(ImportRowError {
                     row: row.number,

@@ -1,4 +1,4 @@
-# OpenGrid web client
+# OpenBase web client
 
 React 19 + TypeScript (strict) single-page app, built with Vite and embedded into the Rust server binary
 (`crates/server/src/web.rs` embeds `web/dist`). Self-hosters never need Node; only contributors do.
@@ -38,7 +38,7 @@ Install with the lockfile and without lifecycle scripts (enforced by `.npmrc`):
 ```sh
 cd web
 npm ci
-npm run dev          # http://localhost:5173, proxies /api to a running opengrid on :8080
+npm run dev          # http://localhost:5173, proxies /api to a running openbase on :8080
 npm run build        # type-check + production build into web/dist
 npm test -- --run    # unit and component tests (fetch is mocked)
 npm run test:contract  # the API client against the real server (needs cargo; see below)
@@ -66,7 +66,7 @@ too (see the conventions in `crates/core/src/api/mod.rs`); response fields stay 
 ### Live contract tests
 
 `npm run test:contract` runs the real API client (`src/api/endpoints.ts`, `src/api/records.ts`,
-`src/api/events.ts`) against a real `target/debug/opengrid` started on a free port with a throwaway
+`src/api/events.ts`) against a real `target/debug/openbase` started on a free port with a throwaway
 data directory (`contract/globalSetup.ts` builds it with `cargo build --features debug-embed`, the same
 binary the end-to-end tests use). Every response is checked against the generated bindings
 (`contract/typecheck.ts` reads `src/api/types/*.ts`), so a server/client mismatch fails here rather than
@@ -86,16 +86,18 @@ administrator already exists for the data plane:
 | `collab.contract.test.ts` | comments, mentions and notifications, trash, automations (CRUD, dry-run test, webhook runs, run history) |
 | `sharing.contract.test.ts` | share links (create, disable, password, delete, limits, who may), public views and forms without credentials (visible fields only, search / paging / transient / range, passwords, uploads, submissions, rate limit), attachments through `?share=`, CSV export and both CSV imports |
 | `automations.contract.test.ts` | what the automations UI relies on: every trigger and action type as the editor sends it, the `action N: ...` error wording, on/off rules, `next_run_at`, real test runs in the history, roles |
+| `email.contract.test.ts` | Administration -> Email: the effective settings and their sources, saving (never a host: the shared server keeps email off), the write-only password, validation errors, the test-email answer, closed to regular users |
+| `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a base built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
-`OPENGRID_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
+`OPENBASE_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
 
 ### End-to-end tests
 
 Playwright drives the real stack in the locally installed Google Chrome (no browser download):
 
 ```sh
-OPENGRID_E2E=1 npm run e2e
+OPENBASE_E2E=1 npm run e2e
 ```
 
 `e2e/globalSetup.ts` builds the web client, builds the server with `web/dist` embedded at compile time
@@ -109,6 +111,7 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and base, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
 | `grid` | `grid.spec.ts` | journey | cell editing, undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
+| `admin-email` | `adminEmail.spec.ts` | sharing, automations, views | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
 
@@ -118,8 +121,8 @@ other's data; they all hang off `grid` only to keep the order fixed on the share
 new line in `playwright.config.ts`, or it never runs). Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
-are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
-reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENGRID_E2E=1` is set.
+are asserted against the API. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
+reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENBASE_E2E=1` is set.
 
 ## Layout
 
@@ -148,7 +151,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 
 | Where | What |
 |---|---|
-| `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `og_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
+| `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
@@ -260,6 +263,20 @@ It depends on Glide 6.0.3 internals (`markerCellRenderer.draw`, `rowMarkers.star
 Colours are tokens in `src/styles/index.css` for both themes; the grid canvas mirrors them in `views/grid/glide/theme.ts`, the choice palette in
 `lib/cells/palette.ts`. `src/styles/contrast.test.ts` keeps text on its usual surfaces at WCAG AA (4.5:1) in both themes. Marks (the dot of a
 stack or lane, the bar of a coloured row) use `swatchColor`, because the pale chip backgrounds are about 1.3:1 on a white surface.
+
+### Logo, favicon and web app manifest
+
+`brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and
+`scripts/check.sh` fails when the copies are stale (`--check`):
+
+- `public/favicon.svg` (the small mark), `favicon.ico`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` and
+  `icon-maskable-512.png`, linked from `index.html`. `public/manifest.webmanifest` (name OpenBase, theme `#1F5AE0`, the three icons) is
+  handwritten. There are no inline scripts or styles in `index.html`: the server's CSP forbids them.
+- `src/components/brandMarks.ts` (generated): the path data that `components/Logo.tsx` draws inline. `Logo` is the lockup (mark plus
+  outlined wordmark, in the text colour, so it follows the theme) or, with `showName={false}`, the small mark; `BrandMark` is the bare
+  mark. They sit in the app top bars, the sign-in, setup, invite and reset pages and, as "Powered by OpenBase", the footer of public
+  form and share pages. The server serves these files with `Cache-Control: public, max-age=86400` and an ETag (the manifest and
+  `index.html` are `no-cache`), see `crates/server/src/web.rs`.
 
 ### Conventions
 

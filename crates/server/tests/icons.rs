@@ -8,7 +8,7 @@ mod records_support;
 mod schema_support;
 mod share_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 use share_support::*;
 

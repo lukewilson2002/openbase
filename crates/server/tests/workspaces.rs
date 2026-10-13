@@ -4,7 +4,7 @@
 mod common;
 mod schema_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::json;
 
@@ -463,6 +463,6 @@ async fn member_changes_notify_bases_of_the_workspace() {
         .await
         .assert_status(200);
     let env = rx.try_recv().expect("BaseChanged event");
-    assert_eq!(env.event, og_core::api::events::BaseEvent::BaseChanged);
+    assert_eq!(env.event, ob_core::api::events::BaseEvent::BaseChanged);
     assert_eq!(env.user_id.as_deref(), f.owner.user_id.as_deref());
 }

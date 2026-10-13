@@ -1,6 +1,6 @@
 //! Malformed JSON bodies and query strings answer with the API's JSON error
 //! envelope (`{"error": {"code", "message"}}`, status 400), not axum's
-//! plain-text rejections. See `opengrid::extract`.
+//! plain-text rejections. See `openbase::extract`.
 
 mod common;
 
@@ -19,11 +19,11 @@ async fn raw(
     let mut req = Request::builder()
         .method(method)
         .uri(path)
-        .header(opengrid::http::CSRF_HEADER, "1");
+        .header(openbase::http::CSRF_HEADER, "1");
     if let Some(c) = &client.cookie {
         req = req.header(
             header::COOKIE,
-            format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+            format!("{}={}", openbase::auth::SESSION_COOKIE, c),
         );
     }
     if let Some(ct) = content_type {

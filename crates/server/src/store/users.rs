@@ -1,6 +1,6 @@
 //! Users, profiles, admin user management and password-reset tokens.
 
-use og_core::api::auth::{AdminUpdateUser, AdminUser, User};
+use ob_core::api::auth::{AdminUpdateUser, AdminUser, User};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Map, Value, json};
 
@@ -167,7 +167,7 @@ pub fn create(
     password_hash: &str,
     is_admin: bool,
 ) -> AppResult<String> {
-    let id = new_id(og_core::ids::USER);
+    let id = new_id(ob_core::ids::USER);
     let now = now_ms();
     conn.execute(
         "INSERT INTO users (id, email, name, password_hash, is_admin, created_at, updated_at)

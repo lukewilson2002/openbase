@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
  * `npm run test:contract`. See contract/README.md.
  *
  * Separate from vite.config.ts on purpose: no jsdom, no React plugins, and the global setup
- * builds and boots `target/debug/opengrid`.
+ * builds and boots `target/debug/openbase`.
  */
 export default defineConfig({
   resolve: {

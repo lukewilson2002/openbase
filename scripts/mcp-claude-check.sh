@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Does the real `claude` CLI connect to OpenGrid's MCP endpoint?
+# Does the real `claude` CLI connect to OpenBase's MCP endpoint?
 #
-# Starts a throwaway OpenGrid on a random localhost port with a temporary data directory,
+# Starts a throwaway OpenBase on a random localhost port with a temporary data directory,
 # signs up an administrator and creates a write+manage API token (what the account page does),
 # then in a temporary project directory:
 #
 #   1. runs the command the account page shows ("Connect an AI assistant (MCP)"),
-#      `claude mcp add --transport http opengrid <url> --header "Authorization: Bearer <token>"`,
-#      and `claude mcp list`. Success = the list shows `opengrid` as connected.
+#      `claude mcp add --transport http openbase <url> --header "Authorization: Bearer <token>"`,
+#      and `claude mcp list`. Success = the list shows `openbase` as connected.
 #   2. writes the same server as a project-scoped `.mcp.json` and reports what `claude mcp list`
 #      says (Claude Code asks the user to approve project-scoped servers once, so a fresh
 #      checkout is expected to show "Pending approval"; this part is informational).
@@ -16,8 +16,8 @@
 # temporary directory, so the real ~/.claude and ~/.claude.json are neither read nor modified,
 # and everything (server, data, config, token) is deleted on exit.
 #
-#   scripts/mcp-claude-check.sh            # builds target/debug/opengrid if needed
-#   OPENGRID_BIN=/path/to/opengrid scripts/mcp-claude-check.sh
+#   scripts/mcp-claude-check.sh            # builds target/debug/openbase if needed
+#   OPENBASE_BIN=/path/to/openbase scripts/mcp-claude-check.sh
 #
 # Exit status: 0 = connected, or skipped because `claude` / python3 / curl is not installed
 # (printed as SKIP); 1 = the CLI could not connect.
@@ -29,11 +29,11 @@ command -v claude >/dev/null 2>&1 || skip "the 'claude' CLI is not on PATH"
 command -v curl >/dev/null 2>&1 || skip "curl is not installed"
 command -v python3 >/dev/null 2>&1 || skip "python3 is not installed"
 
-BIN="${OPENGRID_BIN:-target/debug/opengrid}"
-if [[ -z "${OPENGRID_BIN:-}" ]]; then
-  cargo build -q -p opengrid
+BIN="${OPENBASE_BIN:-target/debug/openbase}"
+if [[ -z "${OPENBASE_BIN:-}" ]]; then
+  cargo build -q -p openbase
 fi
-[[ -x "$BIN" ]] || { echo "no opengrid binary at $BIN" >&2; exit 1; }
+[[ -x "$BIN" ]] || { echo "no openbase binary at $BIN" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
 SERVER_PID=""
@@ -47,8 +47,8 @@ PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); p
 URL="http://127.0.0.1:$PORT"
 mkdir -p "$TMP/data" "$TMP/project" "$TMP/home"
 
-OPENGRID_DATA_DIR="$TMP/data" OPENGRID_BIND="127.0.0.1:$PORT" OPENGRID_PUBLIC_URL="$URL" \
-  OPENGRID_BACKUP_HOUR=-1 "$BIN" serve >"$TMP/server.log" 2>&1 &
+OPENBASE_DATA_DIR="$TMP/data" OPENBASE_BIND="127.0.0.1:$PORT" OPENBASE_PUBLIC_URL="$URL" \
+  OPENBASE_BACKUP_HOUR=-1 "$BIN" serve >"$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 100); do
   curl -fs "$URL/api/health" >/dev/null 2>&1 && break
@@ -59,7 +59,7 @@ curl -fs "$URL/api/health" >/dev/null || { cat "$TMP/server.log" >&2; echo "the 
 
 # The first account becomes the administrator; the token is what the account page would create.
 JAR="$TMP/cookies"
-api() { curl -fsS -b "$JAR" -c "$JAR" -H 'content-type: application/json' -H 'x-opengrid-csrf: 1' "$@"; }
+api() { curl -fsS -b "$JAR" -c "$JAR" -H 'content-type: application/json' -H 'x-openbase-csrf: 1' "$@"; }
 api -X POST "$URL/api/auth/signup" \
   -d '{"email":"check@example.com","name":"Check","password":"a long throwaway password 1"}' >/dev/null
 TOKEN="$(api -X POST "$URL/api/tokens" -d '{"name":"claude-check","write":true,"manage":true}' |
@@ -70,17 +70,17 @@ cd "$TMP/project"
 echo "$(claude --version 2>&1 | head -1) -> $URL/mcp"
 
 # 1. The command the account page shows, in the temporary project with the temporary HOME.
-claude mcp add --transport http opengrid "$URL/mcp" --header "Authorization: Bearer $TOKEN"
+claude mcp add --transport http openbase "$URL/mcp" --header "Authorization: Bearer $TOKEN"
 OUT="$(timeout 90 claude mcp list 2>&1 || true)"
 echo "$OUT"
-LINE="$(echo "$OUT" | grep -E '^opengrid:' || true)"
+LINE="$(echo "$OUT" | grep -E '^openbase:' || true)"
 
 # 2. The same server as a project-scoped .mcp.json.
-claude mcp remove opengrid >/dev/null 2>&1 || true
+claude mcp remove openbase >/dev/null 2>&1 || true
 cat >"$TMP/project/.mcp.json" <<EOF
 {
   "mcpServers": {
-    "opengrid": {
+    "openbase": {
       "type": "http",
       "url": "$URL/mcp",
       "headers": { "Authorization": "Bearer $TOKEN" }
@@ -88,12 +88,12 @@ cat >"$TMP/project/.mcp.json" <<EOF
   }
 }
 EOF
-PROJECT_LINE="$(timeout 90 claude mcp list 2>&1 | grep -E '^opengrid:' || true)"
+PROJECT_LINE="$(timeout 90 claude mcp list 2>&1 | grep -E '^openbase:' || true)"
 echo "project-scoped .mcp.json: ${PROJECT_LINE:-<not listed>}"
 
 if echo "$LINE" | grep -qi 'connected' && ! echo "$LINE" | grep -qiE 'fail|needs auth|error|pending'; then
-  echo "OK: claude mcp list shows opengrid connected"
+  echo "OK: claude mcp list shows openbase connected"
   exit 0
 fi
-echo "FAILED: claude mcp list does not show opengrid as connected" >&2
+echo "FAILED: claude mcp list does not show openbase as connected" >&2
 exit 1

@@ -4,7 +4,7 @@
 //!
 //! * **Definitions** live in the `automations` table ([`store`]): a trigger
 //!   and an ordered list of actions as JSON (the DTOs in
-//!   `og_core::api::automations`), validated on save by [`validate`].
+//!   `ob_core::api::automations`), validated on save by [`validate`].
 //! * **Triggers only enqueue.** The record write path calls
 //!   [`on_records_changed`] inside its write transaction; the incoming-webhook
 //!   endpoint, the form path and the schedule scanner call the same enqueue

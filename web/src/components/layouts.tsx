@@ -8,8 +8,8 @@ import { UserMenu } from "./UserMenu";
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
-      <Link to="/" className="mb-6" aria-label="OpenGrid home">
-        <Logo className="text-lg" />
+      <Link to="/" className="mb-6" aria-label="OpenBase home">
+        <Logo className="h-10" />
       </Link>
       <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-6 shadow-pop">
         <h1 className="text-xl">{title}</h1>
@@ -26,7 +26,7 @@ export function AppPage({ title, actions, children, wide }: { title?: ReactNode;
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-line bg-surface px-4">
-        <Link to="/" aria-label="OpenGrid home">
+        <Link to="/" aria-label="OpenBase home">
           <Logo />
         </Link>
         <div className="flex-1" />

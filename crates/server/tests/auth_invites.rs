@@ -214,10 +214,10 @@ async fn logged_in_user_accepts_invite_and_keeps_higher_role() {
     let role = app
         .state
         .db
-        .read(move |c| opengrid::perm::workspace_role(c, &uid, &ws2))
+        .read(move |c| openbase::perm::workspace_role(c, &uid, &ws2))
         .await
         .unwrap();
-    assert_eq!(role, Some(opengrid::perm::Role::Creator));
+    assert_eq!(role, Some(openbase::perm::Role::Creator));
     // Single use.
     let other = app.user("o2@example.com", "O2");
     app.post(
@@ -248,10 +248,10 @@ async fn logged_in_user_accepts_invite_and_keeps_higher_role() {
     let role = app
         .state
         .db
-        .read(move |c| opengrid::perm::base_role(c, &uid, &base))
+        .read(move |c| openbase::perm::base_role(c, &uid, &base))
         .await
         .unwrap();
-    assert_eq!(role, Some(opengrid::perm::Role::Editor));
+    assert_eq!(role, Some(openbase::perm::Role::Editor));
     assert_eq!(
         app.query_i64(
             "SELECT count(*) FROM audit_log WHERE action = 'invite_accept'",
@@ -326,10 +326,10 @@ async fn signup_with_invite_when_invite_only() {
     let role = app
         .state
         .db
-        .read(move |c| opengrid::perm::workspace_role(c, &uid, &ws))
+        .read(move |c| openbase::perm::workspace_role(c, &uid, &ws))
         .await
         .unwrap();
-    assert_eq!(role, Some(opengrid::perm::Role::Editor));
+    assert_eq!(role, Some(openbase::perm::Role::Editor));
     // The invite is used up.
     let (res, _) = app.signup("third@example.com", PW, Some(&token)).await;
     res.assert_status(404);
@@ -486,7 +486,7 @@ async fn revoke_invite() {
 async fn invite_email_sent_when_smtp_configured() {
     let app = TestApp::with_config(|c| {
         c.smtp_host = Some("smtp.example.com".into());
-        c.public_url = "https://grid.example.com/".into();
+        c.public_url = "https://base.example.com/".into();
     });
     let owner = app.user("owner@example.com", "Olivia");
     let (ws, _) = app.workspace_with_base(&owner, "Acme");
@@ -499,7 +499,7 @@ async fn invite_email_sent_when_smtp_configured() {
         .await;
     res.assert_status(201);
     let url = res.body["url"].as_str().unwrap();
-    assert!(url.starts_with("https://grid.example.com/invite/inv_"));
+    assert!(url.starts_with("https://base.example.com/invite/inv_"));
     let sent = app.mailer.wait_for(1).await;
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].to, "new@example.com");

@@ -1,7 +1,7 @@
 //! Audit log of security-relevant events (logins, password and 2FA changes,
 //! tokens, invites, admin actions). Rows are append-only.
 
-use og_core::api::auth::{AuditEntry, AuditPage};
+use ob_core::api::auth::{AuditEntry, AuditPage};
 use rusqlite::{Connection, params};
 use serde_json::Value;
 
@@ -29,6 +29,11 @@ pub mod actions {
     pub const ADMIN_USER_CREATE: &str = "admin_user_create";
     pub const ADMIN_USER_UPDATE: &str = "admin_user_update";
     pub const ADMIN_RESET_LINK: &str = "admin_reset_link";
+    /// SMTP settings changed on the Admin -> Email page (detail: the changed fields; the
+    /// password only as set / replaced / removed).
+    pub const ADMIN_EMAIL_UPDATE: &str = "admin_email_update";
+    /// A test email was sent from the Admin -> Email page.
+    pub const ADMIN_EMAIL_TEST: &str = "admin_email_test";
     /// An API token with the `manage` permission called an admin endpoint.
     pub const ADMIN_TOKEN_USE: &str = "admin_token_use";
 }

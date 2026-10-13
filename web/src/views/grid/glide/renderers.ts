@@ -10,7 +10,7 @@ import { isFormulaError } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
 import { attachmentsApi } from "@/api/records";
 import type { RecordCellModel } from "../adapter";
-import { isOgCell, withPending, type OgCell } from "./cells";
+import { isObCell, withPending, type ObCell } from "./cells";
 import { DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fileExt, fitText, roundRectPath, type ChipDraw } from "./draw";
 import { mixColors, paletteColor, ratingColor } from "@/lib/cells/palette";
 
@@ -46,7 +46,7 @@ export function openTargetOf(m: RecordCellModel): string | null {
   }
 }
 
-function drawRating(args: DrawArgs<OgCell>, m: RecordCellModel, active: boolean): void {
+function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean): void {
   const { ctx, rect, theme } = args;
   if (m.field.type !== "rating") return;
   const value = typeof m.value === "number" ? m.value : 0;
@@ -69,7 +69,7 @@ function drawRating(args: DrawArgs<OgCell>, m: RecordCellModel, active: boolean)
   }
 }
 
-function drawAttachments(args: DrawArgs<OgCell>, m: RecordCellModel): void {
+function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
   const { ctx, rect, theme, imageLoader, col, row } = args;
   const files = attachmentRefs(m.value);
   const size = Math.min(40, rect.height - 8);
@@ -131,7 +131,7 @@ function drawOpenIcon(ctx: CanvasRenderingContext2D, rect: { x: number; y: numbe
   ctx.stroke();
 }
 
-function drawRecordCell(args: DrawArgs<OgCell>, m: RecordCellModel, rc: RendererContext): void {
+function drawRecordCell(args: DrawArgs<ObCell>, m: RecordCellModel, rc: RendererContext): void {
   const { ctx, rect, theme } = args;
   const shape = displayShapeOf(m.field);
   const active = args.highlighted || args.hoverAmount > 0.01;
@@ -196,10 +196,10 @@ function drawRecordCell(args: DrawArgs<OgCell>, m: RecordCellModel, rc: Renderer
   }
 }
 
-function drawGroup(args: DrawArgs<OgCell>, rc: RendererContext): void {
+function drawGroup(args: DrawArgs<ObCell>, rc: RendererContext): void {
   const { ctx, rect, theme } = args;
   const data = args.cell.data;
-  if (data.og !== "group") return;
+  if (data.ob !== "group") return;
   const m = data.model;
   ctx.fillStyle = rc.dark ? "#232833" : "#eef1f6";
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -217,10 +217,10 @@ function drawGroup(args: DrawArgs<OgCell>, rc: RendererContext): void {
   if (labelX + w + 8 < rect.x + rect.width) ctx.fillText(String(m.count), labelX + w + 8, rect.y + rect.height / 2 + 0.5);
 }
 
-function drawSummary(args: DrawArgs<OgCell>, rc: RendererContext): void {
+function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   const { ctx, rect, theme } = args;
   const data = args.cell.data;
-  if (data.og !== "summary") return;
+  if (data.ob !== "summary") return;
   const m = data.model;
   ctx.fillStyle = rc.dark ? "#1f242d" : "#f6f7f9";
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -246,10 +246,10 @@ function drawSummary(args: DrawArgs<OgCell>, rc: RendererContext): void {
   ctx.fillText(text, rect.x + rect.width - theme.cellHorizontalPadding - ctx.measureText(text).width, y);
 }
 
-export function createRenderer(getContext: () => RendererContext): CustomRenderer<OgCell> {
+export function createRenderer(getContext: () => RendererContext): CustomRenderer<ObCell> {
   return {
     kind: GridCellKind.Custom,
-    isMatch: (cell): cell is OgCell => isOgCell(cell),
+    isMatch: (cell): cell is ObCell => isObCell(cell),
     needsHover: true,
     needsHoverPosition: true,
     draw(args, cell) {
@@ -260,8 +260,8 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
       ctx.rect(rect.x, rect.y, rect.width, rect.height);
       ctx.clip();
       const data = cell.data;
-      if (data.og === "group") drawGroup(args, rc);
-      else if (data.og === "summary") drawSummary(args, rc);
+      if (data.ob === "group") drawGroup(args, rc);
+      else if (data.ob === "summary") drawSummary(args, rc);
       else {
         const m = data.model;
         drawRecordCell(args, m, rc);
@@ -281,7 +281,7 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
     onClick(args) {
       const rc = getContext();
       const data = args.cell.data;
-      if (data.og !== "cell") return undefined;
+      if (data.ob !== "cell") return undefined;
       const m = data.model;
       const [col, row] = args.location;
       // Expand icon on the primary field.

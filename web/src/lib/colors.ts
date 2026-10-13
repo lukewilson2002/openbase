@@ -1,5 +1,5 @@
 /**
- * The fixed colour palette shared with the server (`og_core::field::COLORS`).
+ * The fixed colour palette shared with the server (`ob_core::field::COLORS`).
  * Each name has a matching `.choice-<name>` CSS class in styles/index.css.
  * `colors.test.ts` checks this list against the Rust source so they cannot drift.
  */

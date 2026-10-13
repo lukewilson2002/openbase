@@ -8,11 +8,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use og_core::api::schema::View;
-use og_core::field::{Field, FieldKind};
-use og_core::ids::FieldId;
-use og_core::limits;
-use og_core::view::{ViewConfig, ViewType};
+use ob_core::api::schema::View;
+use ob_core::field::{Field, FieldKind};
+use ob_core::ids::FieldId;
+use ob_core::limits;
+use ob_core::view::{ViewConfig, ViewType};
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Value as Json, json};
@@ -489,7 +489,7 @@ pub fn validate_name(raw: &str, what: &str) -> AppResult<String> {
 
 /// Validate a colour name against the fixed palette.
 pub fn validate_color(color: &str) -> AppResult<()> {
-    if og_core::field::COLORS.contains(&color) {
+    if ob_core::field::COLORS.contains(&color) {
         Ok(())
     } else {
         Err(AppError::bad_request(format!("unknown color '{color}'")))
@@ -738,7 +738,7 @@ mod tests {
         let (ty, opts) = kind_columns(&kind).unwrap();
         assert_eq!(ty, "rating");
         assert_eq!(parse_kind(&ty, &opts).unwrap(), kind);
-        let (ty, opts) = kind_columns(&FieldKind::Email(og_core::field::Empty {})).unwrap();
+        let (ty, opts) = kind_columns(&FieldKind::Email(ob_core::field::Empty {})).unwrap();
         assert_eq!((ty.as_str(), opts.as_str()), ("email", "{}"));
     }
 

@@ -11,7 +11,7 @@ mod v1_support;
 use std::time::Duration;
 
 use common::Client;
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 use v1_support::*;
 
@@ -130,7 +130,7 @@ async fn deactivated_users_lose_api_access() {
 #[tokio::test]
 async fn using_a_token_stamps_last_used_at() {
     let v = v1_people().await;
-    let hash = opengrid::ids::hash_token(v.token.bearer.as_deref().unwrap());
+    let hash = openbase::ids::hash_token(v.token.bearer.as_deref().unwrap());
     let stamp = |app: &common::TestApp| -> Option<i64> {
         sql(app, |tx| {
             tx.query_row(

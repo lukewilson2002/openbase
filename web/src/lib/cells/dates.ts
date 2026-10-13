@@ -1,5 +1,5 @@
 /**
- * Date and time helpers for date fields. Mirrors og_core::cell date handling:
+ * Date and time helpers for date fields. Mirrors ob_core::cell date handling:
  * - date-only values are `YYYY-MM-DD` and never shift between zones;
  * - instants are RFC 3339 UTC strings with milliseconds (`...Z`);
  * - a field may fix a zone (`DateOptions.timezone`), otherwise the viewer's zone is used.

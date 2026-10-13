@@ -47,7 +47,7 @@ describe("ListView", () => {
     expect(screen.getAllByRole("treeitem")).toHaveLength(2); // only the top level is left visible
     await user.click(screen.getByRole("button", { name: /Expand all/ }));
     expect(screen.getByRole("button", { name: "R1" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("og-list-collapsed:viw1") ?? "[]")).toEqual([]);
+    expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1") ?? "[]")).toEqual([]);
   });
 
   it("collapses one group and remembers it", async () => {
@@ -56,7 +56,7 @@ describe("ListView", () => {
     await user.click(await screen.findByRole("button", { name: "Collapse Todo" }));
     expect(screen.queryByRole("button", { name: "R1" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "R3" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("og-list-collapsed:viw1")!)).toEqual([`${F.status.id}:s1`]);
+    expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1")!)).toEqual([`${F.status.id}:s1`]);
   });
 
   it("adds a record inside a nested group with every level's value, then opens it", async () => {

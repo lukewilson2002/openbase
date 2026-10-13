@@ -1,0 +1,68 @@
+# systemd unit for running the OpenBase binary directly (no Docker).
+#
+# Install (see docs/self-hosting.md for the full walkthrough):
+#   sudo useradd --system --home-dir /var/lib/openbase --shell /usr/sbin/nologin openbase
+#   sudo install -m 0755 openbase /usr/local/bin/openbase
+#   sudo install -m 0644 deploy/openbase.service /etc/systemd/system/openbase.service
+#   sudo install -d -m 0750 /etc/openbase   # optional: /etc/openbase/openbase.env
+#   sudo systemctl daemon-reload && sudo systemctl enable --now openbase
+#
+# A dedicated user (rather than DynamicUser) lets you run CLI commands such as
+# `sudo -u openbase openbase backup` against the same files.
+
+[Unit]
+Description=OpenBase (self-hosted Airtable alternative)
+Documentation=https://github.com/openbase/openbase
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openbase
+Group=openbase
+Environment=OPENBASE_DATA_DIR=/var/lib/openbase
+Environment=OPENBASE_BIND=127.0.0.1:8080
+# Site settings (OPENBASE_PUBLIC_URL, SMTP, ...). Optional file; keep it 0640.
+EnvironmentFile=-/etc/openbase/openbase.env
+ExecStart=/usr/local/bin/openbase serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Creates /var/lib/openbase owned by the service user.
+StateDirectory=openbase
+StateDirectoryMode=0750
+UMask=0027
+
+# Resource limits sized for a 1 GB VPS.
+MemoryMax=400M
+LimitNOFILE=65536
+
+# Hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openbase
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

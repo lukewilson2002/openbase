@@ -14,8 +14,8 @@
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
-use og_core::api::records::Comment;
-use og_core::limits;
+use ob_core::api::records::Comment;
+use ob_core::limits;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;
@@ -142,7 +142,7 @@ pub fn create(
     now: i64,
 ) -> AppResult<Comment> {
     let body = validate_body(body)?;
-    let id = new_id(og_core::ids::COMMENT);
+    let id = new_id(ob_core::ids::COMMENT);
     tx.execute(
         "INSERT INTO comments (id, record_id, user_id, body, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?5)",

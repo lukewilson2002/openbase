@@ -190,7 +190,7 @@ pub fn build_multipart(spec: &Map<String, Value>) -> Result<(String, Vec<u8>), S
     if spec.is_empty() {
         return Err("multipart needs at least one part".into());
     }
-    let boundary = format!("----opengrid-mcp-{}", crate::ids::new_id("b"));
+    let boundary = format!("----openbase-mcp-{}", crate::ids::new_id("b"));
     let mut body: Vec<u8> = Vec::new();
     for (name, part) in spec {
         check_token(name, "multipart part name")?;
@@ -332,10 +332,10 @@ pub async fn execute_with(
         .header(
             header::USER_AGENT,
             HeaderValue::from_str(&format!(
-                "opengrid-mcp ({})",
+                "openbase-mcp ({})",
                 ctx.user_agent.as_deref().unwrap_or("unknown client")
             ))
-            .unwrap_or_else(|_| HeaderValue::from_static("opengrid-mcp")),
+            .unwrap_or_else(|_| HeaderValue::from_static("openbase-mcp")),
         )
         .header(
             header::ACCEPT,

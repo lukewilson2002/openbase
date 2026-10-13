@@ -179,7 +179,7 @@ async fn the_other_side_is_edited_history_updated_at_and_events_included() {
     // one RecordsChanged per table
     let mut seen = std::collections::BTreeMap::new();
     while let Ok(ev) = rx.try_recv() {
-        if let og_core::api::events::BaseEvent::RecordsChanged {
+        if let ob_core::api::events::BaseEvent::RecordsChanged {
             table_id, updated, ..
         } = ev.event.clone()
         {

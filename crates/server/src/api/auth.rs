@@ -15,7 +15,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use axum_extra::extract::CookieJar;
-use og_core::api::auth::{
+use ob_core::api::auth::{
     ChangePasswordRequest, LoginRequest, LoginResponse, OkResponse, PasswordResetConfirm,
     PasswordResetRequest, SessionInfo, SetupStatus, SignupRequest, TwoFactorCode, TwoFactorDisable,
     TwoFactorSetup, UpdateMeRequest, User,
@@ -130,7 +130,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
     Ok(Json(SetupStatus {
         needs_setup: n == 0,
         open_signup: state.config.open_signup,
-        email_enabled: state.config.email_enabled(),
+        email_enabled: state.email.enabled(),
     }))
 }
 
@@ -527,7 +527,7 @@ async fn reset_request(
     ApiJson(req): ApiJson<PasswordResetRequest>,
 ) -> AppResult<Json<OkResponse>> {
     state.limiter.check("reset_request", &client.ip, 5, HOUR)?;
-    if !state.config.email_enabled() {
+    if !state.email.enabled() {
         return Ok(ok());
     }
     let Ok(email) = users::normalize_email(&req.email) else {
@@ -570,14 +570,14 @@ async fn reset_request(
     if let Some((to, name, token)) = issued {
         let url = users::reset_url(&state.config.public_url, &token);
         let body = format!(
-            "Hi {name},\n\nSomeone (hopefully you) asked to reset your OpenGrid password.\n\
+            "Hi {name},\n\nSomeone (hopefully you) asked to reset your OpenBase password.\n\
              Open this link within 1 hour to choose a new one:\n\n{url}\n\n\
              If you didn't ask for this, you can ignore this email; your password is unchanged.\n"
         );
         email::send_in_background(
             state.mailer.clone(),
             to,
-            "Reset your OpenGrid password".into(),
+            "Reset your OpenBase password".into(),
             body,
         );
     }

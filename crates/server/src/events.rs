@@ -1,11 +1,11 @@
 //! In-process event bus: one broadcast channel per base, created on first
 //! subscriber and dropped when the last subscriber leaves. No Redis, no
-//! cross-process fan-out: OpenGrid runs as a single process by design.
+//! cross-process fan-out: OpenBase runs as a single process by design.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use og_core::api::events::{BaseEvent, EventEnvelope};
+use ob_core::api::events::{BaseEvent, EventEnvelope};
 use tokio::sync::{broadcast, watch};
 
 use crate::store::versions::DataVersions;

@@ -2,8 +2,8 @@
 //! stay fast on big tables. Numbers are printed (`--nocapture`); the
 //! assertions are generous because tests run unoptimized.
 //!
-//! `cargo test -p opengrid --test recompute_perf -- --nocapture`
-//! `cargo test -p opengrid --test recompute_perf --release -- --ignored --nocapture` runs the 50k variant.
+//! `cargo test -p openbase --test recompute_perf -- --nocapture`
+//! `cargo test -p openbase --test recompute_perf --release -- --ignored --nocapture` runs the 50k variant.
 
 mod common;
 mod records_support;
@@ -11,8 +11,8 @@ mod schema_support;
 
 use std::time::Instant;
 
-use og_core::api::records::NewRecord;
-use opengrid::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
+use ob_core::api::records::NewRecord;
+use openbase::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
 use records_support::*;
 use serde_json::json;
 
@@ -205,7 +205,7 @@ async fn run(n_orders: usize, budget_ms: u128) {
     let hot_orders: Vec<&String> = p
         .order_ids
         .iter()
-        .take(og_core::limits::MAX_LINKS_PER_CELL)
+        .take(ob_core::limits::MAX_LINKS_PER_CELL)
         .collect();
     let n_hot = hot_orders.len();
     let hot = f.create(&p.customers, json!({ &p.discount: 0.2 })).await;
@@ -275,7 +275,7 @@ async fn loading_the_schema_graph_for_a_few_hundred_fields_is_cheap() {
             .state
             .db
             .write_sync(move |tx| {
-                opengrid::engine::recompute::BaseSchema::load(tx, &b)?;
+                openbase::engine::recompute::BaseSchema::load(tx, &b)?;
                 Ok(())
             })
             .unwrap();

@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::common::{Client, Response, TestApp};
 pub use crate::query_support::*;
 
-pub const BOUNDARY: &str = "----opengridw7boundary";
+pub const BOUNDARY: &str = "----openbasew7boundary";
 
 /// A multipart body: (field name, optional file name, bytes).
 pub fn multipart_body(parts: &[(&str, Option<&str>, &[u8])]) -> Vec<u8> {
@@ -45,13 +45,13 @@ pub fn auth(
     if let Some(c) = &client.cookie {
         req = req.header(
             header::COOKIE,
-            format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+            format!("{}={}", openbase::auth::SESSION_COOKIE, c),
         );
     }
     if let Some(t) = &client.bearer {
         req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
     }
-    req.header(opengrid::http::CSRF_HEADER, "1")
+    req.header(openbase::http::CSRF_HEADER, "1")
 }
 
 /// POST a multipart body as `client`; `extra` are additional request headers.

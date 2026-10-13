@@ -5,16 +5,18 @@
 //!   and `manage` without `write`;
 //! - every session-only route is refused for a `manage` token, whatever else the token may do;
 //! - admin routes work for an administrator's `manage` token, are audited, and are refused for
-//!   everyone else.
+//!   everyone else;
+//! - the credential parts of the admin routes (password-reset links, a user's password and 2FA,
+//!   the SMTP password) are session-only even for an administrator's `manage` token.
 //!
-//! `CASES`, `SESSION_ONLY` and `ADMIN` are also compared with the endpoint catalogue of the MCP
+//! `CASES`, `SESSION_ONLY`, `ADMIN_SESSION_ONLY` and `ADMIN` are also compared with the endpoint catalogue of the MCP
 //! server (`mcp::catalogue`), so a route cannot change its capability without this test (and the
 //! documentation) noticing.
 
 mod common;
 
 use common::{Client, TestApp};
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 
 const ROLES: [Role; 5] = [
@@ -113,7 +115,7 @@ impl Fx {
 
     /// A user with `role` on the workspaces and bases of the fixture.
     fn user_with(&self, role: Option<Role>) -> Client {
-        let n = opengrid::ids::new_id("u");
+        let n = openbase::ids::new_id("u");
         let u = self.app.user(&format!("{n}@example.com"), "Actor");
         if let Some(role) = role {
             for ws in [&self.ids.ws, &self.ids.ws_deleted] {
@@ -440,6 +442,15 @@ const SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
     ),
 ];
 
+/// Admin routes no token can ever use, not even an administrator's `manage` token: whoever holds a
+/// password-reset link can set the user's password. (method, template, concrete path, body)
+const ADMIN_SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[(
+    "POST",
+    "/api/admin/users/{id}/reset-link",
+    "/api/admin/users/usrNope/reset-link",
+    Some("{}"),
+)];
+
 async fn call(
     app: &TestApp,
     c: &Client,
@@ -675,7 +686,7 @@ async fn base_limited_manage_tokens_cannot_reach_other_bases() {
 
 #[tokio::test]
 async fn session_only_routes_refuse_every_token() {
-    for (method, _template, path, body) in SESSION_ONLY {
+    for (method, _template, path, body) in SESSION_ONLY.iter().chain(ADMIN_SESSION_ONLY) {
         // A fresh instance per route: a successful session call (password change, revoking
         // sessions) legitimately deletes the tokens used before it.
         let fx = Fx::new().await;
@@ -810,9 +821,10 @@ const ADMIN: &[AdminCase] = &[
         method: "POST",
         template: "/api/admin/users",
         path: |_| "/api/admin/users".into(),
+        // No password: a token cannot set one (see admin_credential_actions_are_session_only).
         body: |_, attempt| {
             Some(
-                json!({"email": format!("new{attempt}@example.com"), "name": "New", "password": "a long enough password", "is_admin": false}),
+                json!({"email": format!("new{attempt}@example.com"), "name": "New", "is_admin": false}),
             )
         },
         ok: 201,
@@ -825,9 +837,23 @@ const ADMIN: &[AdminCase] = &[
         ok: 200,
     },
     AdminCase {
+        method: "GET",
+        template: "/api/admin/email",
+        path: |_| "/api/admin/email".into(),
+        body: |_, _| None,
+        ok: 200,
+    },
+    AdminCase {
+        method: "PATCH",
+        template: "/api/admin/email",
+        path: |_| "/api/admin/email".into(),
+        body: |_, _| Some(json!({"from": "Base <base@example.com>"})),
+        ok: 200,
+    },
+    AdminCase {
         method: "POST",
-        template: "/api/admin/users/{id}/reset-link",
-        path: |i| format!("/api/admin/users/{}/reset-link", i.user),
+        template: "/api/admin/email/test",
+        path: |_| "/api/admin/email/test".into(),
         body: |_, _| Some(json!({})),
         ok: 200,
     },
@@ -968,11 +994,226 @@ async fn admin_routes_work_for_admin_manage_tokens_and_are_audited() {
     }
 }
 
+/// Credential actions stay session-only for an administrator's `manage` token: the reset link,
+/// a password for a new user, the reset link of a new user, switching off 2FA and the SMTP
+/// password. A refused request changes nothing, even when it also asks for something allowed.
+#[tokio::test]
+async fn admin_credential_actions_are_session_only() {
+    let app = TestApp::new();
+    let admin = app.admin("admin@example.com", "Admin");
+    let victim = app.user("victim@example.com", "Victim");
+    let victim_id = victim.user_id.clone().unwrap();
+    app.state
+        .db
+        .write_sync(|tx| {
+            Ok(tx.execute(
+                "UPDATE users SET totp_enabled = 1, totp_secret = 'JBSWY3DPEHPK3PXP' WHERE id = ?1",
+                [&victim_id],
+            )?)
+        })
+        .unwrap();
+    let reset_tokens = || app.query_i64("SELECT count(*) FROM password_resets", &[]);
+    let users = || app.query_i64("SELECT count(*) FROM users", &[]);
+    let manage = app
+        .api_token(&admin, json!({"name": "m", "write": true, "manage": true}))
+        .await;
+    let (_, base) = app.workspace_with_base(&admin, "Acme");
+    let limited = app
+        .api_token(
+            &admin,
+            json!({"name": "l", "write": true, "manage": true, "base_ids": [base]}),
+        )
+        .await;
+
+    // 1. a reset link for an existing user: refused for every token, with the session-only message
+    let before = reset_tokens();
+    for (label, token) in [("manage", &manage), ("base-limited manage", &limited)] {
+        let res = call(
+            &app,
+            token,
+            "POST",
+            &format!("/api/admin/users/{victim_id}/reset-link"),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(res.status.as_u16(), 403, "{label}: {}", res.body);
+        let msg = res.body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            msg.contains("API tokens can never use this endpoint"),
+            "{label}: {msg}"
+        );
+    }
+    assert_eq!(reset_tokens(), before, "no reset token was minted");
+    // the signed-in administrator can
+    let res = call(
+        &app,
+        &admin,
+        "POST",
+        &format!("/api/admin/users/{victim_id}/reset-link"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+    assert_eq!(reset_tokens(), before + 1);
+
+    // 2. switching off someone's 2FA: refused, also when combined with an allowed change
+    for body in [
+        json!({"disable_2fa": true}),
+        json!({"name": "Renamed by token", "disable_2fa": true}),
+    ] {
+        let res = call(
+            &app,
+            &manage,
+            "PATCH",
+            &format!("/api/admin/users/{victim_id}"),
+            Some(body.clone()),
+        )
+        .await;
+        assert_eq!(res.status.as_u16(), 403, "{body}: {}", res.body);
+        assert!(
+            res.body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("two-factor"),
+            "{}",
+            res.body
+        );
+    }
+    assert_eq!(
+        app.query_i64(
+            "SELECT totp_enabled FROM users WHERE id = ?1 AND name = 'Victim'",
+            &[victim_id.as_str()]
+        ),
+        1,
+        "2FA still on and the combined rename did not happen"
+    );
+    // other admin updates still work for the token (and `disable_2fa: false` is not a change)
+    let res = call(
+        &app,
+        &manage,
+        "PATCH",
+        &format!("/api/admin/users/{victim_id}"),
+        Some(json!({"name": "Renamed", "disable_2fa": false})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+    // the signed-in administrator can switch it off
+    let res = call(
+        &app,
+        &admin,
+        "PATCH",
+        &format!("/api/admin/users/{victim_id}"),
+        Some(json!({"disable_2fa": true})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+    assert_eq!(res.body["totp_enabled"], false);
+
+    // 3. creating users: no password from a token, and no reset link back to it
+    let n = users();
+    let res = call(
+        &app,
+        &manage,
+        "POST",
+        "/api/admin/users",
+        Some(json!({"email": "p@example.com", "name": "P", "password": "a long enough password"})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 403, "{}", res.body);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("set a user's password"),
+        "{}",
+        res.body
+    );
+    assert_eq!(users(), n, "no user was created");
+    for admin_flag in [false, true] {
+        let res = call(
+            &app,
+            &manage,
+            "POST",
+            "/api/admin/users",
+            Some(json!({"email": format!("new{admin_flag}@example.com"), "name": "New", "is_admin": admin_flag})),
+        )
+        .await;
+        assert_eq!(res.status.as_u16(), 201, "{}", res.body);
+        assert!(
+            res.body["reset_link"].is_null(),
+            "no link for a token: {}",
+            res.body
+        );
+        assert_eq!(res.body["user"]["is_admin"], admin_flag);
+    }
+    assert_eq!(users(), n + 2);
+    // ... the account exists but nobody can sign in to it, and no reset token exists for it
+    let (login, _) = app
+        .login("newfalse@example.com", "a long enough password")
+        .await;
+    login.assert_status(401);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM password_resets r JOIN users u ON u.id = r.user_id WHERE u.email LIKE 'new%'",
+            &[]
+        ),
+        0
+    );
+    // the signed-in administrator still gets the link, or can set a password directly
+    let res = call(
+        &app,
+        &admin,
+        "POST",
+        "/api/admin/users",
+        Some(json!({"email": "viasession@example.com", "name": "S"})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 201);
+    assert!(res.body["reset_link"]["url"].is_string());
+    let res = call(
+        &app,
+        &admin,
+        "POST",
+        "/api/admin/users",
+        Some(json!({"email": "withpw@example.com", "name": "W", "password": "a long enough password"})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 201);
+    assert!(res.body["reset_link"].is_null());
+
+    // 4. the SMTP password: see tests/admin_email.rs for the full rules
+    let res = call(
+        &app,
+        &manage,
+        "PATCH",
+        "/api/admin/email",
+        Some(json!({"password": "smtp-secret"})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 403, "{}", res.body);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM settings WHERE key = 'smtp.password'",
+            &[]
+        ),
+        0
+    );
+    let res = call(
+        &app,
+        &admin,
+        "PATCH",
+        "/api/admin/email",
+        Some(json!({"password": "smtp-secret"})),
+    )
+    .await;
+    assert_eq!(res.status.as_u16(), 200, "{}", res.body);
+}
+
 /// The tables above and the endpoint catalogue (which `api_reference` shows to agents and
 /// `api_request` enforces up front) describe the same policy.
 #[test]
 fn the_capability_tables_match_the_endpoint_catalogue() {
-    use opengrid::mcp::catalogue::{Access, ENDPOINTS};
+    use openbase::mcp::catalogue::{Access, ENDPOINTS};
     use std::collections::BTreeSet;
 
     let key = |m: &str, p: &str| (m.to_string(), p.to_string());
@@ -1019,7 +1260,11 @@ fn the_capability_tables_match_the_endpoint_catalogue() {
     let admin: BTreeSet<_> = ADMIN.iter().map(|a| key(a.method, a.template)).collect();
     assert_eq!(admin, of(&[Access::Admin]), "admin routes");
 
-    let session_only: BTreeSet<_> = SESSION_ONLY.iter().map(|(m, t, ..)| key(m, t)).collect();
+    let session_only: BTreeSet<_> = SESSION_ONLY
+        .iter()
+        .map(|(m, t, ..)| key(m, t))
+        .chain(ADMIN_SESSION_ONLY.iter().map(|(m, t, ..)| key(m, t)))
+        .collect();
     assert_eq!(
         session_only,
         of(&[Access::SessionOnly]),

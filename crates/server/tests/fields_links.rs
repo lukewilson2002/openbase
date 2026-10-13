@@ -126,7 +126,7 @@ async fn self_link_creates_the_inverse_in_the_same_table() {
     let env = rx.try_recv().unwrap();
     assert_eq!(
         env.event,
-        og_core::api::events::BaseEvent::SchemaChanged {
+        ob_core::api::events::BaseEvent::SchemaChanged {
             table_id: Some(f.table_id.clone())
         }
     );
@@ -146,7 +146,7 @@ async fn linking_across_tables_publishes_an_event_for_the_whole_base() {
     let env = rx.try_recv().unwrap();
     assert_eq!(
         env.event,
-        og_core::api::events::BaseEvent::SchemaChanged { table_id: None }
+        ob_core::api::events::BaseEvent::SchemaChanged { table_id: None }
     );
 }
 
@@ -222,7 +222,7 @@ async fn the_linked_tables_field_limit_is_enforced_atomically() {
     let t2 = f.add_table("Full").await;
     let t2id = sid(&t2["id"]).to_string();
     sql(&f.app, |tx| {
-        for i in 0..(og_core::limits::MAX_FIELDS_PER_TABLE - 1) {
+        for i in 0..(ob_core::limits::MAX_FIELDS_PER_TABLE - 1) {
             tx.execute(
                 "INSERT INTO fields (id, table_id, name, type, options, position, created_at)
                  VALUES (?1, ?2, ?3, 'number', '{}', ?4, 1)",

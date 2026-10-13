@@ -12,7 +12,7 @@ use crate::view::{Filter, Sort};
 /// `values` is keyed by field id and contains every non-empty field,
 /// including computed ones. Link fields are returned as `[{"id","name"}]`
 /// ([`LinkRef`]); everything else in its canonical stored form (see
-/// `og_core::field`). System fields (created/modified time/by, autonumber)
+/// `ob_core::field`). System fields (created/modified time/by, autonumber)
 /// also appear in `values` under their field ids when the table has them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 // Renamed in TypeScript so it does not shadow the built-in `Record<K, V>`.

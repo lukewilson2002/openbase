@@ -44,7 +44,7 @@ export function SetupPage() {
   };
 
   return (
-    <AuthLayout title="Set up OpenGrid" subtitle="Create the administrator account for this instance.">
+    <AuthLayout title="Set up OpenBase" subtitle="Create the administrator account for this instance.">
       <form onSubmit={submit} className="flex flex-col gap-4">
         {(localError || create.isError) && <Notice tone="error">{localError ?? errorMessage(create.error)}</Notice>}
         <Field label="Your name">

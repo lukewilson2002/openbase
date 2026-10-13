@@ -6,7 +6,7 @@ mod schema_support;
 
 use std::collections::HashSet;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use schema_support::*;
 use serde_json::{Value, json};
 

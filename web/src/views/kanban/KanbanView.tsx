@@ -35,7 +35,7 @@ function KanbanInner(props: ViewProps) {
   const attachmentFields = useMemo(() => table.fields.filter((f) => f.type === "attachment"), [table.fields]);
   const coverField = attachmentFields.find((f) => f.id === kanban.cover_field_id);
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
-  const [collapsed, toggleCollapse] = usePersistedSet(`og-kanban-collapsed:${view.id}`);
+  const [collapsed, toggleCollapse] = usePersistedSet(`ob-kanban-collapsed:${view.id}`);
 
   const records = useViewRecords({
     tableId: table.id,

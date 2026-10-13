@@ -1,6 +1,6 @@
-# OpenGrid MCP server
+# OpenBase MCP server
 
-OpenGrid contains an [MCP](https://modelcontextprotocol.io) (Model Context Protocol)
+OpenBase contains an [MCP](https://modelcontextprotocol.io) (Model Context Protocol)
 server in the same binary, at `/mcp`. An AI agent that holds one of your personal
 access tokens can do **everything you can do in the web app**, within that token's
 permissions: build bases, tables, fields of all 28 types and views, fill in and edit
@@ -16,7 +16,9 @@ yourself if you would rather describe the work to an agent.
   your normal public URL, behind your normal HTTPS.
 - **Not for account takeover.** Passwords, two-factor authentication, sessions and
   API tokens can never be read or changed through a token, whatever its scope. The
-  tools cannot create, list or delete tokens either.
+  tools cannot create, list or delete tokens either. Even an administrator's token cannot
+  create a password-reset link, switch off someone's 2FA, give a new user a password or
+  set the SMTP password.
 
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
 [Choose a token](#choose-a-token) · [How an agent works here](#how-an-agent-works-here) ·
@@ -26,7 +28,7 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Quick start
 
-1. Open **Account → AI assistants** in OpenGrid. It shows your endpoint address and
+1. Open **Account → AI assistants** in OpenBase. It shows your endpoint address and
    copy-ready settings (the same ones as below).
 2. **Account → API tokens → New token.** Give it a name. Tick "Allow writes" if the
    assistant should change things, and (only for an assistant that should also manage
@@ -36,7 +38,7 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 3. Add the server to your assistant. For Claude Code:
 
    ```sh
-   claude mcp add --transport http opengrid https://grid.example.com/mcp \
+   claude mcp add --transport http openbase https://base.example.com/mcp \
      --header "Authorization: Bearer YOUR_TOKEN"
    ```
 
@@ -45,15 +47,15 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Set up your client
 
-The server speaks the *Streamable HTTP* transport at `https://<your OpenGrid>/mcp` and
+The server speaks the *Streamable HTTP* transport at `https://<your OpenBase>/mcp` and
 authenticates with a bearer header, `Authorization: Bearer <token>`. It does not
 support OAuth sign-in, so a client that can only connect through an OAuth flow (for
 example the connector directories of some chat apps) cannot use it.
 
 | Client | How | Checked |
 |---|---|---|
-| **Claude Code** | `claude mcp add --transport http opengrid <url> --header "Authorization: Bearer <token>"` (this project and you; add `--scope user` for all your projects). Check with `claude mcp list`: it shows `opengrid ... Connected`. | yes, CLI 2.1.285: `scripts/mcp-claude-check.sh` |
-| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. Keep the token out of git (`"Authorization": "Bearer ${OPENGRID_TOKEN}"` expands an environment variable). Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
+| **Claude Code** | `claude mcp add --transport http openbase <url> --header "Authorization: Bearer <token>"` (this project and you; add `--scope user` for all your projects). Check with `claude mcp list`: it shows `openbase ... Connected`. | yes, CLI 2.1.285: `scripts/mcp-claude-check.sh` |
+| **Claude Code, shared with a team** | `claude mcp add --scope project ...` writes `.mcp.json` into the repository. Keep the token out of git (`"Authorization": "Bearer ${OPENBASE_TOKEN}"` expands an environment variable). Everyone must approve a project-scoped server once; until then `claude mcp list` shows "Pending approval". | approval behaviour yes |
 | **Any client with a JSON file** (Cursor, Windsurf, Cline, ...) | The `mcpServers` object below. Cursor calls the file `~/.cursor/mcp.json`; VS Code uses `.vscode/mcp.json` with a top-level `servers` key instead of `mcpServers`. | format only |
 | **Claude Desktop** | Its connector settings are for OAuth servers. Use a local bridge that adds the header: `"command": "npx", "args": ["-y", "mcp-remote", "<url>", "--header", "Authorization:${AUTH}"]` with `"env": {"AUTH": "Bearer <token>"}` in `claude_desktop_config.json`. | no |
 | **Your own program** | Any MCP SDK with a Streamable HTTP client and custom headers: set the URL and the `Authorization` header. The official Rust SDK (`rmcp`) is tested against this server in both protocol generations. | yes (`rmcp`) |
@@ -61,9 +63,9 @@ example the connector directories of some chat apps) cannot use it.
 ```json
 {
   "mcpServers": {
-    "opengrid": {
+    "openbase": {
       "type": "http",
-      "url": "https://grid.example.com/mcp",
+      "url": "https://base.example.com/mcp",
       "headers": { "Authorization": "Bearer YOUR_TOKEN" }
     }
   }
@@ -75,8 +77,8 @@ but this project has not run that client. A quick check from a shell works for a
 setup:
 
 ```sh
-curl -s https://grid.example.com/mcp \
-  -H "Authorization: Bearer $OPENGRID_TOKEN" \
+curl -s https://base.example.com/mcp \
+  -H "Authorization: Bearer $OPENBASE_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
@@ -113,7 +115,7 @@ The permission table, route by route, is in [api.md](api.md#token-permissions).
   Select values, people and linked records read the same way in every tool.
 - **Deletions are recoverable.** Deleted records, fields, tables, views, bases and
   workspaces go to the trash and come back with `restore_from_trash` within
-  `OPENGRID_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
+  `OPENBASE_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
   the data and asks for confirmation first.
 - **Errors say how to fix them**: the valid names, the missing role ("requires the
   creator role on this base"), or the missing token permission ("needs an API token
@@ -153,8 +155,8 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_bases` | any | Workspaces and bases the token can reach, with your role on each |
-| `get_base_schema` | any | Tables, fields (id, name, type, options) and views of a base |
+| `list_bases` | any | Workspaces and bases the token can reach, with your role on each and their icons |
+| `get_base_schema` | any | The base's icon, and its tables (with icons), fields (id, name, type, options) and views |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues |
 | `search_records` | any | Case-insensitive text search over all fields |
 | `get_record` | any | One record |
@@ -167,9 +169,9 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_workspaces` | any | Workspaces with your role and their bases |
-| `create_workspace` | manage | New workspace; you become its owner |
-| `rename_workspace` | manage | Rename (owner role) |
+| `list_workspaces` | any | Workspaces (with icons) with your role and their bases |
+| `create_workspace` | manage | New workspace, optionally with an `icon`; you become its owner |
+| `rename_workspace` | manage | Rename and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
 | `list_members` | manage | Members of a workspace or of one base, with roles |
 | `set_member_role` | manage | Change a member's role (a workspace always keeps an owner) |
@@ -182,16 +184,37 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_base` / `rename_base` | write | Create a base in a workspace; rename or restyle it |
-| `duplicate_base` / `delete_base` | manage | Copy a base (records optional); delete to the trash (owner role) |
-| `create_table` / `rename_table` | write | Add a table; rename it or change its description |
-| `duplicate_table` / `delete_table` | write | Copy a table (records optional); delete to the trash |
+| `create_base` / `rename_base` | write | Create a base in a workspace; rename or restyle it (name, colour, `icon`) |
+| `duplicate_base` / `delete_base` | manage | Copy a base (records optional; the copy keeps the icons); delete to the trash (owner role) |
+| `create_table` / `rename_table` | write | Add a table; rename it or change its description or `icon` |
+| `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
 | `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |
 | `delete_field` | write | Delete a field and its dependants to the trash |
 | `set_primary_field` | write | Choose the table's primary field |
 | `check_formula` | write | Parse and type-check a formula and preview it on a record |
 | `field_types` | any | Options and value shape of each field type, with an example |
+| `list_icons` | any | Search the Lucide icon names (`query`, `limit`) that `icon` accepts |
+
+#### Icons
+
+Workspaces, bases and tables can have an icon: a [Lucide](https://lucide.dev) name in
+kebab-case such as `briefcase`, `users` or `chart-column` (the web app's icon picker offers
+the same set). `create_workspace`, `create_base` and `create_table` take an optional `icon`;
+`rename_workspace`, `rename_base` and `rename_table` change it. In those, **leaving `icon` out
+keeps the current icon, a name sets it, and `null` removes it**. The tools keep their
+`rename_*` names (an `update_*` rename would have broken existing agents and prompts); their
+titles and descriptions say that they also change icons.
+
+Unlike the REST API, which only checks that an icon name is well-formed (so an icon from a
+newer web client keeps working), the tools check the name against the list of Lucide icons
+(`crates/server/data/lucide-icons.txt`, generated from the `lucide-react` package by
+`scripts/gen-icons.sh`). An unknown name is refused with suggestions (`Did you mean:
+shopping-cart, ...`); an old name (`home` for `house`) or loose spelling (`Chart Column`) is
+accepted and stored under the canonical name, and the result says so in `note`. `list_icons`
+finds names: every word of `query` has to match a name or an old name (`cart shop` finds
+`shopping-cart`); without a query it lists alphabetically. Icons show in `list_bases`,
+`list_workspaces` and `get_base_schema`.
 
 ### Views
 
@@ -251,11 +274,37 @@ send (settings objects merge key by key; `null` resets a part).
 Only for a `manage` token whose owner is an instance administrator; other tokens
 neither see nor can call these. Every call is recorded in the audit log.
 
+**Why `admin_create_user` returns no reset link.** A password-reset link lets whoever
+holds it choose the password of that account, and an account can be an administrator's.
+If a token received the link it could take the account over and keep it after the token
+is revoked, which is exactly what the "tokens never change credentials" rule prevents.
+(For the same reason `POST /api/admin/users/{id}/reset-link` is session-only.) So the
+tool creates the account with no usable password and says what to do: when the server
+sends email the new person uses "Forgot password" on the sign-in page with their address,
+otherwise an administrator, signed in to the web app, creates the link under **Admin →
+Users → Create password reset link** and sends it. Creating an account is otherwise like
+inviting a new person: a new account has no data.
+
+**Email settings.** The three email tools let an agent set up or check outgoing email
+without the web app, with one deliberate gap: **the SMTP password cannot be set or removed
+by a token** (the tool has no such argument, and `api_request` is refused with 403),
+because it is a credential; a person types it under **Admin → Email**. For the same reason,
+while an SMTP password is in use (stored, or from `OPENBASE_SMTP_PASSWORD`) a token cannot
+change the host, port, security mode or username: that would make the server send the
+password to a server of the agent's choosing. It can still change the sender address, and
+switch email off by clearing the host. Fields fixed by an `OPENBASE_SMTP_*` environment
+variable are read-only for everyone. A typical sequence is `admin_get_email_settings`,
+`admin_update_email_settings {host, port, security, username}`, a person enters the
+password in the app, then `admin_send_test_email`.
+
 | Tool | What it does |
 |---|---|
 | `admin_list_users` | All users with role, status and 2FA flag |
-| `admin_create_user` | New account; returns a one-time password-reset link (there is no way to set a password) |
+| `admin_create_user` | New account (name, email, optional administrator role) **without a usable password**: the tool cannot set one or return a reset link (see below) |
 | `admin_update_user` | Rename, deactivate or reactivate, grant or revoke the administrator role (no way to switch off someone's 2FA) |
+| `admin_get_email_settings` | The SMTP settings: on or off, host, port, security, username, sender, whether a password is stored (never the password), where each setting comes from, and the read-only email budgets |
+| `admin_update_email_settings` | Change host, port, security, username or sender (effective at once). Never the password; and while a password is in use not the host, port, security or username either |
+| `admin_send_test_email` | Send a test email (to the administrator, or `to`); a failure comes back as an error with the real SMTP error text |
 | `admin_audit_log` | The audit log, newest first, paged |
 | `admin_stats` | Counts, sizes, last backup, version |
 | `admin_create_backup` / `admin_list_backups` | Make a backup now; list the stored backups |
@@ -316,17 +365,20 @@ have no access" (the base is outside the user's or the token's reach).
   reason `/mcp` is exempt from the cookie CSRF header.
 - **Credentials stay out of reach.** No tool changes a password, two-factor setting,
   session or API token, and `api_request` refuses those endpoints. Administrators
-  cannot set another user's password or switch off their 2FA through MCP; a new user
-  gets a reset link.
+  cannot set another user's password, create a reset link for anyone, switch off their 2FA
+  or set the SMTP password through MCP; a user created through MCP has no usable password
+  until a person sets one in the web app. The server enforces this on the REST API itself,
+  so `api_request` cannot get around it (`403` "API tokens can never ...", and nothing is
+  changed).
 - **Origin check (DNS rebinding).** A request carrying an `Origin` header (browsers
   always send one) is served only if the origin is the configured public URL or in
-  `OPENGRID_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
+  `OPENBASE_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
   `Origin` and are unaffected.
 - **Outbound fetches are guarded.** `upload_attachment` with a `url`, and the
   automations' HTTP action, go through one SSRF guard: http(s) only, no credentials in
   the URL, the host is resolved by the server and every address checked (loopback,
   private, link-local including cloud metadata addresses, and other reserved ranges
-  are refused unless `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` is set), the connection is
+  are refused unless `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` is set), the connection is
   pinned to the checked addresses, redirects are not followed, and the download is
   refused (not cut) beyond the upload limit.
 - **Limits.** Bodies up to 8 MB; per-token and per-user request rates; invalid tokens
@@ -350,12 +402,12 @@ More in [security.md](security.md).
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPENGRID_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
-| `OPENGRID_MCP_RATE_PER_USER` | 100 | requests per second per user |
-| `OPENGRID_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
-| `OPENGRID_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
-| `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
-| `OPENGRID_TRASH_DAYS` | 30 | how long deleted items can be restored |
+| `OPENBASE_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
+| `OPENBASE_MCP_RATE_PER_USER` | 100 | requests per second per user |
+| `OPENBASE_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
+| `OPENBASE_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
+| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
+| `OPENBASE_TRASH_DAYS` | 30 | how long deleted items can be restored |
 
 Fixed in code: 8 MB request body (so base64 uploads up to about 6 MB; URL uploads are
 limited only by the upload limit), 10 records per write call, 200 records per
@@ -395,6 +447,11 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
   automation that really runs, an attachment, CSV export and import into a new table,
   history, and the admin pages. The only steps outside MCP are signing up, accepting
   the invite, the teammate's comment and the visitor's form submission.
+- `mcp_tools_icons.rs` (icons set, changed, kept and cleared on a workspace, base and table and
+  read back; unknown names with suggestions; `list_icons`), `mcp_tools_email.rs` and
+  `admin_email.rs` (the email tools and API: precedence of the environment, write-only password,
+  immediate effect, test email errors from an unreachable and a refusing server) and
+  `token_capabilities.rs` (credential actions stay session-only for an administrator's token).
 - `mcp_tools_schema.rs`, `mcp_tools_people.rs`, `mcp_tools_data.rs`: all 28 field
   types, names in view configurations, type changes, permissions (role vs token),
   base-limited and read-only tokens, admin rules, SSRF refusals, CSV edge cases.
@@ -414,7 +471,7 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
 | `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens) |
-| `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENGRID_MCP_ALLOWED_ORIGINS` |
+| `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENBASE_MCP_ALLOWED_ORIGINS` |
 | `429` | rate limit; retry after the `Retry-After` seconds |
 | a tool is missing from the list | the token lacks write or `manage`, or its owner is not an administrator (`admin_*`); create another token |
 | "not found, or you have no access" | wrong id, or the base is outside the token's base list or the owner's access |

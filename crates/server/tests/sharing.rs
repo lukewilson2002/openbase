@@ -8,7 +8,7 @@ mod records_support;
 mod schema_support;
 mod share_support;
 
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 use share_support::*;
 
@@ -962,7 +962,7 @@ async fn a_disabled_protected_link_is_404_not_a_password_prompt() {
 async fn public_requests_are_rate_limited_per_client_address() {
     let s = setup().await;
     let app = s.app();
-    let limit = opengrid::api::sharing::IP_LIMIT as usize;
+    let limit = openbase::api::sharing::IP_LIMIT as usize;
     for i in 0..limit {
         let r = anon(app, "GET", &s.info_path(), None, &[], "203.0.113.7").await;
         assert_eq!(r.status, 200, "request {i}");
@@ -984,8 +984,8 @@ async fn public_requests_are_rate_limited_per_client_address() {
 async fn public_requests_are_rate_limited_per_token_across_addresses() {
     let s = setup().await;
     let app = s.app();
-    let per_ip = opengrid::api::sharing::IP_LIMIT as usize;
-    let limit = opengrid::api::sharing::TOKEN_LIMIT as usize;
+    let per_ip = openbase::api::sharing::IP_LIMIT as usize;
+    let limit = openbase::api::sharing::TOKEN_LIMIT as usize;
     let mut sent = 0;
     let mut ip_n = 0;
     while sent < limit {
@@ -1077,8 +1077,8 @@ async fn public_group_headers_are_capped_and_truncated() {
     let s = setup().await;
     let t = s.p.f.table_id.clone();
     let name = s.p.name.clone();
-    let max = opengrid::engine::query::PUBLIC_MAX_GROUP_HEADERS;
-    let text_cap = opengrid::engine::query::PUBLIC_GROUP_TEXT_CHARS;
+    let max = openbase::engine::query::PUBLIC_MAX_GROUP_HEADERS;
+    let text_cap = openbase::engine::query::PUBLIC_GROUP_TEXT_CHARS;
     // More distinct names than a response may carry headers for, one of
     // them very long.
     let mut records: Vec<Value> = (0..max + 50)
@@ -1120,7 +1120,7 @@ async fn password_guessing_is_throttled() {
         .unwrap()
         .to_string();
     let path = format!("/api/public/shares/{token}");
-    let limit = opengrid::api::sharing::PASSWORD_LIMIT as usize;
+    let limit = openbase::api::sharing::PASSWORD_LIMIT as usize;
     for i in 0..limit {
         let r = anon(
             &p.f.app,
@@ -1437,11 +1437,11 @@ async fn attachment_password_guesses_are_rate_limited() {
         att["id"].as_str().unwrap()
     );
     let mut statuses = Vec::new();
-    for i in 0..(opengrid::api::sharing::PASSWORD_LIMIT + 5) {
+    for i in 0..(openbase::api::sharing::PASSWORD_LIMIT + 5) {
         let r = pub_get_pw(&f.app, &url, &format!("wrong-{i}")).await;
         statuses.push(r.status.as_u16());
     }
-    let limit = opengrid::api::sharing::PASSWORD_LIMIT as usize;
+    let limit = openbase::api::sharing::PASSWORD_LIMIT as usize;
     assert!(statuses[..limit].iter().all(|s| *s == 404), "{statuses:?}");
     assert!(statuses[limit..].iter().all(|s| *s == 429), "{statuses:?}");
     // Even the right password waits for the window.

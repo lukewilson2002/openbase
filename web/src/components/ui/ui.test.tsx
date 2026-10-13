@@ -164,15 +164,15 @@ describe("ThemeProvider", () => {
     await user.click(screen.getByText("dark"));
     expect(screen.getByTestId("state")).toHaveTextContent("dark/dark");
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    expect(localStorage.getItem("og-theme")).toBe("dark");
+    expect(localStorage.getItem("ob-theme")).toBe("dark");
 
     await user.click(screen.getByText("system"));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    expect(localStorage.getItem("og-theme")).toBe("system");
+    expect(localStorage.getItem("ob-theme")).toBe("system");
   });
 
   it("restores the stored choice and follows the system preference in system mode", () => {
-    localStorage.setItem("og-theme", "system");
+    localStorage.setItem("ob-theme", "system");
     const listeners: ((e: { matches: boolean }) => void)[] = [];
     vi.spyOn(window, "matchMedia").mockImplementation(
       () =>

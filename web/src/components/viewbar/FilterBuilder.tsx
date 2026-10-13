@@ -1,6 +1,6 @@
 /**
  * Nested filter builder (up to 3 levels, and/or per group). Operators per field type come from
- * `filterOpsFor` (mirror of og_core::query::filter_ops_for). Edits are applied locally at once
+ * `filterOpsFor` (mirror of ob_core::query::filter_ops_for). Edits are applied locally at once
  * and reported through `onChange` after a short pause while typing (structural changes are
  * reported immediately), so the view is not re-saved on every keystroke.
  */

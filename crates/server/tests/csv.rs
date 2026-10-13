@@ -10,7 +10,7 @@ use axum::body::Body;
 use axum::http::{Request, header};
 use common::{Client, Response, TestApp};
 use futures::StreamExt;
-use opengrid::perm::Role;
+use openbase::perm::Role;
 use serde_json::{Value, json};
 use share_support::*;
 use tower::ServiceExt;
@@ -534,10 +534,10 @@ async fn import_maps_columns_and_typecasts_values() {
     let mut seen_schema = false;
     while let Ok(env) = events.try_recv() {
         match &env.event {
-            og_core::api::events::BaseEvent::RecordsChanged { created, .. } => {
+            ob_core::api::events::BaseEvent::RecordsChanged { created, .. } => {
                 seen_records |= created.len() == 3;
             }
-            og_core::api::events::BaseEvent::SchemaChanged { .. } => seen_schema = true,
+            ob_core::api::events::BaseEvent::SchemaChanged { .. } => seen_schema = true,
             _ => {}
         }
     }
@@ -1152,8 +1152,8 @@ async fn import_into_a_new_table_infers_field_types() {
     let mut recs = false;
     while let Ok(env) = events.try_recv() {
         match env.event {
-            og_core::api::events::BaseEvent::SchemaChanged { .. } => schema = true,
-            og_core::api::events::BaseEvent::RecordsChanged { .. } => recs = true,
+            ob_core::api::events::BaseEvent::SchemaChanged { .. } => schema = true,
+            ob_core::api::events::BaseEvent::RecordsChanged { .. } => recs = true,
             _ => {}
         }
     }
@@ -1402,8 +1402,8 @@ async fn imports_queue_behind_a_small_number_of_slots() {
     let f = &p.f;
     let t = f.table_id.clone();
     let map = Some(json!({ "n": p.name }));
-    let all = opengrid::api::csv::IMPORT_CONCURRENCY as u32;
-    let held = opengrid::api::csv::IMPORT_PERMITS
+    let all = openbase::api::csv::IMPORT_CONCURRENCY as u32;
+    let held = openbase::api::csv::IMPORT_PERMITS
         .acquire_many(all)
         .await
         .unwrap();
@@ -1421,8 +1421,8 @@ async fn imports_queue_behind_a_small_number_of_slots() {
 
 #[tokio::test]
 async fn bad_rows_are_found_by_bisection_not_one_by_one() {
-    use opengrid::engine::write::{WriteCtx, WriteSource};
-    use opengrid::store::csv_io::{self, ImportOutcome};
+    use openbase::engine::write::{WriteCtx, WriteSource};
+    use openbase::store::csv_io::{self, ImportOutcome};
     let p = people().await;
     let f = &p.f;
     // 1,000 rows (one batch) with three bad ages.
@@ -1443,7 +1443,7 @@ async fn bad_rows_are_found_by_bisection_not_one_by_one() {
         .state
         .db
         .write_sync(move |tx| {
-            let fields = opengrid::store::schema::table_fields(tx, &table)?;
+            let fields = openbase::store::schema::table_fields(tx, &table)?;
             let mapping = [("n", &name), ("age", &age)]
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), Some(v.clone())))

@@ -1,4 +1,4 @@
-//! Shared integration-test harness: an in-process OpenGrid on a temp data dir,
+//! Shared integration-test harness: an in-process OpenBase on a temp data dir,
 //! driven through the real router (middleware included) with `oneshot`.
 #![allow(dead_code)]
 
@@ -8,19 +8,20 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use opengrid::config::Config;
-use opengrid::email::CapturingMailer;
-use opengrid::state::AppState;
+use openbase::config::Config;
+use openbase::email::CapturingMailer;
+use openbase::state::AppState;
 use serde_json::Value;
 use tower::ServiceExt;
 
 pub struct TestApp {
     pub state: AppState,
     pub router: Router,
-    /// Every email the app "sent" (installed as `state.mailer`). Email
-    /// features still only trigger when `config.smtp_host` is set.
+    /// Every email the app "sent" (the transport behind `state.mailer`). Email features
+    /// still only trigger when an SMTP host is configured: `config.smtp_host`, or saved
+    /// through `PATCH /api/admin/email`.
     pub mailer: Arc<CapturingMailer>,
-    _dir: tempfile::TempDir,
+    _dir: Option<tempfile::TempDir>,
 }
 
 pub struct Response {
@@ -40,7 +41,7 @@ impl Response {
                 let s = v.to_str().ok()?;
                 let kv = s.split(';').next()?;
                 let (k, val) = kv.split_once('=')?;
-                (k == opengrid::auth::SESSION_COOKIE && !val.is_empty()).then(|| val.to_string())
+                (k == openbase::auth::SESSION_COOKIE && !val.is_empty()).then(|| val.to_string())
             })
     }
 
@@ -73,15 +74,32 @@ impl TestApp {
         let dir = tempfile::tempdir().unwrap();
         let mut config = Config::for_tests(dir.path());
         f(&mut config);
-        let mut state = AppState::open(config).unwrap();
+        // Every configured SMTP host "delivers" to the capturing mailer, whether it comes from
+        // `config.smtp_host` or from the settings saved through the admin API.
         let mailer = Arc::new(CapturingMailer::default());
-        state.mailer = mailer.clone();
-        let router = opengrid::http::router(state.clone());
+        let capture = mailer.clone();
+        let state = AppState::open_with_mail(
+            config,
+            Arc::new(move |_| Ok(capture.clone() as Arc<dyn openbase::email::Mailer>)),
+        )
+        .unwrap();
+        let router = openbase::http::router(state.clone());
         TestApp {
             state,
             router,
             mailer,
-            _dir: dir,
+            _dir: Some(dir),
+        }
+    }
+
+    /// A harness around a state that was opened by the test itself (to restart "the server"
+    /// on the same data directory). Its `mailer` field is unused.
+    pub fn from_parts(state: AppState, router: Router) -> TestApp {
+        TestApp {
+            state,
+            router,
+            mailer: Arc::new(CapturingMailer::default()),
+            _dir: None,
         }
     }
 
@@ -103,14 +121,14 @@ impl TestApp {
         if let Some(c) = &client.cookie {
             req = req.header(
                 header::COOKIE,
-                format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+                format!("{}={}", openbase::auth::SESSION_COOKIE, c),
             );
         }
         if let Some(t) = &client.bearer {
             req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
         }
         if csrf {
-            req = req.header(opengrid::http::CSRF_HEADER, "1");
+            req = req.header(openbase::http::CSRF_HEADER, "1");
         }
         for (k, v) in headers {
             req = req.header(*k, *v);
@@ -183,9 +201,9 @@ impl TestApp {
         self.state
             .db
             .write_sync(|tx| {
-                let ws = opengrid::ids::new_id(og_core::ids::WORKSPACE);
-                let base = opengrid::ids::new_id(og_core::ids::BASE);
-                let now = opengrid::db::now_ms();
+                let ws = openbase::ids::new_id(ob_core::ids::WORKSPACE);
+                let base = openbase::ids::new_id(ob_core::ids::BASE);
+                let now = openbase::db::now_ms();
                 tx.execute(
                     "INSERT INTO workspaces (id, name, created_by, created_at) VALUES (?1, ?2, ?3, ?4)",
                     rusqlite::params![ws, name, owner_id, now],
@@ -262,13 +280,13 @@ impl TestApp {
         if let Some(c) = &client.cookie {
             req = req.header(
                 header::COOKIE,
-                format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
+                format!("{}={}", openbase::auth::SESSION_COOKIE, c),
             );
         }
         if let Some(t) = &client.bearer {
             req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
         }
-        req = req.header(opengrid::http::CSRF_HEADER, "1");
+        req = req.header(openbase::http::CSRF_HEADER, "1");
         let req = match body {
             Some(b) => req
                 .header(header::CONTENT_TYPE, "application/json")
@@ -323,7 +341,7 @@ impl TestApp {
         // Hashing is deliberately slow; every test user shares one hash of the same password.
         static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
         let hash = HASH
-            .get_or_init(|| opengrid::auth::password::hash("password1234").unwrap())
+            .get_or_init(|| openbase::auth::password::hash("password1234").unwrap())
             .clone();
         let email = email.to_string();
         let name = name.to_string();
@@ -331,14 +349,14 @@ impl TestApp {
             .state
             .db
             .write_sync(|tx| {
-                let id = opengrid::ids::new_id(og_core::ids::USER);
-                let now = opengrid::db::now_ms();
+                let id = openbase::ids::new_id(ob_core::ids::USER);
+                let now = openbase::db::now_ms();
                 tx.execute(
                     "INSERT INTO users (id, email, name, password_hash, is_admin, created_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
                     rusqlite::params![id, email, name, hash, is_admin, now],
                 )?;
-                let token = opengrid::auth::session::create(tx, &id, false, None, None)?;
+                let token = openbase::auth::session::create(tx, &id, false, None, None)?;
                 Ok((id, token))
             })
             .unwrap();
@@ -374,8 +392,8 @@ impl TestApp {
     /// Insert a token row with arbitrary stored `scopes` JSON (for shapes the API refuses to
     /// create, such as `manage` without `write`, or rows written before `manage` existed).
     pub fn raw_token(&self, user: &Client, scopes: Value) -> Client {
-        let token = format!("pat_raw_{}", opengrid::ids::new_id("x"));
-        let hash = opengrid::ids::hash_token(&token);
+        let token = format!("pat_raw_{}", openbase::ids::new_id("x"));
+        let hash = openbase::ids::hash_token(&token);
         let uid = user.user_id.clone().unwrap();
         let scopes = scopes.to_string();
         self.state
@@ -384,7 +402,7 @@ impl TestApp {
                 tx.execute(
                     "INSERT INTO api_tokens (id, user_id, name, token_hash, scopes, created_at)
                      VALUES (?1, ?2, 'raw', ?3, ?4, 1)",
-                    rusqlite::params![opengrid::ids::new_id("pat"), uid, hash, scopes],
+                    rusqlite::params![openbase::ids::new_id("pat"), uid, hash, scopes],
                 )?;
                 Ok(())
             })

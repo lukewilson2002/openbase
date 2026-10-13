@@ -29,15 +29,15 @@ pub fn make_token(
     base_ids: Option<&[&str]>,
     expires_at: Option<i64>,
 ) -> Client {
-    let token = format!("pat_v1_{}", opengrid::ids::new_id("x"));
-    let hash = opengrid::ids::hash_token(&token);
+    let token = format!("pat_v1_{}", openbase::ids::new_id("x"));
+    let hash = openbase::ids::hash_token(&token);
     let uid = user.user_id.clone().unwrap();
     let scopes = json!({ "write": write, "base_ids": base_ids }).to_string();
     sql(app, |tx| {
         tx.execute(
             "INSERT INTO api_tokens (id, user_id, name, token_hash, scopes, created_at, expires_at)
              VALUES (?1, ?2, 't', ?3, ?4, 1, ?5)",
-            rusqlite::params![opengrid::ids::new_id("pat"), uid, hash, scopes, expires_at],
+            rusqlite::params![openbase::ids::new_id("pat"), uid, hash, scopes, expires_at],
         )
     });
     Client {

@@ -41,8 +41,8 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
   return (
     <A.Root open={open} onOpenChange={handleOpenChange}>
       <A.Portal>
-        <A.Overlay className="og-fade-in fixed inset-0 z-50 bg-overlay" />
-        <A.Content className="og-pop-in fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-surface p-4 shadow-pop">
+        <A.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
+        <A.Content className="ob-pop-in fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-surface p-4 shadow-pop">
           <A.Title className="text-base font-semibold">{title}</A.Title>
           <A.Description className="mt-1 text-[0.8125rem] text-muted">{description ?? "Are you sure?"}</A.Description>
           {error && (

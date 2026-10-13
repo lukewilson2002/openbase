@@ -34,7 +34,7 @@ pub async fn people() -> People {
 }
 
 /// [`people`] on an app with a tweaked configuration.
-pub async fn people_with(config: impl FnOnce(&mut opengrid::config::Config)) -> People {
+pub async fn people_with(config: impl FnOnce(&mut openbase::config::Config)) -> People {
     let f = Fixture::with_config(config).await;
     let t = f.table_id.clone();
     let name = f.primary_id.clone();

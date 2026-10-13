@@ -12,9 +12,9 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{Response, StatusCode, header};
-use opengrid::automations::runner::{Runner, RunnerOpts};
-use opengrid::automations::{RecordChanges, on_records_changed};
-use opengrid::config::Config;
+use openbase::automations::runner::{Runner, RunnerOpts};
+use openbase::automations::{RecordChanges, on_records_changed};
+use openbase::config::Config;
 use serde_json::{Map, Value, json};
 
 use crate::common::Response as ApiResponse;
@@ -409,8 +409,8 @@ impl Env {
     /// Insert an automation row directly, bypassing save-time validation
     /// (for definitions the API would refuse, or that went stale later).
     pub fn insert_raw(&self, trigger: Value, actions: Value, enabled: bool) -> String {
-        let id = opengrid::automations::store::new_automation_id();
-        let row = opengrid::automations::store::AutomationRow {
+        let id = openbase::automations::store::new_automation_id();
+        let row = openbase::automations::store::AutomationRow {
             id: id.clone(),
             base_id: self.base().to_string(),
             name: "raw".into(),
@@ -427,7 +427,7 @@ impl Env {
             .app
             .state
             .db
-            .write_sync(|tx| opengrid::automations::store::insert(tx, &row))
+            .write_sync(|tx| openbase::automations::store::insert(tx, &row))
             .unwrap();
         id
     }
@@ -440,7 +440,7 @@ impl Env {
             .state
             .db
             .write_sync(|tx| {
-                Ok(opengrid::automations::store::enqueue_run(tx, &id, &trigger_data)?.unwrap())
+                Ok(openbase::automations::store::enqueue_run(tx, &id, &trigger_data)?.unwrap())
             })
             .unwrap()
     }
@@ -461,7 +461,7 @@ impl Env {
             .app
             .state
             .db
-            .write_sync(|tx| opengrid::automations::store::get_run(tx, run_id))
+            .write_sync(|tx| openbase::automations::store::get_run(tx, run_id))
             .unwrap();
         serde_json::to_value(run.dto()).unwrap()
     }

@@ -2,7 +2,7 @@
 //! once at creation; only its SHA-256 is stored. Scopes are a JSON
 //! [`TokenScope`].
 
-use og_core::api::auth::{CreateTokenRequest, CreatedToken, TokenInfo};
+use ob_core::api::auth::{CreateTokenRequest, CreatedToken, TokenInfo};
 use rusqlite::{Connection, params};
 
 use crate::auth::TokenScope;
@@ -83,7 +83,7 @@ pub fn create(
         manage: req.manage,
         base_ids: base_ids.clone(),
     };
-    let id = new_id(og_core::ids::TOKEN);
+    let id = new_id(ob_core::ids::TOKEN);
     let token = new_token(TOKEN_PREFIX);
     let now = now_ms();
     conn.execute(

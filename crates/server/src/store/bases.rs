@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use og_core::api::schema::{BaseSchema, Table};
-use og_core::api::workspaces::{Collaborator, CreateBase, DuplicateBase, Member, UpdateBase};
-use og_core::field::{Field, FieldKind, LongTextOptions};
+use ob_core::api::schema::{BaseSchema, Table};
+use ob_core::api::workspaces::{Collaborator, CreateBase, DuplicateBase, Member, UpdateBase};
+use ob_core::field::{Field, FieldKind, LongTextOptions};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
 use crate::db::now_ms;
@@ -88,7 +88,7 @@ pub fn create(
     let color = input.color.clone().unwrap_or_else(|| DEFAULT_COLOR.into());
     schema::validate_color(&color)?;
     let icon = schema::icon_on_create(input.icon.as_deref())?;
-    let id = new_id(og_core::ids::BASE);
+    let id = new_id(ob_core::ids::BASE);
     let position = schema::next_position(tx, PositionScope::BasesIn(workspace_id))?;
     tx.execute(
         "INSERT INTO bases (id, workspace_id, name, color, icon, position, created_by, created_at)
@@ -106,7 +106,7 @@ pub fn create(
     )?;
     let table = tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
     let notes = Field {
-        id: new_id(og_core::ids::FIELD),
+        id: new_id(ob_core::ids::FIELD),
         table_id: table.id.clone(),
         name: "Notes".into(),
         description: None,
@@ -223,12 +223,12 @@ pub fn duplicate(
             let head: String = source
                 .name
                 .chars()
-                .take(og_core::limits::MAX_NAME_LEN - " copy".len())
+                .take(ob_core::limits::MAX_NAME_LEN - " copy".len())
                 .collect();
             format!("{head} copy")
         }
     };
-    let id = new_id(og_core::ids::BASE);
+    let id = new_id(ob_core::ids::BASE);
     let position = schema::next_position(tx, PositionScope::BasesIn(&source.workspace_id))?;
     tx.execute(
         "INSERT INTO bases (id, workspace_id, name, color, icon, position, created_by, created_at)

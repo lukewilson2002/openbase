@@ -67,7 +67,7 @@ describe("MCP endpoint", () => {
     expect(wrong.status).toBe(401);
     expect(wrong.headers.get("www-authenticate")).toContain("invalid_token");
     // A session cookie is not an MCP credential.
-    const cookie = await rpc(null, "tools/list", {}, { cookie: "og_session=whatever" });
+    const cookie = await rpc(null, "tools/list", {}, { cookie: "ob_session=whatever" });
     expect(cookie.status).toBe(401);
     expect(cookie.body.error.message).toContain("personal access tokens only");
     // No event stream and no sessions to end.
@@ -78,7 +78,7 @@ describe("MCP endpoint", () => {
   it("answers initialize with the server's identity and guidance", async () => {
     const res = await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract", version: "1" } });
     expect(res.status).toBe(200);
-    expect(res.body.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "opengrid" }, capabilities: { tools: {} } });
+    expect(res.body.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "openbase" }, capabilities: { tools: {} } });
     expect(res.body.result.instructions).toContain("list_bases");
     // The stateless revision needs no handshake at all.
     const discover = await rpc(
@@ -96,7 +96,7 @@ describe("MCP endpoint", () => {
     expect(res.status).toBe(200);
     const tools: { name: string; description: string; inputSchema: { type: string } }[] = res.body.result.tools;
     const names = tools.map((t) => t.name);
-    for (const expected of ["list_bases", "create_records", "create_table", "create_field", "create_view", "query_view", "create_workspace", "upload_attachment", "admin_stats"]) {
+    for (const expected of ["list_bases", "create_records", "create_table", "create_field", "create_view", "query_view", "create_workspace", "upload_attachment", "admin_stats", "list_icons", "admin_get_email_settings", "admin_update_email_settings", "admin_send_test_email"]) {
       expect(names).toContain(expected);
     }
     expect(new Set(names).size).toBe(names.length);
@@ -138,6 +138,54 @@ describe("MCP endpoint", () => {
     const q = await call(token, "query_view", { base_id: baseId, table: "Tasks", view: "Grid view" });
     expect(q.total).toBe(1);
     expect(q.records[0].fields.Name).toBe("Write tests");
+  });
+
+  it("sets, reads and clears icons that the web client then sees, and searches the icon names", async () => {
+    const ws = await call(token, "create_workspace", { name: `Icons ${rand()}`, icon: "briefcase" });
+    const base = await call(token, "create_base", { workspace_id: ws.workspace.id, name: "Shop", icon: "store" });
+    const baseId = base.base.id as string;
+    await call(token, "create_table", { base_id: baseId, name: "Orders", icon: "shopping-cart" });
+
+    const seen = async () => {
+      const workspaces = parseList("WorkspaceSummary", await admin.run(api.workspaces.list));
+      const mine = workspaces.find((w) => w.id === ws.workspace.id)!;
+      const schema = parse("BaseSchema", await admin.run(() => api.bases.get(baseId)));
+      return { workspace: mine.icon ?? null, base: schema.icon ?? null, table: schema.tables.find((t) => t.name === "Orders")?.icon ?? null };
+    };
+    expect(await seen()).toEqual({ workspace: "briefcase", base: "store", table: "shopping-cart" });
+
+    // the agent reads them back with its own tools
+    const listed = await call(token, "list_bases", {});
+    expect(listed.workspaces.find((w: { id: string }) => w.id === ws.workspace.id).icon).toBe("briefcase");
+    const schema = await call(token, "get_base_schema", { base_id: baseId });
+    expect(schema.icon).toBe("store");
+    expect(schema.tables.find((t: { name: string }) => t.name === "Orders").icon).toBe("shopping-cart");
+
+    // change one, keep another (absent), clear the third (null)
+    await call(token, "rename_workspace", { workspace_id: ws.workspace.id, icon: "users" });
+    await call(token, "rename_base", { base_id: baseId, name: "Shop 2" });
+    await call(token, "rename_table", { base_id: baseId, table: "Orders", icon: null });
+    expect(await seen()).toEqual({ workspace: "users", base: "store", table: null });
+
+    // names are checked, with suggestions; searching finds the right ones
+    const bad = await rpc(token, "tools/call", { name: "rename_base", arguments: { base_id: baseId, icon: "shoping-cart" } });
+    expect(bad.body.result.isError).toBe(true);
+    expect(bad.body.result.content[0].text).toContain("Did you mean");
+    expect(bad.body.result.content[0].text).toContain("shopping-cart");
+    const found = await call(token, "list_icons", { query: "shopping cart", limit: 3 });
+    expect(found.icons[0]).toBe("shopping-cart");
+    expect(await seen()).toEqual({ workspace: "users", base: "store", table: null });
+  });
+
+  it("reads the email settings and refuses to change the password through a token", async () => {
+    const before = await call(token, "admin_get_email_settings", {});
+    expect(before.email).toMatchObject({ enabled: false, port: 587, password_set: false });
+    const bad = await rpc(token, "tools/call", { name: "admin_update_email_settings", arguments: { password: "x" } });
+    expect(bad.body.result.isError).toBe(true);
+    expect(bad.body.result.content[0].text).toContain("Invalid arguments");
+    const test = await rpc(token, "tools/call", { name: "admin_send_test_email", arguments: {} });
+    expect(test.body.result.isError).toBe(true);
+    expect(test.body.result.content[0].text).toContain("no SMTP host");
   });
 
   it("returns problems as readable tool errors, and unknown tools as protocol errors", async () => {

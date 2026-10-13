@@ -15,7 +15,7 @@ use std::str::FromStr;
 use chrono::{DateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use croner::Cron;
-use og_core::api::automations::MIN_SCHEDULE_INTERVAL_SECS;
+use ob_core::api::automations::MIN_SCHEDULE_INTERVAL_SECS;
 
 pub const MIN_INTERVAL_SECS: i64 = MIN_SCHEDULE_INTERVAL_SECS;
 

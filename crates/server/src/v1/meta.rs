@@ -3,12 +3,12 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use og_core::api::v1::{V1Base, V1Bases, V1Field, V1Table, V1Tables, V1View};
-use og_core::field::{
+use ob_core::api::v1::{V1Base, V1Bases, V1Field, V1Table, V1Tables, V1View};
+use ob_core::field::{
     DateFormat, DateOptions, DurationFormat, Field, FieldKind, TimeFormat, ValueFormat,
 };
-use og_core::value::ResultType;
-use og_core::view::ViewType;
+use ob_core::value::ResultType;
+use ob_core::view::ViewType;
 use serde_json::{Value as Json2, json};
 
 use crate::perm::{self, Role};
@@ -307,7 +307,7 @@ pub fn field_meta(field: &Field) -> V1Field {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use og_core::field::{DateOptions, Empty, LongTextOptions, UserOptions};
+    use ob_core::field::{DateOptions, Empty, LongTextOptions, UserOptions};
 
     fn f(kind: FieldKind) -> Field {
         Field {
@@ -370,7 +370,7 @@ mod tests {
             airtable_type(&multi),
             airtable_type(&single),
         ];
-        for t in og_core::field::FieldType::ALL {
+        for t in ob_core::field::FieldType::ALL {
             if let Some(kind) = FieldKind::default_for(t) {
                 seen.push(airtable_type(&f(kind)));
             }

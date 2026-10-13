@@ -3,7 +3,7 @@
 (function () {
   var mode = "system";
   try {
-    var stored = localStorage.getItem("og-theme");
+    var stored = localStorage.getItem("ob-theme");
     if (stored === "light" || stored === "dark" || stored === "system") mode = stored;
   } catch (e) {
     /* storage blocked: fall back to system */

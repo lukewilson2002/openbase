@@ -30,6 +30,8 @@ import type {
   CreatedInvite,
   CreatedToken,
   DeleteFieldResponse,
+  EmailSettings,
+  EmailTestResult,
   EventEnvelope,
   Field,
   FormulaCheckResult,
@@ -84,6 +86,8 @@ export interface TypeMap {
   CreatedInvite: CreatedInvite;
   CreatedToken: CreatedToken;
   DeleteFieldResponse: DeleteFieldResponse;
+  EmailSettings: EmailSettings;
+  EmailTestResult: EmailTestResult;
   EventEnvelope: EventEnvelope;
   Field: Field;
   FormulaCheckResult: FormulaCheckResult;

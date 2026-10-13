@@ -7,8 +7,8 @@ mod records_support;
 mod schema_support;
 
 use common::Client;
-use og_core::api::events::BaseEvent;
-use opengrid::perm::Role;
+use ob_core::api::events::BaseEvent;
+use openbase::perm::Role;
 use query_support::*;
 use serde_json::{Value, json};
 
@@ -144,7 +144,7 @@ async fn bodies_must_be_non_empty_and_bounded() {
         r.assert_status(400);
         assert_eq!(r.body["error"]["code"], "bad_request");
     }
-    let max = og_core::limits::MAX_COMMENT_LEN;
+    let max = ob_core::limits::MAX_COMMENT_LEN;
     s.post(&s.f.owner, &"x".repeat(max))
         .await
         .assert_status(201);
@@ -529,7 +529,7 @@ async fn a_rejected_comment_creates_no_notifications() {
     let body = format!(
         "{} {}",
         mention("Ann", &ann),
-        "x".repeat(og_core::limits::MAX_COMMENT_LEN)
+        "x".repeat(ob_core::limits::MAX_COMMENT_LEN)
     );
     s.post(&s.f.owner, &body).await.assert_status(400);
     assert!(s.notifications_of(&ann).is_empty());

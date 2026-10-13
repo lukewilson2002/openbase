@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 #
-# OpenGrid container image. Build from the repository root:
+# OpenBase container image. Build from the repository root:
 #
-#   docker build -f deploy/Dockerfile -t opengrid .
+#   docker build -f deploy/Dockerfile -t openbase .
 #
 # Stage 1 (node) builds the React + TypeScript web client with Vite into
 # web/dist. Stage 2 (rust) builds the server, which embeds web/dist into the
@@ -38,8 +38,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     set -eux; \
     rustup show active-toolchain; \
-    cargo build --release --locked -p opengrid; \
-    install -m 0755 target/release/opengrid /usr/local/bin/opengrid
+    cargo build --release --locked -p openbase; \
+    install -m 0755 target/release/openbase /usr/local/bin/openbase
 
 # ------------------------------------------------------------------- runtime
 FROM ${RUNTIME_IMAGE}
@@ -48,23 +48,23 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates tzdata; \
     rm -rf /var/lib/apt/lists/*; \
-    groupadd --system --gid 10001 opengrid; \
-    useradd --system --uid 10001 --gid opengrid --home-dir /data \
-        --no-create-home --shell /usr/sbin/nologin opengrid; \
+    groupadd --system --gid 10001 openbase; \
+    useradd --system --uid 10001 --gid openbase --home-dir /data \
+        --no-create-home --shell /usr/sbin/nologin openbase; \
     mkdir -p /data; \
-    chown opengrid:opengrid /data
+    chown openbase:openbase /data
 
-COPY --from=builder /usr/local/bin/opengrid /usr/local/bin/opengrid
+COPY --from=builder /usr/local/bin/openbase /usr/local/bin/openbase
 
-ENV OPENGRID_DATA_DIR=/data \
-    OPENGRID_BIND=0.0.0.0:8080
+ENV OPENBASE_DATA_DIR=/data \
+    OPENBASE_BIND=0.0.0.0:8080
 
 VOLUME /data
 EXPOSE 8080
-USER opengrid
+USER openbase
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["opengrid", "healthcheck"]
+    CMD ["openbase", "healthcheck"]
 
-ENTRYPOINT ["opengrid"]
+ENTRYPOINT ["openbase"]
 CMD ["serve"]

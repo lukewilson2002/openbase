@@ -5,7 +5,7 @@
 //! Configurations use the shape of the REST API's `ViewConfig`; wherever it expects a field id
 //! a field name works too, and select filters take choice names ([`super::resolve::Xlate`]).
 
-use og_core::api::schema::{Table, View};
+use ob_core::api::schema::{Table, View};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -307,9 +307,9 @@ struct QueryView {
 
 /// Field ids shown by the view, in display order: `field_order` first, the rest in table order,
 /// hidden ones left out.
-fn visible_columns<'a>(table: &'a Table, view: &View) -> Vec<&'a og_core::field::Field> {
+fn visible_columns<'a>(table: &'a Table, view: &View) -> Vec<&'a ob_core::field::Field> {
     let hidden = &view.config.hidden_fields;
-    let mut ordered: Vec<&og_core::field::Field> = Vec::new();
+    let mut ordered: Vec<&ob_core::field::Field> = Vec::new();
     for id in &view.config.field_order {
         if let Some(f) = table.fields.iter().find(|f| &f.id == id)
             && !ordered.iter().any(|o| o.id == f.id)
@@ -355,9 +355,9 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
     let shows_people = columns.iter().any(|f| {
         matches!(
             f.kind,
-            og_core::field::FieldKind::User(_)
-                | og_core::field::FieldKind::CreatedBy(_)
-                | og_core::field::FieldKind::LastModifiedBy(_)
+            ob_core::field::FieldKind::User(_)
+                | ob_core::field::FieldKind::CreatedBy(_)
+                | ob_core::field::FieldKind::LastModifiedBy(_)
         )
     });
     let people = if shows_people {

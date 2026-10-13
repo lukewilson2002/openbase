@@ -1,3 +1,5 @@
+> Note (2026-10-13): this project was renamed from OpenGrid to OpenBase after this note was written. The content below is unchanged and still says OpenGrid.
+
 # OpenGrid frontend trade-offs: Leptos vs Dioxus vs SSR+htmx vs Rust+TS
 
 Status: research, 2026-10-12. Author: research agent. Scope: picking a frontend approach for OpenGrid, a self-hosted Airtable clone written in Rust, given the stated goal "write it all in Rust".

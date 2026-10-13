@@ -41,7 +41,7 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
     let info = client.peer_info().expect("the server answered");
     assert_eq!(
         serde_json::to_value(&info).unwrap()["serverInfo"]["name"],
-        "opengrid",
+        "openbase",
         "{expect_era}"
     );
 

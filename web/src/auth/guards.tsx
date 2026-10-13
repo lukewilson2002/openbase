@@ -12,7 +12,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (isPending) return <PageSpinner label="Loading your account" />;
   if (isError) {
     return (
-      <EmptyState title="Cannot reach OpenGrid" description={error instanceof Error ? error.message : "Try again in a moment."} />
+      <EmptyState title="Cannot reach OpenBase" description={error instanceof Error ? error.message : "Try again in a moment."} />
     );
   }
   if (!user) {
