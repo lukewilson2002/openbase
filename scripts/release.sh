@@ -3,21 +3,26 @@
 # the full checks, commit "Release vX.Y.Z" and create an annotated tag. It does NOT push and does
 # NOT publish anything; at the end it prints the two commands that do (see docs/releasing.md).
 #
-#   scripts/release.sh X.Y.Z [--skip-checks] [--allow-branch]
+#   scripts/release.sh X.Y.Z [--skip-checks] [--allow-branch] [--notes-from-commits]
 #
-#   X.Y.Z           the new version, e.g. 0.2.0 or 1.0.0-rc.1 (a leading "v" is accepted)
-#   --skip-checks   do not run scripts/check.sh (CI runs everything again when you publish)
-#   --allow-branch  allow a branch other than main (a release candidate from a branch, tests)
+#   X.Y.Z                 the new version, e.g. 0.2.0 or 1.0.0-rc.1 (a leading "v" is accepted)
+#   --skip-checks         do not run scripts/check.sh (CI runs everything again when you publish)
+#   --allow-branch        allow a branch other than main (a release candidate from a branch, tests)
+#   --notes-from-commits  when there are no notes under "Unreleased" in CHANGELOG.md, use the commit
+#                         subjects since the previous release tag instead of refusing
 #
 # What it changes (and nothing else):
 #   Cargo.toml                 [workspace.package] version
 #   Cargo.lock                 the openbase and ob-core entries (via cargo)
 #   web/package.json, web/package-lock.json   the version (via npm)
-#   CHANGELOG.md               the Unreleased notes become the section for this version
+#   CHANGELOG.md               the Unreleased notes become the section for this version, and the
+#                              [Unreleased] and [X.Y.Z] links at the bottom point at tags that exist:
+#                              a comparison with the previous release tag (the previous stable one for
+#                              a stable release), or the release page when there is no previous tag
 #
 # The binary's `openbase --version` and /api/health report CARGO_PKG_VERSION, i.e. the Cargo.toml
-# version, so the bump above is all they need. The first release of a tree whose Cargo.toml already
-# says that version (0.1.0 today) skips the bump and only dates the changelog section.
+# version, so the bump above is all they need. A release whose version Cargo.toml already has, with a
+# "## [X.Y.Z] - unreleased" section waiting in CHANGELOG.md, skips the bump and only dates that section.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -29,16 +34,18 @@ step() { printf '\n==> %s\n' "$*"; }
 VERSION=""
 SKIP_CHECKS=false
 ALLOW_BRANCH=false
+NOTES_FROM_COMMITS=false
 for arg in "$@"; do
   case "$arg" in
     --skip-checks) SKIP_CHECKS=true ;;
     --allow-branch) ALLOW_BRANCH=true ;;
-    -h | --help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --notes-from-commits) NOTES_FROM_COMMITS=true ;;
+    -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     -*) die "unknown option: $arg" ;;
     *) [[ -z "$VERSION" ]] || die "give the version once"; VERSION=${arg#v} ;;
   esac
 done
-[[ -n "$VERSION" ]] || die "usage: scripts/release.sh X.Y.Z [--skip-checks] [--allow-branch]"
+[[ -n "$VERSION" ]] || die "usage: scripts/release.sh X.Y.Z [--skip-checks] [--allow-branch] [--notes-from-commits]"
 TAG=v$VERSION
 
 # ---------------------------------------------------------------- preconditions
@@ -78,6 +85,36 @@ grep -q '^## \[Unreleased\]' CHANGELOG.md || die "CHANGELOG.md has no '## [Unrel
 command -v npm >/dev/null || die "npm is needed to bump the web client's version."
 command -v cargo >/dev/null || die "cargo is needed to update Cargo.lock."
 
+# The release this one follows, for the changelog link and for --notes-from-commits: the nearest
+# release tag before HEAD. A stable release is measured against the nearest stable one (a release
+# candidate does not count) when there is one, else against the nearest tag of any kind. Empty when
+# no release tag exists yet.
+PREV_TAG=""
+[[ "$VERSION" == *-* ]] || PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' 2>/dev/null || true)
+[[ -n "$PREV_TAG" ]] || PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+
+# Where the notes come from, checked now so that a refusal leaves the tree untouched:
+#   section  CHANGELOG.md already has "## [X.Y.Z] - unreleased" (written ahead of the release): date it
+#   notes    the text under "## [Unreleased]"
+#   commits  the commit subjects since PREV_TAG, only with --notes-from-commits
+trim_blank_lines() {
+  awk '{ l[NR] = $0 } END { s = 1; e = NR; while (s <= e && l[s] ~ /^[[:space:]]*$/) s++; while (e >= s && l[e] ~ /^[[:space:]]*$/) e--; for (i = s; i <= e; i++) print l[i] }'
+}
+UNRELEASED_NOTES=$(awk '/^## \[Unreleased\]/ { grab = 1; next } /^## \[/ { grab = 0 } /^\[[^]]+\]: / { grab = 0 } grab' CHANGELOG.md | trim_blank_lines)
+if grep -q "^## \[$VERSION\] - unreleased" CHANGELOG.md; then
+  [[ -z "$UNRELEASED_NOTES" ]] \
+    || die "CHANGELOG.md has notes under '## [Unreleased]' and a '## [$VERSION] - unreleased' section. Move the notes into that section (or drop the section), then run this again."
+  NOTES_SOURCE=section
+elif [[ -n "$UNRELEASED_NOTES" ]]; then
+  NOTES_SOURCE=notes
+elif [[ "$NOTES_FROM_COMMITS" == true ]]; then
+  NOTES_SOURCE=commits
+else
+  die "there are no release notes: CHANGELOG.md has nothing under '## [Unreleased]'.
+Write what changed for users there (### Added / Changed / Fixed ...) and run this again, or pass
+--notes-from-commits to use the commit subjects since ${PREV_TAG:-the beginning} (a poor changelog)."
+fi
+
 # ---------------------------------------------------------------------- versions
 step "Version $CURRENT -> $VERSION"
 if [[ "$FIRST_RELEASE" == false ]]; then
@@ -98,9 +135,9 @@ fi
 scripts/release-info.sh "$TAG" >/dev/null
 
 # --------------------------------------------------------------------- changelog
-step "CHANGELOG.md"
+step "CHANGELOG.md ($NOTES_SOURCE)"
 today=$(date -u +%Y-%m-%d)
-if [[ "$FIRST_RELEASE" == true ]]; then
+if [[ "$NOTES_SOURCE" == section ]]; then
   tmp=$(mktemp)
   awk -v v="$VERSION" -v d="$today" '
     $0 == "## [" v "] - unreleased" { print "## [" v "] - " d; next }
@@ -109,16 +146,15 @@ if [[ "$FIRST_RELEASE" == true ]]; then
   cat "$tmp" >CHANGELOG.md
   rm -f "$tmp"
 else
-  # Notes written under "Unreleased"; if there are none, start from the commit subjects.
-  notes=$(awk '/^## \[Unreleased\]/ { grab = 1; next } /^## \[/ { grab = 0 } grab' CHANGELOG.md)
-  if [[ -z "$(tr -d '[:space:]' <<<"$notes")" ]]; then
-    last_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
-    range=${last_tag:+$last_tag..}HEAD
-    notes=$(printf '### Changed\n\n'; git log --no-merges --pretty='- %s' "$range")
-    printf 'No notes under Unreleased: using the commit subjects since %s. Edit CHANGELOG.md before publishing if you want better ones.\n' "${last_tag:-the beginning}"
+  if [[ "$NOTES_SOURCE" == commits ]]; then
+    range=${PREV_TAG:+$PREV_TAG..}HEAD
+    commits=$(git log --no-merges --invert-grep --grep='^Release v' --pretty='- %s' "$range")
+    [[ -n "$commits" ]] || die "there are no commits since ${PREV_TAG:-the beginning} to take notes from."
+    UNRELEASED_NOTES=$(printf '### Changed\n\n%s' "$commits")
+    printf 'Using the commit subjects since %s as the notes. Edit CHANGELOG.md before publishing if you want better ones.\n' "${PREV_TAG:-the beginning}"
   fi
   tmp=$(mktemp)
-  NOTES=$notes awk -v v="$VERSION" -v d="$today" -v cur="$CURRENT" -v repo="$REPO_URL" '
+  NOTES=$UNRELEASED_NOTES awk -v v="$VERSION" -v d="$today" '
     /^## \[Unreleased\]/ {
       print; print ""
       print "## [" v "] - " d; print ""
@@ -126,17 +162,31 @@ else
       skipping = 1; next
     }
     /^## \[/ { skipping = 0 }
+    /^\[[^]]+\]: / { skipping = 0 }
     skipping { next }
-    /^\[Unreleased\]:/ {
-      print "[Unreleased]: " repo "/compare/v" v "...HEAD"
-      print "[" v "]: " repo "/compare/v" cur "...v" v
-      next
-    }
     { print }
   ' CHANGELOG.md >"$tmp"
   cat "$tmp" >CHANGELOG.md
   rm -f "$tmp"
 fi
+
+# The links at the bottom: [Unreleased] compares the new tag with HEAD; [X.Y.Z] compares the previous
+# release tag with the new one, or, when there is no previous tag, is the release's own page. A link to
+# a tag that does not exist (the old "v<current version>...") would be a dead link on GitHub.
+if [[ -n "$PREV_TAG" ]]; then
+  version_link="$REPO_URL/compare/$PREV_TAG...$TAG"
+else
+  version_link="$REPO_URL/releases/tag/$TAG"
+fi
+tmp=$(mktemp)
+awk -v v="$VERSION" -v unreleased="$REPO_URL/compare/$TAG...HEAD" -v link="$version_link" '
+  /^\[Unreleased\]: / { print "[Unreleased]: " unreleased; print "[" v "]: " link; seen = 1; next }
+  index($0, "[" v "]: ") == 1 { next }
+  { print }
+  END { if (!seen) { print ""; print "[Unreleased]: " unreleased; print "[" v "]: " link } }
+' CHANGELOG.md >"$tmp"
+cat "$tmp" >CHANGELOG.md
+rm -f "$tmp"
 
 # The text of this version's section, used for the tag message (and so for the GitHub Release).
 section=$(awk -v v="$VERSION" '
