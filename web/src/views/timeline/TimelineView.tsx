@@ -4,7 +4,7 @@
  * dates around the visible window are queried (`QueryRequest.range`); the window grows as you
  * scroll toward its edges.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarCheck, Plus, ZoomIn, ZoomOut } from "lucide-react";
 import type { DateRange, TimelineScale, ViewConfig } from "@/api/types";
 import { isGroupable } from "@/components/viewbar/config";
@@ -20,7 +20,7 @@ import { ViewFrame } from "../common/ViewFrame";
 import { DAY_MS, isDateLike, isWritableDate, padRange, recordSpan, wallNow, wallYmd, type Span } from "../common/wallTime";
 import { cardTitle } from "../common/cardFields";
 import type { ViewProps } from "../types";
-import { SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, stepScale, type Axis, type DragMode } from "./geometry";
+import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, stepScale, type Axis, type DragMode } from "./geometry";
 import { NO_LANE, createWrites, dragWrites, groupIntoLanes, lanesFromGroups, type Lane } from "./lanes";
 import { TimelineChart, type ChartLane, type TimelineBar } from "./TimelineChart";
 
@@ -54,6 +54,11 @@ function TimelineInner(props: ViewProps) {
   const [axis, setAxis] = useState<Axis>(() => makeAxis(scale, today));
   const [focus, setFocus] = useState<{ day: number; nonce: number } | null>({ day: today, nonce: 1 });
   const centerDay = useRef(today);
+
+  // The scale can also change from outside (the view was reconfigured elsewhere): rebuild the window.
+  useEffect(() => {
+    setAxis((a) => (a.pxPerDay === PX_PER_DAY[scale] ? a : makeAxis(scale, centerDay.current)));
+  }, [scale]);
 
   const range = useMemo<DateRange | null>(() => {
     if (!fields) return null;
