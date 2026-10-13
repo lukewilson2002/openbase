@@ -115,6 +115,7 @@ async fn create(
     ApiJson(body): ApiJson<CreateAutomation>,
 ) -> AppResult<(StatusCode, Json<Automation>)> {
     let config = state.config.clone();
+    let email_enabled = state.email.enabled();
     let dto = state
         .db
         .write(move |tx| {
@@ -123,6 +124,7 @@ async fn create(
             let valid = validate::validate(
                 tx,
                 &config,
+                email_enabled,
                 &base_id,
                 &body.trigger,
                 &body.actions,
@@ -174,6 +176,7 @@ async fn update(
     ApiJson(body): ApiJson<UpdateAutomation>,
 ) -> AppResult<Json<Automation>> {
     let config = state.config.clone();
+    let email_enabled = state.email.enabled();
     let dto = state
         .db
         .write(move |tx| {
@@ -191,6 +194,7 @@ async fn update(
                 let valid = validate::validate(
                     tx,
                     &config,
+                    email_enabled,
                     &row.base_id,
                     body.trigger.as_ref().unwrap_or(&row.trigger),
                     body.actions.as_deref().unwrap_or(&row.actions),

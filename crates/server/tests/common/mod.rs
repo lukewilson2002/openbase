@@ -17,10 +17,11 @@ use tower::ServiceExt;
 pub struct TestApp {
     pub state: AppState,
     pub router: Router,
-    /// Every email the app "sent" (installed as `state.mailer`). Email
-    /// features still only trigger when `config.smtp_host` is set.
+    /// Every email the app "sent" (the transport behind `state.mailer`). Email features
+    /// still only trigger when an SMTP host is configured: `config.smtp_host`, or saved
+    /// through `PATCH /api/admin/email`.
     pub mailer: Arc<CapturingMailer>,
-    _dir: tempfile::TempDir,
+    _dir: Option<tempfile::TempDir>,
 }
 
 pub struct Response {
@@ -73,15 +74,32 @@ impl TestApp {
         let dir = tempfile::tempdir().unwrap();
         let mut config = Config::for_tests(dir.path());
         f(&mut config);
-        let mut state = AppState::open(config).unwrap();
+        // Every configured SMTP host "delivers" to the capturing mailer, whether it comes from
+        // `config.smtp_host` or from the settings saved through the admin API.
         let mailer = Arc::new(CapturingMailer::default());
-        state.mailer = mailer.clone();
+        let capture = mailer.clone();
+        let state = AppState::open_with_mail(
+            config,
+            Arc::new(move |_| Ok(capture.clone() as Arc<dyn opengrid::email::Mailer>)),
+        )
+        .unwrap();
         let router = opengrid::http::router(state.clone());
         TestApp {
             state,
             router,
             mailer,
-            _dir: dir,
+            _dir: Some(dir),
+        }
+    }
+
+    /// A harness around a state that was opened by the test itself (to restart "the server"
+    /// on the same data directory). Its `mailer` field is unused.
+    pub fn from_parts(state: AppState, router: Router) -> TestApp {
+        TestApp {
+            state,
+            router,
+            mailer: Arc::new(CapturingMailer::default()),
+            _dir: None,
         }
     }
 

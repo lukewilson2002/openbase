@@ -481,9 +481,9 @@ impl Executor {
         subject: &str,
         body: &str,
     ) -> Result<Json, StepError> {
-        if !self.state.config.email_enabled() {
+        if !self.state.email.enabled() {
             return Err(StepError::permanent(
-                "email is not configured on this server (set OPENGRID_SMTP_HOST)",
+                "email is not configured on this server (an administrator can set it up under Admin > Email)",
             ));
         }
         let to = ctx.render_str(to, Escape::None)?;

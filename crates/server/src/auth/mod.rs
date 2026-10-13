@@ -101,6 +101,19 @@ impl Actor {
         }
     }
 
+    /// A part of an otherwise token-accessible request that changes a credential (a password
+    /// being set, someone's two-factor being switched off): refused for every API token, whatever
+    /// its scope, with a message naming what was refused. Sessions pass.
+    pub fn require_session_for(&self, what: &str) -> AppResult<()> {
+        if self.token_scope.is_some() {
+            return Err(AppError::forbidden(format!(
+                "API tokens can never {what} (it changes credentials); do it in the web app \
+                 while signed in"
+            )));
+        }
+        Ok(())
+    }
+
     /// Instance administrator: signed in, or a token with the `manage` permission whose user is
     /// an administrator. Not an audited check; admin handlers use [`admin_guard`].
     pub fn require_admin(&self) -> AppResult<()> {

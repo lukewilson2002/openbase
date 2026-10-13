@@ -29,6 +29,11 @@ pub mod actions {
     pub const ADMIN_USER_CREATE: &str = "admin_user_create";
     pub const ADMIN_USER_UPDATE: &str = "admin_user_update";
     pub const ADMIN_RESET_LINK: &str = "admin_reset_link";
+    /// SMTP settings changed on the Admin -> Email page (detail: the changed fields; the
+    /// password only as set / replaced / removed).
+    pub const ADMIN_EMAIL_UPDATE: &str = "admin_email_update";
+    /// A test email was sent from the Admin -> Email page.
+    pub const ADMIN_EMAIL_TEST: &str = "admin_email_test";
     /// An API token with the `manage` permission called an admin endpoint.
     pub const ADMIN_TOKEN_USE: &str = "admin_token_use";
 }

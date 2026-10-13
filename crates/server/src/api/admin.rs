@@ -1,6 +1,12 @@
 //! `admin` API (instance administrators; signed in, or an API token with the `manage`
-//! permission, whose use is audited): users, reset links,
-//! the audit log and instance stats. Backups live in `api::backups` (ops).
+//! permission, whose use is audited): users, the audit log and instance stats. Backups live in
+//! `api::backups` (ops).
+//!
+//! Whatever touches a credential is session-only, even for an administrator's `manage` token:
+//! `POST .../reset-link` (a password-reset link for any user is an account takeover),
+//! `disable_2fa` in `PATCH .../users/{id}`, and a `password` or the reset link in
+//! `POST /api/admin/users` (a token may create the account but never learns or sets how to
+//! sign in to it).
 
 use std::path::{Path as FsPath, PathBuf};
 
@@ -16,7 +22,7 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::auth::{Actor, ClientInfo, admin_guard, password};
+use crate::auth::{Actor, Capability, ClientInfo, admin_guard, password};
 use crate::error::{AppError, AppResult};
 use crate::extract::{ApiJson, ApiQuery};
 use crate::state::AppState;
@@ -56,6 +62,14 @@ async fn create_user(
     ApiJson(req): ApiJson<AdminCreateUser>,
 ) -> AppResult<(StatusCode, Json<AdminCreatedUser>)> {
     admin_guard(&state, &actor, &client, "POST /api/admin/users").await?;
+    // Credentials are session-only. A token may create an account, but it neither chooses its
+    // password nor receives a link to choose one (the holder of the link could take the account
+    // over, an administrator account included, and keep it after the token is revoked): the
+    // account is created without a usable password and a human sends the invitation.
+    let by_token = actor.token_scope.is_some();
+    if req.password.is_some() {
+        actor.require_session_for("set a user's password")?;
+    }
     let email = users::normalize_email(&req.email)?;
     let name = users::validate_name(&req.name)?;
     let hash = match req.password {
@@ -76,9 +90,9 @@ async fn create_user(
                 hash.as_deref().unwrap_or(users::UNUSABLE_PASSWORD_HASH),
                 req.is_admin,
             )?;
-            let reset_link = match hash {
-                Some(_) => None,
-                None => Some(issue_reset_link(tx, &public_url, &id)?),
+            let reset_link = match (&hash, by_token) {
+                (None, false) => Some(issue_reset_link(tx, &public_url, &id)?),
+                _ => None,
             };
             audit::record(
                 tx,
@@ -105,6 +119,9 @@ async fn update_user(
     ApiJson(req): ApiJson<AdminUpdateUser>,
 ) -> AppResult<Json<AdminUser>> {
     admin_guard(&state, &actor, &client, "PATCH /api/admin/users/{id}").await?;
+    if req.disable_2fa {
+        actor.require_session_for("switch off a user's two-factor authentication")?;
+    }
     let user = state
         .db
         .write(move |tx| {
@@ -126,13 +143,15 @@ async fn update_user(
 }
 
 /// A 24-hour password-reset link for any user, for admins to hand over when
-/// email isn't configured (or the user lost access to their mailbox).
+/// email isn't configured (or the user lost access to their mailbox). Session-only: whoever
+/// holds the link can set the user's password, so it never reaches an API token.
 async fn reset_link(
     State(state): State<AppState>,
     actor: Actor,
     client: ClientInfo,
     Path(id): Path<String>,
 ) -> AppResult<Json<ResetLink>> {
+    actor.require_capability(Capability::SessionOnly)?;
     admin_guard(
         &state,
         &actor,

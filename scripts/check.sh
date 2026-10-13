@@ -37,6 +37,9 @@ EOF
   exit 1
 fi
 
+step "Lucide icon list is current (scripts/gen-icons.sh --check)"
+scripts/gen-icons.sh --check
+
 step "web: tsc --noEmit"
 (cd web && npx tsc --noEmit)
 step "web: unit tests"

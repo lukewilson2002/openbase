@@ -749,6 +749,7 @@ async fn tools_listed_depend_on_the_token() {
         "list_workspaces",
         "list_collaborators",
         "field_types",
+        "list_icons",
         "get_view",
         "query_view",
         "list_trash",

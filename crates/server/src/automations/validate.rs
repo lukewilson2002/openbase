@@ -67,6 +67,7 @@ fn bad(msg: impl Into<String>) -> AppError {
 pub fn validate(
     conn: &Connection,
     config: &Config,
+    email_enabled: bool,
     base_id: &str,
     trigger: &Trigger,
     actions: &[ActionStep],
@@ -85,7 +86,7 @@ pub fn validate(
     let (trigger, info) = check_trigger(conn, base_id, trigger)?;
     let mut out = Vec::with_capacity(actions.len());
     for (i, step) in actions.iter().enumerate() {
-        let step = check_step(conn, config, base_id, &info, i, step)
+        let step = check_step(conn, config, email_enabled, base_id, &info, i, step)
             .map_err(|e| prefix(e, &format!("action {}", i + 1)))?;
         out.push(step);
     }
@@ -211,6 +212,7 @@ fn record_info(conn: &Connection, table_id: &str) -> AppResult<TriggerInfo> {
 fn check_step(
     conn: &Connection,
     config: &Config,
+    email_enabled: bool,
     base_id: &str,
     info: &TriggerInfo,
     index: usize,
@@ -256,9 +258,9 @@ fn check_step(
             }
         }
         Action::SendEmail { to, subject, body } => {
-            if !config.email_enabled() {
+            if !email_enabled {
                 return Err(bad(
-                    "email is not configured on this server (set OPENGRID_SMTP_HOST)",
+                    "email is not configured on this server (an administrator can set it up under Admin > Email)",
                 ));
             }
             let to = to.trim().to_string();

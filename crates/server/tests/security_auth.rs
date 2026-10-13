@@ -434,6 +434,8 @@ const MUTATING_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/admin/users"),
     ("PATCH", "/api/admin/users/usrX"),
     ("POST", "/api/admin/users/usrX/reset-link"),
+    ("PATCH", "/api/admin/email"),
+    ("POST", "/api/admin/email/test"),
     ("POST", "/api/admin/backups"),
     ("POST", "/api/bases/appX/automations"),
     ("PATCH", "/api/automations/autX"),

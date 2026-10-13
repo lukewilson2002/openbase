@@ -347,7 +347,7 @@ mod tests {
         };
         let mut admin = actor(true, true);
         admin.is_admin = true;
-        assert_eq!(admin_tools(&admin).len(), 7);
+        assert_eq!(admin_tools(&admin).len(), 10);
         assert!(
             admin_tools(&actor(true, true)).is_empty(),
             "not an administrator"

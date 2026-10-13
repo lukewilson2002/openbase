@@ -74,24 +74,24 @@ pub struct Config {
     pub email_per_hour: u32,
 
     /// SMTP server for outgoing email (invites, password resets, automations).
-    /// Email features are disabled when unset.
+    /// Email features are disabled when unset (unless a host is saved on the Admin -> Email page).
+    /// Every `OPENGRID_SMTP_*` option that is set wins over what is saved on that page and shows
+    /// there as read-only.
     #[arg(long, env = "OPENGRID_SMTP_HOST")]
     pub smtp_host: Option<String>,
-    #[arg(long, env = "OPENGRID_SMTP_PORT", default_value_t = 587)]
-    pub smtp_port: u16,
+    /// SMTP port (default 587).
+    #[arg(long, env = "OPENGRID_SMTP_PORT")]
+    pub smtp_port: Option<u16>,
     #[arg(long, env = "OPENGRID_SMTP_USER")]
     pub smtp_user: Option<String>,
     #[arg(long, env = "OPENGRID_SMTP_PASSWORD", hide_env_values = true)]
     pub smtp_password: Option<String>,
     /// starttls (default), tls (implicit, usually port 465) or none (local relay only).
-    #[arg(long, env = "OPENGRID_SMTP_SECURITY", default_value = "starttls")]
-    pub smtp_security: String,
-    #[arg(
-        long,
-        env = "OPENGRID_SMTP_FROM",
-        default_value = "OpenGrid <opengrid@localhost>"
-    )]
-    pub smtp_from: String,
+    #[arg(long, env = "OPENGRID_SMTP_SECURITY")]
+    pub smtp_security: Option<String>,
+    /// Sender address (default `OpenGrid <opengrid@localhost>`).
+    #[arg(long, env = "OPENGRID_SMTP_FROM")]
+    pub smtp_from: Option<String>,
 
     /// Allow automation webhooks to call private/loopback addresses
     /// (e.g. other services on your LAN). Off by default to prevent SSRF.
@@ -141,9 +141,6 @@ impl Config {
     pub fn secure_cookies(&self) -> bool {
         self.public_url.starts_with("https://")
     }
-    pub fn email_enabled(&self) -> bool {
-        self.smtp_host.is_some()
-    }
     pub fn max_upload_bytes(&self) -> u64 {
         self.max_upload_mb.saturating_mul(1024 * 1024)
     }
@@ -172,11 +169,11 @@ impl Config {
             email_per_user_hour: 100,
             email_per_hour: 500,
             smtp_host: None,
-            smtp_port: 587,
+            smtp_port: None,
             smtp_user: None,
             smtp_password: None,
-            smtp_security: "starttls".into(),
-            smtp_from: "OpenGrid <test@localhost>".into(),
+            smtp_security: None,
+            smtp_from: None,
             allow_private_webhooks: false,
             // Tests make many requests per second with one token; the limit
             // itself is tested with the real defaults.

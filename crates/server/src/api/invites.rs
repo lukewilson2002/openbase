@@ -72,7 +72,7 @@ async fn create_invite(
         Some(e) => Some(users::normalize_email(e)?),
     };
     let inviter_name = actor.name.clone();
-    let will_email = email.is_some() && state.config.email_enabled();
+    let will_email = email.is_some() && state.email.enabled();
     let (limiter, config) = (state.limiter.clone(), state.config.clone());
     let (token, info, name) = state
         .db
@@ -110,7 +110,7 @@ async fn create_invite(
         })
         .await?;
     let url = invites::invite_url(&state.config.public_url, &token);
-    if let (Some(to), true) = (&info.email, state.config.email_enabled()) {
+    if let (Some(to), true) = (&info.email, state.email.enabled()) {
         let body = format!(
             "Hi,\n\n{inviter_name} invited you to \"{name}\" on OpenGrid as {role}.\n\
              Open this link within 7 days to accept:\n\n{url}\n",

@@ -255,7 +255,8 @@ pub struct AdminUser {
 pub struct AdminCreateUser {
     pub email: String,
     pub name: String,
-    /// If omitted, a reset link is returned for the user to set their password.
+    /// If omitted, a reset link is returned for the user to set their password (to a signed-in
+    /// administrator only). Setting a password is not possible with an API token.
     #[serde(default)]
     pub password: Option<String>,
     #[serde(default)]
@@ -272,7 +273,8 @@ pub struct AdminUpdateUser {
     pub is_active: Option<bool>,
     #[serde(default)]
     pub is_admin: Option<bool>,
-    /// Turn off the user's two-factor authentication (e.g. lost device).
+    /// Turn off the user's two-factor authentication (e.g. lost device). Not possible with an
+    /// API token.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub disable_2fa: bool,
@@ -283,8 +285,8 @@ pub struct AdminUpdateUser {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AdminCreatedUser {
     pub user: AdminUser,
-    /// Present when no password was given: send this link to the user so they
-    /// can choose one.
+    /// Present when no password was given and the caller is signed in: send this link to the
+    /// user so they can choose one. An API token never receives it.
     #[serde(default)]
     pub reset_link: Option<ResetLink>,
 }

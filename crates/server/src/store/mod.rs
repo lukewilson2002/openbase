@@ -7,6 +7,7 @@ pub mod bases;
 pub mod comments;
 pub mod csv_io;
 pub mod duplicate;
+pub mod email_settings;
 pub mod field_kind;
 pub mod fields;
 pub mod fields_engine;

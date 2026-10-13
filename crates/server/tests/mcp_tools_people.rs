@@ -451,6 +451,7 @@ async fn credentials_sessions_and_tokens_are_out_of_reach() {
         ("POST", "/api/tokens"),
         ("POST", "/api/auth/2fa/disable"),
         ("GET", "/api/auth/sessions"),
+        ("POST", "/api/admin/users/usrX/reset-link"),
     ] {
         let e = a
             .fails("api_request", json!({"method": m, "path": p, "body": {}}))
@@ -461,6 +462,55 @@ async fn credentials_sessions_and_tokens_are_out_of_reach() {
         r.app().query_i64("SELECT count(*) FROM api_tokens", &[]),
         1,
         "only the token that was created on the account page"
+    );
+
+    // Credential parts of otherwise allowed admin requests are refused by the server, whatever
+    // the tool: a password for a new user, switching off someone's 2FA, and the SMTP password.
+    let other = r.app().user("other@example.com", "Other");
+    let other_id = other.user_id.clone().unwrap();
+    r.app()
+        .state
+        .db
+        .write_sync(|tx| Ok(tx.execute("UPDATE users SET totp_enabled = 1 WHERE id != ''", [])?))
+        .unwrap();
+    for (m, p, body, what) in [
+        (
+            "POST",
+            "/api/admin/users".to_string(),
+            json!({"email": "x@example.com", "name": "X", "password": "a long enough password"}),
+            "set a user's password",
+        ),
+        (
+            "PATCH",
+            format!("/api/admin/users/{other_id}"),
+            json!({"disable_2fa": true}),
+            "two-factor",
+        ),
+        (
+            "PATCH",
+            "/api/admin/email".to_string(),
+            json!({"password": "smtp-secret"}),
+            "SMTP password",
+        ),
+    ] {
+        let e = a
+            .fails("api_request", json!({"method": m, "path": p, "body": body}))
+            .await;
+        assert!(e.contains("API tokens can never"), "{m} {p}: {e}");
+        assert!(e.contains(what), "{m} {p}: {e}");
+    }
+    assert_eq!(
+        r.app().query_i64(
+            "SELECT totp_enabled FROM users WHERE id = ?1",
+            &[other_id.as_str()]
+        ),
+        1,
+        "2FA is still on"
+    );
+    assert_eq!(
+        r.app().query_i64("SELECT count(*) FROM users", &[]),
+        2,
+        "no user was created"
     );
 }
 
@@ -479,11 +529,35 @@ async fn admin_tools_manage_users_without_touching_credentials() {
         .await;
     assert_eq!(created["user"]["email"], "new.person@example.com");
     assert_eq!(created["user"]["is_admin"], false);
-    let reset = created["reset_link"]["url"].as_str().unwrap();
-    assert!(reset.contains("/reset-password?token="), "{reset}");
-    assert!(created["note"].as_str().unwrap().contains("shown only now"));
+    // An API token never receives a reset link, and says what to do instead.
+    assert!(created.get("reset_link").is_none(), "{created}");
+    let note = created["note"].as_str().unwrap();
+    assert!(note.contains("without a usable password"), "{note}");
+    assert!(note.contains("Admin > Users"), "{note}");
+    assert!(
+        note.contains("Email is not configured"),
+        "email is off in this rig: {note}"
+    );
     let new_id = created["user"]["id"].as_str().unwrap().to_string();
-    // The person sets a password with the link (what the human does).
+    // The account cannot be signed in to yet.
+    let (login, _) = r
+        .app()
+        .login("new.person@example.com", "a brand new password 99")
+        .await;
+    login.assert_status(401);
+    // What the human administrator does in the web app (a session): create the reset link and
+    // hand it over; the person sets a password with it.
+    let link = r
+        .app()
+        .post(
+            &r.admin,
+            &format!("/api/admin/users/{new_id}/reset-link"),
+            json!({}),
+        )
+        .await;
+    link.assert_status(200);
+    let reset = link.body["url"].as_str().unwrap().to_string();
+    assert!(reset.contains("/reset-password?token="), "{reset}");
     let reset_token = reset.rsplit("token=").next().unwrap();
     r.app()
         .post(
@@ -627,7 +701,7 @@ async fn admin_tools_need_an_administrator_with_a_manage_token() {
         let e = mate.fails(t, json!({})).await;
         assert!(e.contains("instance administrator"), "{t}: {e}");
     }
-    // The administrator sees all seven with a manage token, none with a write-only token.
+    // The administrator sees all ten with a manage token, none with a write-only token.
     let admin_tools: Vec<String> = r
         .agent
         .tool_names()
@@ -635,7 +709,7 @@ async fn admin_tools_need_an_administrator_with_a_manage_token() {
         .into_iter()
         .filter(|t| t.starts_with("admin_"))
         .collect();
-    assert_eq!(admin_tools.len(), 7, "{admin_tools:?}");
+    assert_eq!(admin_tools.len(), 10, "{admin_tools:?}");
     let write_only = r.agent_with(json!({"write": true})).await;
     assert!(
         !write_only

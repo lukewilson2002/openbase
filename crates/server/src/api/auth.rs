@@ -130,7 +130,7 @@ async fn setup(State(state): State<AppState>) -> AppResult<Json<SetupStatus>> {
     Ok(Json(SetupStatus {
         needs_setup: n == 0,
         open_signup: state.config.open_signup,
-        email_enabled: state.config.email_enabled(),
+        email_enabled: state.email.enabled(),
     }))
 }
 
@@ -527,7 +527,7 @@ async fn reset_request(
     ApiJson(req): ApiJson<PasswordResetRequest>,
 ) -> AppResult<Json<OkResponse>> {
     state.limiter.check("reset_request", &client.ip, 5, HOUR)?;
-    if !state.config.email_enabled() {
+    if !state.email.enabled() {
         return Ok(ok());
     }
     let Ok(email) = users::normalize_email(&req.email) else {

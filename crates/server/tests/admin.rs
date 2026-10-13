@@ -48,10 +48,11 @@ async fn list_users() {
     res.assert_status(200);
     let users = res.body.as_array().unwrap();
     assert_eq!(users.len(), 2);
-    assert_eq!(users[0]["email"], "admin@example.com");
-    assert_eq!(users[0]["is_admin"], true);
-    assert_eq!(users[1]["is_active"], true);
-    assert!(users[1].get("password_hash").is_none());
+    // Ordered by creation time, then id: users created in the same millisecond tie.
+    let by_email = |e: &str| users.iter().find(|u| u["email"] == e).unwrap();
+    assert_eq!(by_email("admin@example.com")["is_admin"], true);
+    assert_eq!(by_email("u@example.com")["is_active"], true);
+    assert!(by_email("u@example.com").get("password_hash").is_none());
 }
 
 #[tokio::test]
