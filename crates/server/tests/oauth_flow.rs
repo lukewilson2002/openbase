@@ -753,6 +753,21 @@ async fn the_consent_page_is_told_when_to_be_suspicious() {
     .await;
     assert_eq!(b["trusted_host"], true);
     assert!(b["impersonates"].is_null());
+    // Only the providers' documented callbacks are trusted, not every path on their domains: a
+    // GPT's action callback on chat.openai.com is written by whoever made that GPT.
+    let b = show(
+        "ChatGPT",
+        "https://chat.openai.com/aip/g-1234/oauth/callback",
+    )
+    .await;
+    assert_eq!(b["trusted_host"], false);
+    assert_eq!(b["impersonates"], "ChatGPT");
+    let b = show("My GPT", "https://chatgpt.com/aip/g-1234/oauth/callback").await;
+    assert_eq!(b["trusted_host"], false);
+    assert!(b["impersonates"].is_null());
+    let b = show("Claude", "https://claude.ai/some/other/path").await;
+    assert_eq!(b["trusted_host"], false);
+    assert_eq!(b["impersonates"], "Claude");
     // The name of a known assistant on another host.
     let b = show("Claude", "https://claude-login.example.net/cb").await;
     assert_eq!(b["trusted_host"], false);
@@ -761,6 +776,17 @@ async fn the_consent_page_is_told_when_to_be_suspicious() {
     assert_eq!(b["impersonates"], "ChatGPT");
     let b = show("Cl4ude", "https://claude.ai.evil.example/cb").await;
     assert_eq!(b["impersonates"], "Claude");
+    // Capitals and letters of other scripts, fullwidth text and accents do not hide a name.
+    for name in [
+        "\u{0421}laude",
+        "Cl\u{0410}ude",
+        "\u{FF23}\u{FF4C}\u{FF41}\u{FF55}\u{FF44}\u{FF45}",
+        "Cl\u{00E0}ude",
+        "\u{03A7}\u{0043}hatGPT",
+    ] {
+        let b = show(name, "https://evil.example/cb").await;
+        assert!(!b["impersonates"].is_null(), "{name:?} must be flagged");
+    }
     // A local app: flagged as loopback; Claude Code is the case where the imitation is expected.
     let b = show("Claude Code", "http://127.0.0.1:53124/callback").await;
     assert_eq!(b["loopback"], true);
@@ -772,6 +798,55 @@ async fn the_consent_page_is_told_when_to_be_suspicious() {
     assert_eq!(b["trusted_host"], false);
     assert_eq!(b["loopback"], false);
     assert!(b["impersonates"].is_null());
+}
+
+/// Names that were stored before the registration check (or that reach the page some other way)
+/// are shown without hidden or direction-changing characters, and never longer than 100.
+#[tokio::test]
+async fn the_consent_page_never_shows_hidden_characters_in_a_name() {
+    let fx = Fx::new().await;
+    let long = format!("{}\u{202E}", "x".repeat(300));
+    for (stored, shown) in [
+        ("\u{202E}edualC".to_string(), "edualC".to_string()),
+        (
+            "Safe\u{200B}\u{2066}App\u{2069}".to_string(),
+            "SafeApp".to_string(),
+        ),
+        (long, "x".repeat(100)),
+    ] {
+        let id = fx.client_id.clone();
+        fx.app
+            .state
+            .db
+            .write_sync(move |tx| {
+                tx.execute(
+                    "UPDATE oauth_clients SET name = ?2 WHERE id = ?1",
+                    rusqlite::params![id, stored],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let req = request_id(&fx.authorize(&[]).await);
+        let info = fx
+            .app
+            .get(&fx.user, &format!("/api/oauth/requests/{req}"))
+            .await;
+        assert_eq!(info.body["client_name"], shown.as_str());
+        // The connected-apps lists and the audit log agree.
+        let code = code_of(&approve(&fx.app, &fx.user, &req, "read").await);
+        let _ = code;
+        let audit = fx.app.state.db.write_sync(|tx| {
+            Ok(tx.query_row(
+                "SELECT detail FROM audit_log WHERE action = 'oauth_approve' ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get::<_, String>(0),
+            )?)
+        }).unwrap();
+        assert!(
+            !audit.contains('\u{202E}') && !audit.contains('\u{200B}'),
+            "{audit}"
+        );
+    }
 }
 
 #[tokio::test]

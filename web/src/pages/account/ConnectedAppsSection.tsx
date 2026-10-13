@@ -36,7 +36,7 @@ export function ConnectedAppsSection() {
               <Plug aria-hidden className="size-5 shrink-0 text-muted" />
               <div className="min-w-0 flex-1 basis-56">
                 <p className="truncate text-[0.8125rem] font-medium">
-                  {g.client_name}
+                  <bdi>{g.client_name}</bdi>
                   <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{ACCESS_LABEL[accessOf(g)]}</span>
                 </p>
                 <p className="text-xs text-muted">

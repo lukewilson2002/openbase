@@ -221,7 +221,9 @@ fn exchange_code(
                         owner.as_deref(),
                         actions::OAUTH_CODE_REPLAY,
                         Some(&grant_id),
-                        Some(json!({ "client": client.name, "client_id": client.id })),
+                        Some(
+                            json!({ "client": super::redirect::display_name(&client.name), "client_id": client.id }),
+                        ),
                         Some(ip),
                     )?;
                 }
@@ -267,7 +269,7 @@ fn exchange_code(
         actions::OAUTH_GRANT_CREATE,
         Some(&grant_id),
         Some(json!({
-            "client": client.name,
+            "client": super::redirect::display_name(&client.name),
             "client_id": client.id,
             "source": client.source,
             "redirect_host": super::redirect::host_label(&code_row.redirect_uri),
@@ -300,7 +302,9 @@ fn refresh(
                 Some(&user_id),
                 actions::OAUTH_REFRESH_REUSE,
                 Some(&grant_id),
-                Some(json!({ "client": client.name, "client_id": client.id })),
+                Some(
+                    json!({ "client": super::redirect::display_name(&client.name), "client_id": client.id }),
+                ),
                 Some(ip),
             )?;
             failed(OAuthError::invalid_grant(
@@ -356,7 +360,7 @@ pub async fn revoke(
                     Some(&user_id),
                     actions::OAUTH_GRANT_REVOKE,
                     Some(&grant_id),
-                    Some(json!({ "by": "client", "client": client.name, "client_id": client.id })),
+                    Some(json!({ "by": "client", "client": super::redirect::display_name(&client.name), "client_id": client.id })),
                     Some(&ip),
                 )?;
             }

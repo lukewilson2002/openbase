@@ -23,7 +23,7 @@ async fn registration_returns_a_public_client() {
     let res = register(
         &app,
         json!({
-            "client_name": "  Fancy\u{7} App ",
+            "client_name": "  Fancy\n App ",
             "redirect_uris": [GOOD, LOOPBACK_REDIRECT, GOOD],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
@@ -130,6 +130,21 @@ async fn registration_refuses_unsupported_or_oversized_metadata() {
         ),
         ("long name", json!({"client_name": "n".repeat(101)})),
         ("name type", json!({"client_name": 5})),
+        // Names that read as another name, or hide what they are, are refused outright.
+        (
+            "direction override",
+            json!({"client_name": "\u{202E}edualC"}),
+        ),
+        (
+            "direction isolate",
+            json!({"client_name": "\u{2066}Claude\u{2069}"}),
+        ),
+        ("zero-width space", json!({"client_name": "Cl\u{200B}aude"})),
+        (
+            "control character",
+            json!({"client_name": "Fancy\u{7} App"}),
+        ),
+        ("byte-order mark", json!({"client_name": "\u{FEFF}App"})),
         (
             "http logo",
             json!({"logo_uri": "http://app.example.com/l.png"}),
@@ -653,6 +668,12 @@ async fn bad_metadata_documents_are_refused_without_redirecting() {
         ),
         ("not json", b"<html>".to_vec(), "application/json", 200),
         ("not an object", b"[1]".to_vec(), "application/json", 200),
+        (
+            "a name with a direction override",
+            serde_json::to_vec(&base(json!({"client_name": "\u{202E}edualC"}))).unwrap(),
+            "application/json",
+            200,
+        ),
         (
             "html content type",
             serde_json::to_vec(&base(json!({}))).unwrap(),

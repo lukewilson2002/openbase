@@ -117,7 +117,7 @@ pub fn parse_document(client_id: &str, body: &[u8]) -> Result<Client, String> {
     let uris = redirect_uris(doc.get("redirect_uris")).map_err(|e| e.description)?;
     let name = match doc.get("client_name") {
         None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(clean_name(s).ok_or("client_name is too long")?),
+        Some(Value::String(s)) => Some(clean_name(s)?),
         Some(_) => return Err("client_name must be a string".into()),
     };
     let name = name.unwrap_or_else(|| {

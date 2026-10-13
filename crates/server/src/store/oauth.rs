@@ -731,7 +731,7 @@ pub fn list_grants(conn: &Connection, user_id: Option<&str>) -> AppResult<Vec<Gr
         };
         out.push(GrantInfo {
             id,
-            client_name,
+            client_name: crate::oauth::redirect::display_name(&client_name),
             client_source: source,
             redirect_host: crate::oauth::redirect::host_label(&redirect_uri),
             write: scope.write,

@@ -65,6 +65,7 @@ flate2 = "1"
 tar = "0.4"
 url = "2"
 http-body-util = "0.1"
+unicode-normalization = "0.1.25"
 
 [dev-dependencies]
 tempfile = "3"

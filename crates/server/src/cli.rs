@@ -63,8 +63,7 @@ pub fn add_oauth_client(
     confidential: bool,
 ) -> AppResult<(String, Option<String>)> {
     use crate::store::oauth as store;
-    let name = crate::oauth::register::clean_name(name)
-        .ok_or_else(|| AppError::bad_request("the name is too long"))?;
+    let name = crate::oauth::register::clean_name(name).map_err(AppError::bad_request)?;
     if redirect_uris.is_empty() {
         return Err(AppError::bad_request(
             "at least one --redirect-uri is required",

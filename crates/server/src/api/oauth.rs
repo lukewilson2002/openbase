@@ -72,7 +72,7 @@ async fn get_request(
                 client_id: client.id.clone(),
                 impersonates: redirect::impersonated_product(&client.name, &req.redirect_uri)
                     .map(str::to_string),
-                client_name: client.name,
+                client_name: redirect::display_name(&client.name),
                 client_source: client.source,
                 redirect_host: redirect::host_label(&req.redirect_uri),
                 loopback: redirect::is_loopback(&req.redirect_uri),
@@ -106,7 +106,7 @@ async fn decide(
             let client = store::client(tx, &req.client_id)?
                 .ok_or_else(|| AppError::not_found("authorization request"))?;
             let detail = json!({
-                "client": client.name,
+                "client": redirect::display_name(&client.name),
                 "client_id": client.id,
                 "redirect_host": redirect::host_label(&req.redirect_uri),
             });

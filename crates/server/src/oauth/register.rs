@@ -37,20 +37,24 @@ fn metadata_error(code: &'static str, description: impl Into<String>) -> OAuthEr
     OAuthError::new(code, description)
 }
 
-/// An app name made safe to show: control characters dropped, whitespace collapsed. `None` when
-/// it is too long. The consent page shows it as plain text; it is still *untrusted*.
-pub fn clean_name(raw: &str) -> Option<String> {
-    let collapsed = raw
-        .chars()
-        .filter(|c| !c.is_control() || c.is_whitespace())
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if collapsed.chars().count() > MAX_NAME_CHARS {
-        return None;
+/// An app name made safe to show: whitespace collapsed, at most [`MAX_NAME_CHARS`] characters.
+/// A name with control, invisible or direction-changing characters is **refused**, not quietly
+/// repaired: no honest app needs them, and they are how a name is made to read as another
+/// (`U+202E` reverses what follows). The error is a message for the registrant. The consent page
+/// shows the name as plain text; it is still *untrusted*.
+pub fn clean_name(raw: &str) -> Result<String, String> {
+    if raw.chars().any(redirect::is_hidden_char) {
+        return Err(
+            "client_name cannot contain control, invisible or direction-changing characters".into(),
+        );
     }
-    Some(if collapsed.is_empty() {
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() > MAX_NAME_CHARS {
+        return Err(format!(
+            "client_name is longer than {MAX_NAME_CHARS} characters"
+        ));
+    }
+    Ok(if collapsed.is_empty() {
         DEFAULT_NAME.to_string()
     } else {
         collapsed
@@ -210,11 +214,7 @@ fn parse_registration(doc: &Map<String, Value>) -> Result<NewClient, OAuthError>
     let redirect_uris = redirect_uris(doc.get("redirect_uris"))?;
     let name = match doc.get("client_name") {
         None | Some(Value::Null) => DEFAULT_NAME.to_string(),
-        Some(Value::String(s)) => clean_name(s).ok_or_else(|| {
-            bad(&format!(
-                "client_name is longer than {MAX_NAME_CHARS} characters"
-            ))
-        })?,
+        Some(Value::String(s)) => clean_name(s).map_err(|m| bad(&m))?,
         Some(_) => return Err(bad("client_name must be a string")),
     };
     let logo_uri = logo_uri(doc.get("logo_uri"))?;
@@ -296,14 +296,24 @@ mod tests {
 
     #[test]
     fn names_are_cleaned_and_bounded() {
-        assert_eq!(clean_name("  My \n App\t").as_deref(), Some("My App"));
-        assert_eq!(clean_name("a\u{0007}b").as_deref(), Some("ab"));
-        assert_eq!(clean_name("   ").as_deref(), Some(DEFAULT_NAME));
+        assert_eq!(clean_name("  My \n App\t").as_deref(), Ok("My App"));
+        assert_eq!(clean_name("   ").as_deref(), Ok(DEFAULT_NAME));
         assert_eq!(
             clean_name(&"x".repeat(MAX_NAME_CHARS)).map(|s| s.len()),
-            Some(MAX_NAME_CHARS)
+            Ok(MAX_NAME_CHARS)
         );
-        assert!(clean_name(&"x".repeat(MAX_NAME_CHARS + 1)).is_none());
+        assert!(clean_name(&"x".repeat(MAX_NAME_CHARS + 1)).is_err());
+        // Control, invisible and direction-changing characters are refused, not repaired.
+        for bad in [
+            "a\u{0007}b",
+            "\u{202E}edualC",
+            "Claude\u{200B}",
+            "\u{2066}x\u{2069}",
+            "a\u{00AD}b",
+            "\u{FEFF}App",
+        ] {
+            assert!(clean_name(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

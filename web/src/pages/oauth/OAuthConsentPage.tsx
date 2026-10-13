@@ -106,7 +106,7 @@ function Consent({ request }: { request: ConsentRequest }) {
   return (
     <Shell>
       <h1 className="text-xl leading-snug">
-        Allow <span className="break-words font-semibold">{request.client_name}</span> to use your OpenBase?
+        Allow <bdi className="break-words font-semibold">{request.client_name}</bdi> to use your OpenBase?
       </h1>
       <p className="mt-1 text-[0.8125rem] text-muted">
         {me ? (

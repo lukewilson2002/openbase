@@ -117,63 +117,191 @@ pub fn host_label(uri: &str) -> String {
     }
 }
 
-/// Provider domains whose names an app may use for itself.
-const KNOWN_PROVIDER_DOMAINS: [&str; 3] = ["claude.ai", "chatgpt.com", "openai.com"];
+/// The redirect addresses of the assistant providers themselves, the only ones that count as
+/// "verified" and may carry the provider's name: the exact callback URLs they document for
+/// custom connectors. A whole domain is not enough: `chat.openai.com/aip/g-<id>/oauth/callback`
+/// belongs to a GPT that any ChatGPT user can write, and so does everything else under those
+/// domains that is not a documented connector callback.
+const KNOWN_PROVIDER_CALLBACKS: [&str; 4] = [
+    // Claude (claude.ai and Claude Desktop connectors).
+    "https://claude.ai/api/mcp/auth_callback",
+    "https://claude.com/api/mcp/auth_callback",
+    // ChatGPT (custom connectors, and the review flow of the apps platform).
+    "https://chatgpt.com/connector_platform_oauth_redirect",
+    "https://platform.openai.com/apps-manage/oauth",
+];
 
-/// Is the redirect host one of the assistant providers' own (claude.ai, chatgpt.com, openai.com,
-/// or a subdomain of them)?
+/// Is the redirect address exactly one of the providers' documented callbacks (scheme, host and
+/// path; no other port, no query, no fragment)?
 pub fn trusted_host(uri: &str) -> bool {
     let Ok(u) = Url::parse(uri) else {
         return false;
     };
-    if u.scheme() != "https" {
+    if u.scheme() != "https"
+        || u.query().is_some()
+        || u.fragment().is_some()
+        || !u.username().is_empty()
+        || u.password().is_some()
+        || u.port().is_some()
+    {
         return false;
     }
     let Some(Host::Domain(host)) = u.host() else {
         return false;
     };
     let host = host.to_ascii_lowercase();
-    KNOWN_PROVIDER_DOMAINS
-        .iter()
-        .any(|d| host == *d || host.ends_with(&format!(".{d}")))
+    KNOWN_PROVIDER_CALLBACKS.iter().any(|known| {
+        Url::parse(known).is_ok_and(|k| k.host_str() == Some(host.as_str()) && k.path() == u.path())
+    })
 }
 
-/// Letters an app might swap in to make a name look like another (digits and a few Cyrillic /
-/// Greek look-alikes), mapped to the Latin letter they imitate.
-fn skeleton_char(c: char) -> Option<char> {
-    let mapped = match c {
+/// Characters an app name must not contain: controls, and the invisible and direction-changing
+/// "format" characters (soft hyphen, zero-width characters, the bidirectional overrides and
+/// isolates, word joiner, variation selectors, byte-order mark, tag characters, ...). They make
+/// `\u{202E}edualC` render as "Claude", reorder the text around the name, or hide look-alike
+/// padding. Ordinary whitespace is not in this set (it is collapsed separately).
+pub fn is_hidden_char(c: char) -> bool {
+    if c.is_whitespace() {
+        return false;
+    }
+    c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}' // soft hyphen
+            | '\u{034F}' // combining grapheme joiner
+            | '\u{061C}' // arabic letter mark
+            | '\u{115F}' | '\u{1160}' // hangul fillers
+            | '\u{17B4}' | '\u{17B5}'
+            | '\u{180B}'..='\u{180F}' // mongolian variation selectors
+            | '\u{200B}'..='\u{200F}' // zero-width space/joiners, LRM, RLM
+            | '\u{202A}'..='\u{202E}' // bidi embeddings and overrides
+            | '\u{2060}'..='\u{206F}' // word joiner, invisible operators, bidi isolates
+            | '\u{3164}' | '\u{FFA0}' // hangul fillers
+            | '\u{FE00}'..='\u{FE0F}' // variation selectors
+            | '\u{FEFF}' // byte-order mark
+            | '\u{FFF0}'..='\u{FFFB}' // specials (interlinear annotations, object replacement)
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}' // tag characters and variation selectors supplement
+            | '\u{E000}'..='\u{F8FF}' // private use
+        )
+}
+
+/// The name of an app as it may be shown: hidden and direction-changing characters removed,
+/// whitespace collapsed, cut to [`MAX_DISPLAY_NAME_CHARS`]. Names are checked at registration
+/// already; this covers rows stored before that check and keeps every place that shows a name
+/// (consent page, connected apps, audit log) safe.
+pub fn display_name(name: &str) -> String {
+    let cleaned = name
+        .chars()
+        .filter(|c| !is_hidden_char(*c))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    cleaned.chars().take(MAX_DISPLAY_NAME_CHARS).collect()
+}
+
+/// Longest app name shown anywhere.
+pub const MAX_DISPLAY_NAME_CHARS: usize = 100;
+
+/// Latin letters (and digits) that other scripts, or punctuation, imitate, keyed by the lookalike.
+/// A small, hand-picked subset of the Unicode confusables table (UTS #39) covering the Cyrillic,
+/// Greek and Armenian look-alikes of the Latin letters, plus the usual digit and symbol
+/// substitutions. Compatibility forms (fullwidth, mathematical alphanumerics, ligatures, circled
+/// letters, ...) are folded by NFKC before this table is consulted, and combining marks are
+/// dropped, so neither needs entries here.
+fn confusable_latin(c: char) -> Option<char> {
+    Some(match c {
         '0' => 'o',
-        '1' | '!' | '|' => 'l',
+        '1' | '!' | '|' | '\u{0131}' => 'l', // dotless i is deliberately close to l and i
         '3' => 'e',
         '4' | '@' => 'a',
         '5' | '$' => 's',
         '7' => 't',
-        '\u{0430}' | '\u{03b1}' => 'a', // cyrillic а, greek α
-        '\u{0435}' | '\u{03b5}' => 'e', // е, ε
-        '\u{043e}' | '\u{03bf}' => 'o', // о, ο
-        '\u{0441}' => 'c',              // с
-        '\u{0440}' | '\u{03c1}' => 'p', // р, ρ
-        '\u{0456}' | '\u{03b9}' => 'i', // і, ι
+        // Cyrillic (lower case; capitals are lower-cased first).
+        '\u{0430}' => 'a',              // а
+        '\u{0432}' => 'b',              // в
+        '\u{0435}' | '\u{0454}' => 'e', // е, є
+        '\u{0433}' => 'r',              // г
+        '\u{0456}' | '\u{0457}' => 'i', // і, ї
+        '\u{0458}' => 'j',              // ј
+        '\u{043a}' | '\u{049b}' => 'k', // к, қ
+        '\u{04cf}' | '\u{04c0}' => 'l', // ӏ, Ӏ palochka
+        '\u{043c}' => 'm',              // м
+        '\u{043d}' | '\u{04bb}' => 'h', // н, һ
+        '\u{043e}' | '\u{04e9}' => 'o', // о, ө
+        '\u{0440}' => 'p',              // р
+        '\u{0441}' | '\u{04ab}' => 'c', // с, ҫ
+        '\u{0442}' => 't',              // т
+        '\u{0443}' | '\u{04af}' => 'y', // у, ү
+        '\u{0445}' | '\u{04b3}' => 'x', // х, ҳ
         '\u{0455}' => 's',              // ѕ
+        '\u{0448}' => 'w',              // ш
         '\u{0501}' => 'd',              // ԁ
-        '\u{0261}' => 'g',              // ɡ
+        '\u{051b}' => 'q',              // ԛ
+        '\u{051d}' => 'w',              // ԝ
+        // Greek.
+        '\u{03b1}' => 'a',              // α
+        '\u{03b2}' => 'b',              // β
+        '\u{03b3}' => 'y',              // γ
+        '\u{03b5}' | '\u{03f5}' => 'e', // ε, ϵ
+        '\u{03b7}' => 'n',              // η
+        '\u{03b9}' | '\u{0399}' => 'i', // ι
+        '\u{03ba}' | '\u{03f0}' => 'k', // κ
         '\u{03bd}' => 'v',              // ν
-        '\u{0445}' => 'x',              // х
-        '\u{0443}' => 'y',              // у
+        '\u{03bf}' => 'o',              // ο
+        '\u{03c1}' | '\u{03f1}' => 'p', // ρ
+        '\u{03c3}' => 'o',              // σ
+        '\u{03c4}' => 't',              // τ
+        '\u{03c5}' => 'u',              // υ
+        '\u{03c7}' => 'x',              // χ
+        '\u{03c9}' => 'w',              // ω
+        '\u{03f2}' => 'c',              // ϲ
+        '\u{03f3}' => 'j',              // ϳ
+        // Armenian and other look-alikes of single Latin letters.
+        '\u{0570}' => 'h', // հ
+        '\u{0578}' => 'n', // ո
+        '\u{057c}' => 'n', // ռ
+        '\u{057d}' => 'u', // ս
+        '\u{0261}' => 'g', // ɡ latin small script g
+        '\u{0251}' => 'a', // ɑ
+        '\u{0237}' => 'j', // ȷ
+        '\u{026a}' => 'i', // ɪ
+        '\u{1d00}' => 'a', // ᴀ small capitals
+        '\u{1d04}' => 'c',
+        '\u{1d07}' => 'e',
+        '\u{1d0f}' => 'o',
+        '\u{1d1c}' => 'u',
         c if c.is_ascii_alphabetic() => c.to_ascii_lowercase(),
         _ => return None,
-    };
-    Some(mapped)
+    })
+}
+
+/// A comparison form of a name that ignores what an impersonator varies: compatibility forms
+/// (NFKC: fullwidth, mathematical, ligatures), case, accents and other combining marks, hidden
+/// characters, digit and symbol substitutions, and look-alike letters of other scripts. Anything
+/// that does not map to a Latin letter is dropped (spaces, dots, hyphens, other scripts).
+pub fn skeleton(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    name.nfkc()
+        .nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .flat_map(char::to_lowercase)
+        .filter_map(confusable_latin)
+        .collect()
 }
 
 /// If the app's `name` imitates a known assistant ("Claude", "ChatGPT") but the redirect URI is
-/// not on that provider's own domain, the product it imitates. Case, spacing, punctuation, digit
-/// substitutions and common look-alike letters are ignored.
+/// not one of that provider's own callbacks, the product it imitates. See [`skeleton`] for what
+/// is ignored.
 pub fn impersonated_product(name: &str, redirect_uri: &str) -> Option<&'static str> {
     if trusted_host(redirect_uri) {
         return None;
     }
-    let skeleton: String = name.chars().filter_map(skeleton_char).collect();
+    let skeleton = skeleton(name);
+    // A name written backwards under a direction override reads as the product too.
+    let reversed: String = skeleton.chars().rev().collect();
     [
         ("claude", "Claude"),
         ("anthropic", "Claude"),
@@ -181,7 +309,7 @@ pub fn impersonated_product(name: &str, redirect_uri: &str) -> Option<&'static s
         ("openai", "ChatGPT"),
     ]
     .iter()
-    .find(|(needle, _)| skeleton.contains(needle))
+    .find(|(needle, _)| skeleton.contains(needle) || reversed.contains(needle))
     .map(|(_, product)| *product)
 }
 
@@ -287,18 +415,35 @@ mod tests {
     }
 
     #[test]
-    fn trusted_hosts_are_the_providers_own() {
+    fn only_the_providers_documented_callbacks_are_trusted() {
         assert!(trusted_host("https://claude.ai/api/mcp/auth_callback"));
+        assert!(trusted_host("https://claude.com/api/mcp/auth_callback"));
+        assert!(trusted_host("https://CLAUDE.AI/api/mcp/auth_callback"));
         assert!(trusted_host(
             "https://chatgpt.com/connector_platform_oauth_redirect"
         ));
-        assert!(trusted_host(
-            "https://chat.openai.com/aip/g-1/oauth/callback"
-        ));
-        assert!(!trusted_host("https://claude.ai.evil.com/cb"));
-        assert!(!trusted_host("https://evilclaude.ai/cb"));
-        assert!(!trusted_host("http://claude.ai/cb"));
-        assert!(!trusted_host("http://127.0.0.1:1/cb"));
+        // Other paths on the providers' domains belong to third parties: a GPT's action
+        // callback, a connector somebody else created, anything under the domain.
+        for not in [
+            "https://chat.openai.com/aip/g-1/oauth/callback",
+            "https://chatgpt.com/aip/g-123/oauth/callback",
+            "https://chatgpt.com/connector/oauth/abc",
+            "https://chatgpt.com/",
+            "https://claude.ai/anything",
+            "https://claude.ai/api/mcp/auth_callback/extra",
+            "https://claude.ai/api/mcp/auth_callback?x=1",
+            "https://claude.ai/api/mcp/auth_callback#f",
+            "https://claude.ai:8443/api/mcp/auth_callback",
+            "https://sub.claude.ai/api/mcp/auth_callback",
+            "https://openai.com/x",
+            "https://claude.ai.evil.com/api/mcp/auth_callback",
+            "https://evilclaude.ai/api/mcp/auth_callback",
+            "http://claude.ai/api/mcp/auth_callback",
+            "http://127.0.0.1:1/cb",
+            "https://u:p@claude.ai/api/mcp/auth_callback",
+        ] {
+            assert!(!trusted_host(not), "{not}");
+        }
     }
 
     #[test]
@@ -327,12 +472,84 @@ mod tests {
             None
         );
         assert_eq!(
-            impersonated_product("ChatGPT", "https://chatgpt.com/connector/oauth/abc"),
+            impersonated_product(
+                "ChatGPT",
+                "https://chatgpt.com/connector_platform_oauth_redirect"
+            ),
             None
         );
         assert_eq!(
             impersonated_product("Claude Code", "http://127.0.0.1:5/cb"),
             Some("Claude")
         );
+        // A GPT's callback on the provider's domain is not the provider.
+        assert_eq!(
+            impersonated_product("ChatGPT", "https://chat.openai.com/aip/g-1/oauth/callback"),
+            Some("ChatGPT")
+        );
+    }
+
+    #[test]
+    fn capitals_other_scripts_fullwidth_and_marks_do_not_hide_a_name() {
+        let evil = "https://evil.example/cb";
+        for name in [
+            "\u{0421}laude",                                          // Cyrillic capital Es
+            "Cl\u{0410}ude",                                          // Cyrillic capital A
+            "\u{0421}\u{04cf}\u{0430}ud\u{0435}", // Cyrillic C, palochka, a, (u), d, e
+            "\u{FF23}\u{FF4C}\u{FF41}\u{FF55}\u{FF44}\u{FF45}", // fullwidth Claude
+            "\u{1D402}\u{1D425}\u{1D41A}\u{1D42E}\u{1D41D}\u{1D41E}", // mathematical bold
+            "Cl\u{03B1}ud\u{03B5}",               // Greek alpha, epsilon
+            "Cl\u{00E0}\u{00FA}d\u{00E9}",        // accents: Clàúdé
+            "Cla\u{0075}\u{0308}de",              // combining diaeresis
+            "C\u{200B}laude",                     // zero-width space
+            "Cl\u{00AD}aude",                     // soft hyphen
+            "\u{202E}edualC",                     // right-to-left override, reversed
+            "\u{FB01}lm Claude",                  // ligature fi plus Claude
+            "\u{24B8}laude",                      // circled C
+            "Anthr\u{043E}pic",                   // Cyrillic o
+            "\u{0421}hatGPT",
+            "Ch\u{0430}tGPT",
+            "Op\u{0435}nAI",
+        ] {
+            assert!(
+                impersonated_product(name, evil).is_some(),
+                "{name:?} (skeleton {:?}) must be flagged",
+                skeleton(name)
+            );
+        }
+        // Ordinary names stay unflagged, including ones in other scripts.
+        for name in [
+            "Notes",
+            "\u{041f}\u{0440}\u{0438}\u{0432}\u{0435}\u{0442}",
+            "Cloud Tools",
+            "Claud",
+        ] {
+            assert_eq!(impersonated_product(name, evil), None, "{name}");
+        }
+    }
+
+    #[test]
+    fn hidden_characters_are_found_and_removed() {
+        for c in [
+            '\u{202E}',
+            '\u{202D}',
+            '\u{2066}',
+            '\u{2069}',
+            '\u{200B}',
+            '\u{200E}',
+            '\u{FEFF}',
+            '\u{00AD}',
+            '\u{0007}',
+            '\u{FE0F}',
+            '\u{E0041}',
+        ] {
+            assert!(is_hidden_char(c), "{c:?}");
+        }
+        for c in ['a', 'Z', ' ', '\t', '\u{00E9}', '\u{0421}', '\u{4E2D}', '-'] {
+            assert!(!is_hidden_char(c), "{c:?}");
+        }
+        assert_eq!(display_name("\u{202E}edualC"), "edualC");
+        assert_eq!(display_name("  A \u{200B}  B\n C "), "A B C");
+        assert_eq!(display_name(&"x".repeat(500)).chars().count(), 100);
     }
 }
