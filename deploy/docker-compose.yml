@@ -1,22 +1,32 @@
-# OpenBase behind Caddy (automatic HTTPS via Let's Encrypt).
+# OpenBase behind Caddy (automatic HTTPS via Let's Encrypt), using the published image.
 #
-#   cd deploy
+#   git clone https://github.com/lukewilson2002/openbase && cd openbase/deploy
 #   cp .env.example .env      # set OPENBASE_DOMAIN (DNS must point here)
-#   docker compose up -d --build
+#   docker compose up -d
+#
+# The image is ghcr.io/lukewilson2002/openbase, built only from GitHub Releases (never from a
+# push to main). OPENBASE_VERSION in .env chooses what you follow:
+#   latest   the newest stable release (default)
+#   1        the newest 1.x.y release (once 1.0 exists): updates, never a breaking change
+#   1.4      the newest 1.4.y patch release
+#   1.4.2    exactly this release, never changes
+# Nothing updates by itself. To update:  docker compose pull && docker compose up -d
+# (or opt in to automatic updates: docker-compose.autoupdate.yml). Rolling back, and why to
+# take a backup first: docs/self-hosting.md#8-upgrading.
 #
 # Data lives in named volumes: `openbase-data` (database, attachments,
 # backups) and `caddy-data` (TLS certificates). See docs/self-hosting.md.
 #
 # To try the stack on your own machine without a domain or certificates, add the
-# override: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# override: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 # (serves plain HTTP on http://localhost:8088).
+#
+# To build the image from your checkout instead of pulling it, add docker-compose.build.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 services:
   openbase:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    image: openbase:latest
+    image: ghcr.io/lukewilson2002/openbase:${OPENBASE_VERSION:-latest}
     restart: unless-stopped
     env_file:
       - .env
@@ -27,6 +37,10 @@ services:
       # Only Caddy can reach OpenBase (no published port), so trust the client
       # address it puts in X-Forwarded-For.
       OPENBASE_TRUST_PROXY: "true"
+    labels:
+      # Only used by docker-compose.autoupdate.yml: the updater touches containers with this label
+      # and no others (not Caddy, not anything else on the machine).
+      com.centurylinklabs.watchtower.enable: "true"
     volumes:
       - openbase-data:/data
     # Not published on the host: reachable only through Caddy.

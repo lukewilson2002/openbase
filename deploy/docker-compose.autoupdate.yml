@@ -1,0 +1,51 @@
+# OPTIONAL automatic updates. Not part of the default stack; add this file to turn them on:
+#
+#   cd deploy
+#   docker compose -f docker-compose.yml -f docker-compose.autoupdate.yml up -d
+#
+# (Add -f docker-compose.local.yml etc. as you normally would. The same -f list must be used for
+# every later `docker compose` command, or put COMPOSE_FILE=docker-compose.yml:docker-compose.autoupdate.yml
+# in .env.)
+#
+# What it does: once a day, at 04:30 (after the 03:00 automatic backup; the time zone is TZ from
+# .env), Watchtower checks whether the image tag you follow (OPENBASE_VERSION) now points to a
+# newer image, pulls it and restarts the openbase container. It only touches containers that carry
+# the label com.centurylinklabs.watchtower.enable=true, which is the openbase container and
+# nothing else (not Caddy, not other containers on the machine).
+#
+# What you follow decides what "newer" means (OPENBASE_VERSION in .env):
+#   latest   every new stable release, including a new major version that may need your attention
+#   1        new 1.x.y releases only: features and fixes, no breaking change (once 1.0 exists)
+#   1.4      patch releases of 1.4 only
+#   1.4.2    nothing ever changes
+# For unattended updates choose a major or minor tag, not latest. While OpenBase is still 0.x,
+# use the minor (0.1): a 0.x minor release may contain breaking changes and there is no "0" tag.
+#
+# Trade-offs, honestly:
+#   - A new release can change the database schema. OpenBase writes a pre-migration snapshot
+#     first (and refuses to start if it cannot), but you will not be there to read the release
+#     notes. Keep offsite backups (docs/self-hosting.md#offsite-copies-strongly-recommended).
+#   - Watchtower needs the Docker socket, which is root-equivalent access to this machine. If
+#     you prefer not to give that to a container, skip this file and update from cron instead:
+#       30 4 * * *  cd /path/to/openbase/deploy && docker compose pull openbase && docker compose up -d
+#   - containrrr/watchtower (the original) is archived and fails against current Docker Engine
+#     (client API too old). This file uses the maintained fork nickfedor/watchtower, pinned to a
+#     version; Dependabot proposes newer pins.
+#
+# Rolling back: stop following (pin OPENBASE_VERSION to the previous release) and restore the
+# pre-migration snapshot or the backup. See docs/self-hosting.md#8-upgrading.
+
+services:
+  watchtower:
+    image: nickfedor/watchtower:1.23.0
+    restart: unless-stopped
+    environment:
+      # Six fields, with seconds: second minute hour day month weekday.
+      WATCHTOWER_SCHEDULE: "0 30 4 * * *"
+      # Only containers labelled com.centurylinklabs.watchtower.enable=true.
+      WATCHTOWER_LABEL_ENABLE: "true"
+      # Remove the old image after an update.
+      WATCHTOWER_CLEANUP: "true"
+      TZ: ${TZ:-UTC}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

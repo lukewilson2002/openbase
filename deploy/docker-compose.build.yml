@@ -1,0 +1,22 @@
+# Build the image from this checkout instead of pulling the published one. For contributors, for
+# trying unreleased changes, and for architectures other than linux/amd64 and linux/arm64.
+#
+#   cd deploy
+#   cp .env.example .env
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Combine with the local trial override (plain HTTP on http://localhost:8088):
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.local.yml up -d --build
+#
+# The first build compiles the Rust server and the web client inside Docker (no Rust or Node on
+# the host); expect minutes on a laptop and much longer on a small VPS. The result is tagged
+# openbase:local and is never pushed anywhere. To go back to the published image, drop this file
+# from the -f list (and `docker compose pull`).
+
+services:
+  openbase:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: openbase:local
+    pull_policy: build
