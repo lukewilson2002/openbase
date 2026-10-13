@@ -10,8 +10,8 @@ use og_core::api::workspaces::{
     Collaborator, CreateBase, DuplicateBase, Member, UpdateBase, UpdateMember,
 };
 
-use crate::api::schema_support::{OptionalJson, ok, publish, require_session};
-use crate::auth::Actor;
+use crate::api::schema_support::{OptionalJson, ok, publish};
+use crate::auth::{Actor, Capability};
 use crate::error::AppResult;
 use crate::extract::ApiJson;
 use crate::perm::{self, Role};
@@ -40,7 +40,7 @@ async fn create(
     let out = state
         .db
         .write(move |tx| {
-            perm::require_workspace(tx, &actor, &workspace_id, Role::Creator)?;
+            perm::require_workspace_for_content(tx, &actor, &workspace_id, Role::Creator)?;
             let base = bases::create(tx, &workspace_id, &body, &actor.user_id)?;
             let role = perm::require_base(tx, &actor, &base.id, Role::Viewer)?;
             bases::schema(tx, &base, &actor.user_id, role)
@@ -92,7 +92,7 @@ async fn remove(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> AppResult<Json<serde_json::Value>> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::Manage)?;
     let who = actor.clone();
     let base_id = id.clone();
     state
@@ -113,7 +113,7 @@ async fn duplicate(
     Path(id): Path<String>,
     OptionalJson(body): OptionalJson<DuplicateBaseBody>,
 ) -> AppResult<(StatusCode, Json<BaseSchema>)> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::Manage)?;
     let req: DuplicateBase = body.into();
     let out = state
         .db
@@ -168,7 +168,7 @@ async fn list_members(
     actor: Actor,
     Path(id): Path<String>,
 ) -> AppResult<Json<Vec<Member>>> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::Manage)?;
     let out = state
         .db
         .read(move |c| {
@@ -186,7 +186,7 @@ async fn set_member_role(
     Path((id, user_id)): Path<(String, String)>,
     ApiJson(body): ApiJson<UpdateMember>,
 ) -> AppResult<Json<serde_json::Value>> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::Manage)?;
     let role = Role::parse(&body.role)?;
     let who = actor.clone();
     let base_id = id.clone();
@@ -208,7 +208,7 @@ async fn remove_member(
     headers: HeaderMap,
     Path((id, user_id)): Path<(String, String)>,
 ) -> AppResult<Json<serde_json::Value>> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::Manage)?;
     let who = actor.clone();
     let base_id = id.clone();
     state

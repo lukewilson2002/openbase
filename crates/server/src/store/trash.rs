@@ -13,7 +13,7 @@ use rusqlite::types::Value as SqlValue;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Map, Value as Json};
 
-use crate::auth::Actor;
+use crate::auth::{Actor, Capability};
 use crate::engine::write::{self, WriteCtx, WriteOutcome, WriteSource};
 use crate::error::{AppError, AppResult};
 use crate::perm::{self, Role};
@@ -260,9 +260,7 @@ fn base_role_any(conn: &Connection, user_id: &str, base_id: &str) -> AppResult<O
 pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppResult<Target> {
     match kind {
         "workspace" => {
-            if actor.token_scope.is_some() {
-                return Err(AppError::forbidden("API tokens cannot manage workspaces"));
-            }
+            actor.require_capability(Capability::ManageUnscoped)?;
             lookup_text(
                 conn,
                 "SELECT id FROM workspaces WHERE id = ?1",
@@ -278,10 +276,16 @@ pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppR
             }
         }
         "base" => {
-            if actor.token_scope.is_some() {
-                return Err(AppError::forbidden("API tokens cannot restore bases"));
-            }
+            actor.require_capability(Capability::Manage)?;
             lookup_text(conn, "SELECT id FROM bases WHERE id = ?1", id, "base")?;
+            if actor
+                .token_scope
+                .as_ref()
+                .and_then(|s| s.base_ids.as_ref())
+                .is_some_and(|bases| !bases.iter().any(|b| b == id))
+            {
+                return Err(AppError::not_found("base"));
+            }
             match base_role_any(conn, &actor.user_id, id)? {
                 None => Err(AppError::not_found("base")),
                 Some(r) if r < Role::Owner => Err(AppError::forbidden(

@@ -1,5 +1,7 @@
-//! Workspaces and their members. Session-authenticated only: API tokens
-//! never manage workspaces (`perm::require_workspace` rejects them).
+//! Workspaces and their members. Creating, renaming, deleting and managing members is for
+//! signed-in users, or API tokens with the `manage` permission and no base restriction
+//! (`perm::require_workspace`). Listing workspaces works with any token, limited to the bases
+//! the token can reach.
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -9,9 +11,10 @@ use og_core::api::events::BaseEvent;
 use og_core::api::workspaces::{
     CreateWorkspace, Member, UpdateMember, UpdateWorkspace, WorkspaceSummary,
 };
+use rusqlite::Connection;
 
-use crate::api::schema_support::{ok, publish, require_session};
-use crate::auth::Actor;
+use crate::api::schema_support::{ok, publish};
+use crate::auth::{Actor, Capability};
 use crate::error::{AppError, AppResult};
 use crate::extract::ApiJson;
 use crate::perm::{self, Role};
@@ -29,15 +32,43 @@ pub fn router() -> Router<AppState> {
         )
 }
 
+/// The workspaces `actor` can see. A signed-in user sees everything; an API token only the
+/// bases its scope reaches (a base-limited token sees just the workspaces holding them), with
+/// roles capped the way `perm::require_base` caps them (read-only tokens act as Viewer).
+pub fn visible_workspaces(conn: &Connection, actor: &Actor) -> AppResult<Vec<WorkspaceSummary>> {
+    let all = workspaces::list_for_user(conn, &actor.user_id)?;
+    let Some(scope) = &actor.token_scope else {
+        return Ok(all);
+    };
+    let mut out = Vec::new();
+    for mut ws in all {
+        ws.bases.retain_mut(
+            |b| match perm::require_base(conn, actor, &b.id, Role::Viewer) {
+                Ok(role) => {
+                    b.role = role.as_str().to_string();
+                    true
+                }
+                Err(_) => false,
+            },
+        );
+        if !scope.write {
+            ws.role = ws.role.map(|_| Role::Viewer.as_str().to_string());
+        }
+        if scope.base_ids.is_some() && ws.bases.is_empty() {
+            continue;
+        }
+        out.push(ws);
+    }
+    Ok(out)
+}
+
 async fn list(
     State(state): State<AppState>,
     actor: Actor,
 ) -> AppResult<Json<Vec<WorkspaceSummary>>> {
-    require_session(&actor)?;
-    let user_id = actor.user_id;
     let out = state
         .db
-        .read(move |c| workspaces::list_for_user(c, &user_id))
+        .read(move |c| visible_workspaces(c, &actor))
         .await?;
     Ok(Json(out))
 }
@@ -47,7 +78,7 @@ async fn create(
     actor: Actor,
     ApiJson(body): ApiJson<CreateWorkspace>,
 ) -> AppResult<(StatusCode, Json<WorkspaceSummary>)> {
-    require_session(&actor)?;
+    actor.require_capability(Capability::ManageUnscoped)?;
     let out = state
         .db
         .write(move |tx| workspaces::create(tx, &actor.user_id, &body.name, body.icon.as_deref()))

@@ -2,6 +2,12 @@
 
 export type CreateTokenRequest = { name: string, write: boolean, 
 /**
+ * Also allow account-level management a signed-in user can do in the web app: workspaces,
+ * members, invites, base deletion and (for administrators) the admin pages. Requires
+ * `write`. Credentials, sessions and tokens are never reachable with a token.
+ */
+manage: boolean, 
+/**
  * Limit to these bases; None = all bases the user can access.
  */
 base_ids?: Array<string> | null, expires_in_days?: number | null, };

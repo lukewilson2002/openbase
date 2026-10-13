@@ -93,6 +93,10 @@ struct ListParams {
     fields: Option<Vec<String>>,
     sorts: Vec<(String, Direction)>,
     filter_by_formula: Option<String>,
+    /// Case-insensitive substring search over every field (not an Airtable parameter; used by
+    /// the MCP `search_records` tool).
+    search: Option<String>,
+    link_names: bool,
     time_zone: Option<Tz>,
     by_id: bool,
 }
@@ -417,6 +421,7 @@ fn list_in(
             (&s.field_id, dir_code(s.direction)).hash(&mut h);
         }
         p.filter_by_formula.hash(&mut h);
+        p.search.hash(&mut h);
         p.max_records.hash(&mut h);
         p.time_zone.map(|t| t.name()).hash(&mut h);
         h.finish()
@@ -449,6 +454,7 @@ fn list_in(
                     ..Default::default()
                 }),
                 timezone: p.time_zone.map(|t| t.name().to_string()),
+                search: p.search.clone(),
                 ..Default::default()
             };
             let mut entry = query::query_ids(
@@ -500,11 +506,72 @@ fn list_in(
         by_id: p.by_id,
         only: only.as_ref(),
         public_url: &env.public_url,
+        link_names: p.link_names,
     };
     Ok(V1Records {
         records: render(conn, &fields, records, &opts),
         offset,
     })
+}
+
+/// What an in-process caller (the MCP tools) can ask of the list endpoint.
+#[derive(Debug, Default)]
+pub struct ListQuery {
+    pub view: Option<String>,
+    pub fields: Option<Vec<String>>,
+    pub sorts: Vec<(String, Direction)>,
+    pub filter_by_formula: Option<String>,
+    pub search: Option<String>,
+    /// Render linked records as `{id, name}` instead of ids.
+    pub link_names: bool,
+    /// Records per page; `max_records` caps the whole listing.
+    pub page_size: usize,
+    pub max_records: Option<usize>,
+    pub offset: Option<String>,
+}
+
+/// [`list`] without HTTP: the same permission checks, view, `filterByFormula`, paging and
+/// rendering, for the caller `actor`.
+pub async fn list_for(
+    state: &AppState,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    q: ListQuery,
+) -> V1Result<V1Records> {
+    let params = ListParams {
+        page_size: Some(q.page_size.max(1)),
+        max_records: q.max_records,
+        offset: q.offset.filter(|o| !o.is_empty()),
+        view: q.view.filter(|v| !v.is_empty()),
+        fields: q.fields,
+        sorts: q.sorts,
+        filter_by_formula: q.filter_by_formula.filter(|f| !f.trim().is_empty()),
+        search: q.search.filter(|f| !f.trim().is_empty()),
+        link_names: q.link_names,
+        time_zone: None,
+        by_id: false,
+    };
+    list_with(state, actor, base_id, table_ref, params).await
+}
+
+async fn list_with(
+    state: &AppState,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    params: ListParams,
+) -> V1Result<V1Records> {
+    let env = ListEnv {
+        cache: state.query_cache.clone(),
+        versions: state.events.versions().clone(),
+        cursors: state.v1_cursors.clone(),
+        public_url: state.config.public_url.clone(),
+    };
+    state
+        .db
+        .read_as(move |conn| list_in(conn, &env, &actor, &base_id, &table_ref, params))
+        .await
 }
 
 pub async fn list(
@@ -514,28 +581,37 @@ pub async fn list(
     V1Pairs(pairs): V1Pairs,
 ) -> V1Result<AxumJson<V1Records>> {
     let params = ListParams::parse(&pairs)?;
-    let env = ListEnv {
-        cache: state.query_cache.clone(),
-        versions: state.events.versions().clone(),
-        cursors: state.v1_cursors.clone(),
-        public_url: state.config.public_url.clone(),
-    };
-    let out = state
-        .db
-        .read_as(move |conn| list_in(conn, &env, &actor, &base_id, &table_ref, params))
-        .await?;
+    let out = list_with(&state, actor, base_id, table_ref, params).await?;
     Ok(AxumJson(out))
 }
 
-pub async fn get_one(
-    State(state): State<AppState>,
-    V1Auth(actor): V1Auth,
-    Path((base_id, table_ref, record_id)): Path<(String, String, String)>,
-    V1Pairs(pairs): V1Pairs,
-) -> V1Result<AxumJson<V1Record>> {
-    let (tz, by_id) = read_common(&pairs)?;
+/// [`get_one`] without HTTP.
+pub async fn get_for(
+    state: &AppState,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    record_id: String,
+) -> V1Result<V1Record> {
+    get_record(
+        state, actor, base_id, table_ref, record_id, None, false, true,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn get_record(
+    state: &AppState,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    record_id: String,
+    tz: Option<Tz>,
+    by_id: bool,
+    link_names: bool,
+) -> V1Result<V1Record> {
     let public_url = state.config.public_url.clone();
-    let record = state
+    state
         .db
         .read_as(move |conn| {
             let (table, fields) = resolve_table(conn, &actor, &base_id, &table_ref, Role::Viewer)?;
@@ -545,12 +621,26 @@ pub async fn get_one(
                 by_id,
                 only: None,
                 public_url: &public_url,
+                link_names,
             };
             render(conn, &fields, found, &opts)
                 .pop()
                 .ok_or_else(|| V1Error::not_found("Record"))
         })
-        .await?;
+        .await
+}
+
+pub async fn get_one(
+    State(state): State<AppState>,
+    V1Auth(actor): V1Auth,
+    Path((base_id, table_ref, record_id)): Path<(String, String, String)>,
+    V1Pairs(pairs): V1Pairs,
+) -> V1Result<AxumJson<V1Record>> {
+    let (tz, by_id) = read_common(&pairs)?;
+    let record = get_record(
+        &state, actor, base_id, table_ref, record_id, tz, by_id, false,
+    )
+    .await?;
     Ok(AxumJson(record))
 }
 
@@ -628,6 +718,7 @@ fn render_after(
     tz: Tz,
     by_id: bool,
     public_url: &str,
+    link_names: bool,
 ) -> V1Result<Vec<V1Record>> {
     let fields = schema::table_fields(tx, table_id)?;
     let records = record_store::load_dtos(tx, table_id, ids, tz)?;
@@ -635,6 +726,7 @@ fn render_after(
         by_id,
         only: None,
         public_url,
+        link_names,
     };
     Ok(render(tx, &fields, records, &opts))
 }
@@ -655,6 +747,8 @@ struct Mode {
     by_id: bool,
     /// `PUT`: clear the editable fields that are not given.
     replace: bool,
+    /// Render linked records as `{id, name}` in the answer (MCP tools).
+    link_names: bool,
 }
 
 fn create_in(
@@ -686,6 +780,7 @@ fn create_in(
         ctx.timezone,
         mode.by_id,
         &target.public_url,
+        mode.link_names,
     )?;
     Ok((outcome, rendered))
 }
@@ -714,19 +809,49 @@ pub async fn create(
     if batch {
         check_batch(new.len(), "create")?;
     }
+    let mut rendered = create_records(
+        &state,
+        &headers,
+        actor,
+        base_id,
+        table_ref,
+        new,
+        body.typecast,
+        body.return_by_id,
+        false,
+    )
+    .await?;
+    Ok(AxumJson(records_body(batch, &mut rendered)))
+}
+
+/// Create records (`new` are `fields` objects keyed by field name or id) and publish the
+/// change; the shared core of the create endpoint and the MCP `create_records` tool.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_records(
+    state: &AppState,
+    headers: &HeaderMap,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    new: Vec<Map<String, Json>>,
+    typecast: bool,
+    by_id: bool,
+    link_names: bool,
+) -> V1Result<Vec<V1Record>> {
     let mode = Mode {
-        typecast: body.typecast,
-        by_id: body.return_by_id,
+        typecast,
+        by_id,
         replace: false,
+        link_names,
     };
     let who = actor.clone();
-    let t = target(&state, actor, base_id, table_ref);
-    let (outcome, mut rendered) = state
+    let t = target(state, actor, base_id, table_ref);
+    let (outcome, rendered) = state
         .db
         .write_as(move |tx| create_in(tx, &t, new, mode))
         .await?;
-    publish(&state, &headers, &who, &outcome);
-    Ok(AxumJson(records_body(batch, &mut rendered)))
+    publish(state, headers, &who, &outcome);
+    Ok(rendered)
 }
 
 /// `{records: [...]}` for batches, the bare record for single-record calls.
@@ -779,27 +904,49 @@ fn update_in(
         ctx.timezone,
         mode.by_id,
         &target.public_url,
+        mode.link_names,
     )?;
     Ok((outcome, rendered))
 }
 
-/// Run an update and answer with the records (a list for batches, the bare
-/// record otherwise).
+/// Update records (`updates` are `(record id, fields)`); the shared core of the update
+/// endpoints and the MCP `update_records` tool.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_records(
+    state: &AppState,
+    headers: &HeaderMap,
+    actor: Actor,
+    base_id: String,
+    table_ref: String,
+    updates: Vec<(String, Map<String, Json>)>,
+    typecast: bool,
+    replace: bool,
+    link_names: bool,
+) -> V1Result<Vec<V1Record>> {
+    let mode = Mode {
+        typecast,
+        by_id: false,
+        replace,
+        link_names,
+    };
+    let t = target(state, actor, base_id, table_ref);
+    run_update(state, headers, t, updates, mode).await
+}
+
 async fn run_update(
-    state: AppState,
-    headers: HeaderMap,
+    state: &AppState,
+    headers: &HeaderMap,
     target: Target,
     updates: Vec<(String, Map<String, Json>)>,
     mode: Mode,
-    batch: bool,
-) -> V1Result<AxumJson<Json>> {
+) -> V1Result<Vec<V1Record>> {
     let who = target.actor.clone();
-    let (outcome, mut rendered) = state
+    let (outcome, rendered) = state
         .db
         .write_as(move |tx| update_in(tx, &target, updates, mode))
         .await?;
-    publish(&state, &headers, &who, &outcome);
-    Ok(AxumJson(records_body(batch, &mut rendered)))
+    publish(state, headers, &who, &outcome);
+    Ok(rendered)
 }
 
 async fn update_batch(
@@ -829,8 +976,10 @@ async fn update_batch(
         typecast: body.typecast,
         by_id: body.return_by_id,
         replace,
+        link_names: false,
     };
-    run_update(state, headers, target, updates, mode, true).await
+    let mut rendered = run_update(&state, &headers, target, updates, mode).await?;
+    Ok(AxumJson(records_body(true, &mut rendered)))
 }
 
 async fn update_one(
@@ -845,9 +994,11 @@ async fn update_one(
         typecast: body.typecast,
         by_id: body.return_by_id,
         replace,
+        link_names: false,
     };
     let updates = vec![(record_id, body.fields)];
-    run_update(state, headers, target, updates, mode, false).await
+    let mut rendered = run_update(&state, &headers, target, updates, mode).await?;
+    Ok(AxumJson(records_body(false, &mut rendered)))
 }
 
 fn target(state: &AppState, actor: Actor, base_id: String, table_ref: String) -> Target {
@@ -905,10 +1056,12 @@ pub async fn put_one(
     update_one(state, t, headers, record_id, body, true).await
 }
 
-async fn delete_ids(
-    state: AppState,
+/// Delete (to the trash) the records `ids`; the shared core of the delete endpoints and the MCP
+/// `delete_records` tool.
+pub async fn delete_ids(
+    state: &AppState,
     actor: Actor,
-    headers: HeaderMap,
+    headers: &HeaderMap,
     base_id: String,
     table_ref: String,
     ids: Vec<String>,
@@ -932,7 +1085,7 @@ async fn delete_ids(
             Ok::<_, V1Error>((outcome, deleted))
         })
         .await?;
-    publish(&state, &headers, &who, &outcome);
+    publish(state, headers, &who, &outcome);
     Ok(deleted)
 }
 
@@ -949,7 +1102,7 @@ pub async fn delete_batch(
         .map(|(_, v)| v)
         .collect();
     check_batch(ids.len(), "delete")?;
-    let records = delete_ids(state, actor, headers, base_id, table_ref, ids).await?;
+    let records = delete_ids(&state, actor, &headers, base_id, table_ref, ids).await?;
     Ok(AxumJson(V1DeletedRecords { records }))
 }
 
@@ -960,7 +1113,7 @@ pub async fn delete_one(
     Path((base_id, table_ref, record_id)): Path<(String, String, String)>,
 ) -> V1Result<AxumJson<V1DeletedRecord>> {
     let mut records =
-        delete_ids(state, actor, headers, base_id, table_ref, vec![record_id]).await?;
+        delete_ids(&state, actor, &headers, base_id, table_ref, vec![record_id]).await?;
     records
         .pop()
         .map(AxumJson)

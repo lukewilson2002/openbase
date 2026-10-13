@@ -1,5 +1,5 @@
 //! `tokens` API: the caller's personal access tokens (session only: a token
-//! can never mint or delete tokens), plus `whoami`, which also accepts tokens
+//! can never list, mint or delete tokens), plus `whoami`, which also accepts tokens
 //! so integrations can check what their token can do.
 
 use axum::extract::{Path, State};
@@ -9,7 +9,7 @@ use axum::{Json, Router};
 use og_core::api::auth::{CreateTokenRequest, CreatedToken, TokenInfo, WhoAmI};
 use serde_json::json;
 
-use crate::auth::{Actor, ClientInfo};
+use crate::auth::{Actor, Capability, ClientInfo};
 use crate::error::AppResult;
 use crate::extract::ApiJson;
 use crate::state::AppState;
@@ -24,7 +24,7 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn list(State(state): State<AppState>, actor: Actor) -> AppResult<Json<Vec<TokenInfo>>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     let list = state
         .db
         .read(move |c| tokens::list(c, &actor.user_id))
@@ -38,7 +38,7 @@ async fn create(
     client: ClientInfo,
     ApiJson(req): ApiJson<CreateTokenRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedToken>)> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     let created = state
         .db
         .write(move |tx| {
@@ -51,6 +51,7 @@ async fn create(
                 Some(json!({
                     "name": created.info.name,
                     "write": created.info.write,
+                    "manage": created.info.manage,
                     "base_ids": created.info.base_ids,
                 })),
                 Some(&client.ip),
@@ -67,7 +68,7 @@ async fn remove(
     client: ClientInfo,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
-    actor.require_session()?;
+    actor.require_capability(Capability::SessionOnly)?;
     state
         .db
         .write(move |tx| {
@@ -86,9 +87,14 @@ async fn remove(
 }
 
 async fn whoami(actor: Actor) -> Json<WhoAmI> {
-    let (via_token, write, base_ids) = match actor.token_scope {
-        Some(scope) => (true, scope.write, scope.base_ids),
-        None => (false, true, None),
+    let (via_token, write, manage, base_ids) = match actor.token_scope {
+        Some(scope) => (
+            true,
+            scope.write,
+            scope.manage && scope.write,
+            scope.base_ids,
+        ),
+        None => (false, true, true, None),
     };
     Json(WhoAmI {
         user_id: actor.user_id,
@@ -96,6 +102,7 @@ async fn whoami(actor: Actor) -> Json<WhoAmI> {
         name: actor.name,
         via_token,
         write,
+        manage,
         base_ids,
     })
 }

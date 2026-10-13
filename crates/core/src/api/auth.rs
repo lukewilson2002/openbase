@@ -146,6 +146,11 @@ pub struct SessionInfo {
 pub struct CreateTokenRequest {
     pub name: String,
     pub write: bool,
+    /// Also allow account-level management a signed-in user can do in the web app: workspaces,
+    /// members, invites, base deletion and (for administrators) the admin pages. Requires
+    /// `write`. Credentials, sessions and tokens are never reachable with a token.
+    #[serde(default)]
+    pub manage: bool,
     /// Limit to these bases; None = all bases the user can access.
     #[serde(default)]
     pub base_ids: Option<Vec<String>>,
@@ -159,6 +164,9 @@ pub struct TokenInfo {
     pub id: String,
     pub name: String,
     pub write: bool,
+    /// May manage workspaces, members, invites and settings (see `CreateTokenRequest::manage`).
+    #[serde(default)]
+    pub manage: bool,
     #[serde(default)]
     pub base_ids: Option<Vec<String>>,
     pub created_at: i64,
@@ -328,6 +336,9 @@ pub struct WhoAmI {
     pub via_token: bool,
     /// Whether writes are allowed (always true for sessions).
     pub write: bool,
+    /// Whether account-level management is allowed (always true for sessions).
+    #[serde(default)]
+    pub manage: bool,
     /// Base restriction of the token; None = all bases the user can access.
     #[serde(default)]
     pub base_ids: Option<Vec<String>>,

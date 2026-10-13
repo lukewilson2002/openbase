@@ -405,13 +405,15 @@ async fn members_can_leave_but_not_remove_others_unless_owner() {
 }
 
 #[tokio::test]
-async fn api_tokens_cannot_manage_workspaces() {
+async fn api_tokens_without_manage_cannot_manage_workspaces() {
     let f = Fixture::new().await;
     let token = token_client(&f.app, &f.owner, true);
+    // Listing is a read every token may do (the table-driven capability test in
+    // tests/token_capabilities.rs covers every manage-gated route).
     f.app
         .get(&token, "/api/workspaces")
         .await
-        .assert_status(403);
+        .assert_status(200);
     f.app
         .post(&token, "/api/workspaces", json!({ "name": "x" }))
         .await
@@ -432,6 +434,7 @@ async fn api_tokens_cannot_manage_workspaces() {
         .get(&token, &format!("/api/workspaces/{}/members", f.ws))
         .await
         .assert_status(403);
+    // Adding a base is content creation: a write token may do it.
     f.app
         .post(
             &token,
@@ -439,7 +442,7 @@ async fn api_tokens_cannot_manage_workspaces() {
             json!({ "name": "x" }),
         )
         .await
-        .assert_status(403);
+        .assert_status(201);
 }
 
 #[tokio::test]

@@ -1,4 +1,5 @@
-//! `admin` API (instance administrators, session only): users, reset links,
+//! `admin` API (instance administrators; signed in, or an API token with the `manage`
+//! permission, whose use is audited): users, reset links,
 //! the audit log and instance stats. Backups live in `api::backups` (ops).
 
 use std::path::{Path as FsPath, PathBuf};
@@ -15,7 +16,7 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::auth::{Actor, ClientInfo, password};
+use crate::auth::{Actor, ClientInfo, admin_guard, password};
 use crate::error::{AppError, AppResult};
 use crate::extract::{ApiJson, ApiQuery};
 use crate::state::AppState;
@@ -34,8 +35,9 @@ pub fn router() -> Router<AppState> {
 async fn list_users(
     State(state): State<AppState>,
     actor: Actor,
+    client: ClientInfo,
 ) -> AppResult<Json<Vec<AdminUser>>> {
-    actor.require_admin()?;
+    admin_guard(&state, &actor, &client, "GET /api/admin/users").await?;
     Ok(Json(state.db.read(users::list_admin).await?))
 }
 
@@ -53,7 +55,7 @@ async fn create_user(
     client: ClientInfo,
     ApiJson(req): ApiJson<AdminCreateUser>,
 ) -> AppResult<(StatusCode, Json<AdminCreatedUser>)> {
-    actor.require_admin()?;
+    admin_guard(&state, &actor, &client, "POST /api/admin/users").await?;
     let email = users::normalize_email(&req.email)?;
     let name = users::validate_name(&req.name)?;
     let hash = match req.password {
@@ -102,7 +104,7 @@ async fn update_user(
     Path(id): Path<String>,
     ApiJson(req): ApiJson<AdminUpdateUser>,
 ) -> AppResult<Json<AdminUser>> {
-    actor.require_admin()?;
+    admin_guard(&state, &actor, &client, "PATCH /api/admin/users/{id}").await?;
     let user = state
         .db
         .write(move |tx| {
@@ -131,7 +133,13 @@ async fn reset_link(
     client: ClientInfo,
     Path(id): Path<String>,
 ) -> AppResult<Json<ResetLink>> {
-    actor.require_admin()?;
+    admin_guard(
+        &state,
+        &actor,
+        &client,
+        "POST /api/admin/users/{id}/reset-link",
+    )
+    .await?;
     let public_url = state.config.public_url.clone();
     let link = state
         .db
@@ -166,9 +174,10 @@ struct AuditQuery {
 async fn audit_log(
     State(state): State<AppState>,
     actor: Actor,
+    client: ClientInfo,
     ApiQuery(q): ApiQuery<AuditQuery>,
 ) -> AppResult<Json<AuditPage>> {
-    actor.require_admin()?;
+    admin_guard(&state, &actor, &client, "GET /api/admin/audit").await?;
     let limit = q.limit.unwrap_or(audit::DEFAULT_PAGE);
     Ok(Json(
         state
@@ -178,8 +187,12 @@ async fn audit_log(
     ))
 }
 
-async fn stats(State(state): State<AppState>, actor: Actor) -> AppResult<Json<InstanceStats>> {
-    actor.require_admin()?;
+async fn stats(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+) -> AppResult<Json<InstanceStats>> {
+    admin_guard(&state, &actor, &client, "GET /api/admin/stats").await?;
     let (users, workspaces, bases, records, database_bytes) = state
         .db
         .read(|c| {

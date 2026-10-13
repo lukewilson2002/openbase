@@ -29,6 +29,8 @@ pub mod actions {
     pub const ADMIN_USER_CREATE: &str = "admin_user_create";
     pub const ADMIN_USER_UPDATE: &str = "admin_user_update";
     pub const ADMIN_RESET_LINK: &str = "admin_reset_link";
+    /// An API token with the `manage` permission called an admin endpoint.
+    pub const ADMIN_TOKEN_USE: &str = "admin_token_use";
 }
 
 /// Largest `detail` JSON stored in one row; bigger ones are replaced by a marker.

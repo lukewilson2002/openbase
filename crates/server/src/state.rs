@@ -23,6 +23,10 @@ pub struct AppState {
     pub query_cache: Arc<QueryCache>,
     /// Snapshots behind the `offset` of the Airtable-compatible list endpoint.
     pub v1_cursors: Arc<crate::v1::cursor::Cursors>,
+    /// The fully assembled router, set once by [`crate::http::router`]. The MCP server runs
+    /// `api_request` calls through it, so an agent's request meets exactly the middleware,
+    /// permission checks and side effects of a browser's.
+    pub app_router: Arc<std::sync::OnceLock<axum::Router>>,
 }
 
 impl AppState {
@@ -42,6 +46,7 @@ impl AppState {
             mailer,
             query_cache: Arc::new(QueryCache::new()),
             v1_cursors: Arc::default(),
+            app_router: Arc::default(),
         })
     }
 }

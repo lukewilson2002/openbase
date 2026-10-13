@@ -42,11 +42,15 @@ pub struct RenderOpts<'a> {
     pub only: Option<&'a HashSet<String>>,
     /// The configured public URL, for absolute attachment URLs.
     pub public_url: &'a str,
+    /// Render linked records as `{id, name}` (the linked record's primary text) instead of
+    /// bare ids. Airtable's shape is ids only; the MCP tools ask for names too.
+    pub link_names: bool,
 }
 
 struct Cx<'a> {
     conn: &'a Connection,
     public_url: &'a str,
+    link_names: bool,
     users: HashMap<String, Option<Json>>,
 }
 
@@ -83,6 +87,7 @@ pub fn render(
     let mut cx = Cx {
         conn,
         public_url: opts.public_url,
+        link_names: opts.link_names,
         users: HashMap::new(),
     };
     records
@@ -198,8 +203,14 @@ fn cell(cx: &mut Cx, field: &Field, v: &Json) -> Option<Json> {
         FieldKind::Link(_) => non_empty_array(
             v.as_array()?
                 .iter()
-                .filter_map(|r| r.get("id").and_then(Json::as_str))
-                .map(|id| json!(id))
+                .filter_map(|r| {
+                    let id = r.get("id").and_then(Json::as_str)?;
+                    Some(if cx.link_names {
+                        json!({ "id": id, "name": r.get("name").and_then(Json::as_str).unwrap_or(id) })
+                    } else {
+                        json!(id)
+                    })
+                })
                 .collect(),
         ),
         FieldKind::User(o) => {

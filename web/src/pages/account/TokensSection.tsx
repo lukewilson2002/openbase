@@ -28,7 +28,7 @@ export function TokensSection() {
   return (
     <Section
       title="Personal access tokens"
-      description="Use tokens to call the REST API from scripts and tools. A token acts as you, limited by the scope you choose."
+      description="Use tokens to call the REST API from scripts and tools, or to connect an AI assistant (see AI assistants). A token acts as you, limited by the scope you choose."
     >
       <div className="mb-4">
         <Button variant="primary" onClick={() => setCreating(true)}>
@@ -50,6 +50,7 @@ export function TokensSection() {
                 <p className="truncate text-[0.8125rem] font-medium">
                   {t.name}
                   <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{t.write ? "Read and write" : "Read only"}</span>
+                  {t.manage && <span className="ml-1 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-danger">Can manage workspaces and members</span>}
                 </p>
                 <p className="text-xs text-muted">
                   Created {formatDate(t.created_at)} - {t.last_used_at ? `last used ${formatDate(t.last_used_at)}` : "never used"}
@@ -110,9 +111,21 @@ export function TokensSection() {
 function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (t: CreatedToken) => void }) {
   const [name, setName] = useState("");
   const [write, setWrite] = useState(false);
+  const [manage, setManage] = useState(false);
   const [expiry, setExpiry] = useState("");
+  const [limitBases, setLimitBases] = useState(false);
+  const [baseIds, setBaseIds] = useState<string[]>([]);
+  // Only needed (and only fetched) when the token is limited to some bases.
+  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, enabled: limitBases });
   const create = useMutation({
-    mutationFn: () => api.tokens.create({ name: name.trim(), write, base_ids: null, expires_in_days: expiry ? Number(expiry) : null }),
+    mutationFn: () =>
+      api.tokens.create({
+        name: name.trim(),
+        write,
+        manage: write && manage,
+        base_ids: limitBases ? baseIds : null,
+        expires_in_days: expiry ? Number(expiry) : null,
+      }),
     onSuccess: onCreated,
   });
   const submit = (e: FormEvent) => {
@@ -126,7 +139,58 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
         <Field label="Name" hint="For example: Zapier, nightly export.">
           {(ctl) => <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required autoFocus />}
         </Field>
-        <Checkbox checked={write} onCheckedChange={setWrite} label="Allow writes (otherwise read only)" />
+        <Checkbox
+          checked={write}
+          onCheckedChange={(v) => {
+            setWrite(v);
+            if (!v) setManage(false);
+          }}
+          label="Allow writes (otherwise read only)"
+        />
+        <div className="flex flex-col gap-1">
+          <Checkbox checked={write && manage} onCheckedChange={setManage} disabled={!write} label="Allow managing workspaces, members and settings" />
+          <p className="pl-6 text-xs text-muted">
+            Lets whoever holds this token do what you can do in the app beyond your data: create, rename and delete workspaces, change who has access, send invites,
+            and use the admin pages if you are an administrator. Only turn this on for tools you fully trust, such as an AI agent that should work for you. Passwords, two-factor
+            settings, sessions and tokens can never be changed with a token.
+          </p>
+        </div>
+        <Field label="Bases">
+          {(ctl) => (
+            <Select
+              {...ctl}
+              value={limitBases ? "some" : "all"}
+              onChange={(e) => {
+                setLimitBases(e.target.value === "some");
+                if (e.target.value !== "some") setBaseIds([]);
+              }}
+            >
+              <option value="all">All bases I can access</option>
+              <option value="some">Only the bases I select</option>
+            </Select>
+          )}
+        </Field>
+        {limitBases && (
+          <div className="flex flex-col gap-1.5" role="group" aria-label="Allowed bases">
+            {workspaces.isPending ? (
+              <Spinner />
+            ) : workspaces.isError ? (
+              <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
+            ) : (
+              workspaces.data.flatMap((w) =>
+                w.bases.map((b) => (
+                  <Checkbox
+                    key={b.id}
+                    checked={baseIds.includes(b.id)}
+                    onCheckedChange={(on) => setBaseIds((cur) => (on ? [...cur, b.id] : cur.filter((x) => x !== b.id)))}
+                    label={`${w.name} / ${b.name}`}
+                  />
+                )),
+              )
+            )}
+            <p className="text-xs text-muted">A token limited to bases cannot manage workspaces, members or the admin pages.</p>
+          </div>
+        )}
         <Field label="Expires">
           {(ctl) => (
             <Select {...ctl} value={expiry} onChange={(e) => setExpiry(e.target.value)}>
@@ -139,7 +203,7 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
         </Field>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={create.isPending} disabled={!name.trim()}>
+          <Button type="submit" variant="primary" loading={create.isPending} disabled={!name.trim() || (limitBases && baseIds.length === 0)}>
             Create token
           </Button>
         </div>

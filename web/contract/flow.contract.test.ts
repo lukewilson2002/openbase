@@ -263,17 +263,17 @@ describe("personal access tokens", () => {
   let secret = "";
 
   it("creates a token (201) and shows its secret once", async () => {
-    const created = parse("CreatedToken", await asAdmin(() => api.tokens.create({ name: "CI", write: false, base_ids: null, expires_in_days: 30 })));
+    const created = parse("CreatedToken", await asAdmin(() => api.tokens.create({ name: "CI", write: false, manage: false, base_ids: null, expires_in_days: 30 })));
     expect(admin.lastStatus).toBe(201);
     expect(created.token).toMatch(/^pat/);
-    expect(created.info).toMatchObject({ name: "CI", write: false });
+    expect(created.info).toMatchObject({ name: "CI", write: false, manage: false });
     expect(created.info.expires_at).toBeGreaterThan(Date.now());
     tokenId = created.info.id;
     secret = created.token;
   });
 
   it("rejects an invalid token request with the error envelope", async () => {
-    const e = await failure(asAdmin(() => api.tokens.create({ name: "   ", write: true, base_ids: null, expires_in_days: null })));
+    const e = await failure(asAdmin(() => api.tokens.create({ name: "   ", write: true, manage: false, base_ids: null, expires_in_days: null })));
     expectError(e, 400, "bad_request");
   });
 
@@ -285,18 +285,33 @@ describe("personal access tokens", () => {
 
   it("identifies the caller with whoami: session and bearer token", async () => {
     const viaSession = parse("WhoAmI", await asAdmin(() => api.tokens.whoami()));
-    expect(viaSession).toMatchObject({ user_id: adminId, email: adminEmail, via_token: false, write: true });
+    expect(viaSession).toMatchObject({ user_id: adminId, email: adminEmail, via_token: false, write: true, manage: true });
     // The anonymous jar has no cookie, so this proves the bearer token alone authenticates.
     const viaToken = parse("WhoAmI", await asAnon(() => api.tokens.whoami(secret)));
-    expect(viaToken).toMatchObject({ user_id: adminId, via_token: true, write: false });
+    expect(viaToken).toMatchObject({ user_id: adminId, via_token: true, write: false, manage: false });
     expect(viaToken.base_ids ?? null).toBeNull();
   });
 
   it("keeps tokens away from session-only endpoints", async () => {
     const bearer = { headers: { Authorization: `Bearer ${secret}` } };
     expectError(await failure(asAnon(() => http.get("/api/tokens", bearer))), 403, "forbidden");
-    expectError(await failure(asAnon(() => http.get("/api/auth/me", bearer))), 403, "forbidden");
+    expectError(await failure(asAnon(() => http.get("/api/auth/sessions", bearer))), 403, "forbidden");
+    // Admin pages need the manage permission, which this read-only token lacks.
     expectError(await failure(asAnon(() => http.get("/api/admin/users", bearer))), 403, "forbidden");
+  });
+
+  it("lets a manage token do account-level work, but still not credentials or tokens", async () => {
+    const created = parse("CreatedToken", await asAdmin(() => api.tokens.create({ name: "Agent", write: true, manage: true, base_ids: null, expires_in_days: null })));
+    expect(created.info).toMatchObject({ write: true, manage: true });
+    const bearer = { headers: { Authorization: `Bearer ${created.token}` } };
+    // Admin pages and workspace management work; both are real endpoints, not mocks.
+    await asAnon(() => http.get("/api/admin/stats", bearer));
+    expect(anon.lastStatus).toBe(200);
+    await asAnon(() => http.get("/api/workspaces", bearer));
+    expect(anon.lastStatus).toBe(200);
+    expectError(await failure(asAnon(() => http.get("/api/tokens", bearer))), 403, "forbidden");
+    expectError(await failure(asAnon(() => http.post("/api/tokens", { name: "child", write: true }, bearer))), 403, "forbidden");
+    await asAdmin(() => api.tokens.revoke(created.info.id));
   });
 
   it("deletes a token (204) and then rejects it", async () => {

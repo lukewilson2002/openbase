@@ -15,6 +15,7 @@ pub mod events;
 pub mod extract;
 pub mod http;
 pub mod ids;
+pub mod mcp;
 pub mod perm;
 pub mod ratelimit;
 pub mod state;

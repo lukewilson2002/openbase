@@ -8,7 +8,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::auth::Actor;
+use crate::auth::{Actor, Capability};
 use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -114,17 +114,49 @@ pub fn require_base(conn: &Connection, actor: &Actor, base_id: &str, min: Role) 
     Ok(role)
 }
 
-/// Same as [`require_base`] for workspace-level actions (no token access:
-/// workspace administration is session-only).
+/// Same as [`require_base`] for workspace-level actions. A signed-in user needs the workspace
+/// role; an API token additionally needs the `manage` permission and no base restriction
+/// ([`Capability::ManageUnscoped`]).
 pub fn require_workspace(
     conn: &Connection,
     actor: &Actor,
     workspace_id: &str,
     min: Role,
 ) -> AppResult<Role> {
-    if actor.token_scope.is_some() {
-        return Err(AppError::forbidden("API tokens cannot manage workspaces"));
+    actor.require_capability(Capability::ManageUnscoped)?;
+    workspace_role_at_least(conn, actor, workspace_id, min)
+}
+
+/// Workspace role check for actions that only create content inside the workspace (adding a
+/// base). Tokens need write access and no base restriction (a base-limited token could not
+/// reach the base it just created) but not the `manage` permission.
+pub fn require_workspace_for_content(
+    conn: &Connection,
+    actor: &Actor,
+    workspace_id: &str,
+    min: Role,
+) -> AppResult<Role> {
+    if let Some(scope) = &actor.token_scope {
+        if !scope.write {
+            return Err(AppError::forbidden(
+                "this API token is read-only; use a token with write access",
+            ));
+        }
+        if scope.base_ids.is_some() {
+            return Err(AppError::forbidden(
+                "an API token limited to specific bases cannot create bases",
+            ));
+        }
     }
+    workspace_role_at_least(conn, actor, workspace_id, min)
+}
+
+fn workspace_role_at_least(
+    conn: &Connection,
+    actor: &Actor,
+    workspace_id: &str,
+    min: Role,
+) -> AppResult<Role> {
     let Some(role) = workspace_role(conn, &actor.user_id, workspace_id)? else {
         return Err(AppError::not_found("workspace"));
     };
