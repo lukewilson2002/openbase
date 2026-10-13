@@ -21,8 +21,10 @@
 //! 1. `GET /oauth/authorize` ([`authorize`]) validates the whole request, stores it server-side
 //!    and sends the browser to the consent page `/oauth/consent?request=<id>` of the web app.
 //!    Only the opaque id travels through the browser, so the client cannot change parameters
-//!    between the steps. The consent page requires a signed-in session (the login redirect and
-//!    the way back are the web app's own).
+//!    between the steps. Nothing is stored (and no client metadata document is fetched) for a
+//!    visitor without a session: they are sent to `/login?next=<this request>` and the web app
+//!    loads the same URL again after sign-in. The consent page requires a signed-in session too
+//!    (the login redirect and the way back are the web app's own).
 //! 2. `GET /api/oauth/requests/{id}` and `POST /api/oauth/requests/{id}/decision`
 //!    ([`crate::api::oauth`]) show the request and take the user's decision: session only, and
 //!    CSRF-protected like every other state-changing API call. Approval stores a single-use,
