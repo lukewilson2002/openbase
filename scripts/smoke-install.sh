@@ -100,7 +100,7 @@ grep -q 'schema version' "$TMP/migrate1.txt" || die "migrate printed no schema v
 ok "database created"
 
 step "create-admin"
-OPENBASE_ADMIN_PASSWORD=$PASS og "$A" create-admin --email admin@example.com --name "Admin"
+OPENBASE_ADMIN_PASSWORD=$PASS ob "$A" create-admin --email admin@example.com --name "Admin"
 
 step "serve"
 start_server "$A"
@@ -142,7 +142,7 @@ step "healthcheck"
 ob "$A" healthcheck && ok "healthcheck exit 0 while running"
 stop_server
 ok "server stopped on SIGTERM"
-if og "$A" healthcheck 2>"$TMP/hc.err"; then die "healthcheck passed with no server"; else ok "healthcheck exit 1 with no server ($(cat "$TMP/hc.err"))"; fi
+if ob "$A" healthcheck 2>"$TMP/hc.err"; then die "healthcheck passed with no server"; else ok "healthcheck exit 1 with no server ($(cat "$TMP/hc.err"))"; fi
 
 step "restore into an empty directory and start it there"
 ob "$B" restore "$ARCHIVE" | tee "$TMP/restore.txt"
@@ -155,7 +155,7 @@ BASE_B=$(api GET /api/workspaces | jq -r '.. | objects | select(.name? == "Order
 stop_server
 
 step "reset-password"
-OPENBASE_NEW_PASSWORD=$PASS2 og "$B" reset-password --email admin@example.com
+OPENBASE_NEW_PASSWORD=$PASS2 ob "$B" reset-password --email admin@example.com
 start_server "$B"
 rm -f "$JAR"
 if curl -fsS -X POST -H 'X-OpenBase-CSRF: 1' -H 'Content-Type: application/json' \

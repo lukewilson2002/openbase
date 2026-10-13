@@ -26,7 +26,7 @@ import {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo } from "../adapter";
-import { isOgCell, toGridCell, withPending, type OgCell } from "./cells";
+import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
 import { headerIcons } from "./icons";
 import { mixColors, paletteColor } from "@/lib/cells/palette";
 import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
@@ -156,9 +156,9 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       const [col, row] = location;
       if (value.kind === GridCellKind.Boolean) {
         edits.push({ col, row, json: value.data === true ? true : null });
-      } else if (value.kind === GridCellKind.Custom && isOgCell(value)) {
+      } else if (value.kind === GridCellKind.Custom && isObCell(value)) {
         const data = value.data;
-        if (data.og !== "cell") continue;
+        if (data.ob !== "cell") continue;
         if (data.pending) edits.push({ col, row, ...data.pending });
         else edits.push({ col, row, json: data.model.value });
       }
@@ -182,11 +182,11 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     return text.map((row) => row.map((t): GridCell => ({ kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: t, displayData: t, copyData: t })));
   }, []);
 
-  const OgEditor = useMemo<ProvideEditorComponent<OgCell>>(
+  const ObEditor = useMemo<ProvideEditorComponent<ObCell>>(
     () =>
-      function OgEditorBridge({ value, onChange, onFinishedEditing, initialValue, target }) {
+      function ObEditorBridge({ value, onChange, onFinishedEditing, initialValue, target }) {
         const data = value.data;
-        if (data.og !== "cell") return null;
+        if (data.ob !== "cell") return null;
         return (
           <>
             {pr.current.renderEditor({
@@ -205,11 +205,11 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
 
   const provideEditor = useCallback(
     (cell: GridCell): ProvideEditorCallbackResult<GridCell> => {
-      if (!isOgCell(cell) || cell.data.og !== "cell" || !pr.current.canEdit) return undefined;
-      // The editor component is typed for OgCell; Glide hands it exactly those cells.
-      return { editor: OgEditor as unknown as ProvideEditorComponent<GridCell>, disablePadding: true, disableStyling: true };
+      if (!isObCell(cell) || cell.data.ob !== "cell" || !pr.current.canEdit) return undefined;
+      // The editor component is typed for ObCell; Glide hands it exactly those cells.
+      return { editor: ObEditor as unknown as ProvideEditorComponent<GridCell>, disablePadding: true, disableStyling: true };
     },
-    [OgEditor],
+    [ObEditor],
   );
 
   const theme = props.dark ? DARK_THEME : LIGHT_THEME;

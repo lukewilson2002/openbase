@@ -3,27 +3,27 @@
  * `CellModel` maps onto Glide's `GridCell` union; cells are cached per model object so
  * `getCellContent` stays O(1) and allocation-free after the first draw.
  *
- * `any` is not used here: custom cells carry a typed payload (`OgData`) behind Glide's
+ * `any` is not used here: custom cells carry a typed payload (`ObData`) behind Glide's
  * `CustomCell<T>` generic.
  */
 import { GridCellKind, type BooleanCell, type CustomCell, type GridCell, type LoadingCell, type TextCell } from "@glideapps/glide-data-grid";
 import type { CellModel, RecordCellModel } from "../adapter";
 
 /** Payload of every custom cell the grid draws. */
-export type OgData =
-  | { og: "cell"; model: RecordCellModel; pending?: { json?: unknown; text?: string } }
-  | { og: "group"; model: Extract<CellModel, { kind: "group" }> }
-  | { og: "summary"; model: Extract<CellModel, { kind: "summary" }> };
+export type ObData =
+  | { ob: "cell"; model: RecordCellModel; pending?: { json?: unknown; text?: string } }
+  | { ob: "group"; model: Extract<CellModel, { kind: "group" }> }
+  | { ob: "summary"; model: Extract<CellModel, { kind: "summary" }> };
 
-export type OgCell = CustomCell<OgData>;
+export type ObCell = CustomCell<ObData>;
 
 const LOADING: LoadingCell = { kind: GridCellKind.Loading, allowOverlay: false };
 const BLANK: TextCell = { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "" };
 
 const cache = new WeakMap<CellModel, GridCell>();
 
-export function isOgCell(cell: GridCell): cell is OgCell {
-  return cell.kind === GridCellKind.Custom && typeof (cell.data as Partial<OgData> | undefined)?.og === "string";
+export function isObCell(cell: GridCell): cell is ObCell {
+  return cell.kind === GridCellKind.Custom && typeof (cell.data as Partial<ObData> | undefined)?.ob === "string";
 }
 
 function recordCell(m: RecordCellModel): GridCell {
@@ -37,12 +37,12 @@ function recordCell(m: RecordCellModel): GridCell {
     };
     return c;
   }
-  const cell: OgCell = {
+  const cell: ObCell = {
     kind: GridCellKind.Custom,
     allowOverlay: !m.readOnly,
     copyData: m.display,
     readonly: m.readOnly,
-    data: { og: "cell", model: m },
+    data: { ob: "cell", model: m },
   };
   return cell;
 }
@@ -64,12 +64,12 @@ export function toGridCell(model: CellModel): GridCell {
       cell = BLANK;
       break;
     case "group": {
-      const g: OgCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: model.label, readonly: true, data: { og: "group", model } };
+      const g: ObCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: model.label, readonly: true, data: { ob: "group", model } };
       cell = g;
       break;
     }
     case "summary": {
-      const s: OgCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: model.text, readonly: true, data: { og: "summary", model } };
+      const s: ObCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: model.text, readonly: true, data: { ob: "summary", model } };
       cell = s;
       break;
     }
@@ -82,8 +82,8 @@ export function toGridCell(model: CellModel): GridCell {
 }
 
 /** A copy of an edited custom cell carrying the pending value. */
-export function withPending(cell: OgCell, pending: { json?: unknown; text?: string }): OgCell {
+export function withPending(cell: ObCell, pending: { json?: unknown; text?: string }): ObCell {
   const data = cell.data;
-  if (data.og !== "cell") return cell;
+  if (data.ob !== "cell") return cell;
   return { ...cell, data: { ...data, pending } };
 }
