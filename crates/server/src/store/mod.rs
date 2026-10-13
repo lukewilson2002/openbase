@@ -4,6 +4,6 @@
 pub mod attachments;
 pub mod audit;
 pub mod invites;
+pub mod notifications;
 pub mod tokens;
 pub mod users;
-pub mod notifications;
