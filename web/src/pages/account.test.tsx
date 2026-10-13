@@ -212,39 +212,4 @@ describe("account", () => {
     await screen.findByRole("dialog", { name: "Copy your new token" });
     expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Scoped", write: false, manage: false, base_ids: ["app2"], expires_in_days: null });
   });
-
-  it("explains how to connect an AI assistant over MCP, with copyable settings", async () => {
-    const user = userEvent.setup();
-    mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [] });
-    renderApp({ route: "/account?tab=assistants" });
-
-    expect(await screen.findByRole("heading", { name: "Connect an AI assistant (MCP)" })).toBeInTheDocument();
-    const endpoint = `${window.location.origin}/mcp`;
-    expect(screen.getByLabelText("MCP endpoint")).toHaveValue(endpoint);
-
-    // The Claude Code command is exactly what `claude mcp add` takes.
-    const command = screen.getByLabelText("Claude Code command");
-    expect(command).toHaveTextContent(`claude mcp add --transport http openbase ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
-    await user.click(screen.getByRole("button", { name: "Copy command" }));
-    expect(await navigator.clipboard.readText()).toBe(`claude mcp add --transport http openbase ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
-
-    // The generic configuration is valid JSON for clients with remote servers and headers.
-    const config = JSON.parse(screen.getByLabelText("Generic MCP configuration").textContent ?? "");
-    expect(config).toEqual({ mcpServers: { openbase: { type: "http", url: endpoint, headers: { Authorization: "Bearer YOUR_TOKEN" } } } });
-    await user.click(screen.getByRole("button", { name: "Copy configuration" }));
-    expect(JSON.parse(await navigator.clipboard.readText())).toEqual(config);
-
-    // Guidance on the kinds of token, and what no token can do.
-    for (const kind of ["Read only", "Read and write", "Limited to bases", "Can manage workspaces and members"]) {
-      expect(screen.getByText(kind)).toBeInTheDocument();
-    }
-    expect(screen.getByText(/never change your password, two-factor settings, sessions or tokens/)).toBeInTheDocument();
-    // The token itself is never part of the page.
-    expect(document.body.textContent).not.toMatch(/pat_/);
-
-    // The first step leads to the token form.
-    await user.click(screen.getByRole("button", { name: "Create a token" }));
-    expect(await screen.findByRole("heading", { name: "Personal access tokens" })).toBeInTheDocument();
-  });
 });

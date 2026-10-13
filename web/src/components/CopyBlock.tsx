@@ -12,6 +12,7 @@ export function CopyBlock({ value, label, copyLabel = "Copy" }: { value: string;
         <span className="text-xs font-medium text-muted">{label}</span>
         <Button
           size="sm"
+          aria-label={copied ? "Copied" : copyLabel}
           onClick={() => {
             void copyToClipboard(value).then((ok) => {
               setCopied(ok);

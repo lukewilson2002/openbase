@@ -192,7 +192,7 @@ function Consent({ request }: { request: ConsentRequest }) {
           Approve
         </Button>
       </div>
-      <p className="mt-3 text-xs text-muted">You can disconnect the app at any time under Account, API tokens, Connected apps.</p>
+      <p className="mt-3 text-xs text-muted">You can disconnect the app at any time under Account, AI assistants, Connected apps.</p>
     </Shell>
   );
 }

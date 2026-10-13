@@ -12,7 +12,7 @@ import { expect, test } from "./fixtures";
  *   - the browser is sent to the loopback listener, which captures the code; exchange it with PKCE;
  *   - call /mcp: tools/list shows the tools of a write grant, a write tool changes data, a manage
  *     tool is refused with 403 insufficient_scope, the REST API refuses the token;
- *   - find the app under Account -> API tokens -> Connected apps, revoke it there, and see the
+ *   - find the app under Account -> AI assistants -> Connected apps, revoke it there, and see the
  *     access token and the refresh token rejected.
  * A second test refuses an app on the consent page. Runs only with OPENBASE_E2E=1.
  */
@@ -161,7 +161,7 @@ test("an MCP client connects through the browser, works with its token, and is r
     expect((await request.get("/api/auth/me", { headers: { authorization: `Bearer ${access}` }, failOnStatusCode: false })).status()).toBe(401);
 
     // The app shows up under Connected apps, with what it was given.
-    await page.goto("/account?tab=tokens");
+    await page.goto("/account?tab=assistants");
     const apps = page.getByRole("list", { name: "Connected apps" });
     const row = apps.getByRole("listitem").filter({ hasText: name });
     await expect(row).toBeVisible();
@@ -207,7 +207,7 @@ test("refusing an app sends it an access_denied error and shares nothing", async
     expect(callback.url.searchParams.has("code")).toBe(false);
     // Let the listener's page finish loading before leaving it.
     await expect(page.getByText("You can close this tab and go back to the app.")).toBeVisible();
-    await page.goto("/account?tab=tokens");
+    await page.goto("/account?tab=assistants");
     await expect(page.getByText("No connected apps")).toBeVisible();
   } finally {
     listener.server.close();

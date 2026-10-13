@@ -4,7 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useMe } from "@/auth/useAuth";
 import { AssistantsSection } from "./AssistantsSection";
-import { ConnectedAppsSection } from "./ConnectedAppsSection";
 import { ProfileSection } from "./ProfileSection";
 import { SecuritySection } from "./SecuritySection";
 import { SessionsSection } from "./SessionsSection";
@@ -41,10 +40,9 @@ export function AccountPage() {
         </TabsContent>
         <TabsContent value="tokens" className="flex flex-col gap-6">
           <TokensSection />
-          <ConnectedAppsSection />
         </TabsContent>
         <TabsContent value="assistants">
-          <AssistantsSection onOpenTokens={() => setParams({ tab: "tokens" }, { replace: true })} />
+          <AssistantsSection />
         </TabsContent>
       </Tabs>
     </AppPage>

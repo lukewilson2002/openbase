@@ -7,13 +7,12 @@ import { keys } from "@/api/keys";
 import type { GrantInfo } from "@/api/types";
 import { Notice, Section } from "@/components/layouts";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDate } from "@/lib/format";
 import { ACCESS_LABEL, accessOf } from "@/lib/oauthAccess";
 
-/** Apps connected through OAuth (Claude, ChatGPT, ...), each with its access and a Revoke button. */
+/** Apps connected through OAuth (Claude, ChatGPT, ...), each with its access and a Revoke button. Shown on the AI assistants tab. */
 export function ConnectedAppsSection() {
   const qc = useQueryClient();
   const grants = useQuery({ queryKey: keys.oauthGrants, queryFn: api.oauth.grants });
@@ -22,14 +21,14 @@ export function ConnectedAppsSection() {
   return (
     <Section
       title="Connected apps"
-      description="Apps you signed in to OpenBase from, such as Claude or ChatGPT. Each acts as you with the access you approved. Revoke one to cut it off at once."
+      description="Apps you approved. Revoke one to cut it off at once."
     >
       {grants.isPending ? (
         <Spinner />
       ) : grants.isError ? (
         <Notice tone="error">{errorMessage(grants.error)}</Notice>
       ) : grants.data.length === 0 ? (
-        <EmptyState icon={<Plug />} title="No connected apps" description="When you add OpenBase as a connector in an AI assistant and approve it, it shows up here." />
+        <p className="text-[0.8125rem] text-muted">No connected apps yet.</p>
       ) : (
         <ul className="divide-y divide-line rounded-md border border-line" aria-label="Connected apps">
           {grants.data.map((g) => (

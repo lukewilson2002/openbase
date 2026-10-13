@@ -101,9 +101,8 @@ edit records, run formulas, set up automations and public forms, invite people,
 import and export CSV, upload files, read history and notifications, and (for
 administrators) manage users, email settings and backups. Workspaces, bases and
 tables can be given icons. About 70 tools, plus a generic request tool for anything
-else. **Account -> AI assistants** shows the address and copy-ready settings for
-Claude Code and other clients, and **Account -> API tokens -> Connected apps** lists
-the apps you signed in with, each revocable. Passwords (including the SMTP password and
+else. **Account -> AI assistants** shows the address and short steps for Claude, ChatGPT and
+other clients, and lists the connected apps you signed in with, each revocable. Passwords (including the SMTP password and
 password-reset links), two-factor settings, sessions and API tokens stay out of
 reach of any token. See [docs/mcp.md](docs/mcp.md).
 

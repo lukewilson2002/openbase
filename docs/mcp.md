@@ -23,15 +23,17 @@ yourself if you would rather describe the work to an agent.
   set the SMTP password.
 
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
-[Connect with OAuth](#connect-with-oauth-sign-in) · [Choose a token](#choose-a-token) · [How an agent works here](#how-an-agent-works-here) ·
+[Connect with OAuth](#connect-with-oauth-sign-in) · [Choose a token](#choose-a-token) · [How access works](#how-access-works) · [How an agent works here](#how-an-agent-works-here) ·
 [Tools](#tools) · [Reaching everything: api_reference and api_request](#reaching-everything-api_reference-and-api_request) ·
 [Scope model](#scope-model) · [Security model](#security-model) · [Limits and settings](#limits-and-settings) ·
 [Protocol](#protocol) · [What has been tested](#what-has-been-tested) · [Troubleshooting](#troubleshooting)
 
 ## Quick start
 
-Open **Account → AI assistants** in OpenBase for your endpoint address and copy-ready
-settings, then pick one way in:
+Open **Account → AI assistants** in OpenBase. It shows your MCP address (built from
+`OPENBASE_PUBLIC_URL`) and short, collapsible steps for Claude (Claude Desktop and
+claude.ai first, then Claude Code), ChatGPT and other clients, each with copy buttons.
+The same steps, in short, pick one way in:
 
 **Sign in (Claude, ChatGPT, anything with a connector screen).** Add the server address
 `https://base.example.com/mcp` as a custom connector. Your browser opens OpenBase, you
@@ -127,7 +129,7 @@ apply afterwards: the grant becomes the same scope (`write`, `manage`, bases), s
 rules in [Scope model](#scope-model) hold unchanged, credentials, sessions and tokens
 stay out of reach, and what you can do in a base limits what the app can do.
 
-**Managing connections.** **Account → API tokens → Connected apps** lists every app with
+**Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, bases, where it connects from, when it connected and when it was last used,
 with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing your password disconnects all your apps.
@@ -214,6 +216,22 @@ duplicating bases, the admin pages) are refused for it, and so are creating base
 and workspaces.
 
 The permission table, route by route, is in [api.md](api.md#token-permissions).
+
+## How access works
+
+- An assistant acts **as you**, never as someone else, and never with more than your
+  own role allows in each base.
+- You choose its access when you approve it (OAuth) or create the token: read only,
+  read and edit, or full control, on all bases or only the ones you tick.
+- Its changes show in the record history under your name.
+- Passwords, two-factor settings, sessions and API tokens stay out of its reach,
+  whatever access it has.
+- Revoke an app under **Account → AI assistants → Connected apps**, or a token under
+  **Account → API tokens**; it stops working at once. Changing your password
+  disconnects everything.
+
+The details are in [Choose a token](#choose-a-token), [Scope model](#scope-model) and
+[Security model](#security-model).
 
 ## How an agent works here
 
@@ -614,6 +632,12 @@ tool above its access. `resource_metadata` is left out when OAuth is not availab
   captures the code, `tools/list` and a write tool work, the app is revoked from the
   account page and its tokens stop working. Component tests cover the approval page and
   the connected-apps lists.
+- The **Account → AI assistants** page: component tests (`web/src/pages/assistants.test.tsx`)
+  cover the sections, Claude open by default, the public-address warning, the copied
+  text and the collapsed token variants; `web/e2e/assistants.spec.ts` checks it in Chrome
+  against the real server, including the real clipboard, keyboard use and 375 px width in
+  both themes. The marks and wording follow the vendors' documentation; the steps were not
+  followed in the real apps.
 - Not tested: signing in from **claude.ai**, **Claude Desktop** or **ChatGPT** themselves
   (they need a public HTTPS server and an account), and the interactive browser step of
   `claude` (`/mcp` → Authenticate); `claude mcp list` was checked up to the point where it

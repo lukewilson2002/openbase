@@ -6,6 +6,7 @@ import { ADMIN, USER, apiError, mockApi, renderApp } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
+const SETUP = { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org" };
 const NOW = 1_800_000_000_000;
 const GRANTS: GrantInfo[] = [
   {
@@ -57,8 +58,8 @@ const GRANTS: GrantInfo[] = [
 
 describe("account: connected apps", () => {
   it("lists each app with its access, bases and where it connects from", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [], "GET /api/oauth/grants": GRANTS });
-    renderApp({ route: "/account?tab=tokens" });
+    mockApi({ "GET /api/auth/me": USER, "GET /api/setup": SETUP, "GET /api/tokens": [], "GET /api/oauth/grants": GRANTS });
+    renderApp({ route: "/account?tab=assistants" });
     const list = await screen.findByRole("list", { name: "Connected apps" });
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(3);
@@ -79,9 +80,9 @@ describe("account: connected apps", () => {
   });
 
   it("shows an empty state when nothing is connected", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [], "GET /api/oauth/grants": [] });
-    renderApp({ route: "/account?tab=tokens" });
-    expect(await screen.findByText("No connected apps")).toBeInTheDocument();
+    mockApi({ "GET /api/auth/me": USER, "GET /api/setup": SETUP, "GET /api/tokens": [], "GET /api/oauth/grants": [] });
+    renderApp({ route: "/account?tab=assistants" });
+    expect(await screen.findByText("No connected apps yet.")).toBeInTheDocument();
   });
 
   it("revokes an app after confirmation and refreshes the list", async () => {
@@ -89,6 +90,7 @@ describe("account: connected apps", () => {
     let grants = GRANTS;
     const api = mockApi({
       "GET /api/auth/me": USER,
+      "GET /api/setup": SETUP,
       "GET /api/tokens": [],
       "GET /api/oauth/grants": () => grants,
       "DELETE /api/oauth/grants/grt2": () => {
@@ -96,7 +98,7 @@ describe("account: connected apps", () => {
         return { status: 204 };
       },
     });
-    renderApp({ route: "/account?tab=tokens" });
+    renderApp({ route: "/account?tab=assistants" });
     await user.click(await screen.findByRole("button", { name: "Revoke Claude Code" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent("Revoke Claude Code?");
@@ -105,22 +107,22 @@ describe("account: connected apps", () => {
     await user.click(within(dialog).getByRole("button", { name: "Revoke access" }));
     await waitFor(() => expect(api.callsTo("DELETE /api/oauth/grants/grt2")).toHaveLength(1));
     expect(api.callsTo("DELETE /api/oauth/grants/grt2")[0]?.headers.get("X-OpenBase-CSRF")).toBe("1");
-    await waitFor(() => expect(screen.queryByText("Claude Code")).not.toBeInTheDocument());
-    expect(screen.getByText("Claude")).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Connected apps" })).queryByText("Claude Code")).not.toBeInTheDocument());
+    expect(within(screen.getByRole("list", { name: "Connected apps" })).getByText("Claude")).toBeInTheDocument();
   });
 
   it("does not revoke when the confirmation is cancelled", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [], "GET /api/oauth/grants": GRANTS });
-    renderApp({ route: "/account?tab=tokens" });
+    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/setup": SETUP, "GET /api/tokens": [], "GET /api/oauth/grants": GRANTS });
+    renderApp({ route: "/account?tab=assistants" });
     await user.click(await screen.findByRole("button", { name: "Revoke Claude" }));
     await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancel" }));
     expect(api.calls.filter((c) => c.method === "DELETE")).toHaveLength(0);
   });
 
   it("shows the server's error when the list cannot be loaded", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [], "GET /api/oauth/grants": apiError(500, "internal", "Something went wrong.") });
-    renderApp({ route: "/account?tab=tokens" });
+    mockApi({ "GET /api/auth/me": USER, "GET /api/setup": SETUP, "GET /api/tokens": [], "GET /api/oauth/grants": apiError(500, "internal", "Something went wrong.") });
+    renderApp({ route: "/account?tab=assistants" });
     expect(await screen.findByText("Something went wrong.")).toBeInTheDocument();
   });
 });
