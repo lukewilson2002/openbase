@@ -153,11 +153,14 @@ fn replace(a: &[Value], _: &Evaluator) -> R {
     text(out)
 }
 
-fn rept(a: &[Value], _: &Evaluator) -> R {
+fn rept(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
     let n = count_arg(a, 1)?;
     match s.len().checked_mul(n) {
-        Some(total) if total <= MAX_TEXT_BYTES => Ok(Value::Text(s.repeat(n))),
+        Some(total) if total <= MAX_TEXT_BYTES => {
+            ev.charge(total as u64)?;
+            Ok(Value::Text(s.repeat(n)))
+        }
         _ => Err(too_long()),
     }
 }

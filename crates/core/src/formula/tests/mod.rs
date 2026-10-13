@@ -3,6 +3,7 @@
 mod support;
 
 mod array_fns;
+mod budget;
 mod date_fns;
 mod datetime_format;
 mod logical_fns;
