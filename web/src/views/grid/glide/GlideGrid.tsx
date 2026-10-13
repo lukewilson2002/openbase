@@ -29,8 +29,11 @@ import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, Grid
 import { isOgCell, toGridCell, withPending, type OgCell } from "./cells";
 import { headerIcons } from "./icons";
 import { mixColors, paletteColor } from "@/lib/cells/palette";
+import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
 import { createRenderer } from "./renderers";
 import { DARK_THEME, LIGHT_THEME } from "./theme";
+
+installMarkerNumbering();
 
 const EMPTY_SELECTION: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: undefined };
 
@@ -45,6 +48,8 @@ const KEYBINDINGS = {
 const BLANK_MODEL: CellModel = { kind: "blank" };
 const ROW_MARKER_WIDTH = 56;
 const ADD_COLUMN_ID = "__add_field__";
+/** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
+const ROW_MARKERS = { kind: "both", width: ROW_MARKER_WIDTH, startIndex: MARKER_START_INDEX } as const;
 
 /** Glide draws overlay editors into #portal; the app shell has none, so create it once. */
 function ensurePortal(): void {
@@ -80,6 +85,8 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   const [paint, setPaint] = useState(0);
 
   useEffect(ensurePortal, []);
+  // Which number the marker column shows in each display row (none for group headers and the summary row).
+  useEffect(() => setRowNumbering((row) => pr.current.rowNumber(row)), []);
 
   // Glide listens for `click` on the window and reads `changedTouches` from anything that is not a
   // MouseEvent. Radix switches and checkboxes inside a <form> (any dialog or popover of the page)
@@ -237,7 +244,6 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     else if (model.kind === "summary") pr.current.onSummaryClick(cell[0], screenRect(ev.bounds));
   }, []);
 
-  const rowMarkers = useMemo(() => ({ kind: props.showRowNumbers ? ("both" as const) : ("checkbox" as const), width: ROW_MARKER_WIDTH }), [props.showRowNumbers]);
 
   return (
     <DataEditor
@@ -256,7 +262,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       provideEditor={provideEditor}
       theme={theme}
       headerIcons={headerIcons()}
-      rowMarkers={rowMarkers}
+      rowMarkers={ROW_MARKERS}
       rowSelectionMode="multi"
       rangeSelect="rect"
       columnSelect="multi"
