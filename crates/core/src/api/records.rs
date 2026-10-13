@@ -292,6 +292,15 @@ pub struct RestoreRequest {
     pub id: String,
 }
 
+/// `POST /api/trash/restore`: restoring a field also brings back the fields
+/// that were trashed with it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct RestoreResponse {
+    pub ok: bool,
+    pub restored_field_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Notification {

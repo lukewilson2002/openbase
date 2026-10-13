@@ -6,7 +6,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
 use og_core::api::schema::{
-    FormulaCheck, FormulaCheckError, FormulaCheckResult, SetPrimaryField, Table,
+    DeleteFieldResponse, FormulaCheck, FormulaCheckError, FormulaCheckResult, SetPrimaryField,
+    Table,
 };
 use serde_json::{Value as Json2, json};
 
@@ -108,7 +109,11 @@ async fn remove(
         .await?;
     publish_schema(&state, &headers, &who, &base, &out.touched);
     Ok(Json(
-        json!({ "ok": true, "deleted_field_ids": out.deleted_field_ids }),
+        serde_json::to_value(DeleteFieldResponse {
+            ok: true,
+            deleted_field_ids: out.deleted_field_ids,
+        })
+        .unwrap_or(Json2::Null),
     ))
 }
 

@@ -8,8 +8,7 @@ use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use og_core::api::events::BaseEvent;
-use og_core::api::records::{RestoreRequest, TrashListing};
-use serde_json::json;
+use og_core::api::records::{RestoreRequest, RestoreResponse, TrashListing};
 
 use crate::api::schema_support::{publish, publish_schema};
 use crate::auth::Actor;
@@ -61,7 +60,7 @@ async fn restore(
     actor: Actor,
     headers: HeaderMap,
     ApiJson(body): ApiJson<RestoreRequest>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<Json<RestoreResponse>> {
     let who = actor.clone();
     let restored = state
         .db
@@ -81,7 +80,8 @@ async fn restore(
             publish(&state, &headers, &who, base, BaseEvent::BaseChanged);
         }
     }
-    Ok(Json(
-        json!({ "ok": true, "restored_field_ids": restored.restored_field_ids }),
-    ))
+    Ok(Json(RestoreResponse {
+        ok: true,
+        restored_field_ids: restored.restored_field_ids,
+    }))
 }

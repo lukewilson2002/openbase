@@ -210,3 +210,12 @@ pub struct FormulaCheckResult {
     #[serde(default)]
     pub preview: Option<Json>,
 }
+
+/// `DELETE /api/fields/{id}`: the field is trashed together with the fields
+/// that depended on it (lookups, rollups, the inverse of a link...).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct DeleteFieldResponse {
+    pub ok: bool,
+    pub deleted_field_ids: Vec<String>,
+}

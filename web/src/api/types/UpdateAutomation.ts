@@ -15,4 +15,4 @@ actions?: Array<ActionStep> | null,
  * Webhook triggers only: issue a new token (the old one stops working)
  * and return it once in the response.
  */
-rotate_webhook_token: boolean, };
+rotate_webhook_token?: boolean, };

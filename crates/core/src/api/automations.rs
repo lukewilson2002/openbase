@@ -191,9 +191,11 @@ pub struct CreateAutomation {
     pub name: String,
     /// New automations are off unless asked otherwise.
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub enabled: bool,
     pub trigger: Trigger,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<ActionStep>>", optional))]
     pub actions: Vec<ActionStep>,
 }
 
@@ -213,6 +215,7 @@ pub struct UpdateAutomation {
     /// Webhook triggers only: issue a new token (the old one stops working)
     /// and return it once in the response.
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub rotate_webhook_token: bool,
 }
 
@@ -314,6 +317,7 @@ pub struct TestAutomation {
     /// Default true: render templates and evaluate conditions but send,
     /// write and request nothing. Pass false to really run the actions once.
     #[serde(default = "default_true")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub dry_run: bool,
 }
 
