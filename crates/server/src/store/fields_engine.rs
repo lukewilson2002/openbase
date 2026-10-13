@@ -195,12 +195,7 @@ pub fn convert_value(from: &Field, to: &Field, stored: Option<&Json>) -> Option<
 /// Convert every stored cell of `old.id` in `table_id` (live and trashed
 /// records) to the new field definition. Links are rendered with the linked
 /// records' primary text; trashed linked records are left out.
-pub fn convert_column(
-    tx: &Transaction,
-    table_id: &str,
-    old: &Field,
-    new: &Field,
-) -> AppResult<()> {
+pub fn convert_column(tx: &Transaction, table_id: &str, old: &Field, new: &Field) -> AppResult<()> {
     let names = NameCache::new(tx, Tz::UTC);
     let ctx = CellCtx::utc(Utc::now());
     let from_link = matches!(old.kind, FieldKind::Link(_));
@@ -233,19 +228,17 @@ pub fn add_conversion_choices(
     }
     let path = format!("$.\"{}\"", old.id);
     let mut stmt = tx.prepare(
-        "SELECT json_extract(data, ?2) FROM records
+        "SELECT data FROM records
          WHERE table_id = ?1 AND json_type(data, ?2) IS NOT NULL",
     )?;
     let cells: Vec<Json> = stmt
-        .query_map(rusqlite::params![table_id, path], |r| {
-            let raw: Option<String> = r.get(0)?;
-            Ok(raw.and_then(|s| serde_json::from_str(&s).ok()))
-        })?
-        .filter_map(|r| r.ok().flatten())
+        .query_map(rusqlite::params![table_id, path], |r| r.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .filter_map(|raw| serde_json::from_str::<Json>(&raw).ok())
+        .filter_map(|mut data| data.get_mut(&old.id).map(Json::take))
         .collect();
     let names = NameCache::new(tx, Tz::UTC);
-    let needed =
-        choices_needed_for_conversion(old, new, cells.iter().map(Some), &names, Tz::UTC);
+    let needed = choices_needed_for_conversion(old, new, cells.iter().map(Some), &names, Tz::UTC);
     if needed.is_empty() {
         return Ok(());
     }
@@ -360,9 +353,7 @@ pub fn validate_view_config_semantics(
         let pruned = prune_filter(filter, fields, stale_ok);
         compile_filter(&pruned, fields).map_err(bad)?;
     }
-    let sorts = prune_levels(&config.sorts, fields, stale_ok, |s, f| {
-        validate_sorts(s, f)
-    });
+    let sorts = prune_levels(&config.sorts, fields, stale_ok, validate_sorts);
     validate_sorts(&sorts, fields).map_err(bad)?;
     let groups = prune_levels(&config.groups, fields, stale_ok, |s, f| {
         validate_groups(s, f)
@@ -415,10 +406,18 @@ mod tests {
 
     fn fields() -> Vec<Field> {
         vec![
-            f("fldA", "Name", FieldKind::SingleLineText(TextOptions::default())),
+            f(
+                "fldA",
+                "Name",
+                FieldKind::SingleLineText(TextOptions::default()),
+            ),
             f("fldB", "Price", FieldKind::Number(NumberOptions::default())),
             f("fldC", "price", FieldKind::Number(NumberOptions::default())),
-            f("fldD", "Tags", FieldKind::MultipleSelect(SelectOptions::default())),
+            f(
+                "fldD",
+                "Tags",
+                FieldKind::MultipleSelect(SelectOptions::default()),
+            ),
         ]
     }
 

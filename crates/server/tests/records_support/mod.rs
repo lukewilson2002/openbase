@@ -216,13 +216,21 @@ pub fn stored_ids(f: &Fixture, record_id: &str, field_id: &str) -> Vec<String> {
 /// Ids in a link value as returned by the API (`[{id, name}]`).
 pub fn link_ids_of(v: &Value) -> Vec<String> {
     v.as_array()
-        .map(|a| a.iter().map(|x| x["id"].as_str().unwrap().to_string()).collect())
+        .map(|a| {
+            a.iter()
+                .map(|x| x["id"].as_str().unwrap().to_string())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 pub fn link_names(v: &Value) -> Vec<String> {
     v.as_array()
-        .map(|a| a.iter().map(|x| x["name"].as_str().unwrap().to_string()).collect())
+        .map(|a| {
+            a.iter()
+                .map(|x| x["name"].as_str().unwrap().to_string())
+                .collect()
+        })
         .unwrap_or_default()
 }
 

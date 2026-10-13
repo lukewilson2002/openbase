@@ -183,13 +183,15 @@ pub fn build_graph(fields: &[Field], primary: &HashMap<String, String>) -> DepGr
         let sensitive: Vec<Edge> = g
             .dependents_of(&f.id)
             .filter(|e| {
-                by_id.get(e.dependent.as_str()).is_some_and(|d| match d.kind {
-                    FieldKind::Formula(_) | FieldKind::Button(_) => true,
-                    FieldKind::Lookup(_) | FieldKind::Rollup(_) => {
-                        matches!(e.kind, EdgeKind::ViaLink { .. })
-                    }
-                    _ => false,
-                })
+                by_id
+                    .get(e.dependent.as_str())
+                    .is_some_and(|d| match d.kind {
+                        FieldKind::Formula(_) | FieldKind::Button(_) => true,
+                        FieldKind::Lookup(_) | FieldKind::Rollup(_) => {
+                            matches!(e.kind, EdgeKind::ViaLink { .. })
+                        }
+                        _ => false,
+                    })
             })
             .cloned()
             .collect();
@@ -307,7 +309,11 @@ pub struct RowCache {
 impl RowCache {
     /// Rows for `ids` in the order given (unknown ids skipped), loading the
     /// missing ones in one query.
-    pub fn get_many(&mut self, conn: &Connection, ids: &[String]) -> AppResult<Vec<Arc<RecordRow>>> {
+    pub fn get_many(
+        &mut self,
+        conn: &Connection,
+        ids: &[String],
+    ) -> AppResult<Vec<Arc<RecordRow>>> {
         if self.map.len() > MAX_CACHED_ROWS {
             self.map.clear();
         }
@@ -321,7 +327,10 @@ impl RowCache {
                 self.map.insert(r.id.clone(), Arc::new(r));
             }
         }
-        Ok(ids.iter().filter_map(|i| self.map.get(i).cloned()).collect())
+        Ok(ids
+            .iter()
+            .filter_map(|i| self.map.get(i).cloned())
+            .collect())
     }
 
     pub fn get(&mut self, conn: &Connection, id: &str) -> AppResult<Option<Arc<RecordRow>>> {
@@ -525,7 +534,11 @@ impl<'a> Session<'a> {
         Ok(())
     }
 
-    fn table_record_ids(&self, table_id: &str, cache: &mut HashMap<String, Vec<String>>) -> AppResult<Vec<String>> {
+    fn table_record_ids(
+        &self,
+        table_id: &str,
+        cache: &mut HashMap<String, Vec<String>>,
+    ) -> AppResult<Vec<String>> {
         if let Some(ids) = cache.get(table_id) {
             return Ok(ids.clone());
         }
@@ -646,7 +659,7 @@ impl<'a> Session<'a> {
             }
             self.charge(1)?;
             let value = self.compute(field, &row)?;
-            let new = (!value.is_blank()).then(|| canonical_json(value.to_json()));
+            let new = stored_json(&value);
             if same_json(row.data.get(&field.id), new.as_ref()) {
                 continue;
             }
@@ -690,7 +703,10 @@ impl<'a> Session<'a> {
             }
             _ => return Ok(()),
         };
-        let ids: Vec<String> = rows.iter().flat_map(|r| link_ids(&r.data, link_id)).collect();
+        let ids: Vec<String> = rows
+            .iter()
+            .flat_map(|r| link_ids(&r.data, link_id))
+            .collect();
         self.names.preload(ids.iter().map(String::as_str));
         let live: Vec<String> = ids.into_iter().filter(|i| self.names.is_live(i)).collect();
         self.rows.get_many(self.conn, &live)?;
@@ -714,13 +730,20 @@ impl<'a> Session<'a> {
         to_value(field, stored.as_ref(), &self.names)
     }
 
-    fn live_linked(&mut self, row: &RecordRow, link_field_id: &str) -> AppResult<Vec<Arc<RecordRow>>> {
+    fn live_linked(
+        &mut self,
+        row: &RecordRow,
+        link_field_id: &str,
+    ) -> AppResult<Vec<Arc<RecordRow>>> {
         let Some(stored) = row.data.get(link_field_id) else {
             return Ok(Vec::new());
         };
         let ids = self.names.live_ids(stored);
         let rows = self.rows.get_many(self.conn, &ids)?;
-        Ok(rows.into_iter().filter(|r| r.deleted_at.is_none()).collect())
+        Ok(rows
+            .into_iter()
+            .filter(|r| r.deleted_at.is_none())
+            .collect())
     }
 
     /// Values of `target` on the linked records, flattened and without blanks.
@@ -842,6 +865,12 @@ fn format_zone(format: &Option<ValueFormat>) -> Option<Tz> {
         Some(ValueFormat::Date(d)) => d.timezone.as_deref().and_then(|z| z.parse().ok()),
         _ => None,
     }
+}
+
+/// How a computed value is stored: `None` for blank (the key is removed),
+/// else its JSON with whole numbers as integers.
+pub fn stored_json(value: &Value) -> Option<Json> {
+    (!value.is_blank()).then(|| canonical_json(value.to_json()))
 }
 
 /// Whole numbers as JSON integers (`5`, not `5.0`), like `cell::normalize`

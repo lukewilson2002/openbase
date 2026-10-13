@@ -96,9 +96,8 @@ pub fn get_many(conn: &Connection, ids: &[String]) -> AppResult<Vec<RecordRow>> 
     let mut out = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(IN_CHUNK) {
         let marks = vec!["?"; chunk.len()].join(",");
-        let mut stmt = conn.prepare_cached(&format!(
-            "SELECT {COLS} FROM records WHERE id IN ({marks})"
-        ))?;
+        let mut stmt =
+            conn.prepare_cached(&format!("SELECT {COLS} FROM records WHERE id IN ({marks})"))?;
         let rows = stmt.query_map(params_from_iter(chunk.iter()), RecordRow::from_sql)?;
         for row in rows {
             out.push(row?);
@@ -108,7 +107,11 @@ pub fn get_many(conn: &Connection, ids: &[String]) -> AppResult<Vec<RecordRow>> 
 }
 
 /// Ids of the records of a table in manual order, optionally with trashed ones.
-pub fn table_ids(conn: &Connection, table_id: &str, include_trashed: bool) -> AppResult<Vec<String>> {
+pub fn table_ids(
+    conn: &Connection,
+    table_id: &str,
+    include_trashed: bool,
+) -> AppResult<Vec<String>> {
     let sql = if include_trashed {
         "SELECT id FROM records WHERE table_id = ?1 ORDER BY id"
     } else {
@@ -347,7 +350,7 @@ fn try_positions(
     Ok(match (lo, hi) {
         (Some(lo), Some(hi)) => {
             let step = (hi - lo) / (count + 1.0);
-            if !(step >= MIN_GAP) {
+            if step.is_nan() || step < MIN_GAP {
                 return Ok(None);
             }
             Some((1..=n).map(|i| lo + step * i as f64).collect())
@@ -555,8 +558,10 @@ mod tests {
     }
 
     fn pos(conn: &Connection, id: &str) -> f64 {
-        conn.query_row("SELECT position FROM records WHERE id = ?1", [id], |r| r.get(0))
-            .unwrap()
+        conn.query_row("SELECT position FROM records WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
     }
 
     #[test]
@@ -567,14 +572,23 @@ mod tests {
         add(&conn, "gone", 3.0, Some(5));
         let none = HashSet::new();
         // End: after the last live record, trashed ones ignored.
-        assert_eq!(positions_for(&conn, "t", Place::End, 2, &none).unwrap(), vec![3.0, 4.0]);
+        assert_eq!(
+            positions_for(&conn, "t", Place::End, 2, &none).unwrap(),
+            vec![3.0, 4.0]
+        );
         // After a: between a and b.
         let p = positions_for(&conn, "t", Place::After("a"), 2, &none).unwrap();
         assert!(p[0] > 1.0 && p[1] < 2.0 && p[0] < p[1]);
         // After the last record: whole steps.
-        assert_eq!(positions_for(&conn, "t", Place::After("b"), 1, &none).unwrap(), vec![3.0]);
+        assert_eq!(
+            positions_for(&conn, "t", Place::After("b"), 1, &none).unwrap(),
+            vec![3.0]
+        );
         // Before the first record.
-        assert_eq!(positions_for(&conn, "t", Place::Before("a"), 2, &none).unwrap(), vec![-1.0, 0.0]);
+        assert_eq!(
+            positions_for(&conn, "t", Place::Before("a"), 2, &none).unwrap(),
+            vec![-1.0, 0.0]
+        );
         // Before b.
         let p = positions_for(&conn, "t", Place::Before("b"), 1, &none).unwrap();
         assert!(p[0] > 1.0 && p[0] < 2.0);

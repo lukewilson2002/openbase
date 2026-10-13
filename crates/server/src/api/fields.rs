@@ -12,7 +12,7 @@ use serde_json::{Value as Json2, json};
 
 use crate::api::schema_support::{ApiJson, publish_schema};
 use crate::auth::Actor;
-use crate::engine::recompute::{DEFAULT_MAX_EVALS, Session};
+use crate::engine::recompute::{self, DEFAULT_MAX_EVALS, Session};
 use crate::engine::write;
 use crate::error::{AppError, AppResult};
 use crate::perm::{self, Role};
@@ -126,8 +126,7 @@ async fn formula_check(
             let base = perm::base_of_table(conn, &table_id)?;
             perm::require_base(conn, &actor, &base, Role::Editor)?;
             let table_fields = schema::table_fields(conn, &table_id)?;
-            let (stored, ty) = match fields_engine::check_formula(&table_fields, &body.expression)
-            {
+            let (stored, ty) = match fields_engine::check_formula(&table_fields, &body.expression) {
                 Ok(ok) => ok,
                 Err(e) => {
                     return Ok(FormulaCheckResult {
@@ -161,7 +160,7 @@ async fn formula_check(
                     let mut session =
                         Session::new(conn, &base, chrono::Utc::now(), tz, DEFAULT_MAX_EVALS)?;
                     let value = session.preview(&stored, &ty, &row);
-                    Some(value.to_json())
+                    Some(recompute::stored_json(&value).unwrap_or(serde_json::Value::Null))
                 }
                 None => None,
             };

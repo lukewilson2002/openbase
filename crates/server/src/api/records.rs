@@ -35,17 +35,18 @@ pub fn router() -> Router<AppState> {
 }
 
 /// Publish the events of a committed write on behalf of `actor`.
-pub fn publish_outcome(state: &AppState, headers: &HeaderMap, actor: &Actor, outcome: &WriteOutcome) {
+pub fn publish_outcome(
+    state: &AppState,
+    headers: &HeaderMap,
+    actor: &Actor,
+    outcome: &WriteOutcome,
+) {
     for event in outcome.events() {
         publish(state, headers, actor, &outcome.base_id, event);
     }
 }
 
-fn editor_ctx(
-    tx: &rusqlite::Transaction,
-    actor: &Actor,
-    table_id: &str,
-) -> AppResult<WriteCtx> {
+fn editor_ctx(tx: &rusqlite::Transaction, actor: &Actor, table_id: &str) -> AppResult<WriteCtx> {
     let base = perm::base_of_table(tx, table_id)?;
     perm::require_base(tx, actor, &base, Role::Editor)?;
     WriteCtx::for_user(tx, &actor.user_id, WriteSource::Api)
@@ -114,7 +115,9 @@ async fn remove(
         })
         .await?;
     publish_outcome(&state, &headers, &who, &outcome);
-    Ok(Json(json!({ "ok": true, "ids": outcome.target().deleted.to_vec() })))
+    Ok(Json(
+        json!({ "ok": true, "ids": outcome.target().deleted.to_vec() }),
+    ))
 }
 
 async fn restore(
@@ -169,10 +172,9 @@ async fn get_one(
             let base = perm::base_of_table(conn, &table_id)?;
             perm::require_base(conn, &actor, &base, Role::Viewer)?;
             let tz = write::user_timezone(conn, &actor.user_id);
-            let mut found = record_store::load_dtos(conn, &table_id, &[record_id.clone()], tz)?;
-            found
-                .pop()
-                .ok_or_else(|| AppError::not_found("record"))
+            let mut found =
+                record_store::load_dtos(conn, &table_id, std::slice::from_ref(&record_id), tz)?;
+            found.pop().ok_or_else(|| AppError::not_found("record"))
         })
         .await?;
     Ok(Json(record))

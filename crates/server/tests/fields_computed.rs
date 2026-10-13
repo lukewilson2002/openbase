@@ -584,16 +584,14 @@ async fn creating_computed_fields_materializes_them_and_keeps_editable_data() {
         l.f.insert_record(&l.f.table_id, json!({ &l.f.primary_id: "keep me" }));
     l.f.add_field(&l.f.table_id, lookup_body("Prices", &l.link, &l.price))
         .await;
-    let count = l
-        .f
-        .add_field(
+    let count =
+        l.f.add_field(
             &l.f.table_id,
             json!({ "name": "N", "type": "count", "options": { "link_field_id": l.link["id"] } }),
         )
         .await;
-    let formula = l
-        .f
-        .add_field(
+    let formula =
+        l.f.add_field(
             &l.f.table_id,
             json!({ "name": "F", "type": "formula", "options": { "expression": "1" } }),
         )

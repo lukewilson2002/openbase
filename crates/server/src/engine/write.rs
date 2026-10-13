@@ -84,7 +84,9 @@ pub enum WriteSource {
     /// The signed-in web client or a personal access token.
     Api,
     /// A public form submission (the form view id); the actor is usually None.
-    Form { view_id: String },
+    Form {
+        view_id: String,
+    },
     Automation,
     Import,
 }
@@ -379,7 +381,13 @@ impl<'a> Writer<'a> {
     fn begin(tx: &'a Transaction<'a>, ctx: &'a WriteCtx, table_id: &str) -> AppResult<Writer<'a>> {
         let table = schema::live_table(tx, table_id)?;
         let conn: &Connection = tx;
-        let sess = Session::new(conn, &table.base_id, ctx.now, ctx.timezone, ctx.max_recomputes)?;
+        let sess = Session::new(
+            conn,
+            &table.base_id,
+            ctx.now,
+            ctx.timezone,
+            ctx.max_recomputes,
+        )?;
         let out = WriteOutcome::new(&table.base_id, table_id);
         Ok(Writer {
             tx,
@@ -442,7 +450,10 @@ impl<'a> Writer<'a> {
 
     /// With typecast, add the select choices named in `inputs` that do not
     /// exist yet (one schema update per field for the whole batch).
-    fn ensure_choices<'v>(&mut self, inputs: impl Iterator<Item = (&'v String, &'v Json)>) -> AppResult<()> {
+    fn ensure_choices<'v>(
+        &mut self,
+        inputs: impl Iterator<Item = (&'v String, &'v Json)>,
+    ) -> AppResult<()> {
         if !self.ctx.typecast {
             return Ok(());
         }
@@ -525,13 +536,14 @@ impl<'a> Writer<'a> {
     /// Normalize one client value and check what refers to other data.
     /// `old` is the cell's current stored value.
     fn cell(&mut self, field: &Field, input: &Json, old: Option<&Json>) -> AppResult<Option<Json>> {
-        let normalized = normalize(field, input, &self.cell_ctx()).map_err(|e| field_error(field, e))?;
+        let normalized =
+            normalize(field, input, &self.cell_ctx()).map_err(|e| field_error(field, e))?;
         let Some(value) = normalized else {
             // Cleared. A multi-link keeps the ids of trashed records it holds.
             if let (FieldKind::Link(o), Some(old)) = (&field.kind, old)
                 && !o.single
             {
-                let hidden = self.trashed_among(&ids_of(old));
+                let hidden = self.trashed_among(&ids_of(old))?;
                 if !hidden.is_empty() {
                     return Ok(Some(ids_json(&hidden)));
                 }
@@ -550,7 +562,7 @@ impl<'a> Writer<'a> {
                     && let Some(old) = old
                 {
                     let keep: Vec<String> = self
-                        .trashed_among(&ids_of(old))
+                        .trashed_among(&ids_of(old))?
                         .into_iter()
                         .filter(|i| !all.contains(i))
                         .collect();
@@ -566,7 +578,8 @@ impl<'a> Writer<'a> {
             }
             FieldKind::User(_) => {
                 let ids = dedupe(ids_of(&value));
-                let existing: HashSet<String> = old.map(ids_of).unwrap_or_default().into_iter().collect();
+                let existing: HashSet<String> =
+                    old.map(ids_of).unwrap_or_default().into_iter().collect();
                 let collaborators = self.collaborators()?;
                 if let Some(bad) = ids
                     .iter()
@@ -593,27 +606,38 @@ impl<'a> Writer<'a> {
                     let row = attachments::get(self.conn(), id)?
                         .filter(|a| a.base_id.as_deref() == Some(self.table.base_id.as_str()))
                         .ok_or_else(|| {
-                            field_error(field, format!("attachment {id} was not found in this base"))
+                            field_error(
+                                field,
+                                format!("attachment {id} was not found in this base"),
+                            )
                         })?;
                     refs.push(serde_json::to_value(row.to_ref())?);
                 }
-                Ok((!refs.is_empty()).then(|| Json::Array(refs)))
+                Ok((!refs.is_empty()).then_some(Json::Array(refs)))
             }
             _ => Ok(Some(value)),
         }
     }
 
-    /// The ids among `ids` whose records are trashed (or gone).
-    fn trashed_among(&self, ids: &[String]) -> Vec<String> {
-        self.sess.names.preload(ids.iter().map(String::as_str));
-        ids.iter()
-            .filter(|i| !self.sess.names.is_live(i))
+    /// The ids among `ids` whose records are in the trash (not live, not purged).
+    fn trashed_among(&self, ids: &[String]) -> AppResult<Vec<String>> {
+        let trashed: HashSet<String> = records::get_many(self.conn(), ids)?
+            .into_iter()
+            .filter(|r| r.deleted_at.is_some())
+            .map(|r| r.id)
+            .collect();
+        Ok(ids
+            .iter()
+            .filter(|i| trashed.contains(*i))
             .cloned()
-            .collect()
+            .collect())
     }
 
     /// Defaults for editable fields the new record does not mention.
-    fn defaults(&mut self, given: &BTreeMap<String, Json>) -> AppResult<Vec<(String, Option<Json>)>> {
+    fn defaults(
+        &mut self,
+        given: &BTreeMap<String, Json>,
+    ) -> AppResult<Vec<(String, Option<Json>)>> {
         let mut out = Vec::new();
         let fields: Vec<Field> = self.sess.schema.fields_of(&self.table.id).to_vec();
         for f in fields {
@@ -683,7 +707,7 @@ impl<'a> Writer<'a> {
                 };
                 let mut changes = Map::new();
                 changes.insert(inv.clone(), history::change(old.as_ref(), new.as_ref()));
-                self.commit_edit(&row, data, &changes, &[inv.clone()])?;
+                self.commit_edit(&row, data, &changes, std::slice::from_ref(&inv))?;
             }
         }
         Ok(())
@@ -721,10 +745,17 @@ impl<'a> Writer<'a> {
             .entry(row.id.clone())
             .or_default()
             .extend(changed.iter().cloned());
-        self.sess.mark_edited(&row.table_id, &row.id, changed, false)
+        self.sess
+            .mark_edited(&row.table_id, &row.id, changed, false)
     }
 
-    fn note_new_users(&mut self, field: &Field, record_id: &str, old: Option<&Json>, new: Option<&Json>) {
+    fn note_new_users(
+        &mut self,
+        field: &Field,
+        record_id: &str,
+        old: Option<&Json>,
+        new: Option<&Json>,
+    ) {
         let FieldKind::User(o) = &field.kind else {
             return;
         };
@@ -774,9 +805,11 @@ impl<'a> Writer<'a> {
         }
         let base_name: String = self
             .conn()
-            .query_row("SELECT name FROM bases WHERE id = ?1", [&self.table.base_id], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT name FROM bases WHERE id = ?1",
+                [&self.table.base_id],
+                |r| r.get(0),
+            )
             .unwrap_or_default();
         let field_names: HashMap<String, String> = self
             .sess
@@ -792,7 +825,11 @@ impl<'a> Writer<'a> {
                 continue;
             }
             self.sess.names.invalidate(&n.record_id);
-            let record_name = self.sess.names.record_text(&n.record_id).unwrap_or_default();
+            let record_name = self
+                .sess
+                .names
+                .record_text(&n.record_id)
+                .unwrap_or_default();
             notifications::create(
                 self.conn(),
                 &n.user_id,
@@ -1116,7 +1153,9 @@ pub fn restore_records(
         match w.sess.rows.get(w.conn(), id)? {
             Some(r) if r.table_id == table_id => {
                 if r.deleted_at.is_none() {
-                    return Err(AppError::conflict(format!("record {id} is not in the trash")));
+                    return Err(AppError::conflict(format!(
+                        "record {id} is not in the trash"
+                    )));
                 }
                 rows.push(r);
             }
