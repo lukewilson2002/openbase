@@ -374,6 +374,35 @@ async fn deactivated_users_and_ended_sessions_lose_the_stream() {
     b.expect_closed(SOON).await;
 }
 
+#[tokio::test]
+async fn revoked_or_expired_tokens_lose_their_stream() {
+    let f = Fixture::new().await;
+    let revoked = token_client(&f.app, &f.owner, true);
+    let mut a = open(&f.app, &revoked, &f.base_id).await.stream();
+    // Expiry first: a second token for the same user, expired behind the back.
+    let expiring = token_client(&f.app, &f.owner, false);
+    let mut b = open(&f.app, &expiring, &f.base_id).await.stream();
+    let hash = opengrid::ids::hash_token(expiring.bearer.as_deref().unwrap());
+    sql(&f.app, |tx| {
+        tx.execute(
+            "UPDATE api_tokens SET expires_at = 1 WHERE token_hash = ?1",
+            [&hash],
+        )
+    });
+    b.expect_closed(SOON).await;
+
+    // Deleting the token closes its stream too, while the user's session
+    // and other streams are unaffected.
+    let hash = opengrid::ids::hash_token(revoked.bearer.as_deref().unwrap());
+    sql(&f.app, |tx| {
+        tx.execute("DELETE FROM api_tokens WHERE token_hash = ?1", [&hash])
+    });
+    a.expect_closed(SOON).await;
+    let mut session = open(&f.app, &f.owner, &f.base_id).await.stream();
+    f.create(&f.table_id, json!({ &f.primary_id: "x" })).await;
+    assert_eq!(session.next_event().await.0, "records_changed");
+}
+
 // -------------------------------------------------------------------- lag
 
 #[tokio::test]
