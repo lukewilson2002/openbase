@@ -2,11 +2,13 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
+import { mockApi } from "./dev/mock-api";
 
 // The Rust server embeds `dist/` (crates/server/src/web.rs) and serves it with
 // `script-src 'self'`, so the build must not emit inline scripts.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // `VITE_MOCK=1 npm run dev` serves a fake API (dev/mock-api.ts) instead of proxying to a server.
+  plugins: [react(), tailwindcss(), ...(process.env.VITE_MOCK ? [mockApi()] : [])],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },

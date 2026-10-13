@@ -16,15 +16,26 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@glideapps/glide-data-grid": "6.0.3",
     "@tanstack/react-query": "^5.104.2",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.17",
+    "lodash": "^4.18.1",
     "lucide-react": "^1.55.0",
+    "marked": "4.3.0",
     "qrcode": "^1.5.4",
     "radix-ui": "^1.8.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-responsive-carousel": "^3.2.23",
     "react-router": "^8.4.0",
     "tailwind-merge": "^3.7.0"
+  },
+  "overrides": {
+    "@glideapps/glide-data-grid": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -32,6 +43,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@types/marked": "4.3.2",
     "@types/node": "^26.6.5",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
