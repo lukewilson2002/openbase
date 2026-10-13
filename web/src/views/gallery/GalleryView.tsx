@@ -96,7 +96,7 @@ function GalleryInner(props: ViewProps) {
                 <button
                   type="button"
                   onClick={() => void addRecord()}
-                  className="flex min-h-28 items-center justify-center gap-1.5 rounded-lg border border-dashed border-line-strong text-[0.8125rem] text-muted hover:border-primary hover:text-primary"
+                  className="flex h-28 items-center justify-center gap-1.5 self-start rounded-lg border border-dashed border-line-strong text-[0.8125rem] text-muted hover:border-primary hover:text-primary"
                 >
                   <Plus aria-hidden className="size-4" /> Add record
                 </button>

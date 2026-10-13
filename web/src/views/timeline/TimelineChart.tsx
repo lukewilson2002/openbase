@@ -96,8 +96,20 @@ export function TimelineChart(props: TimelineChartProps) {
   const labelW = showLabels ? LABEL_WIDTH : 0;
   const scroller = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const [creating, setCreating] = useState<CreateState | null>(null);
+  // Pointer handlers read the gesture from refs (events can arrive faster than React re-renders);
+  // the state copies only drive what is drawn.
+  const dragRef = useRef<DragState | null>(null);
+  const creatingRef = useRef<CreateState | null>(null);
+  const [drag, setDragState] = useState<DragState | null>(null);
+  const [creating, setCreatingState] = useState<CreateState | null>(null);
+  const setDrag = (d: DragState | null) => {
+    dragRef.current = d;
+    setDragState(d);
+  };
+  const setCreating = (c: CreateState | null) => {
+    creatingRef.current = c;
+    setCreatingState(c);
+  };
   const width = axisWidth(axis);
 
   const placed = useMemo(() => layoutLanes(lanes.map((l) => ({ key: l.lane.key, bars: l.bars })), axis), [lanes, axis]);
@@ -184,13 +196,14 @@ export function TimelineChart(props: TimelineChartProps) {
     setDrag({ id: bar.id, mode, startX: e.clientX, days: 0, moved: false });
   };
   const moveBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
-    if (!drag || drag.id !== bar.id) return;
-    const dx = e.clientX - drag.startX;
-    const allowed = drag.mode === "move" ? bar.canMove : bar.canResize;
-    setDrag({ ...drag, days: allowed ? dragDays(dx, axis) : 0, moved: drag.moved || Math.abs(dx) > 3 });
+    const d = dragRef.current;
+    if (!d || d.id !== bar.id) return;
+    const dx = e.clientX - d.startX;
+    const allowed = d.mode === "move" ? bar.canMove : bar.canResize;
+    setDrag({ ...d, days: allowed ? dragDays(dx, axis) : 0, moved: d.moved || Math.abs(dx) > 3 });
   };
   const endBar = (bar: TimelineBar, cancel = false) => {
-    const d = drag;
+    const d = dragRef.current;
     setDrag(null);
     if (!d || d.id !== bar.id || cancel) return;
     if (!d.moved) props.onOpen(bar.id);
@@ -223,11 +236,12 @@ export function TimelineChart(props: TimelineChartProps) {
     setCreating({ laneKey, fromDay: day, toDay: day, startX: e.clientX, moved: false });
   };
   const moveCreate = (e: PointerEvent<HTMLDivElement>) => {
-    if (!creating) return;
-    setCreating({ ...creating, toDay: dayUnder(e.clientX), moved: creating.moved || Math.abs(e.clientX - creating.startX) > 6 });
+    const c = creatingRef.current;
+    if (!c) return;
+    setCreating({ ...c, toDay: dayUnder(e.clientX), moved: c.moved || Math.abs(e.clientX - c.startX) > 6 });
   };
   const endCreate = (cancel = false) => {
-    const c = creating;
+    const c = creatingRef.current;
     setCreating(null);
     if (c && c.moved && !cancel) props.onCreate(c.laneKey, c.fromDay, c.toDay);
   };
@@ -249,9 +263,9 @@ export function TimelineChart(props: TimelineChartProps) {
         {/* Header: two tick rows, pinned to the top. */}
         <div className="sticky top-0 z-30 flex border-b border-line bg-surface" style={{ height: HEADER_HEIGHT }}>
           {showLabels && <div className="sticky left-0 z-40 shrink-0 border-r border-line bg-surface" style={{ width: LABEL_WIDTH }} />}
-          <div className="relative overflow-hidden" style={{ width }}>
+          <div className="relative overflow-clip" style={{ width }}>
             {major.map((t) => (
-              <div key={`M${t.startDay}`} className="absolute top-0 h-[26px] overflow-hidden border-l border-line text-xs font-medium text-muted" style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay }}>
+              <div key={`M${t.startDay}`} className="absolute top-0 h-[26px] overflow-clip border-l border-line text-xs font-medium text-muted" style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay }}>
                 <span className="sticky inline-block whitespace-nowrap px-2 py-1" style={{ left: labelW }}>
                   {t.label}
                 </span>

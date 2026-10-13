@@ -307,7 +307,7 @@ function KanbanCard({ record, ...p }: { record: TableRecord } & KanbanBoardProps
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "relative overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
+        "relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
         p.canEdit ? "cursor-grab touch-manipulation" : "cursor-pointer",
         isDragging && "opacity-40",
       )}

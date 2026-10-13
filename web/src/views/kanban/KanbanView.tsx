@@ -51,7 +51,8 @@ function KanbanInner(props: ViewProps) {
     () => (stackField && data ? buildStacks(stackField, data.records, { stackOrder: kanban.stack_order, hideEmpty: kanban.hide_empty_stacks, people: setup.people }) : []),
     [stackField, data, kanban.stack_order, kanban.hide_empty_stacks, setup.people],
   );
-  const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? ""])), [table, config, coverField?.id]);
+  // The stack a card sits in already says its stack value, and the cover is drawn as the image.
+  const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? "", stackField?.id ?? ""])), [table, config, coverField?.id, stackField?.id]);
   const recordIds = useMemo(() => stacks.flatMap((s) => s.records.map((r) => r.id)), [stacks]);
   const hasSorts = cfg.queryConfig.sorts.length > 0;
 
@@ -145,7 +146,7 @@ function KanbanInner(props: ViewProps) {
     <ViewFrame
       setup={setup}
       recordIds={recordIds}
-      features={{ group: false }}
+      features={{ group: false, rowHeight: false }}
       hideFieldsNoun="Card fields"
       toolbarExtra={settings}
       footer={

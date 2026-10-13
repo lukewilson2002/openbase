@@ -26,14 +26,15 @@ export function UnscheduledList({
 }) {
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
+    // The list is not mounted while loading, so the dependency on `loading` re-runs this once it is.
     const el = list.current;
-    if (!el || !draggable) return;
+    if (!el || !draggable || loading) return;
     const d = new Draggable(el, {
       itemSelector: "[data-unscheduled]",
       eventData: (item) => ({ title: item.getAttribute("data-title") ?? "", create: false }),
     });
     return () => d.destroy();
-  }, [draggable]);
+  }, [draggable, loading]);
 
   return (
     <aside aria-label="Unscheduled records" className="flex w-64 shrink-0 flex-col border-l border-line bg-surface">
@@ -55,7 +56,7 @@ export function UnscheduledList({
                 data-unscheduled
                 data-record-id={r.id}
                 data-title={title}
-                className={`mb-1.5 flex items-center rounded-md border border-line bg-subtle px-2 py-1.5 text-[0.8125rem] ${draggable ? "cursor-grab" : ""}`}
+                className={`mb-1.5 flex select-none items-center rounded-md border border-line bg-subtle px-2 py-1.5 text-[0.8125rem] ${draggable ? "cursor-grab" : ""}`}
               >
                 <button type="button" onClick={() => onOpen(r.id)} className="min-w-0 flex-1 truncate text-left hover:underline" title={title}>
                   {title}
