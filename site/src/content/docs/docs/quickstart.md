@@ -39,14 +39,15 @@ git clone https://github.com/lukewilson2002/openbase.git
 cd openbase/deploy
 cp .env.example .env
 nano .env                 # set OPENBASE_DOMAIN=base.example.com (and TZ)
-docker compose up -d --build
+docker compose up -d
 docker compose ps         # openbase should become "healthy"
 ```
 
-:::note[Prebuilt image]
-Starting with the first release, a ready-made image is published at
-`ghcr.io/lukewilson2002/openbase`, so the server can pull it instead of compiling. Until then
-`docker compose up -d --build` builds the image on your server from the cloned source, as above.
+:::note[The official image]
+Compose pulls the official image, `ghcr.io/lukewilson2002/openbase` (linux/amd64 and linux/arm64),
+so nothing is compiled on your server. `OPENBASE_VERSION` in `.env` picks the tag (default
+`latest`). To update later: `docker compose pull && docker compose up -d`. To build from the cloned
+source instead, see [Self-hosting](/docs/self-hosting/).
 :::
 
 If `docker compose ps` does not show `healthy` after a few minutes, read the logs with
