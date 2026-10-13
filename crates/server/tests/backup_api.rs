@@ -47,6 +47,51 @@ async fn admin_can_create_list_and_download_backups() {
     assert_eq!(&res.bytes[..2], &[0x1f, 0x8b]);
 }
 
+/// Browsers always send `Accept-Encoding`; the compression layer must not break the stream.
+#[tokio::test]
+async fn download_survives_response_compression() {
+    use std::io::Read;
+
+    let app = TestApp::new();
+    let admin = app.admin("admin@example.com", "Admin");
+    let res = app
+        .post(&admin, "/api/admin/backups", serde_json::json!({}))
+        .await;
+    let name = res.body["name"].as_str().unwrap().to_string();
+    let on_disk = std::fs::read(app.state.config.backups_dir().join(&name)).unwrap();
+
+    for encoding in ["gzip", "gzip, deflate, br", "identity"] {
+        let res = app
+            .request_with(
+                &admin,
+                "GET",
+                &format!("/api/admin/backups/{name}"),
+                None,
+                &[("accept-encoding", encoding)],
+                true,
+                None,
+            )
+            .await;
+        res.assert_status(200);
+        let body = match res
+            .headers
+            .get("content-encoding")
+            .map(|v| v.to_str().unwrap())
+        {
+            Some("gzip") => {
+                let mut out = Vec::new();
+                flate2::read::GzDecoder::new(&res.bytes[..])
+                    .read_to_end(&mut out)
+                    .unwrap();
+                out
+            }
+            None => res.bytes.clone(),
+            Some(other) => panic!("unexpected content-encoding {other} for {encoding}"),
+        };
+        assert_eq!(body, on_disk, "accept-encoding: {encoding}");
+    }
+}
+
 #[tokio::test]
 async fn non_admins_and_tokens_are_refused() {
     let app = TestApp::new();

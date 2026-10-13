@@ -143,3 +143,15 @@ async fn oversized_json_keeps_its_own_status_in_the_envelope() {
     assert_eq!(res.status, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(res.body["error"]["code"], "payload_too_large");
 }
+
+#[tokio::test]
+async fn wrong_method_on_a_known_route_gets_the_envelope() {
+    let app = TestApp::new();
+    let anon = app.anon();
+    let res = app.post(&anon, "/api/setup", serde_json::json!({})).await;
+    assert_eq!(res.status, StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(res.body["error"]["code"], "method_not_allowed");
+    let res = app.delete(&anon, "/api/auth/login").await;
+    assert_eq!(res.status, StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(res.body["error"]["code"], "method_not_allowed");
+}

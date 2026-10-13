@@ -457,6 +457,10 @@ async fn file_response(path: &Path, content_type: &str, disposition: &str) -> Ap
 }
 
 /// Stream a file as a response body in 64 KiB chunks.
+///
+/// The stream is fused: the compression layer (every browser sends `Accept-Encoding`)
+/// polls the body once more after the end, and a bare `unfold` panics when polled
+/// after it returned `None`, which used to cut off every compressed download.
 pub fn file_body(file: tokio::fs::File) -> Body {
     let stream = futures::stream::unfold(Some(file), |state| async move {
         let mut file = state?;
@@ -470,7 +474,7 @@ pub fn file_body(file: tokio::fs::File) -> Body {
             Err(e) => Some((Err(e), None)),
         }
     });
-    Body::from_stream(stream)
+    Body::from_stream(stream.fuse())
 }
 
 /// `Content-Disposition` with an ASCII fallback name and the exact UTF-8 name

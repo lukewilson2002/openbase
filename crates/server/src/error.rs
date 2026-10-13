@@ -18,6 +18,8 @@ pub enum AppError {
     Forbidden(String),
     #[error("{0} not found")]
     NotFound(String),
+    #[error("method not allowed")]
+    MethodNotAllowed,
     #[error("{0}")]
     Conflict(String),
     #[error("{0}")]
@@ -51,6 +53,7 @@ impl AppError {
             AppError::Unauthorized => StatusCode::UNAUTHORIZED,
             AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
+            AppError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             AppError::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
@@ -64,6 +67,7 @@ impl AppError {
             AppError::Unauthorized => "unauthorized",
             AppError::Forbidden(_) => "forbidden",
             AppError::NotFound(_) => "not_found",
+            AppError::MethodNotAllowed => "method_not_allowed",
             AppError::Conflict(_) => "conflict",
             AppError::PayloadTooLarge(_) => "payload_too_large",
             AppError::TooManyRequests => "too_many_requests",

@@ -27,7 +27,8 @@ cd web
 npm ci
 npm run dev          # http://localhost:5173, proxies /api to a running opengrid on :8080
 npm run build        # type-check + production build into web/dist
-npm test -- --run    # unit and component tests
+npm test -- --run    # unit and component tests (fetch is mocked)
+npm run test:contract  # the API client against the real server (needs cargo; see below)
 npx tsc --noEmit     # type-check only
 ```
 
@@ -41,12 +42,25 @@ After changing a Rust DTO in `crates/core`:
 
 ```sh
 scripts/gen-types.sh          # writes web/src/api/types/*.ts
-scripts/gen-types.sh --check  # CI: fails if the committed files are stale
+scripts/gen-types.sh --check  # CI and scripts/check.sh: fails if the files on disk are stale
 ```
 
 `src/api/types/overrides.ts` is hand-maintained (ts-rs cannot express a flattened optional enum, so `UpdateField`
-is composed there). Rust fields with `#[serde(default)]` on the struct are required in the generated TypeScript;
-use spread defaults or `Partial<>` where the client builds such objects.
+is composed there). `Option<T>` fields come out as `field?: T | null`. A request DTO field that is not an
+`Option` but has `#[serde(default)]` is marked `ts(as = "Option<T>", optional)` in Rust so it is optional here
+too (see the conventions in `crates/core/src/api/mod.rs`); response fields stay required.
+
+### Live contract tests
+
+`npm run test:contract` runs the real API client (`src/api/endpoints.ts`) against a real `target/debug/opengrid`
+started on a free port with a throwaway data directory (`contract/globalSetup.ts` builds it with `cargo build`).
+Every response is checked against the generated bindings (`contract/typecheck.ts` reads `src/api/types/*.ts`), so
+a server/client mismatch fails here rather than in a browser. Node has no cookie jar, so `contract/cookieJar.ts`
+wraps `fetch` (tests only) and `setApiBase()` points the client at the server. Set
+`OPENGRID_CONTRACT_SKIP_BUILD=1` to reuse already built binaries. Covered: setup, signup, login/logout, 2FA,
+sessions, tokens, invites, admin users, audit paging, backups, and the error envelope. Workspaces, bases,
+tables, views and records are added as their endpoints land. Invites need a workspace, which cannot be created
+over the API yet, so `crates/server/examples/contract_seed.rs` inserts one; drop it once the workspace API exists.
 
 ### End-to-end tests
 
