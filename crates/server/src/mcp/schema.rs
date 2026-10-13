@@ -692,10 +692,10 @@ fn current_options(field: &Field) -> Map<String, Value> {
 fn conversion_warning(table: &Table, field: &Field, from: &str, to: &str) -> String {
     format!(
         "Changing the type of '{}' in '{}' from {from} to {to} converts every existing value. \
-         Values that do not fit the new type are cleared (the changes appear in the record \
-         history, and the old values can be read there). If this is intended, repeat the call \
-         with confirm_conversion=true. To keep the old data, create a new field of the new \
-         type instead.",
+         Values that do not fit the new type are cleared, and the old values are not kept \
+         (the record history does not record conversions). If this is intended, repeat the call \
+         with confirm_conversion=true. To keep the old data, create a new field of the new type \
+         and copy the values over, or duplicate the table first.",
         field.name, table.name
     )
 }
@@ -759,7 +759,7 @@ async fn update_field(ctx: &McpCtx, a: UpdateField) -> ToolResult {
                 out["conversion"] = json!({
                     "from": current_type,
                     "to": new_type,
-                    "note": "Existing values were converted; values that did not fit were cleared. See get_record_history for what changed.",
+                    "note": "Existing values were converted; values that did not fit were cleared (conversions are not recorded in the record history).",
                 });
             }
             ToolResult::ok(out)
