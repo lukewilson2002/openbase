@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router";
-import { render, type RenderResult } from "@testing-library/react";
+import { render, screen, type RenderResult } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { AppRoutes } from "@/App";
 import { setUnauthorizedHandler } from "@/api/client";
@@ -181,3 +182,12 @@ export const ADMIN_USER_ROW: AdminUser = {
   created_at: 1_700_000_000_000,
   last_login_at: null,
 };
+
+/**
+ * Pick an option of an `<EntitySelect>` (a Radix select, so `selectOptions` does not apply): open it
+ * with its trigger button, then click the option by its visible name.
+ */
+export async function chooseOption(trigger: HTMLElement, optionName: string | RegExp): Promise<void> {
+  await userEvent.click(trigger);
+  await userEvent.click(await screen.findByRole("option", { name: optionName }));
+}

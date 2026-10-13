@@ -227,3 +227,82 @@ describe("tables", () => {
     expectError(await failure(viewer.run(() => api.tables.create(w.baseId, "Not allowed"))), 403, "forbidden");
   });
 });
+
+describe("icons", () => {
+  let w: World;
+  let editor: Profile;
+
+  it("sets, keeps and clears a workspace icon (undefined leaves it, null clears it)", async () => {
+    w = await createWorld("Icons");
+    editor = await newUser(w.owner, "icons-editor");
+    const created = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.create(`Iconic ${rand()}`, "store")));
+    expect(created.icon).toBe("store");
+
+    const set = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.update(w.workspaceId, { icon: "briefcase" })));
+    expect(set.icon).toBe("briefcase");
+    // a rename must not touch the icon (the client leaves `icon` out of the body)
+    const renamed = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.update(w.workspaceId, { name: "Icons renamed" })));
+    expect(renamed).toMatchObject({ name: "Icons renamed", icon: "briefcase" });
+    expect(parseList("WorkspaceSummary", await w.owner.run(api.workspaces.list)).find((x) => x.id === w.workspaceId)?.icon).toBe("briefcase");
+    const cleared = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.update(w.workspaceId, { icon: null })));
+    expect(cleared.icon ?? null).toBeNull();
+
+    for (const bad of ["", "Briefcase", "two words", "x".repeat(65)]) {
+      expectError(await failure(w.owner.run(() => api.workspaces.update(w.workspaceId, { icon: bad }))), 400, "bad_request");
+    }
+    expectError(await failure(w.owner.run(() => api.workspaces.create("Bad icon", "Not Valid"))), 400, "bad_request");
+  });
+
+  it("sets, keeps and clears a base icon, shown in the schema and the workspace list", async () => {
+    const set = parse("BaseSchema", await w.owner.run(() => api.bases.update(w.baseId, { icon: "chart-column" })));
+    expect(set.icon).toBe("chart-column");
+    expect(parseList("WorkspaceSummary", await w.owner.run(api.workspaces.list)).find((x) => x.id === w.workspaceId)?.bases.find((b) => b.id === w.baseId)?.icon).toBe("chart-column");
+    const renamed = parse("BaseSchema", await w.owner.run(() => api.bases.update(w.baseId, { name: "Icons base" })));
+    expect(renamed).toMatchObject({ name: "Icons base", icon: "chart-column" });
+    expect(parse("BaseSchema", await w.owner.run(() => api.bases.update(w.baseId, { icon: null }))).icon ?? null).toBeNull();
+    expectError(await failure(w.owner.run(() => api.bases.update(w.baseId, { icon: "NOPE" }))), 400, "bad_request");
+    const withIcon = parse("BaseSchema", await w.owner.run(() => api.bases.create(w.workspaceId, { name: "Born with an icon", icon: "store" })));
+    expect(withIcon.icon).toBe("store");
+  });
+
+  it("sets, keeps and clears a table icon, and only people who can rename the table may", async () => {
+    const t = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Shipments", "truck")));
+    expect(t.icon).toBe("truck");
+    expect(parse("Table", await w.owner.run(() => api.tables.update(t.id, { icon: "package" }))).icon).toBe("package");
+    expect(parse("Table", await w.owner.run(() => api.tables.update(t.id, { description: "Things in transit" }))).icon).toBe("package");
+    expect((await refreshBase(w.owner, w.baseId)).tables.find((x) => x.id === t.id)?.icon).toBe("package");
+    expectError(await failure(w.owner.run(() => api.tables.update(t.id, { icon: "bad icon" }))), 400, "bad_request");
+
+    await joinBase(w.owner, w.baseId, editor, "editor");
+    expectError(await failure(editor.run(() => api.tables.update(t.id, { icon: "star" }))), 403, "forbidden");
+    expectError(await failure(editor.run(() => api.bases.update(w.baseId, { icon: "star" }))), 403, "forbidden");
+    // ...but they see the icon
+    expect((await refreshBase(editor, w.baseId)).tables.find((x) => x.id === t.id)?.icon).toBe("package");
+
+    expect(parse("Table", await w.owner.run(() => api.tables.update(t.id, { icon: null }))).icon ?? null).toBeNull();
+  });
+
+  it("copies icons when a table or a base is duplicated", async () => {
+    await w.owner.run(() => api.bases.update(w.baseId, { icon: "store" }));
+    const t = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Orders", "shopping-cart")));
+    const tableCopy = parse("Table", await w.owner.run(() => api.tables.duplicate(t.id, { name: "Orders again", include_records: false })));
+    expect(tableCopy.icon).toBe("shopping-cart");
+    const baseCopy = parse("BaseSchema", await w.owner.run(() => api.bases.duplicate(w.baseId, { name: "Icons copy", include_records: false })));
+    expect(baseCopy.icon).toBe("store");
+    expect(baseCopy.tables.find((x) => x.name === "Orders")?.icon).toBe("shopping-cart");
+  });
+
+  it("lists the icon of a trashed table, base and workspace", async () => {
+    const t = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Doomed", "heart")));
+    await w.owner.run(() => api.tables.remove(t.id));
+    const trash = parse("TrashListing", await w.owner.run(() => api.trash.forBase(w.baseId)));
+    expect(trash.items).toContainEqual(expect.objectContaining({ kind: "table", id: t.id, icon: "heart" }));
+
+    const ws = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.create(`Trashed ${rand()}`, "folder")));
+    const base = parse("BaseSchema", await w.owner.run(() => api.bases.create(ws.id, { name: "Doomed base", icon: "star" })));
+    await w.owner.run(() => api.bases.remove(base.id));
+    expect(parse("TrashListing", await w.owner.run(() => api.trash.forWorkspace(ws.id))).items).toContainEqual(expect.objectContaining({ kind: "base", id: base.id, icon: "star" }));
+    await w.owner.run(() => api.workspaces.remove(ws.id));
+    expect(parse("TrashListing", await w.owner.run(api.trash.deletedWorkspaces)).items).toContainEqual(expect.objectContaining({ kind: "workspace", id: ws.id, icon: "folder" }));
+  });
+});

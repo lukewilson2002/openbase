@@ -13,7 +13,7 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import type { PublicProblem } from "@/lib/publicErrors";
 
-export function PublicShell({ title, subtitle, children, wide }: { title?: string; subtitle?: string; children: ReactNode; wide?: boolean }) {
+export function PublicShell({ title, subtitle, children, wide }: { title?: string; subtitle?: ReactNode; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const previous = document.title;
     document.title = title ? `${title} · OpenGrid` : "OpenGrid";

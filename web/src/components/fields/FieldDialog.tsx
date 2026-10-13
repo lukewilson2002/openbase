@@ -3,6 +3,7 @@
  * type. Creating posts `CreateField` (`options` always present); editing patches only what
  * changed, and warns before a type change that may lose data.
  */
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useId, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
@@ -177,7 +178,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
       open
       onOpenChange={(o) => !saving && onOpenChange(o)}
       title={title}
-      description={existing ? `Change the name, type or options of "${existing.name}".` : `Add a field to ${table.name}.`}
+      description={existing ? `Change the name, type or options of "${existing.name}".` : <span className="inline-flex items-center gap-1.5">Add a field to <EntityLabel icon={table.icon}>{table.name}.</EntityLabel></span>}
       size="lg"
       footer={
         <>

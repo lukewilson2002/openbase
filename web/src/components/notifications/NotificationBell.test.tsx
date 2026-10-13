@@ -144,3 +144,32 @@ describe("markedRead", () => {
     expect(markedRead({ ...data, unread: 0 }, ["n1"], 5).unread).toBe(0);
   });
 });
+
+describe("NotificationBell places", () => {
+  it("names the base and table of a mention with the icons they had", async () => {
+    const user = userEvent.setup();
+    mockApi({
+      "GET /api/notifications": {
+        unread: 1,
+        notifications: [note("n1", "mention", { base_id: "app1", base_name: "Roadmap", base_icon: "store", table_id: "tbl1", table_name: "Tasks", table_icon: "truck", record_id: "rec1", record_name: "Launch plan", author_name: "Grace" })],
+      },
+    });
+    renderBell();
+    await user.click(await screen.findByRole("button", { name: /Notifications/ }));
+    const item = (await screen.findByText("Grace mentioned you in Launch plan")).closest("li")!;
+    expect(item.querySelector("svg.lucide-store")).toBeInTheDocument();
+    expect(item.querySelector("svg.lucide-truck")).toBeInTheDocument();
+    expect(item).toHaveTextContent("Roadmap / Tasks");
+  });
+
+  it("shows the names without icons for notifications written before icons existed", async () => {
+    const user = userEvent.setup();
+    mockApi({ "GET /api/notifications": { unread: 1, notifications: [note("n1", "assigned", { base_id: "app1", base_name: "Roadmap", table_id: "tbl1", table_name: "Tasks", record_id: "rec2", record_name: "Fix login", field_name: "Owner" })] } });
+    renderBell();
+    await user.click(await screen.findByRole("button", { name: /Notifications/ }));
+    const item = (await screen.findByText("You were assigned to Fix login")).closest("li")!;
+    expect(item).toHaveTextContent("In Owner");
+    expect(item).toHaveTextContent("Roadmap / Tasks");
+    expect(item.querySelector("button svg.lucide-store")).toBeNull();
+  });
+});

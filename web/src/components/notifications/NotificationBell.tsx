@@ -16,7 +16,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/relativeTime";
 import { notificationsApi } from "./api";
-import { describeNotification, type NotificationKind } from "./describe";
+import { EntityLabel } from "@/components/icons/EntityIcon";
+import { describeNotification, notificationPlace, type NotificationKind } from "./describe";
 
 export const NOTIFICATION_POLL_MS = 60_000;
 
@@ -107,6 +108,7 @@ export function NotificationBell() {
                 const v = describeNotification(n);
                 const Icon = ICONS[v.kind];
                 const isUnread = n.read_at == null;
+                const place = notificationPlace(n);
                 return (
                   <li key={n.id} className="group relative border-b border-line last:border-b-0">
                     <button
@@ -118,6 +120,26 @@ export function NotificationBell() {
                       <span className="min-w-0 flex-1">
                         <span className={cn("block text-[0.8125rem]", isUnread && "font-semibold")}>{v.title}</span>
                         {v.detail && <span className="mt-0.5 line-clamp-2 block text-xs text-muted">{v.detail}</span>}
+                        {place && (
+                          <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted">
+                            {place.base && (
+                              <EntityLabel icon={place.base.icon} iconClassName="size-3.5">
+                                {place.base.name}
+                              </EntityLabel>
+                            )}
+                            {place.base && place.table && (
+                              <>
+                                {" "}
+                                <span aria-hidden>/</span>{" "}
+                              </>
+                            )}
+                            {place.table && (
+                              <EntityLabel icon={place.table.icon} iconClassName="size-3.5">
+                                {place.table.name}
+                              </EntityLabel>
+                            )}
+                          </span>
+                        )}
                         <span className="mt-0.5 block text-xs text-faint">{relativeTime(n.created_at)}</span>
                       </span>
                       {isUnread && <span className="sr-only">Unread</span>}

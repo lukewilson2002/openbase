@@ -4,6 +4,7 @@
  * API (`POST /api/tables/{id}/records`, typecast on), so history, automations and live updates
  * behave exactly as for any other new record.
  */
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
@@ -74,7 +75,9 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-3 rounded-lg border border-line bg-surface p-8 text-center shadow-sm" role="status">
         <CircleCheck aria-hidden className="size-8 text-success" />
         <h2 className="text-xl">{form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}</h2>
-        <p className="text-[0.8125rem] text-muted">The record was added to {table.name}.</p>
+        <p className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted">
+          The record was added to <EntityLabel icon={table.icon}>{table.name}</EntityLabel>.
+        </p>
         <Button
           variant="primary"
           onClick={() => {

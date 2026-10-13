@@ -27,10 +27,11 @@ describe("TrashDialog", () => {
     const headings = (await within(dialog).findAllByRole("heading", { level: 3 })).map((h) => h.textContent?.replace(/\s+/g, " ").trim());
     expect(headings).toEqual(["Tables (1)", "Fields (1)", "Views (1)", "Records (1)"]);
     expect(within(dialog).getByText("Old budget")).toBeInTheDocument();
-    expect(within(dialog).getByText("Deleted 2 days ago in Tasks")).toBeInTheDocument();
-    expect(within(dialog).getByText("Deleted 5 days ago")).toBeInTheDocument();
+    const row = (name: string) => within(dialog).getByText(name).closest("li")!;
+    expect(row("Write the plan")).toHaveTextContent("Deleted 2 days ago in Tasks");
+    expect(row("Old budget")).toHaveTextContent(/^Old budgetDeleted 5 days ago(?! in)/);
     expect(within(dialog).getByText("Unnamed view")).toBeInTheDocument();
-    expect(within(dialog).getByText("Deleted 10 minutes ago in People")).toBeInTheDocument();
+    expect(row("Unnamed view")).toHaveTextContent("Deleted 10 minutes ago in People");
   });
 
   it("restores an item, then reloads the trash and the base", async () => {
@@ -81,5 +82,27 @@ describe("TrashButton", () => {
     renderWithProviders(<TrashButton schema={makeSchema("creator")} />);
     await user.click(screen.getByRole("button", { name: "Trash" }));
     expect(await screen.findByRole("dialog", { name: "Trash" })).toBeInTheDocument();
+  });
+});
+
+describe("TrashDialog icons", () => {
+  it("shows the icon of a deleted table and of the table an item was deleted from", async () => {
+    mockApi({
+      "GET /api/bases/app1/trash": {
+        items: [
+          { kind: "table", id: "tbl9", name: "Old budget", icon: "wallet", table_id: null, deleted_at: NOW - 5 * DAY },
+          { kind: "field", id: "fld9", name: "Legacy", table_id: "tbl1", deleted_at: NOW - 3600_000 },
+        ],
+      },
+    });
+    const schema = makeSchema("creator");
+    schema.tables[0]!.icon = "truck";
+    renderWithProviders(<TrashDialog open onOpenChange={() => {}} schema={schema} />);
+    const dialog = await screen.findByRole("dialog", { name: "Trash" });
+    const table = (await within(dialog).findByText("Old budget")).closest("li")!;
+    expect(table.querySelector("svg.lucide-wallet")).toBeInTheDocument();
+    const field = within(dialog).getByText("Legacy").closest("li")!;
+    expect(field.querySelector("svg.lucide-truck")).toBeInTheDocument();
+    expect(field).toHaveTextContent("in Tasks");
   });
 });

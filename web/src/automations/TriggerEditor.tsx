@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import type { Trigger } from "@/api/types";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EntitySelect } from "@/components/ui/entity-select";
 import { Field, Select } from "@/components/ui/input";
 import { FilterBuilder } from "@/components/viewbar/FilterBuilder";
 import { isComputed } from "@/lib/cells/kinds";
@@ -58,14 +59,12 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
   const tableSelect = (tableId: string) => (
     <Field label="Table" className="max-w-md">
       {(ctl) => (
-        <Select {...ctl} value={tableId} onChange={(e) => onChange(withTriggerTable(trigger, e.target.value))}>
-          {!schema.tables.some((t) => t.id === tableId) && <option value={tableId}>(deleted table)</option>}
-          {schema.tables.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <EntitySelect
+          {...ctl}
+          value={tableId}
+          onValueChange={(id) => onChange(withTriggerTable(trigger, id))}
+          options={[...(schema.tables.some((t) => t.id === tableId) ? [] : [{ value: tableId, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, icon: t.icon }))]}
+        />
       )}
     </Field>
   );
@@ -126,14 +125,12 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
       return (
         <Field label="Form" className="max-w-md" hint={forms.length === 0 ? "This base has no form views. Create one from a table's view sidebar." : undefined}>
           {(ctl) => (
-            <Select {...ctl} value={trigger.view_id} onChange={(e) => onChange({ type: "form_submitted", view_id: e.target.value })}>
-              {!known && <option value={trigger.view_id}>(deleted form)</option>}
-              {forms.map(({ table, view }) => (
-                <option key={view.id} value={view.id}>
-                  {table.name} / {view.name}
-                </option>
-              ))}
-            </Select>
+            <EntitySelect
+              {...ctl}
+              value={trigger.view_id}
+              onValueChange={(id) => onChange({ type: "form_submitted", view_id: id })}
+              options={[...(known ? [] : [{ value: trigger.view_id, label: "(deleted form)" }]), ...forms.map(({ table, view }) => ({ value: view.id, label: `${table.name} / ${view.name}`, icon: table.icon }))]}
+            />
           )}
         </Field>
       );

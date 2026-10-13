@@ -1,3 +1,4 @@
+import { EntityLabel, EntityTile } from "@/components/icons/EntityIcon";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
@@ -53,12 +54,16 @@ export function InvitePage() {
       subtitle={
         <>
           {inv.invited_by ? <>{inv.invited_by} invited you to </> : "You are invited to "}
-          the {inv.target_kind} <strong>{inv.target_name}</strong>
+          the {inv.target_kind}{" "}
+          <strong>
+            <EntityLabel icon={inv.target_icon}>{inv.target_name}</EntityLabel>
+          </strong>
           {role && <> as {ROLE_LABELS[role].toLowerCase()}</>}.
         </>
       }
     >
       <div className="flex flex-col gap-3">
+        <EntityTile name={inv.target_name} icon={inv.target_icon} size="lg" className="self-center" />
         {role && <p className="text-[0.8125rem] text-muted">{ROLE_DESCRIPTIONS[role]}.</p>}
         {inv.email && (
           <Notice>

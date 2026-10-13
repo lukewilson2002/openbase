@@ -6,6 +6,8 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema } from "@/api/types";
 import { Logo } from "@/components/Logo";
+import { EntityTile } from "@/components/icons/EntityIcon";
+import { IconPicker } from "@/components/icons/IconPicker";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SharingDialog } from "@/components/LazySharingDialog";
 import { TrashButton } from "@/components/trash/TrashButton";
@@ -13,8 +15,6 @@ import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
-import { choiceClass } from "@/lib/colors";
 import { ROLE_LABELS, isRole } from "@/lib/roles";
 import { basePermissions } from "./permissions";
 
@@ -29,9 +29,7 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
       <Link to="/" aria-label="Back to all bases" className="shrink-0">
         <Logo showName={false} />
       </Link>
-      <span className={cn("flex size-6 shrink-0 items-center justify-center rounded text-xs font-semibold", choiceClass(schema.color))} aria-hidden>
-        {schema.name.trim().charAt(0).toUpperCase() || "?"}
-      </span>
+      <BaseTile schema={schema} editable={canEdit} />
       <BaseName schema={schema} editable={canEdit} />
       <div className="flex-1" />
       {isRole(schema.role) && <span className="hidden rounded-full bg-subtle px-2 py-0.5 text-xs text-muted sm:inline">{ROLE_LABELS[schema.role]}</span>}
@@ -54,8 +52,31 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
       <TrashButton schema={schema} />
       <NotificationBell />
       <UserMenu />
-      {sharingLoaded && <SharingDialog open={sharing} onOpenChange={setSharing} scope={{ kind: "base", id: schema.id, name: schema.name }} myRole={schema.role} />}
+      {sharingLoaded && <SharingDialog open={sharing} onOpenChange={setSharing} scope={{ kind: "base", id: schema.id, name: schema.name, icon: schema.icon }} myRole={schema.role} />}
     </header>
+  );
+}
+
+/** The base's coloured tile: its icon, or its initial. Creators click it to change the icon. */
+function BaseTile({ schema, editable }: { schema: BaseSchema; editable: boolean }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const setIcon = useMutation({
+    mutationFn: (icon: string | null) => api.bases.update(schema.id, { icon }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.base(schema.id) });
+      void qc.invalidateQueries({ queryKey: keys.workspaces });
+    },
+    onError: (e) => toast.error(e, "Could not change the icon"),
+  });
+  const tile = <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="sm" />;
+  if (!editable) return tile;
+  return (
+    <IconPicker value={schema.icon} onChange={(icon) => setIcon.mutate(icon)}>
+      <button type="button" aria-label="Change base icon" title="Change icon" className="shrink-0 rounded hover:opacity-80 focus-visible:outline-2 focus-visible:outline-ring">
+        {tile}
+      </button>
+    </IconPicker>
   );
 }
 

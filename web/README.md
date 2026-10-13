@@ -15,6 +15,15 @@ React 19 + TypeScript (strict) single-page app, built with Vite and embedded int
 | Contract | TypeScript types generated from the Rust DTOs by ts-rs into `src/api/types` |
 | Tests | Vitest + Testing Library + jsdom; live contract tests against the real server (`contract/`); Playwright end-to-end tests in Chrome (`e2e/`) |
 
+Icons for workspaces, bases and tables (`src/components/icons/`): the 20 popular Lucide icons are bundled
+(`popular.ts`) and draw instantly; the full set (~1,900 icons, a ~190 kB gzipped chunk) is a dynamic `import()`
+(`registry.ts` -> `fullSet.ts`) that loads only when an icon picker opens or an icon outside the popular 20 has to be
+drawn, and is then cached. `<EntityIcon>` / `<EntityTile>` / `<EntityLabel>` draw an icon by name with the first
+letter as the fallback, `<IconPicker>` is the popover (search by name and alias, windowed list, keyboard grid, "Remove
+icon"), and `ui/entity-select.tsx` is the select used where a table is chosen by name (native `<option>`s cannot draw
+icons). `fullSet.ts` globs `lucide-react/dist/esm/icons/*.mjs` and reads Lucide's `__iconData` export; `icons.test.ts`
+fails if a Lucide upgrade removes it or renames one of the popular 20.
+
 Dependencies are deliberately few (9 runtime for the shell): react, react-dom, react-router, @tanstack/react-query, radix-ui,
 lucide-react, clsx, tailwind-merge, qrcode (the QR encoder is lazy-loaded for the 2FA dialog).
 The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and react-responsive-carousel) and dompurify,

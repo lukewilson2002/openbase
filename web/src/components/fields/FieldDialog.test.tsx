@@ -126,7 +126,7 @@ describe("FieldDialog: create", () => {
     const { api } = setup();
     await userEvent.type(screen.getByLabelText("Field name"), "Team");
     await pick("Link to another record");
-    expect(screen.getByLabelText("Table to link to")).toHaveValue("tbl2");
+    expect(screen.getByLabelText("Table to link to")).toHaveTextContent("People");
     await userEvent.click(screen.getByRole("checkbox", { name: "Allow linking to only one record" }));
     await userEvent.type(screen.getByLabelText(/Name of the field created in the linked table/), "Tasks here");
     await userEvent.click(screen.getByRole("button", { name: "Create field" }));
@@ -315,3 +315,28 @@ describe("FieldDialog: edit", () => {
   });
 });
 
+
+describe("FieldDialog: tables with icons", () => {
+  it("shows each table's icon in the link target select, and picks by name", async () => {
+    const user = userEvent.setup();
+    schema.tables[1]!.icon = "truck";
+    try {
+      const { api } = setup();
+      await user.type(screen.getByLabelText("Field name"), "Team");
+      await pick("Link to another record");
+      const target = screen.getByLabelText("Table to link to");
+      expect(target.querySelector("svg.lucide-truck")).toBeInTheDocument();
+      await user.click(target);
+      const options = await screen.findAllByRole("option");
+      expect(options.map((o) => o.textContent)).toEqual(["Tasks (this table)", "People"]);
+      expect(options[1]!.querySelector("svg.lucide-truck")).toBeInTheDocument();
+      expect(options[0]!.querySelector("svg")).toBeNull();
+      await user.click(options[0]!);
+      await user.click(screen.getByRole("button", { name: "Create field" }));
+      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/fields")).toHaveLength(1));
+      expect(body(api)).toMatchObject({ type: "link", options: { linked_table_id: "tbl1" } });
+    } finally {
+      schema.tables[1]!.icon = undefined;
+    }
+  });
+});

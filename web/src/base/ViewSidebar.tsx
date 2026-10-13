@@ -6,6 +6,7 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View, ViewType } from "@/api/types";
 import { NameDialog } from "@/components/NameDialog";
+import { EntityIcon } from "@/components/icons/EntityIcon";
 import { ShareViewDialog } from "@/components/share/LazyShareViewDialog";
 import { canShareView } from "@/components/share/shareView";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -147,7 +148,10 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
         open ? "absolute inset-y-0 left-0 z-40 flex shadow-pop md:static md:shadow-none" : "hidden md:flex",
       )}
     >
-      <div className="px-2 pb-1 pt-1 text-xs font-medium uppercase tracking-wide text-muted">{table.name}</div>
+      <div className="flex items-center gap-1.5 px-2 pb-1 pt-1 text-xs font-medium uppercase tracking-wide text-muted">
+        {table.icon && <EntityIcon name={table.icon} className="size-3.5" />}
+        <span className="min-w-0 truncate">{table.name}</span>
+      </div>
       <ul className="flex flex-col gap-0.5" aria-label="Shared views">
         {shared.map(renderView)}
       </ul>
