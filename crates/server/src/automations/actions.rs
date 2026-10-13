@@ -471,7 +471,11 @@ impl Executor {
         // every recipient counts against the automation owner's hourly email
         // budget and the instance-wide one (permanent: retrying within the
         // same hour cannot succeed).
-        let owner = input.automation.created_by.as_deref().unwrap_or("automation");
+        let owner = input
+            .automation
+            .created_by
+            .as_deref()
+            .unwrap_or("automation");
         let count = u32::try_from(recipients.len()).unwrap_or(u32::MAX);
         if crate::email::spend_budget(&self.state.limiter, &self.state.config, owner, count)
             .is_err()

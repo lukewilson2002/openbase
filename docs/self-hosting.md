@@ -363,7 +363,7 @@ docker compose exec opengrid opengrid disable-2fa --email user@example.com
 | `unhealthy` in `docker compose ps` | `docker compose exec opengrid opengrid healthcheck` prints the reason. |
 | Login works but you are logged out immediately | `OPENGRID_PUBLIC_URL` must match the URL in the browser exactly, including `https://`. |
 | Requests rejected with "missing CSRF header" | A custom script is using a session cookie. Use a personal access token (`Authorization: Bearer ...`) instead. |
-| All users appear to come from one IP (rate limits hit) | Set `OPENGRID_TRUST_PROXY=true` when running behind a reverse proxy. Never enable it when OpenGrid is reachable directly. |
+| All users appear to come from one IP (rate limits hit) | Set `OPENGRID_TRUST_PROXY=true` when running behind a reverse proxy. Never enable it when OpenGrid is reachable directly, and only behind a proxy that sets or appends the client address in `X-Forwarded-For` (OpenGrid uses the last entry); see `docs/security.md`. |
 | Uploads fail with 413 | Raise `OPENGRID_MAX_UPLOAD_MB`. If you use a proxy other than Caddy, raise its body size limit too (nginx: `client_max_body_size`). |
 | Live updates do not appear | A proxy is buffering Server-Sent Events. For nginx set `proxy_buffering off;` for `/api/bases/`. |
 | `restore` says the server looks like it is still running | Stop the server. If it crashed, start and stop it cleanly once, then retry. |

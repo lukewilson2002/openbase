@@ -26,9 +26,15 @@ create or list tokens themselves):
 
 The secret is shown once. A token acts as its owner, limited further by:
 
-- **write**: a read-only token acts as a Viewer on every base (reads only).
+- **write**: a read-only token acts as a Viewer on every base and may only
+  read. Every state-changing request (anything but GET/HEAD, apart from view
+  queries, which are POSTs) answers `403`, including actions on the owner's own
+  data such as deleting a comment or marking notifications read.
 - **base_ids**: the bases the token may reach; any other base answers 404.
-- expiry: expired tokens answer 401.
+  `/api/notifications` only lists (and marks read) notifications of those bases.
+- expiry: expired tokens answer 401. Open event streams (`/api/bases/{id}/events`)
+  end when their token is deleted or expires.
+- Changing or resetting the owner's password deletes all of their tokens.
 
 Roles are the owner's: Viewer < Commenter < Editor < Creator < Owner. Records
 can be written by Editors and above. The Airtable API changes no schema, except

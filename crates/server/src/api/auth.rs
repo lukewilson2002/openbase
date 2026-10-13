@@ -323,9 +323,12 @@ async fn login_2fa(
     // Per client address first: anyone can send a made-up cookie, so nothing
     // keyed by the cookie may be counted until the pending session is known to
     // exist (that would let one client grow the limiter without bound).
-    state
-        .limiter
-        .check("login_2fa_ip", &client.ip, LOGIN_2FA_IP_PER_10_MIN, 10 * MINUTE)?;
+    state.limiter.check(
+        "login_2fa_ip",
+        &client.ip,
+        LOGIN_2FA_IP_PER_10_MIN,
+        10 * MINUTE,
+    )?;
     let Some(raw) = jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) else {
         return Ok(expired());
     };

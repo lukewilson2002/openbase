@@ -155,12 +155,15 @@ environment variable (`OPENGRID_DATA_DIR`).
 | `OPENGRID_BIND` | `127.0.0.1:8080` | Address to listen on. |
 | `OPENGRID_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenGrid at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. |
 | `OPENGRID_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
-| `OPENGRID_TRUST_PROXY` | `false` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` from a reverse proxy. Enable only if OpenGrid can be reached solely through that proxy. |
+| `OPENGRID_TRUST_PROXY` | `false` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` from a reverse proxy (the last `X-Forwarded-For` entry is the client address). Enable only if OpenGrid can be reached solely through that proxy; see `docs/security.md`. |
 | `OPENGRID_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
 | `OPENGRID_BACKUP_HOUR` | `3` | Hour (0–23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
 | `OPENGRID_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
 | `OPENGRID_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |
 | `OPENGRID_HISTORY_DAYS` | `365` | Days of record history to keep (`0` = forever). |
+| `OPENGRID_AUDIT_DAYS` | `365` | Days of audit log (logins, password and token changes, invites, admin actions) to keep (`0` = forever). |
+| `OPENGRID_EMAIL_PER_USER_HOUR` | `100` | Invite and automation emails one user can cause per hour. |
+| `OPENGRID_EMAIL_PER_HOUR` | `500` | Invite and automation emails the whole instance sends per hour on behalf of users. |
 | `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when unset. |
 | `OPENGRID_SMTP_PORT` | `587` | SMTP port. |
 | `OPENGRID_SMTP_USER` | *(unset)* | SMTP username. |

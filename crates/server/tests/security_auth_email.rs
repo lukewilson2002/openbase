@@ -53,9 +53,13 @@ async fn invite_emails_are_limited_per_user_and_per_instance() {
         app.query_i64("SELECT count(*) FROM invites WHERE email IS NOT NULL", &[]),
         4
     );
-    app.post(&a, &format!("/api/workspaces/{ws_a}/invites"), json!({"role": "viewer"}))
-        .await
-        .assert_status(201);
+    app.post(
+        &a,
+        &format!("/api/workspaces/{ws_a}/invites"),
+        json!({"role": "viewer"}),
+    )
+    .await
+    .assert_status(201);
     assert_eq!(app.mailer.wait_for(4).await.len(), 4);
 }
 
@@ -65,7 +69,9 @@ async fn automation_emails_count_every_recipient_against_the_budget() {
     let email = json!([{ "type": "send_email",
         "to": "a@example.com, b@example.com", "subject": "s", "body": "b" }]);
 
-    let first = env.create("first", env.trigger_created(), email.clone()).await;
+    let first = env
+        .create("first", env.trigger_created(), email.clone())
+        .await;
     let second = env.create("second", env.trigger_created(), email).await;
     let rec = env.rec(json!({}));
     env.fire_created(&[&rec]);

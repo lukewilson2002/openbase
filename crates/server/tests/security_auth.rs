@@ -102,7 +102,14 @@ fn audit_log_rows_are_bounded_and_expire() {
         .write_sync(|tx| {
             use opengrid::store::audit;
             let huge = json!({ "email": "x".repeat(100_000) });
-            audit::record(tx, None, audit::actions::LOGIN_FAILED, None, Some(huge), None)?;
+            audit::record(
+                tx,
+                None,
+                audit::actions::LOGIN_FAILED,
+                None,
+                Some(huge),
+                None,
+            )?;
             // One old row and one fresh row.
             tx.execute(
                 "INSERT INTO audit_log (action, created_at) VALUES ('login', 1)",
@@ -212,7 +219,12 @@ async fn cli_password_reset_revokes_api_tokens() {
 // ------------------------------------------------------------------ invites
 
 fn token_of(url: &serde_json::Value) -> String {
-    url.as_str().unwrap().rsplit('/').next().unwrap().to_string()
+    url.as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string()
 }
 
 async fn invite(app: &TestApp, by: &Client, target: &str, role: &str) -> String {
@@ -251,7 +263,10 @@ async fn invites_die_with_their_creators_deactivation() {
         .0
         .assert_status(404);
     assert_eq!(
-        app.query_i64("SELECT count(*) FROM workspace_members WHERE role = 'owner'", &[]),
+        app.query_i64(
+            "SELECT count(*) FROM workspace_members WHERE role = 'owner'",
+            &[]
+        ),
         1
     );
 }
@@ -366,7 +381,12 @@ async fn client_supplied_forwarded_for_entries_cannot_dodge_per_ip_limits() {
         ),
         0
     );
-    assert!(app.query_i64("SELECT count(*) FROM audit_log WHERE ip = '203.0.113.7'", &[]) > 0);
+    assert!(
+        app.query_i64(
+            "SELECT count(*) FROM audit_log WHERE ip = '203.0.113.7'",
+            &[]
+        ) > 0
+    );
 }
 
 #[tokio::test]
@@ -374,7 +394,12 @@ async fn non_bearer_authorization_headers_do_not_bypass_csrf() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");
     let token = user.cookie.clone().unwrap();
-    for auth in ["Basic dXNlcjpwYXNz", "Digest abc", "bearer lowercase", "Bearer"] {
+    for auth in [
+        "Basic dXNlcjpwYXNz",
+        "Digest abc",
+        "bearer lowercase",
+        "Bearer",
+    ] {
         let res = app
             .request_with(
                 &Client {
@@ -390,7 +415,10 @@ async fn non_bearer_authorization_headers_do_not_bypass_csrf() {
             )
             .await;
         res.assert_status(403);
-        assert_eq!(res.body["error"]["message"], "missing CSRF header", "{auth}");
+        assert_eq!(
+            res.body["error"]["message"], "missing CSRF header",
+            "{auth}"
+        );
     }
     // The password was not changed and the session still works.
     app.get(&user, "/api/auth/me").await.assert_status(200);
