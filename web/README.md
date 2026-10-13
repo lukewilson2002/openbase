@@ -264,6 +264,20 @@ Colours are tokens in `src/styles/index.css` for both themes; the grid canvas mi
 `lib/cells/palette.ts`. `src/styles/contrast.test.ts` keeps text on its usual surfaces at WCAG AA (4.5:1) in both themes. Marks (the dot of a
 stack or lane, the bar of a coloured row) use `swatchColor`, because the pale chip backgrounds are about 1.3:1 on a white surface.
 
+### Logo, favicon and web app manifest
+
+`brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and
+`scripts/check.sh` fails when the copies are stale (`--check`):
+
+- `public/favicon.svg` (the small mark), `favicon.ico`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` and
+  `icon-maskable-512.png`, linked from `index.html`. `public/manifest.webmanifest` (name OpenBase, theme `#1F5AE0`, the three icons) is
+  handwritten. There are no inline scripts or styles in `index.html`: the server's CSP forbids them.
+- `src/components/brandMarks.ts` (generated): the path data that `components/Logo.tsx` draws inline. `Logo` is the lockup (mark plus
+  outlined wordmark, in the text colour, so it follows the theme) or, with `showName={false}`, the small mark; `BrandMark` is the bare
+  mark. They sit in the app top bars, the sign-in, setup, invite and reset pages and, as "Powered by OpenBase", the footer of public
+  form and share pages. The server serves these files with `Cache-Control: public, max-age=86400` and an ETag (the manifest and
+  `index.html` are `no-cache`), see `crates/server/src/web.rs`.
+
 ### Conventions
 
 - Every request goes through `src/api/client.ts` (CSRF header, client id, error mapping, 401 handling).

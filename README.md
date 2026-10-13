@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/openbase-lockup-dark.svg">
+    <img src="brand/openbase-lockup.svg" alt="OpenBase" width="320">
+  </picture>
+</p>
+
 # OpenBase
 
 OpenBase is a self-hosted alternative to Airtable for individuals and very small
@@ -454,6 +461,7 @@ Other scripts:
 | Script | What it does |
 |---|---|
 | `scripts/gen-types.sh [--check]` | Regenerates (or verifies) the TypeScript types generated from the Rust DTOs. |
+| `scripts/gen-brand.sh [--check]` | Copies the favicon, touch and manifest icons from `brand/` into `web/public/` and regenerates the inline logo path data (`web/src/components/brandMarks.ts`). |
 | `scripts/smoke-install.sh [binary]` | Fresh-install walkthrough of the release binary: migrate, create-admin, serve, log in, create data, backup, restore elsewhere, reset-password, healthcheck. `SEED_RECORDS=50000` adds the load test. |
 | `scripts/smoke-docker.sh [image]` | The same for the container image: health check, first-run signup, persistence across restarts, backup inside the container, image size and idle memory. |
 | `scripts/loadtest.sh` | Loads N records into a running instance over HTTP and times the common reads. |

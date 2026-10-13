@@ -31,6 +31,68 @@ test("loads / from the embedded build without console errors or CSP violations",
   expect(await page.content()).not.toContain("/@vite/client");
 });
 
+test("the favicons, touch icon and web app manifest are linked, load and decode without CSP violations", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in/ })).toBeVisible();
+  // The OpenBase mark is on the page, drawn inline (no image request, nothing for the CSP to block).
+  await expect(page.getByRole("img", { name: "OpenBase" })).toBeVisible();
+
+  const links = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLLinkElement>("link[rel~=icon], link[rel=apple-touch-icon], link[rel=manifest]")].map((l) => ({ rel: l.rel, type: l.type, href: l.href })),
+  );
+  const byRel = (rel: string, type?: string) => links.find((l) => l.rel === rel && (!type || l.type === type));
+  const svg = byRel("icon", "image/svg+xml");
+  const ico = byRel("icon", "image/x-icon");
+  const touch = byRel("apple-touch-icon");
+  const manifestLink = byRel("manifest");
+  expect(svg && ico && touch && manifestLink, `icon links in the page head: ${JSON.stringify(links)}`).toBeTruthy();
+  expect(await page.locator("meta[name=theme-color]").getAttribute("content")).toBe("#1F5AE0");
+
+  // Content types and caching, as the server sends them.
+  const expected: [string, string | RegExp][] = [
+    [svg!.href, "image/svg+xml"],
+    [ico!.href, /^image\/(x-icon|vnd\.microsoft\.icon)$/],
+    [touch!.href, "image/png"],
+    [manifestLink!.href, "application/manifest+json"],
+  ];
+  for (const [href, type] of expected) {
+    const res = await request.get(href);
+    expect(res.status(), href).toBe(200);
+    const contentType = res.headers()["content-type"] ?? "";
+    if (typeof type === "string") expect(contentType, href).toBe(type);
+    else expect(contentType, href).toMatch(type);
+    expect(res.headers()["etag"], href).toBeTruthy();
+    expect(res.headers()["cache-control"], href).toBe(href === manifestLink!.href ? "no-cache" : "public, max-age=86400");
+  }
+
+  // The browser itself decodes every image (img-src 'self') and parses the manifest (connect-src
+  // 'self'); a CSP violation or a broken file would surface in the diagnostics watchdog.
+  const manifest = await page.evaluate(async (href) => (await fetch(href)).json(), manifestLink!.href);
+  expect(manifest).toMatchObject({ name: "OpenBase", short_name: "OpenBase", start_url: "/", display: "standalone", theme_color: "#1F5AE0" });
+  expect(typeof manifest.background_color).toBe("string");
+  const icons = manifest.icons as { src: string; sizes: string; type: string; purpose: string }[];
+  expect(icons.map((i) => `${i.sizes} ${i.purpose}`).sort()).toEqual(["192x192 any", "512x512 any", "512x512 maskable"]);
+  const decoded = await page.evaluate(
+    (urls) =>
+      Promise.all(
+        urls.map(
+          (url) =>
+            new Promise<{ url: string; width: number }>((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve({ url, width: img.naturalWidth });
+              img.onerror = () => reject(new Error(`could not load ${url}`));
+              img.src = url;
+            }),
+        ),
+      ),
+    [svg!.href, ico!.href, touch!.href, ...icons.map((i) => new URL(i.src, page.url()).href)],
+  );
+  for (const d of decoded) expect(d.width, d.url).toBeGreaterThan(0);
+  expect(decoded.find((d) => d.url.endsWith("/icon-192.png"))?.width).toBe(192);
+  expect(decoded.find((d) => d.url.endsWith("/icon-512.png"))?.width).toBe(512);
+  expect(decoded.find((d) => d.url.endsWith("/apple-touch-icon.png"))?.width).toBe(180);
+});
+
 test("serves client-side routes from the app shell and real 404s for missing assets", async ({ page, request }) => {
   const route = await request.get("/some/client/route");
   expect(route.status()).toBe(200);
