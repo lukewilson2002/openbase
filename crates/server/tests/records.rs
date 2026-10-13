@@ -333,6 +333,61 @@ async fn strict_mode_wants_natural_json_types_and_typecast_reads_text() {
 }
 
 #[tokio::test]
+async fn wall_clock_dates_are_read_in_the_users_timezone_unless_the_field_fixes_one() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let uid = f.owner.user_id.clone().unwrap();
+    sql(&f.app, move |tx| {
+        tx.execute(
+            "UPDATE users SET timezone = 'America/New_York' WHERE id = ?1",
+            [&uid],
+        )
+    });
+    let local = f
+        .add_field(
+            &t,
+            json!({ "name": "Local", "type": "date", "options": { "include_time": true } }),
+        )
+        .await;
+    let fixed = f
+        .add_field(
+            &t,
+            json!({ "name": "Fixed", "type": "date",
+                    "options": { "include_time": true, "timezone": "Asia/Tokyo" } }),
+        )
+        .await;
+    let rec = f
+        .create(
+            &t,
+            json!({ sid(&local["id"]): "2026-03-04T10:00:00", sid(&fixed["id"]): "2026-03-04T10:00:00" }),
+        )
+        .await;
+    // 10:00 in New York (EST, UTC-5) is 15:00Z; 10:00 in Tokyo (UTC+9) is 01:00Z
+    assert!(sid(&rec["values"][sid(&local["id"])]).starts_with("2026-03-04T15:00:00"));
+    assert!(sid(&rec["values"][sid(&fixed["id"])]).starts_with("2026-03-04T01:00:00"));
+    // an explicit offset is honored as is
+    let rec = f
+        .create(&t, json!({ sid(&local["id"]): "2026-03-04T10:00:00Z" }))
+        .await;
+    assert!(sid(&rec["values"][sid(&local["id"])]).starts_with("2026-03-04T10:00:00"));
+}
+
+#[tokio::test]
+async fn durations_and_percentages_are_stored_as_seconds_and_fractions() {
+    let s = sink().await;
+    let r = s
+        .typecast(json!({ s.id("duration"): "1:30", s.id("percent"): "25%" }))
+        .await;
+    r.assert_status(201);
+    let v = &r.body["records"][0]["values"];
+    assert_eq!(v[s.id("duration")], 5400, "h:mm is stored as seconds");
+    assert_eq!(v[s.id("percent")], 0.25);
+    s.create(json!({ s.id("duration"): "not a duration" }))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
 async fn typecast_creates_missing_select_choices_and_announces_the_schema_change() {
     let s = sink().await;
     let mut rx = s.f.app.state.events.subscribe(&s.f.base_id);

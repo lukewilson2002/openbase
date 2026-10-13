@@ -556,7 +556,13 @@ impl<'a> Writer<'a> {
                 if o.single && ids.len() > 1 {
                     return Err(field_error(field, "this field links to a single record"));
                 }
-                links::require_live_targets(self.conn(), field, &o.linked_table_id, &ids)?;
+                // Ids the cell already holds are fine even if their record has
+                // been trashed since the client loaded it; new ones must be live.
+                let held: HashSet<String> =
+                    old.map(ids_of).unwrap_or_default().into_iter().collect();
+                let fresh: Vec<String> =
+                    ids.iter().filter(|i| !held.contains(*i)).cloned().collect();
+                links::require_live_targets(self.conn(), field, &o.linked_table_id, &fresh)?;
                 let mut all = ids;
                 if !o.single
                     && let Some(old) = old

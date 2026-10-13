@@ -38,6 +38,12 @@
 //! A hard cap on recomputed cells per transaction ([`DEFAULT_MAX_EVALS`])
 //! turns a runaway cascade into a 409 instead of a stuck writer.
 //!
+//! **No graph cache.** The base's schema and dependency graph are rebuilt for
+//! every write transaction ([`BaseSchema::load`]): about 2 ms (debug build)
+//! for a base of 320 fields, measured in `tests/recompute_perf.rs`, which is
+//! noise next to the SQLite commit, and it can never be stale. Parsed formulas
+//! are cached by source text (a content-keyed cache needs no invalidation).
+//!
 //! # Schema changes
 //!
 //! [`recompute_fields`] is the entry point for field create/update/delete/
@@ -1057,4 +1063,230 @@ pub fn refresh_volatile(
     s.force_computed(field_ids)?;
     s.run()?;
     Ok(s.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use og_core::field::{
+        CountOptions, Empty, FormulaOptions, LinkOptions, LookupOptions, NumberOptions, TextOptions,
+    };
+    use serde_json::json;
+
+    fn field(id: &str, table: &str, kind: FieldKind) -> Field {
+        Field {
+            id: id.into(),
+            table_id: table.into(),
+            name: id.into(),
+            description: None,
+            kind,
+        }
+    }
+
+    fn formula(id: &str, table: &str, expr: &str) -> Field {
+        field(
+            id,
+            table,
+            FieldKind::Formula(FormulaOptions {
+                expression: expr.into(),
+                format: None,
+                result_type: ResultType::Text,
+            }),
+        )
+    }
+
+    fn link(id: &str, table: &str, to: &str, inverse: &str) -> Field {
+        field(
+            id,
+            table,
+            FieldKind::Link(LinkOptions {
+                linked_table_id: to.into(),
+                inverse_field_id: inverse.into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        )
+    }
+
+    #[test]
+    fn json_comparison_ignores_the_integer_float_difference() {
+        assert!(same_json(Some(&json!(1)), Some(&json!(1.0))));
+        assert!(same_json(
+            Some(&json!([1, {"a": 2.0}])),
+            Some(&json!([1.0, {"a": 2}]))
+        ));
+        assert!(!same_json(Some(&json!(1)), Some(&json!(2))));
+        assert!(!same_json(Some(&json!("1")), Some(&json!(1))));
+        assert!(same_json(None, None));
+        assert!(same_json(Some(&Json::Null), None), "null is absent");
+        assert!(!same_json(Some(&json!(0)), None));
+        assert!(!same_json(
+            Some(&json!({"error": "a"})),
+            Some(&json!({"error": "b"}))
+        ));
+    }
+
+    #[test]
+    fn whole_numbers_are_stored_as_integers() {
+        assert_eq!(canonical_json(json!(5.0)), json!(5));
+        assert!(canonical_json(json!(5.0)).is_i64());
+        assert_eq!(canonical_json(json!(-0.0)), json!(0));
+        assert_eq!(canonical_json(json!(0.5)), json!(0.5));
+        assert_eq!(
+            canonical_json(json!([1.0, [2.5, 3.0]])),
+            json!([1, [2.5, 3]])
+        );
+        assert_eq!(canonical_json(json!("1.0")), json!("1.0"));
+        assert_eq!(stored_json(&Value::Number(2.0)), Some(json!(2)));
+        assert_eq!(
+            stored_json(&Value::Text(String::new())),
+            None,
+            "blank is not stored"
+        );
+        assert_eq!(
+            stored_json(&Value::Number(0.0)),
+            Some(json!(0)),
+            "zero is not blank"
+        );
+        assert_eq!(stored_json(&Value::Bool(false)), Some(json!(false)));
+        assert_eq!(
+            stored_json(&Value::Error("#ERROR: x".into())),
+            Some(json!({"error": "#ERROR: x"}))
+        );
+    }
+
+    #[test]
+    fn urls_are_limited_to_safe_schemes() {
+        assert!(safe_url("https://example.com"));
+        assert!(safe_url("HTTP://example.com"));
+        assert!(safe_url("mailto:a@b.c"));
+        assert!(!safe_url("javascript:alert(1)"));
+        assert!(!safe_url("data:text/html,x"));
+        assert!(!safe_url("ftp://x"));
+        assert!(!safe_url(""));
+    }
+
+    #[test]
+    fn compiled_formulas_know_if_they_are_volatile_or_time_sensitive() {
+        assert!(compile("TODAY()").volatile);
+        assert!(compile("DATETIME_DIFF(NOW(), {fldA}, 'days')").volatile);
+        assert!(!compile("{fldA} + 1").volatile);
+        assert!(compile("LAST_MODIFIED_TIME()").uses_modified_time);
+        assert!(!compile("CREATED_TIME()").uses_modified_time);
+        let bad = compile("1 +");
+        assert!(bad.formula.is_none() && bad.error.is_some());
+        // parsing is cached by source text
+        assert!(Arc::ptr_eq(&compile("{fldA} + 1"), &compile("{fldA} + 1")));
+    }
+
+    #[test]
+    fn names_edges_connect_a_primary_field_to_what_shows_link_names() {
+        let fields = vec![
+            field(
+                "fldP",
+                "B",
+                FieldKind::SingleLineText(TextOptions::default()),
+            ),
+            link("fldL", "A", "B", "fldInv"),
+            link("fldInv", "B", "A", "fldL"),
+            formula("fldShows", "A", "{fldL}"),
+            field(
+                "fldN",
+                "A",
+                FieldKind::Count(CountOptions {
+                    link_field_id: "fldL".into(),
+                }),
+            ),
+            field(
+                "fldLk",
+                "A",
+                FieldKind::Lookup(LookupOptions {
+                    link_field_id: "fldL".into(),
+                    target_field_id: "fldP".into(),
+                    result_type: ResultType::Array(Box::new(ResultType::Text)),
+                }),
+            ),
+        ];
+        let primary: HashMap<String, String> = [
+            ("A".to_string(), "fldA".to_string()),
+            ("B".to_string(), "fldP".to_string()),
+        ]
+        .into();
+        let g = build_graph(&fields, &primary);
+        let v = virtual_id("fldL");
+        // the primary field feeds the names node, which feeds the formula over the link
+        let from_primary: Vec<_> = g
+            .dependents_of("fldP")
+            .map(|e| e.dependent.clone())
+            .collect();
+        assert!(from_primary.contains(&v), "{from_primary:?}");
+        let from_names: Vec<_> = g.dependents_of(&v).map(|e| e.dependent.clone()).collect();
+        assert_eq!(from_names, ["fldShows"], "counts do not depend on names");
+        assert_eq!(virtual_link(&v), Some("fldL"));
+        assert_eq!(virtual_link("fldX"), None);
+        assert!(g.check_acyclic().is_ok());
+
+        // a link nothing reads by name gets no names node
+        let quiet = vec![
+            field(
+                "fldP",
+                "B",
+                FieldKind::SingleLineText(TextOptions::default()),
+            ),
+            link("fldL", "A", "B", "fldInv"),
+            link("fldInv", "B", "A", "fldL"),
+            field(
+                "fldN",
+                "A",
+                FieldKind::Count(CountOptions {
+                    link_field_id: "fldL".into(),
+                }),
+            ),
+        ];
+        let g = build_graph(&quiet, &primary);
+        assert!(g.dependents_of("fldP").next().is_none());
+    }
+
+    #[test]
+    fn a_primary_formula_that_reads_what_shows_its_own_name_is_a_cycle() {
+        // B.p = formula over B.x; B.x looks up A.shows; A.shows = {fldL} (names of B.p)
+        let fields = vec![
+            formula("fldP", "B", "{fldX}"),
+            link("fldL", "A", "B", "fldInv"),
+            link("fldInv", "B", "A", "fldL"),
+            formula("fldShows", "A", "{fldL}"),
+            field(
+                "fldX",
+                "B",
+                FieldKind::Lookup(LookupOptions {
+                    link_field_id: "fldInv".into(),
+                    target_field_id: "fldShows".into(),
+                    result_type: ResultType::Text,
+                }),
+            ),
+        ];
+        let primary: HashMap<String, String> = [
+            ("A".to_string(), "fldA".to_string()),
+            ("B".to_string(), "fldP".to_string()),
+        ]
+        .into();
+        assert!(build_graph(&fields, &primary).check_acyclic().is_err());
+        // without the names edges the plain graph would not see it
+        assert!(
+            DepGraph::build(&fields, &schema::field_refs)
+                .check_acyclic()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn only_formula_like_fields_are_materialized() {
+        assert!(is_materialized(&FieldKind::Count(CountOptions {
+            link_field_id: "l".into()
+        })));
+        assert!(!is_materialized(&FieldKind::Autonumber(Empty {})));
+        assert!(!is_materialized(&FieldKind::Number(
+            NumberOptions::default()
+        )));
+    }
 }

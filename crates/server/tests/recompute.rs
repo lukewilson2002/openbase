@@ -133,6 +133,88 @@ async fn formula_results_follow_their_declared_type() {
 }
 
 #[tokio::test]
+async fn formulas_read_selects_checkboxes_users_and_attachments_as_the_engine_types_them() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let status = f
+        .add_field(
+            &t,
+            json!({ "name": "Status", "type": "single_select",
+                    "options": { "choices": [ { "name": "Todo" }, { "name": "Done" } ] } }),
+        )
+        .await;
+    let tags = f
+        .add_field(
+            &t,
+            json!({ "name": "Tags", "type": "multiple_select",
+                    "options": { "choices": [ { "name": "red" }, { "name": "blue" } ] } }),
+        )
+        .await;
+    let who = f
+        .add_field(&t, json!({ "name": "Who", "type": "user", "options": {} }))
+        .await;
+    let flag = f
+        .add_field(
+            &t,
+            json!({ "name": "Flag", "type": "checkbox", "options": {} }),
+        )
+        .await;
+    let rating = f
+        .add_field(
+            &t,
+            json!({ "name": "Stars", "type": "rating", "options": { "max": 5 } }),
+        )
+        .await;
+    let calc = f
+        .formula(
+            &t,
+            "Calc",
+            "{Status} & \"|\" & ARRAYJOIN({Tags}, \"+\") & \"|\" & {Who} & \"|\" & IF({Flag}, \"on\", \"off\") & \"|\" & {Stars}",
+        )
+        .await;
+    assert_eq!(calc["options"]["result_type"], "text");
+    let me = f.owner.user_id.clone().unwrap();
+    let rec = f
+        .create(
+            &t,
+            json!({ sid(&status["id"]): "Done", sid(&tags["id"]): ["red", "blue"], sid(&who["id"]): [me],
+                    sid(&rating["id"]): 4 }),
+        )
+        .await;
+    assert_eq!(rec["values"][sid(&calc["id"])], "Done|red+blue|Owner|off|4");
+    let rec = f
+        .set(
+            &t,
+            sid(&rec["id"]),
+            json!({ sid(&flag["id"]): true, sid(&status["id"]): null }),
+        )
+        .await;
+    assert_eq!(rec["values"][sid(&calc["id"])], "|red+blue|Owner|on|4");
+    // renaming a choice is reflected after the formula recomputes
+    let choices = status["options"]["choices"].clone();
+    let renamed = json!([ { "id": choices[0]["id"], "name": "To do", "color": choices[0]["color"] },
+                          { "id": choices[1]["id"], "name": "Finished", "color": choices[1]["color"] } ]);
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{}", sid(&status["id"])),
+            json!({ "type": "single_select", "options": { "choices": renamed } }),
+        )
+        .await
+        .assert_status(200);
+    f.set(
+        &t,
+        sid(&rec["id"]),
+        json!({ sid(&status["id"]): "Finished" }),
+    )
+    .await;
+    assert_eq!(
+        f.get(&t, sid(&rec["id"])).await["values"][sid(&calc["id"])],
+        "Finished|red+blue|Owner|on|4"
+    );
+}
+
+#[tokio::test]
 async fn unrelated_edits_do_not_cascade() {
     let l = linked().await;
     let f = &l.f;
@@ -978,6 +1060,34 @@ async fn deleting_the_link_removes_lookups_and_restoring_recomputes_them() {
     let v = f.get(&l.t1, &c).await;
     assert_eq!(v["values"][sid(&rollup["id"])], 25);
     assert_eq!(link_ids_of(&v["values"][sid(&l.link["id"])]), s(&[&o]));
+}
+
+#[tokio::test]
+async fn deleting_and_restoring_a_linked_table_errors_and_heals_formulas_over_its_link() {
+    let l = linked().await;
+    let f = &l.f;
+    let t2p = sid(&f.table(&l.t2).await["primary_field_id"]).to_string();
+    let names = f
+        .formula(&l.t1, "Names", "ARRAYJOIN({Orders}, \",\")")
+        .await;
+    let o = sid(&f.create(&l.t2, json!({ &t2p: "alpha" })).await["id"]).to_string();
+    let c = sid(&f.create(&l.t1, json!({ sid(&l.link["id"]): [o] })).await["id"]).to_string();
+    assert_eq!(f.stored(&c, sid(&names["id"])), "alpha");
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{}", l.t2))
+        .await
+        .assert_status(200);
+    // the link field went to the trash with the table, so the formula over it errors
+    assert!(f.stored(&c, sid(&names["id"]))["error"].is_string());
+    f.app
+        .post(
+            &f.owner,
+            "/api/trash/restore",
+            json!({ "kind": "table", "id": l.t2 }),
+        )
+        .await
+        .assert_status(200);
+    assert_eq!(f.stored(&c, sid(&names["id"])), "alpha");
 }
 
 // --------------------------------------------------------------------- cycles

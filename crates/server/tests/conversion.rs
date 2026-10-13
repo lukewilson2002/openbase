@@ -386,13 +386,12 @@ async fn converting_a_source_field_updates_formulas_lookups_and_rollups_built_on
 }
 
 #[tokio::test]
-async fn a_failed_conversion_changes_nothing() {
+async fn a_rejected_formula_update_changes_nothing() {
     let l = linked().await;
     let f = &l.f;
     let calc = f.formula(&l.t2, "Calc", "{Price} * 2").await;
     let o = sid(&f.create(&l.t2, json!({ sid(&l.price["id"]): 4 })).await["id"]).to_string();
-    // a type change that leaves a formula invalid is allowed (the formula errors), but a
-    // conversion into a select with too many distinct values is cut at the limit, never panics
+    // a formula update that does not parse is refused and the old definition and values stay
     let r = convert(
         f,
         &calc,

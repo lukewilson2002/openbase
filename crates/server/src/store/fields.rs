@@ -285,6 +285,9 @@ pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResul
             Vec::new()
         };
         run_engine(tx, &table.base_id, &table.id, own, dependents)?;
+        if !removed.is_empty() {
+            refresh_after_removal(tx, &table.base_id, &table.id, &removed)?;
+        }
     }
 
     let inverse = match new_inverse {
@@ -701,10 +704,24 @@ pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
     }
     mark_deleted(tx, &ids, now_ms())?;
 
-    // Anything that referenced the removed fields needs a refresh.
-    let live = schema::base_fields(tx, &table.base_id)?;
+    refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
+    Ok(DeleteOutcome {
+        deleted_field_ids: ids,
+        touched,
+    })
+}
+
+/// Fields that referenced the (just trashed) `removed` fields are recomputed:
+/// formulas over a deleted field evaluate to errors.
+fn refresh_after_removal(
+    tx: &Transaction,
+    base_id: &str,
+    table_id: &str,
+    removed: &[String],
+) -> AppResult<()> {
+    let live = schema::base_fields(tx, base_id)?;
     let graph = DepGraph::build(&live, &schema::field_refs);
-    let affected = graph.transitive_dependents(&ids);
+    let affected = graph.transitive_dependents(removed);
     let mut per_table: Vec<(String, Vec<String>)> = Vec::new();
     for f in live.iter().filter(|f| affected.contains(&f.id)) {
         match per_table.iter_mut().find(|(t, _)| *t == f.table_id) {
@@ -712,11 +729,7 @@ pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
             None => per_table.push((f.table_id.clone(), vec![f.id.clone()])),
         }
     }
-    run_engine(tx, &table.base_id, &table.id, Vec::new(), per_table)?;
-    Ok(DeleteOutcome {
-        deleted_field_ids: ids,
-        touched,
-    })
+    run_engine(tx, base_id, table_id, Vec::new(), per_table)
 }
 
 /// Trash the link fields of other tables that point at `table` (already
@@ -747,6 +760,7 @@ pub fn cascade_delete_incoming_links(
         }
     }
     mark_deleted(tx, &ids, at)?;
+    refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
     Ok(touched)
 }
 

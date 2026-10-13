@@ -200,7 +200,14 @@ async fn run(n_orders: usize, budget_ms: u128) {
     eprintln!("edit an unrelated cell: {took:?}");
     assert!(took.as_millis() < budget_ms, "{took:?}");
 
-    // 4. worst case: one customer linked to every order, then its discount changes
+    // 4. worst case: one customer linked to as many orders as a link cell can hold,
+    //    then its discount changes
+    let hot_orders: Vec<&String> = p
+        .order_ids
+        .iter()
+        .take(og_core::limits::MAX_LINKS_PER_CELL)
+        .collect();
+    let n_hot = hot_orders.len();
     let hot = f.create(&p.customers, json!({ &p.discount: 0.2 })).await;
     let hot_id = sid(&hot["id"]).to_string();
     let inverse_link = f.field(&p.customers, "Orders").await;
@@ -208,15 +215,15 @@ async fn run(n_orders: usize, budget_ms: u128) {
     f.set(
         &p.customers,
         &hot_id,
-        json!({ sid(&inverse_link["id"]): p.order_ids }),
+        json!({ sid(&inverse_link["id"]): hot_orders }),
     )
     .await;
-    eprintln!("link {n_orders} orders to one customer: {:?}", t.elapsed());
+    eprintln!("link {n_hot} orders to one customer: {:?}", t.elapsed());
     let t = Instant::now();
     f.set(&p.customers, &hot_id, json!({ &p.discount: 0.3 }))
         .await;
     let took = t.elapsed();
-    eprintln!("edit the discount of a customer linked to all {n_orders} orders: {took:?}");
+    eprintln!("edit the discount of a customer linked to {n_hot} orders: {took:?}");
     assert!(took.as_millis() < budget_ms * 20, "{took:?}");
     let hot_total = f.stored(&hot_id, &p.spend).as_f64().unwrap();
     assert!(hot_total > 0.0);
@@ -231,4 +238,49 @@ async fn single_cell_edits_with_recompute_are_fast_at_5k_records() {
 #[ignore = "50k records: run with --release -- --ignored --nocapture"]
 async fn single_cell_edits_with_recompute_are_fast_at_50k_records() {
     run(50_000, 500).await;
+}
+
+/// Every write loads the base's schema and dependency graph (there is no
+/// cache): measure it for a large-ish base so the decision is backed by a number.
+#[tokio::test]
+async fn loading_the_schema_graph_for_a_few_hundred_fields_is_cheap() {
+    let f = Fixture::new().await;
+    let mut tables = vec![f.table_id.clone()];
+    for i in 1..20 {
+        tables.push(id_of(&f.add_table(&format!("T{i}")).await));
+    }
+    // 20 tables x (1 number + 9 chained formulas + 5 more numbers) = 300 fields + the starters
+    for t in &tables {
+        f.number(t, "N").await;
+        let mut prev = "N".to_string();
+        for k in 0..9 {
+            let name = format!("F{k}");
+            f.formula(t, &name, &format!("{{{prev}}} + 1")).await;
+            prev = name;
+        }
+        for k in 0..5 {
+            f.number(t, &format!("X{k}")).await;
+        }
+    }
+    let base = f.base_id.clone();
+    let fields = f.app.query_i64(
+        "SELECT count(*) FROM fields f JOIN tables t ON t.id = f.table_id WHERE t.base_id = ?1",
+        &[&base],
+    );
+    let started = Instant::now();
+    let runs = 20;
+    for _ in 0..runs {
+        let b = base.clone();
+        f.app
+            .state
+            .db
+            .write_sync(move |tx| {
+                opengrid::engine::recompute::BaseSchema::load(tx, &b)?;
+                Ok(())
+            })
+            .unwrap();
+    }
+    let per_load = started.elapsed() / runs;
+    eprintln!("schema + graph load for {fields} fields: {per_load:?} per write");
+    assert!(per_load.as_millis() < 100, "{per_load:?}");
 }

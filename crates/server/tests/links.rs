@@ -369,7 +369,6 @@ async fn trashed_records_vanish_from_reads_but_keep_their_links() {
     let rec = w.f().get(&w.l.t1, &c).await;
     assert_eq!(link_ids_of(&rec["values"][&w.lid]), s(&[&o2]));
     // a customer whose only order is trashed shows no link value at all
-    // a customer whose only order is trashed shows no link value at all
     let o3 = w.order("Order 3").await;
     let c2 = w.customer("B", &[&o3]).await;
     w.f()
@@ -525,4 +524,29 @@ async fn a_batch_linking_many_records_to_one_target_stays_consistent() {
         .assert_status(200);
     let rec = w.f().get(&w.l.t1, &c).await;
     assert!(rec["values"].get(&w.lid).is_none());
+}
+
+#[tokio::test]
+async fn a_stale_client_may_resend_a_link_that_was_trashed_since() {
+    let w = world().await;
+    let (o1, o2) = (w.order("1").await, w.order("2").await);
+    let c = w.customer("A", &[&o1, &o2]).await;
+    w.f()
+        .delete_records(&w.l.t2, &[&o2])
+        .await
+        .assert_status(200);
+    // the client still believes the customer links [o1, o2] and sends both back
+    let r = w.f().set(&w.l.t1, &c, json!({ &w.lid: [o1, o2] })).await;
+    assert_eq!(link_ids_of(&r["values"][&w.lid]), s(&[&o1]));
+    assert_eq!(w.customers_orders(&c), s(&[&o1, &o2]), "unchanged");
+    // but a trashed record cannot be newly linked
+    let o3 = w.order("3").await;
+    w.f()
+        .delete_records(&w.l.t2, &[&o3])
+        .await
+        .assert_status(200);
+    w.f()
+        .patch_as(&w.f().owner, &w.l.t1, &c, json!({ &w.lid: [o1, o3] }))
+        .await
+        .assert_status(400);
 }
