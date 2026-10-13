@@ -197,6 +197,8 @@ export const api = {
     forBase: (baseId: string) => http.get<TrashListing>(`/api/bases/${enc(baseId)}/trash`),
     /** Workspace owners. */
     forWorkspace: (workspaceId: string) => http.get<TrashListing>(`/api/workspaces/${enc(workspaceId)}/trash`),
+    /** The caller's own deleted workspaces (owners): a deleted workspace has no trash of its own to open. */
+    deletedWorkspaces: () => http.get<TrashListing>("/api/trash/workspaces"),
     /** `kind` is one of workspace | base | table | field | view | record. */
     restore: (body: RestoreRequest) => http.post<RestoreResponse>("/api/trash/restore", body),
   },

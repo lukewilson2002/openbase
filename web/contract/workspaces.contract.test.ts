@@ -70,12 +70,16 @@ describe("workspaces", () => {
     expect(parseList("WorkspaceSummary", await owner.run(api.workspaces.list)).map((w) => w.id)).not.toContain(workspaceId);
     expectError(await failure(owner.run(() => api.bases.get(base.id))), 404, "not_found");
 
-    // A deleted workspace is no longer listable (its trash listing is gone with it), but its owner
-    // can still restore it by id; nobody else can.
+    // The workspace's own trash listing is gone with it, but its owner finds it in their list of
+    // deleted workspaces and can restore it; nobody else sees it or can restore it.
     expectError(await failure(owner.run(() => api.trash.forWorkspace(workspaceId))), 404, "not_found");
+    const deleted = parse("TrashListing", await owner.run(api.trash.deletedWorkspaces));
+    expect(deleted.items).toContainEqual(expect.objectContaining({ kind: "workspace", id: workspaceId, name: expect.any(String) }));
+    expect(parse("TrashListing", await other.run(api.trash.deletedWorkspaces)).items.map((i) => i.id)).not.toContain(workspaceId);
     expectError(await failure(other.run(() => api.trash.restore({ kind: "workspace", id: workspaceId }))), 404, "not_found");
     expect(parse("RestoreResponse", await owner.run(() => api.trash.restore({ kind: "workspace", id: workspaceId })))).toEqual({ ok: true, restored_field_ids: [] });
     expect(parseList("WorkspaceSummary", await owner.run(api.workspaces.list)).map((w) => w.id)).toContain(workspaceId);
+    expect(parse("TrashListing", await owner.run(api.trash.deletedWorkspaces)).items.map((i) => i.id)).not.toContain(workspaceId);
     expect((await refreshBase(owner, base.id)).name).toBe("Inside");
   });
 });

@@ -12,6 +12,8 @@ export const keys = {
   sessions: ["sessions"] as const,
   tokens: ["tokens"] as const,
   workspaces: ["workspaces"] as const,
+  /** The caller's deleted workspaces (home page, "Recently deleted workspaces"). */
+  deletedWorkspaces: ["workspaces", "deleted"] as const,
   workspaceMembers: (id: string) => ["workspace", id, "members"] as const,
   workspaceInvites: (id: string) => ["workspace", id, "invites"] as const,
   base: (id: string) => ["base", id] as const,

@@ -15,11 +15,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { basePermissions } from "@/base/permissions";
 import { relativeTime } from "@/lib/relativeTime";
-import { trashApi, trashKeys } from "./api";
+import { DEFAULT_RETENTION_DAYS, trashApi, trashKeys } from "./api";
 import { TRASH_KIND_LABELS, groupTrash, trashItemName } from "./groupTrash";
-
-/** Days the server keeps deleted items unless the administrator changed `OPENGRID_TRASH_DAYS`. */
-export const DEFAULT_RETENTION_DAYS = 30;
 
 /** Toolbar button that opens the trash; renders nothing for roles that cannot see it. */
 export function TrashButton({ schema }: { schema: BaseSchema }) {

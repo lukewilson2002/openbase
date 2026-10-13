@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceSummary } from "@/api/types";
-import { ADMIN, USER, mockApi, renderApp } from "@/test/utils";
+import { ADMIN, USER, apiError, mockApi, renderApp } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -80,6 +80,57 @@ describe("home", () => {
     expect(await screen.findByRole("menuitem", { name: "Members" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Delete workspace/ })).not.toBeInTheDocument();
+  });
+
+  it("offers deleted workspaces for restore and restores one", async () => {
+    const user = userEvent.setup();
+    let deleted = [{ kind: "workspace", id: "wspOld", name: "Old clients", table_id: null, deleted_at: Date.now() - 3 * 24 * 3600_000 }];
+    let list: WorkspaceSummary[] = [];
+    const api = mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/workspaces": () => list,
+      "GET /api/trash/workspaces": () => ({ items: deleted }),
+      "POST /api/trash/restore": () => {
+        deleted = [];
+        list = [{ id: "wspOld", name: "Old clients", role: "owner", bases: [] }];
+        return { ok: true, restored_field_ids: [] };
+      },
+    });
+    renderApp();
+    const section = (await screen.findByRole("heading", { name: "Recently deleted workspaces" })).closest("section")!;
+    expect(within(section).getByText("Old clients")).toBeInTheDocument();
+    expect(within(section).getByText("Deleted 3 days ago")).toBeInTheDocument();
+
+    await user.click(within(section).getByRole("button", { name: "Restore Old clients" }));
+    await waitFor(() => expect(api.callsTo("POST /api/trash/restore")).toHaveLength(1));
+    expect(api.callsTo("POST /api/trash/restore")[0]!.body).toEqual({ kind: "workspace", id: "wspOld" });
+    // The workspace is back among the live ones and the section is gone.
+    expect(await screen.findByRole("heading", { name: "Old clients" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument());
+  });
+
+  it("shows no deleted-workspaces section when there are none or the list cannot be loaded", async () => {
+    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces, "GET /api/trash/workspaces": { items: [] } });
+    const { unmount } = renderApp();
+    await screen.findByRole("heading", { name: "Acme" });
+    expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument();
+    unmount();
+
+    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces, "GET /api/trash/workspaces": apiError(500, "internal", "boom") });
+    renderApp();
+    await screen.findByRole("heading", { name: "Acme" });
+    expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument();
+  });
+
+  it("lists deleted workspaces even when no workspace is left", async () => {
+    mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/workspaces": [],
+      "GET /api/trash/workspaces": { items: [{ kind: "workspace", id: "wspOld", name: "Old clients", table_id: null, deleted_at: Date.now() - 60_000 }] },
+    });
+    renderApp();
+    expect(await screen.findByText("No workspaces yet")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Restore Old clients" })).toBeInTheDocument();
   });
 
   it("creates a workspace through the dialog", async () => {
