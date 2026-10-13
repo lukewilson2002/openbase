@@ -7,7 +7,7 @@
  * Keyboard: Tab to a card, Space to pick it up, arrow keys to move between stacks and cards,
  * Space to drop, Escape to cancel; Enter opens the record.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -20,6 +20,7 @@ import {
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
+  type KeyboardCoordinateGetter,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -97,9 +98,22 @@ export function KanbanBoard(props: KanbanBoardProps) {
     return () => clearTimeout(t);
   }, [drag]);
 
+  // sortableKeyboardCoordinates also offers the card's own stack as a target, and that stack starts
+  // left of and above its cards, so the first Left or Up press would only snap to the stack edge.
+  // Leave it out: one press goes straight to the neighbouring stack or card.
+  const keyboardCoordinates = useCallback<KeyboardCoordinateGetter>((event, args) => {
+    const { droppableContainers, active } = args.context;
+    const own = active ? findContainer(itemsRef.current, active.id) : undefined;
+    const ownId = own === undefined ? undefined : `${STACK_PREFIX}${own}`;
+    const others = {
+      getEnabled: () => droppableContainers.getEnabled().filter((c) => c.id !== ownId),
+      get: (id: UniqueIdentifier) => droppableContainers.get(id),
+    } as unknown as typeof droppableContainers;
+    return sortableKeyboardCoordinates(event, { ...args, context: { ...args.context, droppableContainers: others } });
+  }, []);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] } }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates, keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] } }),
   );
 
   const onDragStart = (e: DragStartEvent) => {
@@ -246,7 +260,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       role="listitem"
       aria-label={`Stack: ${stack.label}`}
       data-stack-key={stack.key}
-      className={cn("flex max-h-full shrink-0 flex-col rounded-lg border bg-subtle transition-colors", isCollapsed ? "w-44" : "w-72", isOver ? "border-primary" : "border-line")}
+      className={cn("flex max-h-full shrink-0 flex-col rounded-lg border bg-subtle transition-colors", isCollapsed ? "w-44" : "w-[min(18rem,85vw)]", isOver ? "border-primary" : "border-line")}
     >
       {header}
       {!isCollapsed && (

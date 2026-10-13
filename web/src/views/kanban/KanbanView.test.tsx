@@ -1,11 +1,33 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
+import { apiError } from "@/test/utils";
 import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { installBoardLayout, type BoardLayout } from "./boardLayout";
 import KanbanView from "./KanbanView";
 
-afterEach(() => vi.unstubAllGlobals());
+let layout: BoardLayout;
+beforeEach(() => {
+  layout = installBoardLayout();
+});
+afterEach(() => {
+  layout.restore();
+  vi.unstubAllGlobals();
+});
+
+/** Pick a card up with Space, press arrow keys, drop with Space (dnd-kit listens a tick after pick-up). */
+async function keyboardDrag(user: ReturnType<typeof userEvent.setup>, card: HTMLElement, keys: string[]) {
+  const pause = () => act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+  card.focus();
+  await user.keyboard(" ");
+  await pause();
+  for (const k of keys) {
+    await user.keyboard(k);
+    await pause();
+  }
+  await user.keyboard(" ");
+}
 
 const board = (patch: Record<string, unknown> = {}, over = {}) =>
   viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], ...patch } }, over);
@@ -17,9 +39,8 @@ const records = [
   rec("r4", {}),
 ];
 
-function setup(role = "editor", view = board(), extraRoutes: Record<string, unknown> = {}) {
+function setup(role = "editor", view = board(), extraRoutes: Record<string, unknown> = {}, server: { records: typeof records } = { records }) {
   const asked: QueryRequest[] = [];
-  const server = { records };
   return {
     asked,
     ...renderView(KanbanView, {
@@ -60,6 +81,62 @@ describe("KanbanView", () => {
     setup("viewer", viewWithConfig("viw1", "kanban", {}));
     expect(await screen.findByText(/Ask someone who can edit this view/)).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Stack cards by" })).not.toBeInTheDocument();
+  });
+
+  it("dragging a card to another stack writes the stack field, then its place, optimistically", async () => {
+    const user = userEvent.setup();
+    const moved = rec("r1", { [F.status.id]: "s2", [F.effort.id]: 5 });
+    // A server that keeps what it is told, so the refetch after the write agrees with the drop.
+    const server = { records: [...records] };
+    const { api } = setup(
+      "editor",
+      board(),
+      {
+        "PATCH /api/tables/tbl1/records": () => {
+          server.records = server.records.map((r) => (r.id === "r1" ? moved : r));
+          return { records: [moved] };
+        },
+        "POST /api/tables/tbl1/records/move": { records: [moved] },
+      },
+      server,
+    );
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    layout.overlayAt(1); // R1 is the first card of the second stack (Uncategorized comes first)
+    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    // The card is in its new stack at once...
+    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).getByRole("button", { name: "R1" })).toBeInTheDocument());
+    // ...and the server is told the new status (typecast, view form -> wire form) and the new place.
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { f_status: "s2" } }] });
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records/move")[0]!.body).toMatchObject({ ids: ["r1"] });
+  });
+
+  it("puts the card back when the server rejects the drop", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("editor", board(), { "PATCH /api/tables/tbl1/records": apiError(400, "bad_request", "Status is read-only") });
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    layout.overlayAt(1);
+    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    await waitFor(() => expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getByRole("button", { name: "R1" })).toBeInTheDocument());
+    expect(within(screen.getByRole("listitem", { name: "Stack: Doing" })).queryByRole("button", { name: "R1" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Status is read-only/)).toBeInTheDocument();
+    // The move was never attempted: the field write came first and failed.
+    expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
+  });
+
+  it("with sorts, a drop between stacks writes only the field (no manual order)", async () => {
+    const user = userEvent.setup();
+    const sorted = board({}, {});
+    sorted.config.sorts = [{ field_id: F.name.id, direction: "asc" }];
+    const { api } = setup("editor", sorted, { "PATCH /api/tables/tbl1/records": { records: [rec("r1", { [F.status.id]: "s2" })] } });
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    layout.overlayAt(1);
+    await keyboardDrag(user, screen.getByRole("button", { name: "R1" }), ["{ArrowRight}"]);
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
+    expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
   });
 
   it("adds a card prefilled with the stack value and opens it", async () => {
@@ -117,6 +194,19 @@ describe("KanbanView", () => {
       [3000, 1000],
       [4000, 1000],
     ]);
+  });
+
+  it("refetches when a live event invalidates the table's records and shows the change", async () => {
+    const server = { records: [...records] };
+    const asked: QueryRequest[] = [];
+    const { client } = renderView(KanbanView, { schema: projectSchema("editor", [board()]), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler(server, asked) } });
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    expect(screen.queryByRole("button", { name: "R5" })).not.toBeInTheDocument();
+    server.records.push(rec("r5", { [F.status.id]: "s3" }));
+    // What a records_changed event does to the cache (see hooks/useBaseEvents).
+    await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
+    expect(await within(screen.getByRole("listitem", { name: "Stack: Done" })).findByRole("button", { name: "R5" })).toBeInTheDocument();
+    expect(asked.length).toBeGreaterThan(1);
   });
 
   it("filters through the shared toolbar's search (sent with the query)", async () => {

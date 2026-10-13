@@ -6,6 +6,7 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
 import { buildStacks, stackValue, type DropPlan } from "./stacks";
 import { KanbanBoard, type KanbanBoardProps } from "./KanbanBoard";
+import { installBoardLayout, type BoardLayout } from "./boardLayout";
 
 const status = ALL_FIELDS.single_select!;
 const name = ALL_FIELDS.single_line_text!;
@@ -39,31 +40,12 @@ function board(over: Partial<KanbanBoardProps> = {}) {
   return { props, ...render(<KanbanBoard {...props} />) };
 }
 
-// jsdom has no layout, and dnd-kit's keyboard coordinates come from element rects. Lay the board out
-// virtually: stacks side by side, cards stacked inside each stack.
-const realRect = Element.prototype.getBoundingClientRect;
-function rect(x: number, y: number, w: number, h: number): DOMRect {
-  return { x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) } as DOMRect;
-}
+// jsdom has no layout, and dnd-kit's keyboard coordinates come from element rects (see boardLayout.ts).
+let layout: BoardLayout;
 beforeEach(() => {
-  Element.prototype.getBoundingClientRect = function (this: Element) {
-    // The drag overlay is a clone of the picked-up card; tests only pick up the first card of the first stack.
-    if (this.closest("[data-drag-overlay]")) return rect(8, 48, 272, 90);
-    const stack = this.closest<HTMLElement>("[data-stack-key]");
-    if (!stack) return rect(0, 0, 0, 0);
-    const col = [...(stack.parentElement?.children ?? [])].indexOf(stack);
-    if (this === stack) return rect(col * 300, 0, 288, 600);
-    const card = this.closest<HTMLElement>("[data-record-id]");
-    if (card && this === card) {
-      const row = [...(card.parentElement?.children ?? [])].indexOf(card);
-      return rect(col * 300 + 8, 48 + row * 100, 272, 90);
-    }
-    return rect(col * 300, 0, 0, 0);
-  };
+  layout = installBoardLayout();
 });
-afterEach(() => {
-  Element.prototype.getBoundingClientRect = realRect;
-});
+afterEach(() => layout.restore());
 
 async function keyboardDrag(user: ReturnType<typeof userEvent.setup>, card: HTMLElement, keys: string[]) {
   card.focus();
@@ -116,6 +98,16 @@ describe("KanbanBoard", () => {
     expect(stackValue(status, plan.toKey)).toBe("chs2");
     // The card shows in its new stack straight away.
     expect(within(screen.getByRole("listitem", { name: "Stack: In progress" })).getByRole("button", { name: "Write docs" })).toBeInTheDocument();
+  });
+
+  it("moves a card to the previous stack with a single Left press (the own stack is not a stop)", async () => {
+    const user = userEvent.setup();
+    const { props } = board();
+    // "Ship it" is the first card of the second stack.
+    layout.overlayAt(1);
+    await keyboardDrag(user, screen.getByRole("button", { name: "Ship it" }), ["{ArrowLeft}"]);
+    await waitFor(() => expect(props.onDrop).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(props.onDrop).mock.calls[0]![0]).toMatchObject({ recordId: "r3", fromKey: "chs2", toKey: "chs1", changeValue: true });
   });
 
   it("reorders inside a stack with the keyboard only when the view has no sorts", async () => {
