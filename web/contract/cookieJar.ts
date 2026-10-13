@@ -15,6 +15,8 @@ export interface CookieJar {
   lastStatus: number;
   /** The client address this profile claims via X-Forwarded-For, if any. */
   ip: string | undefined;
+  /** When set, sent as `X-Client-Id` on every request (it overrides the one the API client adds). */
+  clientId: string | undefined;
 }
 
 function isExpired(attrs: string[]): boolean {
@@ -32,12 +34,13 @@ function isExpired(attrs: string[]): boolean {
  *   OPENGRID_TRUST_PROXY=true (it only listens on loopback), which gives every profile its own
  *   rate-limit bucket and session `ip`.
  */
-export function createCookieJar(ip?: string): CookieJar {
+export function createCookieJar(ip?: string, clientId?: string): CookieJar {
   const cookies = new Map<string, string>();
-  const jar: CookieJar = { fetch: undefined as unknown as typeof fetch, cookies, lastStatus: 0, ip };
+  const jar: CookieJar = { fetch: undefined as unknown as typeof fetch, cookies, lastStatus: 0, ip, clientId };
   jar.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     if (ip) headers.set("x-forwarded-for", ip);
+    if (jar.clientId) headers.set("x-client-id", jar.clientId);
     if (cookies.size > 0) headers.set("cookie", [...cookies].map(([k, v]) => `${k}=${v}`).join("; "));
     const res = await nativeFetch(input, { ...init, headers, redirect: "manual" });
     jar.lastStatus = res.status;

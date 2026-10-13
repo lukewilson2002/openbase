@@ -6,7 +6,6 @@
  *
  * The steps share one server and build on each other; they are sequential on purpose.
  */
-import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, inject, it } from "vitest";
 import { ApiError, http, setApiBase } from "../src/api/client";
@@ -303,11 +302,15 @@ describe("invitations", () => {
   let workspaceInviteToken = "";
   let baseInviteToken = "";
 
-  it("seeds a workspace and base (the workspace API is not implemented yet)", () => {
-    const out = execFileSync(env.seedBin, ["--data-dir", env.dataDir, "--email", adminEmail], { encoding: "utf8" });
-    const ids = JSON.parse(out.trim()) as { workspace_id: string; base_id: string };
-    workspaceId = ids.workspace_id;
-    baseId = ids.base_id;
+  it("creates a workspace and a base through the workspace API", async () => {
+    const ws = parse("WorkspaceSummary", await asAdmin(() => api.workspaces.create("Contract workspace")));
+    expect(admin.lastStatus).toBe(201);
+    expect(ws).toMatchObject({ name: "Contract workspace", role: "owner", bases: [] });
+    workspaceId = ws.id;
+    const created = parse("BaseSchema", await asAdmin(() => api.bases.create(workspaceId, { name: "Contract base" })));
+    expect(admin.lastStatus).toBe(201);
+    expect(created).toMatchObject({ workspace_id: workspaceId, name: "Contract base", role: "owner" });
+    baseId = created.id;
     expect(workspaceId).toMatch(/^wsp/);
     expect(baseId).toMatch(/^app/);
   });
