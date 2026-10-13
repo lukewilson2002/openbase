@@ -431,7 +431,36 @@ pub fn finish(
         "UPDATE automation_runs SET status = ?2, error = ?3, log = ?4, finished_at = ?5 WHERE id = ?1",
         params![run_id, status.as_str(), error, serde_json::to_string(log)?, now],
     )?;
+    trim_webhook_bodies(tx, None, Some(run_id))?;
     Ok(())
+}
+
+/// Most characters of a webhook body kept on a finished run.
+pub const KEPT_BODY_CHARS: usize = 16 * 1024;
+
+/// Replace the body of finished webhook runs (of one automation and/or one
+/// run; both None = all) that is longer than [`KEPT_BODY_CHARS`] by
+/// `{"truncated": true, "preview": "<its first characters>"}`. A webhook
+/// holder can send 1 MB per call and runs are kept for 30 days, so the full
+/// body is only needed while the run is queued or running.
+pub fn trim_webhook_bodies(
+    tx: &Transaction,
+    automation_id: Option<&str>,
+    run_id: Option<i64>,
+) -> AppResult<usize> {
+    Ok(tx.execute(
+        "UPDATE automation_runs
+         SET trigger_data = json_set(trigger_data, '$.body', json_object(
+                 'truncated', json('true'),
+                 'preview', substr(CAST(json_extract(trigger_data, '$.body') AS TEXT), 1, ?3)))
+         WHERE status IN ('succeeded', 'failed')
+           AND (?1 IS NULL OR automation_id = ?1)
+           AND (?2 IS NULL OR id = ?2)
+           AND length(trigger_data) > ?3 * 2
+           AND json_extract(trigger_data, '$.type') = 'webhook'
+           AND json_type(trigger_data, '$.body') IS NOT NULL",
+        params![automation_id, run_id, KEPT_BODY_CHARS as i64],
+    )?)
 }
 
 /// Put a run back in the queue (a transient failure to retry, or recovery).
@@ -450,11 +479,13 @@ pub fn cancel_queued(
     reason: &str,
     now: i64,
 ) -> AppResult<usize> {
-    Ok(tx.execute(
+    let n = tx.execute(
         "UPDATE automation_runs SET status = 'failed', error = ?2, finished_at = ?3
          WHERE automation_id = ?1 AND status = 'queued'",
         params![automation_id, reason, now],
-    )?)
+    )?;
+    trim_webhook_bodies(tx, Some(automation_id), None)?;
+    Ok(n)
 }
 
 /// Runs left `running` by a crash or restart. Each is re-queued once (a

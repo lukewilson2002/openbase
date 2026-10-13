@@ -1803,3 +1803,55 @@ async fn run_history_is_paged_newest_first() {
         .await;
     assert_eq!(r.body["total"], 0);
 }
+
+#[tokio::test]
+async fn finished_webhook_runs_keep_only_a_prefix_of_big_bodies() {
+    let env = Env::new().await;
+    let a = env
+        .create(
+            "hook",
+            json!({ "type": "webhook" }),
+            json!([env.notify_action("got it")]),
+        )
+        .await;
+    let id = a["id"].as_str().unwrap().to_string();
+    let token = a["webhook_token"].as_str().unwrap().to_string();
+    let anon = env.f.app.anon();
+    let url = format!("/api/hooks/{token}");
+    env.f
+        .app
+        .post(&anon, &url, json!({ "small": 1 }))
+        .await
+        .assert_status(202);
+    let big = "x".repeat(900_000);
+    env.f
+        .app
+        .post(&anon, &url, json!({ "blob": big }))
+        .await
+        .assert_status(202);
+    // While queued the whole body is there (the run needs it).
+    let queued: i64 = env.f.app.query_i64(
+        "SELECT max(length(trigger_data)) FROM automation_runs WHERE automation_id = ?1",
+        &[&id],
+    );
+    assert!(queued > 900_000, "{queued}");
+    env.drain().await;
+
+    let runs = env.runs(&id).await;
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0]["status"], "succeeded");
+    assert_eq!(runs[1]["status"], "succeeded");
+    // Small bodies are kept as they were.
+    assert_eq!(runs[0]["trigger_data"]["body"], json!({ "small": 1 }));
+    // Big ones leave a marked prefix.
+    let kept = &runs[1]["trigger_data"]["body"];
+    assert_eq!(kept["truncated"], true, "{kept}");
+    let preview = kept["preview"].as_str().unwrap();
+    assert!(preview.starts_with("{\"blob\":\"xxxx"), "{preview:.40}");
+    assert_eq!(preview.chars().count(), 16 * 1024);
+    let stored: i64 = env.f.app.query_i64(
+        "SELECT max(length(trigger_data)) FROM automation_runs WHERE automation_id = ?1",
+        &[&id],
+    );
+    assert!(stored < 40_000, "{stored}");
+}
