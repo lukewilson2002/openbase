@@ -53,8 +53,9 @@ The class is decided in one place (`Actor::require_capability`), and
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Manage**: create / rename / delete / restore workspaces, workspace and base members (role changes, removal), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone) | 403 | 403 | yes (the owner's role still applies) | yes |
-| **Admin** pages (`/api/admin/*`: users, reset links, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token) | administrators |
-| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}` | 403 | 403 | **403** | yes |
+| **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
+| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link` | 403 | 403 | **403** | yes |
+| **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
 
 A request that needs `manage` and does not have it answers `403` with a message that
 names the `manage` permission. Actions that reach beyond a single base (workspaces,
@@ -65,6 +66,18 @@ restoring a base) works on the bases in its list only; others answer 404. Creden
 sessions and tokens are never reachable with a token, so a leaked token cannot take
 over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` reports
 `write` and `manage`.
+
+**Credentials and administrators.** The owner's rule is that a token never changes a
+credential, so an instance administrator's `manage` token cannot create a password-reset
+link for any user (that would be an account takeover), cannot switch off a user's
+two-factor authentication, and cannot set the SMTP password. `POST /api/admin/users` with a
+token creates the account (name, email, optional administrator role) but without a usable
+password: it refuses `password` and returns no `reset_link`; a signed-in administrator
+creates the reset link in the app, or the person uses "Forgot password" when email is on.
+Email settings (`GET|PATCH /api/admin/email`, `POST /api/admin/email/test`) are open to the
+administrator's `manage` token, except that it can neither set nor remove the SMTP password,
+and cannot change the host, port, security mode or username while a password is in use
+(that would send the password to a server of its choosing); it can switch email off.
 
 An AI agent can use all of this through the built-in MCP server; see [mcp.md](mcp.md).
 

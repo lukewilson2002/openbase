@@ -52,7 +52,7 @@ cookie or API token that has not been revoked (use HTTPS and revoke tokens),
 denial of service by volume (use your proxy or provider), and a determined
 attacker with many IP addresses against limits that are keyed by IP. Instance
 admins get no implicit access to base data, but they can reset passwords and
-disable 2FA, which is a path to any account.
+disable 2FA, which is a path to any account (signed in; their API tokens cannot).
 
 ## Checklist for administrators
 
@@ -83,6 +83,14 @@ disable 2FA, which is a path to any account.
   with its own sending caps and abuse monitoring, and lower
   `OPENGRID_EMAIL_PER_USER_HOUR` / `OPENGRID_EMAIL_PER_HOUR` if you do not use
   email automations.
+- **Email settings are in the app.** Under **Admin → Email** an administrator
+  edits the SMTP settings; an `OPENGRID_SMTP_*` variable that is set wins for its field
+  and is read-only there. The SMTP password is stored in the database in clear text
+  (the server must present it to the mail server), so it is in every backup: protect
+  backups like the database. It is write-only (never returned by the API, never logged,
+  never in the audit log), and a signed-in person is the only one who can set or remove it.
+  Prefer a dedicated SMTP account with its own sending caps. Putting the host and
+  password in the environment keeps them out of the database altogether.
 - **Disk space.** The server does not look at free disk. The byte budgets below
   bound anonymous growth to about 1 GB per hour, plus up to two hours of retention
   for unattached form uploads, but nothing refuses uploads at a free-space floor.
@@ -197,9 +205,17 @@ disable 2FA, which is a path to any account.
   Admin calls made with a token are written to the audit log as `admin_token_use`
   with the token's id and the request. **Credentials are session-only
   whatever the token's scope**: password change, 2FA setup / enable / disable,
-  the session list and revocation, and listing / creating / deleting tokens. A
-  leaked token, even a `manage` one, can therefore neither take over the account
-  nor mint a replacement that outlives its own revocation. Changing a password
+  the session list and revocation, and listing / creating / deleting tokens. An
+  instance administrator's `manage` token is no exception: it cannot create a
+  password-reset link for a user (`POST /api/admin/users/{id}/reset-link`, which would
+  be an account takeover), cannot switch off a user's 2FA (`disable_2fa`), cannot give a
+  new user a password or receive their reset link (`POST /api/admin/users` creates the
+  account without a usable password; a person sends the invitation from the web app), and
+  cannot set or remove the SMTP password. It also cannot re-point a stored SMTP password:
+  while a password is in use, changing the SMTP host, port, security mode or username is
+  session-only, because that would make the server send the password to a server of the
+  token's choosing. A leaked token, even a `manage` one, can therefore neither take over
+  an account nor mint a replacement that outlives its own revocation. Changing a password
   deletes all of the owner's tokens. Treat a `manage` token like a signed-in
   session of the same user: give it only to tools you fully trust (an AI agent,
   for example), and prefer an expiry. `tests/token_capabilities.rs` checks every
@@ -273,6 +289,13 @@ its own link field (self-linked tables) correctly.
 ## Accepted risks
 
 Authentication and email:
+
+- The email settings let an administrator (or an administrator's `manage` token, which
+  may change host and port while no SMTP password is in use) make the server open a
+  connection to any host and port, and the test email shows whether it answered. That is a
+  small port-probing ability from the server's network position, comparable to what an
+  administrator already has with `OPENGRID_ALLOW_PRIVATE_WEBHOOKS`; it is audited
+  (`admin_email_update`, `admin_email_test`).
 
 - A distributed attacker (many addresses) can still trip the 60-per-hour
   per-account login limit and lock the real owner out for up to an hour. Existing

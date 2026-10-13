@@ -16,7 +16,9 @@ yourself if you would rather describe the work to an agent.
   your normal public URL, behind your normal HTTPS.
 - **Not for account takeover.** Passwords, two-factor authentication, sessions and
   API tokens can never be read or changed through a token, whatever its scope. The
-  tools cannot create, list or delete tokens either.
+  tools cannot create, list or delete tokens either. Even an administrator's token cannot
+  create a password-reset link, switch off someone's 2FA, give a new user a password or
+  set the SMTP password.
 
 Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-client) ·
 [Choose a token](#choose-a-token) · [How an agent works here](#how-an-agent-works-here) ·
@@ -272,11 +274,37 @@ send (settings objects merge key by key; `null` resets a part).
 Only for a `manage` token whose owner is an instance administrator; other tokens
 neither see nor can call these. Every call is recorded in the audit log.
 
+**Why `admin_create_user` returns no reset link.** A password-reset link lets whoever
+holds it choose the password of that account, and an account can be an administrator's.
+If a token received the link it could take the account over and keep it after the token
+is revoked, which is exactly what the "tokens never change credentials" rule prevents.
+(For the same reason `POST /api/admin/users/{id}/reset-link` is session-only.) So the
+tool creates the account with no usable password and says what to do: when the server
+sends email the new person uses "Forgot password" on the sign-in page with their address,
+otherwise an administrator, signed in to the web app, creates the link under **Admin →
+Users → Create password reset link** and sends it. Creating an account is otherwise like
+inviting a new person: a new account has no data.
+
+**Email settings.** The three email tools let an agent set up or check outgoing email
+without the web app, with one deliberate gap: **the SMTP password cannot be set or removed
+by a token** (the tool has no such argument, and `api_request` is refused with 403),
+because it is a credential; a person types it under **Admin → Email**. For the same reason,
+while an SMTP password is in use (stored, or from `OPENGRID_SMTP_PASSWORD`) a token cannot
+change the host, port, security mode or username: that would make the server send the
+password to a server of the agent's choosing. It can still change the sender address, and
+switch email off by clearing the host. Fields fixed by an `OPENGRID_SMTP_*` environment
+variable are read-only for everyone. A typical sequence is `admin_get_email_settings`,
+`admin_update_email_settings {host, port, security, username}`, a person enters the
+password in the app, then `admin_send_test_email`.
+
 | Tool | What it does |
 |---|---|
 | `admin_list_users` | All users with role, status and 2FA flag |
-| `admin_create_user` | New account; returns a one-time password-reset link (there is no way to set a password) |
+| `admin_create_user` | New account (name, email, optional administrator role) **without a usable password**: the tool cannot set one or return a reset link (see below) |
 | `admin_update_user` | Rename, deactivate or reactivate, grant or revoke the administrator role (no way to switch off someone's 2FA) |
+| `admin_get_email_settings` | The SMTP settings: on or off, host, port, security, username, sender, whether a password is stored (never the password), where each setting comes from, and the read-only email budgets |
+| `admin_update_email_settings` | Change host, port, security, username or sender (effective at once). Never the password; and while a password is in use not the host, port, security or username either |
+| `admin_send_test_email` | Send a test email (to the administrator, or `to`); a failure comes back as an error with the real SMTP error text |
 | `admin_audit_log` | The audit log, newest first, paged |
 | `admin_stats` | Counts, sizes, last backup, version |
 | `admin_create_backup` / `admin_list_backups` | Make a backup now; list the stored backups |
@@ -337,8 +365,11 @@ have no access" (the base is outside the user's or the token's reach).
   reason `/mcp` is exempt from the cookie CSRF header.
 - **Credentials stay out of reach.** No tool changes a password, two-factor setting,
   session or API token, and `api_request` refuses those endpoints. Administrators
-  cannot set another user's password or switch off their 2FA through MCP; a new user
-  gets a reset link.
+  cannot set another user's password, create a reset link for anyone, switch off their 2FA
+  or set the SMTP password through MCP; a user created through MCP has no usable password
+  until a person sets one in the web app. The server enforces this on the REST API itself,
+  so `api_request` cannot get around it (`403` "API tokens can never ...", and nothing is
+  changed).
 - **Origin check (DNS rebinding).** A request carrying an `Origin` header (browsers
   always send one) is served only if the origin is the configured public URL or in
   `OPENGRID_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
@@ -416,6 +447,11 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
   automation that really runs, an attachment, CSV export and import into a new table,
   history, and the admin pages. The only steps outside MCP are signing up, accepting
   the invite, the teammate's comment and the visitor's form submission.
+- `mcp_tools_icons.rs` (icons set, changed, kept and cleared on a workspace, base and table and
+  read back; unknown names with suggestions; `list_icons`), `mcp_tools_email.rs` and
+  `admin_email.rs` (the email tools and API: precedence of the environment, write-only password,
+  immediate effect, test email errors from an unreachable and a refusing server) and
+  `token_capabilities.rs` (credential actions stay session-only for an administrator's token).
 - `mcp_tools_schema.rs`, `mcp_tools_people.rs`, `mcp_tools_data.rs`: all 28 field
   types, names in view configurations, type changes, permissions (role vs token),
   base-limited and read-only tokens, admin rules, SSRF refusals, CSV edge cases.

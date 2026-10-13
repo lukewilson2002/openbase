@@ -36,7 +36,8 @@ Invite-only or open signup. Sessions you can list and revoke. Password change
 and password reset, by email when SMTP is configured, otherwise through an admin
 reset link or `opengrid reset-password`. TOTP two-factor authentication,
 profiles with time zones, and personal access tokens (read or write, optionally
-limited to some bases). Admin pages cover users, instance stats, the audit log
+limited to some bases). Admin pages cover users, outgoing email (SMTP settings
+and a "Send test email" button, no restart needed), instance stats, the audit log
 and backups (list, create now, download).
 
 **Workspaces and sharing.** Workspaces with five roles: owner, creator, editor,
@@ -90,11 +91,12 @@ web app, within that token's permissions, so you do not have to use the app
 yourself if you would rather not: build bases, tables, all 28 field types and views,
 edit records, run formulas, set up automations and public forms, invite people,
 import and export CSV, upload files, read history and notifications, and (for
-administrators) manage users and backups. About 65 tools, plus a generic request
-tool for anything else. **Account -> AI assistants** shows the address and
-copy-ready settings for Claude Code and other clients. Passwords, two-factor
-settings, sessions and API tokens stay out of reach of any token. See
-[docs/mcp.md](docs/mcp.md).
+administrators) manage users, email settings and backups. Workspaces, bases and
+tables can be given icons. About 70 tools, plus a generic request tool for anything
+else. **Account -> AI assistants** shows the address and copy-ready settings for
+Claude Code and other clients. Passwords (including the SMTP password and
+password-reset links), two-factor settings, sessions and API tokens stay out of
+reach of any token. See [docs/mcp.md](docs/mcp.md).
 
 **Operations.** CSV import and export. Daily automatic backups with retention,
 plus `opengrid backup` and `opengrid restore`. An automatic database snapshot
@@ -221,7 +223,7 @@ in `deploy/.env`; with systemd in `/etc/opengrid/opengrid.env`.
 | `OPENGRID_AUDIT_DAYS` | `365` | Days of audit log (logins, password and token changes, invites, admin actions) to keep (`0` = forever). |
 | `OPENGRID_EMAIL_PER_USER_HOUR` | `100` | Invite and automation emails one user can cause per hour. |
 | `OPENGRID_EMAIL_PER_HOUR` | `500` | Invite and automation emails the whole instance sends per hour on behalf of users. |
-| `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when unset; do not set the other `OPENGRID_SMTP_*` variables to empty values, leave them out. |
+| `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when no host is set here or on **Admin -> Email**. Do not set the other `OPENGRID_SMTP_*` variables to empty values, leave them out. |
 | `OPENGRID_SMTP_PORT` | `587` | SMTP port. |
 | `OPENGRID_SMTP_USER` | *(unset)* | SMTP username. |
 | `OPENGRID_SMTP_PASSWORD` | *(unset)* | SMTP password. |
@@ -240,6 +242,19 @@ in `deploy/.env`; with systemd in `/etc/opengrid/opengrid.env`.
 
 `TZ` (not an `OPENGRID_` variable) sets the time zone for `OPENGRID_BACKUP_HOUR`
 and for log timestamps.
+
+**Email can also be set up in the app.** An administrator finds the same six SMTP
+settings under **Admin -> Email**, with a "Send test email" button that shows the mail
+server's own error when delivery fails. Changes apply at once, without a restart, and
+are saved in the database (so backups contain them, the SMTP password included). Each
+setting that has an `OPENGRID_SMTP_*` variable set **wins over the saved value and is
+shown there as read-only ("set by environment")**; settings without a variable stay
+editable, so you can fix the host and password in the environment and leave the sender
+address to the page. The SMTP password can be typed only by a signed-in person (never by
+an API token or an AI agent), is never shown again ("Saved", with Replace and Remove)
+and never appears in logs or the audit log. The email limits
+(`OPENGRID_EMAIL_PER_USER_HOUR`, `OPENGRID_EMAIL_PER_HOUR`) are shown there but only
+changed in the environment. See [docs/self-hosting.md](docs/self-hosting.md#5-email-smtp).
 
 ## Backups and restore
 

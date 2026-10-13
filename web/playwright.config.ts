@@ -44,5 +44,8 @@ export default defineConfig({
     { name: "automations", testMatch: /automations\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Kanban, gallery, calendar, timeline, list, trash and the notification bell; signs up its own user.
     { name: "views", testMatch: /views\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // Administration -> Email: changes the instance-wide mail settings and restores them, so it
+    // runs after everything else.
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views"] },
   ],
 });

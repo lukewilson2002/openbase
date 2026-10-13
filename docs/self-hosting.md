@@ -183,8 +183,24 @@ Then turn on two-factor authentication for the admin account under
 ## 5. Email (SMTP)
 
 Email is optional. Without it, invites and password-reset links are shown
-to the admin to pass on by hand. To enable it, set these in `deploy/.env`
-(or `/etc/opengrid/opengrid.env`) and restart:
+to the admin to pass on by hand. There are two ways to turn it on, and you
+can mix them.
+
+**In the app (no restart).** Sign in as an administrator, open
+**Admin → Email**, fill in host, port, connection security (`starttls` for
+port 587, `tls` for 465, `none` only for a relay on the same machine or
+network), username, password and the sender address, and press **Save
+changes**. It takes effect immediately. Press **Send test email** (to your
+own address, or another one you type) to check it: if delivery fails, the
+page shows the real error from the mail server or the connection ("Connection
+refused", "authentication failed", ...), so you can fix it before an invitation
+goes missing. The settings are stored in the database, so they are in your
+backups (the password included: protect backups as you protect the database).
+The password is write-only: the page shows "Saved" with **Replace** and
+**Remove**, and leaving the field empty keeps the saved one.
+
+**In the environment.** Set these in `deploy/.env` (or
+`/etc/opengrid/opengrid.env`) and restart:
 
 ```sh
 OPENGRID_SMTP_HOST=smtp.example.com
@@ -195,8 +211,17 @@ OPENGRID_SMTP_PASSWORD=app-password
 OPENGRID_SMTP_FROM=OpenGrid <opengrid@example.com>
 ```
 
-Leave the `OPENGRID_SMTP_*` lines out entirely (or commented out) to keep
-email disabled. Don't set them to empty values. Any transactional email
+Leave the `OPENGRID_SMTP_*` lines out entirely (or commented out) to leave
+the setting to the page. Don't set them to empty values. **A variable that is
+set always wins, field by field**: the page shows that field as read-only
+("set by environment"), and a change attempted through the API is refused with
+the name of the variable. So you can, for example, keep the host and the
+password in the environment (out of the database) and still let an
+administrator change the sender address on the page. Remove the variable and
+restart to manage that field on the page again. The limits on how many
+invitation and automation emails go out per hour
+(`OPENGRID_EMAIL_PER_USER_HOUR`, `OPENGRID_EMAIL_PER_HOUR`) are shown on the
+page but can only be changed in the environment. Any transactional email
 provider works (Postmark, Mailgun, Amazon SES, Fastmail, a Google
 Workspace app password, ...). Many VPS providers block outgoing port 25,
 so use 587 or 465. Configure SPF/DKIM for the sender domain, or invites
@@ -378,7 +403,9 @@ newer version, so it cannot be downgraded by accident.
 
 **Forgotten password.** Users can reset their own password with "Forgot
 password" when SMTP is configured. Otherwise an administrator can create a
-reset link under **Admin → Users → Reset link** and pass it on. From the
+reset link under **Admin → Users → Create password reset link** and pass it on
+(this works only in the web app, signed in: an API token or AI agent can never
+create a reset link). From the
 command line (this also signs the user out everywhere):
 
 ```sh
