@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Link, Navigate, useLocation, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { FileQuestionMark, Table2 } from "lucide-react";
 import { isApiError } from "@/api/client";
@@ -18,6 +18,7 @@ import { ViewSidebar } from "./ViewSidebar";
 /** `/base/:baseId/:tableId?/:viewId?`: top bar, table tabs, view sidebar and the active view. */
 export function BaseShell() {
   const { baseId = "", tableId, viewId } = useParams();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const base = useQuery({
     queryKey: keys.base(baseId),
@@ -50,7 +51,8 @@ export function BaseShell() {
 
   // Canonicalise the URL so deep links always carry table and view ids.
   if (table && view && (table.id !== tableId || view.id !== viewId)) {
-    return <Navigate to={`/base/${schema.id}/${table.id}/${view.id}`} replace />;
+    // Keep the query string: notification links arrive as /base/:id/:table?record=rec.
+    return <Navigate to={{ pathname: `/base/${schema.id}/${table.id}/${view.id}`, search: location.search }} replace />;
   }
 
   return (

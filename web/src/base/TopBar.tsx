@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Share2 } from "lucide-react";
+import { Share2 } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema } from "@/api/types";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SharingDialog } from "@/components/SharingDialog";
+import { TrashButton } from "@/components/trash/TrashDialog";
 import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
@@ -34,9 +35,8 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
       <Button size="sm" onClick={() => setSharing(true)}>
         <Share2 aria-hidden className="size-3.5" /> Share
       </Button>
-      <IconButton label="Notifications (coming soon)" disabled aria-disabled>
-        <Bell aria-hidden className="size-4" />
-      </IconButton>
+      <TrashButton schema={schema} />
+      <NotificationBell />
       <UserMenu />
       <SharingDialog open={sharing} onOpenChange={setSharing} scope={{ kind: "base", id: schema.id, name: schema.name }} myRole={schema.role} />
     </header>
