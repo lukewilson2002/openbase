@@ -66,9 +66,12 @@ async fn restore(
         .db
         .write(move |tx| {
             let target = trash::authorize(tx, &actor, &body.kind, &body.id)?;
-            trash::restore(tx, &target)
+            trash::restore(tx, &target, Some(&actor.user_id))
         })
         .await?;
+    if let Some(outcome) = &restored.records {
+        crate::api::records::publish_outcome(&state, &headers, &who, outcome);
+    }
     for base in &restored.base_ids {
         if let Some(touched) = &restored.schema {
             publish_schema(&state, &headers, &who, base, touched);

@@ -187,7 +187,7 @@ async fn lookup_target_must_be_live() {
 }
 
 #[tokio::test]
-async fn rollup_and_count_are_created_with_placeholder_inference() {
+async fn rollup_and_count_are_created_with_inferred_types() {
     let l = linked().await;
     let url = fields_url(&l.f.table_id);
     let roll = l
@@ -202,10 +202,7 @@ async fn rollup_and_count_are_created_with_placeholder_inference() {
         .await;
     roll.assert_status(201);
     assert_eq!(roll.body["options"]["expression"], "SUM(values)");
-    assert_eq!(
-        roll.body["options"]["result_type"], "text",
-        "placeholder inference"
-    );
+    assert_eq!(roll.body["options"]["result_type"], "number");
     let count = l
         .f
         .app
@@ -217,7 +214,7 @@ async fn rollup_and_count_are_created_with_placeholder_inference() {
         .await;
     count.assert_status(201);
 
-    // expressions with field references need the formula engine
+    // a rollup only sees the linked values, not other fields
     let r = l
         .f
         .app
@@ -233,7 +230,7 @@ async fn rollup_and_count_are_created_with_placeholder_inference() {
         r.body["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("formula engine")
+            .contains("rollup")
     );
 }
 
@@ -251,15 +248,20 @@ async fn formula_and_button_use_the_formula_integration_point() {
         .await;
     ok.assert_status(201);
     assert_eq!(ok.body["options"]["expression"], "1 + 1");
-    assert_eq!(ok.body["options"]["result_type"], "text");
-    // references cannot be resolved until the formula engine is plugged in
+    assert_eq!(ok.body["options"]["result_type"], "number");
+    // references are resolved by name and stored by id
     let r = f.app.post(&f.owner, &url, json!({ "name": "Ref", "type": "formula", "options": { "expression": "{Name} & \"x\"" } })).await;
+    r.assert_status(201);
+    assert_eq!(r.body["options"]["expression"], "{Name} & \"x\"");
+    assert_eq!(r.body["options"]["result_type"], "text");
+    // unknown references are rejected with the formula error
+    let r = f.app.post(&f.owner, &url, json!({ "name": "Bad", "type": "formula", "options": { "expression": "{Nope} & \"x\"" } })).await;
     r.assert_status(400);
     assert!(
         r.body["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("formula engine")
+            .contains("Nope")
     );
     f.app
         .post(&f.owner, &url, json!({ "name": "Long", "type": "formula", "options": { "expression": "1".repeat(10_001) } }))
@@ -278,6 +280,10 @@ async fn formula_and_button_use_the_formula_integration_point() {
         .assert_status(400);
     f.app
         .post(&f.owner, &url, json!({ "name": "B3", "type": "button", "options": { "label": "Go", "url_formula": "{Name}" } }))
+        .await
+        .assert_status(201);
+    f.app
+        .post(&f.owner, &url, json!({ "name": "B4", "type": "button", "options": { "label": "Go", "url_formula": "{Missing}" } }))
         .await
         .assert_status(400);
 }
@@ -572,24 +578,30 @@ async fn changing_a_lookup_targets_type_refreshes_the_lookups_result_type() {
 }
 
 #[tokio::test]
-async fn creating_computed_fields_does_not_write_record_data() {
+async fn creating_computed_fields_materializes_them_and_keeps_editable_data() {
     let l = linked().await;
     let rec =
         l.f.insert_record(&l.f.table_id, json!({ &l.f.primary_id: "keep me" }));
-    let before = l.f.record_data(&rec);
     l.f.add_field(&l.f.table_id, lookup_body("Prices", &l.link, &l.price))
         .await;
-    l.f.add_field(
-        &l.f.table_id,
-        json!({ "name": "N", "type": "count", "options": { "link_field_id": l.link["id"] } }),
-    )
-    .await;
-    l.f.add_field(
-        &l.f.table_id,
-        json!({ "name": "F", "type": "formula", "options": { "expression": "1" } }),
-    )
-    .await;
-    assert_eq!(l.f.record_data(&rec), before);
+    let count =
+        l.f.add_field(
+            &l.f.table_id,
+            json!({ "name": "N", "type": "count", "options": { "link_field_id": l.link["id"] } }),
+        )
+        .await;
+    let formula =
+        l.f.add_field(
+            &l.f.table_id,
+            json!({ "name": "F", "type": "formula", "options": { "expression": "1" } }),
+        )
+        .await;
+    let data = l.f.record_data(&rec);
+    // editable data untouched; count and formula materialized; the empty lookup is absent
+    assert_eq!(data[&l.f.primary_id], "keep me");
+    assert_eq!(data[sid(&count["id"])], 0);
+    assert_eq!(data[sid(&formula["id"])], 1);
+    assert_eq!(data.as_object().unwrap().len(), 3);
 }
 
 #[tokio::test]

@@ -1,128 +1,500 @@
-//! Integration points with the wave-1 engines.
+//! Integration points between the schema plane and the engines.
 //!
-//! The schema plane (this workstream) must not depend on code that does not
-//! exist yet, so everything it needs from the formula engine (`og_core::formula`),
-//! the cell converter (`og_core::cell::convert`) and the recompute engine
-//! (`crate::engine::recompute`) goes through the functions in this module.
-//! Each has a deliberately simple placeholder body; the integrator replaces
-//! the bodies (not the signatures) once those engines land.
+//! The schema plane (`store::fields`, `store::field_kind`, `store::views`)
+//! reaches the formula engine (`og_core::formula`), the cell converter
+//! (`og_core::cell::convert`), the view-config validators
+//! (`og_core::query`) and the recompute engine
+//! (`crate::engine::recompute`) only through this module.
 //!
 //! Formulas are stored with `{fldXXXX}` field-id references and shown to
 //! clients with `{Field Name}` references: [`prepare_formula`] converts
 //! display -> stored, [`display_formula`] converts stored -> display.
+//!
+//! Name resolution when a formula is saved: an exact field name wins, then a
+//! case-insensitive match if it is unique, then a literal field id (so a
+//! stored formula whose names were rewritten to ids still resolves).
 
+use std::collections::{HashMap, HashSet};
+
+use chrono::Utc;
+use chrono_tz::Tz;
+use og_core::cell::{CellCtx, choices_needed_for_conversion, convert};
+use og_core::field::{COLORS, Field, FieldKind, SelectChoice};
+use og_core::formula::{self, FormulaError, TypeEnv};
+use og_core::ids;
+use og_core::limits;
+use og_core::query::{compile_filter, compile_row_color, validate_groups, validate_sorts};
+use og_core::value::ResultType;
+use og_core::view::{Filter, FilterItem, RowColor, Sort, ViewConfig};
 use rusqlite::Transaction;
 use serde_json::Value as Json;
 
-use og_core::field::Field;
-use og_core::value::ResultType;
-use og_core::view::ViewConfig;
-
+use crate::engine::recompute;
 use crate::error::{AppError, AppResult};
+use crate::ids::new_id;
+use crate::store::field_kind::element_result_type;
+use crate::store::fields;
+use crate::store::links::NameCache;
 
-const NEEDS_ENGINE: &str = "formula fields with references require the formula engine";
+fn formula_error(e: FormulaError) -> AppError {
+    AppError::bad_request(format!("Invalid formula: {e}"))
+}
+
+/// What a formula sees when it reads `field`: the static type of the value
+/// `cell::to_value` / the recompute engine produces for it.
+pub fn field_result_type(f: &Field) -> ResultType {
+    use FieldKind as K;
+    let text_list = || ResultType::Array(Box::new(ResultType::Text));
+    match &f.kind {
+        K::SingleLineText(_)
+        | K::LongText(_)
+        | K::Email(_)
+        | K::Url(_)
+        | K::Phone(_)
+        | K::Barcode(_)
+        | K::Button(_)
+        | K::SingleSelect(_)
+        | K::CreatedBy(_)
+        | K::LastModifiedBy(_) => ResultType::Text,
+        K::Number(_)
+        | K::Currency(_)
+        | K::Percent(_)
+        | K::Duration(_)
+        | K::Rating(_)
+        | K::Autonumber(_)
+        | K::Count(_) => ResultType::Number,
+        K::Checkbox(_) => ResultType::Bool,
+        K::Date(o) if o.include_time => ResultType::DateTime,
+        K::Date(_) => ResultType::Date,
+        K::CreatedTime(_) | K::LastModifiedTime(_) => ResultType::DateTime,
+        K::MultipleSelect(_) | K::Link(_) | K::Attachment(_) => text_list(),
+        K::User(o) if o.multiple => text_list(),
+        K::User(_) => ResultType::Text,
+        K::Formula(o) => o.result_type.clone(),
+        K::Lookup(o) => o.result_type.clone(),
+        K::Rollup(o) => o.result_type.clone(),
+    }
+}
+
+struct Env<'a> {
+    by_id: HashMap<&'a str, &'a Field>,
+    values: Option<ResultType>,
+}
+
+impl<'a> Env<'a> {
+    fn new(fields: &'a [Field], values: Option<ResultType>) -> Env<'a> {
+        Env {
+            by_id: fields.iter().map(|f| (f.id.as_str(), f)).collect(),
+            values,
+        }
+    }
+}
+
+impl TypeEnv for Env<'_> {
+    fn field_type(&self, field_id: &str) -> Option<ResultType> {
+        self.by_id.get(field_id).map(|f| field_result_type(f))
+    }
+    fn values_type(&self) -> Option<ResultType> {
+        self.values.clone()
+    }
+}
+
+/// Field name -> id for formulas typed by users.
+fn resolver(fields: &[Field]) -> impl Fn(&str) -> Option<String> + '_ {
+    move |name: &str| {
+        if let Some(f) = fields.iter().find(|f| f.name == name) {
+            return Some(f.id.clone());
+        }
+        let lower = name.to_lowercase();
+        let mut hits = fields.iter().filter(|f| f.name.to_lowercase() == lower);
+        match (hits.next(), hits.next()) {
+            (Some(f), None) => Some(f.id.clone()),
+            (Some(_), Some(_)) => None, // ambiguous
+            _ => fields.iter().find(|f| f.id == name).map(|f| f.id.clone()),
+        }
+    }
+}
 
 /// Parse and validate a formula typed by a user (`expression_display`, with
 /// `{Field Name}` references resolved against `table_fields`), and return the
 /// stored form (references rewritten to `{fldXXXX}` ids) together with the
 /// inferred result type. Used for formula fields and button `url_formula`s.
-///
-/// PLACEHOLDER: accepts only expressions without references, stores them
-/// unchanged and reports `ResultType::Text`.
-/// REPLACE WITH: `og_core::formula::parse` + `to_storage` + `infer_type`.
+/// Syntax and type errors are 400s carrying the formula error message and
+/// position.
 pub fn prepare_formula(
     table_fields: &[Field],
     expression_display: &str,
 ) -> AppResult<(String, ResultType)> {
-    let _ = table_fields;
-    if expression_display.contains('{') {
-        return Err(AppError::bad_request(NEEDS_ENGINE));
+    check_formula(table_fields, expression_display).map_err(formula_error)
+}
+
+/// [`prepare_formula`] with the structured error (message and position), for
+/// the formula check endpoint.
+pub fn check_formula(
+    table_fields: &[Field],
+    expression_display: &str,
+) -> Result<(String, ResultType), FormulaError> {
+    if expression_display.chars().count() > limits::MAX_FORMULA_LEN {
+        return Err(FormulaError::new(format!(
+            "formula is too long (max {} characters)",
+            limits::MAX_FORMULA_LEN
+        )));
     }
-    Ok((expression_display.to_string(), ResultType::Text))
+    let stored = formula::to_storage(expression_display, &resolver(table_fields))?;
+    let parsed = formula::parse(&stored)?;
+    let ty = formula::infer_type(&parsed, &Env::new(table_fields, None))?;
+    Ok((stored, ty))
 }
 
 /// Parse and validate a rollup expression, a formula over the array `values`
 /// holding the `target` field's values from linked records. Returns the stored
-/// expression and its inferred result type.
-///
-/// PLACEHOLDER: same behaviour as [`prepare_formula`].
-/// REPLACE WITH: formula parse/infer with `values: Array(type of target)`.
+/// expression and its inferred result type. Rollups cannot read other fields
+/// of their own table (the engine would have no dependency edge for them).
 pub fn prepare_rollup(
     table_fields: &[Field],
     target: &Field,
     expression_display: &str,
 ) -> AppResult<(String, ResultType)> {
-    let _ = target;
-    prepare_formula(table_fields, expression_display)
+    let _ = table_fields;
+    let parsed = formula::parse(expression_display).map_err(formula_error)?;
+    if let Some(name) = formula::referenced_fields(&parsed).first() {
+        return Err(AppError::bad_request(format!(
+            "Invalid formula: a rollup can only use the linked values (values), not the field '{name}'"
+        )));
+    }
+    let values = ResultType::Array(Box::new(element_result_type(target)));
+    let env = Env::new(&[], Some(values));
+    let ty = formula::infer_type(&parsed, &env).map_err(formula_error)?;
+    Ok((expression_display.to_string(), ty))
 }
 
 /// Rewrite a stored expression (`{fldXXXX}` references) into display form
 /// (`{Field Name}` references) using the table's current field names. Applied
 /// to every formula, rollup and button expression sent to clients.
-///
-/// PLACEHOLDER: identity.
-/// REPLACE WITH: `og_core::formula::to_display`.
 pub fn display_formula(stored: &str, table_fields: &[Field]) -> String {
-    let _ = table_fields;
-    stored.to_string()
+    formula::to_display(stored, &|id: &str| {
+        table_fields
+            .iter()
+            .find(|f| f.id == id)
+            .map(|f| f.name.clone())
+    })
 }
 
-/// Convert one stored cell value from field `from` to field `to` (same field
-/// id, new type or options) when a field's type changes. `None` in means the
-/// cell is empty; `None` out means the value cannot be represented and is
-/// dropped.
-///
-/// PLACEHOLDER: keeps the value when both fields have the same type, drops it
-/// otherwise.
-/// REPLACE WITH: `og_core::cell::convert`.
+/// Convert one stored cell from field `from` to field `to`, without link
+/// names or a user timezone (see [`convert_column`] for the real path).
 pub fn convert_value(from: &Field, to: &Field, stored: Option<&Json>) -> Option<Json> {
-    if from.field_type() == to.field_type() {
-        stored.cloned()
-    } else {
-        None
+    convert(
+        from,
+        to,
+        stored,
+        &CellCtx::utc(Utc::now()),
+        &og_core::cell::NoNames,
+    )
+}
+
+/// Convert every stored cell of `old.id` in `table_id` (live and trashed
+/// records) to the new field definition. Links are rendered with the linked
+/// records' primary text; trashed linked records are left out.
+pub fn convert_column(tx: &Transaction, table_id: &str, old: &Field, new: &Field) -> AppResult<()> {
+    let names = NameCache::new(tx, Tz::UTC);
+    let ctx = CellCtx::utc(Utc::now());
+    let from_link = matches!(old.kind, FieldKind::Link(_));
+    fields::map_cells(tx, table_id, &old.id, |cell| {
+        if from_link {
+            let live = names.live_ids(cell);
+            if live.is_empty() {
+                return None;
+            }
+            let live = crate::store::links::ids_json(&live);
+            return convert(old, new, Some(&live), &ctx, &names);
+        }
+        convert(old, new, Some(cell), &ctx, &names)
+    })
+}
+
+/// Before a type change converts values into a select field, add the choices
+/// the conversion needs (names found in the existing values) to `new`.
+pub fn add_conversion_choices(
+    tx: &Transaction,
+    table_id: &str,
+    old: &Field,
+    new: &mut Field,
+) -> AppResult<()> {
+    if !matches!(
+        new.kind,
+        FieldKind::SingleSelect(_) | FieldKind::MultipleSelect(_)
+    ) {
+        return Ok(());
     }
+    let path = format!("$.\"{}\"", old.id);
+    let mut stmt = tx.prepare(
+        "SELECT data FROM records
+         WHERE table_id = ?1 AND json_type(data, ?2) IS NOT NULL",
+    )?;
+    let cells: Vec<Json> = stmt
+        .query_map(rusqlite::params![table_id, path], |r| r.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .filter_map(|raw| serde_json::from_str::<Json>(&raw).ok())
+        .filter_map(|mut data| data.get_mut(&old.id).map(Json::take))
+        .collect();
+    let names = NameCache::new(tx, Tz::UTC);
+    let needed = choices_needed_for_conversion(old, new, cells.iter().map(Some), &names, Tz::UTC);
+    if needed.is_empty() {
+        return Ok(());
+    }
+    let choices = match &mut new.kind {
+        FieldKind::SingleSelect(o) | FieldKind::MultipleSelect(o) => &mut o.choices,
+        _ => return Ok(()),
+    };
+    for name in needed {
+        if choices.len() >= limits::MAX_CHOICES_PER_FIELD {
+            break;
+        }
+        let color = COLORS[choices.len() % COLORS.len()].to_string();
+        choices.push(SelectChoice {
+            id: new_id(ids::CHOICE),
+            name,
+            color,
+        });
+    }
+    Ok(())
 }
 
 /// Called inside the schema-changing transaction after fields were created,
-/// changed or removed: (re)materializes the computed fields among `field_ids`
-/// and everything that depends on them, in `table_id` of `base_id`.
-///
-/// PLACEHOLDER: does nothing.
-/// REPLACE WITH: `crate::engine::recompute::recompute_fields`.
+/// changed, removed or restored: (re)materializes the computed fields among
+/// `field_ids` and everything that depends on them, for every record
+/// (including trashed ones), in `table_id` of `base_id`.
 pub fn after_field_change(
     tx: &Transaction,
     base_id: &str,
     table_id: &str,
     field_ids: &[String],
 ) -> AppResult<()> {
-    let _ = (tx, base_id, table_id, field_ids);
+    recompute::recompute_fields(tx, base_id, table_id, field_ids)?;
     Ok(())
 }
 
+// ------------------------------------------------------------ view configs
+
+/// Keep the conditions that still make sense: conditions on fields that no
+/// longer exist are dropped, and so are conditions on `stale_ok` fields that
+/// no longer fit their (changed) type, so a client sending an old config back
+/// unchanged is not rejected for them.
+fn prune_filter(filter: &Filter, fields: &[Field], stale_ok: &HashSet<String>) -> Filter {
+    let mut items = Vec::new();
+    for item in &filter.items {
+        match item {
+            FilterItem::Condition(c) => {
+                if !fields.iter().any(|f| f.id == c.field_id) {
+                    continue;
+                }
+                if stale_ok.contains(&c.field_id) {
+                    let probe = Filter {
+                        conjunction: filter.conjunction,
+                        items: vec![item.clone()],
+                    };
+                    if compile_filter(&probe, fields).is_err() {
+                        continue;
+                    }
+                }
+                items.push(item.clone());
+            }
+            FilterItem::Group(g) => {
+                let pruned = prune_filter(g, fields, stale_ok);
+                if !pruned.items.is_empty() {
+                    items.push(FilterItem::Group(pruned));
+                }
+            }
+        }
+    }
+    Filter {
+        conjunction: filter.conjunction,
+        items,
+    }
+}
+
+fn prune_levels(
+    levels: &[Sort],
+    fields: &[Field],
+    stale_ok: &HashSet<String>,
+    validate: fn(&[Sort], &[Field]) -> Result<(), String>,
+) -> Vec<Sort> {
+    levels
+        .iter()
+        .filter(|s| {
+            fields.iter().any(|f| f.id == s.field_id)
+                && (!stale_ok.contains(&s.field_id)
+                    || validate(std::slice::from_ref(s), fields).is_ok())
+        })
+        .cloned()
+        .collect()
+}
+
+fn bad(msg: String) -> AppError {
+    AppError::bad_request(msg)
+}
+
 /// Check a view config against the field types of its table: operators that
-/// do not apply to a field's type, operand shapes, kanban stack field types,
-/// and so on. Structural checks (unknown field ids, limits) are done by the
-/// caller before this is invoked. A saved config may still name fields that
-/// were deleted or changed type afterwards (the server lets a client send
-/// those back unchanged): ignore references to missing fields here instead of
-/// failing on them.
+/// do not apply to a field's type, operand shapes, sortable and groupable
+/// fields and row colouring. Structural checks
+/// (unknown field ids, limits) are done by the caller before this is invoked.
 ///
-/// PLACEHOLDER: accepts everything.
-/// REPLACE WITH: `og_core::query::validate_config`.
-pub fn validate_view_config_semantics(fields: &[Field], config: &ViewConfig) -> AppResult<()> {
-    let _ = (fields, config);
+/// A saved config may still name fields that were deleted or changed type
+/// afterwards (the server lets a client send those back unchanged, see
+/// `stale_ok`, the ids found in the config being replaced): references to
+/// missing fields are ignored here, and so are `stale_ok` references that no
+/// longer fit their field's type.
+pub fn validate_view_config_semantics(
+    fields: &[Field],
+    config: &ViewConfig,
+    stale_ok: &HashSet<String>,
+) -> AppResult<()> {
+    if let Some(filter) = &config.filter {
+        let pruned = prune_filter(filter, fields, stale_ok);
+        compile_filter(&pruned, fields).map_err(bad)?;
+    }
+    let sorts = prune_levels(&config.sorts, fields, stale_ok, validate_sorts);
+    validate_sorts(&sorts, fields).map_err(bad)?;
+    let groups = prune_levels(&config.groups, fields, stale_ok, |s, f| {
+        validate_groups(s, f)
+    });
+    validate_groups(&groups, fields).map_err(bad)?;
+    match &config.row_color {
+        Some(RowColor::BySelect { field_id }) => {
+            if let Some(f) = fields.iter().find(|f| &f.id == field_id) {
+                let probe = RowColor::BySelect {
+                    field_id: field_id.clone(),
+                };
+                let ok = compile_row_color(&probe, fields);
+                match ok {
+                    Err(_) if stale_ok.contains(&f.id) => {}
+                    other => {
+                        other.map_err(bad)?;
+                    }
+                }
+            }
+        }
+        Some(RowColor::ByConditions { rules }) => {
+            let pruned: Vec<_> = rules
+                .iter()
+                .map(|r| og_core::view::ColorRule {
+                    color: r.color.clone(),
+                    filter: prune_filter(&r.filter, fields, stale_ok),
+                })
+                .collect();
+            compile_row_color(&RowColor::ByConditions { rules: pruned }, fields).map_err(bad)?;
+        }
+        None => {}
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use og_core::field::{NumberOptions, SelectOptions, TextOptions};
+
+    fn f(id: &str, name: &str, kind: FieldKind) -> Field {
+        Field {
+            id: id.into(),
+            table_id: "tbl".into(),
+            name: name.into(),
+            description: None,
+            kind,
+        }
+    }
+
+    fn fields() -> Vec<Field> {
+        vec![
+            f(
+                "fldA",
+                "Name",
+                FieldKind::SingleLineText(TextOptions::default()),
+            ),
+            f("fldB", "Price", FieldKind::Number(NumberOptions::default())),
+            f("fldC", "price", FieldKind::Number(NumberOptions::default())),
+            f(
+                "fldD",
+                "Tags",
+                FieldKind::MultipleSelect(SelectOptions::default()),
+            ),
+        ]
+    }
 
     #[test]
-    fn placeholder_formula_rejects_references() {
-        assert!(prepare_formula(&[], "{Name} & 1").is_err());
-        let (stored, ty) = prepare_formula(&[], "1 + 1").unwrap();
-        assert_eq!(stored, "1 + 1");
+    fn formulas_resolve_names_and_infer_types() {
+        let fs = fields();
+        let (stored, ty) = prepare_formula(&fs, "{Price} * 2").unwrap();
+        assert_eq!(stored, "{fldB} * 2");
+        assert_eq!(ty, ResultType::Number);
+        // exact case wins over the case-insensitive match
+        let (stored, _) = prepare_formula(&fs, "{price} + 1").unwrap();
+        assert_eq!(stored, "{fldC} + 1");
+        // case-insensitive when unique
+        let (stored, ty) = prepare_formula(&fs, "{name} & \"!\"").unwrap();
+        assert_eq!(stored, "{fldA} & \"!\"");
         assert_eq!(ty, ResultType::Text);
+        // a literal id
+        assert_eq!(prepare_formula(&fs, "{fldB}").unwrap().0, "{fldB}");
+        // arrays
+        let (_, ty) = prepare_formula(&fs, "{Tags}").unwrap();
+        assert_eq!(ty, ResultType::Array(Box::new(ResultType::Text)));
+    }
+
+    #[test]
+    fn formula_errors_are_400_with_position() {
+        let fs = fields();
+        for bad in ["{Nope} + 1", "1 +", "FOO(1)", "SUM(values)", "{Price"] {
+            let e = prepare_formula(&fs, bad).unwrap_err();
+            assert!(matches!(e, AppError::BadRequest(_)), "{bad}");
+        }
+        let AppError::BadRequest(m) = prepare_formula(&fs, "{Nope} + 1").unwrap_err() else {
+            panic!()
+        };
+        assert!(m.contains("Nope") && m.contains("position"), "{m}");
+    }
+
+    #[test]
+    fn rollups_type_over_the_target_and_reject_field_refs() {
+        let fs = fields();
+        let target = &fs[1];
+        let (stored, ty) = prepare_rollup(&fs, target, "SUM(values)").unwrap();
+        assert_eq!((stored.as_str(), ty), ("SUM(values)", ResultType::Number));
+        let (_, ty) = prepare_rollup(&fs, &fs[0], "ARRAYJOIN(values, \", \")").unwrap();
+        assert_eq!(ty, ResultType::Text);
+        assert!(prepare_rollup(&fs, target, "SUM(values) + {Price}").is_err());
+        assert!(prepare_rollup(&fs, target, "SUM(").is_err());
+    }
+
+    #[test]
+    fn display_round_trip() {
+        let fs = fields();
+        let (stored, _) = prepare_formula(&fs, "{Price} * 2").unwrap();
+        assert_eq!(display_formula(&stored, &fs), "{Price} * 2");
+        // unknown ids stay as they are
+        assert_eq!(display_formula("{fldGone} + 1", &fs), "{fldGone} + 1");
+    }
+
+    #[test]
+    fn view_semantics_ignore_missing_fields() {
+        let fs = fields();
+        let config: ViewConfig = serde_json::from_value(serde_json::json!({
+            "filter": { "items": [
+                { "field_id": "fldGone", "op": "is", "value": 1 },
+                { "field_id": "fldB", "op": "gt", "value": 3 }
+            ] },
+            "sorts": [ { "field_id": "fldGone" }, { "field_id": "fldB" } ]
+        }))
+        .unwrap();
+        validate_view_config_semantics(&fs, &config, &HashSet::new()).unwrap();
+        // an operator that does not fit the type is rejected...
+        let wrong: ViewConfig = serde_json::from_value(serde_json::json!({
+            "filter": { "items": [ { "field_id": "fldB", "op": "contains", "value": "x" } ] }
+        }))
+        .unwrap();
+        assert!(validate_view_config_semantics(&fs, &wrong, &HashSet::new()).is_err());
+        // ...unless the config already held a reference to that field
+        let stale: HashSet<String> = ["fldB".to_string()].into();
+        validate_view_config_semantics(&fs, &wrong, &stale).unwrap();
     }
 }

@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use og_core::api::schema::View;
-use og_core::deps::DepGraph;
 use og_core::field::{Field, FieldKind};
 use og_core::ids::FieldId;
 use og_core::limits;
@@ -580,7 +579,13 @@ pub fn remap_stored_refs(expression: &str, map: &HashMap<String, String>) -> Str
 /// in a circle. Runs over all live fields of all live tables of the base.
 pub fn check_base_acyclic(conn: &Connection, base_id: &str) -> AppResult<()> {
     let fields = base_fields(conn, base_id)?;
-    let graph = DepGraph::build(&fields, &field_refs);
+    let primary: HashMap<String, String> = live_tables(conn, base_id)?
+        .into_iter()
+        .map(|t| (t.id, t.primary_field_id))
+        .collect();
+    // The engine's graph: field dependencies plus "a link shows the linked
+    // records' primary text" edges, so circles through those are caught too.
+    let graph = crate::engine::recompute::build_graph(&fields, &primary);
     graph.check_acyclic().map_err(|path| {
         let names: HashMap<&str, &str> = fields
             .iter()
@@ -588,7 +593,10 @@ pub fn check_base_acyclic(conn: &Connection, base_id: &str) -> AppResult<()> {
             .collect();
         let shown: Vec<&str> = path
             .iter()
-            .map(|id| names.get(id.as_str()).copied().unwrap_or("?"))
+            .map(|id| {
+                let id = crate::engine::recompute::virtual_link(id).unwrap_or(id);
+                names.get(id).copied().unwrap_or("?")
+            })
             .collect();
         AppError::bad_request(format!(
             "this change would create a circular dependency ({})",

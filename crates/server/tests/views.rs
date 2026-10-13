@@ -272,7 +272,27 @@ async fn config_limits_and_form_rules() {
     let f = Fixture::new().await;
     let url = views_url(&f);
     let p = &f.primary_id;
-    let sorts = |n: usize| json!((0..n).map(|_| json!({ "field_id": p })).collect::<Vec<_>>());
+    // sorts and groups name each field at most once, so the limits need many fields
+    let mut sortable = vec![p.clone()];
+    for i in 0..10 {
+        let nf = f
+            .add_field(
+                &f.table_id,
+                json!({ "name": format!("N{i}"), "type": "number", "options": {} }),
+            )
+            .await;
+        sortable.push(nf["id"].as_str().unwrap().to_string());
+    }
+    let sorts = |n: usize| {
+        json!(
+            sortable
+                .iter()
+                .cycle()
+                .take(n)
+                .map(|id| json!({ "field_id": id }))
+                .collect::<Vec<_>>()
+        )
+    };
     let post = |config: Value| {
         f.app.post(
             &f.owner,

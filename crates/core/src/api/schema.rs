@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::field::{Field, FieldKind};
+use crate::value::ResultType;
 use crate::view::{ViewConfig, ViewType};
+use serde_json::Value as Json;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
@@ -171,4 +173,40 @@ pub struct DuplicateView {
     /// Make the copy a personal view (always true when the source is personal).
     #[serde(default)]
     pub personal: bool,
+}
+
+/// `POST /api/tables/{id}/formula/check`: parse and type-check a formula as
+/// typed in the field editor (`{Field Name}` references) and preview it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct FormulaCheck {
+    pub expression: String,
+    /// Record to preview against (default: the first live record of the table).
+    #[serde(default)]
+    pub record_id: Option<String>,
+}
+
+/// Why a formula was rejected.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct FormulaCheckError {
+    pub message: String,
+    /// Byte offset in the expression, when known.
+    #[serde(default)]
+    pub pos: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct FormulaCheckResult {
+    pub ok: bool,
+    #[serde(default)]
+    pub error: Option<FormulaCheckError>,
+    /// Inferred result type (present when `ok`).
+    #[serde(default)]
+    pub result_type: Option<ResultType>,
+    /// The formula evaluated for the sample record, as it would be stored
+    /// (errors are `{"error": "..."}`); absent when the table has no records.
+    #[serde(default)]
+    pub preview: Option<Json>,
 }

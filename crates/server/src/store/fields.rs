@@ -248,6 +248,12 @@ pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResul
         field.kind = kind;
         kind_changed = field.kind != old.kind;
         if kind_changed {
+            let clears = field.field_type().is_computed()
+                || matches!(plan, LinkPlan::Create | LinkPlan::Relink);
+            if !clears && old.field_type() != field.field_type() {
+                // Names found in the old values become choices of the new select field.
+                fields_engine::add_conversion_choices(tx, &table.id, &old, &mut field)?;
+            }
             let r = rewrite_for_new_kind(tx, &table, &old, &field, &plan)?;
             removed = r.removed;
             for t in &r.touched.0 {
@@ -279,6 +285,9 @@ pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResul
             Vec::new()
         };
         run_engine(tx, &table.base_id, &table.id, own, dependents)?;
+        if !removed.is_empty() {
+            refresh_after_removal(tx, &table.base_id, &table.id, &removed)?;
+        }
     }
 
     let inverse = match new_inverse {
@@ -422,10 +431,10 @@ fn rewrite_cells(
     new: &Field,
     mode: RewriteMode,
 ) -> AppResult<()> {
-    map_cells(tx, table_id, &old.id, |cell| match mode {
-        RewriteMode::Clear => None,
-        RewriteMode::Convert => fields_engine::convert_value(old, new, Some(cell)),
-    })
+    match mode {
+        RewriteMode::Clear => map_cells(tx, table_id, &old.id, |_| None),
+        RewriteMode::Convert => fields_engine::convert_column(tx, table_id, old, new),
+    }
 }
 
 /// For every record of the table having a cell for `field_id`, replace the
@@ -695,10 +704,24 @@ pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
     }
     mark_deleted(tx, &ids, now_ms())?;
 
-    // Anything that referenced the removed fields needs a refresh.
-    let live = schema::base_fields(tx, &table.base_id)?;
+    refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
+    Ok(DeleteOutcome {
+        deleted_field_ids: ids,
+        touched,
+    })
+}
+
+/// Fields that referenced the (just trashed) `removed` fields are recomputed:
+/// formulas over a deleted field evaluate to errors.
+fn refresh_after_removal(
+    tx: &Transaction,
+    base_id: &str,
+    table_id: &str,
+    removed: &[String],
+) -> AppResult<()> {
+    let live = schema::base_fields(tx, base_id)?;
     let graph = DepGraph::build(&live, &schema::field_refs);
-    let affected = graph.transitive_dependents(&ids);
+    let affected = graph.transitive_dependents(removed);
     let mut per_table: Vec<(String, Vec<String>)> = Vec::new();
     for f in live.iter().filter(|f| affected.contains(&f.id)) {
         match per_table.iter_mut().find(|(t, _)| *t == f.table_id) {
@@ -706,11 +729,7 @@ pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
             None => per_table.push((f.table_id.clone(), vec![f.id.clone()])),
         }
     }
-    run_engine(tx, &table.base_id, &table.id, Vec::new(), per_table)?;
-    Ok(DeleteOutcome {
-        deleted_field_ids: ids,
-        touched,
-    })
+    run_engine(tx, base_id, table_id, Vec::new(), per_table)
 }
 
 /// Trash the link fields of other tables that point at `table` (already
@@ -741,6 +760,7 @@ pub fn cascade_delete_incoming_links(
         }
     }
     mark_deleted(tx, &ids, at)?;
+    refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
     Ok(touched)
 }
 
@@ -773,6 +793,14 @@ pub fn set_primary(tx: &Transaction, table_id: &str, field_id: &str) -> AppResul
         tx.execute(
             "UPDATE tables SET primary_field_id = ?2 WHERE id = ?1",
             params![table_id, field.id],
+        )?;
+        // Linked records are shown by their primary field's text.
+        schema::check_base_acyclic(tx, &table.base_id)?;
+        fields_engine::after_field_change(
+            tx,
+            &table.base_id,
+            table_id,
+            &[table.primary_field_id.clone(), field.id.clone()],
         )?;
     }
     live_table(tx, table_id)
@@ -922,16 +950,16 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
 
     schema::check_base_acyclic(tx, &table.base_id)?;
     let mut per_table: Vec<(String, Vec<String>)> = Vec::new();
+    // Every restored field counts, computed or not: formulas that referenced a
+    // restored editable field evaluated to errors while it was gone.
     for id in &members {
         let f = &by_id
             .get(id.as_str())
             .ok_or_else(|| AppError::internal("restore member vanished"))?
             .field;
-        if f.field_type().is_computed() {
-            match per_table.iter_mut().find(|(t, _)| *t == f.table_id) {
-                Some((_, v)) => v.push(f.id.clone()),
-                None => per_table.push((f.table_id.clone(), vec![f.id.clone()])),
-            }
+        match per_table.iter_mut().find(|(t, _)| *t == f.table_id) {
+            Some((_, v)) => v.push(f.id.clone()),
+            None => per_table.push((f.table_id.clone(), vec![f.id.clone()])),
         }
     }
     run_engine(tx, &table.base_id, &table.id, Vec::new(), per_table)?;
