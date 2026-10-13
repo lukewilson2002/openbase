@@ -9,7 +9,9 @@
 # a minute or two.
 #
 # The web steps need `npm ci --ignore-scripts` in web/ once; without node_modules this script
-# stops there with a hint (it does not silently skip them).
+# stops there with a hint (it does not silently skip them). The web client is built before
+# `cargo test` because the server embeds web/dist and its tests inspect it; testing against a
+# missing or stale build would make the result depend on leftover artifacts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,11 +21,6 @@ step "cargo fmt --check"
 cargo fmt --all -- --check
 step "cargo clippy"
 cargo clippy --workspace --all-targets -- -D warnings
-step "cargo test"
-cargo test --workspace
-
-step "TypeScript bindings are current (scripts/gen-types.sh --check)"
-scripts/gen-types.sh --check
 
 if [[ ! -d web/node_modules ]]; then
   cat >&2 <<'EOF'
@@ -37,6 +34,15 @@ EOF
   exit 1
 fi
 
+step "web: production build (the server embeds web/dist, so build before cargo test)"
+(cd web && npm run build)
+
+step "cargo test"
+cargo test --workspace
+
+step "TypeScript bindings are current (scripts/gen-types.sh --check)"
+scripts/gen-types.sh --check
+
 step "Lucide icon list is current (scripts/gen-icons.sh --check)"
 scripts/gen-icons.sh --check
 
@@ -47,8 +53,6 @@ step "web: tsc --noEmit"
 (cd web && npx tsc --noEmit)
 step "web: unit tests"
 (cd web && npm test -- --run)
-step "web: production build"
-(cd web && npm run build)
 step "web: live contract tests (builds and starts target/debug/openbase)"
 (cd web && npm run test:contract)
 

@@ -83,12 +83,20 @@ async fn missing_static_files_are_404_not_the_shell() {
 }
 
 /// With a built client, the brand files the page and the web app manifest link to are all served
-/// with their own content types (never the HTML shell). Without a build there is nothing to serve.
+/// with their own content types (never the HTML shell).
+///
+/// No build at all (`/` is not the HTML shell) skips, so a plain `cargo test` works in a fresh
+/// checkout. A build that exists but lacks the brand files is a stale web/dist from an older
+/// client; that fails loudly instead of skipping, because skipping would hide a real problem
+/// and make the result depend on leftover artifacts. scripts/check.sh always builds first.
 #[tokio::test]
 async fn brand_files_are_served_with_their_own_types() {
     let app = TestApp::new();
     let anon = app.anon();
     if !is_html(&app.get(&anon, "/").await) {
+        eprintln!(
+            "skipping: no web client build is embedded (web/dist missing); run 'cd web && npm run build'"
+        );
         return;
     }
     for (path, types) in [
@@ -104,7 +112,12 @@ async fn brand_files_are_served_with_their_own_types() {
         ("/manifest.webmanifest", &["application/manifest+json"][..]),
     ] {
         let res = app.get(&anon, path).await;
-        res.assert_status(200);
+        assert!(
+            res.status.as_u16() == 200,
+            "{path} returned {} although web/dist is embedded: it is a stale build from an older \
+             client. Run 'cd web && npm run build' and re-run the tests.",
+            res.status
+        );
         let ct = res
             .headers
             .get(header::CONTENT_TYPE)
