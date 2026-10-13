@@ -638,7 +638,7 @@ async fn browser_origins_other_than_the_public_url_are_refused() {
         .assert_status(200);
     for ok in [
         "https://base.example.com",
-        "https://GRID.example.com",
+        "https://BASE.example.com",
         "https://base.example.com/",
         "https://inspector.example.org",
     ] {
