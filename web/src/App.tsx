@@ -19,12 +19,20 @@ import { PageSpinner } from "@/components/ui/spinner";
 // Rarely visited pages load on demand to keep the first paint small.
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
+// Public pages for people without an account: their own chunks, outside the app shell.
+const PublicFormPage = lazy(() => import("@/public/form/PublicFormPage"));
+const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));
 
 /** Routes without a router of their own (tests wrap this in a MemoryRouter). */
 export function AppRoutes() {
   return (
     <Suspense fallback={<PageSpinner />}>
       <Routes>
+        {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
+        <Route path="/form/:token" element={<PublicFormPage />} />
+        <Route path="/f/:token" element={<PublicFormPage />} />
+        <Route path="/share/:token" element={<PublicSharePage />} />
+        <Route path="/s/:token" element={<PublicSharePage />} />
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/2fa" element={<TwoFactorLoginPage />} />
