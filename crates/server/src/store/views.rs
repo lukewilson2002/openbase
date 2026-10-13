@@ -368,7 +368,7 @@ fn validate_config_with(
         }
     }
     check_form(&config.form, &known, stale_ok)?;
-    fields_engine::validate_view_config_semantics(fields, config)
+    fields_engine::validate_view_config_semantics(fields, config, stale_ok)
 }
 
 fn check_filter(filter: &Filter, check: &dyn Fn(&str, &str) -> AppResult<()>) -> AppResult<()> {

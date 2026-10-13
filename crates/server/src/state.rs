@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::config::Config;
 use crate::db::Db;
 use crate::email::Mailer;
+use crate::engine::query::QueryCache;
 use crate::error::AppResult;
 use crate::events::EventBus;
 use crate::ratelimit::RateLimiter;
@@ -17,6 +18,9 @@ pub struct AppState {
     pub limiter: RateLimiter,
     /// Outgoing email (SMTP, or a no-op logger when SMTP is not configured).
     pub mailer: Arc<dyn Mailer>,
+    /// Cached view-query results (ordered ids + group headers), invalidated
+    /// by the per-base data versions of `events.versions()`.
+    pub query_cache: Arc<QueryCache>,
 }
 
 impl AppState {
@@ -34,6 +38,7 @@ impl AppState {
             events: EventBus::default(),
             limiter: RateLimiter::default(),
             mailer,
+            query_cache: Arc::new(QueryCache::new()),
         })
     }
 }

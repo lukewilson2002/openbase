@@ -89,6 +89,13 @@ impl DepGraph {
         g
     }
 
+    /// Add an extra edge `source -> dependent` that is not derivable from
+    /// field definitions. The recompute engine uses it for "a linked
+    /// record's primary text is part of the link field's value".
+    pub fn add_edge(&mut self, source: &str, dependent: &str, kind: EdgeKind) {
+        self.add(source, dependent, kind);
+    }
+
     fn add(&mut self, source: &str, dependent: &str, kind: EdgeKind) {
         self.dependents
             .entry(source.to_string())
@@ -277,6 +284,18 @@ mod tests {
         assert_eq!(deps, HashSet::from(["b".to_string(), "c".to_string()]));
         assert_eq!(g.topo_order(&deps), vec!["b".to_string(), "c".to_string()]);
         assert!(g.check_acyclic().is_ok());
+    }
+
+    #[test]
+    fn extra_edges_take_part_in_cycle_checks_and_ordering() {
+        let fields = vec![formula("a"), formula("b")];
+        let mut g = DepGraph::build(&fields, &refs_table(&[("b", &["a"])]));
+        assert!(g.check_acyclic().is_ok());
+        g.add_edge("x", "a", EdgeKind::SameRecord);
+        let subset: HashSet<FieldId> = ["a", "b", "x"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(g.topo_order(&subset), vec!["x", "a", "b"]);
+        g.add_edge("b", "x", EdgeKind::SameRecord);
+        assert!(g.check_acyclic().is_err());
     }
 
     #[test]

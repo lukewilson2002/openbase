@@ -14,6 +14,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Map, Value as Json};
 
 use crate::auth::Actor;
+use crate::engine::write::{self, WriteCtx, WriteOutcome, WriteSource};
 use crate::error::{AppError, AppResult};
 use crate::perm::{self, Role};
 use crate::store::schema::{self, Touched};
@@ -326,14 +327,17 @@ pub struct Restored {
     pub base_changed: bool,
     /// Fields brought back (field restores bring back partners/dependents).
     pub restored_field_ids: Vec<String>,
+    /// What restoring a record changed (records of several tables when
+    /// linked records had to be recalculated); publish its events.
+    pub records: Option<WriteOutcome>,
 }
 
 fn not_in_trash() -> AppError {
     AppError::conflict("this item is not in the trash")
 }
 
-/// Restore an authorized target.
-pub fn restore(tx: &Transaction, target: &Target) -> AppResult<Restored> {
+/// Restore an authorized target on behalf of `user_id`.
+pub fn restore(tx: &Transaction, target: &Target, user_id: Option<&str>) -> AppResult<Restored> {
     match target {
         Target::Workspace(id) => restore_workspace(tx, id),
         Target::Base(id) => restore_base(tx, id),
@@ -357,7 +361,7 @@ pub fn restore(tx: &Transaction, target: &Target) -> AppResult<Restored> {
             })
         }
         Target::View(id) => restore_view(tx, id),
-        Target::Record(id) => restore_record(tx, id),
+        Target::Record(id) => restore_record(tx, id, user_id),
     }
 }
 
@@ -456,7 +460,7 @@ fn restore_view(tx: &Transaction, id: &str) -> AppResult<Restored> {
     })
 }
 
-fn restore_record(tx: &Transaction, id: &str) -> AppResult<Restored> {
+fn restore_record(tx: &Transaction, id: &str, user_id: Option<&str>) -> AppResult<Restored> {
     let (table_id, deleted): (String, Option<i64>) = tx
         .query_row(
             "SELECT table_id, deleted_at FROM records WHERE id = ?1",
@@ -472,9 +476,13 @@ fn restore_record(tx: &Transaction, id: &str) -> AppResult<Restored> {
     if table.deleted_at.is_some() {
         return Err(AppError::conflict("restore the table first"));
     }
-    tx.execute("UPDATE records SET deleted_at = NULL WHERE id = ?1", [id])?;
+    // The write engine brings the record back, recalculates its computed
+    // fields and the counts/lookups/rollups of the records it links to.
+    let ctx = WriteCtx::new(user_id, WriteSource::Api);
+    let outcome = write::restore_records(tx, &ctx, &table_id, &[id.to_string()])?;
     Ok(Restored {
         base_ids: vec![table.base_id],
+        records: Some(outcome),
         ..Restored::default()
     })
 }

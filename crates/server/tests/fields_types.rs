@@ -13,7 +13,7 @@ fn sid(v: &Value) -> &str {
 }
 
 #[tokio::test]
-async fn same_type_option_changes_keep_values_and_type_changes_drop_unconvertible_ones() {
+async fn same_type_option_changes_keep_values_and_type_changes_convert_them() {
     let f = Fixture::new().await;
     let num = f
         .add_field(
@@ -49,7 +49,7 @@ async fn same_type_option_changes_keep_values_and_type_changes_drop_unconvertibl
         json!({ &nid: 12.5, &oid: 1, &f.primary_id: "a" })
     );
 
-    // number -> text: the placeholder converter keeps nothing across types
+    // number -> text: the value becomes its display text (3 decimals now)
     f.app
         .patch(
             &f.owner,
@@ -58,7 +58,10 @@ async fn same_type_option_changes_keep_values_and_type_changes_drop_unconvertibl
         )
         .await
         .assert_status(200);
-    assert_eq!(f.record_data(&r1), json!({ &oid: 1, &f.primary_id: "a" }));
+    assert_eq!(
+        f.record_data(&r1),
+        json!({ &nid: "12.500", &oid: 1, &f.primary_id: "a" })
+    );
     assert_eq!(
         f.record_data(&r2),
         json!({ &oid: 2 }),
@@ -87,10 +90,10 @@ async fn trashed_records_are_converted_too() {
         )
         .await
         .assert_status(200);
-    assert_eq!(f.record_data(&live), json!({}));
+    assert_eq!(f.record_data(&live), json!({ &nid: true }));
     assert_eq!(
         f.record_data(&dead),
-        json!({}),
+        json!({ &nid: true }),
         "restoring a record later must not resurrect a stale value"
     );
 }
@@ -258,7 +261,8 @@ async fn changing_to_a_computed_type_clears_stored_values() {
         )
         .await
         .assert_status(200);
-    assert_eq!(f.record_data(&rec), json!({ &f.primary_id: "x" }));
+    // the old number is gone; the formula's value is materialized in its place
+    assert_eq!(f.record_data(&rec), json!({ &nid: 1, &f.primary_id: "x" }));
     // and back to an editable type: nothing to carry over
     let r = f
         .app
