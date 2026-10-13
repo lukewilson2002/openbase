@@ -25,7 +25,7 @@ use og_core::ids;
 use og_core::limits;
 use og_core::query::{compile_filter, compile_row_color, validate_groups, validate_sorts};
 use og_core::value::ResultType;
-use og_core::view::{Filter, FilterItem, RowColor, Sort, ViewConfig};
+use og_core::view::{Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
 use rusqlite::Transaction;
 use serde_json::Value as Json;
 
@@ -276,11 +276,128 @@ pub fn after_field_change(
 
 // ------------------------------------------------------------ view configs
 
+/// What the config being replaced already referred to, by location: a field
+/// id in the filter, in the sorts, in the form, ... and each filter condition
+/// as a whole (field, operator and operand).
+///
+/// A field can be deleted or change type after a view config was saved, and a
+/// client sending its config back unchanged must not be rejected for that.
+/// Only a reference found *in the same place* of the old config is forgiven,
+/// and only when it no longer fits the table: a new or edited reference, or
+/// one the old config made elsewhere, is validated in full. (A field the old
+/// config merely hid does not excuse a new `contains` filter on it.)
+#[derive(Debug, Clone, Default)]
+pub struct Stale(HashSet<String>);
+
+impl Stale {
+    /// Nothing is forgiven.
+    pub fn none() -> Stale {
+        Stale::default()
+    }
+
+    /// The references of a saved config.
+    pub fn of(config: &ViewConfig) -> Stale {
+        let mut out = Stale::default();
+        for s in &config.sorts {
+            out.add("sort", &s.field_id);
+        }
+        for g in &config.groups {
+            out.add("group", &g.field_id);
+        }
+        if let Some(filter) = &config.filter {
+            out.add_filter(filter);
+        }
+        for id in &config.hidden_fields {
+            out.add("hidden fields", id);
+        }
+        for id in &config.field_order {
+            out.add("field order", id);
+        }
+        for id in config.field_widths.keys() {
+            out.add("field widths", id);
+        }
+        for id in config.summaries.keys() {
+            out.add("summaries", id);
+        }
+        match &config.row_color {
+            Some(RowColor::BySelect { field_id }) => out.add("row color", field_id),
+            Some(RowColor::ByConditions { rules }) => {
+                for rule in rules {
+                    out.add_filter(&rule.filter);
+                }
+            }
+            None => {}
+        }
+        for (slot, id) in config_slots(config) {
+            if let Some(id) = id {
+                out.add(slot, id);
+            }
+        }
+        for f in &config.form.fields {
+            out.add("form", &f.field_id);
+        }
+        out
+    }
+
+    fn add(&mut self, slot: &str, id: &str) {
+        self.0.insert(format!("{slot}\0{id}"));
+    }
+
+    fn add_filter(&mut self, filter: &Filter) {
+        for item in &filter.items {
+            match item {
+                FilterItem::Condition(c) => {
+                    self.add("filter", &c.field_id);
+                    if let Some(key) = condition_key(c) {
+                        self.0.insert(key);
+                    }
+                }
+                FilterItem::Group(g) => self.add_filter(g),
+            }
+        }
+    }
+
+    /// Did the old config name `id` in this place (`what` is the label the
+    /// validator uses: "sort", "filter", "form", "kanban stack field", ...)?
+    pub fn field(&self, what: &str, id: &str) -> bool {
+        self.0.contains(&format!("{what}\0{id}"))
+    }
+
+    fn condition(&self, c: &Condition) -> bool {
+        condition_key(c).is_some_and(|k| self.0.contains(&k))
+    }
+}
+
+fn condition_key(c: &Condition) -> Option<String> {
+    serde_json::to_string(c)
+        .ok()
+        .map(|json| format!("condition\0{json}"))
+}
+
+/// The single-field slots of a config with the label the validator reports
+/// them under.
+pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 9] {
+    [
+        ("kanban stack field", config.kanban.stack_field_id.as_ref()),
+        ("kanban cover field", config.kanban.cover_field_id.as_ref()),
+        ("calendar date field", config.calendar.date_field_id.as_ref()),
+        ("calendar end field", config.calendar.end_field_id.as_ref()),
+        ("gallery cover field", config.gallery.cover_field_id.as_ref()),
+        ("timeline start field", config.timeline.start_field_id.as_ref()),
+        ("timeline end field", config.timeline.end_field_id.as_ref()),
+        ("timeline group field", config.timeline.group_field_id.as_ref()),
+        (
+            "timeline dependency field",
+            config.timeline.dependency_field_id.as_ref(),
+        ),
+    ]
+}
+
 /// Keep the conditions that still make sense: conditions on fields that no
-/// longer exist are dropped, and so are conditions on `stale_ok` fields that
-/// no longer fit their (changed) type, so a client sending an old config back
-/// unchanged is not rejected for them.
-fn prune_filter(filter: &Filter, fields: &[Field], stale_ok: &HashSet<String>) -> Filter {
+/// longer exist are dropped, and so are conditions that `stale` says the old
+/// config already held and that no longer fit their (changed) field type, so a
+/// client sending an old config back unchanged is not rejected for them.
+fn prune_filter(filter: &Filter, fields: &[Field], stale: &Stale) -> Filter {
     let mut items = Vec::new();
     for item in &filter.items {
         match item {
@@ -288,7 +405,7 @@ fn prune_filter(filter: &Filter, fields: &[Field], stale_ok: &HashSet<String>) -
                 if !fields.iter().any(|f| f.id == c.field_id) {
                     continue;
                 }
-                if stale_ok.contains(&c.field_id) {
+                if stale.condition(c) {
                     let probe = Filter {
                         conjunction: filter.conjunction,
                         items: vec![item.clone()],
@@ -300,7 +417,7 @@ fn prune_filter(filter: &Filter, fields: &[Field], stale_ok: &HashSet<String>) -
                 items.push(item.clone());
             }
             FilterItem::Group(g) => {
-                let pruned = prune_filter(g, fields, stale_ok);
+                let pruned = prune_filter(g, fields, stale);
                 if !pruned.items.is_empty() {
                     items.push(FilterItem::Group(pruned));
                 }
@@ -314,16 +431,17 @@ fn prune_filter(filter: &Filter, fields: &[Field], stale_ok: &HashSet<String>) -
 }
 
 fn prune_levels(
+    slot: &str,
     levels: &[Sort],
     fields: &[Field],
-    stale_ok: &HashSet<String>,
+    stale: &Stale,
     validate: fn(&[Sort], &[Field]) -> Result<(), String>,
 ) -> Vec<Sort> {
     levels
         .iter()
         .filter(|s| {
             fields.iter().any(|f| f.id == s.field_id)
-                && (!stale_ok.contains(&s.field_id)
+                && (!stale.field(slot, &s.field_id)
                     || validate(std::slice::from_ref(s), fields).is_ok())
         })
         .cloned()
@@ -341,21 +459,21 @@ fn bad(msg: String) -> AppError {
 ///
 /// A saved config may still name fields that were deleted or changed type
 /// afterwards (the server lets a client send those back unchanged, see
-/// `stale_ok`, the ids found in the config being replaced): references to
-/// missing fields are ignored here, and so are `stale_ok` references that no
-/// longer fit their field's type.
+/// [`Stale`], the references of the config being replaced): references to
+/// missing fields are ignored here, and so are stale references that no
+/// longer fit their field's type. Everything else is validated.
 pub fn validate_view_config_semantics(
     fields: &[Field],
     config: &ViewConfig,
-    stale_ok: &HashSet<String>,
+    stale: &Stale,
 ) -> AppResult<()> {
     if let Some(filter) = &config.filter {
-        let pruned = prune_filter(filter, fields, stale_ok);
+        let pruned = prune_filter(filter, fields, stale);
         compile_filter(&pruned, fields).map_err(bad)?;
     }
-    let sorts = prune_levels(&config.sorts, fields, stale_ok, validate_sorts);
+    let sorts = prune_levels("sort", &config.sorts, fields, stale, validate_sorts);
     validate_sorts(&sorts, fields).map_err(bad)?;
-    let groups = prune_levels(&config.groups, fields, stale_ok, |s, f| {
+    let groups = prune_levels("group", &config.groups, fields, stale, |s, f| {
         validate_groups(s, f)
     });
     validate_groups(&groups, fields).map_err(bad)?;
@@ -367,7 +485,7 @@ pub fn validate_view_config_semantics(
                 };
                 let ok = compile_row_color(&probe, fields);
                 match ok {
-                    Err(_) if stale_ok.contains(&f.id) => {}
+                    Err(_) if stale.field("row color", &f.id) => {}
                     other => {
                         other.map_err(bad)?;
                     }
@@ -379,7 +497,7 @@ pub fn validate_view_config_semantics(
                 .iter()
                 .map(|r| og_core::view::ColorRule {
                     color: r.color.clone(),
-                    filter: prune_filter(&r.filter, fields, stale_ok),
+                    filter: prune_filter(&r.filter, fields, stale),
                 })
                 .collect();
             compile_row_color(&RowColor::ByConditions { rules: pruned }, fields).map_err(bad)?;
@@ -486,15 +604,23 @@ mod tests {
             "sorts": [ { "field_id": "fldGone" }, { "field_id": "fldB" } ]
         }))
         .unwrap();
-        validate_view_config_semantics(&fs, &config, &HashSet::new()).unwrap();
+        validate_view_config_semantics(&fs, &config, &Stale::none()).unwrap();
         // an operator that does not fit the type is rejected...
         let wrong: ViewConfig = serde_json::from_value(serde_json::json!({
             "filter": { "items": [ { "field_id": "fldB", "op": "contains", "value": "x" } ] }
         }))
         .unwrap();
-        assert!(validate_view_config_semantics(&fs, &wrong, &HashSet::new()).is_err());
-        // ...unless the config already held a reference to that field
-        let stale: HashSet<String> = ["fldB".to_string()].into();
-        validate_view_config_semantics(&fs, &wrong, &stale).unwrap();
+        assert!(validate_view_config_semantics(&fs, &wrong, &Stale::none()).is_err());
+        // ...unless the config being replaced already held exactly that condition
+        validate_view_config_semantics(&fs, &wrong, &Stale::of(&wrong)).unwrap();
+        // a field the old config merely mentioned elsewhere, or a changed operand, is not forgiven
+        let hidden: ViewConfig =
+            serde_json::from_value(serde_json::json!({ "hidden_fields": ["fldB"] })).unwrap();
+        assert!(validate_view_config_semantics(&fs, &wrong, &Stale::of(&hidden)).is_err());
+        let other: ViewConfig = serde_json::from_value(serde_json::json!({
+            "filter": { "items": [ { "field_id": "fldB", "op": "contains", "value": "y" } ] }
+        }))
+        .unwrap();
+        assert!(validate_view_config_semantics(&fs, &wrong, &Stale::of(&other)).is_err());
     }
 }

@@ -835,3 +835,71 @@ async fn editors_cannot_widen_what_a_public_link_shows() {
         .await
         .assert_status(200);
 }
+
+#[tokio::test]
+async fn only_stale_references_are_forgiven_not_everything_the_old_config_mentions() {
+    let f = Fixture::new().await;
+    let n = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Qty", "type": "number", "options": {} }),
+        )
+        .await;
+    let n_id = sid(&n["id"]).to_string();
+    let gt = |value: i64| {
+        json!({ "conjunction": "and", "items": [ { "field_id": n_id, "op": "gt", "value": value } ] })
+    };
+    // The old config filters on Qty (valid for a number) and also hides it.
+    let v = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "V", "type": "grid", "config": {
+                "filter": gt(3), "hidden_fields": [n_id] } }),
+        )
+        .await;
+    v.assert_status(201);
+    let path = view_path(sid(&v.body["id"]));
+    let save = |config: Value| f.app.patch(&f.owner, &path, json!({ "config": config }));
+
+    // Still a number: an operator that does not fit is rejected even though the old config
+    // mentioned the field twice (before: any mention excused anything).
+    let mut contains = v.body["config"].clone();
+    contains["filter"] = json!({ "conjunction": "and", "items": [
+        { "field_id": n_id, "op": "contains", "value": "x" } ] });
+    save(contains.clone()).await.assert_status(400);
+
+    // Qty becomes text: `gt` no longer fits, and the saved view now holds a stale condition.
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{n_id}"),
+            json!({ "type": "single_line_text", "options": {} }),
+        )
+        .await
+        .assert_status(200);
+    let current = v.body["config"].clone();
+
+    // Sending the config back unchanged (plus an unrelated change) is accepted.
+    let mut same = current.clone();
+    same["frozen_columns"] = json!(1);
+    save(same.clone()).await.assert_status(200);
+
+    // A new or edited condition on that field is validated: `gt` on text is refused,
+    // whether it is the old one with another operand or one in a place the old config
+    // never used it (here: a row colour rule).
+    let mut edited = same.clone();
+    edited["filter"] = gt(4);
+    save(edited).await.assert_status(400);
+    let mut elsewhere = same.clone();
+    elsewhere["row_color"] = json!({ "mode": "by_conditions", "rules": [
+        { "color": "red", "filter": gt(9) } ] });
+    save(elsewhere).await.assert_status(400);
+
+    // And a fitting condition on the same field is fine.
+    let mut fitting = same.clone();
+    fitting["filter"] = json!({ "conjunction": "and", "items": [
+        { "field_id": n_id, "op": "contains", "value": "x" } ] });
+    save(fitting).await.assert_status(200);
+}

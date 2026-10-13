@@ -20,7 +20,7 @@ use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
-use crate::store::fields_engine;
+use crate::store::fields_engine::{self, Stale};
 use crate::store::schema::{self, PositionScope, ViewRow, live_table, live_view};
 
 fn need(role: Role, min: Role, what: &str) -> AppResult<()> {
@@ -181,7 +181,7 @@ pub fn update(
     }
     if let Some(config) = &patch.config {
         let fields = schema::table_fields(tx, &row.view.table_id)?;
-        validate_config_with(&fields, config, &previously_referenced(&row.view.config))?;
+        validate_config_with(&fields, config, &Stale::of(&row.view.config))?;
         tx.execute(
             "UPDATE views SET config = ?2 WHERE id = ?1",
             params![view_id, serde_json::to_string(config)?],
@@ -280,44 +280,17 @@ pub fn duplicate(
 /// Operator-vs-type rules are delegated to
 /// [`fields_engine::validate_view_config_semantics`].
 pub fn validate_config(fields: &[Field], config: &ViewConfig) -> AppResult<()> {
-    validate_config_with(fields, config, &HashSet::new())
-}
-
-/// Every id-like string (values and object keys) in a stored config. Ids of
-/// fields that were deleted or changed type after the config was saved stay
-/// in it; a client sending its config back unchanged must not be rejected for
-/// them, so [`update`] grandfathers these.
-fn previously_referenced(config: &ViewConfig) -> HashSet<String> {
-    fn walk(v: &serde_json::Value, out: &mut HashSet<String>) {
-        match v {
-            serde_json::Value::String(s) => {
-                out.insert(s.clone());
-            }
-            serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
-            serde_json::Value::Object(o) => {
-                for (k, x) in o {
-                    out.insert(k.clone());
-                    walk(x, out);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut out = HashSet::new();
-    if let Ok(v) = serde_json::to_value(config) {
-        walk(&v, &mut out);
-    }
-    out
+    validate_config_with(fields, config, &Stale::none())
 }
 
 fn validate_config_with(
     fields: &[Field],
     config: &ViewConfig,
-    stale_ok: &HashSet<String>,
+    stale: &Stale,
 ) -> AppResult<()> {
     let known: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let check = |id: &str, what: &str| -> AppResult<()> {
-        if known.contains_key(id) || stale_ok.contains(id) {
+        if known.contains_key(id) || stale.field(what, id) {
             Ok(())
         } else {
             Err(AppError::bad_request(format!(
@@ -377,26 +350,13 @@ fn validate_config_with(
         }
         None => {}
     }
-    for (id, what) in [
-        (&config.kanban.stack_field_id, "kanban stack field"),
-        (&config.kanban.cover_field_id, "kanban cover field"),
-        (&config.calendar.date_field_id, "calendar date field"),
-        (&config.calendar.end_field_id, "calendar end field"),
-        (&config.gallery.cover_field_id, "gallery cover field"),
-        (&config.timeline.start_field_id, "timeline start field"),
-        (&config.timeline.end_field_id, "timeline end field"),
-        (&config.timeline.group_field_id, "timeline group field"),
-        (
-            &config.timeline.dependency_field_id,
-            "timeline dependency field",
-        ),
-    ] {
+    for (what, id) in fields_engine::config_slots(config) {
         if let Some(id) = id {
             check(id, what)?;
         }
     }
-    check_form(&config.form, &known, stale_ok)?;
-    fields_engine::validate_view_config_semantics(fields, config, stale_ok)
+    check_form(&config.form, &known, stale)?;
+    fields_engine::validate_view_config_semantics(fields, config, stale)
 }
 
 fn check_filter(filter: &Filter, check: &dyn Fn(&str, &str) -> AppResult<()>) -> AppResult<()> {
@@ -437,7 +397,7 @@ fn walk_filter(
 fn check_form(
     form: &FormConfig,
     known: &HashMap<&str, &Field>,
-    stale_ok: &HashSet<String>,
+    stale: &Stale,
 ) -> AppResult<()> {
     if form.title.chars().count() > limits::MAX_NAME_LEN
         || form.submit_label.chars().count() > limits::MAX_NAME_LEN
@@ -459,9 +419,9 @@ fn check_form(
     }
     let mut seen = HashSet::new();
     for f in &form.fields {
-        let stale = stale_ok.contains(&f.field_id);
+        let forgiven = stale.field("form", &f.field_id);
         let Some(field) = known.get(f.field_id.as_str()) else {
-            if stale {
+            if forgiven {
                 continue;
             }
             return Err(AppError::bad_request(format!(
@@ -469,7 +429,7 @@ fn check_form(
                 f.field_id
             )));
         };
-        if field.field_type().is_computed() && !stale {
+        if field.field_type().is_computed() && !forgiven {
             return Err(AppError::bad_request(format!(
                 "computed field '{}' cannot be part of a form",
                 field.name
