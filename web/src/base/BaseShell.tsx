@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { FileQuestionMark, Table2 } from "lucide-react";
@@ -15,8 +15,14 @@ import { TableTabs } from "./TableTabs";
 import { TopBar } from "./TopBar";
 import { ViewSidebar } from "./ViewSidebar";
 
-/** `/base/:baseId/:tableId?/:viewId?`: top bar, table tabs, view sidebar and the active view. */
-export function BaseShell() {
+// Rarely opened, and it pulls in the filter builder and the record editors: its own chunk.
+const AutomationsPage = lazy(() => import("@/automations/AutomationsPage").then((m) => ({ default: m.AutomationsPage })));
+
+/**
+ * `/base/:baseId/:tableId?/:viewId?`: top bar, table tabs, view sidebar and the active view.
+ * With `section="automations"` (`/base/:baseId/automations/...`) the content area is the automations page instead.
+ */
+export function BaseShell({ section }: { section?: "automations" }) {
   const { baseId = "", tableId, viewId } = useParams();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -46,6 +52,21 @@ export function BaseShell() {
   }
 
   const schema = base.data;
+
+  if (section === "automations") {
+    return (
+      <div className="relative flex h-dvh flex-col">
+        <TopBar schema={schema} />
+        <TableTabs schema={schema} activeTableId={undefined} />
+        <main className="min-w-0 flex-1 overflow-auto bg-bg" aria-label="Automations">
+          <Suspense fallback={<PageSpinner label="Loading automations" />}>
+            <AutomationsPage schema={schema} />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
   const table = schema.tables.find((t) => t.id === tableId) ?? schema.tables[0];
   const view = table?.views.find((v) => v.id === viewId) ?? table?.views[0];
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Share2 } from "lucide-react";
+import { Share2, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema } from "@/api/types";
@@ -21,6 +21,7 @@ import { basePermissions } from "./permissions";
 export function TopBar({ schema }: { schema: BaseSchema }) {
   const [sharing, setSharing] = useState(false);
   const canEdit = basePermissions.editBase(schema.role);
+  const onAutomations = useLocation().pathname.startsWith(`/base/${schema.id}/automations`);
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 sm:gap-3">
       <Link to="/" aria-label="Back to all bases" className="shrink-0">
@@ -32,6 +33,13 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
       <BaseName schema={schema} editable={canEdit} />
       <div className="flex-1" />
       {isRole(schema.role) && <span className="hidden rounded-full bg-subtle px-2 py-0.5 text-xs text-muted sm:inline">{ROLE_LABELS[schema.role]}</span>}
+      {basePermissions.manageAutomations(schema.role) && (
+        <Button asChild size="sm" variant={onAutomations ? "primary" : "secondary"}>
+          <Link to={`/base/${schema.id}/automations`} aria-label="Automations" aria-current={onAutomations ? "page" : undefined}>
+            <Zap aria-hidden className="size-3.5" /> <span className="hidden sm:inline">Automations</span>
+          </Link>
+        </Button>
+      )}
       <Button size="sm" onClick={() => setSharing(true)}>
         <Share2 aria-hidden className="size-3.5" /> Share
       </Button>

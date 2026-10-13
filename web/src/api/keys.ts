@@ -29,4 +29,9 @@ export const keys = {
   notifications: ["notifications"] as const,
   /** Share links of one view (Creators). */
   shares: (viewId: string) => ["shares", viewId] as const,
+  /** Automations of a base, and (under the same prefix) each one's run pages. */
+  automations: (baseId: string) => ["automations", baseId] as const,
+  automationRuns: (automationId: string) => ["automation-runs", automationId] as const,
+  /** Last run of each automation, for the list's status column. */
+  automationLastRun: (automationId: string) => ["automation-runs", automationId, "last"] as const,
 };
