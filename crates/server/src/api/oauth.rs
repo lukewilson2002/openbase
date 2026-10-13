@@ -114,9 +114,9 @@ async fn decide(
             let redirect_to = match body.decision.as_str() {
                 "deny" => {
                     store::delete_request(tx, &req.id)?;
-                    audit::record(
+                    audit::record_as(
                         tx,
-                        Some(&actor.user_id),
+                        &actor,
                         actions::OAUTH_DENY,
                         Some(&client.id),
                         Some(detail),
@@ -163,9 +163,9 @@ async fn decide(
                     let mut detail = detail;
                     detail["access"] = json!(chosen.as_str());
                     detail["base_ids"] = json!(token_scope.base_ids);
-                    audit::record(
+                    audit::record_as(
                         tx,
-                        Some(&actor.user_id),
+                        &actor,
                         actions::OAUTH_APPROVE,
                         Some(&client.id),
                         Some(detail),
@@ -218,9 +218,9 @@ async fn revoke_grant(
             if n == 0 {
                 return Err(AppError::not_found("connected app"));
             }
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::OAUTH_GRANT_REVOKE,
                 Some(&id),
                 Some(json!({ "by": "user" })),
@@ -263,9 +263,9 @@ async fn admin_revoke_grant(
                 return Err(AppError::not_found("connected app"));
             };
             store::revoke_grant(tx, &id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::OAUTH_GRANT_REVOKE,
                 Some(&id),
                 Some(json!({ "by": "admin", "user_id": owner })),

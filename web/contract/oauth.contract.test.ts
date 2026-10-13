@@ -89,9 +89,19 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     for (const g of parseList("GrantInfo", await admin.run(api.oauth.grants))) await admin.run(() => api.oauth.revokeGrant(g.id));
   });
 
+  /** The session cookie of the signed-in "browser" that opens the authorization URL. */
+  const browserCookie = () => [...admin.jar.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
+
   /** The browser's part: open the authorization URL, sign in (already), approve at the consent step. */
   async function approve(url: URL, access: "read" | "write" | "manage", baseIds: string[] | null = null) {
-    const res = await fetch(url, { redirect: "manual" });
+    // Nobody signed in: nothing is stored, the visitor is sent to log in and back to this request.
+    const anonymous = await fetch(url, { redirect: "manual" });
+    expect(anonymous.status).toBe(302);
+    const login = new URL(anonymous.headers.get("location")!, seeded.baseUrl);
+    expect(login.pathname).toBe("/login");
+    expect(login.searchParams.get("next")).toBe(`${url.pathname}${url.search}`);
+    // With the session the request is validated in full and stored.
+    const res = await fetch(url, { redirect: "manual", headers: { cookie: browserCookie() } });
     expect(res.status).toBe(302);
     const location = res.headers.get("location")!;
     expect(location).toMatch(/^\/oauth\/consent\?request=oar/);
@@ -120,19 +130,20 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     expect(url.searchParams.get("resource")).toBe(MCP);
 
     const { request, code, iss } = await approve(url, "write", [baseId]);
-    // The SDK asks for every scope the server lists; the page offers all levels but preselects
-    // "Read & edit", never "Full control".
+    // The 401 challenge names "openbase:read openbase:write", which is what a compliant client
+    // asks for: the page offers up to "Read & edit", preselects "Read only" and does not offer
+    // "Full control" to an app that did not ask for it.
     expect(request).toMatchObject({
       client_name: provider.clientMetadata.client_name,
       client_source: "dcr",
       loopback: true,
       trusted_host: false,
       redirect_host: "127.0.0.1:53199",
-      requested_access: "manage",
-      max_access: "manage",
-      default_access: "write",
+      requested_access: "write",
+      max_access: "write",
+      default_access: "read",
     });
-    expect(url.searchParams.get("scope")).toBe("openbase:read openbase:write openbase:manage");
+    expect(url.searchParams.get("scope")).toBe("openbase:read openbase:write");
     expect(iss).toBe(seeded.baseUrl);
     await first.transport.finishAuth(code);
     expect(provider.saved).toMatchObject({ token_type: "Bearer", scope: "openbase:read openbase:write" });
@@ -246,7 +257,7 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     const p = new MemoryProvider(`SDK rest ${rand()}`);
     const first = connectWith(p);
     await expect(first.connect()).rejects.toBeInstanceOf(UnauthorizedError);
-    const { code } = await approve(p.authorizationUrl!, "manage");
+    const { code } = await approve(p.authorizationUrl!, "write");
     await first.transport.finishAuth(code);
     const auth = { authorization: `Bearer ${p.saved!.access_token}` };
     for (const path of ["/api/auth/me", "/api/workspaces", "/api/tokens/whoami", "/api/v1/meta/bases", "/api/oauth/grants"]) {
@@ -260,6 +271,10 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     expect(me.isError, JSON.stringify(me.content)).toBeFalsy();
     const creds = await live.client.callTool({ name: "api_request", arguments: { method: "GET", path: "/api/tokens" } });
     expect(creds.isError).toBe(true);
+    // The Airtable-compatible API takes a personal access token only: refused up front, with the reason.
+    const v1 = await live.client.callTool({ name: "api_request", arguments: { method: "GET", path: "/api/v1/meta/bases" } });
+    expect(v1.isError).toBe(true);
+    expect(JSON.stringify(v1.content)).toContain("not available to apps connected through OAuth");
     await live.client.close();
   });
 

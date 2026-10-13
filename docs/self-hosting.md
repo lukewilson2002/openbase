@@ -431,7 +431,8 @@ offer OAuth at all. Check with
 `curl https://<domain>/.well-known/oauth-protected-resource/mcp`. People approve each app
 on an approval page after signing in; you can see and revoke everyone's connections under
 **Admin → Connected apps**. Apps register themselves unless you set
-`OPENBASE_OAUTH_REGISTRATION=false`; `openbase oauth-client add --name N --redirect-uri URI`
+`OPENBASE_OAUTH_REGISTRATION=false` (apps that publish a metadata document can still ask a
+signed-in person for approval); `openbase oauth-client add --name N --redirect-uri URI`
 adds one by hand. Details: [mcp.md](mcp.md#connect-with-oauth-sign-in).
 
 **The only administrator is locked out.** Use `reset-password` and/or

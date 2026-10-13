@@ -166,9 +166,9 @@ async fn create(
             let view = creator_on_view(tx, &actor, &view_id)?;
             sharing::ensure_shareable(&view, body.kind)?;
             let row = sharing::create(tx, &view_id, body.kind, hash, &actor.user_id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 "share_create",
                 Some(&row.id),
                 Some(json!({
@@ -217,9 +217,9 @@ async fn update(
         .write(move |tx| {
             creator_on_share(tx, &actor, &id)?;
             let row = sharing::update(tx, &id, enabled, hash.clone())?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 "share_update",
                 Some(&id),
                 Some(json!({
@@ -245,9 +245,9 @@ async fn remove(
         .write(move |tx| {
             creator_on_share(tx, &actor, &id)?;
             sharing::delete(tx, &id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 "share_delete",
                 Some(&id),
                 None,

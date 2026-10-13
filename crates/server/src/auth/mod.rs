@@ -148,8 +148,8 @@ pub async fn admin_guard(
 ) -> AppResult<()> {
     actor.require_admin()?;
     if let Some(token_id) = &actor.token_id {
-        let (user_id, token_id, ip, what) = (
-            actor.user_id.clone(),
+        let (acting, token_id, ip, what) = (
+            actor.clone(),
             token_id.clone(),
             client.ip.clone(),
             what.to_string(),
@@ -157,9 +157,9 @@ pub async fn admin_guard(
         state
             .db
             .write(move |tx| {
-                crate::store::audit::record(
+                crate::store::audit::record_as(
                     tx,
-                    Some(&user_id),
+                    &acting,
                     crate::store::audit::actions::ADMIN_TOKEN_USE,
                     Some(&token_id),
                     Some(serde_json::json!({ "request": what })),

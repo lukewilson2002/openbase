@@ -299,7 +299,7 @@ async fn update(
     let env = state.email.env().clone();
     let email = state.email.clone();
     let by_token = actor.token_scope.is_some();
-    let (user_id, ip) = (actor.user_id.clone(), client.ip.clone());
+    let (acting, ip) = (actor.clone(), client.ip.clone());
     state
         .db
         .write(move |tx| {
@@ -329,9 +329,9 @@ async fn update(
             }
             let prepared = email.prepare(&next)?;
             email_settings::save(tx, &next)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&user_id),
+                &acting,
                 actions::ADMIN_EMAIL_UPDATE,
                 None,
                 Some(serde_json::Value::Object(changes)),
@@ -402,8 +402,8 @@ async fn send_test(
             error,
         }
     };
-    let (user_id, ip, detail) = (
-        actor.user_id.clone(),
+    let (acting, ip, detail) = (
+        actor.clone(),
         client.ip.clone(),
         json!({
             "to": to,
@@ -414,9 +414,9 @@ async fn send_test(
     state
         .db
         .write(move |tx| {
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&user_id),
+                &acting,
                 actions::ADMIN_EMAIL_TEST,
                 None,
                 Some(detail),

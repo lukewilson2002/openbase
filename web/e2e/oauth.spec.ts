@@ -100,9 +100,10 @@ test("an MCP client connects through the browser, works with its token, and is r
     const state = randomBytes(8).toString("hex");
     const resource = `${baseURL}/mcp`;
 
-    // The app opens the authorization URL in the browser. Nobody is signed in: the login comes first.
+    // The app opens the authorization URL in the browser. Nobody is signed in: the login comes first,
+    // carrying this very request (nothing is stored until a session loads it again).
     await page.goto(authorizeUrl(clientId, redirect, challenge, state, resource));
-    await expect(page).toHaveURL(/\/login\?next=%2Foauth%2Fconsent%3Frequest%3Doar/);
+    await expect(page).toHaveURL(/\/login\?next=%2Foauth%2Fauthorize%3F/);
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
@@ -112,8 +113,8 @@ test("an MCP client connects through the browser, works with its token, and is r
     await expect(page.getByRole("heading", { name: `Allow ${name} to use your OpenBase?` })).toBeVisible();
     await expect(page.getByTestId("redirect-host")).toHaveText(`127.0.0.1:${listener.port}`);
     await expect(page.getByText("This app runs on your own computer")).toHaveCount(2); // the label and the warning
-    await expect(page.getByLabel(/Read only/)).not.toBeChecked();
-    await expect(page.getByLabel(/Read & edit/)).toBeChecked(); // the app asked for write
+    await expect(page.getByLabel(/Read only/)).toBeChecked(); // Read only is always preselected
+    await expect(page.getByLabel(/Read & edit/)).not.toBeChecked(); // the app asked for write: offered, not chosen
     await expect(page.getByLabel(/Full control/)).toHaveCount(0); // it asked for no more than that
 
     // The consent page cannot be framed.

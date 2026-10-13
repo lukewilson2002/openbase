@@ -118,13 +118,20 @@ and approve. The app then holds a short-lived access token for `/mcp`.
 | Read & edit | also create, change and delete content in your bases | "Allow writes" |
 | Full control | also manage workspaces, members, invites and settings (and the admin pages for an administrator) | "Allow managing ..." |
 
-Plus **All bases** or **only the bases you tick**. An app that asked for less than you
-could give is offered only what it asked for. The page preselects Read only, or Read &
-edit when the app asked for write; it never preselects Full control. It shows the app's
-name (written by the app itself, so not proof of anything) and the address the answer
-goes to, and warns when the app runs on your own computer, when OpenBase cannot verify
-the address, and when an app calls itself "Claude" or "ChatGPT" but is not connecting from
-`claude.ai`, `chatgpt.com` or `openai.com`. The same permission checks as for a token
+Plus **All bases** or **only the bases you tick**. The page **always preselects Read
+only**; you choose more. An app is offered what it asked for and nothing above it: Read &
+edit when it asked for write (an app that named no scope we know can get that much), and
+Full control only when it asked for `openbase:manage` (the `401` from `/mcp` names
+`openbase:read openbase:write`, so a client that follows it does not ask for more). It shows
+the app's name (written by the app itself, so not proof of anything) and the address the
+answer goes to, and warns when the app runs on your own computer, when OpenBase cannot
+verify the address, and when an app calls itself "Claude" or "ChatGPT" (look-alikes with
+other-script letters, accents or full-width text included) but is not connecting from one
+of those providers' documented callback addresses
+(`https://claude.ai/api/mcp/auth_callback` and `https://claude.com/api/mcp/auth_callback`,
+`https://chatgpt.com/connector_platform_oauth_redirect`,
+`https://platform.openai.com/apps-manage/oauth`); other pages on their domains, such as a
+custom GPT's own callback, are treated like any third party. The same permission checks as for a token
 apply afterwards: the grant becomes the same scope (`write`, `manage`, bases), so the
 rules in [Scope model](#scope-model) hold unchanged, credentials, sessions and tokens
 stay out of reach, and what you can do in a base limits what the app can do.
@@ -132,13 +139,19 @@ stay out of reach, and what you can do in a base limits what the app can do.
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, bases, where it connects from, when it connected and when it was last used,
 with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
-under **Admin → Connected apps**. Changing your password disconnects all your apps.
+under **Admin → Connected apps**. Changing or resetting your password, turning on
+two-factor authentication, **Sign out other sessions** and having your account deactivated
+disconnect all your apps (they have to be approved again; reactivating an account does not
+bring them back). Personal access tokens are not touched by the last three.
 
 **Lifetimes.** Authorization codes live 60 seconds and work once. Access tokens live one
 hour. Refresh tokens rotate on every use and expire after 30 idle days, so an app that is
 used keeps working and an abandoned connection lapses by itself. If an old refresh token
-is ever presented again (a copy was kept somewhere), the whole connection is revoked and
-the app has to be approved again. Using a code twice revokes what it issued.
+is ever presented again more than 30 seconds after it was exchanged (a copy was kept
+somewhere), the whole connection is revoked and the app has to be approved again. Inside
+those 30 seconds (an app refreshing twice at once) the second request just gets
+`invalid_grant` and nothing is revoked. A refresh may repeat the granted scope but not ask
+for less or more (`invalid_scope`). Using a code twice revokes what it issued.
 
 **Where it works.**
 
@@ -152,23 +165,28 @@ the app has to be approved again. Using a code twice revokes what it issued.
   certificate they trust. A server on a private network or `localhost` cannot be reached by
   them; use a personal access token with a local client instead.
 - **OAuth tokens work on `/mcp` only**, never on `/api/*` or the Airtable-compatible
-  `/api/v1`. The `api_request` tool still reaches the REST API as you (inside the
-  server), with the grant's permissions.
+  `/api/v1`. The `api_request` tool still reaches the REST API (`/api/...`) as you (inside
+  the server), with the grant's permissions. It does **not** reach `/api/v1` for an OAuth
+  grant: that API takes a personal access token only, so `api_request` refuses it with an
+  explanation and `api_reference` marks the `airtable` area unavailable. Use the curated
+  tools or the other areas, or a personal access token.
 
 **Endpoints** (all derived from `OPENBASE_PUBLIC_URL`; nothing to configure):
 
 | Endpoint | What it is |
 |---|---|
-| `/.well-known/oauth-protected-resource` and `.../mcp` | RFC 9728 metadata of the MCP server; a `401` from `/mcp` points here with `WWW-Authenticate: Bearer resource_metadata="..."` |
+| `/.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata of the MCP server (`resource` is `<issuer>/mcp`); a `401` from `/mcp` points here with `WWW-Authenticate: Bearer resource_metadata="..."`. The same path without `/mcp` answers `404`: a document there would have to name the origin, which is not the protected resource |
 | `/.well-known/oauth-authorization-server` | RFC 8414 metadata: endpoints, `S256` only, grant types, `client_id_metadata_document_supported`, `scopes_supported` |
 | `POST /oauth/register` | RFC 7591 dynamic client registration (public clients; `client_secret_post` on request) |
-| `GET /oauth/authorize` | starts the flow: checks everything, stores the request on the server, sends the browser to `/oauth/consent?request=<id>` in the web app |
+| `GET /oauth/authorize` | starts the flow. Signed in: checks everything, stores the request on the server and sends the browser to `/oauth/consent?request=<id>` in the web app. Not signed in: stores nothing and sends the browser to `/login?next=<this request>`, which loads it again after sign-in |
 | `POST /oauth/token` | `authorization_code` (PKCE `S256` required, `redirect_uri` and `resource` checked) and `refresh_token` |
 | `POST /oauth/revoke` | RFC 7009; revoking either token ends the connection |
 
 Scopes: `openbase:read`, `openbase:write`, `openbase:manage` (what the app *asks* for
 sets the ceiling of what the page offers; what you *choose* decides what it gets, and the
-token response says which).
+token response says which). The `401` challenge of `/mcp` carries
+`scope="openbase:read openbase:write"`, which is what a client following the MCP
+authorization specification asks for.
 
 **How apps identify themselves.** Three ways, all supported:
 
@@ -176,12 +194,21 @@ token response says which).
    the JSON document there (name, redirect addresses) through the same SSRF guard as
    automations (public addresses only, no redirects, 5 s, 16 KB, cached for an hour) and
    checks that its `client_id` is that URL. This is what "Use Claude's published identity"
-   uses.
+   uses. It happens only after you are signed in, `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` does
+   not relax it (that switch is for automations), and a failure is reported only as "could
+   not fetch the app's metadata document" (the reason is in the server log). For a client
+   under development on the same machine, the separate `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE`
+   (development only, default off) allows loopback addresses and `http://localhost`.
 2. **Dynamic registration** at `/oauth/register` ("Register automatically", Claude Code,
-   ChatGPT). Bounded: 30 registrations per address per hour, redirect addresses validated,
-   identical registrations share one client, and a client nobody ever used is forgotten
-   after 7 days. `OPENBASE_OAUTH_REGISTRATION=false` turns registration off; apps that
-   publish a metadata document, and clients you add by hand, still work.
+   ChatGPT). Bounded: 30 registrations per address (IPv6: per /64) per hour, names and
+   redirect addresses validated (a name with control, invisible or direction-changing
+   characters is refused), identical registrations share one client, at most 5,000 (a full
+   table forgets the longest unused client to make room), and a client nobody completed a
+   connection with is forgotten after 7 days. `OPENBASE_OAUTH_REGISTRATION=false` turns
+   registration off; apps that publish a metadata document, and clients you add by hand,
+   still work. Note that this does not stop a stranger from sending you an approval
+   request: anyone can publish a metadata document for their own app. You still see the
+   address the access would go to and decide.
 3. **By hand:** `openbase oauth-client add --name "My app" --redirect-uri https://...`
    prints a `client_id` (and with `--confidential` a secret, shown once, for apps that
    authenticate with `client_secret_post`: "Use your own OAuth client" in Claude).
@@ -224,11 +251,12 @@ The permission table, route by route, is in [api.md](api.md#token-permissions).
 - You choose its access when you approve it (OAuth) or create the token: read only,
   read and edit, or full control, on all bases or only the ones you tick.
 - Its changes show in the record history under your name.
-- Passwords, two-factor settings, sessions and API tokens stay out of its reach,
-  whatever access it has.
+- Passwords, two-factor settings, sessions, API tokens and backup downloads stay out of
+  its reach, whatever access it has.
 - Revoke an app under **Account → AI assistants → Connected apps**, or a token under
   **Account → API tokens**; it stops working at once. Changing your password
-  disconnects everything.
+  disconnects everything; turning on two-factor authentication and "sign out other
+  sessions" disconnect your apps (not your tokens).
 
 The details are in [Choose a token](#choose-a-token), [Scope model](#scope-model) and
 [Security model](#security-model).
@@ -403,7 +431,10 @@ send (settings objects merge key by key; `null` resets a part).
 ### Administration
 
 Only for a `manage` token whose owner is an instance administrator; other tokens
-neither see nor can call these. Every call is recorded in the audit log.
+neither see nor can call these. Every call is recorded in the audit log. There is no tool
+(and `api_request` is refused) for downloading a backup archive: it holds every password
+hash, two-factor secret and the SMTP password, so only a signed-in administrator can fetch
+it in the web app. `admin_create_backup` and `admin_list_backups` return names and sizes.
 
 **Why `admin_create_user` returns no reset link.** A password-reset link lets whoever
 holds it choose the password of that account, and an account can be an administrator's.
@@ -497,10 +528,12 @@ have no access" (the base is outside the user's or the token's reach).
   valid `Authorization: Bearer` header is `401` with `WWW-Authenticate`. That is the
   reason `/mcp` is exempt from the cookie CSRF header.
 - **OAuth.** Access tokens are random and stored only as hashes; they are bound to this
-  server's `/mcp` address and are not accepted on `/api/*`, `/api/v1` or anywhere else.
+  server's `/mcp` address and are not accepted on `/api/*`, `/api/v1` or anywhere else
+  (`api_request` runs `/api/...` as the grant inside the server, but not `/api/v1`).
   Authorization codes are single use, last 60 seconds, require PKCE `S256` and are bound
   to the client, the exact redirect address, the resource and the access you chose.
-  The pending request lives on the server, so the app cannot change it between the steps;
+  The pending request lives on the server, so the app cannot change it between the steps,
+  and it is stored only once a signed-in person loaded the authorization URL;
   approving needs your signed-in session and the CSRF header, so a page cannot approve for
   you, and approving or revoking is never possible with a token or a grant. The approval
   page cannot be framed. All of it, with the threats it answers, is in
@@ -529,9 +562,17 @@ have no access" (the base is outside the user's or the token's reach).
   which needs an explicit confirmation, and deleting automations, share links and
   invites.
 - **Audit.** Calls an administrator's `manage` token makes to the admin pages are
-  recorded in the audit log (`admin_token_use`, with the token id). Token use is
-  stamped in the token list ("last used"). Record changes show the token's owner in
-  the history.
+  recorded in the audit log (`admin_token_use`, with the token id). Audited actions taken
+  with a token or a connected app (invites, share links, automations, user and email
+  administration) say so in `detail.via` (the token's id and name, or the app's name and
+  client id, and the grant id), and **Admin → Audit** shows it under the person's name, so
+  an assistant's action is not mistaken for the person's own. Token use is stamped in the
+  token list ("last used"). Record changes show the token's owner in the history.
+- **Backup archives are never reachable.** `GET /api/admin/backups/{name}` (the download)
+  is session-only: it holds every password hash, two-factor secret and the SMTP password.
+  `admin_create_backup` and `admin_list_backups` work (they return names and sizes; the
+  archive stays on the server), but not even an administrator's `manage` token or a Full
+  control grant can fetch it.
 - **Prompt injection.** An agent reads text that other people wrote (record contents,
   comments, imported files, web pages behind an upload URL). Anything the agent may
   do, text it reads might trick it into doing: use read-only or base-limited tokens
@@ -547,7 +588,8 @@ More in [security.md](security.md).
 | `OPENBASE_MCP_RATE_PER_TOKEN` | 30 | requests per second per token |
 | `OPENBASE_MCP_RATE_PER_USER` | 100 | requests per second per user |
 | `OPENBASE_MCP_ALLOWED_ORIGINS` | none | extra browser origins allowed, comma separated |
-| `OPENBASE_OAUTH_REGISTRATION` | true | let apps register themselves at `/oauth/register`; `false` keeps only metadata-document and hand-added clients |
+| `OPENBASE_OAUTH_REGISTRATION` | true | let apps register themselves at `/oauth/register`; `false` keeps only metadata-document and hand-added clients (it does not stop apps that publish a metadata document from asking you for approval) |
+| `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE` | false | **development only**: let client metadata documents be fetched from loopback and private addresses and `http://localhost`. Independent of `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`, which never applies to them |
 | `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | also the OAuth issuer; OAuth is served only for `https://` or loopback addresses |
 | `OPENBASE_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
 | `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
@@ -581,10 +623,10 @@ Only the `tools` capability is offered; `tools/list` is paginated by an opaque
 `cursor`. JSON-RPC batches are not accepted.
 
 Authentication answers follow the MCP authorization specification: `401` with
-`WWW-Authenticate: Bearer realm="OpenBase MCP", resource_metadata="<issuer>/.well-known/oauth-protected-resource/mcp"`
+`WWW-Authenticate: Bearer realm="OpenBase MCP", scope="openbase:read openbase:write", resource_metadata="<issuer>/.well-known/oauth-protected-resource/mcp"`
 (plus `error="invalid_token"` for a bad, expired or revoked token), and `403` with
 `error="insufficient_scope"` and the scope that would suffice when an OAuth grant calls a
-tool above its access. `resource_metadata` is left out when OAuth is not available.
+tool above its access. `scope` and `resource_metadata` are left out when OAuth is not available.
 
 ## What has been tested
 
@@ -648,12 +690,13 @@ tool above its access. `resource_metadata` is left out when OAuth is not availab
 | Symptom | Cause |
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
-| `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens). For an OAuth app: its access token expired and it did not refresh, or you revoked the connection; connect it again |
+| `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens; a deactivation also deletes connected apps). For an OAuth app: its access token expired and it did not refresh, or you revoked the connection; connect it again |
 | `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; disconnect it under Connected apps and connect it again with more access |
 | the connector says it cannot reach or sign in to the server | Claude and ChatGPT connect from the internet: OpenBase needs a public `https://` address (`OPENBASE_PUBLIC_URL` set to it) with a valid certificate; `curl https://<your OpenBase>/.well-known/oauth-protected-resource/mcp` should answer JSON |
+| `could not fetch the app's metadata document` on the approval step | the app's `client_id` URL did not answer with its JSON document from a public address (the server log has the reason). Private and loopback addresses are refused on purpose |
 | `404` `oauth_disabled` | `OPENBASE_PUBLIC_URL` is plain `http://` on a public address; OAuth is only served over HTTPS (or on localhost) |
 | the approval page says "This request has expired" | the page waited more than 10 minutes, or it was already used; start again from the app |
-| the app says `invalid_grant` after working for a while | its refresh token was used twice (the connection was revoked for safety) or was idle 30 days; connect it again |
+| the app says `invalid_grant` after working for a while | its refresh token was used twice more than 30 seconds apart (the connection was revoked for safety), was idle 30 days, or the connection ended with a password change, turning on two-factor authentication, "sign out other sessions" or a deactivation; connect it again. An `invalid_grant` that says the token "was just exchanged" is two refreshes at once: nothing was revoked |
 | `403` "Origin is not allowed" | a browser-based client on another origin; add it to `OPENBASE_MCP_ALLOWED_ORIGINS` |
 | `429` | rate limit; retry after the `Retry-After` seconds |
 | a tool is missing from the list | the token lacks write or `manage`, or its owner is not an administrator (`admin_*`); create another token |

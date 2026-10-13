@@ -1348,7 +1348,15 @@ async fn the_airtable_api_is_not_available_to_oauth_grants_and_says_so() {
         assert!(!msg.contains("401"), "{msg}");
     }
     // A personal access token reaches it through the same tool.
-    let (t, inner) = mcp_support::api(&w.app, &pat, "GET", "/api/v1/meta/bases", Value::Null, Value::Null).await;
+    let (t, inner) = mcp_support::api(
+        &w.app,
+        &pat,
+        "GET",
+        "/api/v1/meta/bases",
+        Value::Null,
+        Value::Null,
+    )
+    .await;
     t.ok();
     assert_eq!(inner["status"], 200, "{inner}");
     // The ordinary API is unaffected for the grant.
@@ -1368,7 +1376,11 @@ async fn the_airtable_api_is_not_available_to_oauth_grants_and_says_so() {
     let reference = |client: Client, area: Value| {
         let app = &w.app;
         async move {
-            let args = if area.is_null() { json!({}) } else { json!({"area": area}) };
+            let args = if area.is_null() {
+                json!({})
+            } else {
+                json!({"area": area})
+            };
             tool(app, &client, "api_reference", args).await
         }
     };
@@ -1376,13 +1388,24 @@ async fn the_airtable_api_is_not_available_to_oauth_grants_and_says_so() {
     let areas = all.ok()["areas"].as_array().unwrap().clone();
     let airtable = areas.iter().find(|a| a["area"] == "airtable").unwrap();
     assert_eq!(airtable["available"], false);
-    assert!(airtable["note"].as_str().unwrap().contains("personal access token"));
+    assert!(
+        airtable["note"]
+            .as_str()
+            .unwrap()
+            .contains("personal access token")
+    );
     let list = reference(grant.bearer(), json!("airtable")).await;
     let endpoints = list.ok()["endpoints"].as_array().unwrap().clone();
     assert!(!endpoints.is_empty());
     for e in &endpoints {
         assert_eq!(e["available"], false, "{e}");
-        assert!(e["token_capability"].as_str().unwrap().contains("not available"), "{e}");
+        assert!(
+            e["token_capability"]
+                .as_str()
+                .unwrap()
+                .contains("not available"),
+            "{e}"
+        );
     }
     let all = reference(pat.clone(), Value::Null).await;
     let airtable = all.ok()["areas"]
@@ -1395,4 +1418,101 @@ async fn the_airtable_api_is_not_available_to_oauth_grants_and_says_so() {
     assert!(airtable.get("available").is_none());
     let list = reference(pat, json!("airtable")).await;
     assert!(list.ok()["endpoints"][0].get("available").is_none());
+}
+
+/// What an assistant does is told apart from what the person does themselves: audit entries of
+/// actions taken with a connected app or a personal access token name it in `detail.via`.
+#[tokio::test]
+async fn the_audit_log_names_the_app_or_token_behind_an_action() {
+    let app = TestApp::new();
+    let admin = app.admin("root@example.com", "Root");
+    let (ws, _) = app.workspace_with_base(&admin, "Acme");
+    let grant = connect(&app, &admin, "Audited Agent", "manage", None).await;
+    let pat = app
+        .api_token(
+            &admin,
+            json!({"name": "ci token", "write": true, "manage": true}),
+        )
+        .await;
+    let invite = |role: &'static str| json!({"role": role});
+    let path = format!("/api/workspaces/{ws}/invites");
+
+    // The person, an app connected through OAuth, and a personal access token each invite.
+    app.post(&admin, &path, invite("viewer"))
+        .await
+        .assert_status(201);
+    let (t, inner) = mcp_support::api(
+        &app,
+        &grant.bearer(),
+        "POST",
+        &path,
+        Value::Null,
+        invite("commenter"),
+    )
+    .await;
+    t.ok();
+    assert_eq!(inner["status"], 201, "{inner}");
+    app.post(&pat, &path, invite("editor"))
+        .await
+        .assert_status(201);
+    // An admin endpoint used by the app is audited with the app, too.
+    let (t, inner) = mcp_support::api(
+        &app,
+        &grant.bearer(),
+        "GET",
+        "/api/admin/stats",
+        Value::Null,
+        Value::Null,
+    )
+    .await;
+    t.ok();
+    assert_eq!(inner["status"], 200, "{inner}");
+
+    let log = app.get(&admin, "/api/admin/audit?limit=100").await;
+    log.assert_status(200);
+    let entries = log.body["entries"].as_array().unwrap();
+    let invites: Vec<&Value> = entries
+        .iter()
+        .filter(|e| e["action"] == "invite_create")
+        .collect();
+    assert_eq!(invites.len(), 3);
+    // Newest first: token, app, person.
+    assert_eq!(invites[0]["detail"]["via"]["kind"], "token");
+    assert_eq!(invites[0]["detail"]["via"]["token"], "ci token");
+    assert!(
+        invites[0]["detail"]["via"]["token_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("pat")
+    );
+    assert_eq!(invites[1]["detail"]["via"]["kind"], "oauth");
+    assert_eq!(invites[1]["detail"]["via"]["client"], "Audited Agent");
+    assert!(
+        invites[1]["detail"]["via"]["client_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("ocl")
+    );
+    assert!(
+        invites[1]["detail"]["via"]["grant_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("grt")
+    );
+    assert!(
+        invites[2]["detail"].get("via").is_none(),
+        "the person's own click has no via: {}",
+        invites[2]
+    );
+    // The admin_token_use entry of the app's admin call carries it as well.
+    let used = entries
+        .iter()
+        .find(|e| {
+            e["action"] == "admin_token_use" && e["detail"]["request"] == "GET /api/admin/stats"
+        })
+        .expect("the admin call is audited");
+    assert_eq!(used["detail"]["via"]["client"], "Audited Agent");
+    // The log never contains a token.
+    let text = log.body.to_string();
+    assert!(!text.contains(&grant.access) && !text.contains(&grant.refresh));
 }

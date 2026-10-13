@@ -576,7 +576,10 @@ mod tests {
         assert!(preflight(&call("GET", "/api/v1/meta/bases"), false).is_ok());
         for p in ["/api/v1/meta/bases", "/api/v1/appX/Tasks", "/api/v1"] {
             let err = preflight(&call("GET", p), true).unwrap_err();
-            assert!(err.contains("not available to apps connected through OAuth"), "{p}: {err}");
+            assert!(
+                err.contains("not available to apps connected through OAuth"),
+                "{p}: {err}"
+            );
         }
         assert!(preflight(&call("GET", "/api/v10/x"), true).is_ok());
         assert!(preflight(&call("GET", "/api/bases/appX"), true).is_ok());

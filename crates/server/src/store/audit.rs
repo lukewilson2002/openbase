@@ -1,10 +1,18 @@
 //! Audit log of security-relevant events (logins, password and 2FA changes,
 //! tokens, invites, admin actions). Rows are append-only.
+//!
+//! An action taken with a credential other than a session says so: `detail.via` names the
+//! personal access token (`{"kind": "token", "token_id", "token"}`) or the connected app
+//! (`{"kind": "oauth", "grant_id", "client_id", "client"}`) behind it, so a member removed or a
+//! share link created by an AI assistant is not mistaken for the person's own click. Use
+//! [`record_as`] wherever an [`Actor`] is at hand; [`record`] is for events that have none
+//! (sign-in attempts, anonymous requests).
 
 use ob_core::api::auth::{AuditEntry, AuditPage};
-use rusqlite::{Connection, params};
-use serde_json::Value;
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
+use crate::auth::Actor;
 use crate::db::now_ms;
 use crate::error::AppResult;
 
@@ -53,6 +61,15 @@ pub mod actions {
 /// Largest `detail` JSON stored in one row; bigger ones are replaced by a marker.
 pub const MAX_DETAIL_BYTES: usize = 2048;
 
+/// Detail can echo caller-supplied text; never let one row grow large.
+fn capped(detail: Value) -> Value {
+    if detail.to_string().len() > MAX_DETAIL_BYTES {
+        json!({ "truncated": true })
+    } else {
+        detail
+    }
+}
+
 /// Append one audit entry.
 pub fn record(
     conn: &Connection,
@@ -62,15 +79,79 @@ pub fn record(
     detail: Option<Value>,
     ip: Option<&str>,
 ) -> AppResult<()> {
-    // Detail can echo caller-supplied text; never let one row grow large.
-    let detail = detail.map(|d| {
-        let s = d.to_string();
-        if s.len() > MAX_DETAIL_BYTES {
-            r#"{"truncated":true}"#.to_string()
-        } else {
-            s
+    insert(conn, user_id, action, target, detail.map(capped), ip)
+}
+
+/// Append one audit entry for an action of `actor`: like [`record`] with the actor's user, and
+/// `detail.via` set when the actor is a personal access token or an OAuth grant rather than a
+/// session.
+pub fn record_as(
+    conn: &Connection,
+    actor: &Actor,
+    action: &str,
+    target: Option<&str>,
+    detail: Option<Value>,
+    ip: Option<&str>,
+) -> AppResult<()> {
+    let detail = detail.map(capped);
+    let detail = match (detail, via(conn, actor)?) {
+        (detail, None) => detail,
+        (None, Some(via)) => Some(json!({ "via": via })),
+        (Some(Value::Object(mut map)), Some(via)) => {
+            map.insert("via".into(), via);
+            Some(Value::Object(map))
         }
-    });
+        (Some(other), Some(via)) => Some(json!({ "value": other, "via": via })),
+    };
+    insert(conn, Some(&actor.user_id), action, target, detail, ip)
+}
+
+/// The credential behind `actor`, when it is not a session.
+fn via(conn: &Connection, actor: &Actor) -> AppResult<Option<Value>> {
+    if let Some(grant_id) = &actor.oauth_grant_id {
+        let app: Option<(String, String)> = conn
+            .query_row(
+                "SELECT c.id, c.name FROM oauth_grants g
+                 JOIN oauth_clients c ON c.id = g.client_id WHERE g.id = ?1",
+                [grant_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        return Ok(Some(match app {
+            Some((client_id, name)) => json!({
+                "kind": "oauth",
+                "grant_id": grant_id,
+                "client_id": client_id,
+                "client": crate::oauth::redirect::display_name(&name),
+            }),
+            None => json!({ "kind": "oauth", "grant_id": grant_id }),
+        }));
+    }
+    if let Some(token_id) = &actor.token_id {
+        let name: Option<String> = conn
+            .query_row(
+                "SELECT name FROM api_tokens WHERE id = ?1",
+                [token_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        return Ok(Some(match name {
+            Some(name) => json!({ "kind": "token", "token_id": token_id, "token": name }),
+            None => json!({ "kind": "token", "token_id": token_id }),
+        }));
+    }
+    Ok(None)
+}
+
+fn insert(
+    conn: &Connection,
+    user_id: Option<&str>,
+    action: &str,
+    target: Option<&str>,
+    detail: Option<Value>,
+    ip: Option<&str>,
+) -> AppResult<()> {
+    let detail = detail.map(|d| d.to_string());
     conn.execute(
         "INSERT INTO audit_log (user_id, action, target, detail, ip, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",

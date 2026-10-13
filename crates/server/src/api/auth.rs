@@ -507,9 +507,9 @@ async fn change_password(
             users::set_password_hash(tx, &actor.user_id, &hash)?;
             session::delete_all_for_user(tx, &actor.user_id, actor.session_hash.as_deref())?;
             let revoked = tokens::delete_all_for_user(tx, &actor.user_id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::PASSWORD_CHANGE,
                 None,
                 Some(json!({ "api_tokens_revoked": revoked })),
@@ -803,9 +803,9 @@ async fn revoke_session(
             if n == 0 {
                 return Err(AppError::not_found("session"));
             }
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::SESSION_REVOKE,
                 Some(&id),
                 None,
@@ -829,9 +829,9 @@ async fn revoke_other_sessions(
             // "Sign out everywhere else" is what a person does when they fear someone else has
             // access, and connected apps are access: they end too and have to be approved again.
             crate::store::oauth::revoke_all_for_user(tx, &actor.user_id)?;
-            audit::record(
+            audit::record_as(
                 tx,
-                Some(&actor.user_id),
+                &actor,
                 actions::SESSION_REVOKE,
                 Some("others"),
                 None,

@@ -71,9 +71,9 @@ fn load_for(tx: &Connection, actor: &Actor, id: &str, min: Role) -> AppResult<Au
 }
 
 fn audit_event(tx: &Transaction, actor: &Actor, action: &str, a: &AutomationRow) -> AppResult<()> {
-    audit::record(
+    audit::record_as(
         tx,
-        Some(&actor.user_id),
+        &actor,
         action,
         Some(&a.id),
         Some(json!({ "name": a.name, "base_id": a.base_id })),

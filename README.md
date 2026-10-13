@@ -238,12 +238,13 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 | `OPENBASE_SMTP_PASSWORD` | *(unset)* | SMTP password. |
 | `OPENBASE_SMTP_SECURITY` | `starttls` | `starttls`, `tls` (implicit TLS, usually port 465) or `none` (local relay only). |
 | `OPENBASE_SMTP_FROM` | `OpenBase <openbase@localhost>` | Sender address. |
-| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. |
+| `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. It does not apply to OAuth client metadata documents. |
 | `OPENBASE_V1_RATE_PER_TOKEN` | `5` | Requests per second one API token may make to `/api/v1`; more answer `429`. |
 | `OPENBASE_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
 | `OPENBASE_MCP_RATE_PER_TOKEN` | `30` | Requests per second one API token may make to the MCP endpoint `/mcp`; more answer `429`. |
 | `OPENBASE_MCP_RATE_PER_USER` | `100` | Requests per second all tokens of one user may make to `/mcp` together. |
-| `OPENBASE_OAUTH_REGISTRATION` | `true` | Let apps register themselves for the OAuth sign-in of the MCP endpoint. Turn off to allow only apps that publish a client metadata document and clients added with `openbase oauth-client add`. OAuth is served only when `OPENBASE_PUBLIC_URL` is `https://` (or a localhost address). |
+| `OPENBASE_OAUTH_REGISTRATION` | `true` | Let apps register themselves for the OAuth sign-in of the MCP endpoint. Turn off to allow only apps that publish a client metadata document and clients added with `openbase oauth-client add` (apps that publish a document can still ask a signed-in person for approval). OAuth is served only when `OPENBASE_PUBLIC_URL` is `https://` (or a localhost address). |
+| `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE` | `false` | Development only: fetch OAuth client metadata documents from loopback and private addresses and `http://localhost`, for a client under development on the same machine. Never turn it on in production: any signed-in user could make the server probe your network. |
 | `OPENBASE_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
 | `OPENBASE_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
 | `OPENBASE_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
