@@ -1040,6 +1040,78 @@ async fn public_transient_overrides_may_only_use_shown_fields() {
 }
 
 #[tokio::test]
+async fn public_group_headers_carry_no_user_ids_or_raw_values() {
+    let s = setup().await;
+    let owner_id = s.p.f.owner.user_id.clone().unwrap();
+    for field in [&s.assignee, &s.made_by, &s.p.status] {
+        let r = pub_post(
+            s.app(),
+            &s.query_path(),
+            json!({ "transient": { "groups": [{ "field_id": field }] } }),
+        )
+        .await;
+        r.assert_status(200);
+        let raw = String::from_utf8(r.bytes.clone()).unwrap();
+        assert!(!raw.contains(&owner_id), "user id in group headers: {raw}");
+        assert!(!raw.contains("\"usr"), "user id in group headers: {raw}");
+        let groups = r.body["groups"].as_array().unwrap();
+        assert!(!groups.is_empty());
+        for g in groups {
+            // The raw value is only for dragging records between groups.
+            assert_eq!(g["value"], Value::Null, "{g}");
+        }
+        if field != &s.p.status {
+            assert_eq!(groups[0]["label"], "Owner");
+            assert_eq!(groups[0]["count"], 5);
+            assert!(
+                groups[0]["key"].as_str().unwrap().starts_with("user-"),
+                "{}",
+                groups[0]
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn public_group_headers_are_capped_and_truncated() {
+    let s = setup().await;
+    let t = s.p.f.table_id.clone();
+    let name = s.p.name.clone();
+    let max = opengrid::engine::query::PUBLIC_MAX_GROUP_HEADERS;
+    let text_cap = opengrid::engine::query::PUBLIC_GROUP_TEXT_CHARS;
+    // More distinct names than a response may carry headers for, one of
+    // them very long.
+    let mut records: Vec<Value> = (0..max + 50)
+        .map(|i| json!({ "values": { &name: format!("name {i:05}") } }))
+        .collect();
+    records.push(json!({ "values": { &name: "a".repeat(5_000) } }));
+    for chunk in records.chunks(500) {
+        let r = s
+            .app()
+            .post(&s.p.f.owner, &records_url(&t), json!({ "records": chunk }))
+            .await;
+        r.assert_status(201);
+    }
+
+    let body = json!({ "limit": 1, "transient": { "groups": [{ "field_id": name }] } });
+    let r = pub_post(s.app(), &s.query_path(), body).await;
+    r.assert_status(200);
+    let groups = r.body["groups"].as_array().unwrap();
+    assert_eq!(groups.len(), max);
+    assert_eq!(r.body["total"], 5 + max + 50 + 1);
+    for g in groups {
+        assert!(g["key"].as_str().unwrap().chars().count() <= text_cap);
+        assert!(g["label"].as_str().unwrap().chars().count() <= text_cap);
+    }
+    // The signed-in view of the same query is unaffected: complete headers.
+    let full =
+        s.p.f
+            .query(json!({ "limit": 1, "transient": { "groups": [{ "field_id": name }] } }))
+            .await;
+    assert_eq!(full["groups"].as_array().unwrap().len(), 5 + max + 50 + 1);
+}
+
+#[tokio::test]
 async fn password_guessing_is_throttled() {
     let p = people().await;
     let view = p.f.new_view(&p.f.table_id, "Locked", json!({})).await;
