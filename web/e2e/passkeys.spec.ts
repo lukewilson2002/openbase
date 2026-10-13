@@ -226,8 +226,13 @@ test("a sign-in with a passkey skips the two-factor code that a password sign-in
   // mediation, for the email field's autofill list) and a real browser completes that request when the
   // person picks the passkey from the list. Chrome's virtual authenticator, once it approves prompts
   // by itself, completes it right away: signed in, with nothing typed, no button and no code.
+  const loggedOut = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  const signedIn = page.waitForResponse((r) => r.url().endsWith("/api/auth/passkey-login/finish"));
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
+  expect((await loggedOut).ok()).toBe(true);
+  expect((await signedIn).status()).toBe(200);
+  await expect(page).not.toHaveURL(/login/);
   await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
   expect((await (await page.request.get("/api/auth/me")).json()).email).toBe(email);
 });
