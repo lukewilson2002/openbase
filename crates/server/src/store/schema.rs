@@ -33,10 +33,11 @@ pub struct TableRow {
     pub primary_field_id: String,
     pub next_autonumber: i64,
     pub deleted_at: Option<i64>,
+    pub icon: Option<String>,
 }
 
 const TABLE_COLS: &str =
-    "id, base_id, name, description, position, primary_field_id, next_autonumber, deleted_at";
+    "id, base_id, name, description, position, primary_field_id, next_autonumber, deleted_at, icon";
 
 impl TableRow {
     fn from_row(r: &Row) -> rusqlite::Result<TableRow> {
@@ -49,6 +50,7 @@ impl TableRow {
             primary_field_id: r.get(5)?,
             next_autonumber: r.get(6)?,
             deleted_at: r.get(7)?,
+            icon: r.get(8)?,
         })
     }
 }
@@ -511,6 +513,44 @@ pub fn normalize_optional_text(
         )));
     }
     Ok((!text.is_empty()).then(|| text.to_string()))
+}
+
+/// Longest icon name accepted.
+pub const MAX_ICON_LEN: usize = 64;
+
+/// Validate a Lucide icon name: 1 to 64 characters of `[a-z0-9-]`. The server
+/// does not know the icon set; the client falls back to a letter for names it
+/// cannot render.
+pub fn validate_icon(icon: &str) -> AppResult<String> {
+    if icon.is_empty() || icon.len() > MAX_ICON_LEN {
+        return Err(AppError::bad_request(format!(
+            "icon must be 1 to {MAX_ICON_LEN} characters (a Lucide icon name such as 'briefcase')"
+        )));
+    }
+    if !icon
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Err(AppError::bad_request(
+            "icon may only contain lowercase letters, digits and '-' (a Lucide icon name)",
+        ));
+    }
+    Ok(icon.to_string())
+}
+
+/// An icon given at creation: `None` means no icon.
+pub fn icon_on_create(icon: Option<&str>) -> AppResult<Option<String>> {
+    icon.map(validate_icon).transpose()
+}
+
+/// An icon in a PATCH body: outer `None` leaves the column alone (returns
+/// `None`), `Some(None)` clears it, `Some(Some(name))` sets a validated name.
+pub fn icon_patch(patch: &Option<Option<String>>) -> AppResult<Option<Option<String>>> {
+    match patch {
+        None => Ok(None),
+        Some(None) => Ok(Some(None)),
+        Some(Some(name)) => Ok(Some(Some(validate_icon(name)?))),
+    }
 }
 
 /// Case-insensitive comparison key for names.

@@ -227,10 +227,12 @@ async fn update_base_name_color_icon_position() {
     assert_eq!(r.body["name"], "Renamed");
     assert_eq!(r.body["color"], "teal_dark");
     assert_eq!(r.body["icon"], "star");
-    // an empty icon clears it
-    let r = f.app.patch(&f.owner, &path, json!({ "icon": "" })).await;
+    // null clears it (see tests/icons.rs); an empty or malformed name is rejected
+    let r = f.app.patch(&f.owner, &path, json!({ "icon": null })).await;
     assert!(r.body["icon"].is_null());
     for bad in [
+        json!({ "icon": "" }),
+        json!({ "icon": "Star" }),
         json!({ "name": "" }),
         json!({ "color": "nope" }),
         json!({ "icon": "x".repeat(100) }),

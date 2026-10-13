@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Notification } from "@/api/types";
-import { describeNotification, notificationHref } from "./describe";
+import { describeNotification, notificationHref, notificationPlace } from "./describe";
 
 const n = (kind: string, payload: unknown): Notification => ({ id: "ntf1", kind, payload: payload as Notification["payload"], read_at: null, created_at: 1 });
 
@@ -13,8 +13,16 @@ describe("describeNotification", () => {
   it("describes an assignment", () => {
     const v = describeNotification(n("assigned", { base_id: "app1", base_name: "Roadmap", table_id: "tbl1", table_name: "Tasks", record_id: "rec1", record_name: "Fix login", field_id: "fld1", field_name: "Owner", assigned_by: "usr2" }));
     expect(v.title).toBe("You were assigned to Fix login");
-    expect(v.detail).toBe("In Owner · Roadmap / Tasks");
+    expect(v.detail).toBe("In Owner");
     expect(v.href).toBe("/base/app1/tbl1?record=rec1");
+  });
+
+  it("names the base and table with the icons they had", () => {
+    const place = notificationPlace(n("mention", { base_name: "Roadmap", base_icon: "store", table_name: "Tasks", table_icon: null }));
+    expect(place).toEqual({ base: { name: "Roadmap", icon: "store" }, table: { name: "Tasks", icon: null } });
+    expect(notificationPlace(n("mention", { table_name: "Tasks", table_icon: "truck" }))).toEqual({ base: null, table: { name: "Tasks", icon: "truck" } });
+    expect(notificationPlace(n("mention", { record_name: "x" }))).toBeNull();
+    expect(notificationPlace(n("assigned", null))).toBeNull();
   });
 
   it("tolerates missing keys and odd payloads", () => {

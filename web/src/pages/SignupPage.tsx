@@ -1,3 +1,4 @@
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -73,7 +74,10 @@ export function SignupPage() {
         <form onSubmit={submit} className="flex flex-col gap-4">
           {invite.data && (
             <Notice>
-              You were invited to <strong>{invite.data.target_name}</strong>
+              You were invited to{" "}
+              <strong>
+                <EntityLabel icon={invite.data.target_icon}>{invite.data.target_name}</EntityLabel>
+              </strong>
               {isRole(invite.data.role) && <> as {ROLE_LABELS[invite.data.role].toLowerCase()}</>}.
             </Notice>
           )}

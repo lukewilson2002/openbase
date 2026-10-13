@@ -4,7 +4,7 @@ import type { PublicFormField } from "./PublicFormField";
 /**
  * `GET /api/public/forms/{token}`.
  */
-export type PublicForm = { title: string, description: string, base_name: string, table_name: string, fields: Array<PublicFormField>, submit_label: string, success_message: string, 
+export type PublicForm = { title: string, description: string, base_name: string, base_icon?: string | null, table_name: string, table_icon?: string | null, fields: Array<PublicFormField>, submit_label: string, success_message: string, 
 /**
  * Only http(s) URLs are ever returned.
  */

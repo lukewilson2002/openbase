@@ -291,3 +291,129 @@ describe("top bar additions", () => {
     expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
   });
 });
+
+describe("icons", () => {
+  const withIcons = (role: string) => {
+    const schema = makeSchema(role, { icon: "store" });
+    schema.tables[0]!.icon = "truck";
+    return schema;
+  };
+  const icon = (el: HTMLElement | Element | null, name: string) => el?.querySelector(`svg.lucide-${name}`);
+
+  it("shows the base icon in the top bar, the table icon left of its tab name and in the view sidebar, and no icon for a table without one", async () => {
+    openBase("viewer", { "GET /api/bases/app1": withIcons("viewer") });
+    await screen.findByText("Grid view coming soon");
+    const tile = document.querySelector("header [data-entity-tile]")!;
+    expect(icon(tile, "store")).toBeInTheDocument();
+    expect(tile).not.toHaveTextContent("P");
+
+    const tasks = screen.getByRole("link", { name: "Tasks" });
+    expect(icon(tasks, "truck")).toBeInTheDocument();
+    expect(tasks.firstElementChild).toBe(icon(tasks, "truck"));
+    expect(screen.getByRole("link", { name: "People" }).querySelector("svg")).toBeNull();
+    expect(icon(screen.getByRole("complementary", { name: "Views" }), "truck")).toBeInTheDocument();
+  });
+
+  it("keeps the initial in the top bar tile when the base has no icon", async () => {
+    openBase("viewer");
+    await screen.findByText("Grid view coming soon");
+    expect(document.querySelector("header [data-entity-tile]")).toHaveTextContent("P");
+  });
+
+  it("lets creators change the base icon from the top bar tile, and remove it", async () => {
+    const user = userEvent.setup();
+    const api = openBase("creator", { "GET /api/bases/app1": withIcons("creator"), "PATCH /api/bases/app1": { status: 204 } });
+    await screen.findByText("Grid view coming soon");
+    await user.click(screen.getByRole("button", { name: "Change base icon" }));
+    const popular = await screen.findByRole("group", { name: "Popular icons" });
+    expect(within(popular).getAllByRole("button")).toHaveLength(20);
+    await user.click(within(popular).getByRole("button", { name: "Star" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app1")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/bases/app1")[0]?.body).toEqual({ icon: "star" });
+
+    // removing it sends null, which the server reads as "clear"
+    await user.click(screen.getByRole("button", { name: "Change base icon" }));
+    await user.click(await screen.findByRole("button", { name: "Remove icon" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app1")).toHaveLength(2));
+    expect(api.callsTo("PATCH /api/bases/app1")[1]?.body).toEqual({ icon: null });
+  });
+
+  it("gives editors no way to change the base or a table icon (they cannot rename either)", async () => {
+    const user = userEvent.setup();
+    openBase("editor", { "GET /api/bases/app1": withIcons("editor") });
+    await screen.findByText("Grid view coming soon");
+    expect(screen.queryByRole("button", { name: "Change base icon" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+    expect(await screen.findByRole("menuitem", { name: /Import CSV/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Change icon/ })).not.toBeInTheDocument();
+  });
+
+  it("gives viewers the icons but no picker", async () => {
+    openBase("viewer", { "GET /api/bases/app1": withIcons("viewer") });
+    await screen.findByText("Grid view coming soon");
+    expect(screen.queryByRole("button", { name: "Change base icon" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Table options/ })).not.toBeInTheDocument();
+    expect(document.querySelector("header [data-entity-tile] svg.lucide-store")).toBeInTheDocument();
+  });
+
+  it("changes a table's icon from its menu", async () => {
+    const user = userEvent.setup();
+    const api = openBase("creator", { "GET /api/bases/app1": withIcons("creator"), "PATCH /api/tables/tbl1": { status: 204 } });
+    await screen.findByText("Grid view coming soon");
+    await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Change icon/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Table icon" });
+    expect(await within(dialog).findByRole("button", { name: "Truck" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(dialog).getByRole("button", { name: "Wrench" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1")[0]?.body).toEqual({ icon: "wrench" });
+  });
+
+  it("creates a table with an icon chosen in the dialog", async () => {
+    const user = userEvent.setup();
+    const api = openBase("creator", {
+      "POST /api/bases/app1/tables": { id: "tbl9", base_id: "app1", name: "Orders", icon: "package", description: null, primary_field_id: "f", fields: [], views: [] },
+    });
+    await screen.findByText("Grid view coming soon");
+    await user.click(screen.getByRole("button", { name: "Add table" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New empty table" }));
+    const dialog = await screen.findByRole("dialog", { name: "New table" });
+    await user.type(within(dialog).getByLabelText("Name"), "Orders");
+    await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
+    await user.click(await screen.findByRole("button", { name: "Package" }));
+    // the picker closes and the dialog now shows the chosen icon
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Change icon" })).toBeInTheDocument());
+    await user.click(within(dialog).getByRole("button", { name: "Create table" }));
+    await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
+    expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Orders", icon: "package" });
+  });
+
+  it("renames a table without sending its icon when the icon was not touched", async () => {
+    const user = userEvent.setup();
+    const api = openBase("creator", { "GET /api/bases/app1": withIcons("creator"), "PATCH /api/tables/tbl1": { status: 204 } });
+    await screen.findByText("Grid view coming soon");
+    await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Rename table" }));
+    const dialog = await screen.findByRole("dialog", { name: "Rename table" });
+    const name = within(dialog).getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Jobs");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1")[0]?.body).toEqual({ name: "Jobs" });
+  });
+
+  it("removes a table's icon from the rename dialog by sending null", async () => {
+    const user = userEvent.setup();
+    const api = openBase("creator", { "GET /api/bases/app1": withIcons("creator"), "PATCH /api/tables/tbl1": { status: 204 } });
+    await screen.findByText("Grid view coming soon");
+    await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Rename table" }));
+    const dialog = await screen.findByRole("dialog", { name: "Rename table" });
+    await user.click(within(dialog).getByRole("button", { name: "Change icon" }));
+    await user.click(await screen.findByRole("button", { name: "Remove icon" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1")[0]?.body).toEqual({ name: "Tasks", icon: null });
+  });
+});

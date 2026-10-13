@@ -154,7 +154,11 @@ pub struct PublicView {
     #[serde(rename = "type")]
     pub view_type: ViewType,
     pub table_name: String,
+    #[serde(default)]
+    pub table_icon: Option<String>,
     pub base_name: String,
+    #[serde(default)]
+    pub base_icon: Option<String>,
     /// Only the fields visible in the view, in the view's display order.
     pub fields: Vec<PublicField>,
     pub config: PublicViewConfig,
@@ -209,7 +213,11 @@ pub struct PublicForm {
     pub title: String,
     pub description: String,
     pub base_name: String,
+    #[serde(default)]
+    pub base_icon: Option<String>,
     pub table_name: String,
+    #[serde(default)]
+    pub table_icon: Option<String>,
     pub fields: Vec<PublicFormField>,
     pub submit_label: String,
     pub success_message: String,

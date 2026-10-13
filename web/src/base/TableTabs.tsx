@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Copy, FileUp, PanelLeft, Pencil, Plus, Table2, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, FileUp, PanelLeft, Pencil, Plus, Shapes, Table2, Trash2 } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table } from "@/api/types";
 import { ImportCsvDialog, NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
 import { NameDialog } from "@/components/NameDialog";
+import { EntityIcon } from "@/components/icons/EntityIcon";
+import { IconPickerDialog } from "@/components/icons/IconPicker";
+import { iconPatch } from "@/components/icons/iconPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
@@ -22,7 +25,13 @@ export interface TableTabsProps {
   sidebarOpen?: boolean;
 }
 
-type TableDialog = { kind: "create" } | { kind: "create-from-csv" } | { kind: "import"; table: Table } | { kind: "rename"; table: Table } | { kind: "delete"; table: Table };
+type TableDialog =
+  | { kind: "create" }
+  | { kind: "create-from-csv" }
+  | { kind: "import"; table: Table }
+  | { kind: "rename"; table: Table }
+  | { kind: "icon"; table: Table }
+  | { kind: "delete"; table: Table };
 
 export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen = false }: TableTabsProps) {
   const qc = useQueryClient();
@@ -34,14 +43,18 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
   const refresh = () => qc.invalidateQueries({ queryKey: keys.base(schema.id) });
 
   const create = useMutation({
-    mutationFn: (name: string) => api.tables.create(schema.id, name),
+    mutationFn: (v: { name: string; icon: string | null }) => api.tables.create(schema.id, v.name, v.icon),
     onSuccess: async (table) => {
       await refresh();
       const view = table.views?.[0];
       navigate(`/base/${schema.id}/${table.id}${view ? `/${view.id}` : ""}`);
     },
   });
-  const rename = useMutation({ mutationFn: (v: { id: string; name: string }) => api.tables.update(v.id, { name: v.name }), onSuccess: refresh });
+  const update = useMutation({
+    mutationFn: (v: { id: string; name?: string; icon?: string | null }) => api.tables.update(v.id, { name: v.name, icon: v.icon }),
+    onSuccess: refresh,
+    onError: (e) => toast.error(e, "Could not update table"),
+  });
   const remove = useMutation({
     mutationFn: (id: string) => api.tables.remove(id),
     onSuccess: async (_res, id) => {
@@ -76,8 +89,9 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
                   active ? "border-line bg-surface font-medium" : "border-transparent text-muted hover:bg-hover hover:text-fg",
                 )}
               >
-                <Link to={`/base/${schema.id}/${t.id}`} aria-current={active ? "page" : undefined} className="flex h-full max-w-48 items-center truncate px-3 text-inherit no-underline">
-                  {t.name}
+                <Link to={`/base/${schema.id}/${t.id}`} aria-current={active ? "page" : undefined} className="flex h-full max-w-48 items-center gap-1.5 px-3 text-inherit no-underline">
+                  {t.icon && <EntityIcon name={t.icon} className="size-4" />}
+                  <span className="truncate">{t.name}</span>
                 </Link>
                 {active && (canManage || canImport) && (
                   <DropdownMenu>
@@ -96,6 +110,9 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
                         <>
                           <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", table: t })}>
                             <Pencil aria-hidden className="size-4" /> Rename table
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setDialog({ kind: "icon", table: t })}>
+                            <Shapes aria-hidden className="size-4" /> Change icon…
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
                             <Copy aria-hidden className="size-4" /> Duplicate table
@@ -137,7 +154,8 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
         onOpenChange={(o) => !o && setDialog(null)}
         title="New table"
         submitLabel="Create table"
-        onSubmit={(name) => create.mutateAsync(name)}
+        withIcon
+        onSubmit={(name, icon) => create.mutateAsync({ name, icon })}
       />
       {dialog?.kind === "create-from-csv" && <NewTableFromCsvDialog open onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} />}
       {dialog?.kind === "import" && <ImportCsvDialog open onOpenChange={(o) => !o && setDialog(null)} baseId={schema.id} table={dialog.table} />}
@@ -146,7 +164,16 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
         onOpenChange={(o) => !o && setDialog(null)}
         title="Rename table"
         initialValue={dialog?.kind === "rename" ? dialog.table.name : ""}
-        onSubmit={(name) => (dialog?.kind === "rename" ? rename.mutateAsync({ id: dialog.table.id, name }) : undefined)}
+        withIcon
+        initialIcon={dialog?.kind === "rename" ? (dialog.table.icon ?? null) : null}
+        onSubmit={(name, icon) => (dialog?.kind === "rename" ? update.mutateAsync({ id: dialog.table.id, name, ...iconPatch(dialog.table.icon, icon) }) : undefined)}
+      />
+      <IconPickerDialog
+        open={dialog?.kind === "icon"}
+        onOpenChange={(o) => !o && setDialog(null)}
+        title="Table icon"
+        value={dialog?.kind === "icon" ? dialog.table.icon : null}
+        onChange={(icon) => dialog?.kind === "icon" && update.mutate({ id: dialog.table.id, icon })}
       />
       <ConfirmDialog
         open={dialog?.kind === "delete"}

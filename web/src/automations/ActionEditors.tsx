@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { Action } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EntitySelect } from "@/components/ui/entity-select";
 import { IconButton } from "@/components/ui/icon-button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { Notice } from "@/components/layouts";
@@ -28,14 +29,12 @@ function TableSelect({ label, value, onChange }: { label: string; value: string;
   return (
     <Field label={label} className="max-w-xs">
       {(ctl) => (
-        <Select {...ctl} value={value} onChange={(e) => onChange(e.target.value)}>
-          {!known && <option value={value}>(deleted table)</option>}
-          {schema.tables.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <EntitySelect
+          {...ctl}
+          value={value}
+          onValueChange={onChange}
+          options={[...(known ? [] : [{ value, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, icon: t.icon }))]}
+        />
       )}
     </Field>
   );

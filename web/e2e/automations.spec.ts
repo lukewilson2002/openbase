@@ -115,7 +115,8 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     await dialog.getByRole("button", { name: "Create automation" }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/aut\\w+$`));
     automationId = page.url().split("/").pop()!;
-    await expect(page.getByLabel("Table", { exact: true })).toHaveValue(fx.table1.id);
+    // The table select is an icon-aware listbox (EntitySelect), not a native <select>.
+    await expect(page.getByRole("combobox", { name: "Table", exact: true })).toHaveText("Table 1");
     const stored = await call<{ enabled: boolean; trigger: unknown; actions: unknown[] }>(page.request, "get", `/api/automations/${automationId}`);
     expect(stored).toMatchObject({ enabled: false, trigger: { type: "record_created", table_id: fx.table1.id }, actions: [] });
   });
@@ -130,7 +131,8 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     await page.getByRole("button", { name: "Add action" }).click();
     await page.getByRole("menuitem", { name: /Create record/ }).click();
     const card = page.getByRole("listitem", { name: /^Action 1:/ });
-    await card.getByLabel("Table", { exact: true }).selectOption(fx.table2.id);
+    await card.getByRole("combobox", { name: "Table", exact: true }).click();
+    await page.getByRole("option", { name: "Table 2", exact: true }).click();
     await card.getByLabel("Add a field").selectOption(fx.table2.nameId);
     // The value comes from the "Insert data" menu, so the token is the real thing.
     await card.getByRole("button", { name: "Insert data into Name" }).click();

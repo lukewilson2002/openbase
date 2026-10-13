@@ -141,7 +141,7 @@ export const api = {
 
   workspaces: {
     list: () => http.get<WorkspaceSummary[]>("/api/workspaces"),
-    create: (name: string) => http.post<WorkspaceSummary>("/api/workspaces", { name }),
+    create: (name: string, icon?: string | null) => http.post<WorkspaceSummary>("/api/workspaces", icon ? { name, icon } : { name }),
     update: (id: string, body: UpdateWorkspace) => http.patch<WorkspaceSummary>(`/api/workspaces/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/workspaces/${enc(id)}`),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
@@ -169,7 +169,7 @@ export const api = {
   },
 
   tables: {
-    create: (baseId: string, name: string) => http.post<Table>(`/api/bases/${enc(baseId)}/tables`, { name }),
+    create: (baseId: string, name: string, icon?: string | null) => http.post<Table>(`/api/bases/${enc(baseId)}/tables`, icon ? { name, icon } : { name }),
     update: (id: string, body: UpdateTable) => http.patch<Table>(`/api/tables/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/tables/${enc(id)}`),
     /** `include_records` defaults to true server-side. */

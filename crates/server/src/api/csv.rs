@@ -679,7 +679,7 @@ fn build_table(
     } else {
         tables::free_name(tx, base_id, wanted)?
     };
-    let table = tables::create(tx, base_id, &name, &actor.user_id)?;
+    let table = tables::create(tx, base_id, &name, None, &actor.user_id)?;
     let mut columns: Vec<ImportColumn> = Vec::new();
     let mut imported: Vec<ImportedField> = Vec::new();
     for (i, kind) in kinds.into_iter().enumerate() {

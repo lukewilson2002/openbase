@@ -7,4 +7,8 @@ export type InvitePreview = {
 /**
  * Workspace or base name.
  */
-target_name: string, target_kind: string, role: string, email?: string | null, invited_by?: string | null, };
+target_name: string, 
+/**
+ * Lucide icon name of the workspace or base, if it has one.
+ */
+target_icon?: string | null, target_kind: string, role: string, email?: string | null, invited_by?: string | null, };

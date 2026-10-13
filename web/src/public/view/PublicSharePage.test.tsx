@@ -265,3 +265,21 @@ describe("shared views of other types", () => {
     expect(screen.getByRole("combobox", { name: "Timeline scale" })).toBeInTheDocument();
   });
 });
+
+describe("icons on a shared view", () => {
+  it("shows the table and base icons in the header, a plain name without them", async () => {
+    open({ ...view("grid"), table_icon: "truck", base_icon: "store" });
+    await screen.findByRole("heading", { name: "Team board" });
+    const header = document.querySelector("header")!;
+    expect(header.querySelector("svg.lucide-truck")).toBeInTheDocument();
+    expect(header.querySelector("svg.lucide-store")).toBeInTheDocument();
+    expect(header).toHaveTextContent("Tasks · Studio · read-only");
+  });
+
+  it("adds nothing when neither has an icon", async () => {
+    open(view("grid"));
+    await screen.findByRole("heading", { name: "Team board" });
+    expect(document.querySelector("header svg")).toBeNull();
+    expect(document.querySelector("header")).toHaveTextContent("Tasks · Studio · read-only");
+  });
+});

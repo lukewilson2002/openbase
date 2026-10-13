@@ -44,17 +44,19 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
     }
 
     let mut out = Vec::new();
-    let member_of: Vec<(String, String, String)> = {
+    let member_of: Vec<(String, String, Option<String>, String)> = {
         let mut stmt = conn.prepare(
-            "SELECT w.id, w.name, m.role FROM workspace_members m
+            "SELECT w.id, w.name, w.icon, m.role FROM workspace_members m
              JOIN workspaces w ON w.id = m.workspace_id
              WHERE m.user_id = ?1 AND w.deleted_at IS NULL
              ORDER BY w.created_at, w.id",
         )?;
-        let rows = stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        let rows = stmt.query_map([user_id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?;
         rows.collect::<Result<_, _>>()?
     };
-    for (id, name, role) in member_of {
+    for (id, name, icon, role) in member_of {
         let ws_role = Role::parse(&role)?;
         let bases = bases::live_bases_in(conn, &id)?
             .iter()
@@ -68,14 +70,15 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
         out.push(WorkspaceSummary {
             id,
             name,
+            icon,
             role: Some(ws_role.as_str().to_string()),
             bases,
         });
     }
 
-    let shared_only: Vec<(String, String)> = {
+    let shared_only: Vec<(String, String, Option<String>)> = {
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT w.id, w.name, w.created_at FROM base_members bm
+            "SELECT DISTINCT w.id, w.name, w.icon, w.created_at FROM base_members bm
              JOIN bases b ON b.id = bm.base_id AND b.deleted_at IS NULL
              JOIN workspaces w ON w.id = b.workspace_id AND w.deleted_at IS NULL
              WHERE bm.user_id = ?1
@@ -83,10 +86,10 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
                                WHERE wm.workspace_id = w.id AND wm.user_id = ?1)
              ORDER BY w.created_at, w.id",
         )?;
-        let rows = stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let rows = stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         rows.collect::<Result<_, _>>()?
     };
-    for (id, name) in shared_only {
+    for (id, name, icon) in shared_only {
         let bases = bases::live_bases_in(conn, &id)?
             .iter()
             .filter_map(|b| base_roles.get(&b.id).map(|r| summary_of(b, *r)))
@@ -94,6 +97,7 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
         out.push(WorkspaceSummary {
             id,
             name,
+            icon,
             role: None,
             bases,
         });
@@ -102,13 +106,19 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
 }
 
 /// Create a workspace owned by `user_id`.
-pub fn create(tx: &Transaction, user_id: &str, name: &str) -> AppResult<WorkspaceSummary> {
+pub fn create(
+    tx: &Transaction,
+    user_id: &str,
+    name: &str,
+    icon: Option<&str>,
+) -> AppResult<WorkspaceSummary> {
     let name = schema::validate_name(name, "workspace")?;
+    let icon = schema::icon_on_create(icon)?;
     let id = new_id(og_core::ids::WORKSPACE);
     let now = now_ms();
     tx.execute(
-        "INSERT INTO workspaces (id, name, created_by, created_at) VALUES (?1, ?2, ?3, ?4)",
-        params![id, name, user_id, now],
+        "INSERT INTO workspaces (id, name, icon, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, name, icon, user_id, now],
     )?;
     tx.execute(
         "INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
@@ -118,9 +128,30 @@ pub fn create(tx: &Transaction, user_id: &str, name: &str) -> AppResult<Workspac
     Ok(WorkspaceSummary {
         id,
         name,
+        icon,
         role: Some(Role::Owner.as_str().to_string()),
         bases: Vec::new(),
     })
+}
+
+/// Set (`Some(Some(name))`) or clear (`Some(None)`) a live workspace's icon;
+/// `None` leaves it alone.
+pub fn set_icon(
+    tx: &Transaction,
+    workspace_id: &str,
+    icon: &Option<Option<String>>,
+) -> AppResult<()> {
+    let Some(icon) = schema::icon_patch(icon)? else {
+        return Ok(());
+    };
+    let n = tx.execute(
+        "UPDATE workspaces SET icon = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![workspace_id, icon],
+    )?;
+    if n == 0 {
+        return Err(AppError::not_found("workspace"));
+    }
+    Ok(())
 }
 
 /// Rename a live workspace.

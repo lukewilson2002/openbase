@@ -59,8 +59,15 @@ pub fn free_name(conn: &Connection, base_id: &str, wanted: &str) -> AppResult<St
 
 /// Create a table with its primary single-line-text field "Name" and a grid
 /// view "Grid view". Used by base and table creation.
-pub fn create(tx: &Transaction, base_id: &str, name: &str, user_id: &str) -> AppResult<TableRow> {
+pub fn create(
+    tx: &Transaction,
+    base_id: &str,
+    name: &str,
+    icon: Option<&str>,
+    user_id: &str,
+) -> AppResult<TableRow> {
     let name = schema::validate_name(name, "table")?;
+    let icon = schema::icon_on_create(icon)?;
     let count: i64 = tx.query_row(
         "SELECT count(*) FROM tables WHERE base_id = ?1 AND deleted_at IS NULL",
         [base_id],
@@ -79,9 +86,9 @@ pub fn create(tx: &Transaction, base_id: &str, name: &str, user_id: &str) -> App
     let primary_id = new_id(og_core::ids::FIELD);
     let position = schema::next_position(tx, PositionScope::TablesIn(base_id))?;
     tx.execute(
-        "INSERT INTO tables (id, base_id, name, position, primary_field_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![table_id, base_id, name, position, primary_id, now],
+        "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![table_id, base_id, name, icon, position, primary_id, now],
     )?;
     let primary = Field {
         id: primary_id,
@@ -104,15 +111,22 @@ pub fn create(tx: &Transaction, base_id: &str, name: &str, user_id: &str) -> App
     schema::live_table(tx, &table_id)
 }
 
-/// Apply a rename / description / position update.
+/// Apply a rename / icon / description / position update.
 pub fn update(tx: &Transaction, table_id: &str, patch: &UpdateTable) -> AppResult<TableRow> {
     let table = schema::live_table(tx, table_id)?;
+    let icon = schema::icon_patch(&patch.icon)?;
     if let Some(name) = &patch.name {
         let name = schema::validate_name(name, "table")?;
         ensure_name_free(tx, &table.base_id, &name, Some(table_id))?;
         tx.execute(
             "UPDATE tables SET name = ?2 WHERE id = ?1",
             params![table_id, name],
+        )?;
+    }
+    if let Some(icon) = icon {
+        tx.execute(
+            "UPDATE tables SET icon = ?2 WHERE id = ?1",
+            params![table_id, icon],
         )?;
     }
     if let Some(desc) = &patch.description {
@@ -176,6 +190,7 @@ pub fn to_dto(conn: &Connection, table: &TableRow, user_id: &str) -> AppResult<T
         id: table.id.clone(),
         base_id: table.base_id.clone(),
         name: table.name.clone(),
+        icon: table.icon.clone(),
         description: table.description.clone(),
         primary_field_id: table.primary_field_id.clone(),
         fields: schema::fields_for_client(&stored),

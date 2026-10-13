@@ -205,6 +205,7 @@ pub struct Resolved {
     pub view: ViewRow,
     pub table: TableRow,
     pub base_name: String,
+    pub base_icon: Option<String>,
 }
 
 /// The live share of `kind` with `token`; anything else is a 404: unknown
@@ -228,12 +229,12 @@ pub fn resolve(conn: &Connection, token: &str, kind: ShareKind) -> AppResult<Res
         return Err(not_found());
     }
     let table = schema::live_table(conn, &view.view.table_id).map_err(|_| not_found())?;
-    let base_name: String = conn
+    let (base_name, base_icon): (String, Option<String>) = conn
         .query_row(
-            "SELECT b.name FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+            "SELECT b.name, b.icon FROM bases b JOIN workspaces w ON w.id = b.workspace_id
              WHERE b.id = ?1 AND b.deleted_at IS NULL AND w.deleted_at IS NULL",
             [&table.base_id],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()?
         .ok_or_else(not_found)?;
@@ -242,6 +243,7 @@ pub fn resolve(conn: &Connection, token: &str, kind: ShareKind) -> AppResult<Res
         view,
         table,
         base_name,
+        base_icon,
     })
 }
 

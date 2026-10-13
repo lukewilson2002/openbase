@@ -1,7 +1,8 @@
 /**
  * Turns a notification into text and a link. The payload keys are the ones the server writes:
  * `mention` (store/comments.rs) has `base_id`, `base_name`, `table_id`, `table_name`, `record_id`,
- * `record_name`, `comment_id`, `snippet`, `author_id`, `author_name`; `assigned` (engine/write.rs)
+ * `record_name`, `comment_id`, `snippet`, `author_id`, `author_name` (and `base_icon`/`table_icon`,
+ * the Lucide names the base and table had then, which `notificationPlace` returns); `assigned` (engine/write.rs)
  * has the same location keys plus `field_id`, `field_name` and `assigned_by` (a user id, no name);
  * `automation` has `message`, `automation_name`, `base_id`, `record_id`. Every key is optional
  * and anything unexpected is ignored, so a payload the client does not know yet still renders.
@@ -47,10 +48,22 @@ function actorName(p: Record<string, unknown>): string {
   return text(p, "author_name") ?? text(p, "actor_name") ?? "Someone";
 }
 
-/** "Roadmap / Tasks", as far as the payload names them. */
-function where(p: Record<string, unknown>): string | null {
-  const parts = [text(p, "base_name"), text(p, "table_name")].filter((x): x is string => !!x);
-  return parts.length ? parts.join(" / ") : null;
+/** A base or table a notification is about, with the icon it had when the notification was written. */
+export interface PlaceName {
+  name: string;
+  icon: string | null;
+}
+
+/** The base and table a notification names (`base_name`/`base_icon`, `table_name`/`table_icon`), if any. */
+export function notificationPlace(n: Notification): { base: PlaceName | null; table: PlaceName | null } | null {
+  const p = payloadOf(n);
+  const one = (kind: "base" | "table"): PlaceName | null => {
+    const name = text(p, `${kind}_name`);
+    return name ? { name, icon: text(p, `${kind}_icon`) } : null;
+  };
+  const base = one("base");
+  const table = one("table");
+  return base || table ? { base, table } : null;
 }
 
 function kindOf(kind: string): NotificationKind {
@@ -71,8 +84,7 @@ export function describeNotification(n: Notification): NotificationView {
     case "assigned": {
       // The server records who assigned (a user id) but not their name, so the title leaves them out.
       const field = text(p, "field_name");
-      const place = where(p);
-      return { kind, title: `You were assigned to ${record ?? "a record"}`, detail: snippet ?? message ?? ([field && `In ${field}`, place].filter(Boolean).join(" · ") || null), href };
+      return { kind, title: `You were assigned to ${record ?? "a record"}`, detail: snippet ?? message ?? (field ? `In ${field}` : null), href };
     }
     case "invite": {
       const token = text(p, "token");

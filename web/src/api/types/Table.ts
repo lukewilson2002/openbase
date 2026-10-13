@@ -2,7 +2,11 @@
 import type { Field } from "./Field";
 import type { View } from "./View";
 
-export type Table = { id: string, base_id: string, name: string, description?: string | null, primary_field_id: string, 
+export type Table = { id: string, base_id: string, name: string, 
+/**
+ * Lucide icon name (kebab-case); the client falls back to the name's initial.
+ */
+icon?: string | null, description?: string | null, primary_field_id: string, 
 /**
  * Fields in display order.
  */

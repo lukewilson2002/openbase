@@ -232,3 +232,27 @@ describe("password reset", () => {
     expect(await screen.findByText(/needs a reset link/)).toBeInTheDocument();
   });
 });
+
+describe("icons on invites", () => {
+  it("shows the workspace icon on the invite page and in the sign-up notice", async () => {
+    mockApi({
+      "GET /api/auth/me": LOGGED_OUT,
+      "GET /api/invites/by-token/tok123": { target_name: "Acme", target_icon: "briefcase", target_kind: "workspace", role: "editor", invited_by: "Grace" },
+    });
+    const { unmount } = renderApp({ route: "/invite/tok123" });
+    expect(await screen.findByRole("heading", { name: "Join Acme" })).toBeInTheDocument();
+    expect(document.querySelectorAll("svg.lucide-briefcase").length).toBeGreaterThan(0);
+    unmount();
+  });
+
+  it("falls back to the initial when the invited base has no icon", async () => {
+    mockApi({
+      "GET /api/auth/me": LOGGED_OUT,
+      "GET /api/invites/by-token/tok123": { target_name: "Roadmap", target_kind: "base", role: "viewer" },
+    });
+    renderApp({ route: "/invite/tok123" });
+    await screen.findByRole("heading", { name: "Join Roadmap" });
+    expect(document.querySelector("[data-entity-tile]")).toHaveTextContent("R");
+    expect(document.querySelector("svg.lucide-briefcase")).toBeNull();
+  });
+});

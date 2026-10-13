@@ -826,12 +826,12 @@ impl<'a> Writer<'a> {
         if self.notices.is_empty() {
             return Ok(());
         }
-        let base_name: String = self
+        let (base_name, base_icon): (String, Option<String>) = self
             .conn()
             .query_row(
-                "SELECT name FROM bases WHERE id = ?1",
+                "SELECT name, icon FROM bases WHERE id = ?1",
                 [&self.table.base_id],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap_or_default();
         let field_names: HashMap<String, String> = self
@@ -860,8 +860,10 @@ impl<'a> Writer<'a> {
                 &json!({
                     "base_id": self.table.base_id,
                     "base_name": base_name,
+                    "base_icon": base_icon,
                     "table_id": self.table.id,
                     "table_name": self.table.name,
+                    "table_icon": self.table.icon,
                     "record_id": n.record_id,
                     "record_name": record_name,
                     "field_id": n.field_id,

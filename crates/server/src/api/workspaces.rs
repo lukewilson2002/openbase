@@ -50,7 +50,7 @@ async fn create(
     require_session(&actor)?;
     let out = state
         .db
-        .write(move |tx| workspaces::create(tx, &actor.user_id, &body.name))
+        .write(move |tx| workspaces::create(tx, &actor.user_id, &body.name, body.icon.as_deref()))
         .await?;
     Ok((StatusCode::CREATED, Json(out)))
 }
@@ -68,6 +68,7 @@ async fn rename(
             if let Some(name) = &body.name {
                 workspaces::rename(tx, &id, name)?;
             }
+            workspaces::set_icon(tx, &id, &body.icon)?;
             workspaces::list_for_user(tx, &actor.user_id)?
                 .into_iter()
                 .find(|w| w.id == id)

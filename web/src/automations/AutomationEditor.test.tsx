@@ -9,7 +9,7 @@ import type { ActionStep, Automation, Trigger } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { api as endpoints } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { apiError, mockApi, type Handler, type MockApi } from "@/test/utils";
+import { apiError, chooseOption, mockApi, type Handler, type MockApi } from "@/test/utils";
 import { AutomationEditor } from "./AutomationEditor";
 import { automationSchema, makeAutomation, makeEnv, renderWithEnv } from "./testUtils";
 
@@ -117,7 +117,7 @@ describe("saving and the draft", () => {
 describe("triggers round-trip into the update payload", () => {
   it("record_created: another table", async () => {
     const { api } = await setup(makeAutomation());
-    await userEvent.selectOptions(screen.getByLabelText("Table"), "tbl2");
+    await chooseOption(screen.getByLabelText("Table"), "People");
     expect(await save(api)).toEqual({ name: "Flow", trigger: { type: "record_created", table_id: "tbl2" }, actions: [] });
   });
 
@@ -130,7 +130,7 @@ describe("triggers round-trip into the update payload", () => {
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl1", field_ids: ["fld2", "fld3"] });
     await userEvent.click(screen.getByRole("checkbox", { name: "Qty" }));
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl1", field_ids: ["fld3"] });
-    await userEvent.selectOptions(screen.getByLabelText("Table"), "tbl2");
+    await chooseOption(screen.getByLabelText("Table"), "People");
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl2", field_ids: [] });
   });
 
@@ -146,8 +146,10 @@ describe("triggers round-trip into the update payload", () => {
 
   it("form_submitted: a form view of any table", async () => {
     await setup(makeAutomation({ trigger: { type: "form_submitted", view_id: "viw9" } }));
-    expect(within(screen.getByLabelText("Form")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Tasks / Signup form"]);
-    expect(screen.getByLabelText("Form")).toHaveValue("viw9");
+    const form = screen.getByLabelText("Form");
+    expect(form).toHaveTextContent("Tasks / Signup form");
+    await userEvent.click(form);
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tasks / Signup form"]);
   });
 
   it("schedule: presets build the cron, the time zone is sent as chosen", async () => {
@@ -220,7 +222,7 @@ describe("actions round-trip into the update payload", () => {
     const { api } = await setup(makeAutomation());
     await addAction("Create record");
     const c = card(1);
-    await userEvent.selectOptions(within(c).getByLabelText("Table"), "tbl2");
+    await chooseOption(within(c).getByLabelText("Table"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "{{trigger.record.fields.Name}}");
     await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld6");
@@ -236,7 +238,7 @@ describe("actions round-trip into the update payload", () => {
     const { api } = await setup(makeAutomation({ trigger: { type: "webhook" } }));
     await addAction("Create record");
     const c = card(1);
-    await userEvent.selectOptions(within(c).getByLabelText("Table"), "tbl2");
+    await chooseOption(within(c).getByLabelText("Table"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld6");
     await userEvent.click(within(c).getByRole("button", { name: "Template" }));
     await paste(within(c).getByRole("textbox", { name: "Score" }), "{{trigger.body.score}}");
@@ -263,7 +265,7 @@ describe("actions round-trip into the update payload", () => {
     const c = card(1);
     await userEvent.click(within(c).getByRole("button", { name: "Remove Score" }));
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl2", values: { fld5: "x" } }]);
-    await userEvent.selectOptions(within(c).getByLabelText("Table"), "tbl1");
+    await chooseOption(within(c).getByLabelText("Table"), "Tasks");
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl1", values: {} }]);
   });
 
@@ -285,7 +287,7 @@ describe("actions round-trip into the update payload", () => {
     await userEvent.clear(id);
     await userEvent.click(within(c).getByRole("button", { name: "Insert data into Record id" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /record_id.*steps\.1\.record_id/ }));
-    await userEvent.selectOptions(within(c).getByLabelText("Table"), "tbl2");
+    await chooseOption(within(c).getByLabelText("Table"), "People");
     await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "again");
     const actions = (await save(api)).actions;
@@ -374,7 +376,7 @@ describe("actions round-trip into the update payload", () => {
   it("changing the trigger table drops conditions that name the old table's fields", async () => {
     const withCondition: ActionStep = { type: "notify", user_ids: ["usr1"], message: "hi", condition: { conjunction: "and", items: [{ field_id: "fld4", op: "is", value: true }] } };
     const { api } = await setup(makeAutomation({ actions: [withCondition] }));
-    await userEvent.selectOptions(screen.getAllByLabelText("Table")[0]!, "tbl2");
+    await chooseOption(screen.getAllByLabelText("Table")[0]!, "People");
     const body = await save(api);
     expect(body.trigger).toEqual({ type: "record_created", table_id: "tbl2" });
     expect(body.actions).toEqual([{ type: "notify", user_ids: ["usr1"], message: "hi" }]);
@@ -495,5 +497,34 @@ describe("webhook panel", () => {
     renderWithEnv(<AutomationEditor automation={hook} tab="editor" onTabChange={() => {}} webhookToken={null} onWebhookToken={() => {}} />);
     await userEvent.type(screen.getByLabelText("Name"), "!");
     expect(screen.getByRole("button", { name: "Rotate token" })).toBeDisabled();
+  });
+});
+
+describe("table icons in the automation editor", () => {
+  const iconEnv = () => {
+    const schema = automationSchema();
+    schema.tables[0]!.icon = "clipboard-list";
+    schema.tables[1]!.icon = "users";
+    return makeEnv({ schema });
+  };
+
+  it("shows the table icons in the trigger's table select", async () => {
+    await setup(makeAutomation(), iconEnv());
+    const select = screen.getByLabelText("Table");
+    expect(select.querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
+    await userEvent.click(select);
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Tasks", "People"]);
+    expect(options[1]!.querySelector("svg.lucide-users")).toBeInTheDocument();
+  });
+
+  it("shows the table icon in an action's table select", async () => {
+    await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl2", values: {} }] }), iconEnv());
+    expect(within(card(1)).getByLabelText("Table").querySelector("svg.lucide-users")).toBeInTheDocument();
+  });
+
+  it("names the form's table icon in the form trigger", async () => {
+    await setup(makeAutomation({ trigger: { type: "form_submitted", view_id: "viw9" } }), iconEnv());
+    expect(screen.getByLabelText("Form").querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
   });
 });

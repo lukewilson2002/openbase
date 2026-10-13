@@ -42,13 +42,15 @@ pub fn list_base(conn: &Connection, base_id: &str, user_id: &str) -> AppResult<T
     let mut items: Vec<TrashItem> = Vec::new();
 
     let mut stmt = conn.prepare(
-        "SELECT id, name, deleted_at FROM tables WHERE base_id = ?1 AND deleted_at IS NOT NULL",
+        "SELECT id, name, deleted_at, icon FROM tables
+         WHERE base_id = ?1 AND deleted_at IS NOT NULL",
     )?;
     for row in stmt.query_map([base_id], |r| {
         Ok(TrashItem {
             kind: "table".into(),
             id: r.get(0)?,
             name: r.get(1)?,
+            icon: r.get(3)?,
             table_id: None,
             deleted_at: r.get(2)?,
         })
@@ -69,6 +71,7 @@ pub fn list_base(conn: &Connection, base_id: &str, user_id: &str) -> AppResult<T
             kind: "view".into(),
             id: r.get(0)?,
             name: r.get(1)?,
+            icon: None,
             table_id: Some(r.get(2)?),
             deleted_at: r.get(3)?,
         })
@@ -88,6 +91,7 @@ pub fn list_base(conn: &Connection, base_id: &str, user_id: &str) -> AppResult<T
             kind: "record".into(),
             id: r.get(0)?,
             name: primary_text(r.get::<_, SqlValue>(3)?),
+            icon: None,
             table_id: Some(r.get(1)?),
             deleted_at: r.get(2)?,
         })
@@ -142,6 +146,7 @@ fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<TrashItem>>
             kind: "field".into(),
             id: r.field.id.clone(),
             name: r.field.name.clone(),
+            icon: None,
             table_id: Some(r.field.table_id.clone()),
             deleted_at: at,
         });
@@ -152,7 +157,7 @@ fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<TrashItem>>
 /// Trashed bases of a workspace, newest first.
 pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashListing> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, deleted_at FROM bases
+        "SELECT id, name, deleted_at, icon FROM bases
          WHERE workspace_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id",
     )?;
     let items = stmt
@@ -161,6 +166,7 @@ pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashL
                 kind: "base".into(),
                 id: r.get(0)?,
                 name: r.get(1)?,
+                icon: r.get(3)?,
                 table_id: None,
                 deleted_at: r.get(2)?,
             })
@@ -174,7 +180,7 @@ pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashL
 /// longer resolves), so this is how an owner finds one to restore.
 pub fn list_deleted_workspaces(conn: &Connection, user_id: &str) -> AppResult<TrashListing> {
     let mut stmt = conn.prepare(
-        "SELECT w.id, w.name, w.deleted_at FROM workspaces w
+        "SELECT w.id, w.name, w.deleted_at, w.icon FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id
          WHERE w.deleted_at IS NOT NULL AND m.user_id = ?1 AND m.role = 'owner'
          ORDER BY w.deleted_at DESC, w.id",
@@ -185,6 +191,7 @@ pub fn list_deleted_workspaces(conn: &Connection, user_id: &str) -> AppResult<Tr
                 kind: "workspace".into(),
                 id: r.get(0)?,
                 name: r.get(1)?,
+                icon: r.get(3)?,
                 table_id: None,
                 deleted_at: r.get(2)?,
             })

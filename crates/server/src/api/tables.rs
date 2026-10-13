@@ -35,7 +35,13 @@ async fn create(
         .db
         .write(move |tx| {
             perm::require_base(tx, &actor, &base_id, Role::Creator)?;
-            let row = tables::create(tx, &base_id, &body.name, &actor.user_id)?;
+            let row = tables::create(
+                tx,
+                &base_id,
+                &body.name,
+                body.icon.as_deref(),
+                &actor.user_id,
+            )?;
             tables::to_dto(tx, &row, &actor.user_id)
         })
         .await?;

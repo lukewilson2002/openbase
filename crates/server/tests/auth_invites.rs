@@ -144,6 +144,7 @@ async fn preview_is_public_and_hides_invalid_invites() {
         res.body,
         json!({
             "target_name": "Acme base",
+            "target_icon": null,
             "target_kind": "base",
             "role": "commenter",
             "email": "z@example.com",

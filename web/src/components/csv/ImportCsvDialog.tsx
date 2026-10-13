@@ -3,6 +3,7 @@
  * map each column to a field (or skip it), import. The server takes the file all-or-nothing:
  * if any row is refused nothing is written, and the problem rows are listed here.
  */
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
@@ -23,12 +24,16 @@ export interface ImportCsvDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   baseId: string;
-  table: Pick<Table, "id" | "name" | "fields">;
+  table: Pick<Table, "id" | "name" | "fields"> & { icon?: string | null };
 }
 
 export function ImportCsvDialog({ open, onOpenChange, baseId, table }: ImportCsvDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title={`Import CSV into ${table.name}`} description="New records are added to the table. Existing records are not changed.">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title={
+        <span className="flex min-w-0 items-center gap-2">
+          Import CSV into <EntityLabel icon={table.icon}>{table.name}</EntityLabel>
+        </span>
+      } description="New records are added to the table. Existing records are not changed.">
       {open && <ImportBody baseId={baseId} table={table} onClose={() => onOpenChange(false)} />}
     </Dialog>
   );

@@ -230,3 +230,21 @@ describe("the redirect after submitting", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 });
+
+describe("icons on a public form", () => {
+  it("shows the base and table with their icons above the title", async () => {
+    open({}, { ...form, base_icon: "store", table_icon: "clipboard-list" });
+    await screen.findByRole("heading", { name: "Join the waitlist" });
+    const header = document.querySelector("form header")!;
+    expect(header.querySelector("svg.lucide-store")).toBeInTheDocument();
+    expect(header.querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
+    expect(header).toHaveTextContent("Studio / Leads");
+  });
+
+  it("shows just the names without icons", async () => {
+    open();
+    await screen.findByRole("heading", { name: "Join the waitlist" });
+    expect(document.querySelector("form header svg")).toBeNull();
+    expect(document.querySelector("form header")).toHaveTextContent("Studio / Leads");
+  });
+});

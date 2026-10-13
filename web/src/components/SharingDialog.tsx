@@ -1,3 +1,4 @@
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Trash2, UserMinus } from "lucide-react";
@@ -23,6 +24,8 @@ export interface SharingScope {
   kind: "workspace" | "base";
   id: string;
   name: string;
+  /** Lucide icon name of the workspace or base, shown beside the name in the title. */
+  icon?: string | null;
 }
 
 /** Minimum role needed to change members and create invites. */
@@ -69,7 +72,11 @@ export function SharingDialog({ open, onOpenChange, scope, myRole }: SharingDial
       open={open}
       onOpenChange={onOpenChange}
       size="lg"
-      title={`Share ${scope.name}`}
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          Share <EntityLabel icon={scope.icon}>{scope.name}</EntityLabel>
+        </span>
+      }
       description={scope.kind === "workspace" ? "People in a workspace can open every base in it." : "Base members add to the access they already have through the workspace."}
     >
       <div className="flex flex-col gap-6">

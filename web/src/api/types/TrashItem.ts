@@ -4,4 +4,8 @@ export type TrashItem = {
 /**
  * workspace | base | table | field | view | record
  */
-kind: string, id: string, name: string, table_id?: string | null, deleted_at: number, };
+kind: string, id: string, name: string, 
+/**
+ * Lucide icon name of a trashed workspace, base or table.
+ */
+icon?: string | null, table_id?: string | null, deleted_at: number, };

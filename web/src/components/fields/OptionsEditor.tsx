@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import type { DateFormat, DateOptions, DurationFormat, Field, FieldKind, TimeFormat, ValueFormat } from "@/api/types";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EntitySelect } from "@/components/ui/entity-select";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { Field as FormField, Input, Select } from "@/components/ui/input";
 import { listTimeZones } from "@/lib/format";
@@ -312,14 +313,13 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
         <div className="flex flex-col gap-3">
           <FormField label="Table to link to" hint={existing ? "The linked table cannot be changed after the field is created." : undefined}>
             {(c) => (
-              <Select {...c} disabled={!!existing} value={kind.options.linked_table_id} onChange={(e) => onChange({ ...kind, options: { ...kind.options, linked_table_id: e.target.value, picker_view_id: null } })}>
-                {otherTables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                    {t.id === ctx.table.id ? " (this table)" : ""}
-                  </option>
-                ))}
-              </Select>
+              <EntitySelect
+                {...c}
+                disabled={!!existing}
+                value={kind.options.linked_table_id}
+                onValueChange={(id) => onChange({ ...kind, options: { ...kind.options, linked_table_id: id, picker_view_id: null } })}
+                options={otherTables.map((t) => ({ value: t.id, label: `${t.name}${t.id === ctx.table.id ? " (this table)" : ""}`, icon: t.icon }))}
+              />
             )}
           </FormField>
           <Checkbox label="Allow linking to only one record" checked={kind.options.single} onCheckedChange={(single) => onChange({ ...kind, options: { ...kind.options, single } })} />

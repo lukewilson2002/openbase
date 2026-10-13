@@ -19,7 +19,6 @@ use crate::store::{duplicate, tables};
 pub const DEFAULT_COLOR: &str = "blue";
 /// Name of the table every new base starts with.
 pub const FIRST_TABLE_NAME: &str = "Table 1";
-const MAX_ICON_LEN: usize = 64;
 
 /// A row of the `bases` table.
 #[derive(Debug, Clone)]
@@ -88,7 +87,7 @@ pub fn create(
     let name = schema::validate_name(&input.name, "base")?;
     let color = input.color.clone().unwrap_or_else(|| DEFAULT_COLOR.into());
     schema::validate_color(&color)?;
-    let icon = schema::normalize_optional_text(input.icon.as_deref(), MAX_ICON_LEN, "icon")?;
+    let icon = schema::icon_on_create(input.icon.as_deref())?;
     let id = new_id(og_core::ids::BASE);
     let position = schema::next_position(tx, PositionScope::BasesIn(workspace_id))?;
     tx.execute(
@@ -105,7 +104,7 @@ pub fn create(
             now_ms()
         ],
     )?;
-    let table = tables::create(tx, &id, FIRST_TABLE_NAME, user_id)?;
+    let table = tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
     let notes = Field {
         id: new_id(og_core::ids::FIELD),
         table_id: table.id.clone(),
@@ -141,6 +140,7 @@ pub fn schema(
             id: t.id.clone(),
             base_id: t.base_id.clone(),
             name: t.name.clone(),
+            icon: t.icon.clone(),
             description: t.description.clone(),
             primary_field_id: t.primary_field_id.clone(),
             fields: schema::fields_for_client(&stored),
@@ -166,6 +166,7 @@ pub fn schema(
 /// Apply a rename / colour / icon / position update.
 pub fn update(tx: &Transaction, base_id: &str, patch: &UpdateBase) -> AppResult<BaseRow> {
     live_base(tx, base_id)?;
+    let icon = schema::icon_patch(&patch.icon)?;
     if let Some(name) = &patch.name {
         let name = schema::validate_name(name, "base")?;
         tx.execute(
@@ -180,8 +181,7 @@ pub fn update(tx: &Transaction, base_id: &str, patch: &UpdateBase) -> AppResult<
             params![base_id, color],
         )?;
     }
-    if let Some(icon) = &patch.icon {
-        let icon = schema::normalize_optional_text(Some(icon), MAX_ICON_LEN, "icon")?;
+    if let Some(icon) = icon {
         tx.execute(
             "UPDATE bases SET icon = ?2 WHERE id = ?1",
             params![base_id, icon],

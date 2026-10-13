@@ -31,7 +31,7 @@ const COLUMNS = [
 type Col = (typeof COLUMNS)[number]["key"];
 
 type Field = { id: string; name: string; type: string; options: Record<string, unknown> };
-type Table = { id: string; name: string; primary_field_id: string; fields: Field[]; views: { id: string; config: Record<string, unknown> }[] };
+type Table = { id: string; name: string; icon?: string | null; primary_field_id: string; fields: Field[]; views: { id: string; config: Record<string, unknown> }[] };
 
 async function api<T>(page: Page, path: string, init?: { method?: "GET" | "POST"; data?: unknown }): Promise<T> {
   const res = init?.method === "POST" ? await page.request.post(path, { data: init.data ?? {}, headers: CSRF }) : await page.request.get(path);
@@ -284,5 +284,75 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
     await expect(page.getByText("2 records")).toBeVisible();
     expect((await records()).map((r) => r.values[table.primary_field_id])).toEqual(["Charlie", "Bravo"]);
+  });
+
+  // Icons: picked from the full list for a table, shown in its tab and in the link field's target
+  // select, then for the base and the workspace (home page tiles).
+  await test.step("gives the table an icon from the full list; the tab shows it and the server keeps it", async () => {
+    await page.getByRole("button", { name: "Table options for Projects" }).click();
+    await page.getByRole("menuitem", { name: /Change icon/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Table icon" });
+    // The 20 popular icons are on screen at once; anything else is found by name.
+    await expect(dialog.getByRole("group", { name: "Popular icons" }).getByRole("button")).toHaveCount(20);
+    await dialog.getByRole("searchbox", { name: "Search icons" }).fill("tractor");
+    await dialog.getByRole("group", { name: "Matching icons" }).getByRole("button", { name: "Tractor" }).click();
+    await expect(dialog).toBeHidden();
+    const tab = page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Projects" });
+    await expect(tab.locator("svg[data-icon='tractor']")).toBeVisible();
+    expect((await loadTable()).icon).toBe("tractor");
+    // It survives a reload (and is drawn from the lazily loaded set, not just the bundled 20).
+    await page.reload();
+    await expect(tab.locator("svg[data-icon='tractor']")).toBeVisible();
+  });
+
+  await test.step("shows the table icons in the link field's target select", async () => {
+    const created = await page.request.post(`/api/bases/${baseId}/tables`, { data: { name: "Clients", icon: "users" }, headers: CSRF });
+    expect(created.ok(), await created.text()).toBeTruthy();
+    const clients = (await created.json()) as { id: string };
+    await expect(page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Clients" }).locator("svg[data-icon='users']")).toBeVisible();
+
+    await page.getByRole("button", { name: "Add field" }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Add a field" });
+    await dialog.getByLabel("Field name").fill("Client");
+    await dialog.getByRole("option", { name: /^Link to another record/ }).click();
+    const target = dialog.getByRole("combobox", { name: "Table to link to" });
+    await target.click();
+    const here = page.getByRole("option", { name: "Projects (this table)" });
+    const other = page.getByRole("option", { name: "Clients" });
+    await expect(here.locator("svg[data-icon='tractor']")).toBeVisible();
+    await expect(other.locator("svg[data-icon='users']")).toBeVisible();
+    await other.click();
+    await expect(target.locator("svg[data-icon='users']")).toBeVisible();
+    await dialog.getByRole("button", { name: "Create field" }).click();
+    await expect(dialog).toBeHidden();
+    const link = (await loadTable()).fields.find((f) => f.name === "Client")!;
+    expect(link.type).toBe("link");
+    expect(link.options).toMatchObject({ linked_table_id: clients.id });
+  });
+
+  await test.step("gives the base and the workspace icons; the home page shows them instead of the letters", async () => {
+    await page.getByRole("button", { name: "Change base icon" }).click();
+    await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
+    await expect(page.locator("header [data-entity-tile] svg[data-icon='store']")).toBeVisible();
+
+    await page.getByRole("link", { name: "Back to all bases" }).click();
+    const card = page.getByRole("link", { name: "Journey base" }).locator("xpath=ancestor::li");
+    await expect(card.locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
+    await expect(card.locator("[data-entity-tile]")).not.toContainText("J");
+
+    await page.getByRole("button", { name: "Change icon of Journey workspace" }).click();
+    await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Briefcase" }).click();
+    const section = page.getByRole("heading", { name: "Journey workspace" }).locator("xpath=ancestor::section");
+    await expect(section.locator("[data-entity-tile] svg[data-icon='briefcase']").first()).toBeVisible();
+    const workspaces = await api<{ name: string; icon: string | null; bases: { name: string; icon: string | null }[] }[]>(page, "/api/workspaces");
+    const ws = workspaces.find((w) => w.name === "Journey workspace")!;
+    expect(ws.icon).toBe("briefcase");
+    expect(ws.bases.find((b) => b.name === "Journey base")?.icon).toBe("store");
+
+    // Removing the icon brings the letter back.
+    await page.getByRole("button", { name: "Change icon of Journey workspace" }).click();
+    await page.getByRole("button", { name: "Remove icon" }).click();
+    await expect(section.locator("[data-entity-tile]").first()).toContainText("J");
+    expect((await api<{ name: string; icon: string | null }[]>(page, "/api/workspaces")).find((w) => w.name === "Journey workspace")?.icon ?? null).toBeNull();
   });
 });

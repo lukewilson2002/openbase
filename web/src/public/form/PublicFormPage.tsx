@@ -4,6 +4,7 @@
  * (kept in memory), validates before sending, uploads files through the form's own endpoint, and
  * ends with the success message, an optional "Submit another response" and an optional redirect.
  */
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
 import { CircleCheck } from "lucide-react";
@@ -127,6 +128,9 @@ function FilledForm({ token, password, form }: { token: string; password: string
     <PublicShell>
       <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate aria-label={form.title} className="flex flex-col gap-6 rounded-lg border border-line bg-surface p-5 shadow-sm sm:p-7">
         <header className="flex flex-col gap-1.5">
+          <p className="inline-flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            <EntityLabel icon={form.base_icon}>{form.base_name}</EntityLabel> <span aria-hidden>/</span> <EntityLabel icon={form.table_icon}>{form.table_name}</EntityLabel>
+          </p>
           <h1 className="text-2xl">{form.title}</h1>
           {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] text-muted">{form.description}</p>}
           {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}

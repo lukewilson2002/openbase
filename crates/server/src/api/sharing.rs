@@ -354,7 +354,9 @@ async fn public_view(
         name: r.view.view.name.clone(),
         view_type: r.view.view.view_type,
         table_name: r.table.name.clone(),
+        table_icon: r.table.icon.clone(),
         base_name: r.base_name.clone(),
+        base_icon: r.base_icon.clone(),
         fields: visible.iter().map(sharing::public_field).collect(),
         config: sharing::public_config(&r.view.view.config, &ids),
     }))
@@ -495,7 +497,9 @@ async fn public_form(
         title: or(&form.title, &r.view.view.name),
         description: form.description.clone(),
         base_name: r.base_name.clone(),
+        base_icon: r.base_icon.clone(),
         table_name: r.table.name.clone(),
+        table_icon: r.table.icon.clone(),
         fields: inputs,
         submit_label: or(&form.submit_label, "Submit"),
         success_message: or(

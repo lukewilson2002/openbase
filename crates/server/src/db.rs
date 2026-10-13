@@ -14,7 +14,10 @@ use crate::error::{AppError, AppResult};
 
 /// Embedded migrations, applied in order. `PRAGMA user_version` records how
 /// many have been applied. Never edit a released migration; add a new one.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_icons.sql"),
+];
 
 pub fn schema_version() -> i64 {
     MIGRATIONS.len() as i64
@@ -303,6 +306,96 @@ mod tests {
             })
             .unwrap();
         assert_eq!(fk_errors, 0);
+    }
+
+    /// A v1 database holding a workspace, base and table.
+    fn v1_database(conn: &Connection, base_icon: Option<&str>) {
+        migrate_with(conn, &MIGRATIONS[..1], None).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'Acme', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('b1', 'w1', 'CRM', 1);
+             INSERT INTO tables (id, base_id, name, primary_field_id, created_at)
+                 VALUES ('t1', 'b1', 'Contacts', 'f1', 1);",
+        )
+        .unwrap();
+        conn.execute("UPDATE bases SET icon = ?1", [base_icon])
+            .unwrap();
+    }
+
+    #[test]
+    fn v1_database_migrates_to_icons_keeping_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        v1_database(&conn, Some("briefcase"));
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 1);
+        migrate(&conn).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 2);
+        assert_eq!(schema_version(), 2);
+        let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        // new columns exist and start empty; existing rows are intact
+        assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
+        assert_eq!(icon("SELECT icon FROM tables WHERE id = 't1'"), None);
+        assert_eq!(
+            icon("SELECT name FROM tables WHERE id = 't1'").as_deref(),
+            Some("Contacts")
+        );
+        // a valid v1 base icon is kept
+        assert_eq!(
+            icon("SELECT icon FROM bases WHERE id = 'b1'").as_deref(),
+            Some("briefcase")
+        );
+        // and the new columns accept values
+        conn.execute_batch(
+            "UPDATE workspaces SET icon = 'store'; UPDATE tables SET icon = 'package';",
+        )
+        .unwrap();
+        // migrating again is a no-op
+        migrate(&conn).unwrap();
+        assert_eq!(
+            icon("SELECT icon FROM tables WHERE id = 't1'").as_deref(),
+            Some("package")
+        );
+    }
+
+    #[test]
+    fn v1_free_text_base_icons_that_are_not_valid_names_are_cleared() {
+        for bad in [
+            "",
+            "Briefcase",
+            "chart column",
+            "\u{1F4BC}",
+            &"x".repeat(65),
+        ] {
+            let conn = Connection::open_in_memory().unwrap();
+            v1_database(&conn, Some(bad));
+            migrate(&conn).unwrap();
+            let icon: Option<String> = conn
+                .query_row("SELECT icon FROM bases WHERE id = 'b1'", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(icon, None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn v1_file_database_is_snapshotted_before_the_icons_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("opengrid.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            v1_database(&conn, None);
+        }
+        let db = Db::open(&path).unwrap();
+        drop(db);
+        let files = snapshots(&dir.path().join("backups"));
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert!(files[0].starts_with("pre-migration-v1-"));
+        assert_eq!(file_schema_version(&path).unwrap(), 2);
     }
 
     #[test]

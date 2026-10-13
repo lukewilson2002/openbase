@@ -10,6 +10,7 @@ import { RotateCcw } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { TrashItem } from "@/api/types";
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { relativeTime } from "@/lib/relativeTime";
@@ -52,7 +53,9 @@ export function DeletedWorkspaces() {
         {items.map((item) => (
           <li key={item.id} className="flex items-center gap-3 px-3 py-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[0.8125rem] font-medium">{item.name}</p>
+              <p className="truncate text-[0.8125rem] font-medium">
+                <EntityLabel icon={item.icon}>{item.name}</EntityLabel>
+              </p>
               <p className="text-xs text-muted">Deleted {relativeTime(item.deleted_at)}</p>
             </div>
             <Button size="sm" aria-label={`Restore ${item.name}`} loading={restoring === item.id} disabled={restore.isPending} onClick={() => restore.mutate(item)}>

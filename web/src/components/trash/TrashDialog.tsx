@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { keys } from "@/api/keys";
-import type { BaseSchema, TrashItem } from "@/api/types";
+import type { BaseSchema, Table, TrashItem } from "@/api/types";
+import { EntityLabel } from "@/components/icons/EntityIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -16,10 +17,9 @@ import { relativeTime } from "@/lib/relativeTime";
 import { DEFAULT_RETENTION_DAYS, trashApi, trashKeys } from "./api";
 import { TRASH_KIND_LABELS, groupTrash, trashItemName } from "./groupTrash";
 
-function where(item: TrashItem, schema: BaseSchema): string | null {
+function where(item: TrashItem, schema: BaseSchema): Table | null {
   if (!item.table_id) return null;
-  const table = schema.tables.find((t) => t.id === item.table_id);
-  return table ? `in ${table.name}` : null;
+  return schema.tables.find((t) => t.id === item.table_id) ?? null;
 }
 
 export function TrashDialog({ open, onOpenChange, schema }: { open: boolean; onOpenChange: (open: boolean) => void; schema: BaseSchema }) {
@@ -80,10 +80,20 @@ export function TrashDialog({ open, onOpenChange, schema }: { open: boolean; onO
                   return (
                     <li key={key} className="flex items-center gap-3 px-3 py-2">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[0.8125rem] font-medium">{name}</p>
-                        <p className="text-xs text-muted">
-                          Deleted {relativeTime(item.deleted_at)}
-                          {place ? ` ${place}` : ""}
+                        <p className="truncate text-[0.8125rem] font-medium">
+                          <EntityLabel icon={item.icon}>{name}</EntityLabel>
+                        </p>
+                        <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted">
+                          <span>Deleted {relativeTime(item.deleted_at)}</span>
+                          {place && (
+                            <>
+                              {" "}
+                              <span>in</span>{" "}
+                              <EntityLabel icon={place.icon} iconClassName="size-3.5">
+                                {place.name}
+                              </EntityLabel>
+                            </>
+                          )}
                         </p>
                       </div>
                       <Button size="sm" aria-label={`Restore ${name}`} loading={restoring === key} disabled={restore.isPending} onClick={() => restore.mutate(item)}>

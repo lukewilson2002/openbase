@@ -217,6 +217,9 @@ pub struct CreatedInvite {
 pub struct InvitePreview {
     /// Workspace or base name.
     pub target_name: String,
+    /// Lucide icon name of the workspace or base, if it has one.
+    #[serde(default)]
+    pub target_icon: Option<String>,
     pub target_kind: String,
     pub role: String,
     #[serde(default)]

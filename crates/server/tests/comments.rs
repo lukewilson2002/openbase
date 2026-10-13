@@ -444,6 +444,32 @@ async fn mentions_notify_users_with_access_except_the_author() {
 }
 
 #[tokio::test]
+async fn mention_notifications_carry_the_base_and_table_icons() {
+    let s = setup().await;
+    let ann = s.f.member("ann@example.com", Role::Viewer);
+    s.f.app
+        .patch(
+            &s.f.owner,
+            &format!("/api/bases/{}", s.f.base_id),
+            json!({ "icon": "store" }),
+        )
+        .await
+        .assert_status(200);
+    s.f.app
+        .patch(
+            &s.f.owner,
+            &format!("/api/tables/{}", s.f.table_id),
+            json!({ "icon": "package" }),
+        )
+        .await
+        .assert_status(200);
+    s.post_ok(&s.f.owner, &mention("Ann", &ann)).await;
+    let n = s.notifications_of(&ann);
+    assert_eq!(n[0].1["base_icon"], "store");
+    assert_eq!(n[0].1["table_icon"], "package");
+}
+
+#[tokio::test]
 async fn mentions_of_unknown_or_inactive_users_and_plain_text_are_ignored() {
     let s = setup().await;
     let ann = s.f.member("ann@example.com", Role::Viewer);
