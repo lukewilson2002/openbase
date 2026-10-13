@@ -34,7 +34,7 @@ function GalleryInner(props: ViewProps) {
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? ""])), [table, config, coverField?.id]);
 
-  const data = useGalleryData({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone });
+  const data = useGalleryData({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
 
   // Infinite scroll: load the next page when the sentinel below the cards comes into view.
   const sentinel = useRef<HTMLDivElement>(null);

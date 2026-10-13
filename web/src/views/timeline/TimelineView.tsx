@@ -65,7 +65,7 @@ function TimelineInner(props: ViewProps) {
     const padded = padRange(wallYmd(axis.fromDay * DAY_MS), wallYmd((axis.toDay - 1) * DAY_MS), 1);
     return padded && { field_id: fields.start.field.id, end_field_id: fields.end?.field.id ?? null, ...padded };
   }, [fields, axis.fromDay, axis.toDay]);
-  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, enabled: !!range });
+  const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, transient: setup.transient, enabled: !!range });
   const data = records.data;
 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);

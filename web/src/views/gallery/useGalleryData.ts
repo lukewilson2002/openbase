@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { recordKeys, recordsApi } from "@/api/records";
-import type { QueryResponse, TableRecord } from "@/api/types";
+import type { QueryResponse, TableRecord, TransientConfig } from "@/api/types";
 
 export const GALLERY_PAGE = 60;
 
@@ -21,12 +21,12 @@ export interface GalleryData {
   loadMore(): void;
 }
 
-export function useGalleryData(p: { tableId: string; viewId: string; configKey: string; search: string; timeZone: string }): GalleryData {
+export function useGalleryData(p: { tableId: string; viewId: string; configKey: string; search: string; timeZone: string; transient?: TransientConfig | null }): GalleryData {
   const q = useInfiniteQuery({
-    queryKey: [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "gallery", p.timeZone],
+    queryKey: [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "gallery", p.timeZone, p.transient ?? null],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }): Promise<QueryResponse> =>
-      recordsApi.query(p.viewId, { offset: pageParam, limit: GALLERY_PAGE, search: p.search || null, timezone: p.timeZone }, signal),
+      recordsApi.query(p.viewId, { offset: pageParam, limit: GALLERY_PAGE, search: p.search || null, timezone: p.timeZone, ...(p.transient ? { transient: p.transient } : {}) }, signal),
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((n, pg) => n + pg.records.length, 0);
       return last.records.length > 0 && loaded < last.total ? loaded : undefined;

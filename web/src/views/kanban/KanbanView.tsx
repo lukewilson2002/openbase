@@ -43,6 +43,7 @@ function KanbanInner(props: ViewProps) {
     configKey: setup.configKey,
     search: setup.debouncedSearch,
     timeZone: setup.timeZone,
+    transient: setup.transient,
     enabled: !!stackField,
   });
   const data = records.data;
