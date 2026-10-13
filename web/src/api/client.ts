@@ -22,12 +22,15 @@ const CLIENT_ID_KEY = "og-client-id";
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  /** The rest of the error object, for the few errors that carry more than a message (`import_failed` lists rows). */
+  readonly details: Readonly<Record<string, unknown>> | null;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details: Readonly<Record<string, unknown>> | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 
   get isUnauthorized(): boolean {
@@ -89,6 +92,11 @@ export function setApiBase(base: string): void {
 
 /** Routes reachable without a session; a 401 there must not bounce to /login. */
 const PUBLIC_PREFIXES = [
+  // Share links and public forms are for people without an account (both spellings of each).
+  "/share/",
+  "/s/",
+  "/form/",
+  "/f/",
   "/login",
   "/setup",
   "/signup",
@@ -143,6 +151,7 @@ export function withQuery(path: string, query?: Query): string {
 async function parseError(res: Response): Promise<ApiError> {
   let code = `http_${res.status}`;
   let message = res.statusText || `Request failed (${res.status})`;
+  let details: Record<string, unknown> | null = null;
   try {
     const text = await res.text();
     if (text) {
@@ -151,15 +160,17 @@ async function parseError(res: Response): Promise<ApiError> {
       if (err && typeof err === "object") {
         if (typeof err.code === "string") code = err.code;
         if (typeof err.message === "string") message = err.message;
+        details = err as Record<string, unknown>;
       }
     }
   } catch {
     /* non-JSON error body: keep the status text */
   }
-  return new ApiError(res.status, code, message);
+  return new ApiError(res.status, code, message, details);
 }
 
-export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+/** Send a request and return the successful response; every failure is thrown as an {@link ApiError}. */
+async function send(path: string, opts: RequestOptions): Promise<Response> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -197,7 +208,11 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
     }
     throw err;
   }
+  return res;
+}
 
+export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const res = await send(path, opts);
   // 204 No Content (DELETE routes): there is no body to parse.
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -206,6 +221,28 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
   } catch {
     throw new ApiError(res.status, "bad_response", "The server sent an unexpected response.");
   }
+}
+
+/** The file name a `Content-Disposition` header suggests (`filename*=UTF-8''…` wins over `filename="…"`). */
+export function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = /filename\*\s*=\s*(?:UTF-8|utf-8)?'[^']*'([^;]+)/.exec(header);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].trim());
+    } catch {
+      /* fall through to the plain form */
+    }
+  }
+  const plain = /filename\s*=\s*"((?:[^"\\]|\\.)*)"|filename\s*=\s*([^;]+)/.exec(header);
+  const raw = plain?.[1] ?? plain?.[2];
+  return raw ? raw.replace(/\\(.)/g, "$1").trim() : null;
+}
+
+/** A successful response read as a file (CSV export): the bytes and the name the server suggests. */
+export async function requestFile(path: string, opts: RequestOptions = {}): Promise<{ blob: Blob; filename: string | null }> {
+  const res = await send(path, { ...opts, headers: { Accept: "*/*", ...opts.headers } });
+  return { blob: await res.blob(), filename: filenameFromDisposition(res.headers.get("Content-Disposition")) };
 }
 
 export const http = {

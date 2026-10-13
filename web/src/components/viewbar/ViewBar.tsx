@@ -9,6 +9,8 @@
 import { useState, type RefObject } from "react";
 import { EyeOff, Filter, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, Share2, X } from "lucide-react";
 import type { BaseSchema, Collaborator, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
+import { ExportCsvButton } from "@/components/csv/ExportCsvButton";
+import { ShareViewDialog, canShareView } from "@/components/share/ShareViewDialog";
 import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { Switch } from "@/components/ui/checkbox";
@@ -17,6 +19,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input, Select } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
+import { atLeast } from "@/lib/roles";
 import { countConditions, isFilterable } from "@/lib/cells/filters";
 import { FilterBuilder } from "./FilterBuilder";
 import { SortListEditor } from "./SortListEditor";
@@ -61,7 +64,9 @@ export interface ViewBarProps {
   onAddField?: () => void;
   canManageFields: boolean;
   /** Toolbar sections a view type does not use can be switched off (all on by default). */
-  features?: { group?: boolean; color?: boolean; rowHeight?: boolean; shareView?: boolean };
+  features?: { group?: boolean; color?: boolean; rowHeight?: boolean; shareView?: boolean; csv?: boolean };
+  /** Viewer's IANA zone, used by the CSV export for dates. */
+  timeZone?: string;
   /** Label of the hide-fields menu ("Hide fields" in the grid, "Card fields" on card views). */
   hideFieldsNoun?: string;
   /** View-type specific settings (stack field, date fields...), shown before the search box. */
@@ -213,7 +218,9 @@ export function ViewBar(props: ViewBarProps) {
   const heights: RowHeight[] = ["short", "medium", "tall", "extra_tall"];
   const rowColorActive = !!config.row_color && (config.row_color.mode === "by_select" || config.row_color.rules.length > 0);
   const showSearch = searchOpen || search !== "";
-  const features = { group: true, color: true, rowHeight: true, shareView: true, ...props.features };
+  const features = { group: true, color: true, rowHeight: true, shareView: true, csv: true, ...props.features };
+  const [sharing, setSharing] = useState(false);
+  const mayShare = atLeast(props.role, "creator");
 
   return (
     <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-0.5 bg-surface px-2 py-1">
@@ -324,10 +331,14 @@ export function ViewBar(props: ViewBarProps) {
             <Search aria-hidden className="size-4" />
           </IconButton>
         )}
-        {features.shareView && (
-          <Button size="sm" variant="secondary" disabled title="Sharing arrives with the sharing workstream">
-            <Share2 aria-hidden className="size-4" /> <span className="hidden sm:inline">Share view</span>
-          </Button>
+        {features.csv && <ExportCsvButton view={view} timeZone={props.timeZone} />}
+        {features.shareView && mayShare && (
+          <>
+            <Button size="sm" variant="secondary" disabled={!canShareView(props.role, view)} title={view.personal ? "Personal views cannot be shared" : "Create public links to this view"} onClick={() => setSharing(true)}>
+              <Share2 aria-hidden className="size-4" /> <span className="max-sm:sr-only">Share view</span>
+            </Button>
+            {sharing && <ShareViewDialog open onOpenChange={setSharing} view={view} table={table} />}
+          </>
         )}
       </div>
     </div>

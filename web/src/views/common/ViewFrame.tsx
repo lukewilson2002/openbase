@@ -54,6 +54,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           onSearchOpenChange={setup.setSearchOpen}
           searchInputRef={searchInputRef}
           canManageFields={false}
+          timeZone={setup.timeZone}
           features={{ shareView: true, ...features }}
           hideFieldsNoun={hideFieldsNoun}
           extra={toolbarExtra}

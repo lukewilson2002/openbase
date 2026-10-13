@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, Lock, LockOpen, Pencil, Trash2, User as UserIcon } from "lucide-react";
+import { Copy, Ellipsis, Lock, LockOpen, Pencil, Share2, Trash2, User as UserIcon } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View, ViewType } from "@/api/types";
 import { NameDialog } from "@/components/NameDialog";
+import { ShareViewDialog, canShareView } from "@/components/share/ShareViewDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -32,6 +33,7 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
   const role = schema.role;
   const [dialog, setDialog] = useState<ViewDialog | null>(null);
   const [personal, setPersonal] = useState(false);
+  const [sharingView, setSharingView] = useState<View | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: keys.base(schema.id) });
   const viewHref = (v: View) => `/base/${schema.id}/${table.id}/${v.id}`;
 
@@ -109,6 +111,11 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
                   </DropdownMenuItem>
                 </>
               )}
+              {canShareView(role, v) && (
+                <DropdownMenuItem onSelect={() => setSharingView(v)}>
+                  <Share2 aria-hidden className="size-4" /> Share view…
+                </DropdownMenuItem>
+              )}
               {canLock && (
                 <DropdownMenuItem onSelect={() => toggleLock.mutate(v)}>
                   {v.locked ? <LockOpen aria-hidden className="size-4" /> : <Lock aria-hidden className="size-4" />}
@@ -178,6 +185,7 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
         </div>
       )}
 
+      {sharingView && <ShareViewDialog open onOpenChange={(o) => !o && setSharingView(null)} view={table.views.find((x) => x.id === sharingView.id) ?? sharingView} table={table} />}
       <NameDialog
         open={!!creating}
         onOpenChange={(o) => !o && setDialog(null)}

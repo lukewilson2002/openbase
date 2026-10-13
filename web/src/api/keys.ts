@@ -27,4 +27,6 @@ export const keys = {
   adminStats: ["admin", "stats"] as const,
   adminBackups: ["admin", "backups"] as const,
   notifications: ["notifications"] as const,
+  /** Share links of one view (Creators). */
+  shares: (viewId: string) => ["shares", viewId] as const,
 };
