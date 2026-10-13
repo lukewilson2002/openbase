@@ -13,11 +13,11 @@
 # runs as the unprivileged user. Prints the image size and idle memory
 # (`docker stats --no-stream`). Removes the container and volume at the end.
 #
-# PORT=18090 changes the host port. Needs docker, curl and jq.
+# PORT=18090 picks the host port (default: a free one). Needs docker, curl, jq and python3.
 set -euo pipefail
 
 IMAGE=${1:-opengrid:local}
-PORT=${PORT:-18090}
+PORT=${PORT:-$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}
 NAME=opengrid-smoke-$$
 VOL=opengrid-smoke-data-$$
 URL=http://127.0.0.1:$PORT

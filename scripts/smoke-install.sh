@@ -17,7 +17,7 @@
 #   SEED_RECORDS=50000   also run scripts/loadtest.sh: load that many records through
 #                        the API, print read latencies and the server's resident memory
 #                        (ps rss) after each phase.
-#   PORT=18080           loopback port to use.
+#   PORT=18080           loopback port to use (default: a free one).
 #
 # Needs curl and jq. The web client must have been built before the binary
 # (`cd web && npm ci && npm run build`) for the "/" check to see the real app.
@@ -27,7 +27,10 @@ cd "$(dirname "$0")/.."
 BIN=${1:-target/release/opengrid}
 [[ -x "$BIN" ]] || { echo "binary not found: $BIN (cargo build --release -p opengrid)" >&2; exit 2; }
 BIN=$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")
-PORT=${PORT:-18080}
+PORT=${PORT:-$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')}
+if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
+  echo "something already answers on 127.0.0.1:$PORT; pick another PORT" >&2; exit 2
+fi
 SEED_RECORDS=${SEED_RECORDS:-0}
 URL=http://127.0.0.1:$PORT
 PASS='correct-horse-battery-staple'
