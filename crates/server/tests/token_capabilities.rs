@@ -967,3 +967,62 @@ async fn admin_routes_work_for_admin_manage_tokens_and_are_audited() {
         }
     }
 }
+
+/// The tables above and the endpoint catalogue (which `api_reference` shows to agents and
+/// `api_request` enforces up front) describe the same policy.
+#[test]
+fn the_capability_tables_match_the_endpoint_catalogue() {
+    use opengrid::mcp::catalogue::{Access, ENDPOINTS};
+    use std::collections::BTreeSet;
+
+    let key = |m: &str, p: &str| (m.to_string(), p.to_string());
+    let of = |wanted: &[Access]| -> BTreeSet<(String, String)> {
+        ENDPOINTS
+            .iter()
+            .filter(|e| wanted.contains(&e.access))
+            .map(|e| key(e.method, e.path))
+            .collect()
+    };
+
+    // Manage-gated routes. Trash restore is a Write endpoint whose `workspace` and `base` kinds
+    // need the manage permission: the two cases below exercise exactly that.
+    let manage = of(&[Access::Manage, Access::ManageUnscoped]);
+    let mut cases = BTreeSet::new();
+    for case in CASES {
+        if case.template == "/api/trash/restore" {
+            let ep = ENDPOINTS
+                .iter()
+                .find(|e| e.method == "POST" && e.path == case.template)
+                .unwrap();
+            assert_eq!(ep.access, Access::Write);
+            continue;
+        }
+        cases.insert(key(case.method, case.template));
+        let ep = ENDPOINTS
+            .iter()
+            .find(|e| e.method == case.method && e.path == case.template)
+            .unwrap_or_else(|| panic!("{} is not in the catalogue", case.name));
+        let expected = match case.scoped {
+            Scoped::Allowed | Scoped::OutOfScope => Access::Manage,
+            Scoped::Refused => Access::ManageUnscoped,
+        };
+        // Revoking an invite is one catalogue entry for workspace and base invites.
+        if case.template != "/api/invites/{id}" {
+            assert_eq!(ep.access, expected, "{}", case.name);
+        }
+    }
+    assert_eq!(
+        cases, manage,
+        "manage-gated routes: test table vs catalogue"
+    );
+
+    let admin: BTreeSet<_> = ADMIN.iter().map(|a| key(a.method, a.template)).collect();
+    assert_eq!(admin, of(&[Access::Admin]), "admin routes");
+
+    let session_only: BTreeSet<_> = SESSION_ONLY.iter().map(|(m, t, ..)| key(m, t)).collect();
+    assert_eq!(
+        session_only,
+        of(&[Access::SessionOnly]),
+        "session-only routes"
+    );
+}
