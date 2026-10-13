@@ -11,10 +11,11 @@
 //! - attachment garbage collection + stale upload temp files (hourly)
 //! - orphaned attachment file sweep (daily)
 //! - record history retention (`history_days`, daily)
+//! - trash purge (`trash_days`, daily)
+//! - volatile formula refresh (`NOW()`/`TODAY()`..., every 5 minutes)
 //! - daily automatic backup at `backup_hour` local time + retention
 //!
-//! The data-plane workstream adds trash purge and volatile-formula refresh;
-//! the automations workstream adds its runner. See the marked spots in
+//! The automations workstream adds its runner; see the marked spot in
 //! [`tick`].
 
 use std::collections::HashSet;
@@ -22,11 +23,13 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
 use chrono::{DateTime, Local, Timelike};
-use rusqlite::Connection;
+use og_core::api::events::BaseEvent;
+use rusqlite::{Connection, Transaction};
 
 use crate::auth::session;
 use crate::backup;
 use crate::db::now_ms;
+use crate::engine::recompute;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::store::attachments as attachment_store;
@@ -38,6 +41,7 @@ pub const TICK: Duration = Duration::from_secs(60);
 pub const ATTACHMENT_GRACE_MS: i64 = 24 * 3600 * 1000;
 const HOURLY: Duration = Duration::from_secs(3600);
 const DAILY: Duration = Duration::from_secs(24 * 3600);
+const VOLATILE_EVERY: Duration = Duration::from_secs(5 * 60);
 const STALE_TMP: Duration = Duration::from_secs(24 * 3600);
 /// Orphaned attachment files younger than this are never swept.
 pub const ORPHAN_GRACE: Duration = Duration::from_secs(24 * 3600);
@@ -63,6 +67,8 @@ pub struct Clock {
     attachments: Option<Instant>,
     orphans: Option<Instant>,
     history: Option<Instant>,
+    trash: Option<Instant>,
+    volatile: Option<Instant>,
 }
 
 fn due(last: &mut Option<Instant>, every: Duration) -> bool {
@@ -121,12 +127,24 @@ pub async fn tick(state: &AppState, clock: &mut Clock) {
     })
     .await;
 
-    // DATA-PLANE (W6): add the trash purge job (records/fields/tables/views/
-    // bases deleted more than `config.trash_days` ago) and the volatile-formula
-    // refresh (every 5 minutes) here, following the pattern above: a plain
-    // function taking `&Transaction`, scheduled through a `Clock` field and
-    // wrapped in `run_job`.
-    //
+    if due(&mut clock.trash, DAILY) {
+        run_job(state, "trash purge", |s| {
+            let days = s.config.trash_days;
+            let stats = s.db.write_sync(|tx| purge_trash(tx, days, now_ms()))?;
+            if stats != Default::default() {
+                tracing::info!(?stats, "purged expired trash");
+            }
+            Ok(stats)
+        })
+        .await;
+    }
+    if due(&mut clock.volatile, VOLATILE_EVERY) {
+        run_job(state, "volatile formula refresh", |s| {
+            refresh_volatile_formulas(s, chrono::Utc::now())
+        })
+        .await;
+    }
+
     // AUTOMATIONS (W8): start the automation runner from `spawn_all` or
     // schedule its due-trigger scan here.
 }
@@ -158,6 +176,50 @@ where
             false
         }
     }
+}
+
+/// Permanently delete everything that has been in the trash for more than
+/// `trash_days` days (records, fields, tables, views, bases, workspaces).
+pub fn purge_trash(
+    tx: &Transaction,
+    trash_days: u32,
+    now_ms: i64,
+) -> AppResult<crate::store::trash::PurgeStats> {
+    let cutoff = now_ms - i64::from(trash_days) * 24 * 3600 * 1000;
+    crate::store::trash::purge_expired(tx, cutoff)
+}
+
+/// Most record ids put into one refresh event.
+const REFRESH_EVENT_IDS: usize = 1000;
+
+/// Recompute every formula that depends on the clock (`NOW()`, `TODAY()`...)
+/// for the live records of every base, plus whatever depends on those
+/// formulas, one base per transaction. Subscribers hear about the changed
+/// records (at most [`REFRESH_EVENT_IDS`] ids per table). Returns the number
+/// of records whose stored values changed.
+pub fn refresh_volatile_formulas(state: &AppState, now: DateTime<chrono::Utc>) -> AppResult<usize> {
+    let groups = state.db.write_sync(|tx| recompute::volatile_fields(tx))?;
+    let mut changed = 0;
+    for (base_id, field_ids) in groups {
+        let outcome = state
+            .db
+            .write_sync(|tx| recompute::refresh_volatile(tx, &base_id, &field_ids, now))?;
+        for (table_id, ids) in outcome.updated {
+            changed += ids.len();
+            state.events.publish(
+                &base_id,
+                None,
+                None,
+                BaseEvent::RecordsChanged {
+                    table_id,
+                    created: Vec::new(),
+                    updated: ids.into_iter().take(REFRESH_EVENT_IDS).collect(),
+                    deleted: Vec::new(),
+                },
+            );
+        }
+    }
+    Ok(changed)
 }
 
 /// Delete expired sessions.

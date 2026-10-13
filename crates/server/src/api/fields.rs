@@ -5,21 +5,26 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
-use og_core::api::schema::{SetPrimaryField, Table};
+use og_core::api::schema::{
+    FormulaCheck, FormulaCheckError, FormulaCheckResult, SetPrimaryField, Table,
+};
 use serde_json::{Value as Json2, json};
 
 use crate::api::schema_support::{ApiJson, publish_schema};
 use crate::auth::Actor;
-use crate::error::AppResult;
+use crate::engine::recompute::{DEFAULT_MAX_EVALS, Session};
+use crate::engine::write;
+use crate::error::{AppError, AppResult};
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::field_kind::{parse_create_field, parse_update_field};
 use crate::store::fields::{self, FieldChange};
-use crate::store::schema::Touched;
-use crate::store::tables;
+use crate::store::schema::{self, Touched};
+use crate::store::{fields_engine, records, tables};
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/tables/{id}/formula/check", post(formula_check))
         .route("/api/tables/{id}/fields", post(create))
         .route("/api/fields/{id}", patch(update).delete(remove))
         .route("/api/tables/{id}/primary-field", post(set_primary))
@@ -104,6 +109,71 @@ async fn remove(
     Ok(Json(
         json!({ "ok": true, "deleted_field_ids": out.deleted_field_ids }),
     ))
+}
+
+/// `POST /api/tables/{id}/formula/check`: parse and type-check a formula as
+/// typed in the field editor and preview it on a sample record. Editor role
+/// (field creators need it, and it changes nothing).
+async fn formula_check(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(table_id): Path<String>,
+    ApiJson(body): ApiJson<FormulaCheck>,
+) -> AppResult<Json<FormulaCheckResult>> {
+    let result = state
+        .db
+        .read(move |conn| {
+            let base = perm::base_of_table(conn, &table_id)?;
+            perm::require_base(conn, &actor, &base, Role::Editor)?;
+            let table_fields = schema::table_fields(conn, &table_id)?;
+            let (stored, ty) = match fields_engine::check_formula(&table_fields, &body.expression)
+            {
+                Ok(ok) => ok,
+                Err(e) => {
+                    return Ok(FormulaCheckResult {
+                        ok: false,
+                        error: Some(FormulaCheckError {
+                            message: e.message,
+                            pos: e.pos,
+                        }),
+                        result_type: None,
+                        preview: None,
+                    });
+                }
+            };
+            let row = match &body.record_id {
+                Some(id) => Some(
+                    records::get(conn, id)?
+                        .filter(|r| r.table_id == table_id && r.deleted_at.is_none())
+                        .ok_or_else(|| AppError::not_found("record"))?,
+                ),
+                None => {
+                    let first = records::table_ids(conn, &table_id, false)?;
+                    match first.first() {
+                        Some(id) => records::get(conn, id)?,
+                        None => None,
+                    }
+                }
+            };
+            let preview = match row {
+                Some(row) => {
+                    let tz = write::user_timezone(conn, &actor.user_id);
+                    let mut session =
+                        Session::new(conn, &base, chrono::Utc::now(), tz, DEFAULT_MAX_EVALS)?;
+                    let value = session.preview(&stored, &ty, &row);
+                    Some(value.to_json())
+                }
+                None => None,
+            };
+            Ok(FormulaCheckResult {
+                ok: true,
+                error: None,
+                result_type: Some(ty),
+                preview,
+            })
+        })
+        .await?;
+    Ok(Json(result))
 }
 
 async fn set_primary(
