@@ -601,6 +601,12 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [editorEnv],
   );
 
+  // The marker column counts records in the view; group headers and the summary row have no number.
+  const rowNumber = useCallback((row: number): number | null => {
+    const i = rowMapRef.current.recordIndexAt(row);
+    return i >= 0 ? i + 1 : null;
+  }, []);
+
   // ---- render ----------------------------------------------------------------------------------
   const dark = resolved === "dark";
   const total = data.total;
@@ -611,7 +617,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     rowHeight,
     freezeColumns,
     showSummary: true,
-    showRowNumbers: !grouped,
+    rowNumber,
     searchTerm: debouncedSearch,
     dark,
     canEdit,

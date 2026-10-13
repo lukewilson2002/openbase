@@ -5,7 +5,7 @@ import { cardTitle, fieldsToShow } from "@/views/common/cardFields";
 import { buildStacks, stackKind } from "@/views/kanban/stacks";
 import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
-import { paletteColor } from "@/lib/cells/palette";
+import { swatchColor } from "@/lib/cells/palette";
 import { useThumbSrc } from "./PublicAttachments";
 import { PublicCell } from "./PublicCell";
 import { useShare } from "./ShareContext";
@@ -34,7 +34,7 @@ export function PublicCard({ record, fields, color, coverFit = "cover", coverHei
   const shown = fieldsToShow(fields.rest, record, format);
   return (
     <article data-record-id={record.id} aria-label={cardTitle(fields.title, record, format)} className="relative overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm">
-      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: paletteColor(color).bg }} />}
+      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
       {fields.cover && <Cover record={record} field={fields.cover} fit={coverFit} height={coverHeight} />}
       <div className="flex flex-col gap-1.5 p-2.5">
         <h3 className="line-clamp-2 break-words text-[0.8125rem] font-semibold">{cardTitle(fields.title, record, format)}</h3>
@@ -90,7 +90,7 @@ export function PublicKanban({ stackField, hideEmpty, records, fields, colors }:
       {stacks.map((stack) => (
         <section key={stack.key} role="listitem" aria-label={`Stack: ${stack.label}`} className="flex w-[min(18rem,85vw)] shrink-0 flex-col rounded-lg border border-line bg-subtle">
           <div className="flex items-center gap-1.5 px-2.5 py-2">
-            {stack.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: paletteColor(stack.color).bg }} />}
+            {stack.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatchColor(stack.color) }} />}
             <h3 className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">{stack.label}</h3>
             <span className="text-xs tabular-nums text-muted" aria-label={`${stack.records.length} cards`}>
               {stack.records.length}

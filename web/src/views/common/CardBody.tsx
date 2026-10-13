@@ -3,7 +3,7 @@ import type { Field, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { paletteColor } from "@/lib/cells/palette";
+import { swatchColor } from "@/lib/cells/palette";
 import { cardTitle, coverUrl, fieldsToShow } from "./cardFields";
 
 export interface CardBodyProps {
@@ -26,7 +26,7 @@ export function CardBody({ record, primary, fields, coverField, coverFit = "cove
   const shown = fieldsToShow(fields, record, format, limit);
   return (
     <>
-      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: paletteColor(color).bg }} />}
+      {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: swatchColor(color) }} />}
       {cover && (
         <div className="overflow-hidden rounded-t-[inherit] bg-subtle" style={{ height: coverHeight }}>
           <img src={cover} alt="" loading="lazy" draggable={false} className={cn("size-full", coverFit === "cover" ? "object-cover" : "object-contain")} />

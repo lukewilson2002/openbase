@@ -22,6 +22,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/bases/{id}/trash", get(base_trash))
         .route("/api/workspaces/{id}/trash", get(workspace_trash))
+        .route("/api/trash/workspaces", get(deleted_workspaces))
         .route("/api/trash/restore", post(restore))
 }
 
@@ -51,6 +52,19 @@ async fn workspace_trash(
             perm::require_workspace(c, &actor, &id, Role::Owner)?;
             trash::list_workspace(c, &id)
         })
+        .await?;
+    Ok(Json(out))
+}
+
+/// The caller's own deleted workspaces (they must be an owner), for restoring.
+async fn deleted_workspaces(
+    State(state): State<AppState>,
+    actor: Actor,
+) -> AppResult<Json<TrashListing>> {
+    actor.require_session()?;
+    let out = state
+        .db
+        .read(move |c| trash::list_deleted_workspaces(c, &actor.user_id))
         .await?;
     Ok(Json(out))
 }

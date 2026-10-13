@@ -2,7 +2,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError, makeSchema, mockApi, renderWithProviders } from "@/test/utils";
-import { TrashButton, TrashDialog } from "./TrashDialog";
+import { TrashButton } from "./TrashButton";
+import { TrashDialog } from "./TrashDialog";
 
 afterEach(() => vi.unstubAllGlobals());
 

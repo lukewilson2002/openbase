@@ -4,36 +4,17 @@
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { keys } from "@/api/keys";
 import type { BaseSchema, TrashItem } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
-import { basePermissions } from "@/base/permissions";
 import { relativeTime } from "@/lib/relativeTime";
-import { trashApi, trashKeys } from "./api";
+import { DEFAULT_RETENTION_DAYS, trashApi, trashKeys } from "./api";
 import { TRASH_KIND_LABELS, groupTrash, trashItemName } from "./groupTrash";
-
-/** Days the server keeps deleted items unless the administrator changed `OPENGRID_TRASH_DAYS`. */
-export const DEFAULT_RETENTION_DAYS = 30;
-
-/** Toolbar button that opens the trash; renders nothing for roles that cannot see it. */
-export function TrashButton({ schema }: { schema: BaseSchema }) {
-  const [open, setOpen] = useState(false);
-  if (!basePermissions.manageTables(schema.role)) return null;
-  return (
-    <>
-      <IconButton label="Trash" onClick={() => setOpen(true)}>
-        <Trash2 aria-hidden className="size-4" />
-      </IconButton>
-      {open && <TrashDialog open={open} onOpenChange={setOpen} schema={schema} />}
-    </>
-  );
-}
 
 function where(item: TrashItem, schema: BaseSchema): string | null {
   if (!item.table_id) return null;

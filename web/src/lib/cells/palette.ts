@@ -41,6 +41,17 @@ export function ratingColor(name: string): string {
   return name.endsWith("_dark") ? e.bg : e.fg;
 }
 
+/**
+ * A colour for small marks (the dot of a stack or lane, the bar at the edge of a coloured row).
+ * The light palette entries are chip backgrounds, far too pale for a 10 px dot on a white or grey
+ * surface (about 1.3:1); mixing in the chip text colour gives at least 3:1 against the light and
+ * the dark surfaces. The `_dark` entries are saturated already.
+ */
+export function swatchColor(name: string | undefined): string {
+  const e = paletteColor(name);
+  return name?.endsWith("_dark") ? e.bg : mixColors(e.bg, e.fg, 0.55);
+}
+
 /** Mix `fg` over `bg` by `amount` (0..1); both are `#rrggbb`. */
 export function mixColors(bg: string, fg: string, amount: number): string {
   const parse = (c: string): [number, number, number] => {

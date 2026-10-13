@@ -389,3 +389,43 @@ async fn admin_can_reset_lost_2fa() {
     assert_eq!(res.body["two_factor_required"], false);
     app.get(&client, "/api/auth/me").await.assert_status(200);
 }
+
+#[tokio::test]
+async fn enabling_2fa_signs_out_the_other_sessions_but_keeps_this_one() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    // A second browser signed in earlier (say, with a stolen password).
+    let (res, other) = app.login("a@example.com", PW).await;
+    res.assert_status(200);
+    app.get(&other, "/api/auth/me").await.assert_status(200);
+    assert_eq!(
+        app.get(&user, "/api/auth/sessions")
+            .await
+            .body
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // API tokens are not sessions; they keep working.
+    let token = app
+        .post(&user, "/api/tokens", json!({"name": "ci", "write": true}))
+        .await;
+    token.assert_status(201);
+
+    enable_2fa(&app, &user).await;
+
+    // The session that turned 2FA on survives, the other one is gone.
+    app.get(&user, "/api/auth/me").await.assert_status(200);
+    app.get(&other, "/api/auth/me").await.assert_status(401);
+    let sessions = app.get(&user, "/api/auth/sessions").await;
+    assert_eq!(sessions.body.as_array().unwrap().len(), 1);
+    assert_eq!(sessions.body[0]["current"], true);
+    let bearer = Client {
+        bearer: token.body["token"].as_str().map(str::to_string),
+        ..Default::default()
+    };
+    app.get(&bearer, "/api/tokens/whoami")
+        .await
+        .assert_status(200);
+}

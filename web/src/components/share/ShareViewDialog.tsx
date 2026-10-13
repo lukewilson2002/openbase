@@ -24,23 +24,12 @@ import { Field, Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast";
-import { atLeast } from "@/lib/roles";
 import { formatDateTime } from "@/lib/format";
 import { publicLink, sharePasswordProblem } from "@/lib/shareLinks";
 import { liveEntries, publicStatus } from "@/lib/forms/formConfig";
+import { MAX_SHARES_PER_VIEW, canShareView, shareKindOf } from "./shareView";
 
-/** At most this many links per view (`MAX_SHARES_PER_VIEW` on the server). */
-export const MAX_SHARES_PER_VIEW = 20;
-
-/** Whether the person may manage share links of the view (the server enforces it as well). */
-export function canShareView(role: string, view: Pick<View, "personal">): boolean {
-  return atLeast(role, "creator") && !view.personal;
-}
-
-/** The kind of link a view gets: form views are shared as forms, everything else read-only. */
-export function shareKindOf(view: Pick<View, "type">): ShareKind {
-  return view.type === "form" ? "form" : "view";
-}
+export { MAX_SHARES_PER_VIEW, canShareView, shareKindOf };
 
 export interface ShareViewDialogProps {
   open: boolean;

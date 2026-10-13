@@ -8,17 +8,19 @@ import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { HomePage } from "@/pages/HomePage";
-import { InvitePage } from "@/pages/InvitePage";
 import { LoginPage } from "@/pages/LoginPage";
-import { ForgotPasswordPage, ResetPasswordPage } from "@/pages/PasswordResetPages";
-import { SetupPage } from "@/pages/SetupPage";
-import { SignupPage } from "@/pages/SignupPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
 import { PageSpinner } from "@/components/ui/spinner";
 
 // Rarely visited pages load on demand to keep the first paint small.
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
+// Pages a person meets once (first-run setup, sign-up, an invite, a password reset) stay out of the shell too.
+const SetupPage = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
+const SignupPage = lazy(() => import("@/pages/SignupPage").then((m) => ({ default: m.SignupPage })));
+const InvitePage = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
+const ForgotPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then((m) => ({ default: m.ResetPasswordPage })));
 // Public pages for people without an account: their own chunks, outside the app shell.
 const PublicFormPage = lazy(() => import("@/public/form/PublicFormPage"));
 const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));

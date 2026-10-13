@@ -270,11 +270,90 @@ test("adds and deletes records, with undo", async ({ page }) => {
   await openGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
   await expect(page.getByText("6 records")).toBeVisible();
+  // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
+  await expect.poll(async () => (await rows(page)).length).toBe(6);
   await undo(page);
   await expect(page.getByText("5 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(5);
   await clickCell(page, "name", 4, { right: true });
   await page.getByRole("menuitem", { name: /Delete record/ }).click();
   await expect(page.getByText("4 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(4);
   await undo(page);
   await expect(page.getByText("5 records")).toBeVisible();
+  await expect.poll(async () => (await rows(page)).length).toBe(5);
+});
+
+/**
+ * The marker column's pixels: an 8-bit "ink" map of the marker cell of display row `row`
+ * (0 = first body row; `"summary"` = the pinned summary row at the bottom of the canvas) with the
+ * cell background taken as the colour of its corner pixel. The marker shows a number or nothing
+ * (a checkbox appears only under the pointer, which the helper moves out of the way first).
+ */
+async function markerInk(page: Page, row: number | "summary"): Promise<string> {
+  await page.mouse.move(2, 2);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  return canvas(page).evaluate(
+    (el, args) => {
+      const c = el as HTMLCanvasElement;
+      const scale = c.width / c.getBoundingClientRect().width;
+      const top = args.row === "summary" ? c.getBoundingClientRect().height - args.rowH : args.header + (args.row as number) * args.rowH;
+      const ctx = c.getContext("2d")!;
+      const x0 = Math.round(8 * scale);
+      const w = Math.round((args.markerW - 16) * scale);
+      const y0 = Math.round((top + 5) * scale);
+      const h = Math.round((args.rowH - 10) * scale);
+      const { data } = ctx.getImageData(x0, y0, w, h);
+      const bg = [data[0]!, data[1]!, data[2]!];
+      let out = "";
+      for (let i = 0; i < data.length; i += 4) {
+        const d = Math.abs(data[i]! - bg[0]!) + Math.abs(data[i + 1]! - bg[1]!) + Math.abs(data[i + 2]! - bg[2]!);
+        out += d > 60 ? "1" : "0";
+      }
+      return out;
+    },
+    { row, rowH: ROW_H, header: HEADER_H, markerW: MARKER_W },
+  );
+}
+const inked = (map: string): boolean => map.includes("1");
+
+test("the marker column numbers the records and leaves the pinned summary row without a number", async ({ page }) => {
+  await openGrid(page);
+  const n = (await rows(page)).length;
+  expect(inked(await markerInk(page, 0)), "record 1 shows its number").toBe(true);
+  expect(inked(await markerInk(page, n - 1)), `record ${n} shows its number`).toBe(true);
+  // Below the last record there is empty space, and the summary row at the bottom: neither has a number.
+  expect(inked(await markerInk(page, n + 1)), "an empty row shows a number").toBe(false);
+  expect(inked(await markerInk(page, "summary")), `the summary row shows "${n + 1}"`).toBe(false);
+});
+
+test("in a grouped view the marker column numbers the records, not the group headers", async ({ page }) => {
+  const view = await post<{ id: string }>(page.request, `/api/tables/${fx.tableId}/views`, {
+    name: "By status",
+    type: "grid",
+    config: { groups: [{ field_id: fx.fields.status, direction: "asc" }] },
+  });
+  const res = await page.request.post(`/api/views/${view.id}/query`, { data: { offset: 0, limit: 100 }, headers: CSRF });
+  const grouped = (await res.json()) as { total: number; groups: { start: number; depth: number }[] };
+  expect(grouped.groups.length).toBeGreaterThan(1);
+  // Display row of record i: the records before it plus the group headers that precede it.
+  const displayRow = (i: number) => i + grouped.groups.filter((g) => g.start <= i).length;
+
+  // Reference glyphs: the same numbers in the ungrouped view.
+  await openGrid(page);
+  const plain: string[] = [];
+  for (let i = 0; i < grouped.total; i++) plain.push(await markerInk(page, i));
+
+  await page.goto(`/base/${fx.baseId}/${fx.tableId}/${view.id}`);
+  await expect(page.getByText(/grouped/)).toBeVisible();
+  await expect(canvas(page)).toBeVisible();
+  for (let i = 0; i < grouped.total; i++) {
+    // Record i + 1 draws the same number as in the plain view: a number, not a (hover-only) checkbox.
+    await expect.poll(() => markerInk(page, displayRow(i)), { message: `marker of record ${i + 1}` }).toBe(plain[i]);
+  }
+  // Group header j sits after its own start records and the j headers before it.
+  for (const [j, g] of grouped.groups.entries()) {
+    expect(inked(await markerInk(page, g.start + j)), `group header ${j} shows a number`).toBe(false);
+  }
+  expect(inked(await markerInk(page, "summary")), "the summary row shows a number").toBe(false);
 });

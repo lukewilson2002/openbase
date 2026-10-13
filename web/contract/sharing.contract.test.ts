@@ -212,11 +212,7 @@ describe("a shared view, seen without an account", () => {
     expectError(await failure(anon.run(() => publicApi.query(link.token, { range: { field_id: secret, from: "2026-03-01", to: "2026-03-31" } }))), 400, "bad_request");
   });
 
-  // KNOWN SERVER BUG (reported, not fixed here: the brief forbids Rust changes): a shared view that
-  // groups by a user field answers group headers whose `key` and `value` are the user's id, although
-  // docs/api.md promises that no user ids ever appear. `it.fails` keeps the suite green while it
-  // documents the gap, and turns red the day the server is fixed, as a reminder to make it a plain `it`.
-  it.fails("groups by a user field without handing out user ids", async () => {
+  it("groups by a user field without handing out user ids", async () => {
     const grouped = await makeView("list", { groups: [{ field_id: owner, direction: "asc" }] });
     const l = await share(grouped, "view");
     const res = parse("PublicQueryResponse", await anon.run(() => publicApi.query(l.token, {})));

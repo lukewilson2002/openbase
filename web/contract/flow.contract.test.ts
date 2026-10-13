@@ -179,6 +179,36 @@ describe("two-factor authentication and sessions", () => {
     expect(sessions.find((s) => s.current)?.ip).toBe(admin.ip);
   });
 
+  it("revokes one session by id (204)", async () => {
+    const sessions = parseList("SessionInfo", await asAdmin(api.auth.sessions));
+    expect(sessions).toHaveLength(3);
+    const others = sessions.filter((s) => !s.current);
+    // Sessions B and C were created before this one; either may be revoked first.
+    const target = others[0]!;
+    const res = await asAdmin(() => api.auth.revokeSession(target.id));
+    expect(res).toBeUndefined();
+    expect(admin.lastStatus).toBe(204);
+    expectError(await failure(asAdmin(() => api.auth.revokeSession(target.id))), 404, "not_found");
+    expectError(await failure(asAdmin(() => api.auth.revokeSession("not-a-session-id"))), 404, "not_found");
+    expect(parseList("SessionInfo", await asAdmin(api.auth.sessions))).toHaveLength(2);
+  });
+
+  it("revokes all other sessions ({ok: true}) and keeps the current one", async () => {
+    const res = parse("OkResponse", await asAdmin(api.auth.revokeOtherSessions));
+    expect(res).toEqual({ ok: true });
+    const after = parseList("SessionInfo", await asAdmin(api.auth.sessions));
+    expect(after).toHaveLength(1);
+    expect(after[0]?.current).toBe(true);
+    for (const jar of [adminB, adminC]) expectError(await failure(as(jar, api.auth.me)), 401, "unauthorized");
+  });
+
+  it("opens another session (B) that turning on two-factor must sign out", async () => {
+    const res = parse("LoginResponse", await as(adminB, () => api.auth.login({ email: adminEmail, password: adminPassword })));
+    expect(res.user?.id).toBe(adminId);
+    expect(parse("User", await as(adminB, api.auth.me)).id).toBe(adminId);
+    expect(parseList("SessionInfo", await asAdmin(api.auth.sessions))).toHaveLength(2);
+  });
+
   it("sets up two-factor and returns the secret and otpauth URL", async () => {
     const setup = parse("TwoFactorSetup", await asAdmin(api.auth.twoFactorSetup));
     expect(setup.secret).toMatch(/^[A-Z2-7]{16,}$/);
@@ -195,6 +225,11 @@ describe("two-factor authentication and sessions", () => {
     expect(user.totp_enabled).toBe(true);
     expect(user.id).toBe(adminId);
     expectError(await failure(asAdmin(api.auth.twoFactorSetup)), 409, "conflict");
+    // Enabling signs out the user's other sessions and keeps the one that did it.
+    expectError(await failure(as(adminB, api.auth.me)), 401, "unauthorized");
+    const after = parseList("SessionInfo", await asAdmin(api.auth.sessions));
+    expect(after).toHaveLength(1);
+    expect(after[0]?.current).toBe(true);
   });
 
   it("asks for the second step at login and completes it", async () => {
@@ -220,29 +255,6 @@ describe("two-factor authentication and sessions", () => {
     expectError(await failure(as(replay, () => api.auth.login2fa(usedCode))), 401, "invalid_code");
     // Without a pending session the second step reports that the sign-in expired.
     expectError(await failure(asAnon(() => api.auth.login2fa(usedCode))), 401, "two_factor_expired");
-  });
-
-  it("revokes one session by id (204)", async () => {
-    const sessions = parseList("SessionInfo", await asAdmin(api.auth.sessions));
-    expect(sessions).toHaveLength(3);
-    const others = sessions.filter((s) => !s.current);
-    // Sessions B and C were created before this one; either may be revoked first.
-    const target = others[0]!;
-    const res = await asAdmin(() => api.auth.revokeSession(target.id));
-    expect(res).toBeUndefined();
-    expect(admin.lastStatus).toBe(204);
-    expectError(await failure(asAdmin(() => api.auth.revokeSession(target.id))), 404, "not_found");
-    expectError(await failure(asAdmin(() => api.auth.revokeSession("not-a-session-id"))), 404, "not_found");
-    expect(parseList("SessionInfo", await asAdmin(api.auth.sessions))).toHaveLength(2);
-  });
-
-  it("revokes all other sessions ({ok: true}) and keeps the current one", async () => {
-    const res = parse("OkResponse", await asAdmin(api.auth.revokeOtherSessions));
-    expect(res).toEqual({ ok: true });
-    const after = parseList("SessionInfo", await asAdmin(api.auth.sessions));
-    expect(after).toHaveLength(1);
-    expect(after[0]?.current).toBe(true);
-    for (const jar of [adminB, adminC]) expectError(await failure(as(jar, api.auth.me)), 401, "unauthorized");
   });
 });
 

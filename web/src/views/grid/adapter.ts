@@ -113,8 +113,11 @@ export interface GridAdapterProps {
   freezeColumns: number;
   /** Show a pinned summary row after the data (the host supplies its cells through `getCell`). */
   showSummary: boolean;
-  /** Show row numbers (off when group headers are interleaved, which would skew the numbering). */
-  showRowNumbers: boolean;
+  /**
+   * The number the row marker column shows in a display row: the record's position in the view,
+   * or null for rows that are not records (group headers, the summary row), which show nothing.
+   */
+  rowNumber(row: number): number | null;
   /** Highlight this text inside cells (search). */
   searchTerm: string;
   dark: boolean;

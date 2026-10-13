@@ -10,7 +10,7 @@ import type { Field, GroupHeader, Sort, TableRecord } from "@/api/types";
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { cn } from "@/lib/cn";
 import { isSortable } from "@/components/viewbar/config";
-import { paletteColor } from "@/lib/cells/palette";
+import { swatchColor } from "@/lib/cells/palette";
 import { PublicCell } from "./PublicCell";
 import { layoutRows } from "./tableRows";
 
@@ -41,7 +41,7 @@ const Row = memo(function Row({ record, fields, widths, color }: { record: Table
         <td
           key={f.id}
           className={cn("overflow-hidden px-2.5 py-1.5", i === 0 && "sticky left-0 z-[1] border-r border-line bg-surface font-medium")}
-          style={{ width: widths[f.id] ?? DEFAULT_WIDTH, maxWidth: widths[f.id] ?? DEFAULT_WIDTH, ...(i === 0 && color ? { boxShadow: `inset 4px 0 0 ${paletteColor(color).bg}` } : {}) }}
+          style={{ width: widths[f.id] ?? DEFAULT_WIDTH, maxWidth: widths[f.id] ?? DEFAULT_WIDTH, ...(i === 0 && color ? { boxShadow: `inset 4px 0 0 ${swatchColor(color)}` } : {}) }}
         >
           <PublicCell field={f} value={record.values[f.id] ?? null} compact className="line-clamp-4 text-[0.8125rem]" markdown={false} />
         </td>

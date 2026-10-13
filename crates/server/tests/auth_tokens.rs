@@ -296,3 +296,44 @@ async fn deactivated_user_is_locked_out_immediately() {
         .assert_status(200);
     app.get(&user, "/api/auth/me").await.assert_status(401);
 }
+
+#[tokio::test]
+async fn last_used_at_is_stamped_at_most_once_a_minute() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "Ann");
+    let (token, _) = create_token(&app, &user, json!({"name": "ci", "write": true})).await;
+    let stamp = || app.query_i64("SELECT last_used_at FROM api_tokens", &[]);
+    let set = |ms_ago: i64| {
+        app.state
+            .db
+            .write_sync(move |tx| {
+                tx.execute(
+                    "UPDATE api_tokens SET last_used_at = ?1",
+                    [opengrid::db::now_ms() - ms_ago],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    };
+    let t = bearer(&token);
+
+    // The first use stamps the token.
+    app.get(&t, "/api/tokens/whoami").await.assert_status(200);
+    assert!(stamp() > 0);
+
+    // A use within the minute leaves the stamp alone (no write on the single writer).
+    set(10_000);
+    let before = stamp();
+    app.get(&t, "/api/tokens/whoami").await.assert_status(200);
+    assert_eq!(
+        stamp(),
+        before,
+        "a use 10 seconds after the last stamp wrote again"
+    );
+
+    // A use after the minute refreshes it.
+    set(120_000);
+    let stale = stamp();
+    app.get(&t, "/api/tokens/whoami").await.assert_status(200);
+    assert!(stamp() > stale + 100_000, "a stale stamp was not refreshed");
+}

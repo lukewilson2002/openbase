@@ -91,17 +91,22 @@ OPENGRID_E2E=1 npm run e2e
 
 `e2e/globalSetup.ts` builds the web client, builds the server with `web/dist` embedded at compile time
 (`--features debug-embed`), starts it on a temporary data directory and a free port, and checks that it serves
-the app with `web/dist` moved away. The projects run in order on that one instance: `smoke` (the embedded
-build loads `/` without console errors or CSP violations), `journey` (first-run setup, workspace and base, rename a
-table, add number / single select / date / formula fields through the dialog, add records and edit cells,
-filter and sort, expanded record and a comment, log out and in), `grid` (`grid.spec.ts`: cell editing,
-undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records) and `sharing`
-(`sharing.spec.ts`: build, share and anonymously submit a form in a fresh cookie-less browser context, a
-password-protected grid share that hides a field, CSV download and import, a viewer sorting a board). Every test
-filter and sort, expanded record and a comment, log out and in) and `grid` (`grid.spec.ts`: cell editing,
-undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records). The last project, `automations` (`automations.spec.ts`), builds "record created in Table 1 -> create a record in
-Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, and checks through the API
-and the Runs tab that it ran; it then runs it for real from the Test panel. Every test
+the app with `web/dist` moved away. The projects share that one instance and run in a chain
+(`playwright.config.ts`; `workers: 1`, so one at a time):
+
+| Project | Spec | Depends on | Covers |
+|---|---|---|---|
+| `smoke` | `smoke.spec.ts` | | the embedded build loads `/` without console errors or CSP violations |
+| `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and base, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
+| `grid` | `grid.spec.ts` | journey | cell editing, undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
+| `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
+| `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
+| `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
+
+`sharing`, `automations` and `views` each sign up their own user (the server started by globalSetup allows
+signup) and seed their own workspace, so they only need the instance to be set up and do not depend on each
+other's data; they all hang off `grid` only to keep the order fixed on the shared server (a new spec is a
+new line in `playwright.config.ts`, or it never runs). Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
 are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
@@ -159,7 +164,7 @@ All five get `{schema, table, view, role}`, are lazy chunks registered in `views
 
 - **Kanban** stacks by single select, single user or checkbox (`stacks.ts` is pure: bucketing, `stack_order`, drop planning). dnd-kit with pointer and keyboard sensors (Space picks up, arrows move, Space drops, Enter opens). A drop writes the stack field with `typecast` and, only when the view has no sorts, a manual-order move; both are optimistic with rollback.
 - **Gallery** pages the view query by offset (60 per page, IntersectionObserver plus a "Load more" button).
-- **Calendar** runs FullCalendar in its `UTC` mode on wall times, queries only the visible range (padded one day each side) and the viewer's zone, and builds the unscheduled list from a whole-view query with a `transient` filter override (the saved filter plus "start date is empty", `unscheduledTransient` in `eventMath.ts`). FullCalendar's prev/next buttons are text because its icon font is a `data:` URI that the server's CSP blocks.
+- **Calendar** runs FullCalendar in its `UTC` mode on wall times, queries only the visible range (padded one day each side) and the viewer's zone, and builds the unscheduled list from a whole-view query with a `transient` filter override (the saved filter plus "start date is empty", `unscheduledTransient` in `eventMath.ts`). FullCalendar's prev/next buttons are text because its icon font is a `data:` URI that the server's CSP blocks. `calendar/iconFont.ts` also deletes the font's `@font-face` rule from FullCalendar's injected stylesheet, so opening a calendar does not log a CSP violation.
 - **Timeline** (`geometry.ts`, `lanes.ts` are pure; `TimelineChart.tsx` is the DOM): scales day to year, a window that grows as you scroll near an edge, swimlanes, milestones, create by dragging, whole-day drag and resize, and dependency arrows (red when the predecessor ends after the successor starts; a date-only end counts through the end of its day).
 - **List** turns `QueryResponse.groups` into a collapsible outline (`outline.ts`).
 
@@ -200,7 +205,7 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 
 ### Trash and notifications
 
-`components/trash`: `TrashButton` in the base top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
+`components/trash`: `TrashButton` in the base top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). A deleted *workspace* has no trash of its own to open (`GET /api/workspaces/{id}/trash` answers 404 once it is deleted), so the home page lists the caller's own deleted workspaces in "Recently deleted workspaces" (`DeletedWorkspaces`, from `GET /api/trash/workspaces`, owners only) with a Restore button; the section is absent when there are none. `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
 
 ### Automations (`src/automations`)
 
@@ -222,6 +227,30 @@ read run history, but listing automations needs a creator, so editors have no wa
 
 Not in the UI because the server has no endpoint for it: duplicating an automation, previewing the next few run times of a schedule
 (the saved automation's `next_run_at` is shown instead), re-showing a webhook token.
+
+### Bundle
+
+The app shell (`index-*.js` plus the chunks it needs on every page, see `vite build` output) is kept small by loading
+what most visits never use on demand: the grid, the other views, automations, account, admin, the public pages, and the
+dialogs behind a button (`ShareViewDialog`, `ImportCsvDialog`, `NewTableFromCsvDialog`, `TrashDialog`, `SharingDialog`) through
+`React.lazy` wrappers (`Lazy*.tsx`, `TrashButton.tsx`) that render nothing while the chunk loads, plus the one-off account pages (setup,
+sign-up, invite, password reset). Components that decide *whether* to show such a dialog import its small pure helpers instead
+(`components/share/shareView.ts`). Measured on 2026-10-13 after `vite build` (gzip level 9 of the files `index.html` loads: entry, shared chunks
+and CSS; Vite's own report uses a lower level and differs by about 1%): entry chunk 121,137 -> 110,073 bytes, whole initial load 186,200 -> 174,544 bytes. React DOM, the router and TanStack Query are
+most of what is left.
+
+### Grid marker column
+
+Glide draws the marker column (a number that turns into a checkbox on hover) from the display row. `views/grid/glide/marker.ts` wraps
+Glide's marker renderer once so the grid view decides the number instead (`GridAdapterProps.rowNumber`): a record shows its position in the
+view (grouped views count records, not headers), group headers and the pinned summary row show nothing, not even the hover checkbox.
+It depends on Glide 6.0.3 internals (`markerCellRenderer.draw`, `rowMarkers.startIndex` = 1); see the notes in the file.
+
+### Themes
+
+Colours are tokens in `src/styles/index.css` for both themes; the grid canvas mirrors them in `views/grid/glide/theme.ts`, the choice palette in
+`lib/cells/palette.ts`. `src/styles/contrast.test.ts` keeps text on its usual surfaces at WCAG AA (4.5:1) in both themes. Marks (the dot of a
+stack or lane, the bar of a coloured row) use `swatchColor`, because the pale chip backgrounds are about 1.3:1 on a white surface.
 
 ### Conventions
 

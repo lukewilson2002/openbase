@@ -684,6 +684,10 @@ async fn totp_enable(
                 return Err(AppError::bad_request("that code is not valid"));
             }
             users::set_totp(tx, &user.id, Some(secret), true)?;
+            // Sessions opened before the second factor existed (possibly by
+            // someone who only had the password) must not outlive turning it
+            // on; the session making this request stays.
+            session::delete_all_for_user(tx, &user.id, actor.session_hash.as_deref())?;
             audit::record(
                 tx,
                 Some(&user.id),

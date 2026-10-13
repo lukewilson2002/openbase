@@ -6,7 +6,8 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
 import { NameDialog } from "@/components/NameDialog";
-import { SharingDialog } from "@/components/SharingDialog";
+import { SharingDialog } from "@/components/LazySharingDialog";
+import { DeletedWorkspaces } from "@/components/trash/DeletedWorkspaces";
 import { AppPage, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -104,6 +105,7 @@ export function HomePage() {
           ))}
         </div>
       )}
+      {!workspaces.isPending && <DeletedWorkspaces />}
 
       <NameDialog
         open={dialog?.kind === "create-workspace"}
@@ -140,7 +142,7 @@ export function HomePage() {
         open={dialog?.kind === "delete-workspace"}
         onOpenChange={(o) => !o && close()}
         title={`Delete ${dialog?.kind === "delete-workspace" ? dialog.ws.name : "workspace"}?`}
-        description="The workspace and all of its bases move to the trash and can be restored for 30 days."
+        description="The workspace and all of its bases move to the trash. Restore it from “Recently deleted workspaces” on this page for 30 days."
         confirmLabel="Delete workspace"
         destructive
         onConfirm={() => (dialog?.kind === "delete-workspace" ? deleteWorkspace.mutateAsync(dialog.ws.id) : undefined)}

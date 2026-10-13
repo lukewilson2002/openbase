@@ -30,7 +30,7 @@ import type { Field, TableRecord } from "@/api/types";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { paletteColor } from "@/lib/cells/palette";
+import { swatchColor } from "@/lib/cells/palette";
 import { CardBody } from "../common/CardBody";
 import { cardTitle } from "../common/cardFields";
 import { planDrop, type DropPlan, type Stack } from "./stacks";
@@ -213,7 +213,7 @@ interface StackColumnProps extends KanbanBoardProps {
 function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore, activeId, ...p }: StackColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `${STACK_PREFIX}${stack.key}` });
   const isCollapsed = p.collapsed.has(stack.key);
-  const swatch = stack.color ? paletteColor(stack.color).bg : undefined;
+  const swatch = stack.color ? swatchColor(stack.color) : undefined;
   const visible = ids.slice(0, limit);
   if (activeId && ids.includes(activeId) && !visible.includes(activeId)) visible.push(activeId);
   const hidden = ids.length - visible.length;
