@@ -4,6 +4,8 @@ description = "OpenBase core: field types, cell values, formula engine and view 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 rust-version.workspace = true
 
 [features]

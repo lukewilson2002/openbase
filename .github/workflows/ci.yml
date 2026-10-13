@@ -1,0 +1,147 @@
+# Continuous integration: every check the project has, on every pull request and on every push
+# to main. It NEVER publishes anything (no images, no releases, no packages): it only reads the
+# repository. Publishing happens in release.yml, and only for a published GitHub Release.
+#
+# release.yml also calls this workflow (`uses: ./.github/workflows/ci.yml`) so a release runs the
+# very same checks as a pull request; `ref` is then the release tag.
+#
+# Jobs:
+#   checks  scripts/check.sh: rustfmt, clippy -D warnings, the web production build, cargo test,
+#           the generated-file checks (TypeScript bindings, Lucide icon list, brand files),
+#           tsc, Vitest, and the live contract tests (TypeScript client against the real server).
+#           It is the same script developers run locally, so CI cannot drift from it.
+#   e2e     the Playwright end-to-end tests against the real server in Google Chrome.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to check out (the release tag). Empty: the event's own commit."
+        type: string
+        default: ""
+
+# Read-only: nothing in here can write to the repository, packages or releases.
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces a run that is still going. Release runs
+# (workflow_call from release.yml, or a manual run) are never cancelled by anything.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  checks:
+    name: Checks (Rust and web)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # rust-toolchain.toml pins "stable" plus rustfmt, clippy and the wasm32 target. Recent rustup
+      # no longer installs it on first use, so do it explicitly.
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: |
+          rustup toolchain install --profile minimal
+          rustc --version
+          cargo --version
+
+      - name: Cache cargo (registry, target)
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: checks
+          # Only main writes the cache, so pull requests cannot evict it with their own entries.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies (pinned, no install scripts)
+        working-directory: web
+        run: npm ci --ignore-scripts
+
+      - name: scripts/check.sh
+        run: scripts/check.sh
+
+  e2e:
+    name: End-to-end (Playwright, Chrome)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      OPENBASE_E2E: "1"
+      # The tests run in the Google Chrome that GitHub's Ubuntu runners already have installed
+      # ("chrome", as on a developer machine). If a runner image ever stops shipping it, set the
+      # repository variable OPENBASE_E2E_BROWSER to "chromium": this job then downloads
+      # Playwright's own Chromium. Developer machines never download a browser.
+      OPENBASE_E2E_BROWSER: ${{ vars.OPENBASE_E2E_BROWSER || 'chrome' }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install --profile minimal
+
+      - name: Cache cargo (registry, target)
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: e2e
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies (pinned, no install scripts)
+        working-directory: web
+        run: npm ci --ignore-scripts
+
+      - name: Browser
+        working-directory: web
+        run: |
+          if [[ "$OPENBASE_E2E_BROWSER" == "chromium" ]]; then
+            npx playwright install --with-deps chromium
+            echo "Using Playwright's Chromium."
+          else
+            google-chrome --version
+          fi
+
+      # Builds web/dist and the debug server with the client embedded, starts it on a temporary data
+      # directory and drives it (see web/playwright.config.ts and web/e2e/globalSetup.ts).
+      - name: Playwright end-to-end tests
+        working-directory: web
+        run: npm run e2e
+
+      # Playwright keeps a trace, a screenshot and the HTML report for every failed test.
+      - name: Upload Playwright traces and report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

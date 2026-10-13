@@ -496,6 +496,11 @@ Formulas and queries:
 
 ## Reporting a problem
 
-The project has no dedicated security contact or disclosure process yet. Until it
-does, report a vulnerability privately to the maintainer of the repository you
-installed OpenBase from rather than in a public issue.
+Report a vulnerability **privately** with GitHub's private vulnerability reporting:
+<https://github.com/lukewilson2002/openbase/security/advisories/new> (repository
+**Security** tab -> **Report a vulnerability**). Do not open a public issue for it.
+[SECURITY.md](../SECURITY.md) has what to include, what to expect and which versions are
+supported: only the latest minor release gets fixes, shipped as a new release. A fix
+reaches your server when you pull the new image (`docker compose pull && docker compose up -d`)
+or install the new binary; nothing updates itself unless you turn that on
+([upgrading](self-hosting.md#8-upgrading)).

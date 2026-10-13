@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 import { ChatGPTMark, ClaudeMark, OtherClientsMark } from "./AssistantMarks";
 import { ConnectedAppsSection } from "./ConnectedAppsSection";
 
-const DOCS = "https://github.com/openbase/openbase/blob/main/docs/mcp.md";
+const DOCS = "https://github.com/lukewilson2002/openbase/blob/main/docs/mcp.md";
 export const DOCS_ACCESS = `${DOCS}#how-access-works`;
 export const DOCS_CLIENTS = `${DOCS}#set-up-your-client`;
 
