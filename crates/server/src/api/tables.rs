@@ -6,9 +6,10 @@ use axum::routing::{patch, post};
 use axum::{Json, Router};
 use og_core::api::schema::{CreateTable, DuplicateTable, Table, UpdateTable};
 
-use crate::api::schema_support::{ApiJson, OptionalJson, ok, publish_schema};
+use crate::api::schema_support::{OptionalJson, ok, publish_schema};
 use crate::auth::Actor;
 use crate::error::AppResult;
+use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::schema::Touched;

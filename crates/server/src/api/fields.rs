@@ -10,11 +10,12 @@ use og_core::api::schema::{
 };
 use serde_json::{Value as Json2, json};
 
-use crate::api::schema_support::{ApiJson, publish_schema};
+use crate::api::schema_support::publish_schema;
 use crate::auth::Actor;
 use crate::engine::recompute::{self, DEFAULT_MAX_EVALS, Session};
 use crate::engine::write;
 use crate::error::{AppError, AppResult};
+use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::field_kind::{parse_create_field, parse_update_field};

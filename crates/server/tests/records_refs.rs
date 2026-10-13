@@ -352,7 +352,7 @@ async fn the_automations_hook_receives_created_and_edited_records() {
         .await;
     let _ = total;
     write::take_recorded(&f.base_id);
-    f.delete_records(&l.t2, &[&oid]).await.assert_status(200);
+    f.delete_records(&l.t2, &[&oid]).await.assert_status(204);
     assert!(write::take_recorded(&f.base_id).is_empty());
     f.restore_records(&l.t2, &[&oid]).await.assert_status(200);
     assert!(write::take_recorded(&f.base_id).is_empty());

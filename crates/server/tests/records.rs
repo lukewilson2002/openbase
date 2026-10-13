@@ -71,7 +71,7 @@ async fn autonumbers_are_never_reused_after_deletes() {
     let b = f.create(&f.table_id, json!({})).await;
     f.delete_records(&f.table_id, &[sid(&b["id"])])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let c = f.create(&f.table_id, json!({})).await;
     assert_eq!(
         (a["autonumber"].as_i64(), c["autonumber"].as_i64()),
@@ -638,7 +638,7 @@ async fn a_table_holds_at_most_the_maximum_number_of_records() {
     // trashed records do not count: delete one, create one
     f.delete_records(&f.table_id, &["recfill5"])
         .await
-        .assert_status(200);
+        .assert_status(204);
     f.create(&f.table_id, json!({})).await;
     f.restore_records(&f.table_id, &["recfill5"])
         .await
@@ -698,7 +698,7 @@ async fn history_rows_record_old_and_new_values_of_editable_fields() {
     .await;
     f.delete_records(&f.table_id, &[&rid])
         .await
-        .assert_status(200);
+        .assert_status(204);
     f.restore_records(&f.table_id, &[&rid])
         .await
         .assert_status(200);
@@ -745,7 +745,7 @@ async fn update_errors() {
     // trashed record cannot be edited
     f.delete_records(&f.table_id, &[aid])
         .await
-        .assert_status(200);
+        .assert_status(204);
     f.patch_as(&f.owner, &f.table_id, aid, json!({ &f.primary_id: "x" }))
         .await
         .assert_status(404);
@@ -794,8 +794,8 @@ async fn delete_is_soft_and_restore_brings_the_record_back() {
     let b = f.create(&f.table_id, json!({ &f.primary_id: "b" })).await;
     let (aid, bid) = (sid(&a["id"]), sid(&b["id"]));
     let r = f.delete_records(&f.table_id, &[aid]).await;
-    r.assert_status(200);
-    assert_eq!(r.body["ids"], json!([aid]));
+    r.assert_status(204);
+    assert!(r.bytes.is_empty(), "a delete has no body");
     assert!(f.columns(aid).4.is_some(), "deleted_at set, row kept");
     assert_eq!(f.record_data(aid)[&f.primary_id], "a", "data is kept");
     assert_eq!(f.order(&f.table_id), [bid.to_string()]);
@@ -837,8 +837,8 @@ async fn deleting_several_records_is_all_or_nothing() {
     assert!(f.columns(aid).4.is_none());
     // duplicates in the request are fine
     let r = f.delete_records(&f.table_id, &[aid, aid]).await;
-    r.assert_status(200);
-    assert_eq!(r.body["ids"], json!([aid]));
+    r.assert_status(204);
+    assert!(f.columns(aid).4.is_some());
 }
 
 #[tokio::test]
@@ -851,7 +851,7 @@ async fn trash_endpoint_restores_a_record_through_the_write_engine() {
             .await;
     let (cid, oid) = (sid(&cust["id"]).to_string(), sid(&order["id"]).to_string());
     assert_eq!(l.f.value(&l.t1, &cid, sid(&n["id"])).await, 1);
-    l.f.delete_records(&l.t2, &[&oid]).await.assert_status(200);
+    l.f.delete_records(&l.t2, &[&oid]).await.assert_status(204);
     assert!(
         l.f.value(&l.t1, &cid, sid(&n["id"])).await.is_null()
             || l.f.value(&l.t1, &cid, sid(&n["id"])).await == 0
@@ -938,7 +938,7 @@ async fn records_are_created_at_the_end_or_after_a_given_record() {
         .assert_status(400);
     f.delete_records(&f.table_id, &[&ids[0]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     f.app
         .post(
             &f.owner,
@@ -947,6 +947,174 @@ async fn records_are_created_at_the_end_or_after_a_given_record() {
         )
         .await
         .assert_status(400);
+}
+
+#[tokio::test]
+async fn records_can_be_created_before_a_given_record() {
+    let f = Fixture::new().await;
+    let ids = five(&f).await;
+    let url = records_url(&f.table_id);
+    let new_ids = |r: &crate::common::Response| -> Vec<String> {
+        r.body["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| sid(&r["id"]).to_string())
+            .collect()
+    };
+    // before a record in the middle: the new ones keep their request order
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": {} }, { "values": {} } ], "before_record_id": ids[2] }),
+        )
+        .await;
+    r.assert_status(201);
+    let new = new_ids(&r);
+    let expected: Vec<String> = [
+        &ids[0], &ids[1], &new[0], &new[1], &ids[2], &ids[3], &ids[4],
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    assert_eq!(f.order(&f.table_id), expected);
+    // before the very first record
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": {} } ], "before_record_id": ids[0] }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(f.order(&f.table_id)[0], new_ids(&r)[0]);
+    // both anchors: rejected, nothing written
+    let before = f.order(&f.table_id);
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": {} } ],
+                    "before_record_id": ids[1], "after_record_id": ids[2] }),
+        )
+        .await;
+    r.assert_status(400);
+    assert_eq!(r.body["error"]["code"], "bad_request");
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not both")
+    );
+    assert_eq!(f.order(&f.table_id), before);
+    // unknown or trashed anchors are rejected
+    f.app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": {} } ], "before_record_id": "recNOPE" }),
+        )
+        .await
+        .assert_status(400);
+    f.delete_records(&f.table_id, &[&ids[4]])
+        .await
+        .assert_status(204);
+    f.app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": {} } ], "before_record_id": ids[4] }),
+        )
+        .await
+        .assert_status(400);
+    // placing is the same for every writer of the engine: values still apply
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "records": [ { "values": { &f.primary_id: "first" } } ],
+                    "before_record_id": ids[1] }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["records"][0]["values"][&f.primary_id], "first");
+}
+
+#[tokio::test]
+async fn repeated_insertion_before_a_record_never_runs_out_of_room() {
+    let f = Fixture::new().await;
+    let ids = five(&f).await;
+    let mut inserted = Vec::new();
+    for _ in 0..70 {
+        let r = f
+            .app
+            .post(
+                &f.owner,
+                &records_url(&f.table_id),
+                json!({ "records": [ { "values": {} } ], "before_record_id": ids[1] }),
+            )
+            .await;
+        r.assert_status(201);
+        inserted.push(sid(&r.body["records"][0]["id"]).to_string());
+    }
+    let expected: Vec<String> = std::iter::once(ids[0].clone())
+        .chain(inserted.iter().cloned())
+        .chain(ids[1..].iter().cloned())
+        .collect();
+    assert_eq!(f.order(&f.table_id), expected);
+}
+
+#[tokio::test]
+async fn write_responses_follow_the_api_conventions() {
+    let f = Fixture::new().await;
+    let ids = five(&f).await;
+    let url = records_url(&f.table_id);
+
+    // delete: 204 and no body; the batch is all-or-nothing.
+    let r = f.delete_records(&f.table_id, &[&ids[0], &ids[1]]).await;
+    r.assert_status(204);
+    assert!(r.bytes.is_empty());
+    assert_eq!(f.order(&f.table_id), ids[2..].to_vec());
+
+    // restore: RecordsResponse with the restored records, in request order.
+    let r = f.restore_records(&f.table_id, &[&ids[1], &ids[0]]).await;
+    r.assert_status(200);
+    let got: Vec<&str> = r.body["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| sid(&x["id"]))
+        .collect();
+    assert_eq!(got, [ids[1].as_str(), ids[0].as_str()]);
+    assert_eq!(r.body["records"][0]["values"][&f.primary_id], "r1");
+    assert_eq!(r.body["records"][0]["table_id"], f.table_id);
+
+    // move: RecordsResponse with the moved records, in the order requested
+    // (duplicates collapse), reflecting their new place in the table.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &format!("{url}/move"),
+            json!({ "ids": [ids[4], ids[3], ids[4]], "before_id": ids[0] }),
+        )
+        .await;
+    r.assert_status(200);
+    let got: Vec<&str> = r.body["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| sid(&x["id"]))
+        .collect();
+    assert_eq!(got, [ids[4].as_str(), ids[3].as_str()]);
+    assert_eq!(r.body["records"][0]["values"][&f.primary_id], "r4");
+    assert_eq!(f.order(&f.table_id)[..2], [ids[4].clone(), ids[3].clone()]);
+    assert!(r.body.get("ok").is_none(), "no more {{ok: true}} bodies");
 }
 
 #[tokio::test]
@@ -1077,7 +1245,7 @@ async fn move_errors_and_effects() {
     // trashed records cannot be moved
     f.delete_records(&f.table_id, &[&ids[1]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     f.app
         .post(
             &f.owner,
@@ -1116,7 +1284,7 @@ async fn events_are_published_after_commit_one_per_table() {
     assert!(rx.try_recv().is_err());
     f.delete_records(&f.table_id, &[&aid])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert!(matches!(
         rx.try_recv().unwrap().event,
         og_core::api::events::BaseEvent::RecordsChanged { ref deleted, .. } if deleted.as_slice() == std::slice::from_ref(&aid)
@@ -1169,7 +1337,7 @@ async fn role_matrix_for_record_writes() {
         let who = f.member(&format!("{}-role@example.com", role.as_str()), role);
         let can_write = role >= Role::Editor;
         let expect = if can_write {
-            [201, 200, 200]
+            [201, 200, 204]
         } else {
             [403, 403, 403]
         };
@@ -1207,7 +1375,7 @@ async fn role_matrix_for_record_writes() {
         } else {
             f.delete_records(&f.table_id, &[&tid])
                 .await
-                .assert_status(200);
+                .assert_status(204);
             let r = f
                 .app
                 .post(&who, &format!("{url}/restore"), json!({ "ids": [tid] }))

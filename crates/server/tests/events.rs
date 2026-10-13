@@ -6,183 +6,17 @@ mod common;
 mod query_support;
 mod records_support;
 mod schema_support;
+mod sse_support;
 
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
-use common::{Client, TestApp};
-use http_body_util::BodyExt;
+use axum::http::{StatusCode, header};
+use common::Client;
 use og_core::api::events::BaseEvent;
 use opengrid::perm::Role;
 use query_support::*;
 use serde_json::{Value, json};
-use tower::ServiceExt;
-
-/// Short keep-alive and access re-check intervals for every test here.
-fn fast() {
-    opengrid::api::events::set_timing_for_tests(
-        Duration::from_millis(200),
-        Duration::from_millis(150),
-    );
-}
-
-struct Opened {
-    status: StatusCode,
-    headers: axum::http::HeaderMap,
-    error: Value,
-    stream: Option<Stream>,
-}
-
-/// One parsed SSE message.
-#[derive(Debug, Clone, PartialEq)]
-struct Msg {
-    comment: Option<String>,
-    event: Option<String>,
-    data: Option<String>,
-}
-
-struct Stream {
-    body: Body,
-    buf: String,
-}
-
-async fn open(app: &TestApp, client: &Client, base_id: &str) -> Opened {
-    fast();
-    let mut req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/bases/{base_id}/events"))
-        .header(header::ACCEPT, "text/event-stream");
-    if let Some(c) = &client.cookie {
-        req = req.header(
-            header::COOKIE,
-            format!("{}={}", opengrid::auth::SESSION_COOKIE, c),
-        );
-    }
-    if let Some(t) = &client.bearer {
-        req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
-    }
-    let res = app
-        .router
-        .clone()
-        .oneshot(req.body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    let status = res.status();
-    let headers = res.headers().clone();
-    if status != StatusCode::OK {
-        let bytes = res.into_body().collect().await.unwrap().to_bytes();
-        return Opened {
-            status,
-            headers,
-            error: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-            stream: None,
-        };
-    }
-    Opened {
-        status,
-        headers,
-        error: Value::Null,
-        stream: Some(Stream {
-            body: res.into_body(),
-            buf: String::new(),
-        }),
-    }
-}
-
-impl Opened {
-    fn stream(self) -> Stream {
-        assert_eq!(self.status, StatusCode::OK, "{}", self.error);
-        self.stream.expect("stream")
-    }
-}
-
-fn parse(block: &str) -> Msg {
-    let mut msg = Msg {
-        comment: None,
-        event: None,
-        data: None,
-    };
-    for line in block.lines() {
-        if let Some(c) = line.strip_prefix(':') {
-            msg.comment = Some(c.trim().to_string());
-        } else if let Some(e) = line.strip_prefix("event:") {
-            msg.event = Some(e.trim().to_string());
-        } else if let Some(d) = line.strip_prefix("data:") {
-            msg.data = Some(d.trim().to_string());
-        }
-    }
-    msg
-}
-
-impl Stream {
-    /// The next message, or None when the stream ended; Err on timeout.
-    async fn next_msg(&mut self, within: Duration) -> Result<Option<Msg>, ()> {
-        let deadline = tokio::time::Instant::now() + within;
-        loop {
-            if let Some(i) = self.buf.find("\n\n") {
-                let block: String = self.buf.drain(..i + 2).collect();
-                return Ok(Some(parse(&block)));
-            }
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-            match tokio::time::timeout(left, self.body.frame()).await {
-                Err(_) => return Err(()),
-                Ok(None) => return Ok(None),
-                Ok(Some(Err(e))) => panic!("body error: {e}"),
-                Ok(Some(Ok(frame))) => {
-                    if let Ok(data) = frame.into_data() {
-                        self.buf.push_str(std::str::from_utf8(&data).unwrap());
-                    }
-                }
-            }
-        }
-    }
-
-    /// The next real event (comments skipped): (event name, data JSON).
-    async fn next_event(&mut self) -> (String, Value) {
-        self.try_event(Duration::from_secs(5))
-            .await
-            .expect("an event within 5s")
-    }
-
-    async fn try_event(&mut self, within: Duration) -> Option<(String, Value)> {
-        let deadline = tokio::time::Instant::now() + within;
-        loop {
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-            match self.next_msg(left).await {
-                Err(()) => return None,
-                Ok(None) => panic!("stream ended while waiting for an event"),
-                Ok(Some(m)) if m.event.is_some() => {
-                    let data: Value = serde_json::from_str(m.data.as_ref().unwrap()).unwrap();
-                    return Some((m.event.unwrap(), data));
-                }
-                Ok(Some(_)) => {}
-            }
-        }
-    }
-
-    /// Wait until the server closes the stream (skipping any events and comments).
-    async fn expect_closed(&mut self, within: Duration) {
-        let deadline = tokio::time::Instant::now() + within;
-        loop {
-            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-            match self.next_msg(left).await {
-                Err(()) => panic!("stream stayed open"),
-                Ok(None) => return,
-                Ok(Some(_)) => {}
-            }
-        }
-    }
-
-    /// Assert that no event (comments aside) arrives for `quiet`.
-    async fn expect_quiet(&mut self, quiet: Duration) {
-        if let Some(ev) = self.try_event(quiet).await {
-            panic!("unexpected event {ev:?}");
-        }
-    }
-}
-
-const SOON: Duration = Duration::from_secs(5);
+use sse_support::*;
 
 // ------------------------------------------------------------------ basics
 
@@ -258,7 +92,7 @@ async fn updates_and_deletes_are_reported_per_table() {
     assert_eq!(data["event"]["updated"], json!([id]));
     f.delete_records(&f.table_id, &[&id])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let (_, data) = s.next_event().await;
     assert_eq!(data["event"]["deleted"], json!([id]));
 }

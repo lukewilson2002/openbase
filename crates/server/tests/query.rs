@@ -36,7 +36,7 @@ async fn returns_live_records_in_manual_order_with_the_full_value_map() {
     // Trashed records disappear from queries and totals.
     p.f.delete_records(&p.f.table_id, &[&p.ids[1]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let resp = p.f.query(json!({})).await;
     assert_eq!(resp["total"], 4);
     assert!(!rec_ids(&resp).contains(&p.ids[1]));
@@ -1115,7 +1115,7 @@ async fn trashing_and_restoring_records_invalidates_the_cache() {
     assert_eq!(p.f.query(json!({})).await["total"], 5);
     p.f.delete_records(&p.f.table_id, &[&p.ids[0]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert_eq!(p.f.query(json!({})).await["total"], 4);
     p.f.restore_records(&p.f.table_id, &[&p.ids[0]])
         .await
@@ -1249,7 +1249,7 @@ async fn trashed_linked_records_are_hidden_from_values_and_filters() {
     // Trash Globex: order-2 keeps only Acme, and no longer matches the filter.
     c.f.delete_records(&c.customers, &[&c.customer_ids[1]])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let resp = c.f.query_view(&view, json!({})).await;
     assert_eq!(resp["total"], 0);
     let all = c.f.new_view(&c.orders, "All", json!({})).await;

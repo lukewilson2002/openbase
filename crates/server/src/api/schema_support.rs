@@ -1,10 +1,9 @@
 //! Helpers shared by the schema-plane handlers (workspaces, bases, tables,
-//! fields, views, trash): a JSON body extractor that fails with the API error
-//! format, the `X-Client-Id` header, event publishing and a few responses.
+//! fields, views, trash): an optional-body JSON extractor, the `X-Client-Id` header, event publishing and a few responses.
 
 use axum::body::Bytes;
 use axum::extract::{FromRequest, Request};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::HeaderMap;
 use og_core::api::events::BaseEvent;
 use serde::de::DeserializeOwned;
 use serde_json::{Value as Json, json};
@@ -16,25 +15,6 @@ use crate::store::schema::Touched;
 
 /// Header clients send so SSE echoes of their own changes can be skipped.
 pub const CLIENT_ID_HEADER: &str = "x-client-id";
-
-/// JSON request body. Unlike `axum::Json`, malformed bodies produce the
-/// standard `{"error": {...}}` response.
-pub struct ApiJson<T>(pub T);
-
-impl<S, T> FromRequest<S> for ApiJson<T>
-where
-    T: DeserializeOwned,
-    S: Send + Sync,
-{
-    type Rejection = AppError;
-
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::Json::<T>::from_request(req, state).await {
-            Ok(axum::Json(v)) => Ok(ApiJson(v)),
-            Err(rej) => Err(json_rejection(rej)),
-        }
-    }
-}
 
 /// JSON request body that may be omitted entirely (empty body = defaults).
 pub struct OptionalJson<T>(pub T);
@@ -56,18 +36,6 @@ where
         serde_json::from_slice(&bytes)
             .map(OptionalJson)
             .map_err(|e| AppError::bad_request(format!("invalid JSON body: {e}")))
-    }
-}
-
-fn json_rejection(rej: axum::extract::rejection::JsonRejection) -> AppError {
-    match rej.status() {
-        StatusCode::PAYLOAD_TOO_LARGE => {
-            AppError::PayloadTooLarge("request body is too large".into())
-        }
-        StatusCode::UNSUPPORTED_MEDIA_TYPE => {
-            AppError::bad_request("expected a JSON body with Content-Type: application/json")
-        }
-        _ => AppError::bad_request(rej.body_text()),
     }
 }
 

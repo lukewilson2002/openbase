@@ -9,4 +9,9 @@ typecast?: boolean,
 /**
  * Insert after this record in manual order (default: at the end).
  */
-after_record_id?: string | null, };
+after_record_id?: string | null, 
+/**
+ * Insert before this record in manual order. Mutually exclusive with
+ * `after_record_id` (400 if both are given).
+ */
+before_record_id?: string | null, };

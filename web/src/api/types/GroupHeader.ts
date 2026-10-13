@@ -4,7 +4,10 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * One group header in a grouped view. Groups are listed in display order,
  * depth-first; `start` is the index (in the full ordered result) of the
- * first record in the group.
+ * first record in the group and `count` the number of records in it. The
+ * list of headers is **complete on every page** of a query (it never
+ * depends on `offset` / `limit`), so `start` and `count` always refer to
+ * the whole result, not to the page.
  */
 export type GroupHeader = { 
 /**

@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
+use crate::view::{Filter, Sort};
+
 /// A record as returned by the API.
 ///
 /// `values` is keyed by field id and contains every non-empty field,
@@ -72,11 +74,39 @@ pub struct QueryRequest {
     /// user's profile zone, then UTC.
     #[serde(default)]
     pub timezone: Option<String>,
+    /// A one-off filter / sort / group override for this request only; see
+    /// [`TransientConfig`].
+    #[serde(default)]
+    pub transient: Option<TransientConfig>,
+}
+
+/// A request-scoped replacement for parts of a view's saved config, for users
+/// who cannot save the view (viewers of shared views, editors of locked
+/// views). Each part that is present replaces the saved one for this request
+/// only; parts left out keep the saved value. It is validated with the same
+/// rules as saving a view config (unknown fields, operators that do not suit
+/// the field type, level limits) and is never stored. To drop the saved
+/// filter, send a filter without items.
+///
+/// The view query takes it as the `transient` body field; the aggregations
+/// endpoint takes it JSON-encoded in the `transient` query parameter.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct TransientConfig {
+    #[serde(default)]
+    pub filter: Option<Filter>,
+    #[serde(default)]
+    pub sorts: Option<Vec<Sort>>,
+    #[serde(default)]
+    pub groups: Option<Vec<Sort>>,
 }
 
 /// One group header in a grouped view. Groups are listed in display order,
 /// depth-first; `start` is the index (in the full ordered result) of the
-/// first record in the group.
+/// first record in the group and `count` the number of records in it. The
+/// list of headers is **complete on every page** of a query (it never
+/// depends on `offset` / `limit`), so `start` and `count` always refer to
+/// the whole result, not to the page.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct GroupHeader {
@@ -101,7 +131,8 @@ pub struct QueryResponse {
     pub total: usize,
     pub offset: usize,
     pub records: Vec<Record>,
-    /// Empty unless the view groups.
+    /// Empty unless the view groups; otherwise every group of the whole
+    /// result, whatever page was requested.
     #[serde(default)]
     pub groups: Vec<GroupHeader>,
     /// Row colour per record id (only when the view colours rows).
@@ -135,6 +166,10 @@ pub struct CreateRecords {
     /// Insert after this record in manual order (default: at the end).
     #[serde(default)]
     pub after_record_id: Option<String>,
+    /// Insert before this record in manual order. Mutually exclusive with
+    /// `after_record_id` (400 if both are given).
+    #[serde(default)]
+    pub before_record_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -184,6 +219,10 @@ pub struct LinkCandidates {
     pub records: Vec<LinkRef>,
 }
 
+/// Old and new value of one field in a history entry. Link fields are
+/// `[{id, name}]` ([`LinkRef`]) with names resolved when the history is read;
+/// a linked record that is in the trash or gone shows its id as the name.
+/// Other fields hold the canonical stored value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FieldChange {

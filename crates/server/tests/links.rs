@@ -261,7 +261,7 @@ async fn invalid_link_targets_are_rejected_and_nothing_is_written() {
     w.f()
         .delete_records(&w.l.t2, &[&o])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let r = w
         .f()
         .patch_as(&w.f().owner, &w.l.t1, &c, json!({ &w.lid: [o] }))
@@ -360,7 +360,7 @@ async fn trashed_records_vanish_from_reads_but_keep_their_links() {
     w.f()
         .delete_records(&w.l.t2, &[&o1])
         .await
-        .assert_status(200);
+        .assert_status(204);
 
     // stored arrays are untouched on both sides ...
     assert_eq!(w.customers_orders(&c), s(&[&o1, &o2]));
@@ -374,7 +374,7 @@ async fn trashed_records_vanish_from_reads_but_keep_their_links() {
     w.f()
         .delete_records(&w.l.t2, &[&o3])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let rec = w.f().get(&w.l.t1, &c2).await;
     assert!(rec["values"].get(&w.lid).is_none());
     // restore: everything is back, in the original order
@@ -394,7 +394,7 @@ async fn editing_a_link_cell_keeps_the_hidden_trashed_links() {
     w.f()
         .delete_records(&w.l.t2, &[&o2])
         .await
-        .assert_status(200);
+        .assert_status(204);
 
     // the client sees [o1] and sets [o1, o3]; the hidden o2 stays linked
     let r = w.f().set(&w.l.t1, &c, json!({ &w.lid: [o1, o3] })).await;
@@ -416,7 +416,7 @@ async fn editing_a_link_cell_keeps_the_hidden_trashed_links() {
     w.f()
         .delete_records(&w.l.t2, &[&o2])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let r = w.f().set(&w.l.t1, &c, json!({ &w.lid: [] })).await;
     assert!(r["values"].get(&w.lid).is_none());
     assert_eq!(w.customers_orders(&c), s(&[&o2]));
@@ -443,7 +443,7 @@ async fn replacing_a_single_link_drops_a_hidden_trashed_one() {
     let p1 = sid(&f.create(&t2, json!({})).await["id"]).to_string();
     let p2 = sid(&f.create(&t2, json!({})).await["id"]).to_string();
     let a = sid(&f.create(&t1, json!({ &lid: [p1] })).await["id"]).to_string();
-    f.delete_records(&t2, &[&p1]).await.assert_status(200);
+    f.delete_records(&t2, &[&p1]).await.assert_status(204);
     f.set(&t1, &a, json!({ &lid: [p2] })).await;
     // a single link never holds two records, hidden or not
     assert_eq!(stored_ids(&f, &a, &lid), s(&[&p2]));
@@ -476,7 +476,7 @@ async fn deleting_and_restoring_the_linking_record_hides_and_shows_it_for_its_pa
     w.f()
         .delete_records(&w.l.t1, &[&c])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let order = w.f().get(&w.l.t2, &o).await;
     assert!(
         order["values"].get(&w.iid).is_none(),
@@ -521,7 +521,7 @@ async fn a_batch_linking_many_records_to_one_target_stays_consistent() {
     w.f()
         .delete_records(&w.l.t2, &refs)
         .await
-        .assert_status(200);
+        .assert_status(204);
     let rec = w.f().get(&w.l.t1, &c).await;
     assert!(rec["values"].get(&w.lid).is_none());
 }
@@ -534,7 +534,7 @@ async fn a_stale_client_may_resend_a_link_that_was_trashed_since() {
     w.f()
         .delete_records(&w.l.t2, &[&o2])
         .await
-        .assert_status(200);
+        .assert_status(204);
     // the client still believes the customer links [o1, o2] and sends both back
     let r = w.f().set(&w.l.t1, &c, json!({ &w.lid: [o1, o2] })).await;
     assert_eq!(link_ids_of(&r["values"][&w.lid]), s(&[&o1]));
@@ -544,7 +544,7 @@ async fn a_stale_client_may_resend_a_link_that_was_trashed_since() {
     w.f()
         .delete_records(&w.l.t2, &[&o3])
         .await
-        .assert_status(200);
+        .assert_status(204);
     w.f()
         .patch_as(&w.f().owner, &w.l.t1, &c, json!({ &w.lid: [o1, o3] }))
         .await

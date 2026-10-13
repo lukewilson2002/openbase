@@ -146,7 +146,7 @@ async fn check_validates_the_record_and_the_table() {
     let mine = f.create(&t, json!({})).await;
     f.delete_records(&t, &[sid(&mine["id"])])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let r = check(
         &f,
         &t,

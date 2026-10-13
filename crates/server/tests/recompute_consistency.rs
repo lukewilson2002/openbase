@@ -272,7 +272,7 @@ async fn run(seed: u64, steps: usize) {
                 let Some(id) = rng.pick(&live[t]).cloned() else {
                     continue;
                 };
-                f.delete_records(t, &[&id]).await.assert_status(200);
+                f.delete_records(t, &[&id]).await.assert_status(204);
                 live.get_mut(t).unwrap().retain(|x| x != &id);
                 trashed.get_mut(t).unwrap().push(id);
             }
