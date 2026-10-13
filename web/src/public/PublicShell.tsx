@@ -73,7 +73,7 @@ export function PasswordPrompt({ what, invalid, checking, onSubmit }: { what: "f
   };
   return (
     <PublicShell>
-      <form onSubmit={submit} className="mx-auto mt-10 flex w-full max-w-sm flex-col gap-4 rounded-lg border border-line bg-surface p-6 shadow-pop" aria-label="Password required">
+      <form onSubmit={submit} className="mx-auto mt-10 flex w-full max-w-sm flex-col gap-4 rounded-lg border border-line bg-surface p-6 shadow-pop">
         <div className="flex items-center gap-2">
           <Lock aria-hidden className="size-5 text-muted" />
           <h1 className="text-lg">This {what} is password protected</h1>
