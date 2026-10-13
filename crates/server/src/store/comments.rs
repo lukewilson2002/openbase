@@ -113,15 +113,13 @@ pub fn list(conn: &Connection, record_id: &str) -> AppResult<Vec<Comment>> {
 /// One comment with its base and table.
 pub fn get(conn: &Connection, id: &str) -> AppResult<CommentRow> {
     conn.query_row(
-        &format!(
-            "SELECT c.id, c.record_id, c.user_id, u.name, c.body, c.created_at, c.updated_at,
-                    t.base_id, t.id
-             FROM comments c
-             JOIN records r ON r.id = c.record_id
-             JOIN tables t ON t.id = r.table_id
-             LEFT JOIN users u ON u.id = c.user_id
-             WHERE c.id = ?1 AND c.deleted_at IS NULL AND t.deleted_at IS NULL"
-        ),
+        "SELECT c.id, c.record_id, c.user_id, u.name, c.body, c.created_at, c.updated_at,
+                t.base_id, t.id
+         FROM comments c
+         JOIN records r ON r.id = c.record_id
+         JOIN tables t ON t.id = r.table_id
+         LEFT JOIN users u ON u.id = c.user_id
+         WHERE c.id = ?1 AND c.deleted_at IS NULL AND t.deleted_at IS NULL",
         [id],
         |r| {
             Ok(CommentRow {

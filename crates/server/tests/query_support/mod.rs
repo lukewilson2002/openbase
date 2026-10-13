@@ -82,7 +82,7 @@ pub async fn people() -> People {
         .as_array()
         .unwrap()
         .iter()
-        .map(|r| id_of(r))
+        .map(id_of)
         .collect();
     People {
         f,

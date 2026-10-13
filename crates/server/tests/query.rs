@@ -476,10 +476,7 @@ async fn system_fields_are_filterable_and_sortable() {
 #[tokio::test]
 async fn formula_filters_use_the_materialized_value() {
     let p = people().await;
-    let double = id_of(
-        &p.f.formula(&p.f.table_id, "Double", &format!("{{Age}} * 2"))
-            .await,
-    );
+    let double = id_of(&p.f.formula(&p.f.table_id, "Double", "{Age} * 2").await);
     assert_eq!(
         filtered(&p, and(vec![cond(&double, "gt", json!(59))])).await,
         ["Alice", "Carol", "Eve"]
