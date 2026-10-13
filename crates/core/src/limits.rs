@@ -18,6 +18,8 @@ pub const MAX_FILTER_DEPTH: usize = 3;
 pub const MAX_FILTER_CONDITIONS: usize = 100;
 pub const MAX_SORTS: usize = 10;
 pub const MAX_GROUPS: usize = 3;
+/// Longest grid search text, in characters.
+pub const MAX_SEARCH_LEN: usize = 500;
 pub const MAX_PAGE_SIZE: usize = 1_000;
 /// Formula evaluation nesting (function calls / computed field chains).
 pub const MAX_FORMULA_DEPTH: usize = 64;

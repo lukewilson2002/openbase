@@ -5,7 +5,9 @@ use serde_json::json;
 
 use super::*;
 use crate::field::Field;
-use crate::query::{compile_row_color, matches_search, row_color, row_color_compiled};
+use crate::query::{
+    compile_row_color, matches_search, row_color, row_color_compiled, search_needle,
+};
 use crate::view::{ColorRule, Conjunction, Filter, FilterOp, RowColor};
 
 #[test]
@@ -21,7 +23,7 @@ fn search_over_display_text() {
         "r1",
         json!({"fldText": "Quarterly Report", "fldNum": 1234.5, "fldSel": "selBlue", "fldLink": ["recA"], "fldDate": "2026-10-12", "fldCheck": true}),
     );
-    let s = |q: &str| matches_search(&r, &fields, q, &names(), Tz::UTC);
+    let s = |q: &str| matches_search(&r, &fields, &search_needle(q).unwrap(), &names(), Tz::UTC);
     assert!(s(""));
     assert!(s("   "));
     assert!(s("report"));
@@ -38,6 +40,17 @@ fn search_over_display_text() {
     assert!(!matches_search(&r, &only_num, "report", &names(), Tz::UTC));
     assert!(!matches_search(&r, &[], "report", &names(), Tz::UTC));
     assert!(matches_search(&r, &[], "", &names(), Tz::UTC));
+}
+
+#[test]
+fn search_needle_is_normalised_once_and_length_capped() {
+    assert_eq!(search_needle("  MiXeD ").unwrap(), "mixed");
+    assert_eq!(search_needle("   ").unwrap(), "");
+    let ok = "ä".repeat(crate::limits::MAX_SEARCH_LEN);
+    assert!(search_needle(&ok).is_ok());
+    assert!(search_needle(&format!("{ok}x")).is_err());
+    // Surrounding blanks do not count towards the cap.
+    assert!(search_needle(&format!("  {ok}  ")).is_ok());
 }
 
 #[test]

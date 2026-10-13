@@ -64,7 +64,7 @@ use og_core::limits;
 use og_core::query::{
     CompiledFilter, CompiledRowColor, OwnedRow, QueryCtx, Row, aggregate, aggregations_for,
     compile_filter, compile_row_color, group_spans, matches, matches_search, row_color_compiled,
-    sort_rows_with_groups,
+    search_needle, sort_rows_with_groups,
 };
 use og_core::value::Value;
 use og_core::view::{Aggregation, Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
@@ -508,11 +508,9 @@ impl Plan {
             }
             None => (CompiledFilter::match_all(), false, false),
         };
-        let search = req
-            .and_then(|r| r.search.as_deref())
-            .unwrap_or_default()
-            .trim()
-            .to_string();
+        // Lower-cased once here, not per row; also length-capped.
+        let search = search_needle(req.and_then(|r| r.search.as_deref()).unwrap_or_default())
+            .map_err(AppError::bad_request)?;
         let search_fields: Vec<Field> = if search.is_empty() {
             Vec::new()
         } else {
