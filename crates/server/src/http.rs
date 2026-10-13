@@ -34,10 +34,13 @@ pub fn router(state: AppState) -> Router {
         .merge(api)
         .merge(crate::web::router())
         .layer(CompressionLayer::new())
+        // CSP for the React SPA: only same-origin scripts (no inline, no eval, no WASM).
+        // `style-src 'unsafe-inline'` is needed because Radix UI and canvas widgets set
+        // inline styles; `img-src data: blob:` covers generated QR codes and previews.
         .layer(SetResponseHeaderLayer::if_not_present(
             HeaderName::from_static("content-security-policy"),
             HeaderValue::from_static(
-                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
                  img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; \
                  form-action 'self'; object-src 'none'",
             ),

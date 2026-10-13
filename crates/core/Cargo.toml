@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Derive TypeScript bindings for the wire types (see scripts/gen-types.sh).
+ts = ["dep:ts-rs"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -13,6 +17,7 @@ thiserror.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 regex.workspace = true
+ts-rs = { version = "12", optional = true, features = ["serde-json-impl"] }
 
 [dev-dependencies]
 proptest = "1"

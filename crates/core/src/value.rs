@@ -12,6 +12,7 @@ use serde_json::Value as Json;
 /// inference or the lookup target), so stored materialized JSON can be read
 /// back into the right [`Value`] variant (e.g. a date string vs plain text).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ResultType {
     #[default]

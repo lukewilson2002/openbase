@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SetupStatus {
     /// No users exist yet: the next signup creates the administrator.
     pub needs_setup: bool,
@@ -13,6 +14,7 @@ pub struct SetupStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct User {
     pub id: String,
     pub email: String,
@@ -25,6 +27,7 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SignupRequest {
     pub email: String,
     pub name: String,
@@ -34,6 +37,7 @@ pub struct SignupRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
@@ -42,6 +46,7 @@ pub struct LoginRequest {
 /// Login result: either a user (logged in) or a 2FA challenge (a pending
 /// session cookie is set; complete with `POST /api/auth/login/2fa`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LoginResponse {
     #[serde(default)]
     pub user: Option<User>,
@@ -50,11 +55,13 @@ pub struct LoginResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TwoFactorCode {
     pub code: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateMeRequest {
     #[serde(default)]
     pub name: Option<String>,
@@ -64,23 +71,27 @@ pub struct UpdateMeRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct ChangePasswordRequest {
     pub current_password: String,
     pub new_password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct PasswordResetRequest {
     pub email: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct PasswordResetConfirm {
     pub token: String,
     pub new_password: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TwoFactorSetup {
     /// Base32 secret for manual entry.
     pub secret: String,
@@ -89,12 +100,14 @@ pub struct TwoFactorSetup {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TwoFactorDisable {
     pub password: String,
     pub code: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SessionInfo {
     /// Opaque id (a prefix of the token hash), usable with DELETE /api/auth/sessions/{id}.
     pub id: String,
@@ -109,6 +122,7 @@ pub struct SessionInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateTokenRequest {
     pub name: String,
     pub write: bool,
@@ -120,6 +134,7 @@ pub struct CreateTokenRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TokenInfo {
     pub id: String,
     pub name: String,
@@ -135,12 +150,14 @@ pub struct TokenInfo {
 
 /// Returned once at creation; the raw token is never shown again.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreatedToken {
     pub token: String,
     pub info: TokenInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateInviteRequest {
     /// Optional: restrict acceptance to this email and send an email if SMTP is configured.
     #[serde(default)]
@@ -150,6 +167,7 @@ pub struct CreateInviteRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct InviteInfo {
     pub id: String,
     #[serde(default)]
@@ -166,6 +184,7 @@ pub struct InviteInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreatedInvite {
     /// Full URL to share: `<public_url>/invite/<token>`. Shown once.
     pub url: String,
@@ -174,6 +193,7 @@ pub struct CreatedInvite {
 
 /// Public view of an invite (by token) shown on the accept page.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct InvitePreview {
     /// Workspace or base name.
     pub target_name: String,
@@ -186,6 +206,7 @@ pub struct InvitePreview {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AdminUser {
     pub id: String,
     pub email: String,
@@ -199,6 +220,7 @@ pub struct AdminUser {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AdminCreateUser {
     pub email: String,
     pub name: String,
@@ -210,6 +232,7 @@ pub struct AdminCreateUser {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AdminUpdateUser {
     #[serde(default)]
     pub name: Option<String>,
@@ -233,12 +256,14 @@ pub struct AdminCreatedUser {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct ResetLink {
     pub url: String,
     pub expires_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AuditEntry {
     pub id: i64,
     #[serde(default)]
@@ -281,6 +306,7 @@ pub struct WhoAmI {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct InstanceStats {
     pub users: i64,
     pub workspaces: i64,
@@ -294,6 +320,7 @@ pub struct InstanceStats {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct BackupInfo {
     pub name: String,
     pub size: u64,

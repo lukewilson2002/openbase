@@ -33,6 +33,7 @@ use crate::ids::{ChoiceId, FieldId, TableId, ViewId};
 use crate::value::ResultType;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Field {
     pub id: FieldId,
     pub table_id: TableId,
@@ -51,6 +52,7 @@ impl Field {
 
 /// Field type tag without options. Serialized names match [`FieldKind`] tags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     SingleLineText,
@@ -183,6 +185,7 @@ impl FieldType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "type", content = "options", rename_all = "snake_case")]
 pub enum FieldKind {
     SingleLineText(#[serde(default)] TextOptions),
@@ -287,15 +290,23 @@ impl FieldKind {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+// ts-rs would emit `Record<symbol, never>`; JSON object keys are strings.
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, type = "Record<string, never>")
+)]
 pub struct Empty {}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TextOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LongTextOptions {
     /// Render and edit as markdown ("rich text").
     #[serde(default)]
@@ -303,6 +314,7 @@ pub struct LongTextOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct NumberOptions {
     /// Decimal places, 0..=8.
@@ -323,6 +335,7 @@ impl Default for NumberOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct CurrencyOptions {
     pub precision: u8,
@@ -341,6 +354,7 @@ impl Default for CurrencyOptions {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum DurationFormat {
     /// h:mm
@@ -357,12 +371,14 @@ pub enum DurationFormat {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct DurationOptions {
     #[serde(default)]
     pub format: DurationFormat,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct RatingOptions {
     /// 1..=10
@@ -382,6 +398,7 @@ impl Default for RatingOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct CheckboxOptions {
     pub icon: String,
@@ -398,6 +415,7 @@ impl Default for CheckboxOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SelectChoice {
     pub id: ChoiceId,
     pub name: String,
@@ -406,6 +424,7 @@ pub struct SelectChoice {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SelectOptions {
     #[serde(default)]
     pub choices: Vec<SelectChoice>,
@@ -436,6 +455,7 @@ pub const COLORS: [&str; 20] = [
 ];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum DateFormat {
     /// 10/12/2026
@@ -450,6 +470,7 @@ pub enum DateFormat {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum TimeFormat {
     #[default]
@@ -458,6 +479,7 @@ pub enum TimeFormat {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct DateOptions {
     pub include_time: bool,
@@ -470,6 +492,7 @@ pub struct DateOptions {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct LastModifiedOptions {
     /// Only changes to these fields count. Empty = any editable field.
@@ -479,6 +502,7 @@ pub struct LastModifiedOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LinkOptions {
     pub linked_table_id: TableId,
     /// The paired field in the linked table. Every link field has exactly one
@@ -495,6 +519,7 @@ pub struct LinkOptions {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct UserOptions {
     pub multiple: bool,
@@ -504,6 +529,7 @@ pub struct UserOptions {
 
 /// How a computed number/date result is displayed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ValueFormat {
     Number { precision: u8 },
@@ -514,6 +540,7 @@ pub enum ValueFormat {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FormulaOptions {
     /// Source text as the user typed it, with `{Field Name}` references.
     /// The server stores it with references rewritten to `{fldXXXX}` ids and
@@ -527,6 +554,7 @@ pub struct FormulaOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct LookupOptions {
     /// A link field in this table.
     pub link_field_id: FieldId,
@@ -538,6 +566,7 @@ pub struct LookupOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct RollupOptions {
     pub link_field_id: FieldId,
     pub target_field_id: FieldId,
@@ -552,11 +581,13 @@ pub struct RollupOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CountOptions {
     pub link_field_id: FieldId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct ButtonOptions {
     pub label: String,
     /// Formula producing the URL to open. Only http(s) and mailto URLs open.
@@ -565,6 +596,7 @@ pub struct ButtonOptions {
 
 /// Reference to an uploaded file, as stored in an attachment cell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AttachmentRef {
     pub id: String,
     pub filename: String,

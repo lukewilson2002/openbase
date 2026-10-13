@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BaseEvent {
     /// Records were created, updated or deleted (including recomputed
@@ -33,6 +34,7 @@ pub enum BaseEvent {
 /// Wrapper carrying who caused the event, so a client can skip echoes of its
 /// own changes (it sends `X-Client-Id` with every request).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct EventEnvelope {
     pub base_id: String,
     #[serde(default)]

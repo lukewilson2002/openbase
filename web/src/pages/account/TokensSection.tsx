@@ -1,0 +1,149 @@
+import { useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Plus, Trash2 } from "lucide-react";
+import { api } from "@/api/endpoints";
+import { keys } from "@/api/keys";
+import type { CreatedToken, TokenInfo } from "@/api/types";
+import { errorMessage } from "@/api/client";
+import { CopyField } from "@/components/CopyField";
+import { Notice, Section } from "@/components/layouts";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { IconButton } from "@/components/ui/icon-button";
+import { Field, Input, Select } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { formatDate } from "@/lib/format";
+
+export function TokensSection() {
+  const qc = useQueryClient();
+  const tokens = useQuery({ queryKey: keys.tokens, queryFn: api.tokens.list });
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState<CreatedToken | null>(null);
+  const [revoking, setRevoking] = useState<TokenInfo | null>(null);
+  const refresh = () => qc.invalidateQueries({ queryKey: keys.tokens });
+
+  return (
+    <Section
+      title="Personal access tokens"
+      description="Use tokens to call the REST API from scripts and tools. A token acts as you, limited by the scope you choose."
+    >
+      <div className="mb-4">
+        <Button variant="primary" onClick={() => setCreating(true)}>
+          <Plus aria-hidden className="size-4" /> New token
+        </Button>
+      </div>
+      {tokens.isPending ? (
+        <Spinner />
+      ) : tokens.isError ? (
+        <Notice tone="error">{errorMessage(tokens.error)}</Notice>
+      ) : tokens.data.length === 0 ? (
+        <EmptyState icon={<KeyRound />} title="No tokens yet" description="Create a token to use the API." />
+      ) : (
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {tokens.data.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <KeyRound aria-hidden className="size-5 shrink-0 text-muted" />
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="truncate text-[0.8125rem] font-medium">
+                  {t.name}
+                  <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{t.write ? "Read and write" : "Read only"}</span>
+                </p>
+                <p className="text-xs text-muted">
+                  Created {formatDate(t.created_at)} - {t.last_used_at ? `last used ${formatDate(t.last_used_at)}` : "never used"}
+                  {t.expires_at ? ` - expires ${formatDate(t.expires_at)}` : ""}
+                  {t.base_ids ? ` - ${t.base_ids.length} base${t.base_ids.length === 1 ? "" : "s"}` : " - all bases"}
+                </p>
+              </div>
+              <IconButton label={`Revoke ${t.name}`} size="sm" onClick={() => setRevoking(t)}>
+                <Trash2 aria-hidden className="size-4" />
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {creating && (
+        <CreateTokenDialog
+          onClose={() => setCreating(false)}
+          onCreated={(res) => {
+            setCreating(false);
+            setCreated(res);
+            void refresh();
+          }}
+        />
+      )}
+      {created && (
+        <Dialog
+          open
+          onOpenChange={(o) => !o && setCreated(null)}
+          title="Copy your new token"
+          description="This is the only time the token is shown. Store it somewhere safe."
+          footer={
+            <Button variant="primary" onClick={() => setCreated(null)}>
+              Done
+            </Button>
+          }
+        >
+          <CopyField label="API token" value={created.token} />
+        </Dialog>
+      )}
+      <ConfirmDialog
+        open={!!revoking}
+        onOpenChange={(o) => !o && setRevoking(null)}
+        title={`Revoke ${revoking?.name ?? "token"}?`}
+        description="Anything using this token will stop working immediately."
+        confirmLabel="Revoke token"
+        destructive
+        onConfirm={async () => {
+          if (!revoking) return;
+          await api.tokens.revoke(revoking.id);
+          void refresh();
+        }}
+      />
+    </Section>
+  );
+}
+
+function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (t: CreatedToken) => void }) {
+  const [name, setName] = useState("");
+  const [write, setWrite] = useState(false);
+  const [expiry, setExpiry] = useState("");
+  const create = useMutation({
+    mutationFn: () => api.tokens.create({ name: name.trim(), write, base_ids: null, expires_in_days: expiry ? Number(expiry) : null }),
+    onSuccess: onCreated,
+  });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    create.mutate();
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()} title="New personal access token" size="sm">
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
+        <Field label="Name" hint="For example: Zapier, nightly export.">
+          {(ctl) => <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required autoFocus />}
+        </Field>
+        <Checkbox checked={write} onCheckedChange={setWrite} label="Allow writes (otherwise read only)" />
+        <Field label="Expires">
+          {(ctl) => (
+            <Select {...ctl} value={expiry} onChange={(e) => setExpiry(e.target.value)}>
+              <option value="">Never</option>
+              <option value="30">In 30 days</option>
+              <option value="90">In 90 days</option>
+              <option value="365">In 1 year</option>
+            </Select>
+          )}
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" loading={create.isPending} disabled={!name.trim()}>
+            Create token
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}

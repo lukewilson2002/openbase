@@ -12,6 +12,7 @@ use serde_json::Value as Json;
 use crate::ids::FieldId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum ViewType {
     Grid,
@@ -36,6 +37,7 @@ impl ViewType {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum Conjunction {
     #[default]
@@ -45,6 +47,7 @@ pub enum Conjunction {
 
 /// A filter tree. Top level is a group; groups nest (the UI allows 2 levels).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Filter {
     #[serde(default)]
     pub conjunction: Conjunction,
@@ -53,6 +56,7 @@ pub struct Filter {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(untagged)]
 pub enum FilterItem {
     Condition(Condition),
@@ -60,6 +64,7 @@ pub enum FilterItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Condition {
     pub field_id: FieldId,
     pub op: FilterOp,
@@ -71,6 +76,7 @@ pub struct Condition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum FilterOp {
     // generic
@@ -107,6 +113,7 @@ pub enum FilterOp {
 /// Date filter operand. Relative modes are resolved against `now` and the
 /// viewer's timezone at query time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum DateOperand {
     Today,
@@ -133,6 +140,7 @@ pub enum DateOperand {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
     #[default]
@@ -141,6 +149,7 @@ pub enum Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Sort {
     pub field_id: FieldId,
     #[serde(default)]
@@ -148,6 +157,7 @@ pub struct Sort {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum RowHeight {
     #[default]
@@ -158,6 +168,7 @@ pub enum RowHeight {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum Aggregation {
     None,
@@ -184,6 +195,7 @@ pub enum Aggregation {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum RowColor {
     /// Colour each row by the colour of its choice in a single select field.
@@ -193,12 +205,14 @@ pub enum RowColor {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct ColorRule {
     pub color: String,
     pub filter: Filter,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct KanbanConfig {
     /// Single select, user (single) or checkbox field to stack by.
@@ -210,6 +224,7 @@ pub struct KanbanConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct CalendarConfig {
     pub date_field_id: Option<FieldId>,
@@ -218,6 +233,7 @@ pub struct CalendarConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct GalleryConfig {
     pub cover_field_id: Option<FieldId>,
@@ -226,6 +242,7 @@ pub struct GalleryConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct TimelineConfig {
     pub start_field_id: Option<FieldId>,
@@ -238,6 +255,7 @@ pub struct TimelineConfig {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum TimelineScale {
     Day,
@@ -249,6 +267,7 @@ pub enum TimelineScale {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct FormConfig {
     pub title: String,
@@ -262,6 +281,7 @@ pub struct FormConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FormField {
     pub field_id: FieldId,
     #[serde(default)]
@@ -274,6 +294,7 @@ pub struct FormField {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
 pub struct ViewConfig {
     pub filter: Option<Filter>,
