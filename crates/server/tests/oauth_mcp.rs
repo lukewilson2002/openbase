@@ -1313,3 +1313,86 @@ async fn a_full_control_grant_of_an_administrator_cannot_fetch_a_backup_archive(
         .await
         .ok();
 }
+
+/// `/api/v1` takes a personal access token and nothing else, so it cannot work for an app that
+/// connected through OAuth. `api_request` says so up front and `api_reference` marks the area
+/// unavailable instead of offering endpoints that can only answer 401.
+#[tokio::test]
+async fn the_airtable_api_is_not_available_to_oauth_grants_and_says_so() {
+    let w = World::new().await;
+    let grant = w.connect("write", None).await;
+    let pat = w
+        .app
+        .api_token(&w.user, json!({"name": "t", "write": true}))
+        .await;
+
+    for path in [
+        "/api/v1/meta/bases".to_string(),
+        format!("/api/v1/{}/Anything", w.base),
+    ] {
+        let (t, _) = mcp_support::api(
+            &w.app,
+            &grant.bearer(),
+            "GET",
+            &path,
+            Value::Null,
+            Value::Null,
+        )
+        .await;
+        let msg = t.err();
+        assert!(
+            msg.contains("not available to apps connected through OAuth")
+                && msg.contains("personal access token"),
+            "{path}: {msg}"
+        );
+        assert!(!msg.contains("401"), "{msg}");
+    }
+    // A personal access token reaches it through the same tool.
+    let (t, inner) = mcp_support::api(&w.app, &pat, "GET", "/api/v1/meta/bases", Value::Null, Value::Null).await;
+    t.ok();
+    assert_eq!(inner["status"], 200, "{inner}");
+    // The ordinary API is unaffected for the grant.
+    let (t, inner) = mcp_support::api(
+        &w.app,
+        &grant.bearer(),
+        "GET",
+        &format!("/api/bases/{}", w.base),
+        Value::Null,
+        Value::Null,
+    )
+    .await;
+    t.ok();
+    assert_eq!(inner["status"], 200);
+
+    // The reference marks the area, and each of its endpoints, unavailable to the grant only.
+    let reference = |client: Client, area: Value| {
+        let app = &w.app;
+        async move {
+            let args = if area.is_null() { json!({}) } else { json!({"area": area}) };
+            tool(app, &client, "api_reference", args).await
+        }
+    };
+    let all = reference(grant.bearer(), Value::Null).await;
+    let areas = all.ok()["areas"].as_array().unwrap().clone();
+    let airtable = areas.iter().find(|a| a["area"] == "airtable").unwrap();
+    assert_eq!(airtable["available"], false);
+    assert!(airtable["note"].as_str().unwrap().contains("personal access token"));
+    let list = reference(grant.bearer(), json!("airtable")).await;
+    let endpoints = list.ok()["endpoints"].as_array().unwrap().clone();
+    assert!(!endpoints.is_empty());
+    for e in &endpoints {
+        assert_eq!(e["available"], false, "{e}");
+        assert!(e["token_capability"].as_str().unwrap().contains("not available"), "{e}");
+    }
+    let all = reference(pat.clone(), Value::Null).await;
+    let airtable = all.ok()["areas"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["area"] == "airtable")
+        .unwrap()
+        .clone();
+    assert!(airtable.get("available").is_none());
+    let list = reference(pat, json!("airtable")).await;
+    assert!(list.ok()["endpoints"][0].get("available").is_none());
+}

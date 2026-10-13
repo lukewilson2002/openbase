@@ -940,8 +940,8 @@ struct ReferenceArgs {
     area: Option<String>,
 }
 
-async fn api_reference(_ctx: &McpCtx, a: ReferenceArgs) -> ToolResult {
-    match catalogue::reference(a.area.as_deref()) {
+async fn api_reference(ctx: &McpCtx, a: ReferenceArgs) -> ToolResult {
+    match catalogue::reference(a.area.as_deref(), ctx.actor.oauth_grant_id.is_some()) {
         Ok(v) => ToolResult::ok(v),
         Err(e) => ToolResult::error(e),
     }

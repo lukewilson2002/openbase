@@ -1578,15 +1578,32 @@ fn endpoint_json(ep: &Endpoint, detailed: bool) -> Value {
     }
 }
 
+/// What `api_reference` shows as the capability of an `/api/v1` endpoint to a caller that is an
+/// OAuth grant: those endpoints exist, but not for such a caller.
+const AIRTABLE_UNAVAILABLE_FOR_OAUTH: &str =
+    "not available to apps connected through OAuth sign-in (needs a personal access token)";
+
 /// The text of `api_reference`. Without an area: the list of areas with their endpoint lines
 /// would be long, so only the areas are listed; with one, every endpoint of the area in detail.
-pub fn reference(area: Option<&str>) -> Result<Value, String> {
+/// `oauth` is true for a caller that is an OAuth grant: it cannot use `/api/v1` (the
+/// Airtable-compatible API takes a personal access token only), so those endpoints are marked
+/// unavailable instead of being offered as if they worked.
+pub fn reference(area: Option<&str>, oauth: bool) -> Result<Value, String> {
     match area {
         None => {
             let areas: Vec<Value> = AREAS
                 .iter()
                 .map(|(name, what)| {
                     let n = ENDPOINTS.iter().filter(|e| e.area == *name).count();
+                    if oauth && *name == "airtable" {
+                        return json!({
+                            "area": name,
+                            "endpoints": n,
+                            "about": what,
+                            "available": false,
+                            "note": AIRTABLE_UNAVAILABLE_FOR_OAUTH,
+                        });
+                    }
                     json!({"area": name, "endpoints": n, "about": what})
                 })
                 .collect();
@@ -1606,7 +1623,14 @@ pub fn reference(area: Option<&str>) -> Result<Value, String> {
             let list: Vec<Value> = ENDPOINTS
                 .iter()
                 .filter(|e| e.area == name)
-                .map(|e| endpoint_json(e, true))
+                .map(|e| {
+                    let mut v = endpoint_json(e, true);
+                    if oauth && crate::mcp::api::is_airtable_api(e.path) {
+                        v["token_capability"] = json!(AIRTABLE_UNAVAILABLE_FOR_OAUTH);
+                        v["available"] = json!(false);
+                    }
+                    v
+                })
                 .collect();
             if list.is_empty() {
                 let known: Vec<&str> = AREAS.iter().map(|(n, _)| *n).collect();
@@ -1688,16 +1712,16 @@ mod tests {
 
     #[test]
     fn reference_lists_areas_and_endpoints() {
-        let all = reference(None).unwrap();
+        let all = reference(None, false).unwrap();
         assert_eq!(all["areas"].as_array().unwrap().len(), AREAS.len());
-        let records = reference(Some("Records")).unwrap();
+        let records = reference(Some("Records"), false).unwrap();
         let list = records["endpoints"].as_array().unwrap();
         assert!(list.iter().any(|e| e["path"] == "/api/views/{id}/query"));
         assert!(
             list.iter()
                 .all(|e| e["token_capability"].as_str().is_some() && e["min_role"].is_string())
         );
-        let err = reference(Some("nope")).unwrap_err();
+        let err = reference(Some("nope"), false).unwrap_err();
         assert!(err.contains("records"), "{err}");
     }
 
