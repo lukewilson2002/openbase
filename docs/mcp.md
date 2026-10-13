@@ -153,8 +153,8 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_bases` | any | Workspaces and bases the token can reach, with your role on each |
-| `get_base_schema` | any | Tables, fields (id, name, type, options) and views of a base |
+| `list_bases` | any | Workspaces and bases the token can reach, with your role on each and their icons |
+| `get_base_schema` | any | The base's icon, and its tables (with icons), fields (id, name, type, options) and views |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues |
 | `search_records` | any | Case-insensitive text search over all fields |
 | `get_record` | any | One record |
@@ -167,9 +167,9 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_workspaces` | any | Workspaces with your role and their bases |
-| `create_workspace` | manage | New workspace; you become its owner |
-| `rename_workspace` | manage | Rename (owner role) |
+| `list_workspaces` | any | Workspaces (with icons) with your role and their bases |
+| `create_workspace` | manage | New workspace, optionally with an `icon`; you become its owner |
+| `rename_workspace` | manage | Rename and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
 | `list_members` | manage | Members of a workspace or of one base, with roles |
 | `set_member_role` | manage | Change a member's role (a workspace always keeps an owner) |
@@ -182,16 +182,37 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_base` / `rename_base` | write | Create a base in a workspace; rename or restyle it |
-| `duplicate_base` / `delete_base` | manage | Copy a base (records optional); delete to the trash (owner role) |
-| `create_table` / `rename_table` | write | Add a table; rename it or change its description |
-| `duplicate_table` / `delete_table` | write | Copy a table (records optional); delete to the trash |
+| `create_base` / `rename_base` | write | Create a base in a workspace; rename or restyle it (name, colour, `icon`) |
+| `duplicate_base` / `delete_base` | manage | Copy a base (records optional; the copy keeps the icons); delete to the trash (owner role) |
+| `create_table` / `rename_table` | write | Add a table; rename it or change its description or `icon` |
+| `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
 | `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |
 | `delete_field` | write | Delete a field and its dependants to the trash |
 | `set_primary_field` | write | Choose the table's primary field |
 | `check_formula` | write | Parse and type-check a formula and preview it on a record |
 | `field_types` | any | Options and value shape of each field type, with an example |
+| `list_icons` | any | Search the Lucide icon names (`query`, `limit`) that `icon` accepts |
+
+#### Icons
+
+Workspaces, bases and tables can have an icon: a [Lucide](https://lucide.dev) name in
+kebab-case such as `briefcase`, `users` or `chart-column` (the web app's icon picker offers
+the same set). `create_workspace`, `create_base` and `create_table` take an optional `icon`;
+`rename_workspace`, `rename_base` and `rename_table` change it. In those, **leaving `icon` out
+keeps the current icon, a name sets it, and `null` removes it**. The tools keep their
+`rename_*` names (an `update_*` rename would have broken existing agents and prompts); their
+titles and descriptions say that they also change icons.
+
+Unlike the REST API, which only checks that an icon name is well-formed (so an icon from a
+newer web client keeps working), the tools check the name against the list of Lucide icons
+(`crates/server/data/lucide-icons.txt`, generated from the `lucide-react` package by
+`scripts/gen-icons.sh`). An unknown name is refused with suggestions (`Did you mean:
+shopping-cart, ...`); an old name (`home` for `house`) or loose spelling (`Chart Column`) is
+accepted and stored under the canonical name, and the result says so in `note`. `list_icons`
+finds names: every word of `query` has to match a name or an old name (`cart shop` finds
+`shopping-cart`); without a query it lists alphabetically. Icons show in `list_bases`,
+`list_workspaces` and `get_base_schema`.
 
 ### Views
 
