@@ -44,6 +44,10 @@ pub const ORPHAN_GRACE: Duration = Duration::from_secs(24 * 3600);
 
 /// Start the background loop. Call once, from inside the tokio runtime.
 pub fn spawn_all(state: &AppState) {
+    // AUTOMATIONS (W8): the run queue worker has its own loop (it wakes on new
+    // runs and polls every 2 s), so it is started here rather than from `tick`.
+    crate::automations::runner::spawn(state);
+
     let state = state.clone();
     tokio::spawn(async move {
         let mut clock = Clock::default();
