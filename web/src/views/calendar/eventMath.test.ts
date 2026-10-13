@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Field } from "@/api/types";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
-import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, visibleRange, type EventContext } from "./eventMath";
+import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, unscheduledTransient, visibleRange, type EventContext } from "./eventMath";
 
 const name = ALL_FIELDS.single_line_text!;
 const day = (id: string): Field => field("date", { include_time: false, date_format: "iso", time_format: "h24", timezone: null }, { id, name: id });
@@ -98,5 +98,24 @@ describe("dateClickValues and visibleRange", () => {
 
   it("turns FullCalendar's exclusive range into padded inclusive bounds", () => {
     expect(visibleRange(Date.UTC(2026, 1, 23), Date.UTC(2026, 3, 6))).toEqual({ from: "2026-02-22", to: "2026-04-06" });
+  });
+});
+
+describe("unscheduledTransient", () => {
+  const empty = { field_id: "d", op: "is_empty", value: null };
+  const cond = { field_id: "s", op: "is", value: "x" } as const;
+
+  it("is just 'start is empty' when the view has no filter", () => {
+    expect(unscheduledTransient(null, "d")).toEqual({ filter: { conjunction: "and", items: [empty] } });
+    expect(unscheduledTransient({ conjunction: "or", items: [] }, "d")).toEqual({ filter: { conjunction: "and", items: [empty] } });
+  });
+
+  it("appends to a saved AND filter instead of nesting it", () => {
+    expect(unscheduledTransient({ conjunction: "and", items: [cond] }, "d")).toEqual({ filter: { conjunction: "and", items: [cond, empty] } });
+  });
+
+  it("nests a saved OR filter so its meaning survives", () => {
+    const or = { conjunction: "or" as const, items: [cond, { field_id: "s", op: "is" as const, value: "y" }] };
+    expect(unscheduledTransient(or, "d")).toEqual({ filter: { conjunction: "and", items: [or, empty] } });
   });
 });

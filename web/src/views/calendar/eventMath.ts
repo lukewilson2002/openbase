@@ -5,7 +5,7 @@
  * what it reports back after a drag is again a wall time that maps to stored values through the
  * date fields' own options and zones, whatever zone the browser is in.
  */
-import type { Field, TableRecord } from "@/api/types";
+import type { Field, Filter, TableRecord, TransientConfig } from "@/api/types";
 import { cardTitle } from "../common/cardFields";
 import { resolveDateFields, type DateFields } from "../common/dateFields";
 import type { FormatCtx } from "@/lib/cells/format";
@@ -75,6 +75,20 @@ export function recordsToEvents(records: readonly TableRecord[], ctx: EventConte
 /** Records the calendar cannot place: no start date. */
 export function unscheduledRecords(records: readonly TableRecord[], fields: CalendarFields, zone: string): TableRecord[] {
   return records.filter((r) => recordSpan(r.values, { id: fields.start.field.id, opts: fields.start.opts }, null, zone) === null);
+}
+
+/**
+ * The one-off override that makes the view query answer "records without a start date": the
+ * saved filter AND the start field is empty. A transient filter replaces the saved one, so the
+ * saved conditions are carried over (a saved AND group is flattened, anything else nests as a
+ * group) and the view's own filter still applies to the unscheduled list.
+ */
+export function unscheduledTransient(saved: Filter | null | undefined, startFieldId: string): TransientConfig {
+  const empty = { field_id: startFieldId, op: "is_empty" as const, value: null };
+  const items = saved?.items ?? [];
+  if (items.length === 0) return { filter: { conjunction: "and", items: [empty] } };
+  if (saved!.conjunction === "and") return { filter: { conjunction: "and", items: [...items, empty] } };
+  return { filter: { conjunction: "and", items: [saved!, empty] } };
 }
 
 export interface EventTimes {

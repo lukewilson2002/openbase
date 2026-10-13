@@ -25,7 +25,7 @@ import { ViewFrame } from "../common/ViewFrame";
 import { isDateLike, isWritableDate, wallNow } from "../common/wallTime";
 import type { ViewProps } from "../types";
 import "./calendar.css";
-import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, visibleRange } from "./eventMath";
+import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, unscheduledTransient, visibleRange } from "./eventMath";
 import { UnscheduledList } from "./UnscheduledList";
 
 export default function CalendarView(props: ViewProps) {
@@ -52,8 +52,11 @@ function CalendarInner(props: ViewProps) {
     [fields, visible],
   );
   const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, enabled: !!range });
-  // The API has no "date is empty" query for a view, so the unscheduled list reads the whole view and filters here.
-  const all = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, enabled: !!fields && sidebar, variant: "unscheduled" });
+  // The unscheduled list asks the server for the view's records whose date is empty (a transient
+  // filter that keeps the saved one); the client filter below also drops a record the moment it is
+  // dropped onto the calendar, before the refetch lands.
+  const transient = useMemo(() => (fields ? unscheduledTransient(cfg.queryConfig.filter, fields.start.field.id) : null), [fields, cfg.queryConfig.filter]);
+  const all = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, enabled: !!fields && sidebar, variant: "unscheduled", transient });
 
   const events = useMemo(
     () => (fields && records.data ? recordsToEvents(records.data.records, { fields, primary, format: setup.format, colors: records.data.colors, canEdit: setup.canEdit }) : []),
@@ -156,7 +159,10 @@ function CalendarInner(props: ViewProps) {
             plugins={PLUGINS}
             initialView="dayGridMonth"
             headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listMonth" }}
-            buttonText={{ today: "Today", month: "Month", week: "Week", list: "List" }}
+            // FullCalendar draws prev/next with an icon font it inlines as a data: URI, which the
+            // server's Content-Security-Policy (default-src 'self') blocks, so the buttons say it in words.
+            buttonIcons={false}
+            buttonText={{ prev: "Prev", next: "Next", today: "Today", month: "Month", week: "Week", list: "List" }}
             timeZone="UTC"
             now={() => new Date(wallNow(timeZone))}
             nowIndicator

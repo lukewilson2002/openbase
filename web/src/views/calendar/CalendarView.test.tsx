@@ -65,6 +65,19 @@ describe("CalendarView", () => {
     await waitFor(() => expect(document.querySelector(".fc-list")).not.toBeNull());
   });
 
+  it("navigates with text buttons (the icon font is blocked by the server's CSP) and queries the new range", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { asked } = setup();
+    await screen.findByText("March 2026");
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(next).toHaveAttribute("title", "Next Month");
+    expect(screen.getByRole("button", { name: "Prev" })).toHaveAttribute("title", "Previous Month");
+    expect(document.querySelector(".fc-icon")).toBeNull();
+    await user.click(next);
+    expect(await screen.findByText("April 2026")).toBeInTheDocument();
+    await waitFor(() => expect(asked.some((a) => a.range?.from === "2026-03-28")).toBe(true));
+  });
+
   it("asks for a date field when none is set and saves the choice", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const view = viewWithConfig("viw1", "calendar", {});
@@ -76,7 +89,7 @@ describe("CalendarView", () => {
     expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { calendar: { date_field_id: string } } }).config.calendar.date_field_id).toBe("f_start");
   });
 
-  it("lists records without a date in the unscheduled sidebar (filtered client-side from the whole view)", async () => {
+  it("lists records without a date in the unscheduled sidebar, asking the server with a transient is_empty filter", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { asked } = setup();
     await screen.findByText("R1");
@@ -84,8 +97,23 @@ describe("CalendarView", () => {
     const side = await screen.findByRole("complementary", { name: "Unscheduled records" });
     expect(await within(side).findByText("R3")).toBeInTheDocument();
     expect(within(side).queryByText("R1")).not.toBeInTheDocument();
-    // The sidebar's query has no date range.
-    expect(asked.some((a) => !a.range)).toBe(true);
+    // The sidebar's query has no date range and carries the override; the calendar's own query has neither.
+    const sidebarQuery = asked.find((a) => a.transient);
+    expect(sidebarQuery).toBeDefined();
+    expect(sidebarQuery!.range).toBeNull();
+    expect(sidebarQuery!.transient).toEqual({ filter: { conjunction: "and", items: [{ field_id: "f_start", op: "is_empty", value: null }] } });
+    expect(asked.filter((a) => a.range).every((a) => !a.transient)).toBe(true);
+  });
+
+  it("keeps the view's saved filter in the unscheduled query", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const saved = { conjunction: "and" as const, items: [{ field_id: "f_status", op: "is" as const, value: "s2" }] };
+    const view = viewWithConfig("viw1", "calendar", { filter: saved, calendar: { date_field_id: F.start.id, end_field_id: null } });
+    const { asked } = setup("editor", view);
+    await screen.findByText("March 2026");
+    await user.click(screen.getByRole("button", { name: /Unscheduled/ }));
+    await waitFor(() => expect(asked.some((a) => a.transient)).toBe(true));
+    expect(asked.find((a) => a.transient)!.transient!.filter!.items).toEqual([...saved.items, { field_id: "f_start", op: "is_empty", value: null }]);
   });
 
   it("is read-only for viewers: dates cannot be changed and days cannot be clicked to create", async () => {

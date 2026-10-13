@@ -7,7 +7,7 @@
  */
 import { keepPreviousData, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { recordKeys, recordsApi } from "@/api/records";
-import type { DateRange, GroupHeader, TableRecord } from "@/api/types";
+import type { DateRange, GroupHeader, TableRecord, TransientConfig } from "@/api/types";
 import type { ViewRecordsData } from "./cache";
 
 /** Largest page the server returns (`og_core::limits::MAX_PAGE_SIZE`). */
@@ -27,16 +27,18 @@ export interface ViewRecordsParams {
   enabled?: boolean;
   /** Distinguishes independent queries of the same view (for example the unscheduled list). */
   variant?: string;
+  /** A request-only filter/sort/group override (`QueryRequest.transient`); part of the cache key. */
+  transient?: TransientConfig | null;
 }
 
-export function viewRecordsKey(p: Pick<ViewRecordsParams, "tableId" | "viewId" | "configKey" | "search" | "timeZone" | "range" | "cap" | "variant">): QueryKey {
-  return [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "all", p.variant ?? "", p.range ?? null, p.timeZone, p.cap ?? RECORD_CAP];
+export function viewRecordsKey(p: Pick<ViewRecordsParams, "tableId" | "viewId" | "configKey" | "search" | "timeZone" | "range" | "cap" | "variant" | "transient">): QueryKey {
+  return [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "all", p.variant ?? "", p.range ?? null, p.timeZone, p.cap ?? RECORD_CAP, p.transient ?? null];
 }
 
 /** Fetch pages until `cap` records or the end; exported for tests. */
 export async function fetchAllRecords(
   viewId: string,
-  base: { search: string; timeZone: string; range?: DateRange | null },
+  base: { search: string; timeZone: string; range?: DateRange | null; transient?: TransientConfig | null },
   cap: number,
   signal?: AbortSignal,
 ): Promise<ViewRecordsData> {
@@ -47,7 +49,7 @@ export async function fetchAllRecords(
   for (;;) {
     const res = await recordsApi.query(
       viewId,
-      { offset: records.length, limit: Math.min(FETCH_PAGE, cap - records.length), search: base.search || null, timezone: base.timeZone, range: base.range ?? null },
+      { offset: records.length, limit: Math.min(FETCH_PAGE, cap - records.length), search: base.search || null, timezone: base.timeZone, range: base.range ?? null, ...(base.transient ? { transient: base.transient } : {}) },
       signal,
     );
     total = res.total;
@@ -75,7 +77,7 @@ export function useViewRecords(p: ViewRecordsParams): ViewRecords {
   const queryKey = viewRecordsKey({ ...p, cap });
   const q = useQuery({
     queryKey,
-    queryFn: ({ signal }) => fetchAllRecords(p.viewId, { search: p.search, timeZone: p.timeZone, range: p.range }, cap, signal),
+    queryFn: ({ signal }) => fetchAllRecords(p.viewId, { search: p.search, timeZone: p.timeZone, range: p.range, transient: p.transient }, cap, signal),
     enabled: p.enabled ?? true,
     placeholderData: keepPreviousData,
   });
