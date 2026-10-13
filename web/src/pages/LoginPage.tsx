@@ -8,7 +8,9 @@ import { AuthLayout, Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
-import { safeNext } from "@/lib/format";
+import { ServerRedirect } from "@/components/ServerRedirect";
+import { isServerPath, safeNext } from "@/lib/format";
+import { followRedirect } from "@/lib/oauthAccess";
 
 export function LoginPage() {
   const [params] = useSearchParams();
@@ -27,12 +29,13 @@ export function LoginPage() {
         navigate(`/login/2fa?next=${encodeURIComponent(next)}`);
       } else if (res.user) {
         setUser(res.user);
-        navigate(next, { replace: true });
+        if (isServerPath(next)) followRedirect(next);
+        else navigate(next, { replace: true });
       }
     },
   });
 
-  if (me) return <Navigate to={next} replace />;
+  if (me) return isServerPath(next) ? <ServerRedirect to={next} /> : <Navigate to={next} replace />;
   if (setupPending) return <PageSpinner />;
   if (setup?.needs_setup) return <Navigate to="/setup" replace />;
 

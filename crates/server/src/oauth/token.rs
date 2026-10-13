@@ -6,6 +6,11 @@
 //! presentation of a code that was already exchanged revokes the grant created from it (RFC 6749
 //! 4.1.2). Refresh tokens rotate on every use; presenting one that was already exchanged revokes
 //! the whole grant (RFC 9700 4.14), because either the client or an attacker holds a stale copy.
+//! The exception is a short grace window ([`store::REFRESH_GRACE_MS`]): a client that fires two
+//! refreshes at once (two tabs, two workers) would otherwise destroy its own connection, so the
+//! second one is refused with `invalid_grant` and nothing is revoked; the first one's answer is
+//! the live pair. A refresh may repeat the grant's scope but not ask for less (the server keeps
+//! one scope per connection) and never for more.
 //! Failed checks are reported as `invalid_grant` without saying which one failed.
 
 use std::time::Duration;
@@ -59,7 +64,7 @@ async fn read_form(
     }
     state.limiter.check(
         bucket,
-        &client.ip,
+        &super::rate_key(&client.ip),
         REQUESTS_PER_IP_PER_MINUTE,
         Duration::from_secs(60),
     )?;
@@ -286,6 +291,9 @@ fn refresh(
         Refresh::Invalid => failed(OAuthError::invalid_grant(
             "the refresh token is invalid or expired",
         )),
+        Refresh::JustUsed => failed(OAuthError::invalid_grant(
+            "the refresh token was just exchanged; use the tokens issued for that request",
+        )),
         Refresh::Reused { grant_id, user_id } => {
             audit::record(
                 tx,
@@ -301,16 +309,22 @@ fn refresh(
             ))
         }
         Refresh::Issued { tokens, .. } => {
-            // A client may ask for less than it has, never for more (RFC 6749 6).
+            // RFC 6749 6: the scope of a refresh may not exceed the grant. Asking for less is
+            // not supported either: tokens carry the scope of the connection, so answering a
+            // narrower request with the full scope would hand out more than was asked. Both are
+            // `invalid_scope`, and the error rolls the rotation back (the token stays usable).
             let (asked, _) = scope::requested(requested_scope);
-            let granted: Vec<&str> = tokens.scope.split(' ').collect();
-            if asked
-                .split(' ')
-                .any(|s| !s.is_empty() && !granted.contains(&s))
-            {
-                // Roll back the rotation: the refresh token stays usable.
+            if !asked.is_empty() && asked != tokens.scope {
+                let granted: Vec<&str> = tokens.scope.split(' ').collect();
+                let exceeds = asked.split(' ').any(|s| !granted.contains(&s));
                 return Err(AppError::BadRequest(
-                    "the requested scope exceeds the scope granted".into(),
+                    if exceeds {
+                        "the requested scope exceeds the scope granted"
+                    } else {
+                        "this server cannot narrow the scope of a connection when refreshing: \
+                         omit scope, or ask for exactly the granted scope"
+                    }
+                    .into(),
                 ));
             }
             Ok(Outcome::Issued(Box::new(tokens)))

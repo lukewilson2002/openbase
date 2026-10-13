@@ -16,6 +16,12 @@ pub const MANAGE: &str = "openbase:manage";
 /// Every scope the server understands, lowest first.
 pub const SUPPORTED: [&str; 3] = [READ, WRITE, MANAGE];
 
+/// The scope the `401` challenge of `/mcp` names. MCP clients ask for the scope of the challenge
+/// first and only then for everything the metadata lists, so naming read and write here keeps a
+/// compliant client from asking for `manage` by default (the consent page offers Full control
+/// only to an app that asked for it).
+pub const CHALLENGE: &str = "openbase:read openbase:write";
+
 /// What an app can be given, lowest first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Access {

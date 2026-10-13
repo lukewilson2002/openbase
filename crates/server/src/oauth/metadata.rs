@@ -69,9 +69,22 @@ fn document(state: &AppState, build: fn(&Config) -> Value) -> Result<Response, O
     Ok(res)
 }
 
-/// `GET /.well-known/oauth-protected-resource` and `.../mcp`.
+/// `GET /.well-known/oauth-protected-resource/mcp`.
 pub async fn protected_resource(State(state): State<AppState>) -> Result<Response, OAuthError> {
     document(&state, protected_resource_document)
+}
+
+/// `GET /.well-known/oauth-protected-resource` (no path suffix): there is no protected resource at
+/// the origin, so there is no document. Serving the `/mcp` document here would advertise a
+/// `resource` that does not match the URL it was read from (RFC 9728 section 3.3).
+pub async fn protected_resource_root() -> OAuthError {
+    OAuthError {
+        status: axum::http::StatusCode::NOT_FOUND,
+        error: "not_found",
+        description: "the protected resource is /mcp; its metadata is at \
+                      /.well-known/oauth-protected-resource/mcp"
+            .into(),
+    }
 }
 
 /// `GET /.well-known/oauth-authorization-server`.

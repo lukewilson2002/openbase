@@ -1260,7 +1260,10 @@ async fn backup_archives_can_only_be_downloaded_with_a_session() {
     // write or read-only one. The refusal is the session-only capability.
     let (_, base) = app.workspace_with_base(&admin, "Acme");
     for (label, scope) in [
-        ("manage", json!({"name": "m", "write": true, "manage": true})),
+        (
+            "manage",
+            json!({"name": "m", "write": true, "manage": true}),
+        ),
         (
             "base-limited manage",
             json!({"name": "l", "write": true, "manage": true, "base_ids": [base]}),
@@ -1284,7 +1287,10 @@ async fn backup_archives_can_only_be_downloaded_with_a_session() {
 
     // Through MCP, with a personal access token: refused before anything is sent.
     let manage = app
-        .api_token(&admin, json!({"name": "mcp", "write": true, "manage": true}))
+        .api_token(
+            &admin,
+            json!({"name": "mcp", "write": true, "manage": true}),
+        )
         .await;
     let t = mcp_support::tool(
         &app,

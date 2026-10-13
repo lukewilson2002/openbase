@@ -3,8 +3,10 @@
 //! Anyone can register (that is the point: Claude Code, ChatGPT and other apps register
 //! themselves on first use), so this is the place abuse would start, and everything is bounded:
 //! the body is capped, names and redirect URIs are validated, each client address may register
-//! only a few clients per hour, the total number is capped, identical registrations share one
-//! client, and a client nobody ever used is forgotten after seven days. A registration grants
+//! only a few clients per hour (IPv6 addresses count per /64), the total number is capped (when
+//! the table is full the longest unused client is forgotten, so the cap never locks anybody out),
+//! identical registrations share one client, and a client nobody ever used is forgotten after
+//! seven days by the hourly cleanup. A registration grants
 //! nothing by itself: no access is possible without a signed-in user approving it on the consent
 //! page, which names the app and shows where the access would go.
 
@@ -124,7 +126,7 @@ pub async fn register(
     }
     state.limiter.check(
         "oauth_register",
-        &client_info.ip,
+        &super::rate_key(&client_info.ip),
         REGISTRATIONS_PER_IP_PER_HOUR,
         Duration::from_secs(3600),
     )?;
@@ -160,17 +162,16 @@ pub async fn register(
     let response = state
         .db
         .write(move |tx| {
-            // Make room first: forget what nobody used.
-            store::gc(tx, now_ms())?;
             let fp = (!new.confidential).then(|| fingerprint(&new.name, &new.redirect_uris));
             if let Some(fp) = &fp
                 && let Some(existing) = store::client_by_fingerprint(tx, fp)?
             {
                 return Ok(registration_response(&existing, None));
             }
-            if store::count_clients(tx, SOURCE_DCR)? >= MAX_DCR_CLIENTS {
-                return Err(crate::error::AppError::TooManyRequests);
-            }
+            // A full table forgets the longest unused client instead of refusing the newcomer:
+            // otherwise a trickle of registrations from a few addresses would keep every real
+            // app out for good.
+            store::make_room(tx, SOURCE_DCR, MAX_DCR_CLIENTS)?;
             let (secret, secret_hash) = if new.confidential {
                 let (s, h) = store::new_client_secret();
                 (Some(s), Some(h))

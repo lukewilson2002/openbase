@@ -523,7 +523,7 @@ async fn only_bearer_tokens_authenticate() {
     res.assert_status(401);
     assert_eq!(
         res.headers["www-authenticate"],
-        "Bearer realm=\"OpenBase MCP\", resource_metadata=\"http://localhost:8080/.well-known/oauth-protected-resource/mcp\""
+        "Bearer realm=\"OpenBase MCP\", scope=\"openbase:read openbase:write\", resource_metadata=\"http://localhost:8080/.well-known/oauth-protected-resource/mcp\""
     );
     // A signed-in session cookie is refused, with or without the CSRF header, and says why.
     for csrf in [false, true] {

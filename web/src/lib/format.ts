@@ -60,6 +60,14 @@ export function safeNext(next: string | null | undefined): string {
   return next;
 }
 
+/**
+ * Paths the server itself answers (not the web app's router): the OAuth authorization endpoint
+ * sends a visitor to sign in with itself as `next`, and the way back must be a full page load.
+ */
+export function isServerPath(next: string): boolean {
+  return next === "/oauth/authorize" || next.startsWith("/oauth/authorize?");
+}
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);

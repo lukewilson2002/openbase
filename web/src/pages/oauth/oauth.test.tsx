@@ -216,4 +216,63 @@ describe("OAuth consent page", () => {
     await user.click(screen.getByRole("button", { name: "Log in" }));
     expect(await screen.findByRole("heading", { name: /Allow Fancy App to use your OpenBase\?/ })).toBeInTheDocument();
   });
+
+  describe("coming back from signing in to the server's authorization endpoint", () => {
+    const AUTHORIZE = "/oauth/authorize?client_id=ocl1&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&state=s1";
+    const LOGIN = `/login?next=${encodeURIComponent(AUTHORIZE)}`;
+    const SETUP = { needs_setup: false, open_signup: false, email_enabled: false };
+
+    it("loads the authorization request again with a full page load once the person is signed in", async () => {
+      const user = userEvent.setup();
+      let signedIn = false;
+      mockApi({
+        "GET /api/setup": SETUP,
+        "GET /api/auth/me": () => (signedIn ? USER : LOGGED_OUT),
+        "POST /api/auth/login": () => {
+          signedIn = true;
+          return { user: USER, two_factor_required: false };
+        },
+      });
+      renderApp({ route: LOGIN });
+      await user.type(await screen.findByLabelText("Email"), "ada@example.com");
+      await user.type(screen.getByLabelText("Password"), "correct horse");
+      await user.click(screen.getByRole("button", { name: "Log in" }));
+      // /oauth/authorize is answered by the server, not by a route of the app.
+      await waitFor(() => expect(follow).toHaveBeenCalledWith(AUTHORIZE));
+    });
+
+    it("does the same after the two-factor step", async () => {
+      const user = userEvent.setup();
+      let signedIn = false;
+      mockApi({
+        "GET /api/setup": SETUP,
+        "GET /api/auth/me": () => (signedIn ? USER : LOGGED_OUT),
+        "POST /api/auth/login": { two_factor_required: true },
+        "POST /api/auth/login/2fa": () => {
+          signedIn = true;
+          return { user: USER, two_factor_required: false };
+        },
+      });
+      renderApp({ route: LOGIN });
+      await user.type(await screen.findByLabelText("Email"), "ada@example.com");
+      await user.type(screen.getByLabelText("Password"), "correct horse");
+      await user.click(screen.getByRole("button", { name: "Log in" }));
+      await user.type(await screen.findByLabelText("Authentication code"), "123456");
+      await user.click(screen.getByRole("button", { name: "Verify" }));
+      await waitFor(() => expect(follow).toHaveBeenCalledWith(AUTHORIZE));
+    });
+
+    it("continues straight away for a person who is already signed in", async () => {
+      mockApi({ "GET /api/setup": SETUP, "GET /api/auth/me": USER });
+      renderApp({ route: LOGIN });
+      await waitFor(() => expect(follow).toHaveBeenCalledWith(AUTHORIZE));
+    });
+
+    it("only treats the authorization endpoint as a server page, never another address", async () => {
+      mockApi({ "GET /api/setup": SETUP, "GET /api/auth/me": USER, "GET /api/workspaces": [] });
+      renderApp({ route: `/login?next=${encodeURIComponent("https://evil.example/oauth/authorize?x=1")}` });
+      expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+      expect(follow).not.toHaveBeenCalled();
+    });
+  });
 });

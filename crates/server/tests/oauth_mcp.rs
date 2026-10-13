@@ -1066,6 +1066,18 @@ async fn the_audit_log_follows_the_whole_story() {
     token_refresh(&w.app, &fx_client, &a.refresh)
         .await
         .assert_status(200);
+    // (Past the grace window in which a client racing itself is merely refused.)
+    w.app
+        .state
+        .db
+        .write_sync(|tx| {
+            tx.execute(
+                "UPDATE oauth_tokens SET used_at = used_at - 60000 WHERE used_at IS NOT NULL",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
     token_refresh(&w.app, &fx_client, &a.refresh)
         .await
         .assert_status(400);
@@ -1176,11 +1188,27 @@ async fn the_whole_flow_over_real_http() {
         ("state", "s1"),
         ("resource", &format!("{}/mcp", live.url)),
     ]);
+    let authorize_url = format!(
+        "{}?{query}",
+        server["authorization_endpoint"].as_str().unwrap()
+    );
+    // Without a session the browser is sent to sign in and back to this very request; nothing
+    // is stored.
+    let res = http.get(&authorize_url).send().await.unwrap();
+    assert_eq!(res.status(), 302);
+    let to = res.headers()["location"].to_str().unwrap().to_string();
+    assert!(to.starts_with("/login?next="), "{to}");
+    // With the session cookie of the person who signed in, the request is validated and stored.
     let res = http
-        .get(format!(
-            "{}?{query}",
-            server["authorization_endpoint"].as_str().unwrap()
-        ))
+        .get(&authorize_url)
+        .header(
+            "cookie",
+            format!(
+                "{}={}",
+                openbase::auth::SESSION_COOKIE,
+                user.cookie.as_deref().unwrap()
+            ),
+        )
         .send()
         .await
         .unwrap();
@@ -1253,10 +1281,7 @@ async fn a_full_control_grant_of_an_administrator_cannot_fetch_a_backup_archive(
     let app = TestApp::new();
     let admin = app.admin("root@example.com", "Root");
     let grant = connect(&app, &admin, "Admin Agent", "manage", None).await;
-    let name = app
-        .post(&admin, "/api/admin/backups", json!({}))
-        .await
-        .body["name"]
+    let name = app.post(&admin, "/api/admin/backups", json!({})).await.body["name"]
         .as_str()
         .unwrap()
         .to_string();
@@ -1264,8 +1289,15 @@ async fn a_full_control_grant_of_an_administrator_cannot_fetch_a_backup_archive(
 
     // The archive carries every password hash, two-factor secret and the SMTP password: even a
     // grant with full control gets nothing of it, through the tool or any other way.
-    let (t, _) =
-        mcp_support::api(&app, &grant.bearer(), "GET", &path, Value::Null, Value::Null).await;
+    let (t, _) = mcp_support::api(
+        &app,
+        &grant.bearer(),
+        "GET",
+        &path,
+        Value::Null,
+        Value::Null,
+    )
+    .await;
     assert!(t.err().contains("not available through MCP"), "{}", t.text);
     assert!(!t.raw.body.to_string().contains("body_base64"));
     // Used as a bearer on the REST API directly, an OAuth token is refused anyway.

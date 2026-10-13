@@ -33,10 +33,18 @@ impl Fx {
         authorize_with(&self.app, &self.client_id, CB, &pkce().1, extra).await
     }
 
-    /// Start a flow and approve it; returns (code, verifier).
+    /// Start a flow (the app asks for the scopes of `access`) and approve it; returns
+    /// (code, verifier).
     async fn code(&self, access: &str) -> (String, String) {
         let (verifier, challenge) = pkce();
-        let res = authorize_with(&self.app, &self.client_id, CB, &challenge, &[]).await;
+        let res = authorize_with(
+            &self.app,
+            &self.client_id,
+            CB,
+            &challenge,
+            &[("scope", scope_for(access))],
+        )
+        .await;
         let id = request_id(&res);
         (
             code_of(&approve(&self.app, &self.user, &id, access).await),
@@ -51,6 +59,48 @@ impl Fx {
     fn count(&self, sql: &str) -> i64 {
         self.app.query_i64(sql, &[])
     }
+
+    /// Pretend the refresh tokens that were exchanged were exchanged `secs` seconds ago.
+    fn age_used_refresh_tokens(&self, secs: i64) {
+        self.app
+            .state
+            .db
+            .write_sync(move |tx| {
+                tx.execute(
+                    "UPDATE oauth_tokens SET used_at = used_at - ?1 WHERE used_at IS NOT NULL",
+                    [secs * 1000],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+}
+
+/// `GET /oauth/authorize` for `client_id` from `ip` (through `X-Forwarded-For`, so the app must
+/// trust the proxy), signed in as `user` or as a visitor.
+async fn authorize_from(
+    app: &TestApp,
+    user: Option<&Client>,
+    ip: &str,
+    client_id: &str,
+) -> common::Response {
+    let params = authorize_params(client_id, CB, &pkce().1, &[]);
+    let query = encode(
+        &params
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    app.request_with(
+        user.unwrap_or(&Client::default()),
+        "GET",
+        &format!("/oauth/authorize?{query}"),
+        None,
+        &[("x-forwarded-for", ip)],
+        false,
+        None,
+    )
+    .await
 }
 
 fn error_of(res: &common::Response) -> (&str, &str) {
@@ -110,10 +160,11 @@ async fn a_valid_request_is_stored_and_the_browser_goes_to_the_consent_page() {
             "openbase:write".into()
         )
     );
-    // The client counts as used.
+    // Starting a request does not make the client count as used: only a completed exchange does
+    // (otherwise strangers could keep clients alive past the unused-client cleanup).
     assert_eq!(
         fx.count("SELECT count(*) FROM oauth_clients WHERE last_used_at IS NOT NULL"),
-        1
+        0
     );
 }
 
@@ -372,16 +423,205 @@ async fn authorization_requests_are_rate_limited_and_capped() {
         .db
         .write_sync(|tx| {
             for i in 0..openbase::store::oauth::MAX_PENDING_REQUESTS {
+                // Spread over many clients, so the instance-wide ceiling is what trips.
+                tx.execute(
+                    "INSERT INTO oauth_clients (id, source, name, redirect_uris, created_at)
+                     VALUES (?1, 'dcr', 'bulk', '[]', 1)",
+                    [format!("ocl{i}")],
+                )?;
                 tx.execute(
                     "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, resource, scope, created_at, expires_at)
                      VALUES (?1, ?2, 'x', 'y', 'z', '', 1, ?3)",
-                    rusqlite::params![format!("oar{i}"), fx.client_id, openbase::db::now_ms() + 600_000],
+                    rusqlite::params![format!("oar{i}"), format!("ocl{i}"), openbase::db::now_ms() + 600_000],
                 )?;
             }
             Ok(())
         })
         .unwrap();
     fx.authorize(&[]).await.assert_status(503);
+}
+
+/// One app cannot use up the instance-wide room for waiting requests; others are unaffected.
+#[tokio::test]
+async fn waiting_requests_are_capped_per_client() {
+    let fx = Fx::new().await;
+    let other = register_client(&fx.app, "Other App", &[CB]).await;
+    let cap = openbase::store::oauth::MAX_PENDING_PER_CLIENT;
+    let client_id = fx.client_id.clone();
+    fx.app
+        .state
+        .db
+        .write_sync(move |tx| {
+            for i in 0..cap {
+                tx.execute(
+                    "INSERT INTO oauth_requests (id, client_id, redirect_uri, code_challenge, resource, scope, created_at, expires_at)
+                     VALUES (?1, ?2, 'x', 'y', 'z', '', 1, ?3)",
+                    rusqlite::params![format!("oar{i}"), client_id, openbase::db::now_ms() + 600_000],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    fx.authorize(&[]).await.assert_status(503);
+    authorize_with(&fx.app, &other, CB, &pkce().1, &[])
+        .await
+        .assert_status(302);
+}
+
+/// Anyone can open `/oauth/authorize`, so for a visitor who is not signed in it must write
+/// nothing: no waiting request, no "used" mark on the client. The visitor is sent to sign in,
+/// with this very request as the place to come back to.
+#[tokio::test]
+async fn visitors_are_sent_to_sign_in_and_nothing_is_stored() {
+    let fx = Fx::new().await;
+    let (_, challenge) = pkce();
+    let params = authorize_params(
+        &fx.client_id,
+        CB,
+        &challenge,
+        &[("scope", "openbase:write")],
+    );
+    let pairs: Vec<(&str, &str)> = params
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    let res = authorize_anonymous(&fx.app, &pairs).await;
+    res.assert_status(302);
+    let loc = location(&res);
+    assert!(loc.starts_with("/login?next="), "{loc}");
+    // `next` is the same authorization request, to be loaded again once signed in.
+    let next = query_of(&loc).remove("next").unwrap();
+    assert_eq!(next, format!("/oauth/authorize?{}", encode(&pairs)));
+    assert_eq!(res.headers["cache-control"], "no-store");
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_requests"), 0);
+    assert_eq!(
+        fx.count("SELECT count(*) FROM oauth_clients WHERE last_used_at IS NOT NULL"),
+        0
+    );
+
+    // A flood of anonymous hits (up to the per-address limit) leaves the tables as they were.
+    for _ in 0..40 {
+        authorize_anonymous(&fx.app, &pairs)
+            .await
+            .assert_status(302);
+    }
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_requests"), 0);
+    assert_eq!(
+        fx.count("SELECT count(*) FROM oauth_clients WHERE last_used_at IS NOT NULL"),
+        0
+    );
+
+    // Coming back with a session finishes the job: the request is stored and the browser goes on
+    // to the consent page.
+    let res = authorize_as(&fx.app, &fx.user, &pairs).await;
+    let id = request_id(&res);
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_requests"), 1);
+    approve(&fx.app, &fx.user, &id, "write")
+        .await
+        .assert_status(200);
+}
+
+/// A broken link is explained before the sign-in, not after it; problems with a client's own
+/// parameters wait for the second pass so nothing is redirected to an unverified address.
+#[tokio::test]
+async fn a_visitor_sees_broken_links_explained_before_signing_in() {
+    let fx = Fx::new().await;
+    let (_, challenge) = pkce();
+    for (label, client, redirect) in [
+        ("unknown client", "oclNope", CB),
+        (
+            "unregistered redirect",
+            fx.client_id.as_str(),
+            "https://evil.example/cb",
+        ),
+    ] {
+        let res = authorize_with_anonymous(&fx.app, client, redirect, &challenge, &[]).await;
+        res.assert_status(400);
+        assert!(!res.headers.contains_key("location"), "{label}");
+    }
+    // A very long query would not fit through the sign-in page.
+    let long = "x".repeat(openbase::oauth::authorize::MAX_QUERY_LEN);
+    let res =
+        authorize_with_anonymous(&fx.app, &fx.client_id, CB, &challenge, &[("state", &long)]).await;
+    res.assert_status(400);
+    assert!(!res.headers.contains_key("location"));
+}
+
+/// A session cookie is the only thing that counts as being signed in: a bearer token on the
+/// authorization endpoint does not make a request storable.
+#[tokio::test]
+async fn a_bearer_token_does_not_count_as_signed_in() {
+    let fx = Fx::new().await;
+    let token = fx
+        .app
+        .api_token(&fx.user, json!({"name": "t", "write": true}))
+        .await;
+    let (_, challenge) = pkce();
+    let params = authorize_params(&fx.client_id, CB, &challenge, &[]);
+    let pairs: Vec<(&str, &str)> = params
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    let res = authorize_as(&fx.app, &token, &pairs).await;
+    res.assert_status(302);
+    assert!(location(&res).starts_with("/login?next="));
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_requests"), 0);
+}
+
+#[tokio::test]
+async fn one_person_can_only_start_so_many_requests_a_minute() {
+    // Different addresses, one account: the per-person limit is what trips.
+    let app = TestApp::with_config(|c| c.trust_proxy = true);
+    let user = app.user("busy@example.com", "Busy");
+    let client_id = register_client(&app, "Busy App", &[CB]).await;
+    for n in 0..openbase::oauth::authorize::REQUESTS_PER_USER_PER_MINUTE {
+        let ip = format!("198.51.100.{}", n + 1);
+        let res = authorize_from(&app, Some(&user), &ip, &client_id).await;
+        res.assert_status(302);
+    }
+    let res = authorize_from(&app, Some(&user), "198.51.100.200", &client_id).await;
+    res.assert_status(429);
+    // Somebody else is not affected.
+    let other = app.user("calm@example.com", "Calm");
+    authorize_from(&app, Some(&other), "198.51.100.201", &client_id)
+        .await
+        .assert_status(302);
+}
+
+/// IPv6 clients are limited per /64, not per address: a subscriber's whole /64 is one budget.
+#[tokio::test]
+async fn ipv6_clients_share_one_authorization_budget_per_slash_64() {
+    let app = TestApp::with_config(|c| c.trust_proxy = true);
+    let client_id = register_client(&app, "V6 App", &[CB]).await;
+    let limit = openbase::oauth::authorize::REQUESTS_PER_IP_PER_MINUTE;
+    for n in 0..limit {
+        // Every hit from another address inside 2001:db8:1:2::/64.
+        let ip = format!("2001:db8:1:2:{:x}:{:x}::{:x}", n, n + 7, n + 1);
+        let res = authorize_from(&app, None, &ip, &client_id).await;
+        res.assert_status(302);
+    }
+    let res = authorize_from(&app, None, "2001:db8:1:2:ffff::1", &client_id).await;
+    res.assert_status(429);
+    // Another /64 (and an IPv4 address) have their own budgets.
+    authorize_from(&app, None, "2001:db8:1:3::1", &client_id)
+        .await
+        .assert_status(302);
+    authorize_from(&app, None, "203.0.113.9", &client_id)
+        .await
+        .assert_status(302);
+}
+
+#[test]
+fn rate_keys_group_ipv6_by_slash_64() {
+    use openbase::oauth::rate_key;
+    assert_eq!(rate_key("203.0.113.9"), "203.0.113.9");
+    assert_eq!(
+        rate_key("2001:db8:1:2:aaaa:bbbb:cccc:dddd"),
+        rate_key("2001:db8:1:2::1")
+    );
+    assert_ne!(rate_key("2001:db8:1:2::1"), rate_key("2001:db8:1:3::1"));
+    assert_eq!(rate_key("::ffff:203.0.113.9"), "203.0.113.9");
+    assert_eq!(rate_key("unknown"), "unknown");
 }
 
 // --------------------------------------------------------------------------- consent
@@ -407,8 +647,8 @@ async fn the_consent_page_gets_everything_it_shows_from_the_server() {
     assert!(b["impersonates"].is_null());
     assert!(b["requested_access"].is_null());
     assert_eq!(
-        b["max_access"], "manage",
-        "no scope asked: any level may be chosen"
+        b["max_access"], "write",
+        "no scope asked: Full control is not offered"
     );
     assert_eq!(
         b["default_access"], "read",
@@ -418,20 +658,20 @@ async fn the_consent_page_gets_everything_it_shows_from_the_server() {
 }
 
 #[tokio::test]
-async fn requested_scopes_set_the_ceiling_and_the_preselection() {
+async fn requested_scopes_set_the_ceiling_and_read_only_is_always_preselected() {
     let fx = Fx::new().await;
-    for (scope, requested, max, default) in [
-        ("openbase:read", "read", "read", "read"),
-        ("openbase:write", "write", "write", "write"),
-        ("openbase:read openbase:write", "write", "write", "write"),
-        // An app asking for everything is preselected "Read & edit", never "Full control".
+    for (scope, requested, max) in [
+        ("openbase:read", "read", "read"),
+        ("openbase:write", "write", "write"),
+        ("openbase:read openbase:write", "write", "write"),
+        // The ceiling is what the app asked for; the preselection is always Read only, even for
+        // an app that asks for everything.
         (
             "openbase:read openbase:write openbase:manage",
             "manage",
             "manage",
-            "write",
         ),
-        ("openbase:manage", "manage", "manage", "write"),
+        ("openbase:manage", "manage", "manage"),
     ] {
         let id = request_id(&fx.authorize(&[("scope", scope)]).await);
         let info = fx
@@ -440,16 +680,51 @@ async fn requested_scopes_set_the_ceiling_and_the_preselection() {
             .await;
         assert_eq!(info.body["requested_access"], requested, "{scope}");
         assert_eq!(info.body["max_access"], max, "{scope}");
-        assert_eq!(info.body["default_access"], default, "{scope}");
+        assert_eq!(info.body["default_access"], "read", "{scope}");
     }
-    // Unknown scopes are ignored: the app asked for nothing we know.
+    // Unknown scopes are ignored: the app asked for nothing we know, so it can be given reading
+    // and editing, but never Full control.
     let id = request_id(&fx.authorize(&[("scope", "openid profile")]).await);
     let info = fx
         .app
         .get(&fx.user, &format!("/api/oauth/requests/{id}"))
         .await;
     assert!(info.body["requested_access"].is_null());
-    assert_eq!(info.body["max_access"], "manage");
+    assert_eq!(info.body["max_access"], "write");
+    assert_eq!(info.body["default_access"], "read");
+    approve(&fx.app, &fx.user, &id, "write")
+        .await
+        .assert_status(200);
+}
+
+/// Full control is for apps that ask for it: an app that asked for less (or named nothing) is
+/// refused when the decision claims more, whatever the page offered.
+#[tokio::test]
+async fn full_control_is_only_granted_to_an_app_that_asked_for_it() {
+    let fx = Fx::new().await;
+    for scope in ["", "openbase:read openbase:write", "openid"] {
+        let extra: Vec<(&str, &str)> = if scope.is_empty() {
+            vec![]
+        } else {
+            vec![("scope", scope)]
+        };
+        let id = request_id(&fx.authorize(&extra).await);
+        let res = approve(&fx.app, &fx.user, &id, "manage").await;
+        res.assert_status(400);
+        assert!(
+            res.body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("more access than the app asked for"),
+            "{scope:?}: {}",
+            res.body
+        );
+    }
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_codes"), 0);
+    let id = request_id(&fx.authorize(&[("scope", "openbase:manage")]).await);
+    approve(&fx.app, &fx.user, &id, "manage")
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]
@@ -1182,7 +1457,9 @@ async fn presenting_an_old_refresh_token_revokes_the_whole_grant() {
         .await
         .assert_status(200);
 
-    // The first token is used again (by the app after a lost response, or by a thief).
+    // The first token is used again, well after the grace window (by the app after a lost
+    // response, or by a thief).
+    fx.age_used_refresh_tokens(31);
     let reuse = token_refresh(&fx.app, &fx.client_id, &first.refresh).await;
     reuse.assert_status(400);
     assert_eq!(error_of(&reuse).0, "invalid_grant");
@@ -1202,6 +1479,62 @@ async fn presenting_an_old_refresh_token_revokes_the_whole_grant() {
     assert!(audit_actions(&fx.app).contains(&"oauth_refresh_reuse".to_string()));
     let grants = fx.app.get(&fx.user, "/api/oauth/grants").await;
     assert_eq!(grants.body, json!([]));
+}
+
+/// Two refreshes of the same token at once (two tabs, two workers of one app) must not destroy
+/// the connection: one gets the new pair, the other `invalid_grant`, and nothing is revoked.
+#[tokio::test]
+async fn parallel_refreshes_with_one_token_do_not_revoke_the_connection() {
+    let fx = Fx::new().await;
+    let c = connect_as(&fx.app, &fx.user, &fx.client_id, CB, "write", None).await;
+    let (a, b) = tokio::join!(
+        token_refresh(&fx.app, &fx.client_id, &c.refresh),
+        token_refresh(&fx.app, &fx.client_id, &c.refresh),
+    );
+    let (ok, refused) = if a.status == 200 { (a, b) } else { (b, a) };
+    ok.assert_status(200);
+    refused.assert_status(400);
+    assert_eq!(error_of(&refused).0, "invalid_grant");
+    // The connection is alive: the pair the winner got works and can be refreshed again.
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_grants"), 1);
+    let access = TestApp::bearer(ok.body["access_token"].as_str().unwrap());
+    mcp_support::legacy(&fx.app, &access, "tools/list", json!({}))
+        .await
+        .assert_status(200);
+    token_refresh(
+        &fx.app,
+        &fx.client_id,
+        ok.body["refresh_token"].as_str().unwrap(),
+    )
+    .await
+    .assert_status(200);
+    assert!(!audit_actions(&fx.app).contains(&"oauth_refresh_reuse".to_string()));
+}
+
+#[tokio::test]
+async fn reusing_a_refresh_token_inside_the_grace_window_revokes_nothing_after_it_everything() {
+    let fx = Fx::new().await;
+    let first = connect_as(&fx.app, &fx.user, &fx.client_id, CB, "write", None).await;
+    let second = token_refresh(&fx.app, &fx.client_id, &first.refresh).await;
+    second.assert_status(200);
+    // Right away: refused, the newest pair keeps working.
+    let early = token_refresh(&fx.app, &fx.client_id, &first.refresh).await;
+    early.assert_status(400);
+    assert_eq!(error_of(&early).0, "invalid_grant");
+    assert!(!error_of(&early).1.contains("revoked"));
+    token_refresh(
+        &fx.app,
+        &fx.client_id,
+        second.body["refresh_token"].as_str().unwrap(),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_grants"), 1);
+    // Past the window the same token means theft: the connection ends.
+    fx.age_used_refresh_tokens(31);
+    let late = token_refresh(&fx.app, &fx.client_id, &first.refresh).await;
+    assert!(error_of(&late).1.contains("revoked"), "{}", late.body);
+    assert_eq!(fx.count("SELECT count(*) FROM oauth_grants"), 0);
 }
 
 #[tokio::test]
@@ -1316,7 +1649,7 @@ async fn refresh_tokens_are_bound_to_their_client_and_to_a_working_account() {
 }
 
 #[tokio::test]
-async fn a_refresh_may_ask_for_less_scope_but_not_more() {
+async fn a_refresh_may_repeat_the_scope_but_neither_widen_nor_narrow_it() {
     let fx = Fx::new().await;
     let c = connect_as(&fx.app, &fx.user, &fx.client_id, CB, "write", None).await;
     let post = |scope: &'static str, refresh: String| {
@@ -1343,8 +1676,26 @@ async fn a_refresh_may_ask_for_less_scope_but_not_more() {
     res.assert_status(400);
     assert_eq!(error_of(&res).0, "invalid_scope");
     // The refused attempt did not use the token up.
+    // Asking for less is refused as well: tokens carry the scope of the connection, so a
+    // read-only request must never be answered with a token that can write.
     let res = post("openbase:read", c.refresh.clone()).await;
+    res.assert_status(400);
+    assert_eq!(error_of(&res).0, "invalid_scope");
+    assert!(error_of(&res).1.contains("narrow"), "{}", res.body);
+    assert_eq!(
+        fx.count("SELECT count(*) FROM oauth_tokens WHERE used_at IS NOT NULL"),
+        0
+    );
+    // Exactly the granted scope (in any order, with unknown names ignored) is fine and the
+    // answer names it.
+    let res = post("openbase:write openbase:read mcp", c.refresh.clone()).await;
     res.assert_status(200);
+    assert_eq!(res.body["scope"], "openbase:read openbase:write");
+    // So is no scope at all.
+    let next = res.body["refresh_token"].as_str().unwrap().to_string();
+    token_refresh(&fx.app, &fx.client_id, &next)
+        .await
+        .assert_status(200);
 }
 
 // ---------------------------------------------------------------------------- revoke

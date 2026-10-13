@@ -5,9 +5,16 @@
 //! The browser therefore carries only an opaque id: the client cannot alter the redirect URI,
 //! the PKCE challenge, the resource or the scopes between the steps, and the consent page needs
 //! no query parameters it would have to trust. The consent page is a normal page of the app, so
-//! it requires a signed-in session (the login redirect and the way back come from the app's own
-//! guard), is served with the app's `frame-ancestors 'none'` CSP, and approval is a
-//! CSRF-protected API call from that session (see `api::oauth`).
+//! it requires a signed-in session, is served with the app's `frame-ancestors 'none'` CSP, and
+//! approval is a CSRF-protected API call from that session (see `api::oauth`).
+//!
+//! **Nothing is written for a visitor who is not signed in.** Anyone can open this URL, so a
+//! stored request (or a fetched client metadata document, or a refreshed `last_used_at`) per hit
+//! would let strangers fill the tables and keep them full. A visitor without a session is sent
+//! to `/login?next=<this very request>`; after signing in the web app loads the same URL again,
+//! now with a session, and only then is the request validated in full and stored. Before that,
+//! the cheap read-only checks that need no fetch (a registered client and its redirect address)
+//! still run, so an obviously broken link is explained before the sign-in rather than after it.
 //!
 //! Errors follow RFC 6749 4.1.2.1: while the client or the redirect URI cannot be trusted the
 //! user sees an error page and nothing is redirected (an open redirect would otherwise be
@@ -20,14 +27,19 @@ use std::time::Duration;
 use axum::extract::{RawQuery, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use axum_extra::extract::CookieJar;
 
-use super::{normalize_resource, parse_params, redirect, scope};
-use crate::auth::ClientInfo;
+use super::{normalize_resource, parse_params, rate_key, redirect, scope};
+use crate::auth::{ClientInfo, SESSION_COOKIE, actor_from_session};
 use crate::state::AppState;
 use crate::store::oauth as store;
 
-/// Authorization requests one client address may start per minute.
+/// Authorization requests one client address (IPv6: one /64) may start per minute.
 pub const REQUESTS_PER_IP_PER_MINUTE: u32 = 60;
+/// Authorization requests one signed-in user may start per minute.
+pub const REQUESTS_PER_USER_PER_MINUTE: u32 = 20;
+/// Longest query string accepted: it is carried through the sign-in page in a URL.
+pub const MAX_QUERY_LEN: usize = 8 * 1024;
 /// Longest accepted `state` parameter.
 pub const MAX_STATE_LEN: usize = 1024;
 /// Length of a base64url-encoded SHA-256 digest.
@@ -50,6 +62,13 @@ pub fn redirect_url(redirect_uri: &str, params: &[(&str, &str)], issuer: &str) -
         q.append_pair("iss", issuer);
     }
     Some(url.to_string())
+}
+
+/// The sign-in page, with this very authorization request as the place to return to.
+fn login_path(raw_query: &str) -> String {
+    let back = format!("/oauth/authorize?{raw_query}");
+    let encoded: String = url::form_urlencoded::byte_serialize(back.as_bytes()).collect();
+    format!("/login?next={encoded}")
 }
 
 fn found(location: &str) -> Response {
@@ -103,6 +122,7 @@ fn is_challenge(s: &str) -> bool {
 pub async fn authorize(
     State(state): State<AppState>,
     client_info: ClientInfo,
+    jar: CookieJar,
     RawQuery(query): RawQuery,
 ) -> Response {
     if !state.config.oauth_enabled() {
@@ -115,7 +135,7 @@ pub async fn authorize(
         .limiter
         .check(
             "oauth_authorize",
-            &client_info.ip,
+            &rate_key(&client_info.ip),
             REQUESTS_PER_IP_PER_MINUTE,
             Duration::from_secs(60),
         )
@@ -126,16 +146,62 @@ pub async fn authorize(
             "Too many connection attempts. Wait a minute and try again.",
         );
     }
-    let params = match parse_params(query.as_deref().unwrap_or("").as_bytes()) {
+    let raw = query.unwrap_or_default();
+    if raw.len() > MAX_QUERY_LEN {
+        return error_page(StatusCode::BAD_REQUEST, "The request is too long.");
+    }
+    let params = match parse_params(raw.as_bytes()) {
         Ok(p) => p,
         Err(e) => return error_page(StatusCode::BAD_REQUEST, &e.description),
     };
+
+    // Who is looking? Only a signed-in person (a session cookie; never a bearer token) may have
+    // anything stored or fetched on their behalf.
+    let user = match jar.get(SESSION_COOKIE) {
+        Some(cookie) => {
+            let token = cookie.value().to_string();
+            match state.db.read(move |c| actor_from_session(c, &token)).await {
+                Ok(actor) => actor,
+                Err(e) => return e.into_response(),
+            }
+        }
+        None => None,
+    };
+    if let Some(user) = &user
+        && state
+            .limiter
+            .check(
+                "oauth_authorize_user",
+                &user.user_id,
+                REQUESTS_PER_USER_PER_MINUTE,
+                Duration::from_secs(60),
+            )
+            .is_err()
+    {
+        return error_page(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many connection attempts. Wait a minute and try again.",
+        );
+    }
 
     // 1. Who is asking, and where may the answer go? Until both are verified: no redirects.
     let Some(client_id) = params.get("client_id").filter(|s| !s.is_empty()) else {
         return error_page(StatusCode::BAD_REQUEST, "The request has no client_id.");
     };
     let client = if super::cimd::is_url(client_id) {
+        if user.is_none() {
+            // The metadata document is fetched (and cached) only for a signed-in person. Until
+            // then only the shape of the address is checked.
+            if let Err(e) =
+                super::cimd::validate_client_id(client_id, state.config.oauth_cimd_allow_private)
+            {
+                return error_page(
+                    StatusCode::BAD_REQUEST,
+                    &format!("The app could not be identified: {e}"),
+                );
+            }
+            return found(&login_path(&raw));
+        }
         match super::cimd::resolve(&state, client_id).await {
             Ok(c) => c,
             Err(e) => {
@@ -214,7 +280,11 @@ pub async fn authorize(
     }
     let (requested_scope, _) = scope::requested(params.get("scope").map(String::as_str));
 
-    // 3. Keep the request on the server and hand the browser an id.
+    // 3. Keep the request on the server and hand the browser an id, but only for a signed-in
+    //    person. A visitor goes to the sign-in page first and comes back to this very URL.
+    if user.is_none() {
+        return found(&login_path(&raw));
+    }
     let (cid, uri, ch, st, res, sc) = (
         client.id.clone(),
         redirect_uri.clone(),
@@ -225,10 +295,7 @@ pub async fn authorize(
     );
     let created = state
         .db
-        .write(move |tx| {
-            store::touch_client(tx, &cid)?;
-            store::create_request(tx, &cid, &uri, &ch, st.as_deref(), &res, &sc)
-        })
+        .write(move |tx| store::create_request(tx, &cid, &uri, &ch, st.as_deref(), &res, &sc))
         .await;
     match created {
         Ok(req) => found(&consent_path(&req.id)),

@@ -130,6 +130,19 @@ pub struct Config {
     #[arg(long, env = "OPENBASE_OAUTH_REGISTRATION", default_value_t = true, action = clap::ArgAction::Set)]
     pub oauth_registration: bool,
 
+    /// DEVELOPMENT ONLY. Let OAuth client metadata documents (a `client_id` that is a URL) be
+    /// fetched from loopback and private addresses, and from plain `http://localhost`, so a client
+    /// under development on the same machine can identify itself. Off by default and independent
+    /// of `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` (which is for automations only): any signed-in user
+    /// can make the server fetch such a URL, so on a shared or public instance this lets them
+    /// probe the internal network. Never turn it on in production.
+    #[arg(
+        long,
+        env = "OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE",
+        default_value_t = false
+    )]
+    pub oauth_cimd_allow_private: bool,
+
     /// Log format: "pretty" or "json".
     #[arg(long, env = "OPENBASE_LOG_FORMAT", default_value = "pretty")]
     pub log_format: String,
@@ -219,6 +232,7 @@ impl Config {
             mcp_rate_per_user: 10_000,
             mcp_allowed_origins: Vec::new(),
             oauth_registration: true,
+            oauth_cimd_allow_private: false,
             log_format: "pretty".into(),
         }
     }

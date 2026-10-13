@@ -34,17 +34,22 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/oauth/grants/{id}", delete(admin_revoke_grant))
 }
 
-/// The highest level the user may pick for a request, and the level preselected on the page:
-/// never `manage` (an app that asks for everything is not given everything by default) and never
-/// above what the app asked for.
-fn levels(req: &store::PendingRequest) -> (Access, Access, Option<Access>) {
+/// The highest level the user may pick for a request, and the level preselected on the page.
+///
+/// - **Read only is always preselected**, whatever the app asked for: more access is a decision
+///   the person makes, never a default.
+/// - The ceiling is what the app asked for. An app that named no scope we know gets "Read & edit"
+///   at most; **Full control is offered only when the app asked for it** (`openbase:manage`) and
+///   the person could hand it out themselves, that is, may create `manage` tokens (every
+///   signed-in person may; a token or an OAuth grant never reaches this code, the endpoints are
+///   session-only).
+fn levels(actor: &Actor, req: &store::PendingRequest) -> (Access, Access, Option<Access>) {
     let asked = scope::max_requested(&req.scope);
-    let max = asked.unwrap_or(Access::Manage);
-    let default = match asked {
-        Some(a) if a >= Access::Write => Access::Write,
-        _ => Access::Read,
-    };
-    (max, default.min(max), asked)
+    let mut max = asked.unwrap_or(Access::Write);
+    if max == Access::Manage && actor.require_capability(Capability::Manage).is_err() {
+        max = Access::Write;
+    }
+    (max, Access::Read, asked)
 }
 
 async fn get_request(
@@ -61,7 +66,7 @@ async fn get_request(
             };
             let client = store::client(c, &req.client_id)?
                 .ok_or_else(|| AppError::not_found("authorization request"))?;
-            let (max, default, asked) = levels(&req);
+            let (max, default, asked) = levels(&actor, &req);
             Ok(ConsentRequest {
                 id: req.id,
                 client_id: client.id.clone(),
@@ -122,7 +127,7 @@ async fn decide(
                     redirect_url(&req.redirect_uri, &pairs, &issuer)
                 }
                 "approve" => {
-                    let (max, _, _) = levels(&req);
+                    let (max, _, _) = levels(&actor, &req);
                     let chosen =
                         body.access
                             .as_deref()

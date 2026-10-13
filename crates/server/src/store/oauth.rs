@@ -30,13 +30,21 @@ pub const REQUEST_TTL_MS: i64 = 10 * 60_000;
 const USED_CODE_KEEP_MS: i64 = 24 * 3_600_000;
 /// Clients that never completed anything are forgotten after this long.
 pub const UNUSED_CLIENT_MS: i64 = 7 * 24 * 3_600_000;
-/// Pending authorization requests the whole instance holds at most. They are created by anonymous
-/// visitors (the login happens on the consent page), so the table needs a ceiling.
+/// Pending authorization requests the whole instance holds at most. Only a signed-in user can
+/// create one, but the table still needs a ceiling.
 pub const MAX_PENDING_REQUESTS: i64 = 5_000;
-/// Self-registered (DCR) clients the instance holds at most.
+/// Pending authorization requests one client holds at most, so a single app (or one account
+/// scripting a client of its own) cannot use up the instance-wide room.
+pub const MAX_PENDING_PER_CLIENT: i64 = 200;
+/// Self-registered (DCR) clients the instance holds at most. When the table is full the longest
+/// unused client that nobody connected through is forgotten to make room, see [`make_room`].
 pub const MAX_DCR_CLIENTS: i64 = 5_000;
-/// Cached client metadata documents the instance holds at most.
+/// Cached client metadata documents the instance holds at most (same rule as above).
 pub const MAX_CIMD_CLIENTS: i64 = 5_000;
+/// A refresh token that was exchanged is "just used" for this long: presenting it again in that
+/// window is a client racing itself (two parallel refreshes) and is refused with `invalid_grant`
+/// without revoking the connection. After the window it counts as theft.
+pub const REFRESH_GRACE_MS: i64 = 30_000;
 /// Connected apps one user can have.
 pub const MAX_GRANTS_PER_USER: i64 = 100;
 
@@ -186,6 +194,34 @@ pub fn upsert_cimd_client(conn: &Connection, c: &Client) -> AppResult<()> {
     Ok(())
 }
 
+/// Make room for one more client of `source`: when the table already holds `max` of them, delete
+/// the one that was used longest ago (never used: the oldest) among those nobody connected
+/// through. Refusing instead would let a flood of registrations keep every real app out;
+/// evicting only ever costs an unused client its registration. Fails (429) only when every
+/// client has a connected app, which the per-user limit on connected apps makes unreachable
+/// in practice.
+pub fn make_room(conn: &Connection, source: &str, max: i64) -> AppResult<()> {
+    if count_clients(conn, source)? < max {
+        return Ok(());
+    }
+    let evicted = conn.execute(
+        "DELETE FROM oauth_clients WHERE id = (
+             SELECT c.id FROM oauth_clients c
+             WHERE c.source = ?1
+               AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)
+             ORDER BY COALESCE(c.last_used_at, c.created_at), c.created_at
+             LIMIT 1)",
+        [source],
+    )?;
+    if evicted == 0 {
+        return Err(AppError::TooManyRequests);
+    }
+    Ok(())
+}
+
+/// Record that a client completed something (an authorization code was exchanged). Anonymous or
+/// merely started authorization requests never call this, otherwise a stranger could keep
+/// clients alive past the unused-client cleanup.
 pub fn touch_client(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute(
         "UPDATE oauth_clients SET last_used_at = ?1 WHERE id = ?2",
@@ -239,7 +275,12 @@ pub fn create_request(
     let now = now_ms();
     conn.execute("DELETE FROM oauth_requests WHERE expires_at <= ?1", [now])?;
     let pending: i64 = conn.query_row("SELECT count(*) FROM oauth_requests", [], |r| r.get(0))?;
-    if pending >= MAX_PENDING_REQUESTS {
+    let of_client: i64 = conn.query_row(
+        "SELECT count(*) FROM oauth_requests WHERE client_id = ?1",
+        [client_id],
+        |r| r.get(0),
+    )?;
+    if pending >= MAX_PENDING_REQUESTS || of_client >= MAX_PENDING_PER_CLIENT {
         return Err(AppError::TooManyRequests);
     }
     let req = PendingRequest {
@@ -523,6 +564,9 @@ pub enum Refresh {
     Issued { grant_id: String, tokens: Issued },
     /// The token had been exchanged before: the whole grant was revoked.
     Reused { grant_id: String, user_id: String },
+    /// The token was exchanged a moment ago ([`REFRESH_GRACE_MS`]): a client racing itself.
+    /// Nothing is issued and nothing is revoked.
+    JustUsed,
     /// Unknown, expired, issued to another client, or its grant no longer works.
     Invalid,
 }
@@ -558,7 +602,10 @@ pub fn rotate_refresh(conn: &Connection, token: &str, client_id: &str) -> AppRes
     if owner != client_id {
         return Ok(Refresh::Invalid);
     }
-    if used_at.is_some() {
+    if let Some(used) = used_at {
+        if now - used <= REFRESH_GRACE_MS {
+            return Ok(Refresh::JustUsed);
+        }
         revoke_grant(conn, &grant_id)?;
         return Ok(Refresh::Reused { grant_id, user_id });
     }
@@ -578,9 +625,15 @@ pub fn revoke_grant(conn: &Connection, grant_id: &str) -> AppResult<bool> {
     Ok(conn.execute("DELETE FROM oauth_grants WHERE id = ?1", [grant_id])? > 0)
 }
 
-/// Delete every grant of a user (password change or reset: access obtained before a credential
-/// change must not outlive it). Returns how many were deleted.
+/// Delete every grant of a user, and the authorization codes they approved but nobody has
+/// redeemed yet (password change or reset, enabling two-factor, signing out other sessions,
+/// deactivation: access obtained before such a change must not outlive it, and a code is access
+/// that has not been cashed in). Returns how many grants were deleted.
 pub fn revoke_all_for_user(conn: &Connection, user_id: &str) -> AppResult<usize> {
+    conn.execute(
+        "DELETE FROM oauth_codes WHERE user_id = ?1 AND used_at IS NULL",
+        [user_id],
+    )?;
     Ok(conn.execute("DELETE FROM oauth_grants WHERE user_id = ?1", [user_id])?)
 }
 
@@ -818,7 +871,17 @@ mod tests {
             panic!("rotation");
         };
         assert_ne!(second.refresh_token, first.refresh_token);
-        // Reuse revokes everything of the grant.
+        // A second presentation right away is a client racing itself: refused, not revoked.
+        assert!(matches!(
+            rotate_refresh(&c, &first.refresh_token, &client.id).unwrap(),
+            Refresh::JustUsed
+        ));
+        // Reuse after the grace window revokes everything of the grant.
+        c.execute(
+            "UPDATE oauth_tokens SET used_at = used_at - ?1 WHERE used_at IS NOT NULL",
+            [REFRESH_GRACE_MS + 1],
+        )
+        .unwrap();
         assert!(matches!(
             rotate_refresh(&c, &first.refresh_token, &client.id).unwrap(),
             Refresh::Reused { .. }

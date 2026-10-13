@@ -30,6 +30,15 @@ pub fn pkce() -> (String, String) {
     (verifier, challenge)
 }
 
+/// The scopes an app asks for when it wants `access` ("read", "write" or "manage").
+pub fn scope_for(access: &str) -> &'static str {
+    match access {
+        "manage" => "openbase:read openbase:write openbase:manage",
+        "write" => "openbase:read openbase:write",
+        _ => "openbase:read",
+    }
+}
+
 pub fn encode(pairs: &[(&str, &str)]) -> String {
     let mut s = url::form_urlencoded::Serializer::new(String::new());
     for (k, v) in pairs {
@@ -108,20 +117,41 @@ pub async fn register_client(app: &TestApp, name: &str, redirect_uris: &[&str]) 
     res.body["client_id"].as_str().unwrap().to_string()
 }
 
-/// `GET /oauth/authorize` with these parameters.
-pub async fn authorize(app: &TestApp, pairs: &[(&str, &str)]) -> Response {
+/// A new signed-in user (the browser of the person who is connecting an app).
+pub fn signed_in(app: &TestApp) -> Client {
+    app.user(
+        &format!("{}@example.com", openbase::ids::new_id("browser")),
+        "Browser",
+    )
+}
+
+/// `GET /oauth/authorize` with these parameters as a visitor who is NOT signed in.
+pub async fn authorize_anonymous(app: &TestApp, pairs: &[(&str, &str)]) -> Response {
     get(app, &format!("/oauth/authorize?{}", encode(pairs))).await
 }
 
-/// The standard authorization request of a client, plus `extra` parameters (which replace
-/// defaults of the same name; an empty value removes the parameter).
-pub async fn authorize_with(
-    app: &TestApp,
+/// `GET /oauth/authorize` with these parameters as `user`'s browser (session cookie).
+pub async fn authorize_as(app: &TestApp, user: &Client, pairs: &[(&str, &str)]) -> Response {
+    let path = format!("/oauth/authorize?{}", encode(pairs));
+    app.request_with(user, "GET", &path, None, &[], false, None)
+        .await
+}
+
+/// `GET /oauth/authorize` with these parameters, from a freshly signed-in browser (a request is
+/// stored only for a signed-in person; tests that need no particular user use this).
+pub async fn authorize(app: &TestApp, pairs: &[(&str, &str)]) -> Response {
+    let user = signed_in(app);
+    authorize_as(app, &user, pairs).await
+}
+
+/// The standard parameters of an authorization request of a client, plus `extra` parameters
+/// (which replace defaults of the same name; an empty value removes the parameter).
+pub fn authorize_params(
     client_id: &str,
     redirect_uri: &str,
     challenge: &str,
     extra: &[(&str, &str)],
-) -> Response {
+) -> Vec<(String, String)> {
     let mut params: Vec<(String, String)> = vec![
         ("response_type".into(), "code".into()),
         ("client_id".into(), client_id.into()),
@@ -136,11 +166,51 @@ pub async fn authorize_with(
             params.push((k.to_string(), v.to_string()));
         }
     }
-    let pairs: Vec<(&str, &str)> = params
+    params
+}
+
+fn as_pairs(params: &[(String, String)]) -> Vec<(&str, &str)> {
+    params
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    authorize(app, &pairs).await
+        .collect()
+}
+
+/// The standard authorization request of a client from a freshly signed-in browser.
+pub async fn authorize_with(
+    app: &TestApp,
+    client_id: &str,
+    redirect_uri: &str,
+    challenge: &str,
+    extra: &[(&str, &str)],
+) -> Response {
+    let params = authorize_params(client_id, redirect_uri, challenge, extra);
+    authorize(app, &as_pairs(&params)).await
+}
+
+/// The same request from `user`'s browser.
+pub async fn authorize_with_as(
+    app: &TestApp,
+    user: &Client,
+    client_id: &str,
+    redirect_uri: &str,
+    challenge: &str,
+    extra: &[(&str, &str)],
+) -> Response {
+    let params = authorize_params(client_id, redirect_uri, challenge, extra);
+    authorize_as(app, user, &as_pairs(&params)).await
+}
+
+/// The same request from a visitor who is not signed in.
+pub async fn authorize_with_anonymous(
+    app: &TestApp,
+    client_id: &str,
+    redirect_uri: &str,
+    challenge: &str,
+    extra: &[(&str, &str)],
+) -> Response {
+    let params = authorize_params(client_id, redirect_uri, challenge, extra);
+    authorize_anonymous(app, &as_pairs(&params)).await
 }
 
 pub fn location(res: &Response) -> String {
@@ -271,7 +341,18 @@ pub async fn connect_as(
     base_ids: Option<Vec<String>>,
 ) -> Connected {
     let (verifier, challenge) = pkce();
-    let res = authorize_with(app, client_id, redirect_uri, &challenge, &[]).await;
+    // The app asks for the scopes of the level it will be given (Full control is offered only to
+    // an app that asked for it).
+    let asked = scope_for(access);
+    let res = authorize_with_as(
+        app,
+        user,
+        client_id,
+        redirect_uri,
+        &challenge,
+        &[("scope", asked)],
+    )
+    .await;
     let id = request_id(&res);
     let mut body = json!({"decision": "approve", "access": access});
     if let Some(ids) = base_ids {

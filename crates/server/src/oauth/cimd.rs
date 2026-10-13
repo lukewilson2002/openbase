@@ -6,9 +6,18 @@
 //! request forgery risk. It goes through the same guard as automations' HTTP requests and file
 //! downloads ([`crate::automations::download`]): http(s) only, no credentials in the URL, the
 //! host is resolved by us and every address checked (no loopback, private or link-local
-//! targets unless the operator allows private webhooks), the connection is pinned to the checked
-//! addresses and redirects are never followed. On top of that: a 5 second deadline, a 16 KB limit
-//! on the document, strict validation, and a one hour cache in the database.
+//! targets), the connection is pinned to the checked addresses and redirects are never followed.
+//! Unlike automations, this guard is **never** relaxed by `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`: that
+//! switch is for automations calling the operator's own network, while any signed-in user can
+//! make this fetch happen. The only exception is the development-only
+//! `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE` ([`crate::config::Config::oauth_cimd_allow_private`]),
+//! which exists for clients under development on the same machine (and for the tests).
+//!
+//! The fetch happens only for a signed-in user (see [`super::authorize`]), and what went wrong
+//! is never shown: the person sees a generic message, the details (resolved addresses, status
+//! codes, timeouts) go to the server log, so the page cannot be used to probe the internal
+//! network. On top of that: a 5 second deadline, a 16 KB limit on the document, strict
+//! validation, and a one hour cache in the database.
 
 use std::time::Duration;
 
@@ -34,7 +43,11 @@ pub fn is_url(client_id: &str) -> bool {
     client_id.starts_with("https://") || client_id.starts_with("http://")
 }
 
-/// The URL rules of the draft, plus the loopback exception for tests and local development.
+/// What the person is told when the document could not be fetched, whatever the reason.
+pub const FETCH_FAILED: &str = "could not fetch the app's metadata document";
+
+/// The URL rules of the draft, plus the loopback exception for local development
+/// (`allow_private`, from `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE`).
 pub fn validate_client_id(client_id: &str, allow_private: bool) -> Result<url::Url, String> {
     if client_id.len() > MAX_REDIRECT_URI_LEN {
         return Err("the client_id URL is too long".into());
@@ -130,7 +143,8 @@ pub fn parse_document(client_id: &str, body: &[u8]) -> Result<Client, String> {
 /// The client behind a URL `client_id`: the cached copy while it is fresh, else the freshly
 /// fetched and validated document (stored for the token endpoint, which never fetches).
 pub async fn resolve(state: &AppState, client_id: &str) -> Result<Client, String> {
-    let allow_private = state.config.allow_private_webhooks;
+    // Never `allow_private_webhooks`: see the module documentation.
+    let allow_private = state.config.oauth_cimd_allow_private;
     validate_client_id(client_id, allow_private)?;
     let id = client_id.to_string();
     let cached = state
@@ -163,13 +177,10 @@ pub async fn resolve(state: &AppState, client_id: &str) -> Result<Client, String
     state
         .db
         .write(move |tx| {
-            if store::client(tx, &to_store.id)?.is_none()
-                && store::count_clients(tx, SOURCE_CIMD)? >= MAX_CIMD_CLIENTS
-            {
-                store::gc(tx, now_ms())?;
-                if store::count_clients(tx, SOURCE_CIMD)? >= MAX_CIMD_CLIENTS {
-                    return Err(crate::error::AppError::TooManyRequests);
-                }
+            // A new document makes room by forgetting the longest unused one that nobody
+            // connected through; a full table never blocks a new app.
+            if store::client(tx, &to_store.id)?.is_none() {
+                store::make_room(tx, SOURCE_CIMD, MAX_CIMD_CLIENTS)?;
             }
             store::upsert_cimd_client(tx, &to_store)
         })
@@ -190,20 +201,29 @@ async fn fetch(client_id: &str, allow_private: bool) -> Result<Client, String> {
         crate::automations::download::download(client_id, allow_private, MAX_DOCUMENT_BYTES),
     )
     .await
-    .map_err(|_| "fetching the client metadata document took too long".to_string())?
+    .map_err(|_| {
+        tracing::warn!(
+            client_id,
+            "fetching an OAuth client metadata document timed out"
+        );
+        FETCH_FAILED.to_string()
+    })?
     .map_err(|e| {
-        format!(
-            "could not fetch the client metadata document: {}",
-            e.message
-        )
+        // The reason (a refused address, a status code, a connect error) stays in the log: shown
+        // to a visitor it would turn this page into a probe of the internal network.
+        tracing::warn!(
+            client_id,
+            error = %e.message,
+            "could not fetch an OAuth client metadata document"
+        );
+        FETCH_FAILED.to_string()
     })?;
     if let Some(ct) = &fetched.content_type
         && ct != "application/json"
         && !ct.ends_with("+json")
     {
-        return Err(format!(
-            "the client metadata document must be served as application/json (got {ct})"
-        ));
+        tracing::warn!(client_id, content_type = %ct, "OAuth client metadata document with the wrong content type");
+        return Err("the client metadata document must be served as application/json".into());
     }
     parse_document(client_id, &fetched.bytes)
 }
@@ -234,7 +254,7 @@ mod tests {
         ] {
             assert!(validate_client_id(bad, false).is_err(), "{bad}");
         }
-        // The loopback http exception needs the operator's private-address switch.
+        // The loopback http exception needs the development-only switch.
         assert!(validate_client_id("http://127.0.0.1:9/client.json", false).is_err());
         assert!(validate_client_id("http://127.0.0.1:9/client.json", true).is_ok());
         assert!(validate_client_id("http://example.com/client.json", true).is_err());

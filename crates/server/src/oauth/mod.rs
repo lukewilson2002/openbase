@@ -60,13 +60,34 @@ use crate::state::AppState;
 /// Largest body the protocol endpoints read.
 pub const MAX_BODY_BYTES: usize = 16 * 1024;
 
+/// The key the per-address limits of the OAuth endpoints use: an IPv4 address as it is, an IPv6
+/// address reduced to its /64 (one subscriber usually holds a whole /64, so per-address keys would
+/// give an attacker 2^64 fresh budgets), and an IPv4-mapped IPv6 address as the IPv4 address.
+pub fn rate_key(ip: &str) -> String {
+    use std::net::IpAddr;
+    match ip.parse::<IpAddr>() {
+        Ok(IpAddr::V4(v4)) => v4.to_string(),
+        Ok(IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => {
+                let s = v6.segments();
+                format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3])
+            }
+        },
+        Err(_) => ip.to_string(),
+    }
+}
+
 pub fn router() -> Router<AppState> {
     // Machine endpoints: no cookies, no ambient credentials, so they may answer any origin
     // (browser-based MCP clients such as the MCP Inspector call them with `fetch`).
+    // The root `/.well-known/oauth-protected-resource` answers 404: RFC 9728 section 3.3 requires
+    // the `resource` of a document to be the URL it was read from minus the well-known part, and
+    // the only protected resource is `/mcp` (the 401 challenge points at that document).
     let machine = Router::new()
         .route(
             "/.well-known/oauth-protected-resource",
-            get(metadata::protected_resource),
+            get(metadata::protected_resource_root),
         )
         .route(
             "/.well-known/oauth-protected-resource/mcp",

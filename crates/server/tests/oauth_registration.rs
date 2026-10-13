@@ -252,28 +252,95 @@ async fn registration_is_rate_limited_per_address() {
     assert_eq!(count(&app, "SELECT count(*) FROM oauth_clients"), 30);
 }
 
+/// A full client table forgets the longest unused client to make room; it never turns a real app
+/// away (a trickle of registrations from a few addresses would otherwise keep the table full for
+/// good), and it never forgets a client somebody is connected through.
 #[tokio::test]
-async fn the_number_of_registered_clients_is_capped() {
+async fn a_full_client_table_makes_room_instead_of_refusing() {
     let app = TestApp::new();
+    let user = app.user("a@example.com", "A");
+    let user_id = user.user_id.clone().unwrap();
     app.state
         .db
-        .write_sync(|tx| {
+        .write_sync(move |tx| {
             for i in 0..openbase::store::oauth::MAX_DCR_CLIENTS {
                 tx.execute(
                     "INSERT INTO oauth_clients (id, source, name, redirect_uris, created_at)
                      VALUES (?1, 'dcr', 'bulk', '[]', ?2)",
-                    rusqlite::params![format!("bulk{i}"), openbase::db::now_ms()],
+                    rusqlite::params![format!("bulk{i}"), 1_000 + i],
                 )?;
             }
+            // The oldest client has a connected app: it must stay.
+            tx.execute(
+                "INSERT INTO oauth_grants (id, user_id, client_id, redirect_uri, resource, scopes, created_at)
+                 VALUES ('grtKeep', ?1, 'bulk0', 'x', 'y', '{\"write\":false}', 1)",
+                [&user_id],
+            )?;
             Ok(())
         })
         .unwrap();
+    let count = |sql: &str| app.query_i64(sql, &[]);
+    assert_eq!(count("SELECT count(*) FROM oauth_clients"), 5_000);
     let res = register(
         &app,
         json!({"client_name": "late", "redirect_uris": [GOOD]}),
     )
     .await;
-    res.assert_status(429);
+    res.assert_status(201);
+    assert_eq!(count("SELECT count(*) FROM oauth_clients"), 5_000);
+    assert_eq!(
+        count("SELECT count(*) FROM oauth_clients WHERE id = 'bulk0'"),
+        1,
+        "a client with a connected app is never forgotten"
+    );
+    assert_eq!(
+        count("SELECT count(*) FROM oauth_clients WHERE id = 'bulk1'"),
+        0,
+        "the longest unused client made room"
+    );
+    // And again: another newcomer is not refused either.
+    register(
+        &app,
+        json!({"client_name": "later", "redirect_uris": ["https://later.example.com/cb"]}),
+    )
+    .await
+    .assert_status(201);
+    assert_eq!(count("SELECT count(*) FROM oauth_clients"), 5_000);
+}
+
+/// Starting authorization requests must not make a client look used: the unused-client cleanup
+/// would otherwise never run for a client a stranger pokes once a week.
+#[tokio::test]
+async fn starting_authorization_requests_does_not_keep_a_client_alive() {
+    let app = TestApp::new();
+    let client = register_client(&app, "Poked", &[GOOD]).await;
+    let week = 7 * 24 * 3600 * 1000;
+    app.state
+        .db
+        .write_sync(move |tx| {
+            tx.execute(
+                "UPDATE oauth_clients SET created_at = ?1",
+                [openbase::db::now_ms() - week - 60_000],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    // A visitor and a signed-in person both start a request for it.
+    authorize_with_anonymous(&app, &client, GOOD, &pkce().1, &[])
+        .await
+        .assert_status(302);
+    authorize_with(&app, &client, GOOD, &pkce().1, &[])
+        .await
+        .assert_status(302);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM oauth_clients WHERE last_used_at IS NOT NULL",
+            &[]
+        ),
+        0
+    );
+    openbase::tasks::tick(&app.state, &mut openbase::tasks::Clock::default()).await;
+    assert_eq!(app.query_i64("SELECT count(*) FROM oauth_clients", &[]), 0);
 }
 
 #[tokio::test]
@@ -283,10 +350,7 @@ async fn clients_nobody_used_are_forgotten_after_a_week() {
     let idle = register_client(&app, "Idle", &[GOOD]).await;
     let connected = connect(&app, &user, "Connected", "read", None).await;
     let tried = register_client(&app, "Tried once", &[GOOD]).await;
-    // "Tried once" started an authorization request, so it counts as used at that time.
-    authorize_with(&app, &tried, GOOD, &pkce().1, &[])
-        .await
-        .assert_status(302);
+    // ("Tried once" is marked as used recently below, as a completed exchange would.)
     let hand = openbase::cli::add_oauth_client(&app.state, "By hand", &[GOOD.to_string()], false)
         .unwrap()
         .0;
@@ -436,10 +500,10 @@ async fn clients_can_be_added_by_hand() {
 
 // ---------------------------------------------------------------------------------- CIMD
 
-/// An app server with the loopback exception for http client ids, which exists for local
-/// development and tests (a real client id is an https URL).
+/// An app server with the development-only loopback exception for client metadata documents
+/// (`OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE`); a real client id is an https URL on a public host.
 fn app_with_doc_fetching() -> TestApp {
-    TestApp::with_config(|c| c.allow_private_webhooks = true)
+    TestApp::with_config(|c| c.oauth_cimd_allow_private = true)
 }
 
 #[tokio::test]
@@ -625,7 +689,7 @@ async fn bad_metadata_documents_are_refused_without_redirecting() {
 }
 
 #[tokio::test]
-async fn client_id_urls_must_be_https_and_public_unless_the_operator_allows_private_hosts() {
+async fn client_id_urls_must_be_https_and_public_unless_development_mode_allows_loopback() {
     // Default configuration: the local test server is refused (SSRF guard), whatever the URL.
     let app = TestApp::new();
     let docs = DocServer::start().await;
@@ -653,7 +717,7 @@ async fn client_id_urls_must_be_https_and_public_unless_the_operator_allows_priv
         res.assert_status(400);
         assert!(!res.headers.contains_key("location"), "{url}");
     }
-    // With private addresses allowed, plain http is accepted for loopback hosts only.
+    // With the development-only switch, plain http is accepted for loopback hosts only.
     let app = app_with_doc_fetching();
     let res = authorize_with(
         &app,
@@ -669,6 +733,149 @@ async fn client_id_urls_must_be_https_and_public_unless_the_operator_allows_priv
     authorize_with(&app, &registered, GOOD, &pkce().1, &[])
         .await
         .assert_status(302);
+}
+
+/// `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` is for automations calling the operator's own network. Any
+/// signed-in user can make the server fetch a client metadata URL, so that switch must never let
+/// those fetches reach loopback or private addresses.
+#[tokio::test]
+async fn allow_private_webhooks_never_relaxes_metadata_fetching() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let app = TestApp::with_config(|c| c.allow_private_webhooks = true);
+    assert!(app.state.config.allow_private_webhooks);
+    assert!(!app.state.config.oauth_cimd_allow_private);
+
+    // A listener that counts connections: nothing may even try to connect to it.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let connections = Arc::new(AtomicUsize::new(0));
+    let seen = connections.clone();
+    tokio::spawn(async move {
+        while let Ok((s, _)) = listener.accept().await {
+            seen.fetch_add(1, Ordering::SeqCst);
+            drop(s);
+        }
+    });
+
+    for url in [
+        format!("https://127.0.0.1:{port}/client.json"),
+        format!("https://localhost:{port}/client.json"),
+        format!("https://[::ffff:127.0.0.1]:{port}/client.json"),
+        // Plain http to loopback is a development affordance, not an automation feature.
+        format!("http://127.0.0.1:{port}/client.json"),
+        format!("http://localhost:{port}/client.json"),
+    ] {
+        let res = authorize_with(&app, &url, GOOD, &pkce().1, &[]).await;
+        res.assert_status(400);
+        assert!(!res.headers.contains_key("location"), "{url}");
+    }
+    assert_eq!(
+        connections.load(Ordering::SeqCst),
+        0,
+        "nothing connected to a private address"
+    );
+    assert_eq!(count(&app, "SELECT count(*) FROM oauth_clients"), 0);
+}
+
+/// A visitor (or a signed-in user) must not learn anything about the internal network from the
+/// error page: not a resolved address, not whether a name resolves, not a status code.
+#[tokio::test]
+async fn the_error_page_for_an_unfetchable_document_reveals_nothing_about_the_network() {
+    let app = TestApp::new();
+    let page = |res: &common::Response| String::from_utf8_lossy(&res.bytes).into_owned();
+    let mut pages = Vec::new();
+    for url in [
+        "https://localhost/client.json",
+        "https://127.0.0.1/client.json",
+        "https://169.254.169.254/latest/meta-data/x",
+        "https://10.1.2.3:8443/client.json",
+        "https://no-such-host.invalid/client.json",
+    ] {
+        let res = authorize_with(&app, url, GOOD, &pkce().1, &[]).await;
+        res.assert_status(400);
+        let html = page(&res);
+        assert!(
+            html.contains("could not fetch the app&#39;s metadata document"),
+            "{url}: {html}"
+        );
+        for leak in [
+            "127.0.0.1",
+            "::1",
+            "169.254",
+            "10.1.2.3",
+            "private",
+            "loopback",
+            "resolve",
+            "link-local",
+        ] {
+            assert!(!html.contains(leak), "{url} leaked {leak:?}: {html}");
+        }
+        pages.push(html);
+    }
+    // Every cause looks the same.
+    assert!(pages.windows(2).all(|w| w[0] == w[1]));
+}
+
+/// The document is fetched (and cached) only for a signed-in person: a visitor opening the
+/// authorization URL makes the server contact nobody and store nothing.
+#[tokio::test]
+async fn a_visitor_cannot_make_the_server_fetch_a_metadata_document() {
+    let app = app_with_doc_fetching();
+    let docs = DocServer::start().await;
+    docs.serve_default("Document App", &[GOOD]);
+    for _ in 0..5 {
+        let res = authorize_with_anonymous(&app, &docs.client_id(), GOOD, &pkce().1, &[]).await;
+        res.assert_status(302);
+        assert!(location(&res).starts_with("/login?next="));
+    }
+    assert_eq!(docs.hits(), 0);
+    assert_eq!(count(&app, "SELECT count(*) FROM oauth_clients"), 0);
+    assert_eq!(count(&app, "SELECT count(*) FROM oauth_requests"), 0);
+    // After signing in, the same request does it once.
+    authorize_with(&app, &docs.client_id(), GOOD, &pkce().1, &[])
+        .await
+        .assert_status(302);
+    assert_eq!(docs.hits(), 1);
+    assert_eq!(count(&app, "SELECT count(*) FROM oauth_clients"), 1);
+    // A malformed address is still explained to the visitor, without any fetch.
+    let res =
+        authorize_with_anonymous(&app, "https://app.example.com/", GOOD, &pkce().1, &[]).await;
+    res.assert_status(400);
+}
+
+/// A full metadata-document cache makes room (forgetting the longest unused entry) instead of
+/// refusing every new app.
+#[tokio::test]
+async fn a_full_document_cache_makes_room_instead_of_refusing() {
+    let app = app_with_doc_fetching();
+    app.state
+        .db
+        .write_sync(|tx| {
+            for i in 0..openbase::store::oauth::MAX_CIMD_CLIENTS {
+                tx.execute(
+                    "INSERT INTO oauth_clients (id, source, name, redirect_uris, created_at, fetched_at)
+                     VALUES (?1, 'cimd', 'bulk', '[]', ?2, ?2)",
+                    rusqlite::params![format!("https://bulk.example.com/{i}"), 1_000 + i],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let docs = DocServer::start().await;
+    docs.serve_default("Document App", &[GOOD]);
+    authorize_with(&app, &docs.client_id(), GOOD, &pkce().1, &[])
+        .await
+        .assert_status(302);
+    assert_eq!(count(&app, "SELECT count(*) FROM oauth_clients"), 5_000);
+    assert_eq!(
+        count(
+            &app,
+            "SELECT count(*) FROM oauth_clients WHERE id = 'https://bulk.example.com/0'"
+        ),
+        0,
+        "the longest unused entry made room"
+    );
 }
 
 #[tokio::test]

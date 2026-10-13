@@ -19,10 +19,7 @@ fn app_at(public_url: &str) -> TestApp {
 #[tokio::test]
 async fn protected_resource_metadata_names_this_instance() {
     let app = app_at("https://base.example.com");
-    for path in [
-        "/.well-known/oauth-protected-resource",
-        "/.well-known/oauth-protected-resource/mcp",
-    ] {
+    for path in ["/.well-known/oauth-protected-resource/mcp"] {
         let res = get(&app, path).await;
         res.assert_status(200);
         assert_eq!(
@@ -46,6 +43,22 @@ async fn protected_resource_metadata_names_this_instance() {
                 .starts_with("application/json")
         );
     }
+}
+
+/// RFC 9728 section 3.3: the `resource` of a document is the URL it was read from minus the
+/// well-known part. The root document would have to name the origin, which is not the protected
+/// resource (that is `/mcp`), so it is not served at all.
+#[tokio::test]
+async fn the_root_protected_resource_document_is_not_served() {
+    let app = app_at("https://base.example.com");
+    let res = get(&app, "/.well-known/oauth-protected-resource").await;
+    res.assert_status(404);
+    assert!(res.body.get("resource").is_none(), "{}", res.body);
+    assert_eq!(res.body["error"], "not_found");
+    // The document the challenge points to is served and matches its own location.
+    let doc = get(&app, "/.well-known/oauth-protected-resource/mcp").await;
+    doc.assert_status(200);
+    assert_eq!(doc.body["resource"], "https://base.example.com/mcp");
 }
 
 #[tokio::test]
@@ -118,7 +131,6 @@ async fn oauth_is_advertised_over_https_and_loopback_only() {
         assert_eq!(app.state.config.oauth_enabled(), on, "{url}");
         for path in [
             "/.well-known/oauth-authorization-server",
-            "/.well-known/oauth-protected-resource",
             "/.well-known/oauth-protected-resource/mcp",
         ] {
             let res = get(&app, path).await;
@@ -192,7 +204,7 @@ async fn metadata_is_readable_from_a_browser_on_any_origin() {
 #[tokio::test]
 async fn mcp_401_points_at_the_resource_metadata() {
     let app = TestApp::new();
-    let challenge = "Bearer realm=\"OpenBase MCP\", resource_metadata=\"http://localhost:8080/.well-known/oauth-protected-resource/mcp\"";
+    let challenge = "Bearer realm=\"OpenBase MCP\", scope=\"openbase:read openbase:write\", resource_metadata=\"http://localhost:8080/.well-known/oauth-protected-resource/mcp\"";
     let res = legacy(&app, &app.anon(), "tools/list", json!({})).await;
     res.assert_status(401);
     assert_eq!(res.headers["www-authenticate"], challenge);

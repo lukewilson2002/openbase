@@ -229,8 +229,14 @@ fn unauthorized(state: &AppState, message: &str, invalid_token: bool) -> Respons
     let mut res = refuse(StatusCode::UNAUTHORIZED, SERVER_REFUSAL, message);
     let error =
         invalid_token.then_some(("invalid_token", "The access token is invalid or expired"));
+    // With OAuth available, the challenge names the scope a client should ask for: read and
+    // write, not `manage` (see `oauth::scope::CHALLENGE`).
+    let scope = state
+        .config
+        .oauth_enabled()
+        .then_some(crate::oauth::scope::CHALLENGE);
     res.headers_mut()
-        .insert(header::WWW_AUTHENTICATE, challenge(state, error, None));
+        .insert(header::WWW_AUTHENTICATE, challenge(state, error, scope));
     res
 }
 
