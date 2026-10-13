@@ -68,6 +68,15 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
 }
 
 describe("ExpandedRecord", () => {
+  it("opens with the dialog itself focused (not a button whose tooltip would swallow the first Escape) and closes on Escape", async () => {
+    const { props } = setup();
+    await screen.findByDisplayValue("Launch");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("shows every field with its value, computed ones read-only, hidden ones collapsed", async () => {
     setup();
     expect(await screen.findByDisplayValue("Launch")).toBeInTheDocument();

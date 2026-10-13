@@ -381,6 +381,15 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const [colMenu, setColMenu] = useState<{ index: number; at: ScreenRect } | null>(null);
   const [rowMenu, setRowMenu] = useState<{ row: number; col: number; at: ScreenRect } | null>(null);
   const [sumMenu, setSumMenu] = useState<{ col: number; at: ScreenRect } | null>(null);
+  /**
+   * Close a context menu and hand the keyboard back to the grid. The menus hang off an invisible
+   * anchor, so Radix has nothing to return focus to and it would fall to <body>, where Ctrl+Z (undo
+   * of a delete done from the menu) and the other grid shortcuts no longer work.
+   */
+  const closeMenu = useCallback((set: (v: null) => void) => {
+    set(null);
+    gridRef.current?.focus();
+  }, []);
   const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
   const [confirmField, setConfirmField] = useState<Field | null>(null);
@@ -456,10 +465,13 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- add / delete rows -----------------------------------------------------------------------
   const addRecord = useCallback(async () => {
+    const selectionBefore = selectionRef.current;
     const created = await opsRef.current.createRecords({});
     if (created.length === 0) return;
-    // Wait for the refreshed pages, then bring the new row into view.
+    // Wait for the refreshed pages, then bring the new row into view. Someone who has meanwhile
+    // clicked into another cell (or is typing in one) keeps their selection.
     window.setTimeout(() => {
+      if (selectionRef.current !== selectionBefore) return;
       const idx = dataRef.current.indexOf(created[0]!.id);
       const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.length - 1;
       if (row >= 0) {
@@ -709,7 +721,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         cfg={cfg}
         canManageFields={canManageFields}
         canSort
-        onClose={() => setColMenu(null)}
+        onClose={() => closeMenu(setColMenu)}
         onEditField={(f, focus) => setFieldDialog({ mode: "edit", field: f, focus })}
         onInsert={(side) => colSpec && setFieldDialog({ mode: "create", relativeTo: { fieldId: colSpec.id, side } })}
         onDelete={(f) => setConfirmField(f)}
@@ -717,7 +729,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       <RowMenu
         at={rowMenu?.at ?? null}
         canEdit={canEdit}
-        onClose={() => setRowMenu(null)}
+        onClose={() => closeMenu(setRowMenu)}
         onExpand={() => rowMenu && onExpand(rowMenu.row)}
         onInsert={(where) => rowMenu && void insertRecord(rowMenu.row, where)}
         onDuplicate={() => {
@@ -739,7 +751,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         field={sumMenu ? columns[sumMenu.col]?.field : undefined}
         current={sumMenu ? (queryConfig.summaries[columns[sumMenu.col]?.id ?? ""] ?? "none") : "none"}
         canConfigure={cfg.canConfigure}
-        onClose={() => setSumMenu(null)}
+        onClose={() => closeMenu(setSumMenu)}
         onPick={(agg) => {
           const id = sumMenu ? columns[sumMenu.col]?.id : undefined;
           if (id) cfg.update((c) => setSummary(c, id, agg));
