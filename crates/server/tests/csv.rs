@@ -1353,3 +1353,175 @@ async fn a_large_new_table_import_completes() {
     assert_eq!(q["total"], 5_000);
     assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());
 }
+
+// ------------------------------------------------------- hardening (B2)
+
+#[tokio::test]
+async fn import_refuses_files_with_too_many_cells() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let map = Some(json!({ "n": p.name }));
+    // 500 columns x 7,000 rows of real cells: 3.5M cells in 7 MB.
+    let row = format!("{}\n", vec!["a"; 500].join(","));
+    let mut wide = format!("n{}\n", ",c".repeat(499));
+    wide.push_str(&row.repeat(7_000));
+    let r = import_to(&f.app, &f.owner, &t, wide.as_bytes(), map.clone(), None).await;
+    r.assert_status(400);
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("cells"),
+        "{}",
+        r.body
+    );
+    // A 500-column header over many one-cell rows is padded to 3.5M cells: refused too.
+    let mut ragged = format!("n{}\n", ",c".repeat(499));
+    ragged.push_str(&"a\n".repeat(7_000));
+    import_to(&f.app, &f.owner, &t, ragged.as_bytes(), map.clone(), None)
+        .await
+        .assert_status(400);
+    // The same through the new-table import (Creator).
+    import_base(&f.app, &f.owner, &f.base_id, "w.csv", wide.as_bytes(), None)
+        .await
+        .assert_status(400);
+    assert_eq!(all_records(&p).await["total"], 5);
+    // Exactly at the budget (header + 5,999 rows of 500 cells) still imports.
+    let mut ok = format!("n{}\n", ",c".repeat(499));
+    ok.push_str(&row.repeat(5_999));
+    import_to(&f.app, &f.owner, &t, ok.as_bytes(), map, None)
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn imports_queue_behind_a_small_number_of_slots() {
+    use std::time::Duration;
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let map = Some(json!({ "n": p.name }));
+    let all = opengrid::api::csv::IMPORT_CONCURRENCY as u32;
+    let held = opengrid::api::csv::IMPORT_PERMITS
+        .acquire_many(all)
+        .await
+        .unwrap();
+    let blocked = tokio::time::timeout(
+        Duration::from_millis(400),
+        import_to(&f.app, &f.owner, &t, b"n\nqueued\n", map.clone(), None),
+    )
+    .await;
+    assert!(blocked.is_err(), "the import ran without a free slot");
+    drop(held);
+    import_to(&f.app, &f.owner, &t, b"n\nrunning\n", map, None)
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn bad_rows_are_found_by_bisection_not_one_by_one() {
+    use opengrid::engine::write::{WriteCtx, WriteSource};
+    use opengrid::store::csv_io::{self, ImportOutcome};
+    let p = people().await;
+    let f = &p.f;
+    // 1,000 rows (one batch) with three bad ages.
+    let mut text = String::from("n,age\n");
+    for i in 0..1_000 {
+        let age = if [137, 138, 900].contains(&i) {
+            "nope".to_string()
+        } else {
+            i.to_string()
+        };
+        text.push_str(&format!("row {i},{age}\n"));
+    }
+    let parsed = csv_io::parse(text.as_bytes(), true).unwrap();
+    let (table, user) = (f.table_id.clone(), f.owner.user_id.clone().unwrap());
+    let (name, age) = (p.name.clone(), p.age.clone());
+    let (calls, rejected) = f
+        .app
+        .state
+        .db
+        .write_sync(move |tx| {
+            let fields = opengrid::store::schema::table_fields(tx, &table)?;
+            let mapping = [("n", &name), ("age", &age)]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), Some(v.clone())))
+                .collect();
+            let cols = csv_io::resolve_mapping(&parsed, &mapping, &fields)?;
+            let ctx = WriteCtx::for_user(tx, &user, WriteSource::Import)?.typecast(true);
+            let before = csv_io::create_calls_on_this_thread();
+            let out = csv_io::import_rows(tx, &ctx, &table, &cols, &parsed.rows)?;
+            let calls = csv_io::create_calls_on_this_thread() - before;
+            let ImportOutcome::Rejected { errors, truncated } = out else {
+                panic!("expected a rejection");
+            };
+            assert!(!truncated);
+            Ok((calls, errors.iter().map(|e| e.row).collect::<Vec<_>>()))
+        })
+        .unwrap();
+    // Header is row 1, so data row i is row i + 2.
+    assert_eq!(rejected, [139, 140, 902]);
+    // One-by-one replay took 1,001 creates; bisecting three rows takes ~60.
+    assert!(calls < 100, "{calls} create calls");
+}
+
+#[tokio::test]
+async fn export_is_a_snapshot_when_rows_change_between_pages() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let age = id_of(&f.number(&t, "Age").await);
+    let (name, age2, table) = (f.primary_id.clone(), age.clone(), t.clone());
+    schema_support::sql(&f.app, move |tx| {
+        tx.execute(
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1200)
+             INSERT INTO records (id, table_id, data, position, autonumber, created_at, updated_at)
+             SELECT 'recsnap' || i, ?1, json_object(?2, 'Row ' || i, ?3, i), i, i, 1, 1 FROM n",
+            rusqlite::params![table, name, age2],
+        )
+    });
+    let sorted = f
+        .view_of(
+            &t,
+            "Sorted",
+            "grid",
+            json!({ "sorts": [{ "field_id": age, "direction": "desc" }] }),
+        )
+        .await;
+    let req = auth(
+        Request::builder().method("GET").uri(export_url(&sorted)),
+        &f.owner,
+    )
+    .body(Body::empty())
+    .unwrap();
+    let res = f.app.router.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), 200);
+    let mut stream = res.into_body().into_data_stream();
+    let mut all: Vec<u8> = Vec::new();
+    all.extend_from_slice(&stream.next().await.unwrap().unwrap());
+    // Records land at the top of the sort order while the file streams.
+    f.create(&t, json!({ &f.primary_id: "Newcomer", &age: 5000 }))
+        .await;
+    f.create(&t, json!({ &f.primary_id: "Newcomer 2", &age: 5001 }))
+        .await;
+    while let Some(chunk) = stream.next().await {
+        all.extend_from_slice(&chunk.unwrap());
+    }
+    let parsed: Vec<Vec<String>> = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(&all[3..])
+        .records()
+        .map(|r| r.unwrap().iter().map(str::to_string).collect())
+        .collect();
+    let distinct: std::collections::HashSet<&str> = parsed.iter().map(|r| r[0].as_str()).collect();
+    // The header and exactly the 1,200 rows of the snapshot, each once.
+    assert_eq!(parsed.len(), 1201);
+    assert_eq!(distinct.len(), 1201, "a row was repeated");
+    assert!(!distinct.contains("Newcomer"));
+    for i in 1..=1200 {
+        assert!(
+            distinct.contains(format!("Row {i}").as_str()),
+            "Row {i} missing"
+        );
+    }
+}
