@@ -690,6 +690,9 @@ async fn totp_enable(
             // someone who only had the password) must not outlive turning it
             // on; the session making this request stays.
             session::delete_all_for_user(tx, &user.id, actor.session_hash.as_deref())?;
+            // The same goes for connected apps (OAuth grants): they were approved before the
+            // second factor existed. (API tokens stay, as documented in docs/security.md.)
+            crate::store::oauth::revoke_all_for_user(tx, &user.id)?;
             audit::record(
                 tx,
                 Some(&user.id),
@@ -823,6 +826,9 @@ async fn revoke_other_sessions(
         .db
         .write(move |tx| {
             session::delete_all_for_user(tx, &actor.user_id, actor.session_hash.as_deref())?;
+            // "Sign out everywhere else" is what a person does when they fear someone else has
+            // access, and connected apps are access: they end too and have to be approved again.
+            crate::store::oauth::revoke_all_for_user(tx, &actor.user_id)?;
             audit::record(
                 tx,
                 Some(&actor.user_id),

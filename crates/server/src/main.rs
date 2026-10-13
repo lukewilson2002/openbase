@@ -115,6 +115,7 @@ fn disable_two_factor(state: &AppState, email: &str) -> openbase::error::AppResu
             rusqlite::params![openbase::db::now_ms(), id],
         )?;
         openbase::auth::session::delete_all_for_user(tx, &id, None)?;
+        openbase::store::oauth::revoke_all_for_user(tx, &id)?;
         Ok(())
     })
 }
