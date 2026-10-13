@@ -175,4 +175,76 @@ describe("account", () => {
     await screen.findByRole("dialog", { name: "Copy your new token" });
     expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Agent", write: true, manage: true, base_ids: null, expires_in_days: null });
   });
+  it("limits a token to selected bases", async () => {
+    const user = userEvent.setup();
+    const info = { id: "pat4", name: "Scoped", write: true, manage: false, base_ids: ["app2"], created_at: 1_700_000_000_000, last_used_at: null, expires_at: null };
+    const api = mockApi({
+      "GET /api/auth/me": USER,
+      "GET /api/tokens": [],
+      "GET /api/workspaces": [
+        {
+          id: "wsp1",
+          name: "Acme",
+          role: "owner",
+          bases: [
+            { id: "app1", workspace_id: "wsp1", name: "CRM", color: "blue", icon: null, role: "owner" },
+            { id: "app2", workspace_id: "wsp1", name: "Ops", color: "green", icon: null, role: "owner" },
+          ],
+        },
+      ],
+      "POST /api/tokens": { token: "pat_SCOPED", info },
+    });
+    renderApp({ route: "/account?tab=tokens" });
+
+    await user.click(await screen.findByRole("button", { name: /New token/ }));
+    const form = await screen.findByRole("dialog", { name: "New personal access token" });
+    await user.type(within(form).getByLabelText("Name"), "Scoped");
+    // Without the list of bases being asked for, nothing is fetched.
+    expect(api.callsTo("GET /api/workspaces")).toHaveLength(0);
+    await user.selectOptions(within(form).getByLabelText("Bases"), "some");
+    const group = await within(form).findByRole("group", { name: "Allowed bases" });
+    expect(within(form).getByRole("button", { name: "Create token" })).toBeDisabled();
+    await user.click(await within(group).findByRole("checkbox", { name: "Acme / Ops" }));
+    expect(within(group).getByRole("checkbox", { name: "Acme / CRM" })).not.toBeChecked();
+    expect(within(group).getByText(/cannot manage workspaces/)).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Create token" }));
+
+    await screen.findByRole("dialog", { name: "Copy your new token" });
+    expect(api.callsTo("POST /api/tokens")[0]?.body).toEqual({ name: "Scoped", write: false, manage: false, base_ids: ["app2"], expires_in_days: null });
+  });
+
+  it("explains how to connect an AI assistant over MCP, with copyable settings", async () => {
+    const user = userEvent.setup();
+    mockApi({ "GET /api/auth/me": USER, "GET /api/tokens": [] });
+    renderApp({ route: "/account?tab=assistants" });
+
+    expect(await screen.findByRole("heading", { name: "Connect an AI assistant (MCP)" })).toBeInTheDocument();
+    const endpoint = `${window.location.origin}/mcp`;
+    expect(screen.getByLabelText("MCP endpoint")).toHaveValue(endpoint);
+
+    // The Claude Code command is exactly what `claude mcp add` takes.
+    const command = screen.getByLabelText("Claude Code command");
+    expect(command).toHaveTextContent(`claude mcp add --transport http opengrid ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
+    await user.click(screen.getByRole("button", { name: "Copy claude code command" }));
+    expect(await navigator.clipboard.readText()).toBe(`claude mcp add --transport http opengrid ${endpoint} --header "Authorization: Bearer YOUR_TOKEN"`);
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+
+    // The generic configuration is valid JSON for clients with remote servers and headers.
+    const config = JSON.parse(screen.getByLabelText("Generic MCP configuration").textContent ?? "");
+    expect(config).toEqual({ mcpServers: { opengrid: { type: "http", url: endpoint, headers: { Authorization: "Bearer YOUR_TOKEN" } } } });
+    await user.click(screen.getByRole("button", { name: "Copy generic mcp configuration" }));
+    expect(JSON.parse(await navigator.clipboard.readText())).toEqual(config);
+
+    // Guidance on the kinds of token, and what no token can do.
+    for (const kind of ["Read only", "Read and write", "Limited to bases", "Can manage workspaces and members"]) {
+      expect(screen.getByText(kind)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/never change your password, two-factor settings, sessions or tokens/)).toBeInTheDocument();
+    // The token itself is never part of the page.
+    expect(document.body.textContent).not.toMatch(/pat_/);
+
+    // The first step leads to the token form.
+    await user.click(screen.getByRole("button", { name: "Create a token" }));
+    expect(await screen.findByRole("heading", { name: "Personal access tokens" })).toBeInTheDocument();
+  });
 });

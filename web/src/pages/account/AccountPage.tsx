@@ -3,12 +3,13 @@ import { AppPage } from "@/components/layouts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useMe } from "@/auth/useAuth";
+import { AssistantsSection } from "./AssistantsSection";
 import { ProfileSection } from "./ProfileSection";
 import { SecuritySection } from "./SecuritySection";
 import { SessionsSection } from "./SessionsSection";
 import { TokensSection } from "./TokensSection";
 
-const TABS = ["profile", "security", "sessions", "tokens"] as const;
+const TABS = ["profile", "security", "sessions", "tokens", "assistants"] as const;
 type TabName = (typeof TABS)[number];
 
 export function AccountPage() {
@@ -26,6 +27,7 @@ export function AccountPage() {
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="tokens">API tokens</TabsTrigger>
+          <TabsTrigger value="assistants">AI assistants</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
           <ProfileSection user={user} />
@@ -38,6 +40,9 @@ export function AccountPage() {
         </TabsContent>
         <TabsContent value="tokens">
           <TokensSection />
+        </TabsContent>
+        <TabsContent value="assistants">
+          <AssistantsSection onOpenTokens={() => setParams({ tab: "tokens" }, { replace: true })} />
         </TabsContent>
       </Tabs>
     </AppPage>
