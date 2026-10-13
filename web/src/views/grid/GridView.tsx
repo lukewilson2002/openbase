@@ -464,21 +464,39 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   }, [openRecordId, data.version, rowMap, recordAtRow]);
 
   // ---- add / delete rows -----------------------------------------------------------------------
+  // The new row is selected and scrolled into view once its page has arrived, unless the person has
+  // picked another cell by then. Quick successive clicks share one pending reveal (the last new row
+  // wins, and "before" stays the selection from the first click), so no stale timer can move the
+  // selection from under a click that came later.
+  const reveal = useRef<{ timer: number; before: GridSelectionInfo } | null>(null);
+  useEffect(
+    () => () => {
+      if (reveal.current) window.clearTimeout(reveal.current.timer);
+    },
+    [],
+  );
+
   const addRecord = useCallback(async () => {
-    const selectionBefore = selectionRef.current;
+    const before = reveal.current?.before ?? selectionRef.current;
+    const focused = document.activeElement;
     const created = await opsRef.current.createRecords({});
     if (created.length === 0) return;
-    // Wait for the refreshed pages, then bring the new row into view. Someone who has meanwhile
-    // clicked into another cell (or is typing in one) keeps their selection.
-    window.setTimeout(() => {
-      if (selectionRef.current !== selectionBefore) return;
+    if (reveal.current) window.clearTimeout(reveal.current.timer);
+    const timer = window.setTimeout(() => {
+      reveal.current = null;
+      if (selectionRef.current !== before) return;
       const idx = dataRef.current.indexOf(created[0]!.id);
       const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.length - 1;
       if (row >= 0) {
         gridRef.current?.scrollToRow(row);
         gridRef.current?.selectCell(0, row);
+        // The keyboard is still on the "Add record" button (or nowhere) that was used: hand it to the
+        // grid, or the new row looks selected while typing goes to the button, and a click on that
+        // already selected cell would not move the focus either.
+        if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
       }
     }, 400);
+    reveal.current = { timer, before };
   }, []);
 
   const insertRecord = useCallback(
