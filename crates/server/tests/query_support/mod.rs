@@ -30,7 +30,12 @@ impl People {
 /// Done [] 2026-03-20 (checked); dave (nothing but a name); Eve 30 Todo [b]
 /// (no date).
 pub async fn people() -> People {
-    let f = Fixture::new().await;
+    people_with(|_| {}).await
+}
+
+/// [`people`] on an app with a tweaked configuration.
+pub async fn people_with(config: impl FnOnce(&mut opengrid::config::Config)) -> People {
+    let f = Fixture::with_config(config).await;
     let t = f.table_id.clone();
     let name = f.primary_id.clone();
     let age = id_of(&f.number(&t, "Age").await);

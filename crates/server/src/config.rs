@@ -83,6 +83,16 @@ pub struct Config {
     #[arg(long, env = "OPENGRID_ALLOW_PRIVATE_WEBHOOKS", default_value_t = false)]
     pub allow_private_webhooks: bool,
 
+    /// Requests per second one API token may make to the Airtable-compatible
+    /// API (`/api/v1`). Excess requests answer 429 RATE_LIMIT_REACHED.
+    #[arg(long, env = "OPENGRID_V1_RATE_PER_TOKEN", default_value_t = 5)]
+    pub v1_rate_per_token: u32,
+
+    /// Requests per second all API tokens of one user may make to `/api/v1`
+    /// together.
+    #[arg(long, env = "OPENGRID_V1_RATE_PER_USER", default_value_t = 50)]
+    pub v1_rate_per_user: u32,
+
     /// Log format: "pretty" or "json".
     #[arg(long, env = "OPENGRID_LOG_FORMAT", default_value = "pretty")]
     pub log_format: String,
@@ -135,6 +145,10 @@ impl Config {
             smtp_security: "starttls".into(),
             smtp_from: "OpenGrid <test@localhost>".into(),
             allow_private_webhooks: false,
+            // Tests make many requests per second with one token; the limit
+            // itself is tested with the real defaults.
+            v1_rate_per_token: 10_000,
+            v1_rate_per_user: 10_000,
             log_format: "pretty".into(),
         }
     }

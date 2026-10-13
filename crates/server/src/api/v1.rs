@@ -1,9 +1,9 @@
-//! `v1` API.
+//! Routes of the Airtable-compatible API (see [`crate::v1`]).
 
 use axum::Router;
 
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
+    crate::v1::router()
 }

@@ -195,7 +195,8 @@ pub fn actor_from_api_token(conn: &Connection, token: &str) -> AppResult<Option<
     }))
 }
 
-fn bearer(parts: &Parts) -> Option<&str> {
+/// The token of an `Authorization: Bearer <token>` header.
+pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
     let v = parts
         .headers
         .get(axum::http::header::AUTHORIZATION)?

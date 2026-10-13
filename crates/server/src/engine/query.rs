@@ -761,25 +761,28 @@ pub fn effective_config(
     Ok(config)
 }
 
-/// Run a view query (see the module docs). The caller has checked that the
-/// user may read the view's base.
-pub fn run_query(
+/// The result of scanning a view: the (possibly cached) ordered ids plus what
+/// rendering a page needs.
+struct Scanned {
+    entry: std::sync::Arc<CachedQuery>,
+    plan: Plan,
+    config: ViewConfig,
+    table_id: String,
+}
+
+fn scan(
     conn: &Connection,
     cache: &QueryCache,
     versions: &DataVersions,
     user_id: &str,
     view: &ViewRow,
     req: &QueryRequest,
-) -> AppResult<QueryResponse> {
+) -> AppResult<Scanned> {
     let table_id = view.view.table_id.as_str();
     let table = schema::live_table(conn, table_id)?;
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
     let config = effective_config(conn, view, req.transient.as_ref())?;
     let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz)?;
-    let limit = req
-        .limit
-        .unwrap_or(DEFAULT_PAGE_SIZE)
-        .min(limits::MAX_PAGE_SIZE);
 
     // Version first, data second: see store::versions.
     let version = versions.current(&table.base_id);
@@ -815,12 +818,41 @@ pub fn run_query(
             built
         }
     };
+    Ok(Scanned {
+        entry,
+        plan,
+        config,
+        table_id: table_id.to_string(),
+    })
+}
 
+/// Run a view query (see the module docs). The caller has checked that the
+/// user may read the view's base.
+pub fn run_query(
+    conn: &Connection,
+    cache: &QueryCache,
+    versions: &DataVersions,
+    user_id: &str,
+    view: &ViewRow,
+    req: &QueryRequest,
+) -> AppResult<QueryResponse> {
+    let scanned = scan(conn, cache, versions, user_id, view, req)?;
+    let limit = req
+        .limit
+        .unwrap_or(DEFAULT_PAGE_SIZE)
+        .min(limits::MAX_PAGE_SIZE);
+    let entry = &scanned.entry;
     let total = entry.ids.len();
     let start = req.offset.min(total);
     let end = start.saturating_add(limit).min(total);
     let page_ids = &entry.ids[start..end];
-    let (records, colors) = load_page(conn, &plan, &config, page_ids, table_id)?;
+    let (records, colors) = load_page(
+        conn,
+        &scanned.plan,
+        &scanned.config,
+        page_ids,
+        &scanned.table_id,
+    )?;
     Ok(QueryResponse {
         total,
         offset: req.offset,
@@ -828,6 +860,21 @@ pub fn run_query(
         groups: entry.groups.clone(),
         colors,
     })
+}
+
+/// The ordered ids of every record the query matches (the same scan and cache
+/// as [`run_query`], without rendering a page). `offset` and `limit` of the
+/// request are ignored. Used by the Airtable-compatible API, which pages
+/// through a snapshot of these ids.
+pub fn query_ids(
+    conn: &Connection,
+    cache: &QueryCache,
+    versions: &DataVersions,
+    user_id: &str,
+    view: &ViewRow,
+    req: &QueryRequest,
+) -> AppResult<std::sync::Arc<CachedQuery>> {
+    Ok(scan(conn, cache, versions, user_id, view, req)?.entry)
 }
 
 /// Load the page's records by id and render them, with row colours.
