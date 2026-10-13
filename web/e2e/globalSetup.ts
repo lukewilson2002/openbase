@@ -108,7 +108,10 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | und
 
   const dataDir = mkdtempSync(join(tmpdir(), "openbase-e2e-"));
   const port = await freePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
+  // `localhost`, not 127.0.0.1: passkeys (WebAuthn) need a domain name as the relying party, and
+  // `localhost` is the one name browsers treat as a secure context over plain http. The server still
+  // listens on the IPv4 loopback only; the browser and Node fall back to it from ::1.
+  const baseUrl = `http://localhost:${port}`;
   let log = "";
   const child = spawn(bin, ["serve"], {
     cwd: dataDir,

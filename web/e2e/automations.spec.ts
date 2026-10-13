@@ -79,7 +79,7 @@ async function runs(page: Page, automationId: string): Promise<RunDto[]> {
 }
 
 test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://127.0.0.1:8080" });
+  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080" });
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);
