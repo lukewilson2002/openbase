@@ -48,7 +48,9 @@ fn assemble(state: AppState, with_mcp: bool) -> Router {
 
     // `/mcp` takes bearer tokens only (cookies are refused), so it needs no CSRF header and
     // sits outside the cookie guard above; it enforces its own body limit.
-    let mut app = Router::new().merge(api);
+    // The OAuth protocol endpoints (`/oauth/*`, `/.well-known/oauth-*`) use no cookies either and
+    // answer in the RFCs' formats, so they are outside the cookie guard too.
+    let mut app = Router::new().merge(api).merge(crate::oauth::router());
     if with_mcp {
         app = app.merge(crate::mcp::router());
     }

@@ -47,6 +47,11 @@ enum Command {
         #[arg(long)]
         email: String,
     },
+    /// Add, list or remove OAuth clients by hand (apps that should not register themselves, or
+    /// that need a client secret). Self-registered clients and clients identified by a metadata
+    /// document URL need none of this.
+    #[command(name = "oauth-client", subcommand)]
+    OauthClient(OauthClientCommand),
     /// Write a consistent backup archive (database + attachments).
     Backup {
         /// Output file (.tar.gz). Defaults to <data_dir>/backups/openbase-<timestamp>.tar.gz
@@ -63,6 +68,26 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum OauthClientCommand {
+    /// Add a client and print its client_id (and its secret, once, with --confidential).
+    Add {
+        /// The name the consent page shows.
+        #[arg(long)]
+        name: String,
+        /// An exact redirect URI: https, or http on a loopback address. Repeat for several.
+        #[arg(long = "redirect-uri", required = true)]
+        redirect_uris: Vec<String>,
+        /// Give the client a secret it must send at the token endpoint (client_secret_post).
+        #[arg(long)]
+        confidential: bool,
+    },
+    /// List every client (registered, fetched and added by hand).
+    List,
+    /// Remove a client together with the connections (grants) made through it.
+    Remove { client_id: String },
 }
 
 fn init_tracing(format: &str) {
@@ -208,6 +233,38 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             let state = AppState::open(config)?;
             let path = openbase::backup::create(&state, out.as_deref())?;
             println!("backup written to {}", path.display());
+            Ok(())
+        }
+        Command::OauthClient(command) => {
+            let state = AppState::open(config)?;
+            match command {
+                OauthClientCommand::Add {
+                    name,
+                    redirect_uris,
+                    confidential,
+                } => {
+                    let (id, secret) = openbase::cli::add_oauth_client(
+                        &state,
+                        &name,
+                        &redirect_uris,
+                        confidential,
+                    )?;
+                    println!("client_id:     {id}");
+                    if let Some(secret) = secret {
+                        println!("client_secret: {secret}");
+                        println!("(the secret is shown only now; it is stored hashed)");
+                    }
+                }
+                OauthClientCommand::List => {
+                    for line in openbase::cli::list_oauth_clients(&state)? {
+                        println!("{line}");
+                    }
+                }
+                OauthClientCommand::Remove { client_id } => {
+                    openbase::cli::remove_oauth_client(&state, &client_id)?;
+                    println!("removed {client_id} and the connections made through it");
+                }
+            }
             Ok(())
         }
         // Handled in main() before the runtime starts.

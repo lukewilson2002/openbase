@@ -41,6 +41,21 @@ impl Level {
         }
     }
 
+    /// For an actor whose scope is too small for this level: the scope string that would be
+    /// enough (`openbase:read openbase:write`, ...). `None` when the scope suffices, or when
+    /// what is missing is not a scope (an `Admin` tool for a user who is not an administrator).
+    pub fn missing_scope(self, actor: &Actor) -> Option<&'static str> {
+        let scope = actor.token_scope.as_ref()?;
+        match self {
+            Level::Read => None,
+            Level::Write if !scope.write => Some("openbase:read openbase:write"),
+            Level::Manage | Level::Admin if !(scope.write && scope.manage) => {
+                Some("openbase:read openbase:write openbase:manage")
+            }
+            _ => None,
+        }
+    }
+
     fn needs(self) -> &'static str {
         match self {
             Level::Read => "an API token",
@@ -217,6 +232,11 @@ pub fn truncate(text: &str, max: usize) -> String {
     )
 }
 
+/// The level a tool needs, if the tool exists.
+pub fn required_level(name: &str) -> Option<Level> {
+    registry().iter().find(|t| t.name == name).map(|t| t.level)
+}
+
 pub fn registry() -> &'static [ToolDef] {
     static TOOLS: OnceLock<Vec<ToolDef>> = OnceLock::new();
     TOOLS.get_or_init(super::definitions)
@@ -294,6 +314,7 @@ mod tests {
             session_hash: None,
             token_hash: Some("h".into()),
             token_id: Some("pat".into()),
+            oauth_grant_id: None,
         }
     }
 

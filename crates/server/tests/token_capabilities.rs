@@ -427,6 +427,25 @@ const SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
         "/api/auth/2fa/disable",
         Some(r#"{"password":"password1234","code":"000000"}"#),
     ),
+    ("GET", "/api/oauth/grants", "/api/oauth/grants", None),
+    (
+        "DELETE",
+        "/api/oauth/grants/{id}",
+        "/api/oauth/grants/grtNope",
+        None,
+    ),
+    (
+        "GET",
+        "/api/oauth/requests/{id}",
+        "/api/oauth/requests/oarNope",
+        None,
+    ),
+    (
+        "POST",
+        "/api/oauth/requests/{id}/decision",
+        "/api/oauth/requests/oarNope/decision",
+        Some(r#"{"decision":"approve","access":"manage"}"#),
+    ),
     ("GET", "/api/auth/sessions", "/api/auth/sessions", None),
     (
         "POST",
@@ -444,12 +463,27 @@ const SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
 
 /// Admin routes no token can ever use, not even an administrator's `manage` token: whoever holds a
 /// password-reset link can set the user's password. (method, template, concrete path, body)
-const ADMIN_SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[(
-    "POST",
-    "/api/admin/users/{id}/reset-link",
-    "/api/admin/users/usrNope/reset-link",
-    Some("{}"),
-)];
+const ADMIN_SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
+    (
+        "POST",
+        "/api/admin/users/{id}/reset-link",
+        "/api/admin/users/usrNope/reset-link",
+        Some("{}"),
+    ),
+    // Connected apps are credentials too: no token lists or revokes them.
+    (
+        "GET",
+        "/api/admin/oauth/grants",
+        "/api/admin/oauth/grants",
+        None,
+    ),
+    (
+        "DELETE",
+        "/api/admin/oauth/grants/{id}",
+        "/api/admin/oauth/grants/grtNope",
+        None,
+    ),
+];
 
 async fn call(
     app: &TestApp,

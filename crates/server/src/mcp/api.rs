@@ -325,11 +325,6 @@ pub async fn execute_with(
         .method(method.as_str())
         .uri(&uri)
         .header(
-            header::AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", ctx.token))
-                .map_err(|_| "the API token cannot be used in a header".to_string())?,
-        )
-        .header(
             header::USER_AGENT,
             HeaderValue::from_str(&format!(
                 "openbase-mcp ({})",
@@ -370,9 +365,23 @@ pub async fn execute_with(
             Body::from(bytes)
         }
     };
+    // A personal access token goes along as the `Authorization` header it came in. An OAuth
+    // access token is valid on /mcp only and is never sent to /api/*: the router is told who
+    // the caller is instead (see `TrustedActor`).
+    if ctx.actor.oauth_grant_id.is_none() {
+        builder = builder.header(
+            header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", ctx.token))
+                .map_err(|_| "the API token cannot be used in a header".to_string())?,
+        );
+    }
     let mut req = builder
         .body(body)
         .map_err(|e| format!("could not build the request: {e}"))?;
+    if ctx.actor.oauth_grant_id.is_some() {
+        req.extensions_mut()
+            .insert(crate::auth::TrustedActor(ctx.actor.clone()));
+    }
     if let Some(peer) = ctx.peer {
         req.extensions_mut().insert(ConnectInfo(peer));
     }

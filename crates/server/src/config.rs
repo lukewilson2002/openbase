@@ -123,6 +123,13 @@ pub struct Config {
     #[arg(long, env = "OPENBASE_MCP_ALLOWED_ORIGINS", value_delimiter = ',')]
     pub mcp_allowed_origins: Vec<String>,
 
+    /// Let OAuth clients (MCP apps such as Claude or ChatGPT) register themselves at
+    /// `POST /oauth/register` (RFC 7591). Turn it off to allow only clients that identify
+    /// themselves with an HTTPS metadata document URL or that you add with
+    /// `openbase oauth-client add`. The consent page still asks the user for every connection.
+    #[arg(long, env = "OPENBASE_OAUTH_REGISTRATION", default_value_t = true, action = clap::ArgAction::Set)]
+    pub oauth_registration: bool,
+
     /// Log format: "pretty" or "json".
     #[arg(long, env = "OPENBASE_LOG_FORMAT", default_value = "pretty")]
     pub log_format: String,
@@ -149,6 +156,35 @@ impl Config {
         match url::Url::parse(&self.public_url) {
             Ok(u) => u.origin().ascii_serialization(),
             Err(_) => self.public_url.trim_end_matches('/').to_string(),
+        }
+    }
+
+    /// The OAuth issuer: the public origin. No trailing slash, no path.
+    pub fn oauth_issuer(&self) -> String {
+        self.public_origin()
+    }
+
+    /// The canonical URI of the MCP server, the `resource` OAuth tokens are issued for.
+    pub fn mcp_resource(&self) -> String {
+        format!("{}/mcp", self.public_origin())
+    }
+
+    /// OAuth is advertised and served only over HTTPS, or over plain HTTP when the public URL is
+    /// a loopback address (local testing, for example `claude mcp add` on the same machine).
+    /// Over plain HTTP anywhere else, codes and tokens would cross the network in clear text.
+    pub fn oauth_enabled(&self) -> bool {
+        let Ok(u) = url::Url::parse(&self.public_url) else {
+            return false;
+        };
+        match u.scheme() {
+            "https" => u.host().is_some(),
+            "http" => match u.host() {
+                Some(url::Host::Domain(d)) => d.eq_ignore_ascii_case("localhost"),
+                Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+                Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+                None => false,
+            },
+            _ => false,
         }
     }
 
@@ -182,6 +218,7 @@ impl Config {
             mcp_rate_per_token: 10_000,
             mcp_rate_per_user: 10_000,
             mcp_allowed_origins: Vec::new(),
+            oauth_registration: true,
             log_format: "pretty".into(),
         }
     }

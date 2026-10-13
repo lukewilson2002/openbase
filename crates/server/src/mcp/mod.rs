@@ -25,8 +25,15 @@
 //!
 //! # Security
 //!
-//! Only `Authorization: Bearer <personal access token>` authenticates (a session cookie is
-//! refused with 401, which is also why this route needs no CSRF header); a browser `Origin` is
+//! Only `Authorization: Bearer <token>` authenticates: a personal access token, or an OAuth
+//! access token issued by the built-in authorization server ([`crate::oauth`]) for this very
+//! endpoint (a session cookie is refused with 401, which is also why this route needs no CSRF
+//! header). An OAuth grant becomes the same [`crate::auth::TokenScope`] as a personal access
+//! token, so everything below treats the two alike; OAuth tokens work on `/mcp` only, never on
+//! `/api/*` (`api_request` runs its in-process requests as a [`crate::auth::TrustedActor`]).
+//! `401` responses carry `WWW-Authenticate: Bearer resource_metadata="..."` (RFC 9728) so MCP
+//! clients can discover the authorization server; an OAuth token that lacks the scope for the
+//! tool it calls gets `403` with `error="insufficient_scope"`. A browser `Origin` is
 //! accepted only from the configured public URL (DNS-rebinding protection, MCP spec); bodies
 //! are capped; every request counts against a per-token and a per-user rate limit; token use is
 //! stamped like on every other API.
@@ -57,7 +64,10 @@ use axum::routing::post;
 use base64::Engine;
 use serde_json::{Map, Value, json};
 
-use crate::auth::{Actor, bearer_from_headers, client_ip, lookup_api_token, stamp_token_use};
+use crate::auth::{
+    Actor, OAUTH_ACCESS_PREFIX, bearer_from_headers, client_ip, lookup_api_token,
+    lookup_oauth_token, stamp_grant_use, stamp_token_use,
+};
 use crate::ids::hash_token;
 use crate::state::AppState;
 
@@ -194,17 +204,33 @@ fn refuse(status: StatusCode, code: i64, message: &str) -> Response {
     )
 }
 
-fn unauthorized(message: &str, invalid_token: bool) -> Response {
+/// The `WWW-Authenticate` challenge of this endpoint: the realm, the location of the protected
+/// resource metadata (when OAuth is available, RFC 9728 5.1) and optional error parameters.
+fn challenge(state: &AppState, error: Option<(&str, &str)>, scope: Option<&str>) -> HeaderValue {
+    let mut value = String::from("Bearer realm=\"OpenBase MCP\"");
+    if let Some((code, description)) = error {
+        value.push_str(&format!(
+            ", error=\"{code}\", error_description=\"{description}\""
+        ));
+    }
+    if let Some(scope) = scope {
+        value.push_str(&format!(", scope=\"{scope}\""));
+    }
+    if state.config.oauth_enabled() {
+        value.push_str(&format!(
+            ", resource_metadata=\"{}\"",
+            crate::oauth::metadata::resource_metadata_url(&state.config)
+        ));
+    }
+    HeaderValue::from_str(&value).expect("challenge values are ASCII")
+}
+
+fn unauthorized(state: &AppState, message: &str, invalid_token: bool) -> Response {
     let mut res = refuse(StatusCode::UNAUTHORIZED, SERVER_REFUSAL, message);
-    let challenge = if invalid_token {
-        "Bearer realm=\"OpenBase MCP\", error=\"invalid_token\""
-    } else {
-        "Bearer realm=\"OpenBase MCP\""
-    };
-    res.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_str(challenge).expect("static header value"),
-    );
+    let error =
+        invalid_token.then_some(("invalid_token", "The access token is invalid or expired"));
+    res.headers_mut()
+        .insert(header::WWW_AUTHENTICATE, challenge(state, error, None));
     res
 }
 
@@ -286,35 +312,57 @@ async fn handle(State(state): State<AppState>, req: Request) -> Response {
         );
     }
 
-    // Authentication: personal access tokens only. Cookies are never looked at.
+    // Authentication: bearer tokens only (personal access tokens and OAuth access tokens).
+    // Cookies are never looked at.
     let Some(token) = bearer_from_headers(&parts.headers).map(str::to_string) else {
         let has_cookie = parts.headers.contains_key(header::COOKIE);
         return unauthorized(
+            &state,
             if has_cookie {
-                "the MCP endpoint accepts personal access tokens only (Authorization: Bearer <token>); session cookies are not accepted"
+                "the MCP endpoint accepts bearer tokens only (Authorization: Bearer <token>); session cookies are not accepted"
             } else {
-                "authentication required: send a personal access token as Authorization: Bearer <token>"
+                "authentication required: send a personal access token or an OAuth access token as Authorization: Bearer <token>"
             },
             false,
         );
     };
     let lookup = token.clone();
-    let found = match state.db.read(move |c| lookup_api_token(c, &lookup)).await {
+    let oauth_token = token.starts_with(OAUTH_ACCESS_PREFIX);
+    let found = if oauth_token {
+        // OAuth tokens count only while OAuth is available (not over plain http on a public
+        // host) and only when issued for this endpoint.
+        if state.config.oauth_enabled() {
+            let resource = state.config.mcp_resource();
+            state
+                .db
+                .read(move |c| lookup_oauth_token(c, &lookup, &resource))
+                .await
+        } else {
+            Ok(None)
+        }
+    } else {
+        state.db.read(move |c| lookup_api_token(c, &lookup)).await
+    };
+    let found = match found {
         Ok(found) => found,
         Err(e) => return e.into_response(),
     };
     let Some((actor, last_used_at)) = found else {
-        return unauthorized("the API token is invalid or expired", true);
+        return unauthorized(&state, "the access token is invalid or expired", true);
     };
     // Limits apply to valid tokens only, which keeps the limiter's memory bounded by the number
     // of tokens (same approach as /api/v1).
     let second = std::time::Duration::from_secs(1);
-    let token_hash = hash_token(&token);
+    // (An OAuth grant is limited as a whole, not per access token: tokens rotate every hour.)
+    let token_key = actor
+        .oauth_grant_id
+        .clone()
+        .unwrap_or_else(|| hash_token(&token));
     let limited = state
         .limiter
         .check(
             "mcp_token",
-            &token_hash,
+            &token_key,
             state.config.mcp_rate_per_token,
             second,
         )
@@ -336,7 +384,11 @@ async fn handle(State(state): State<AppState>, req: Request) -> Response {
             .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
         return res;
     }
-    stamp_token_use(&state, &actor, last_used_at).await;
+    if actor.oauth_grant_id.is_some() {
+        stamp_grant_use(&state, &actor, last_used_at).await;
+    } else {
+        stamp_token_use(&state, &actor, last_used_at).await;
+    }
 
     if !is_json_content_type(&parts.headers) {
         return refuse(
@@ -389,9 +441,25 @@ async fn handle(State(state): State<AppState>, req: Request) -> Response {
         actor,
         token,
     };
-    let (status, body) = process(&ctx, &parts.headers, &bytes).await;
+    let (status, body, scope_challenge) = process(&ctx, &parts.headers, &bytes).await;
     match body {
-        Some(body) => json_response(status, &body),
+        Some(body) => {
+            let mut res = json_response(status, &body);
+            if let Some(scope) = scope_challenge {
+                res.headers_mut().insert(
+                    header::WWW_AUTHENTICATE,
+                    challenge(
+                        &ctx.state,
+                        Some((
+                            "insufficient_scope",
+                            "The access token does not allow this tool",
+                        )),
+                        Some(&scope),
+                    ),
+                );
+            }
+            res
+        }
         None => {
             let mut res = Response::new(Body::empty());
             *res.status_mut() = status;
@@ -431,8 +499,47 @@ fn decode_header_value(raw: &str) -> Option<String> {
     }
 }
 
-/// Parse and answer one POST body. Returns the HTTP status and the JSON body (None = empty).
+/// Parse and answer one POST body. Returns the HTTP status and the JSON body (None = empty), and
+/// the scope to name in a `403 insufficient_scope` challenge when that is the answer.
 pub async fn process(
+    ctx: &McpCtx,
+    headers: &HeaderMap,
+    bytes: &[u8],
+) -> (StatusCode, Option<Value>, Option<String>) {
+    if let Some((message, scope)) = insufficient_scope(ctx, bytes) {
+        return (
+            StatusCode::FORBIDDEN,
+            Some(rpc_body(Value::Null, Err((SERVER_REFUSAL, message, None)))),
+            Some(scope),
+        );
+    }
+    let (status, body) = process_message(ctx, headers, bytes).await;
+    (status, body, None)
+}
+
+/// MCP authorization, scope challenges: an OAuth access token that calls a tool its scope does
+/// not allow is answered `403` with `error="insufficient_scope"` and the scope that would be
+/// enough, so a client can send the user through the consent step again with more access.
+/// (Personal access tokens keep getting a tool error that names the permission they lack.)
+fn insufficient_scope(ctx: &McpCtx, bytes: &[u8]) -> Option<(String, String)> {
+    ctx.actor.oauth_grant_id.as_ref()?;
+    let msg: Value = serde_json::from_slice(bytes).ok()?;
+    if msg.get("method").and_then(Value::as_str) != Some("tools/call") {
+        return None;
+    }
+    let name = msg.get("params")?.get("name")?.as_str()?;
+    let level = tools::required_level(name)?;
+    let needed = level.missing_scope(&ctx.actor)?;
+    Some((
+        format!(
+            "The tool '{name}' needs more access than this connection was given ({needed}). \
+             Reconnect the app and choose more access on the approval page."
+        ),
+        needed.to_string(),
+    ))
+}
+
+async fn process_message(
     ctx: &McpCtx,
     headers: &HeaderMap,
     bytes: &[u8],

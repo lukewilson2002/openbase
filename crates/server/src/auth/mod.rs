@@ -51,9 +51,22 @@ pub struct Actor {
     /// SHA-256 of the API token when authenticated by token (so long-lived
     /// connections can notice the token being revoked or expiring).
     pub token_hash: Option<String>,
-    /// Id of the API token (for audit entries), when authenticated by token.
+    /// Id of the API token (for audit entries), when authenticated by token. For an OAuth
+    /// access token this is the id of its grant (`grt...`).
     pub token_id: Option<String>,
+    /// Set when authenticated by an OAuth access token (the MCP endpoint only): the id of the
+    /// grant ("connected app"). Such an actor also has a `token_scope`, so every permission
+    /// check treats it exactly like an API token with the grant's scope.
+    pub oauth_grant_id: Option<String>,
 }
+
+/// An actor the server itself vouches for, attached to a request that is built in-process (the
+/// MCP `api_request` tool runs requests through the router on behalf of an OAuth grant, which
+/// has no API token to put in an `Authorization` header). Request extensions are never filled
+/// from the network, so no client can forge this; [`Actor`]'s extractor honours it before
+/// looking at any header or cookie.
+#[derive(Debug, Clone)]
+pub struct TrustedActor(pub Actor);
 
 /// What an endpoint needs beyond a role, checked with [`Actor::require_capability`]. Sessions
 /// (the web app) have every capability; API tokens only the ones their scope grants.
@@ -252,6 +265,7 @@ pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Ac
         session_hash: Some(hash),
         token_hash: None,
         token_id: None,
+        oauth_grant_id: None,
     }))
 }
 
@@ -307,6 +321,7 @@ pub fn lookup_api_token(conn: &Connection, token: &str) -> AppResult<Option<(Act
             session_hash: None,
             token_hash: Some(hash),
             token_id: Some(token_id),
+            oauth_grant_id: None,
         },
         last_used_at,
     )))
@@ -333,6 +348,105 @@ pub async fn stamp_token_use(state: &AppState, actor: &Actor, last_used_at: Opti
                  WHERE token_hash = ?2 AND user_id = ?3
                    AND (last_used_at IS NULL OR last_used_at < ?4)",
                 rusqlite::params![now, hash, id, now - LAST_USED_GRANULARITY_MS],
+            )?;
+            Ok(())
+        })
+        .await;
+}
+
+/// Prefix of OAuth access tokens. Personal access tokens start with `pat`; the prefix only
+/// decides which table a bearer token is looked up in.
+pub const OAUTH_ACCESS_PREFIX: &str = "oat";
+
+/// Resolve an OAuth access token to an actor. The token must be unexpired, its grant must still
+/// exist, its user must be active and it must have been issued for `resource` (the MCP
+/// endpoint's canonical URI): a token for another audience is as good as unknown. Also returns
+/// the grant's `last_used_at` (for [`stamp_grant_use`]).
+pub fn lookup_oauth_token(
+    conn: &Connection,
+    token: &str,
+    resource: &str,
+) -> AppResult<Option<(Actor, Option<i64>)>> {
+    if !token.starts_with(OAUTH_ACCESS_PREFIX) {
+        return Ok(None);
+    }
+    let hash = hash_token(token);
+    let now = now_ms();
+    let row = conn
+        .query_row(
+            "SELECT u.id, u.name, u.email, u.is_admin, g.scopes, g.id, g.last_used_at, g.resource,
+                    t.expires_at
+             FROM oauth_tokens t
+             JOIN oauth_grants g ON g.id = t.grant_id
+             JOIN users u ON u.id = g.user_id
+             WHERE t.token_hash = ?1 AND t.kind = 'access' AND u.is_active = 1",
+            [&hash],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, bool>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, String>(5)?,
+                    r.get::<_, Option<i64>>(6)?,
+                    r.get::<_, String>(7)?,
+                    r.get::<_, i64>(8)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((
+        user_id,
+        name,
+        email,
+        is_admin,
+        scopes,
+        grant_id,
+        last_used_at,
+        audience,
+        expires_at,
+    )) = row
+    else {
+        return Ok(None);
+    };
+    if expires_at <= now || audience != resource {
+        return Ok(None);
+    }
+    let scope: TokenScope = serde_json::from_str(&scopes)?;
+    Ok(Some((
+        Actor {
+            user_id,
+            name,
+            email,
+            is_admin,
+            token_scope: Some(scope),
+            session_hash: None,
+            token_hash: None,
+            token_id: Some(grant_id.clone()),
+            oauth_grant_id: Some(grant_id),
+        },
+        last_used_at,
+    )))
+}
+
+/// Best-effort usage stamp for the OAuth grant behind `actor`, at most once a minute (the same
+/// granularity as [`stamp_token_use`]). Never fails the request.
+pub async fn stamp_grant_use(state: &AppState, actor: &Actor, last_used_at: Option<i64>) {
+    let Some(grant_id) = actor.oauth_grant_id.clone() else {
+        return;
+    };
+    let now = now_ms();
+    if last_used_at.is_some_and(|t| t >= now - LAST_USED_GRANULARITY_MS) {
+        return;
+    }
+    let _ = state
+        .db
+        .write(move |tx| {
+            tx.execute(
+                "UPDATE oauth_grants SET last_used_at = ?1
+                 WHERE id = ?2 AND (last_used_at IS NULL OR last_used_at < ?3)",
+                rusqlite::params![now, grant_id, now - LAST_USED_GRANULARITY_MS],
             )?;
             Ok(())
         })
@@ -389,6 +503,11 @@ impl FromRequestParts<AppState> for Actor {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        if let Some(TrustedActor(actor)) = parts.extensions.get::<TrustedActor>() {
+            let actor = actor.clone();
+            enforce_read_only(parts, &actor)?;
+            return Ok(actor);
+        }
         if let Some(token) = bearer(parts) {
             let token = token.to_string();
             let found = state.db.read(move |c| lookup_api_token(c, &token)).await?;

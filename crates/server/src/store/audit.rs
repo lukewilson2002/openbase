@@ -34,6 +34,18 @@ pub mod actions {
     pub const ADMIN_EMAIL_UPDATE: &str = "admin_email_update";
     /// A test email was sent from the Admin -> Email page.
     pub const ADMIN_EMAIL_TEST: &str = "admin_email_test";
+    /// A user approved an app on the OAuth consent page (an authorization code was issued).
+    pub const OAUTH_APPROVE: &str = "oauth_approve";
+    /// A user refused an app on the OAuth consent page.
+    pub const OAUTH_DENY: &str = "oauth_deny";
+    /// An app exchanged its authorization code: the grant ("connected app") now exists.
+    pub const OAUTH_GRANT_CREATE: &str = "oauth_grant_create";
+    /// A grant was revoked: by the user, an administrator or the app itself (detail: `by`).
+    pub const OAUTH_GRANT_REVOKE: &str = "oauth_grant_revoke";
+    /// An already used refresh token was presented: the grant was revoked.
+    pub const OAUTH_REFRESH_REUSE: &str = "oauth_refresh_reuse";
+    /// An already used authorization code was presented: the grant created from it was revoked.
+    pub const OAUTH_CODE_REPLAY: &str = "oauth_code_replay";
     /// An API token with the `manage` permission called an admin endpoint.
     pub const ADMIN_TOKEN_USE: &str = "admin_token_use";
 }

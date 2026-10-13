@@ -52,4 +52,10 @@ pub mod ids {
     pub const TOKEN: &str = "pat";
     pub const INVITE: &str = "inv";
     pub const NOTIFICATION: &str = "ntf";
+    /// OAuth client ids handed out by dynamic registration and `openbase oauth-client add`.
+    pub const OAUTH_CLIENT: &str = "ocl";
+    /// A user's OAuth grant ("connected app").
+    pub const OAUTH_GRANT: &str = "grt";
+    /// A pending OAuth authorization request (carried to the consent page).
+    pub const OAUTH_REQUEST: &str = "oar";
 }

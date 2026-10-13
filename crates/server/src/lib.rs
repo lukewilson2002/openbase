@@ -17,6 +17,7 @@ pub mod http;
 pub mod icons;
 pub mod ids;
 pub mod mcp;
+pub mod oauth;
 pub mod perm;
 pub mod ratelimit;
 pub mod state;
