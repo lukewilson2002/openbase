@@ -10,18 +10,26 @@ OpenGrid is one process that uses SQLite, so a small VPS is enough.
 
 | Team size | Suggested VPS | Notes |
 |---|---|---|
-| 1–10 people, up to ~20k records per table | 1 vCPU, 1 GB RAM, 20 GB disk | The $4–6/month tier at most providers. |
-| 10–25 people, up to ~50k records per table | 1–2 vCPU, 2 GB RAM | Leaves headroom for Caddy and large imports. |
+| 1-10 people, up to ~20k records per table | 1 vCPU, 1 GB RAM, 20 GB disk | The $4-6/month tier at most providers. |
+| 10-25 people, up to ~50k records per table | 1-2 vCPU, 2 GB RAM | Leaves headroom for Caddy and large imports. |
 
-Disk usage is roughly the database (usually tens of MB) plus your
-attachments plus your backups. Each backup archive holds the whole
-database **and every attachment**, so with `OPENGRID_BACKUP_KEEP=7` you
-need room for about 8× (database + attachments). Keep an eye on free disk
-space if you store many large files.
+These are suggestions, not tested configurations. What has been measured (on a
+fast laptop, not a VPS; see [Resource usage](../README.md#resource-usage-and-scale)):
+the server idles at about 15-19 MB and stayed at or under about 105 MB with a
+50,000-record, 11-field table, and the Docker image is about 181 MB on disk. The
+systemd unit caps memory at 400 MB.
 
-Use any 64-bit Linux with Docker (Debian 12 and Ubuntu 24.04 have been the
-reference systems). Open ports 80 and 443 in your firewall; OpenGrid itself
-is never exposed directly.
+Disk usage is roughly the database (a 50,000-record test table with 11 fields
+produced a 5.7 MB backup archive; usually tens of MB) plus your attachments plus
+your backups. Each backup archive holds the whole database **and every
+attachment**, so with `OPENGRID_BACKUP_KEEP=7` you need room for about 8x
+(database + attachments). The server does not check free disk space: keep an eye
+on it, especially if you store many large files.
+
+Use any 64-bit Linux with Docker (the image is built for the architecture of the
+machine that builds it; it was tested as linux/arm64 and the Dockerfile has no
+architecture-specific steps, but an amd64 build was not run). Open ports 80 and
+443 in your firewall; OpenGrid itself is never exposed directly.
 
 ## 2. Docker Compose with Caddy (recommended)
 
@@ -36,7 +44,7 @@ automatically. OpenGrid listens only on the internal Docker network.
 3. Get the code and configure it:
 
    ```sh
-   git clone https://github.com/opengrid/opengrid.git
+   git clone <repository-url> opengrid
    cd opengrid/deploy
    cp .env.example .env
    nano .env            # set OPENGRID_DOMAIN, TZ and optionally SMTP
@@ -55,14 +63,43 @@ automatically. OpenGrid listens only on the internal Docker network.
 
 What runs where:
 
-- `opengrid` uses the image built from `deploy/Dockerfile`. It runs as an
-  unprivileged `opengrid` user, keeps its data in the `opengrid-data`
-  volume (mounted at `/data`), and has a built-in health check
-  (`opengrid healthcheck`).
+- `opengrid` uses the image built from `deploy/Dockerfile`: a Node 24 stage builds
+  the web client, a `rust:1-bookworm` stage builds the server with the client
+  embedded, and the final stage is `debian:bookworm-slim` with only the binary,
+  CA certificates and time zone data. It runs as the unprivileged user
+  `opengrid` (uid 10001), keeps its data in the `opengrid-data` volume (mounted at
+  `/data`), and has a built-in health check (`opengrid healthcheck`, every 30 s).
 - `caddy` uses the official `caddy:2` image configured by
-  `deploy/Caddyfile`. Certificates are stored in the `caddy-data` volume.
+  `deploy/Caddyfile`. Certificates are stored in the `caddy-data` volume. It
+  forwards Server-Sent Events without buffering, so live updates work.
 - `OPENGRID_TRUST_PROXY=true` and `OPENGRID_PUBLIC_URL=https://<domain>`
-  are set for you in `docker-compose.yml`.
+  are set for you in `docker-compose.yml`. Nothing but Caddy can reach the
+  `opengrid` container (its port is not published).
+- Everything in `deploy/.env` is passed to the `opengrid` container, so any
+  `OPENGRID_*` option from the [README](../README.md#configuration) works there.
+
+The Compose file, the image build, first-run signup, data surviving
+`docker compose restart` / a re-created container, `opengrid backup` and the
+restore procedure below were all run end to end. A real Let's Encrypt
+certificate could not be: it needs a public domain, so that step is untested here.
+
+### Trying the stack locally (no domain, no certificate)
+
+Caddy cannot get a public certificate for `localhost`, so `deploy/docker-compose.local.yml`
+overrides three things: the site address becomes `http://localhost` (Caddy then serves
+plain HTTP and skips certificates), the published port becomes `127.0.0.1:8088`, and
+`OPENGRID_PUBLIC_URL` becomes `http://localhost:8088`.
+
+```sh
+cd opengrid/deploy
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+open http://localhost:8088       # first account becomes the administrator
+docker compose -f docker-compose.yml -f docker-compose.local.yml down -v   # removes the volumes too
+```
+
+Use this only on your own machine: there is no TLS. `docker compose config` accepts
+both files together with the shipped `.env.example`.
 
 Run CLI commands inside the container like this:
 
@@ -103,7 +140,9 @@ docker compose exec opengrid opengrid --help
    The unit stores data in `/var/lib/opengrid` and listens on
    `127.0.0.1:8080`. It is hardened with `ProtectSystem=strict`,
    `NoNewPrivileges`, `PrivateTmp`, a system-call filter and
-   `MemoryMax=400M`.
+   `MemoryMax=400M`. The unit file passes `systemd-analyze verify` (checked in a
+   Debian 12 container); it has not been started under a real systemd host, so
+   if a hardening option does not suit your distribution, loosen it and tell us.
 
 3. Put a TLS reverse proxy in front. With Caddy installed from your
    distribution, `/etc/caddy/Caddyfile` only needs:
@@ -243,7 +282,8 @@ restrict who can read it. Run a test restore now and then (see below).
 A restore replaces the database with the one in the archive and adds the
 archive's attachments. Files already on disk are kept, since attachment
 files are named by their content hash. The current database is never
-deleted: it is moved aside to `opengrid.db.pre-restore-<timestamp>`.
+deleted: it is moved aside to `opengrid.db.pre-restore-<timestamp>` (with its
+`-wal` file, if it had one).
 
 **The server must be stopped.** `opengrid restore` refuses to run while
 `opengrid.db-wal` is non-empty, which is how it detects a running (or
@@ -321,6 +361,11 @@ If the snapshot cannot be written (for example, the disk is full), it does
 not migrate and refuses to start. These snapshots are plain SQLite
 databases and are never deleted automatically. Remove old ones once you
 are happy with the upgrade.
+
+`opengrid migrate` (also run on every start) is a no-op on a database that is
+already current: it takes no snapshot and writes nothing. That was checked with
+the release binary; a snapshot taken *because migrations were pending* is covered
+by unit tests only, since schema version 1 is the only version so far.
 
 To **roll back** an upgrade: stop the server, reinstall the previous
 version, and restore your pre-upgrade backup archive with `opengrid restore

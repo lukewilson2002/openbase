@@ -1,81 +1,94 @@
 # OpenGrid
 
-OpenGrid is a self-hosted alternative to Airtable for individuals and small
-businesses. It is one Rust binary with an embedded web app and a SQLite
-database, and it is built to run well on a $4–6/month VPS.
+OpenGrid is a self-hosted alternative to Airtable for individuals and very small
+businesses: tables, linked records, formulas, grid / kanban / calendar / gallery /
+timeline / list / form views, automations, sharing and an Airtable-compatible API.
+You run it on a small server you control, and your data stays in one folder.
 
-- **One process, one data directory.** The database (`opengrid.db`),
-  uploaded files (`attachments/`) and backups (`backups/`) all live in a
-  single directory. You don't need Postgres or Redis, and the Docker image
-  and release binary don't need Node either.
-- **Rust server, embedded web app.** The axum + SQLite server is written in
-  Rust. The React + TypeScript web client (built with Vite) is compiled into
-  the binary at build time, so a deployment is still one file.
-- **No paid tier.** There are no license keys and no feature flags. Dual
-  licensed MIT OR Apache-2.0.
+- **One process, one data directory.** The server is a single Rust program
+  (axum + SQLite) with the web app compiled into it. The database
+  (`opengrid.db`), uploaded files (`attachments/`) and backups (`backups/`) all
+  live in one directory. No Postgres, no Redis, no Node at runtime.
+- **Built for a small VPS.** Idle, the server uses about 15 MB of memory; a
+  50,000-record table stayed under about 105 MB in our tests
+  ([measured numbers](#resource-usage-and-scale), taken on a fast laptop, not on a
+  $5 VPS).
+- **No paid tier.** No license keys, no feature flags. Dual licensed
+  MIT OR Apache-2.0.
 
-> **Status:** under active development. This README describes what v1
-> includes. The scale numbers below are targets and are still being verified.
+> **Status:** version 0.1.0, not yet used in production by anyone but its
+> authors. Read [what is and is not verified](#resource-usage-and-scale) before
+> you rely on the numbers, and keep offsite backups.
+
+## Contents
+
+[Features](#features) · [Not included](#what-is-deliberately-not-included) ·
+[Quick start](#quick-start) · [First run](#first-run) ·
+[Configuration](#configuration) · [Backups and restore](#backups-and-restore) ·
+[Upgrading](#upgrading) · [Resource usage and scale](#resource-usage-and-scale) ·
+[Security](#security) · [API](#api) · [Building from source](#building-from-source) ·
+[Tests](#running-the-tests) · [License](#license)
 
 ## Features
 
 **Accounts and admin.** First-run setup (the first user becomes admin).
-Invite-only or open signup. Sessions you can list and revoke. Password
-change and password reset, by email when SMTP is configured, otherwise
-through an admin reset link or `opengrid reset-password`. TOTP two-factor
-auth, profiles with time zones, and personal access tokens (read or write,
-optionally limited to some bases). Admin pages cover users, instance stats,
-the audit log, and backups (list, create now, download).
+Invite-only or open signup. Sessions you can list and revoke. Password change
+and password reset, by email when SMTP is configured, otherwise through an admin
+reset link or `opengrid reset-password`. TOTP two-factor authentication,
+profiles with time zones, and personal access tokens (read or write, optionally
+limited to some bases). Admin pages cover users, instance stats, the audit log
+and backups (list, create now, download).
 
-**Workspaces and sharing.** Workspaces with five roles: owner, creator,
-editor, commenter and viewer. Invites by link, or by email if SMTP is set
-up. Sharing per base: your effective role is the higher of your workspace
-role and your base role. Read-only view share links (optional password) and
-public form links.
+**Workspaces and sharing.** Workspaces with five roles: owner, creator, editor,
+commenter and viewer. Invites by link, or by email if SMTP is set up. Sharing per
+base: your effective role is the higher of your workspace role and your base
+role. Read-only view share links (optional password) and public form links.
 
-**Bases, tables and fields.** 28 field types: single line text, long text
-(plain or Markdown), number, currency, percent, duration, rating, checkbox,
-single and multiple select, date (optional time, formats, time zones),
-email, URL, phone, attachment (with thumbnails), link to another record
-(paired both ways), user, formula, lookup, rollup, count, created/last
-modified time, created/last modified by, autonumber, barcode and button.
-Fields support descriptions and defaults. Changing a field's type converts
-its data. You can change the primary field. Deleted fields can be restored.
+**Bases, tables and fields.** Create, rename, duplicate (with or without
+records), delete and restore bases and tables. 28 field types: single line text,
+long text (plain or Markdown), number, currency, percent, duration, rating,
+checkbox, single and multiple select, date (optional time, formats, time zones),
+email, URL, phone, attachment (with thumbnails), link to another record (paired
+both ways), user, formula, lookup, rollup, count, created / last modified time,
+created / last modified by, autonumber, barcode and button (opens a URL computed
+by a formula). Fields support descriptions and defaults. Changing a field's type
+converts its data. You can change the primary field. Deleted fields can be
+restored.
 
-**Formulas.** Airtable-compatible syntax and the full Airtable function list.
-That includes date formatting and arithmetic, time zones, `WORKDAY` and
-regex functions.
+**Formulas.** Airtable-compatible syntax and the full Airtable function list,
+including date formatting and arithmetic, time zones, `WORKDAY` and regex
+functions. Formulas, lookups, rollups and counts are stored with the record and
+recomputed when their inputs change.
 
 **Records.** Create, edit, delete and restore records, in batches. Manual
-ordering, an expanded record view, duplicating, comments with @mentions,
-per-record revision history, attachments, copy/paste of ranges, a fill
-handle, undo/redo and search.
+ordering, an expanded record view, duplicating, comments with @mentions and
+in-app notifications, per-record revision history, attachments, copy and paste of
+ranges, a fill handle, undo / redo and search.
 
-**Views.** Grid, form, gallery, kanban, calendar, timeline (with swimlanes
-and Gantt-style dependency arrows) and list. Every view supports nested
-filters, sorts, up to three grouping levels, hidden/reordered/resized
-fields, frozen columns, row height, row colouring, summary bar
-aggregations, personal and locked views, and CSV export.
+**Views.** Grid, form, gallery, kanban, calendar, timeline (with swimlanes and
+Gantt-style dependency arrows) and list. Every view supports nested filters,
+sorts, up to three grouping levels, hidden / reordered / resized fields, frozen
+columns, row height, row colouring, summary-bar aggregations, personal and locked
+views, and CSV export.
 
-**Live collaboration.** Changes appear in other open tabs within moments,
-via Server-Sent Events. If two people edit the same cell, the last write
-wins, and record history keeps both versions.
+**Live collaboration.** Changes appear in other open tabs within moments, via
+Server-Sent Events. If two people edit the same cell, the last write wins, and
+record history keeps both versions.
 
 **Automations.** Triggers: record created, record updated, record matches
-conditions, form submitted, schedule (cron) and incoming webhook. Actions:
-create record, update record, send email, HTTP request (with SSRF
-protection) and in-app notification. Runs are logged and retried.
+conditions, form submitted, schedule (cron) and incoming webhook. Actions: create
+record, update record, send email, HTTP request (with SSRF protection) and in-app
+notification. `{{...}}` placeholders carry data between steps. Runs are logged and
+retried. See [docs/automations.md](docs/automations.md).
 
 **API.** An Airtable-compatible REST API under `/api/v1`. Existing Airtable
-clients and n8n/Make/Zapier HTTP steps work once you change the base URL;
-see [docs/api.md](docs/api.md) for what is supported and how it differs from
-Airtable.
+clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 
-**Operations.** CSV import and export. Daily automatic backups with
-retention. `opengrid backup` and `opengrid restore` commands. An automatic
-database snapshot before every schema upgrade. A trash that keeps deleted
-items for 30 days. Record history retention, a health endpoint, a Docker
-image, docker-compose with Caddy for automatic HTTPS, and a systemd unit.
+**Operations.** CSV import and export. Daily automatic backups with retention,
+plus `opengrid backup` and `opengrid restore`. An automatic database snapshot
+before a schema upgrade. A trash that keeps deleted items for 30 days. Record
+history and audit-log retention. A health endpoint, a Docker image, a
+docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 
 ## What is deliberately not included
 
@@ -86,125 +99,332 @@ image, docker-compose with Caddy for automatic HTTPS, and a systemd unit.
 | AI features | They depend on external paid model APIs. Use the REST API to connect your own AI tools. |
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
-| SSO (SAML/OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords plus TOTP 2FA are solid. |
+| SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords plus TOTP 2FA are solid. |
 | Field- and table-level permissions | Every write path would need an extra check. Five roles plus per-base sharing are enough for small teams. |
 | S3 storage, multiple nodes, Postgres | Each adds a moving part. The design is one node, local disk and backups. |
 | Excel (.xlsx) and Airtable-base import | CSV covers it, since both Airtable and Excel export CSV. |
-| Airtable-style webhooks API | Automations ("record created/updated → HTTP request") cover outbound notifications. |
+| Airtable-style webhooks API | Automations ("record created / updated -> HTTP request") cover outbound notifications. |
 | Presence avatars and live cursors | Low value, and would need a client-to-server presence channel. |
 | Non-English UI | Translations need ongoing maintenance. |
 | Native mobile apps, offline mode | The web UI is responsive. |
 | Timeline resource planning, Gantt critical path | Complex scheduling math with little value for small businesses. |
 | Calendar iCal feed | Left out of v1 to limit scope. It may come later. |
+| Conditional lookups and rollups | Left out of v1; ordinary lookups and rollups are included. |
 
 ## Quick start
 
+Two supported ways to run it. Both end with OpenGrid on `127.0.0.1:8080` or
+behind Caddy; **never expose the plain HTTP port to the internet**, because
+passwords and session cookies would travel unencrypted.
+
 ### Docker Compose with automatic HTTPS (recommended)
 
-You need a server with Docker and a domain whose DNS points at it.
+You need a server with Docker (Engine and the Compose plugin) and a domain whose
+DNS already points at it, with ports 80 and 443 open.
 
 ```sh
-git clone https://github.com/opengrid/opengrid.git
+git clone <repository-url> opengrid
 cd opengrid/deploy
-cp .env.example .env        # set OPENGRID_DOMAIN=grid.example.com
+cp .env.example .env        # set OPENGRID_DOMAIN=grid.example.com (and TZ)
 docker compose up -d --build
+docker compose ps           # opengrid should become "healthy"
 ```
 
-Open `https://grid.example.com`. The first account you create becomes the
-administrator. Caddy gets and renews the TLS certificate automatically.
+Open `https://grid.example.com`. Caddy obtains and renews the certificate
+automatically. The first build compiles the Rust server and the web client inside
+Docker and needs no Rust or Node on the host. It took 2 minutes 12 seconds on the
+laptop described under [Resource usage](#resource-usage-and-scale), including
+pulling the base images; expect much longer on a small VPS.
 
-### Single binary
+To try the same stack on your own computer without a domain, add the local
+override, which serves plain HTTP on `http://localhost:8088`:
 
 ```sh
-# Build from source (requires Rust and Node 24), or download a release binary.
-(cd web && npm ci && npm run build)    # produces web/dist, embedded below
-cargo build --release --locked -p opengrid
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+```
 
+### Single binary with systemd
+
+There are no prebuilt release binaries yet; build one (see
+[Building from source](#building-from-source)), copy `target/release/opengrid` to
+the server, and follow [docs/self-hosting.md](docs/self-hosting.md#3-alternative-the-binary-with-systemd)
+for the service user, `deploy/opengrid.service` and a TLS reverse proxy.
+
+To just try it locally:
+
+```sh
 OPENGRID_DATA_DIR=./data ./target/release/opengrid
 # Listening on http://127.0.0.1:8080
 ```
 
-Building from source requires Rust and Node 24. Docker and release-binary
-users need neither: the web client is already inside the binary.
+### First run
 
-Put it behind a reverse proxy that terminates TLS (Caddy, nginx) before
-exposing it to the internet. See [docs/self-hosting.md](docs/self-hosting.md)
-for a full walkthrough, a systemd unit, backups and upgrades.
+Open the site: the first account you create becomes the administrator. Do this
+before you share the URL. Afterwards new accounts need an invite unless you set
+`OPENGRID_OPEN_SIGNUP=true`. For scripted installs you can create the
+administrator on the command line instead:
+
+```sh
+read -rs OPENGRID_ADMIN_PASSWORD && export OPENGRID_ADMIN_PASSWORD
+opengrid create-admin --email you@example.com --name "Your Name"
+```
+
+Then turn on two-factor authentication under **Account -> Security**, and set up
+offsite backups (below). The full walkthrough, SMTP setup, recovery and
+troubleshooting are in [docs/self-hosting.md](docs/self-hosting.md).
 
 ### Command line
 
 ```
-opengrid [serve]                 run the server (default)
-opengrid migrate                 apply database migrations and exit
-opengrid create-admin --email E --name N    (password from OPENGRID_ADMIN_PASSWORD)
-opengrid reset-password --email E           (password from OPENGRID_NEW_PASSWORD)
-opengrid disable-2fa --email E              turn off 2FA for a user who lost their device
-opengrid backup [--out FILE]     write a backup archive
-opengrid restore ARCHIVE [--force]   restore an archive (server must be stopped)
-opengrid healthcheck             exit 0 if the server answers /api/health
+opengrid [serve]                           run the server (default)
+opengrid migrate                           apply database migrations and exit
+opengrid create-admin --email E --name N   (password from OPENGRID_ADMIN_PASSWORD)
+opengrid reset-password --email E          (password from OPENGRID_NEW_PASSWORD)
+opengrid disable-2fa --email E             turn off 2FA for a user who lost their device
+opengrid backup [--out FILE]               write a backup archive
+opengrid restore ARCHIVE [--force]         restore an archive (server must be stopped)
+opengrid healthcheck                       exit 0 if the server answers /api/health
 ```
+
+With Docker, run them as `docker compose exec opengrid opengrid <command>`.
 
 ## Configuration
 
-Each option can be set as a command-line flag (`--data-dir`) or as an
-environment variable (`OPENGRID_DATA_DIR`).
+Every option is a command-line flag (`--data-dir`) and an environment variable
+(`OPENGRID_DATA_DIR`); `opengrid --help` lists them. With Docker Compose put them
+in `deploy/.env`; with systemd in `/etc/opengrid/opengrid.env`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OPENGRID_DATA_DIR` | `./data` | Directory for the database, attachments and backups. |
-| `OPENGRID_BIND` | `127.0.0.1:8080` | Address to listen on. |
-| `OPENGRID_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenGrid at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. |
+| `OPENGRID_DATA_DIR` | `./data` (`/data` in the image) | Directory for the database, attachments and backups. |
+| `OPENGRID_BIND` | `127.0.0.1:8080` (`0.0.0.0:8080` in the image) | Address to listen on. |
+| `OPENGRID_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenGrid at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. |
 | `OPENGRID_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
-| `OPENGRID_TRUST_PROXY` | `false` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` from a reverse proxy (the last `X-Forwarded-For` entry is the client address). Enable only if OpenGrid can be reached solely through that proxy; see `docs/security.md`. |
+| `OPENGRID_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenGrid can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
 | `OPENGRID_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
-| `OPENGRID_BACKUP_HOUR` | `3` | Hour (0–23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
+| `OPENGRID_BACKUP_HOUR` | `3` | Hour (0-23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
 | `OPENGRID_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
 | `OPENGRID_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |
-| `OPENGRID_HISTORY_DAYS` | `365` | Days of record history to keep (`0` = forever). |
+| `OPENGRID_HISTORY_DAYS` | `365` | Days of record history to keep (`0` = forever). Attachments mentioned in retained history are kept on disk. |
 | `OPENGRID_AUDIT_DAYS` | `365` | Days of audit log (logins, password and token changes, invites, admin actions) to keep (`0` = forever). |
 | `OPENGRID_EMAIL_PER_USER_HOUR` | `100` | Invite and automation emails one user can cause per hour. |
 | `OPENGRID_EMAIL_PER_HOUR` | `500` | Invite and automation emails the whole instance sends per hour on behalf of users. |
-| `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when unset. |
+| `OPENGRID_SMTP_HOST` | *(unset)* | SMTP server for outgoing email. Email features are off when unset; do not set the other `OPENGRID_SMTP_*` variables to empty values, leave them out. |
 | `OPENGRID_SMTP_PORT` | `587` | SMTP port. |
 | `OPENGRID_SMTP_USER` | *(unset)* | SMTP username. |
 | `OPENGRID_SMTP_PASSWORD` | *(unset)* | SMTP password. |
 | `OPENGRID_SMTP_SECURITY` | `starttls` | `starttls`, `tls` (implicit TLS, usually port 465) or `none` (local relay only). |
 | `OPENGRID_SMTP_FROM` | `OpenGrid <opengrid@localhost>` | Sender address. |
-| `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private/loopback addresses. Off by default to prevent SSRF. |
+| `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. |
+| `OPENGRID_V1_RATE_PER_TOKEN` | `5` | Requests per second one API token may make to `/api/v1`; more answer `429`. |
+| `OPENGRID_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
 | `OPENGRID_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
-| `OPENGRID_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax). |
+| `OPENGRID_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
 | `OPENGRID_ADMIN_PASSWORD` | – | Password for `create-admin`. |
 | `OPENGRID_NEW_PASSWORD` | – | Password for `reset-password`. |
 
-## Scale
+`TZ` (not an `OPENGRID_` variable) sets the time zone for `OPENGRID_BACKUP_HOUR`
+and for log timestamps.
 
-These are **targets for a 1 vCPU / 1 GB VPS and are still being verified.**
-A seeded 50,000-record scale test is planned, and these numbers will be
-replaced with its measured results.
+## Backups and restore
 
-| | Target |
-|---|---|
-| Records per table | 50,000 comfortable, 100,000 hard cap |
-| Fields per table | 500 (hard limit) |
-| Tables per base | 200 (hard limit) |
-| Concurrent active users | about 25 |
-| Upload size | 100 MB per file (configurable) |
-| Grid page fetch (cached) | under 50 ms p95 at 50k rows |
-| View re-query after a write | under 1 s at 50k rows |
-| Memory (RSS) | under 60 MB idle, under 300 MB under load |
+- **Automatic.** Every day at `OPENGRID_BACKUP_HOUR` the server writes
+  `backups/opengrid-auto-<UTC timestamp>.tar.gz` and keeps the newest
+  `OPENGRID_BACKUP_KEEP`. If the server was down at that hour, the backup runs as
+  soon as it is back up that day (so a brand-new instance writes one at its
+  first start after the hour has passed).
+- **Manual.** **Admin -> Backups -> Create backup now**, or `opengrid backup [--out FILE]`.
+  Works while the server is running (the database is copied with SQLite's
+  `VACUUM INTO`).
+- **What is inside.** `opengrid.db`, every attachment, and a `manifest.json`
+  (OpenGrid version and schema version). Archives are not encrypted and contain
+  password hashes.
+- **Copy them off the server.** Backups on the same disk do not protect you from
+  losing the server. For example, with [rclone](https://rclone.org) (any S3
+  storage, Backblaze B2, SFTP, ...), as a root cron entry an hour after the backup
+  hour:
 
-## Development
+  ```cron
+  30 4 * * * rclone copy --max-age 48h /var/lib/docker/volumes/deploy_opengrid-data/_data/backups b2:my-opengrid-backups
+  ```
+
+  (`/var/lib/opengrid/backups` for a systemd install; use an encrypted remote.)
+  The offsite examples were not run against a real remote storage service; check
+  that your copy job works and that you can restore from a copy.
+- **Restore** (server stopped; the current database is moved aside, not deleted):
+
+  ```sh
+  docker compose stop opengrid
+  docker compose run --rm --no-deps opengrid restore /data/backups/opengrid-auto-20261012-030000.tar.gz --force
+  docker compose start opengrid
+  ```
+
+  Restoring onto a new server, from a file on the host, and with systemd are
+  covered in [docs/self-hosting.md](docs/self-hosting.md#7-restoring-a-backup).
+  Try a test restore before you need one.
+
+## Upgrading
+
+Take a manual backup and make sure you have a recent offsite copy, then:
 
 ```sh
-scripts/check.sh    # cargo fmt --check, clippy -D warnings, all tests
-(cd web && npm ci && npm run build)   # web client, embedded by the server build
+cd opengrid && git pull
+cd deploy && docker compose up -d --build
 ```
 
-The server embeds `web/dist` when it is compiled. Without it the server
-still builds and runs, and shows a "web client not built" page at `/`.
+(systemd: replace `/usr/local/bin/opengrid` and `systemctl restart opengrid`.)
+When a new version changes the database schema, OpenGrid first writes a
+pre-migration snapshot (`backups/pre-migration-v<old>-<timestamp>.db`) and refuses
+to start if it cannot. It never opens a database written by a newer version.
+Rolling back means restoring your pre-upgrade backup. Details in
+[docs/self-hosting.md](docs/self-hosting.md#8-upgrading).
 
-The design and the reasons behind it are in
+## Resource usage and scale
+
+**Where these numbers come from.** Everything below was measured on one machine:
+an **Apple M3 Max laptop (16 cores, 64 GB RAM, macOS 27.0.1, arm64)**, with
+Docker Desktop's Linux VM (16 CPUs, 23 GiB). That is far faster than a $4-6 VPS,
+so **treat absolute times as best case; they have not been measured on a 1 vCPU /
+1 GB VPS.** The methodology is in the scripts named in each row, so you can repeat
+it on your own server.
+
+### Limits
+
+| | Limit | Status |
+|---|---|---|
+| Records per table | 50,000 comfortable, 100,000 hard cap | 50,000 measured; the 100,000 cap is enforced but not benchmarked |
+| Fields per table | 500 | enforced |
+| Tables per base | 200 | enforced |
+| Upload size | 100 MB per file (`OPENGRID_MAX_UPLOAD_MB`) | enforced |
+| CSV import | 100,000 rows, 20 MB, 3,000,000 cells | enforced |
+| Concurrent active users | about 25 | design target, not load-tested |
+
+### Measured: size and memory
+
+| | Measured |
+|---|---|
+| Release binary (web client embedded), macOS arm64 | 21.5 MB |
+| Docker image, linux/arm64 | 181 MB on disk, 40.6 MB compressed; the binary in it is 22.8 MB |
+| Server idle, release binary, right after start (RSS) | 15.1 MB |
+| Container idle (`/proc` RSS of the server / `docker stats`) | 18.6 MB / 5.6 MiB (`docker stats` leaves out page cache) |
+| After the first password sign-in (a password hash uses 19 MiB while it runs) | 38 MB on macOS; 18 MB in the Linux container |
+| 50,000-record table loaded through the API, 11 fields incl. a formula | 58 MB |
+| ...after fetching the first page of that table | 77 MB |
+| ...after a sorted query, a write and 8 simultaneous cold searches | 104 MB |
+| Same load in a container limited to 1 CPU and 1 GB | 101 MB peak RSS |
+
+(`scripts/smoke-install.sh` with `SEED_RECORDS=50000`, which runs
+`scripts/loadtest.sh`; the container run used `docker run --cpus=1 --memory=1g`.)
+
+### Measured: speed at 50,000 records
+
+From the in-process scale test (`cargo test -p opengrid --release --test scale --
+--ignored --nocapture`, three runs; 50,000 orders with 11 fields incl. a link, a
+lookup and a formula, plus 1,000 customers):
+
+| | Result |
+|---|---|
+| Seeding through the write engine | 3.0-3.2 s |
+| Cold query (filter + 2 sorts), 18,006 matches | 91-96 ms |
+| Page of 100 rows, cached | p50 1.1-1.2 ms, p95 1.2-1.4 ms |
+| The same query right after a single write | 90-101 ms |
+| Summary bar (4 aggregations) | 82-86 ms |
+| Cold search over all fields | 163-174 ms |
+| Cold grouped query | 107-114 ms |
+| Test process memory | 146-149 MB resident (includes the seeding data) |
+
+The recompute test (`--test recompute_perf`, 5,000 customers and 50,000 linked
+orders): editing one order's price, which updates a formula and a rollup, takes
+0.7 ms; editing an unrelated cell 0.2 ms; linking 10,000 orders to one customer
+takes about 1 s; editing a value that 10,000 orders look up takes about 0.5 s.
+
+Over HTTP against the release server (`scripts/loadtest.sh`): inserting 50,000
+records in batches of 1,000 took 2-3 s; the first page of 100 rows 65-70 ms; a
+deep page of a text sort 83-93 ms cold and 1 ms cached; the same page right after
+a one-record write 83-98 ms. With the container limited to **one CPU**
+(`--cpus=1`), those were 86 ms, 94 ms and 98 ms, and eight simultaneous cold
+searches finished in 1.6 s (0.6 s unrestricted). A CPU quota on a fast core is
+not the same as a slow 1 vCPU host: expect a real $5 VPS to be slower by a factor
+we have not measured.
+
+### Against the design targets
+
+| Target (1 vCPU / 1 GB VPS) | Result on the laptop |
+|---|---|
+| Grid page fetch (cached), p95 under 50 ms at 50k rows | met (1.4 ms) |
+| View re-query after a write, under 1 s at 50k rows | met (about 0.1 s) |
+| Memory, under 60 MB idle | met (15 MB) |
+| Memory, under 300 MB under load at 50k rows | met (at most 104 MB over HTTP) |
+
+Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users,
+upload-heavy workloads, long-running memory growth, or an amd64 build. The
+systemd unit passes `systemd-analyze verify` but has not been run on a real systemd
+host. The container build and the full install / backup / restore lifecycle were
+run end to end on the laptop (`scripts/smoke-docker.sh`, `scripts/smoke-install.sh`).
+
+Disk: the 50,000-record test database with 11 fields compressed to a 5.7 MB
+backup archive. Each backup holds the database **and every attachment**, so
+with the default `OPENGRID_BACKUP_KEEP=7` plan for roughly eight times your
+database plus attachments.
+
+## Security
+
+OpenGrid is designed to face the internet behind HTTPS: invite-only sign-up by
+default, Argon2id passwords, optional TOTP 2FA, revocable sessions and tokens, CSRF
+protection, per-role access checks on every route, rate limits on every
+unauthenticated surface, and SSRF protection for automation HTTP requests. The
+threat model, every limit, the administrator checklist and the accepted risks are
+in [docs/security.md](docs/security.md). Read the checklist before going live.
+
+## API
+
+The Airtable-compatible API lives under `/api/v1` and takes personal access
+tokens (create one under **Account -> Tokens**):
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" https://grid.example.com/api/v1/meta/bases
+```
+
+[docs/api.md](docs/api.md) lists what is supported and how it differs from
+Airtable. Automation triggers, actions, templates and webhooks are in
+[docs/automations.md](docs/automations.md).
+
+## Building from source
+
+You need Rust (the version in `rust-toolchain.toml`, stable) and Node 24. The
+server embeds `web/dist` when it is compiled, so build the web client first:
+
+```sh
+(cd web && npm ci && npm run build)       # produces web/dist
+cargo build --release --locked -p opengrid
+./target/release/opengrid --help
+```
+
+Without `web/dist` the server still builds and runs, and shows a "web client not
+built" page at `/`. Docker users need neither Rust nor Node: `deploy/Dockerfile`
+builds both inside the image. The web client is described in
+[web/README.md](web/README.md), the design in
 [docs/plans/2026-10-12-opengrid.md](docs/plans/2026-10-12-opengrid.md).
+
+## Running the tests
+
+```sh
+(cd web && npm ci --ignore-scripts)    # once
+scripts/check.sh                       # rustfmt, clippy -D warnings, cargo test, generated types,
+                                       # tsc, Vitest, production build, live API contract tests
+OPENGRID_E2E=1 scripts/check.sh        # the same plus the Playwright end-to-end tests
+```
+
+The end-to-end tests drive the real server in Google Chrome (installed Chrome via
+Playwright's `chrome` channel; no browser download) and take a minute or two.
+Other scripts:
+
+| Script | What it does |
+|---|---|
+| `scripts/gen-types.sh [--check]` | Regenerates (or verifies) the TypeScript types generated from the Rust DTOs. |
+| `scripts/smoke-install.sh [binary]` | Fresh-install walkthrough of the release binary: migrate, create-admin, serve, log in, create data, backup, restore elsewhere, reset-password, healthcheck. `SEED_RECORDS=50000` adds the load test. |
+| `scripts/smoke-docker.sh [image]` | The same for the container image: health check, first-run signup, persistence across restarts, backup inside the container, image size and idle memory. |
+| `scripts/loadtest.sh` | Loads N records into a running instance over HTTP and times the common reads. |
 
 ## License
 
