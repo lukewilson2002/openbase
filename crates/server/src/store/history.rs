@@ -3,13 +3,16 @@
 //! that changed. Computed values are derived, so they are never logged.
 //! Retention is enforced by the `tasks` module (`history_days`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use og_core::api::records::{FieldChange, HistoryEntry};
-use rusqlite::{Connection, params, params_from_iter};
+use og_core::field::FieldKind;
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde_json::{Map, Value as Json};
 
 use crate::error::AppResult;
+use crate::store::links::NameCache;
+use crate::store::schema;
 
 pub const CREATE: &str = "create";
 pub const UPDATE: &str = "update";
@@ -86,6 +89,61 @@ pub fn list_page(
         )?
         .collect::<Result<_, _>>()?;
     Ok(rows)
+}
+
+/// Turn the link-field values of history entries into `[{id, name}]`.
+///
+/// History stores link cells as arrays of record ids. When it is read, the
+/// ids of every link field of the record's table are given the primary text
+/// the linked record has *now*; a linked record that is in the trash or gone
+/// (and ids whose field was deleted or changed type) keeps its id as the
+/// name. Values already in the `{id, name}` shape are left alone.
+pub fn resolve_link_names(
+    conn: &Connection,
+    record_id: &str,
+    entries: &mut [HistoryEntry],
+    tz: chrono_tz::Tz,
+) -> AppResult<()> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let table_id: Option<String> = conn
+        .query_row(
+            "SELECT table_id FROM records WHERE id = ?1",
+            [record_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(table_id) = table_id else {
+        return Ok(());
+    };
+    let link_fields: HashSet<String> = schema::table_fields(conn, &table_id)?
+        .into_iter()
+        .filter(|f| matches!(f.kind, FieldKind::Link(_)))
+        .map(|f| f.id)
+        .collect();
+    if link_fields.is_empty() {
+        return Ok(());
+    }
+    let names = NameCache::new(conn, tz);
+    let to_refs = |v: &mut Json| {
+        let Json::Array(items) = v else { return };
+        for item in items.iter_mut() {
+            if let Json::String(id) = item {
+                let name = names.record_text(id).unwrap_or_else(|| id.clone());
+                *item = serde_json::json!({ "id": id, "name": name });
+            }
+        }
+    };
+    for entry in entries.iter_mut() {
+        for (field_id, change) in entry.changes.iter_mut() {
+            if link_fields.contains(field_id) {
+                to_refs(&mut change.old);
+                to_refs(&mut change.new);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// When (and by whom) the latest create/update touching any of `field_ids`

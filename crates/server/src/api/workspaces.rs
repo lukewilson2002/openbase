@@ -10,9 +10,10 @@ use og_core::api::workspaces::{
     CreateWorkspace, Member, UpdateMember, UpdateWorkspace, WorkspaceSummary,
 };
 
-use crate::api::schema_support::{ApiJson, ok, publish, require_session};
+use crate::api::schema_support::{ok, publish, require_session};
 use crate::auth::Actor;
 use crate::error::{AppError, AppResult};
+use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::workspaces;

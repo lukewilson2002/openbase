@@ -64,7 +64,7 @@ async fn delete_and_restore_are_part_of_the_history() {
     let id = id_str(&rec["id"]);
     f.delete_records(&f.table_id, &[&id])
         .await
-        .assert_status(200);
+        .assert_status(204);
     // A trashed record's history stays readable (you can see why it was deleted).
     let h = history_of(&f, &id, "").await;
     assert_eq!(h[0]["kind"], "delete");
@@ -214,8 +214,79 @@ async fn link_changes_show_up_on_both_records() {
     f.set(&f.table_id, &cust, json!({ &link_id: [order] }))
         .await;
     let h = history_of(&f, &cust, "").await;
-    assert_eq!(h[0]["changes"][&link_id]["new"], json!([order]));
+    assert_eq!(
+        h[0]["changes"][&link_id]["new"],
+        json!([{ "id": order, "name": "o1" }])
+    );
+    assert_eq!(h[0]["changes"][&link_id]["old"], Value::Null);
     let h = history_of(&f, &order, "").await;
     assert_eq!(h[0]["kind"], "update");
-    assert_eq!(h[0]["changes"][&inverse]["new"], json!([cust]));
+    assert_eq!(
+        h[0]["changes"][&inverse]["new"],
+        json!([{ "id": cust, "name": "c1" }])
+    );
+}
+
+#[tokio::test]
+async fn link_values_in_history_carry_names_resolved_when_read() {
+    let f = Fixture::new().await;
+    let other = id_of(&f.add_table("Orders").await);
+    let link = f.add_link(&f.table_id, "Orders", &other).await;
+    let link_id = link["id"].as_str().unwrap().to_string();
+    let o_primary = id_str(&f.table(&other).await["primary_field_id"]);
+    let o1 = id_str(&f.create(&other, json!({ &o_primary: "o1" })).await["id"]);
+    let o2 = id_str(&f.create(&other, json!({ &o_primary: "o2" })).await["id"]);
+    let cust = id_str(&f.create(&f.table_id, json!({ &f.primary_id: "c1" })).await["id"]);
+    f.set(&f.table_id, &cust, json!({ &link_id: [o1] })).await;
+    f.set(
+        &f.table_id,
+        &cust,
+        json!({ &link_id: [o1, o2], &f.notes_id: "n" }),
+    )
+    .await;
+    f.set(&f.table_id, &cust, json!({ &link_id: [o2] })).await;
+
+    let h = history_of(&f, &cust, "").await;
+    assert_eq!(h.len(), 4, "create + 3 updates");
+    // Newest first: [o1, o2] -> [o2]; both sides are lists of {id, name}.
+    assert_eq!(
+        h[0]["changes"][&link_id],
+        json!({ "old": [{ "id": o1, "name": "o1" }, { "id": o2, "name": "o2" }],
+                "new": [{ "id": o2, "name": "o2" }] })
+    );
+    // Non-link fields keep their stored value.
+    assert_eq!(h[1]["changes"][&f.notes_id]["new"], "n");
+    // The oldest entry (the create) has no link change.
+    assert!(h[3]["changes"].get(&link_id).is_none());
+
+    // Names are the *current* primary text of the linked record.
+    f.set(&other, &o1, json!({ &o_primary: "renamed" })).await;
+    let h = history_of(&f, &cust, "").await;
+    assert_eq!(h[0]["changes"][&link_id]["old"][0]["name"], "renamed");
+    assert_eq!(h[2]["changes"][&link_id]["new"][0]["name"], "renamed");
+
+    // A trashed linked record is shown by id.
+    f.delete_records(&other, &[&o1]).await.assert_status(204);
+    let h = history_of(&f, &cust, "").await;
+    assert_eq!(
+        h[0]["changes"][&link_id]["old"],
+        json!([{ "id": o1, "name": o1 }, { "id": o2, "name": "o2" }])
+    );
+    // ... and so is one that was purged for good.
+    schema_support::sql(&f.app, |tx| {
+        tx.execute("DELETE FROM records WHERE id = ?1", [&o1])
+    });
+    let h = history_of(&f, &cust, "").await;
+    assert_eq!(
+        h[0]["changes"][&link_id]["old"][0],
+        json!({ "id": o1, "name": o1 })
+    );
+
+    // Paging resolves too.
+    let page = history_of(&f, &cust, "?limit=1").await;
+    assert_eq!(page.len(), 1);
+    assert_eq!(
+        page[0]["changes"][&link_id]["new"],
+        json!([{ "id": o2, "name": "o2" }])
+    );
 }

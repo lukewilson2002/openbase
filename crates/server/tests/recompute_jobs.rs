@@ -34,7 +34,7 @@ async fn volatile_formulas_are_refreshed_with_their_dependents_and_nothing_else(
         sid(&dead["id"]).to_string(),
         sid(&other["id"]).to_string(),
     );
-    f.delete_records(&t, &[&dead]).await.assert_status(200);
+    f.delete_records(&t, &[&dead]).await.assert_status(204);
 
     // make every stored value stale
     let stale = |rid: &str, data: serde_json::Value| set_data(&f.app, rid, data);
@@ -135,7 +135,7 @@ async fn trash_purge_job_removes_old_trash_and_keeps_recent() {
     .to_string();
     f.delete_records(&l.t2, &[&o_old, &o_new])
         .await
-        .assert_status(200);
+        .assert_status(204);
     let now = opengrid::db::now_ms();
     set_deleted_at(&f.app, "records", &o_old, now - 31 * DAY);
     set_deleted_at(&f.app, "records", &o_new, now - 2 * DAY);
@@ -167,7 +167,7 @@ async fn the_tick_runs_the_new_jobs_and_runs_each_only_when_due() {
     let today = f.formula(&t, "Today", "TODAY()").await;
     let rec = sid(&f.create(&t, json!({})).await["id"]).to_string();
     let doomed = sid(&f.create(&t, json!({})).await["id"]).to_string();
-    f.delete_records(&t, &[&doomed]).await.assert_status(200);
+    f.delete_records(&t, &[&doomed]).await.assert_status(204);
     set_deleted_at(
         &f.app,
         "records",

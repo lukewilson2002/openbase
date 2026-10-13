@@ -8,7 +8,8 @@ export type QueryResponse = {
  */
 total: number, offset: number, records: Array<TableRecord>, 
 /**
- * Empty unless the view groups.
+ * Empty unless the view groups; otherwise every group of the whole
+ * result, whatever page was requested.
  */
 groups: Array<GroupHeader>, 
 /**

@@ -202,7 +202,7 @@ async fn unknown_and_trashed_records() {
     s.post_ok(&s.f.owner, "before").await;
     s.f.delete_records(&s.f.table_id, &[&s.record])
         .await
-        .assert_status(200);
+        .assert_status(204);
     assert_eq!(s.list().await.len(), 1);
     s.post(&s.f.owner, "after").await.assert_status(404);
     s.f.restore_records(&s.f.table_id, &[&s.record])
