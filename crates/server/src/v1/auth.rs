@@ -11,16 +11,13 @@ use axum::extract::{FromRequest, FromRequestParts, Request};
 use axum::http::request::Parts;
 use serde::de::DeserializeOwned;
 
-use crate::auth::{Actor, actor_from_api_token, bearer};
-use crate::db::now_ms;
+use crate::auth::{Actor, bearer, lookup_api_token, stamp_token_use};
 use crate::extract::{ApiJson, ApiQuery};
 use crate::ids::hash_token;
 use crate::state::AppState;
 use crate::v1::error::V1Error;
 
 const SECOND: Duration = Duration::from_secs(1);
-/// `last_used_at` of a token is refreshed at most this often.
-const LAST_USED_GRANULARITY_MS: i64 = 60_000;
 
 /// The caller of a `/api/v1` request: an API-token actor within its rate
 /// limits.
@@ -40,9 +37,9 @@ impl FromRequestParts<AppState> for V1Auth {
             ));
         };
         let lookup = token.clone();
-        let Some(actor) = state
+        let Some((actor, last_used_at)) = state
             .db
-            .read(move |c| actor_from_api_token(c, &lookup))
+            .read(move |c| lookup_api_token(c, &lookup))
             .await?
         else {
             return Err(V1Error::auth_required(
@@ -64,21 +61,7 @@ impl FromRequestParts<AppState> for V1Auth {
             state.config.v1_rate_per_user,
             SECOND,
         )?;
-        // Best-effort usage stamp, at most once a minute per token.
-        let (id, hash) = (actor.user_id.clone(), token_hash);
-        let _ = state
-            .db
-            .write(move |tx| {
-                let now = now_ms();
-                tx.execute(
-                    "UPDATE api_tokens SET last_used_at = ?1
-                     WHERE token_hash = ?2 AND user_id = ?3
-                       AND (last_used_at IS NULL OR last_used_at < ?4)",
-                    rusqlite::params![now, hash, id, now - LAST_USED_GRANULARITY_MS],
-                )?;
-                Ok(())
-            })
-            .await;
+        stamp_token_use(state, &actor, last_used_at).await;
         Ok(V1Auth(actor))
     }
 }

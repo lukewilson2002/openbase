@@ -166,13 +166,26 @@ pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Ac
     }))
 }
 
+/// `last_used_at` of an API token is refreshed at most this often, so a busy
+/// integration does not queue a write on the single writer for every request.
+const LAST_USED_GRANULARITY_MS: i64 = 60_000;
+
 /// Resolve an API token (`pat...`) to an actor.
 pub fn actor_from_api_token(conn: &Connection, token: &str) -> AppResult<Option<Actor>> {
+    Ok(lookup_api_token(conn, token)?.map(|(actor, _)| actor))
+}
+
+/// Like [`actor_from_api_token`], also returning the token's `last_used_at`
+/// (for [`stamp_token_use`]).
+pub fn lookup_api_token(
+    conn: &Connection,
+    token: &str,
+) -> AppResult<Option<(Actor, Option<i64>)>> {
     let hash = hash_token(token);
     let now = now_ms();
     let row = conn
         .query_row(
-            "SELECT u.id, u.name, u.email, u.is_admin, t.scopes, t.expires_at
+            "SELECT u.id, u.name, u.email, u.is_admin, t.scopes, t.expires_at, t.last_used_at
              FROM api_tokens t JOIN users u ON u.id = t.user_id
              WHERE t.token_hash = ?1 AND u.is_active = 1",
             [&hash],
@@ -184,26 +197,57 @@ pub fn actor_from_api_token(conn: &Connection, token: &str) -> AppResult<Option<
                     r.get::<_, bool>(3)?,
                     r.get::<_, String>(4)?,
                     r.get::<_, Option<i64>>(5)?,
+                    r.get::<_, Option<i64>>(6)?,
                 ))
             },
         )
         .optional()?;
-    let Some((user_id, name, email, is_admin, scopes, expires_at)) = row else {
+    let Some((user_id, name, email, is_admin, scopes, expires_at, last_used_at)) = row else {
         return Ok(None);
     };
     if expires_at.is_some_and(|e| e <= now) {
         return Ok(None);
     }
     let scope: TokenScope = serde_json::from_str(&scopes)?;
-    Ok(Some(Actor {
-        user_id,
-        name,
-        email,
-        is_admin,
-        token_scope: Some(scope),
-        session_hash: None,
-        token_hash: Some(hash),
-    }))
+    Ok(Some((
+        Actor {
+            user_id,
+            name,
+            email,
+            is_admin,
+            token_scope: Some(scope),
+            session_hash: None,
+            token_hash: Some(hash),
+        },
+        last_used_at,
+    )))
+}
+
+/// Best-effort usage stamp for the token behind `actor`, at most once a minute
+/// per token: when the `last_used_at` read with the token is recent there is no
+/// write at all, and the update re-checks so concurrent requests stamp once.
+/// Never fails the request. Shared by the [`Actor`] extractor and `/api/v1`.
+pub async fn stamp_token_use(state: &AppState, actor: &Actor, last_used_at: Option<i64>) {
+    let Some(hash) = actor.token_hash.clone() else {
+        return;
+    };
+    let now = now_ms();
+    if last_used_at.is_some_and(|t| t >= now - LAST_USED_GRANULARITY_MS) {
+        return;
+    }
+    let id = actor.user_id.clone();
+    let _ = state
+        .db
+        .write(move |tx| {
+            tx.execute(
+                "UPDATE api_tokens SET last_used_at = ?1
+                 WHERE token_hash = ?2 AND user_id = ?3
+                   AND (last_used_at IS NULL OR last_used_at < ?4)",
+                rusqlite::params![now, hash, id, now - LAST_USED_GRANULARITY_MS],
+            )?;
+            Ok(())
+        })
+        .await;
 }
 
 /// The token of an `Authorization: Bearer <token>` header. Any other
@@ -258,27 +302,12 @@ impl FromRequestParts<AppState> for Actor {
     ) -> Result<Self, Self::Rejection> {
         if let Some(token) = bearer(parts) {
             let token = token.to_string();
-            let actor = state
-                .db
-                .read(move |c| actor_from_api_token(c, &token))
-                .await?;
-            if let Some(a) = &actor {
+            let found = state.db.read(move |c| lookup_api_token(c, &token)).await?;
+            if let Some((a, last_used_at)) = &found {
                 enforce_read_only(parts, a)?;
-                let id = a.user_id.clone();
-                let hash = hash_token(bearer(parts).unwrap_or_default());
-                // Best-effort usage stamp; never fail the request over it.
-                let _ = state
-                    .db
-                    .write(move |tx| {
-                        tx.execute(
-                            "UPDATE api_tokens SET last_used_at = ?1 WHERE token_hash = ?2 AND user_id = ?3",
-                            rusqlite::params![now_ms(), hash, id],
-                        )?;
-                        Ok(())
-                    })
-                    .await;
+                stamp_token_use(state, a, *last_used_at).await;
             }
-            return actor.ok_or(AppError::Unauthorized);
+            return found.map(|(a, _)| a).ok_or(AppError::Unauthorized);
         }
         let jar = CookieJar::from_headers(&parts.headers);
         let Some(cookie) = jar.get(SESSION_COOKIE) else {
