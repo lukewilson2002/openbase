@@ -863,10 +863,7 @@ async fn uploads_need_a_file_field_on_the_form_and_respect_limits() {
 #[tokio::test]
 async fn the_public_upload_cap_is_lower_than_the_configured_limit() {
     // With a generous server limit the public form still stops at 25 MB.
-    let p = {
-        let f = Fixture::with_config(|c| c.max_upload_mb = 100).await;
-        f
-    };
+    let p = { Fixture::with_config(|c| c.max_upload_mb = 100).await };
     let t = p.table_id.clone();
     let files = id_of(&p.attachment_field(&t, "Files").await);
     let view = p

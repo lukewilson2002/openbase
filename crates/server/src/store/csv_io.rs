@@ -112,7 +112,7 @@ fn detect_delimiter(text: &str) -> u8 {
     if counts[best] == 0 {
         return b',';
     }
-    [b',', b';', b'\t'][best]
+    b",;\t"[best]
 }
 
 fn clean_header_name(raw: &str, index: usize) -> String {
@@ -122,6 +122,56 @@ fn clean_header_name(raw: &str, index: usize) -> String {
         return format!("Column {}", index + 1);
     }
     trimmed.chars().take(limits::MAX_NAME_LEN).collect()
+}
+
+/// Row numbers (1-based, every line counts, including empty ones) of the
+/// records the CSV reader will return, which skips empty lines. Quoted fields
+/// may contain line breaks; a quote only opens a quoted field at its start.
+fn record_numbers(text: &str, delimiter: u8) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut numbers = Vec::new();
+    let (mut row, mut line_len) = (1usize, 0usize);
+    let (mut field_start, mut in_quotes) = (true, false);
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if in_quotes {
+            line_len += 1;
+            if b == b'"' {
+                if bytes.get(i + 1) == Some(&b'"') {
+                    i += 1;
+                    line_len += 1;
+                } else {
+                    in_quotes = false;
+                }
+            }
+        } else if b == b'\n' || b == b'\r' {
+            if b == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+                i += 1;
+            }
+            if line_len > 0 {
+                numbers.push(row);
+            }
+            row += 1;
+            line_len = 0;
+            field_start = true;
+        } else if b == delimiter {
+            line_len += 1;
+            field_start = true;
+        } else if b == b'"' && field_start {
+            line_len += 1;
+            in_quotes = true;
+            field_start = false;
+        } else {
+            line_len += 1;
+            field_start = false;
+        }
+        i += 1;
+    }
+    if line_len > 0 {
+        numbers.push(row);
+    }
+    numbers
 }
 
 /// Parse CSV bytes. Fails with a 400 when the file is empty, unreadable or
@@ -136,8 +186,21 @@ pub fn parse(bytes: &[u8], has_header: bool) -> AppResult<Csv> {
         .from_reader(text.as_bytes());
     let mut records: Vec<(usize, Vec<String>)> = Vec::new();
     let mut width = 0usize;
-    for (i, rec) in reader.records().enumerate() {
-        let rec = rec.map_err(|e| AppError::bad_request(format!("could not read the CSV: {e}")))?;
+    // The reader drops empty lines silently; spreadsheets count them as rows,
+    // so row numbers come from a separate scan of the text.
+    let numbers = record_numbers(&text, delimiter);
+    let mut rec = csv::StringRecord::new();
+    loop {
+        let more = reader
+            .read_record(&mut rec)
+            .map_err(|e| AppError::bad_request(format!("could not read the CSV: {e}")))?;
+        if !more {
+            break;
+        }
+        let row_number = numbers
+            .get(records.len())
+            .copied()
+            .unwrap_or(records.len() + 1);
         if records.len() > MAX_ROWS + 1 {
             return Err(AppError::bad_request(format!(
                 "a CSV import can have at most {MAX_ROWS} rows"
@@ -149,7 +212,7 @@ pub fn parse(bytes: &[u8], has_header: bool) -> AppResult<Csv> {
                 "a CSV import can have at most {MAX_COLUMNS} columns"
             )));
         }
-        records.push((i + 1, rec.iter().map(str::to_string).collect()));
+        records.push((row_number, rec.iter().map(str::to_string).collect()));
     }
     if records.is_empty() || width == 0 {
         return Err(AppError::bad_request("the CSV file is empty"));
@@ -301,7 +364,7 @@ fn currency_options(values: &[&str]) -> Option<CurrencyOptions> {
         max_decimals = max_decimals.max(decimals(v));
     }
     Some(CurrencyOptions {
-        precision: max_decimals.max(2).min(8) as u8,
+        precision: max_decimals.clamp(2, 8) as u8,
         symbol: symbol?,
         allow_negative: true,
     })
@@ -649,6 +712,31 @@ mod tests {
             [2, 3, 6]
         );
         assert_eq!(csv.rows[2].cells, ["last", "x", "3", "extra"]);
+    }
+
+    #[test]
+    fn row_numbers_count_blank_lines_and_quoted_line_breaks() {
+        // Quoted line breaks stay inside one row; every blank line is a row.
+        let text = "h1,h2\n\n\"a\nb\",x\n\n\n\"\",y\n";
+        assert_eq!(record_numbers(text, b','), [1, 3, 6]);
+        // CR, LF and CRLF all end a row.
+        assert_eq!(record_numbers("a\rb\r\n\rc\nd", b','), [1, 2, 4, 5]);
+        // A quote inside an unquoted field is literal, so it opens no quotes.
+        assert_eq!(record_numbers("5\" pipe,x\nnext,y\n", b','), [1, 2]);
+        // `""` escapes and delimiters in quotes do not confuse the scan.
+        assert_eq!(record_numbers("\"a \"\"q,\"\" b\",c\n\nz\n", b','), [1, 3]);
+        assert_eq!(record_numbers("", b','), Vec::<usize>::new());
+        assert_eq!(record_numbers("\n\n", b','), Vec::<usize>::new());
+        // The scan agrees with the reader about how many rows there are.
+        for data in ["a,b\n\n1,2\n\n", "a;b\r\n1;\"x\r\ny\"\r\n", "a\n\"\"\n \n"] {
+            let csv = parse(data.as_bytes(), false).unwrap();
+            let numbers = record_numbers(data, detect_delimiter(data));
+            let mut seen: Vec<usize> = vec![];
+            for row in &csv.rows {
+                seen.push(row.number);
+            }
+            assert!(seen.iter().all(|n| numbers.contains(n)), "{data:?}");
+        }
     }
 
     #[test]

@@ -48,9 +48,15 @@ async fn export_has_headers_bom_and_download_headers() {
     assert_eq!(r.headers[header::CONTENT_TYPE], "text/csv; charset=utf-8");
     assert_eq!(r.headers[header::CACHE_CONTROL], "private, no-store");
     let disposition = r.headers[header::CONTENT_DISPOSITION].to_str().unwrap();
-    assert!(disposition.starts_with("attachment; filename=\"Grid view.csv\""), "{disposition}");
+    assert!(
+        disposition.starts_with("attachment; filename=\"Grid view.csv\""),
+        "{disposition}"
+    );
     let rows = rows_of(&r);
-    assert_eq!(rows[0], ["Name", "Notes", "Age", "Status", "Tags", "Due", "Done"]);
+    assert_eq!(
+        rows[0],
+        ["Name", "Notes", "Age", "Status", "Tags", "Due", "Done"]
+    );
     assert_eq!(rows.len(), 6);
     // Standard CRLF line ends.
     assert!(text_of(&r).contains("\r\n"));
@@ -109,7 +115,9 @@ async fn export_quotes_per_rfc_4180_and_round_trips() {
     // What the table stores (text is normalized on the way in) is what comes out.
     let mut expected: Vec<(String, String)> = Vec::new();
     for (name, note) in tricky {
-        let rec = f.create(&t, json!({ &p.name: name, &f.notes_id: note })).await;
+        let rec = f
+            .create(&t, json!({ &p.name: name, &f.notes_id: note }))
+            .await;
         let get = |id: &str| rec["values"][id].as_str().unwrap_or("").to_string();
         expected.push((get(&p.name), get(&f.notes_id)));
     }
@@ -129,7 +137,10 @@ async fn export_quotes_per_rfc_4180_and_round_trips() {
     }
     let raw = text_of(&r);
     assert!(raw.contains("\"comma, inside\",plain\r\n"), "{raw}");
-    assert!(raw.contains("\"quote \"\"inside\"\"\",\"two\nlines\"\r\n"), "{raw}");
+    assert!(
+        raw.contains("\"quote \"\"inside\"\"\",\"two\nlines\"\r\n"),
+        "{raw}"
+    );
     assert!(raw.contains("ünïcödé ✓ 日本"));
 }
 
@@ -138,19 +149,35 @@ async fn export_guards_against_formula_injection() {
     let p = people().await;
     let f = &p.f;
     let t = f.table_id.clone();
-    let danger = ["=1+1", "+1+1", "-2+3", "@SUM(A1)", "\t=cmd", "=HYPERLINK(\"http://evil\")"];
+    let danger = [
+        "=1+1",
+        "+1+1",
+        "-2+3",
+        "@SUM(A1)",
+        "\t=cmd",
+        "=HYPERLINK(\"http://evil\")",
+    ];
     for d in danger {
         f.create(&t, json!({ &p.name: d, &p.age: -5 })).await;
     }
-    f.create(&t, json!({ &p.name: "safe = value", &p.age: -7 })).await;
+    f.create(&t, json!({ &p.name: "safe = value", &p.age: -7 }))
+        .await;
     let view = f
-        .view_of(&t, "V", "grid", json!({ "hidden_fields": [f.notes_id, p.status, p.tags, p.due, p.done] }))
+        .view_of(
+            &t,
+            "V",
+            "grid",
+            json!({ "hidden_fields": [f.notes_id, p.status, p.tags, p.due, p.done] }),
+        )
         .await;
     let r = f.app.get(&f.owner, &export_url(&view)).await;
     let rows = rows_of(&r);
     for d in danger {
         let want = format!("'{d}");
-        assert!(rows.iter().any(|r| r[0] == want), "{d:?} must be neutralized: {rows:?}");
+        assert!(
+            rows.iter().any(|r| r[0] == want),
+            "{d:?} must be neutralized: {rows:?}"
+        );
         assert!(!rows.iter().any(|r| r[0] == d), "{d:?} must not appear raw");
     }
     assert!(rows.iter().any(|r| r[0] == "safe = value"));
@@ -175,17 +202,25 @@ async fn export_shows_link_user_attachment_and_computed_cells_as_text() {
     let orders = id_of(&f.add_table("Orders").await);
     let order_name = id_of(&f.field(&orders, "Name").await);
     let link = f.add_link(&t, "Orders", &orders).await;
-    let o1 = f.create(&orders, json!({ &order_name: "Order, one" })).await;
+    let o1 = f
+        .create(&orders, json!({ &order_name: "Order, one" }))
+        .await;
     let o2 = f.create(&orders, json!({ &order_name: "Order two" })).await;
     let who = id_of(
-        &f.add_field(&t, json!({ "name": "Who", "type": "user", "options": { "multiple": true } }))
-            .await,
+        &f.add_field(
+            &t,
+            json!({ "name": "Who", "type": "user", "options": { "multiple": true } }),
+        )
+        .await,
     );
     let files = id_of(&f.attachment_field(&t, "Files").await);
     let att = f.upload("report.pdf", b"%PDF-1.4").await;
     let double = id_of(&f.formula(&t, "Double", "{Age} * 2").await);
-    f.add_field(&t, json!({ "name": "Made", "type": "created_by", "options": {} }))
-        .await;
+    f.add_field(
+        &t,
+        json!({ "name": "Made", "type": "created_by", "options": {} }),
+    )
+    .await;
     f.set(
         &t,
         &p.ids[0],
@@ -207,7 +242,10 @@ async fn export_shows_link_user_attachment_and_computed_cells_as_text() {
     assert_eq!(alice[col("Double")], "60");
     assert_eq!(alice[col("Made")], "Owner");
     let raw = text_of(&r);
-    assert!(!raw.contains("owner@example.com"), "e-mail addresses are not exported");
+    assert!(
+        !raw.contains("owner@example.com"),
+        "e-mail addresses are not exported"
+    );
     assert!(!raw.contains("usr"), "user ids are not exported");
     assert!(!raw.contains(&double));
 }
@@ -225,7 +263,8 @@ async fn export_formats_dates_in_the_requested_zone() {
         )
         .await,
     );
-    f.set(&t, &p.ids[0], json!({ &at: "2026-03-10T23:30:00.000Z" })).await;
+    f.set(&t, &p.ids[0], json!({ &at: "2026-03-10T23:30:00.000Z" }))
+        .await;
     let get = |tz: Option<&str>| {
         let url = match tz {
             Some(z) => format!("{}?timezone={z}", export_url(&f.view_id)),
@@ -243,7 +282,10 @@ async fn export_formats_dates_in_the_requested_zone() {
     assert_eq!(cell(&get(None).await), "2026-03-10 23:30");
     assert_eq!(cell(&get(Some("UTC")).await), "2026-03-10 23:30");
     assert_eq!(cell(&get(Some("Asia/Tokyo")).await), "2026-03-11 08:30");
-    assert_eq!(cell(&get(Some("America/Los_Angeles")).await), "2026-03-10 16:30");
+    assert_eq!(
+        cell(&get(Some("America/Los_Angeles")).await),
+        "2026-03-10 16:30"
+    );
     get(Some("Mars/Base")).await.assert_status(400);
     // Without a parameter the profile zone applies.
     schema_support::sql(&f.app, |tx| {
@@ -268,7 +310,10 @@ async fn export_sanitizes_the_download_filename() {
         let d = r.headers[header::CONTENT_DISPOSITION].to_str().unwrap();
         assert!(d.is_ascii() && !d.contains(['\n', '\r']), "{d}");
         assert!(d.starts_with("attachment; filename=\""), "{d}");
-        assert!(d.ends_with(&format!("filename*=UTF-8''{utf8_name}")), "{name:?} -> {d}");
+        assert!(
+            d.ends_with(&format!("filename*=UTF-8''{utf8_name}")),
+            "{name:?} -> {d}"
+        );
         assert!(!d.contains(".."), "{d}");
     }
 }
@@ -277,7 +322,13 @@ async fn export_sanitizes_the_download_filename() {
 async fn export_needs_viewer_access() {
     let f = Fixture::new().await;
     let url = export_url(&f.view_id);
-    for role in [Role::Viewer, Role::Commenter, Role::Editor, Role::Creator, Role::Owner] {
+    for role in [
+        Role::Viewer,
+        Role::Commenter,
+        Role::Editor,
+        Role::Creator,
+        Role::Owner,
+    ] {
         let u = f.member(&format!("{}@x.io", role.as_str()), role);
         f.app.get(&u, &url).await.assert_status(200);
     }
@@ -285,7 +336,10 @@ async fn export_needs_viewer_access() {
     let stranger = f.app.user("stranger@x.io", "S");
     f.app.get(&stranger, &url).await.assert_status(404);
     f.app.get(&f.app.anon(), &url).await.assert_status(401);
-    f.app.get(&f.owner, &export_url("viwNOPE")).await.assert_status(404);
+    f.app
+        .get(&f.owner, &export_url("viwNOPE"))
+        .await
+        .assert_status(404);
     // Tokens: a read-only token may export; a token limited to another base may not.
     let ro = token_client(&f.app, &f.owner, false);
     f.app.get(&ro, &url).await.assert_status(200);
@@ -299,9 +353,15 @@ async fn export_needs_viewer_access() {
         )
         .await;
     let pid = id_of(&personal.body);
-    f.app.get(&f.owner, &export_url(&pid)).await.assert_status(200);
+    f.app
+        .get(&f.owner, &export_url(&pid))
+        .await
+        .assert_status(200);
     let viewer = f.member("v2@x.io", Role::Viewer);
-    f.app.get(&viewer, &export_url(&pid)).await.assert_status(404);
+    f.app
+        .get(&viewer, &export_url(&pid))
+        .await
+        .assert_status(404);
 }
 
 #[tokio::test]
@@ -335,9 +395,12 @@ async fn a_big_table_is_streamed_in_bounded_chunks() {
             json!({ "sorts": [{ "field_id": age, "direction": "desc" }] }),
         )
         .await;
-    let req = auth(Request::builder().method("GET").uri(export_url(&sorted)), &f.owner)
-        .body(Body::empty())
-        .unwrap();
+    let req = auth(
+        Request::builder().method("GET").uri(export_url(&sorted)),
+        &f.owner,
+    )
+    .body(Body::empty())
+    .unwrap();
     let res = f.app.router.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), 200);
     let mut stream = res.into_body().into_data_stream();
@@ -352,7 +415,10 @@ async fn a_big_table_is_streamed_in_bounded_chunks() {
     }
     // 10,000 rows come in pages of 500: many chunks, none close to the whole file.
     assert!(chunks >= 20, "{chunks} chunks");
-    assert!(largest < total / 10, "largest chunk {largest} of {total} bytes");
+    assert!(
+        largest < total / 10,
+        "largest chunk {largest} of {total} bytes"
+    );
     assert!(largest < 64 * 1024, "{largest}");
     // All rows, in order, exactly once; the sort ran once (cached for the pages).
     let parsed: Vec<Vec<String>> = csv::ReaderBuilder::new()
@@ -399,7 +465,14 @@ async fn import_to(
     if let Some(h) = has_header {
         parts.push(("has_header", None, h.as_bytes()));
     }
-    post_multipart(app, client, &format!("/api/tables/{table_id}/import"), &parts, &[]).await
+    post_multipart(
+        app,
+        client,
+        &format!("/api/tables/{table_id}/import"),
+        &parts,
+        &[],
+    )
+    .await
 }
 
 async fn all_records(p: &People) -> Value {
@@ -448,7 +521,10 @@ async fn import_maps_columns_and_typecasts_values() {
         .map(|c| c["name"].as_str().unwrap())
         .collect();
     assert_eq!(names, ["Todo", "Doing", "Done", "Blocked"]);
-    assert_eq!(rows[1]["values"][&p.status], status["options"]["choices"][0]["id"]);
+    assert_eq!(
+        rows[1]["values"][&p.status],
+        status["options"]["choices"][0]["id"]
+    );
     // Provenance and history.
     assert_eq!(rows[0]["created_by"], f.owner.user_id.clone().unwrap());
     let id = rows[0]["id"].as_str().unwrap();
@@ -472,7 +548,15 @@ async fn import_maps_columns_and_typecasts_values() {
 async fn import_without_a_mapping_matches_columns_by_name() {
     let p = people().await;
     let csv = "name,AGE,Unknown,status\nNina,40,x,Doing\n";
-    let r = import_to(&p.f.app, &p.f.owner, &p.f.table_id, csv.as_bytes(), None, None).await;
+    let r = import_to(
+        &p.f.app,
+        &p.f.owner,
+        &p.f.table_id,
+        csv.as_bytes(),
+        None,
+        None,
+    )
+    .await;
     r.assert_status(200);
     let all = all_records(&p).await;
     let nina = all["records"].as_array().unwrap().last().unwrap().clone();
@@ -486,16 +570,31 @@ async fn import_without_a_header_uses_column_numbers() {
     let p = people().await;
     let csv = "Oscar,50\nPia,51\n";
     let mapping = json!({ "0": p.name, "1": p.age });
-    let r = import_to(&p.f.app, &p.f.owner, &p.f.table_id, csv.as_bytes(), Some(mapping), Some("false")).await;
+    let r = import_to(
+        &p.f.app,
+        &p.f.owner,
+        &p.f.table_id,
+        csv.as_bytes(),
+        Some(mapping),
+        Some("false"),
+    )
+    .await;
     r.assert_status(200);
     assert_eq!(r.body["created"], 2);
     let all = all_records(&p).await;
     assert_eq!(all["total"], 7);
     // A header-style key is unknown without a header.
     let bad = json!({ "Column 1": p.name });
-    import_to(&p.f.app, &p.f.owner, &p.f.table_id, csv.as_bytes(), Some(bad), Some("false"))
-        .await
-        .assert_status(400);
+    import_to(
+        &p.f.app,
+        &p.f.owner,
+        &p.f.table_id,
+        csv.as_bytes(),
+        Some(bad),
+        Some("false"),
+    )
+    .await
+    .assert_status(400);
 }
 
 #[tokio::test]
@@ -516,7 +615,9 @@ async fn import_reads_whatever_spreadsheets_write() {
         .assert_status(200);
     // Latin-1 bytes.
     let c = b"n,v\ncaf\xe9,2\n";
-    import_to(&f.app, &f.owner, &t, c, Some(map), None).await.assert_status(200);
+    import_to(&f.app, &f.owner, &t, c, Some(map), None)
+        .await
+        .assert_status(200);
     let all = all_records(&p).await;
     let got: Vec<(String, Option<i64>)> = all["records"].as_array().unwrap()[5..]
         .iter()
@@ -540,6 +641,34 @@ async fn import_reads_whatever_spreadsheets_write() {
 }
 
 #[tokio::test]
+async fn error_row_numbers_match_the_spreadsheet_row() {
+    // Blank lines are rows in a spreadsheet, and a quoted line break stays in
+    // its row: the bad values below are in rows 4, 8 and 10.
+    let p = people().await;
+    let f = &p.f;
+    let csv = "n,age\r\n\
+               fine,1\r\n\
+               \r\n\
+               bad,abc\r\n\
+               \"two\nlines\",2\r\n\
+               \r\n\
+               \r\n\
+               worse,xyz\r\n\
+               fine too,3\r\n\
+               last bad,??\r\n";
+    let map = json!({ "n": p.name, "age": p.age });
+    let r = import_to(&f.app, &f.owner, &f.table_id, csv.as_bytes(), Some(map), None).await;
+    r.assert_status(422);
+    let rows: Vec<i64> = r.body["error"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["row"].as_i64().unwrap())
+        .collect();
+    assert_eq!(rows, [4, 8, 10]);
+}
+
+#[tokio::test]
 async fn import_is_all_or_nothing_with_row_numbers() {
     let p = people().await;
     let f = &p.f;
@@ -559,14 +688,32 @@ async fn import_is_all_or_nothing_with_row_numbers() {
     assert_eq!(r.body["error"]["truncated"], false);
     let rows = r.body["error"]["rows"].as_array().unwrap();
     // Row numbers count the header as row 1.
-    assert_eq!(rows.iter().map(|r| r["row"].as_i64().unwrap()).collect::<Vec<_>>(), [3, 5]);
-    assert!(rows[0]["message"].as_str().unwrap().contains("Age"), "{}", rows[0]);
-    assert!(r.body["error"]["message"].as_str().unwrap().contains("nothing was imported"));
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["row"].as_i64().unwrap())
+            .collect::<Vec<_>>(),
+        [3, 5]
+    );
+    assert!(
+        rows[0]["message"].as_str().unwrap().contains("Age"),
+        "{}",
+        rows[0]
+    );
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("nothing was imported")
+    );
     // Nothing was written: no records, no new choices, no autonumber gaps.
     assert_eq!(all_records(&p).await["total"], before);
     assert_eq!(f.field(&t, "Status").await, choices_before);
     let next: i64 = schema_support::sql(&f.app, |tx| {
-        tx.query_row("SELECT next_autonumber FROM tables WHERE id = ?1", [&t], |r| r.get(0))
+        tx.query_row(
+            "SELECT next_autonumber FROM tables WHERE id = ?1",
+            [&t],
+            |r| r.get(0),
+        )
     });
     let after_ok = import_to(
         &f.app,
@@ -602,7 +749,15 @@ async fn a_bad_row_in_a_late_batch_rolls_back_the_earlier_batches() {
         csv.push_str(&format!("tail {i},{i}\n"));
     }
     let map = json!({ "n": p.name, "age": p.age });
-    let r = import_to(&f.app, &f.owner, &t, csv.as_bytes(), Some(map.clone()), None).await;
+    let r = import_to(
+        &f.app,
+        &f.owner,
+        &t,
+        csv.as_bytes(),
+        Some(map.clone()),
+        None,
+    )
+    .await;
     r.assert_status(422);
     // Header + 2,500 rows, then the broken one is row 2,502.
     assert_eq!(r.body["error"]["rows"][0]["row"], 2502);
@@ -656,7 +811,10 @@ async fn import_validates_the_mapping_and_the_file() {
         (json!({ "n": "fldNOPE" }), "unknown field"),
         (json!({ "n": double }), "computed field"),
         (json!({ "n": link }), "link field"),
-        (json!({ "n": p.name, "v": p.name }), "two columns, one field"),
+        (
+            json!({ "n": p.name, "v": p.name }),
+            "two columns, one field",
+        ),
         (json!({ "n": null }), "nothing mapped"),
         (json!({}), "empty mapping"),
     ] {
@@ -670,7 +828,10 @@ async fn import_validates_the_mapping_and_the_file() {
             &f.app,
             &f.owner,
             &format!("/api/tables/{t}/import"),
-            &[("file", Some("a.csv"), b"n\na\n"), ("mapping", None, text.as_bytes())],
+            &[
+                ("file", Some("a.csv"), b"n\na\n"),
+                ("mapping", None, text.as_bytes()),
+            ],
             &[],
         )
         .await;
@@ -678,7 +839,9 @@ async fn import_validates_the_mapping_and_the_file() {
     }
     // Empty files and missing parts.
     for body in [&b""[..], b"\n\n", b"\xff\xfeu\0t\0"] {
-        go(body, Some(json!({ "n": p.name }))).await.assert_status(400);
+        go(body, Some(json!({ "n": p.name })))
+            .await
+            .assert_status(400);
     }
     post_multipart(
         &f.app,
@@ -690,7 +853,11 @@ async fn import_validates_the_mapping_and_the_file() {
     .await
     .assert_status(400);
     f.app
-        .post(&f.owner, &format!("/api/tables/{t}/import"), json!({ "file": "x" }))
+        .post(
+            &f.owner,
+            &format!("/api/tables/{t}/import"),
+            json!({ "file": "x" }),
+        )
         .await
         .assert_status(400);
     // Header-only file: nothing to import is not an error, just 0 records.
@@ -711,7 +878,12 @@ async fn import_enforces_size_row_and_column_limits() {
     rows.push_str(&"x\n".repeat(100_001));
     let r = import_to(&f.app, &f.owner, &t, rows.as_bytes(), map.clone(), None).await;
     r.assert_status(400);
-    assert!(r.body["error"]["message"].as_str().unwrap().contains("100000"));
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("100000")
+    );
     // More than 500 columns.
     let wide = format!("n{}\na\n", ",c".repeat(500));
     import_to(&f.app, &f.owner, &t, wide.as_bytes(), map.clone(), None)
@@ -724,7 +896,11 @@ async fn import_enforces_size_row_and_column_limits() {
     let (_, base_id) = app.workspace_with_base(&owner, "W");
     let table = {
         let r = app
-            .post(&owner, &format!("/api/bases/{base_id}/tables"), json!({ "name": "T" }))
+            .post(
+                &owner,
+                &format!("/api/bases/{base_id}/tables"),
+                json!({ "name": "T" }),
+            )
             .await;
         r.assert_status(201);
         r.body
@@ -752,12 +928,24 @@ async fn import_enforces_size_row_and_column_limits() {
         let _ = name;
         Ok(())
     });
-    import_to(&f.app, &f.owner, &t, b"n\na\nb\nc\nd\ne\n", map.clone(), None)
-        .await
-        .assert_status(200);
+    import_to(
+        &f.app,
+        &f.owner,
+        &t,
+        b"n\na\nb\nc\nd\ne\n",
+        map.clone(),
+        None,
+    )
+    .await
+    .assert_status(200);
     let r = import_to(&f.app, &f.owner, &t, b"n\na\n", map, None).await;
     r.assert_status(400);
-    assert!(r.body["error"]["message"].as_str().unwrap().contains("limit"));
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("limit")
+    );
 }
 
 #[tokio::test]
@@ -832,7 +1020,14 @@ async fn import_base(
     if let Some(n) = &name {
         parts.push(("name", None, n.as_bytes()));
     }
-    post_multipart(app, client, &format!("/api/bases/{base_id}/import"), &parts, &[]).await
+    post_multipart(
+        app,
+        client,
+        &format!("/api/bases/{base_id}/import"),
+        &parts,
+        &[],
+    )
+    .await
 }
 
 const SAMPLE: &str = "Name,Age,Price,Share,Done,Joined,Email,Site,Status,Notes,Zip\n\
@@ -846,7 +1041,15 @@ const SAMPLE: &str = "Name,Age,Price,Share,Done,Joined,Email,Site,Status,Notes,Z
 async fn import_into_a_new_table_infers_field_types() {
     let f = Fixture::new().await;
     let mut events = f.app.state.events.subscribe(&f.base_id);
-    let r = import_base(&f.app, &f.owner, &f.base_id, "People 2026.csv", SAMPLE.as_bytes(), None).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "People 2026.csv",
+        SAMPLE.as_bytes(),
+        None,
+    )
+    .await;
     r.assert_status(201);
     assert_eq!(r.body["created"], 5);
     let table_id = r.body["table_id"].as_str().unwrap().to_string();
@@ -854,7 +1057,12 @@ async fn import_into_a_new_table_infers_field_types() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|f| (f["name"].as_str().unwrap().to_string(), f["type"].as_str().unwrap().to_string()))
+        .map(|f| {
+            (
+                f["name"].as_str().unwrap().to_string(),
+                f["type"].as_str().unwrap().to_string(),
+            )
+        })
         .collect();
     let expect = [
         ("Name", "single_line_text"),
@@ -869,7 +1077,10 @@ async fn import_into_a_new_table_infers_field_types() {
         ("Notes", "long_text"),
         ("Zip", "single_line_text"),
     ];
-    let expect: Vec<(String, String)> = expect.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+    let expect: Vec<(String, String)> = expect
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
     assert_eq!(types, expect);
 
     // The table exists with a grid view; the first column is the primary field.
@@ -913,9 +1124,20 @@ async fn import_into_a_new_table_infers_field_types() {
     assert_eq!(ann[id_of(&by_name("Joined"))], "2026-01-05");
     assert_eq!(ann[id_of(&by_name("Email"))], "ann@x.io");
     assert_eq!(ann[id_of(&by_name("Zip"))], "02134");
-    assert_eq!(q["records"][1]["values"][id_of(&by_name("Notes"))], "multi\nline");
-    assert!(q["records"][3]["values"].get(id_of(&by_name("Age"))).is_none());
-    assert!(q["records"][1]["values"].get(id_of(&by_name("Done"))).is_none());
+    assert_eq!(
+        q["records"][1]["values"][id_of(&by_name("Notes"))],
+        "multi\nline"
+    );
+    assert!(
+        q["records"][3]["values"]
+            .get(id_of(&by_name("Age")))
+            .is_none()
+    );
+    assert!(
+        q["records"][1]["values"]
+            .get(id_of(&by_name("Done")))
+            .is_none()
+    );
 
     // Schema and record events were published.
     let mut schema = false;
@@ -934,20 +1156,53 @@ async fn import_into_a_new_table_infers_field_types() {
 async fn new_table_names_headers_and_primary_rules() {
     let f = Fixture::new().await;
     // Explicit name wins; a clash with an existing table is a 409.
-    let r = import_base(&f.app, &f.owner, &f.base_id, "x.csv", b"a\n1\n", Some("Leads")).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "x.csv",
+        b"a\n1\n",
+        Some("Leads"),
+    )
+    .await;
     r.assert_status(201);
-    assert_eq!(f.table(r.body["table_id"].as_str().unwrap()).await["name"], "Leads");
-    let again = import_base(&f.app, &f.owner, &f.base_id, "x.csv", b"a\n1\n", Some("leads")).await;
+    assert_eq!(
+        f.table(r.body["table_id"].as_str().unwrap()).await["name"],
+        "Leads"
+    );
+    let again = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "x.csv",
+        b"a\n1\n",
+        Some("leads"),
+    )
+    .await;
     again.assert_status(409);
     // Without a name the file name is used and made unique.
     let one = import_base(&f.app, &f.owner, &f.base_id, "Sales.csv", b"a\n1\n", None).await;
     let two = import_base(&f.app, &f.owner, &f.base_id, "Sales.csv", b"a\n1\n", None).await;
     one.assert_status(201);
     two.assert_status(201);
-    assert_eq!(f.table(one.body["table_id"].as_str().unwrap()).await["name"], "Sales");
-    assert_eq!(f.table(two.body["table_id"].as_str().unwrap()).await["name"], "Sales 2");
+    assert_eq!(
+        f.table(one.body["table_id"].as_str().unwrap()).await["name"],
+        "Sales"
+    );
+    assert_eq!(
+        f.table(two.body["table_id"].as_str().unwrap()).await["name"],
+        "Sales 2"
+    );
     // Blank and duplicate headers get unique names; a number column can be primary.
-    let r = import_base(&f.app, &f.owner, &f.base_id, "d.csv", b"id,,id,ID\n1,a,b,c\n2,d,e,f\n", Some("Dups")).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "d.csv",
+        b"id,,id,ID\n1,a,b,c\n2,d,e,f\n",
+        Some("Dups"),
+    )
+    .await;
     r.assert_status(201);
     let names: Vec<&str> = r.body["fields"]
         .as_array()
@@ -958,12 +1213,28 @@ async fn new_table_names_headers_and_primary_rules() {
     assert_eq!(names, ["id", "Column 2", "id 2", "ID 3"]);
     assert_eq!(r.body["fields"][0]["type"], "number");
     // A checkbox-looking first column stays text (a primary field cannot be a checkbox).
-    let r = import_base(&f.app, &f.owner, &f.base_id, "c.csv", b"ok,x\nyes,1\nno,2\n", Some("Checks")).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "c.csv",
+        b"ok,x\nyes,1\nno,2\n",
+        Some("Checks"),
+    )
+    .await;
     r.assert_status(201);
     assert_eq!(r.body["fields"][0]["type"], "single_line_text");
     assert_eq!(r.body["fields"][1]["type"], "number");
     // Header only: a table with fields and no records.
-    let r = import_base(&f.app, &f.owner, &f.base_id, "e.csv", b"a,b\n", Some("Empty")).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "e.csv",
+        b"a,b\n",
+        Some("Empty"),
+    )
+    .await;
     r.assert_status(201);
     assert_eq!(r.body["created"], 0);
     assert_eq!(r.body["fields"].as_array().unwrap().len(), 2);
@@ -979,9 +1250,16 @@ async fn failed_new_table_imports_leave_nothing_behind() {
             .assert_status(400);
     }
     let wide = format!("n{}\n", ",c".repeat(600));
-    import_base(&f.app, &f.owner, &f.base_id, "wide.csv", wide.as_bytes(), Some("Wide"))
-        .await
-        .assert_status(400);
+    import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "wide.csv",
+        wide.as_bytes(),
+        Some("Wide"),
+    )
+    .await
+    .assert_status(400);
     post_multipart(
         &f.app,
         &f.owner,
@@ -991,7 +1269,10 @@ async fn failed_new_table_imports_leave_nothing_behind() {
     )
     .await
     .assert_status(400);
-    assert_eq!(f.schema().await["tables"].as_array().unwrap().len(), tables_before);
+    assert_eq!(
+        f.schema().await["tables"].as_array().unwrap().len(),
+        tables_before
+    );
 }
 
 #[tokio::test]
@@ -1007,12 +1288,26 @@ async fn new_table_import_needs_creator_access() {
         .await
         .assert_status(201);
     let stranger = f.app.user("stranger@x.io", "S");
-    import_base(&f.app, &stranger, &f.base_id, "a.csv", b"a\n1\n", Some("T2"))
-        .await
-        .assert_status(404);
-    import_base(&f.app, &f.app.anon(), &f.base_id, "a.csv", b"a\n1\n", Some("T3"))
-        .await
-        .assert_status(401);
+    import_base(
+        &f.app,
+        &stranger,
+        &f.base_id,
+        "a.csv",
+        b"a\n1\n",
+        Some("T2"),
+    )
+    .await
+    .assert_status(404);
+    import_base(
+        &f.app,
+        &f.app.anon(),
+        &f.base_id,
+        "a.csv",
+        b"a\n1\n",
+        Some("T3"),
+    )
+    .await
+    .assert_status(401);
     let ro = token_client(&f.app, &f.owner, false);
     import_base(&f.app, &ro, &f.base_id, "a.csv", b"a\n1\n", Some("T4"))
         .await
@@ -1027,13 +1322,26 @@ async fn a_large_new_table_import_completes() {
         csv.push_str(&format!("item {i},{i},{}\n", ["N", "S", "E", "W"][i % 4]));
     }
     let started = std::time::Instant::now();
-    let r = import_base(&f.app, &f.owner, &f.base_id, "big.csv", csv.as_bytes(), Some("Big")).await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "big.csv",
+        csv.as_bytes(),
+        Some("Big"),
+    )
+    .await;
     r.assert_status(201);
     assert_eq!(r.body["created"], 5_000);
     assert_eq!(r.body["fields"][1]["type"], "number");
     assert_eq!(r.body["fields"][2]["type"], "single_select");
     let table = f.table(r.body["table_id"].as_str().unwrap()).await;
-    let q = f.query_view(table["views"][0]["id"].as_str().unwrap(), json!({ "limit": 1 })).await;
+    let q = f
+        .query_view(
+            table["views"][0]["id"].as_str().unwrap(),
+            json!({ "limit": 1 }),
+        )
+        .await;
     assert_eq!(q["total"], 5_000);
     assert!(started.elapsed().as_secs() < 60, "{:?}", started.elapsed());
 }
