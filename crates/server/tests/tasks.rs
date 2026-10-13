@@ -333,3 +333,73 @@ async fn tick_runs_every_job_and_survives_failures() {
     let ok = tasks::run_job(&app.state, "ok", |_| Ok(())).await;
     assert!(ok);
 }
+
+fn run_gc(app: &TestApp, now: i64) -> tasks::GcStats {
+    app.state
+        .db
+        .write_sync(|tx| tasks::gc_attachments(tx, &app.state.config.attachments_dir(), now))
+        .unwrap()
+}
+
+#[test]
+fn a_file_removed_from_a_cell_survives_gc_while_history_still_mentions_it() {
+    let app = TestApp::new();
+    seed_table(&app);
+    let now = now_ms();
+    let id = format!("att{}", "H".repeat(14));
+    // Uploaded a week ago; a record once held it, then it was cleared.
+    let blob = add_attachment(&app, &id, &sha('f'), now - 7 * DAY);
+    add_record(&app, "rec1", r#"{"fld9":[]}"#, false);
+    exec(
+        &app,
+        "INSERT INTO record_history (record_id, table_id, user_id, kind, changes, created_at)
+         VALUES ('rec1', 'tbl1', NULL, 'update', ?1, ?2)",
+        rusqlite::params![
+            format!(r#"{{"fld9":{{"old":[{{"id":"{id}","filename":"f.txt"}}],"new":[]}}}}"#),
+            now - DAY
+        ],
+    );
+    // Hourly GC runs: the file stays, so undo or a copy from the history panel works.
+    assert_eq!(run_gc(&app, now).rows_deleted, 0);
+    assert_eq!(run_gc(&app, now + HOUR).rows_deleted, 0);
+    assert!(blob.exists());
+    assert_eq!(count(&app, "SELECT count(*) FROM attachments"), 1);
+    // Once the history is purged by retention, the next run collects it.
+    exec(&app, "DELETE FROM record_history", []);
+    let stats = run_gc(&app, now + 2 * HOUR);
+    assert_eq!((stats.rows_deleted, stats.files_deleted), (1, 1));
+    assert!(!blob.exists());
+}
+
+#[test]
+fn unattached_public_form_uploads_are_collected_after_two_hours() {
+    let app = TestApp::new();
+    seed_table(&app);
+    let member = app.user("uploader@example.com", "U");
+    let now = now_ms();
+    // Anonymous (created_by NULL) uploads: 3 h old goes, 1 h old stays.
+    let stale = add_attachment(&app, "attAnonStalexxxx1", &sha('1'), now - 3 * HOUR);
+    let fresh = add_attachment(&app, "attAnonFreshxxxx1", &sha('2'), now - HOUR);
+    // A signed-in user's unattached upload keeps the full day.
+    let by_user = add_attachment(&app, "attByUserxxxxxxx1", &sha('3'), now - 3 * HOUR);
+    exec(
+        &app,
+        "UPDATE attachments SET created_by = ?1 WHERE id = 'attByUserxxxxxxx1'",
+        [member.user_id.clone().unwrap()],
+    );
+    let stats = run_gc(&app, now);
+    assert_eq!(stats.rows_deleted, 1, "{stats:?}");
+    assert!(!stale.exists());
+    assert!(fresh.exists());
+    assert!(by_user.exists());
+    // A submitted form upload (now referenced by a record) is never collected.
+    let kept = add_attachment(&app, "attSubmittedxxxx1", &sha('4'), now - 5 * DAY);
+    add_record(
+        &app,
+        "rec9",
+        r#"{"fld9":[{"id":"attSubmittedxxxx1"}]}"#,
+        false,
+    );
+    run_gc(&app, now);
+    assert!(kept.exists());
+}

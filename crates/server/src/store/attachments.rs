@@ -212,15 +212,30 @@ fn ids_in(text: &str, out: &mut HashSet<String>) {
     }
 }
 
-/// Delete attachment rows created before `cutoff_ms` that no record (live or
-/// trashed) mentions in its data JSON. Returns the hashes of the deleted rows.
+/// Delete attachment rows that nothing references: created before
+/// `cutoff_ms`, or (uploads without a user, i.e. from public forms) before
+/// `anonymous_cutoff_ms`. "Referenced" means mentioned in the data of any
+/// record (live or trashed) or in the retained record history: removing a
+/// file from a cell must stay undoable (client-side undo, copying from the
+/// history panel) for as long as that history exists. Returns the hashes of
+/// the deleted rows.
 ///
 /// Equivalent to `NOT EXISTS (SELECT 1 FROM records WHERE instr(data, id))`
-/// but scans the records once instead of once per attachment.
-pub fn delete_unreferenced(conn: &Connection, cutoff_ms: i64) -> AppResult<Vec<String>> {
-    let mut stmt = conn.prepare("SELECT id, sha256 FROM attachments WHERE created_at < ?1")?;
+/// but scans the records once instead of once per attachment; the history is
+/// scanned (once) only when some candidate is unreferenced by the records.
+pub fn delete_unreferenced(
+    conn: &Connection,
+    cutoff_ms: i64,
+    anonymous_cutoff_ms: i64,
+) -> AppResult<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, sha256 FROM attachments
+         WHERE created_at < ?1 OR (created_by IS NULL AND created_at < ?2)",
+    )?;
     let candidates: Vec<(String, String)> = stmt
-        .query_map([cutoff_ms], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .query_map([cutoff_ms, anonymous_cutoff_ms], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?
         .collect::<Result<_, _>>()?;
     if candidates.is_empty() {
         return Ok(Vec::new());
@@ -231,6 +246,15 @@ pub fn delete_unreferenced(conn: &Connection, cutoff_ms: i64) -> AppResult<Vec<S
     while let Some(row) = rows.next()? {
         let data: String = row.get(0)?;
         ids_in(&data, &mut referenced);
+    }
+    if candidates.iter().any(|(id, _)| !referenced.contains(id)) {
+        let mut stmt =
+            conn.prepare("SELECT changes FROM record_history WHERE instr(changes, ?1) > 0")?;
+        let mut rows = stmt.query([ID_PREFIX])?;
+        while let Some(row) = rows.next()? {
+            let changes: String = row.get(0)?;
+            ids_in(&changes, &mut referenced);
+        }
     }
     let mut del = conn.prepare("DELETE FROM attachments WHERE id = ?1")?;
     let mut shas = Vec::new();

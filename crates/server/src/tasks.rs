@@ -39,6 +39,9 @@ pub const TICK: Duration = Duration::from_secs(60);
 /// Unreferenced attachments younger than this are kept: an upload is saved
 /// before the record that references it.
 pub const ATTACHMENT_GRACE_MS: i64 = 24 * 3600 * 1000;
+/// The same for uploads made without a user (public forms): anyone on the
+/// internet can create these, so unattached ones go sooner.
+pub const ANONYMOUS_ATTACHMENT_GRACE_MS: i64 = 2 * 3600 * 1000;
 const HOURLY: Duration = Duration::from_secs(3600);
 const DAILY: Duration = Duration::from_secs(24 * 3600);
 const VOLATILE_EVERY: Duration = Duration::from_secs(5 * 60);
@@ -247,9 +250,10 @@ pub struct GcStats {
     pub files_deleted: usize,
 }
 
-/// Delete attachment rows older than [`ATTACHMENT_GRACE_MS`] that no record
-/// (live or trashed) references, then the files (and thumbnails) whose hash no
-/// remaining row uses.
+/// Delete attachment rows older than [`ATTACHMENT_GRACE_MS`]
+/// ([`ANONYMOUS_ATTACHMENT_GRACE_MS`] for public-form uploads) that no record
+/// (live or trashed) and no retained record history references, then the
+/// files (and thumbnails) whose hash no remaining row uses.
 ///
 /// Must run inside a write transaction: uploads store their file and insert
 /// their row under the same writer lock, so a file can never be deleted
@@ -260,7 +264,11 @@ pub fn gc_attachments(
     attachments_dir: &Path,
     now_ms: i64,
 ) -> AppResult<GcStats> {
-    let shas = attachment_store::delete_unreferenced(conn, now_ms - ATTACHMENT_GRACE_MS)?;
+    let shas = attachment_store::delete_unreferenced(
+        conn,
+        now_ms - ATTACHMENT_GRACE_MS,
+        now_ms - ANONYMOUS_ATTACHMENT_GRACE_MS,
+    )?;
     let mut stats = GcStats {
         rows_deleted: shas.len(),
         files_deleted: 0,

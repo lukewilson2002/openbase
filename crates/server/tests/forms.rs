@@ -52,7 +52,11 @@ impl Form {
 /// (relabelled, with help), Files; Done is listed but hidden in the view, a
 /// link and a user field are listed too, and `Extra` is not on the form.
 async fn form() -> Form {
-    let p = people().await;
+    form_with(|_| {}).await
+}
+
+async fn form_with(config: impl FnOnce(&mut opengrid::config::Config)) -> Form {
+    let p = people_with(config).await;
     let f = &p.f;
     let t = f.table_id.clone();
     let notes = f.notes_id.clone();
@@ -954,4 +958,70 @@ async fn uploads_are_rate_limited_and_protected_by_the_password() {
     )
     .await
     .assert_status(200);
+}
+
+// ----------------------------------------------- upload byte budgets (B2)
+
+/// Upload a tiny file from client address `ip` while claiming the request is
+/// `claimed_mb` MB long (what a browser's Content-Length would say).
+async fn upload_claiming(fm: &Form, ip: &str, claimed_mb: u64) -> common::Response {
+    use axum::body::Body;
+    use axum::http::{Request, header};
+    let body = multipart_body(&[("file", Some("x.txt"), b"x")]);
+    let mut req = Request::builder()
+        .method("POST")
+        .uri(fm.upload_path())
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
+        .header(
+            header::CONTENT_LENGTH,
+            (claimed_mb * 1024 * 1024).to_string(),
+        )
+        .body(Body::from(body))
+        .unwrap();
+    let peer: std::net::SocketAddr = format!("{ip}:4000").parse().unwrap();
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(peer));
+    fm.app().send(req).await
+}
+
+#[tokio::test]
+async fn anonymous_uploads_have_a_byte_budget_per_ip() {
+    let fm = form_with(|c| c.max_upload_mb = 25).await;
+    // 10 x 20 MB is the whole 200 MB hourly budget of one address.
+    for _ in 0..10 {
+        upload_claiming(&fm, "10.1.1.1", 20)
+            .await
+            .assert_status(200);
+    }
+    upload_claiming(&fm, "10.1.1.1", 20)
+        .await
+        .assert_status(429);
+    // Even a small file: the budget, not the count, is spent.
+    upload_claiming(&fm, "10.1.1.1", 1).await.assert_status(429);
+    // Another address is unaffected.
+    upload_claiming(&fm, "10.1.1.2", 20)
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn anonymous_uploads_have_a_byte_budget_per_base() {
+    let fm = form_with(|c| c.max_upload_mb = 25).await;
+    // Three addresses use 10 x 20 MB, 10 x 20 MB, 5 x 20 MB = the base's 500 MB.
+    for (ip, n) in [("10.2.0.1", 10), ("10.2.0.2", 10), ("10.2.0.3", 5)] {
+        for _ in 0..n {
+            upload_claiming(&fm, ip, 20).await.assert_status(200);
+        }
+    }
+    upload_claiming(&fm, "10.2.0.3", 20)
+        .await
+        .assert_status(429);
+    upload_claiming(&fm, "10.2.0.4", 20)
+        .await
+        .assert_status(429);
+    // Files the owner uploads are not anonymous and not counted.
+    fm.p.f.upload("mine.txt", b"mine").await;
 }
