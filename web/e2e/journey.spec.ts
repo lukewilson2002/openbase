@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { editorFocused, expect, gridFocused, hoverAt, redo, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, gridFocused, redo, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * The journey of a new instance, driven through the real UI in a real browser against the real
@@ -54,15 +54,7 @@ async function cellPoint(page: Page, col: Col, row: number) {
 
 async function selectCell(page: Page, col: Col, row: number, opts: { double?: boolean } = {}) {
   const p = await cellPoint(page, col, row);
-  await hoverAt(page, p.x, p.y);
-  if (opts.double) {
-    await page.mouse.dblclick(p.x, p.y);
-    await editorFocused(page);
-  }
-  else {
-    await page.mouse.click(p.x, p.y);
-    await gridFocused(page);
-  }
+  await clickGrid(page, p.x, p.y, opts);
 }
 
 /**
@@ -81,7 +73,7 @@ async function typeDown(page: Page, col: Col, startRow: number, values: string[]
 }
 
 test("a new instance, from first-run setup to a logged-in grid with data", async ({ page, diagnostics }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(120_000);
   // The wrong password typed on purpose below makes Chrome log the 401 of the login request.
   diagnostics.allow(/status of 401.*\/api\/auth\/login\)$/);
   let baseId = "";

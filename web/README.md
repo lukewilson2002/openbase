@@ -138,6 +138,25 @@ The grid is a canvas, so cells are operated by position with real mouse and keyb
 are asserted against the API. The server's public URL is `http://localhost:<port>` (not `127.0.0.1`): WebAuthn needs a domain name as the relying party, and `localhost` is the one browsers treat as a secure context over plain http. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
 reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENBASE_E2E=1` is set.
 
+The suite must not depend on how fast the machine is (it passes on a laptop and has to pass on a busy CI runner):
+
+- **Client addresses.** The server limits sign-ins (10 a minute) and sign-ups (10 an hour) per client address, and
+  every test would otherwise come from `127.0.0.1` and share one bucket. globalSetup starts the server (loopback
+  only) with `OPENBASE_TRUST_PROXY=true`, and every test, and every browser context a test or a `beforeAll` makes
+  with `newClientContext()`, sends its own `X-Forwarded-For` derived from the project, the test and the retry, as
+  the contract tests do (`contract/cookieJar.ts`). The real limits are unchanged. A spec that makes a context with
+  plain `browser.newContext()` shares the bucket again: use `newClientContext()` (`e2e/fixtures.ts`).
+- **Waits are bounded and say what they waited for.** The grid helpers (`clickGrid`, `gridFocused`, `editorFocused`)
+  time out after 5 s with the focused element and the selected cell in the message, and `clickGrid` waits out
+  Glide's double-click window instead of guessing (see its comment) and retries a click that left an editor open.
+- **No race with the browser's virtual authenticator.** It decides about user presence when a request reaches it, so
+  `passkeys.spec.ts` holds the page's challenge request until the authenticator is ready (`signInWithButton`).
+- **Slow-machine run.** `OPENBASE_E2E_CPU_THROTTLE=4 OPENBASE_E2E=1 npm run e2e` runs every page with Chrome's CPU
+  throttling (try 6 for a harsher one); a test that only passes on a fast machine fails there.
+- **Retries.** CI retries a failed test once (locally there are none). A test that only passes on its retry is
+  *flaky*: the e2e job lists it in the job summary and as a warning, and the release workflow fails on it
+  (`OPENBASE_E2E_FAIL_ON_FLAKY=1`, which `ci.yml` passes on when `release.yml` calls it with `fail_on_flaky`).
+
 ## Layout
 
 ```

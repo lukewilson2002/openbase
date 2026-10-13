@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, newClientContext, test } from "./fixtures";
 
 /**
  * Kanban, gallery, calendar, timeline and list views, plus the trash and the notification bell,
@@ -112,8 +112,8 @@ async function open(page: Page, view: keyof Fixture["views"]) {
   await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
 }
 
-test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080", storageState: { cookies: [], origins: [] } });
+test.beforeAll(async ({ browser }, testInfo) => {
+  const ctx = await newClientContext(browser, testInfo, { baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080", storageState: { cookies: [], origins: [] } }, "seed");
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);

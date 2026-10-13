@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Locator, Page } from "@playwright/test";
-import { editorFocused, expect, gridFocused, hoverAt, redo, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, newClientContext, redo, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
@@ -103,17 +103,7 @@ async function pointAt(page: Page, col: keyof typeof WIDTHS, row: number) {
 
 async function clickCell(page: Page, col: keyof typeof WIDTHS, row: number, opts: { double?: boolean; right?: boolean } = {}) {
   const p = await pointAt(page, col, row);
-  await hoverAt(page, p.x, p.y);
-  if (opts.double) {
-    await page.mouse.dblclick(p.x, p.y);
-    await editorFocused(page);
-  }
-  else {
-    await page.mouse.click(p.x, p.y, { button: opts.right ? "right" : "left" });
-    // After a click Glide takes keyboard focus back on the next frame (even over an editor opened in
-    // between), so keys sent sooner are lost; people never type that fast after a click.
-    if (!opts.right) await gridFocused(page);
-  }
+  await clickGrid(page, p.x, p.y, opts);
 }
 
 async function gotoGrid(page: Page) {
@@ -123,8 +113,8 @@ async function gotoGrid(page: Page) {
   await expect(canvas(page)).toBeVisible();
 }
 
-test.beforeAll(async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080" });
+test.beforeAll(async ({ browser }, testInfo) => {
+  const ctx = await newClientContext(browser, testInfo, { baseURL: process.env["OPENBASE_E2E_URL"] ?? "http://localhost:8080" }, "seed");
   const page = await ctx.newPage();
   await signIn(page);
   fx = await seed(page);

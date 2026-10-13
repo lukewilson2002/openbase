@@ -122,6 +122,11 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | und
       OPENBASE_PUBLIC_URL: baseUrl,
       // grid.spec.ts signs up its own user after the journey has created the administrator.
       OPENBASE_OPEN_SIGNUP: "true",
+      // The server listens on the loopback only, so nobody but the tests can send X-Forwarded-For.
+      // Every test presents its own client address (fixtures.ts), which gives it its own bucket in the
+      // real, unchanged rate limits (10 sign-ins a minute, 10 sign-ups an hour per address) instead of
+      // the whole suite sharing 127.0.0.1's. The same is done by web/contract.
+      OPENBASE_TRUST_PROXY: "true",
       OPENBASE_BACKUP_HOUR: "-1",
       OPENBASE_LOG: "warn",
     },
