@@ -14,3 +14,6 @@
 /web/e2e/.grid-auth.json
 /web/e2e/.views-auth.json
 /deploy/.env
+/.web-dist
+/release-bin
+/dist-release
