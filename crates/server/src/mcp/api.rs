@@ -123,7 +123,7 @@ pub fn validate_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn percent_decode(s: &str) -> String {
+pub(super) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -296,6 +296,18 @@ pub fn preflight(call: &ApiCall) -> Result<(String, String), String> {
 
 /// Run `call` through the application router as the caller.
 pub async fn execute(ctx: &McpCtx, call: ApiCall) -> Result<ApiResponse, String> {
+    execute_with(ctx, call, MAX_RESULT_BYTES, false).await
+}
+
+/// [`execute`] with a custom cap on returned text; with `plain_cut` an over-long text is cut at
+/// a character boundary without the in-band "[truncated ...]" note (the response still says
+/// `truncated`), for callers that return the text itself, such as CSV exports.
+pub async fn execute_with(
+    ctx: &McpCtx,
+    call: ApiCall,
+    text_cap: usize,
+    plain_cut: bool,
+) -> Result<ApiResponse, String> {
     let (method, path) = preflight(&call)?;
     let uri = match &call.query {
         None | Some(Value::Null) => path.clone(),
@@ -377,7 +389,7 @@ pub async fn execute(ctx: &McpCtx, call: ApiCall) -> Result<ApiResponse, String>
             )
         })?
         .map_err(|e| format!("request failed: {e}"))?;
-    render(res).await
+    render(res, text_cap, plain_cut).await
 }
 
 fn is_json(ct: &str) -> bool {
@@ -390,7 +402,11 @@ fn is_text(ct: &str) -> bool {
     ct.starts_with("text/") || ct == "application/xml" || ct.ends_with("+xml")
 }
 
-async fn render(res: axum::response::Response) -> Result<ApiResponse, String> {
+async fn render(
+    res: axum::response::Response,
+    text_cap: usize,
+    plain_cut: bool,
+) -> Result<ApiResponse, String> {
     let (parts, mut body) = res.into_parts();
     let content_type = parts
         .headers
@@ -431,7 +447,7 @@ async fn render(res: axum::response::Response) -> Result<ApiResponse, String> {
     let ct = content_type.as_deref().unwrap_or("");
     if is_json(ct) || is_text(ct) || ct.is_empty() {
         let text = String::from_utf8_lossy(&bytes);
-        if !cut && text.len() <= MAX_RESULT_BYTES {
+        if !cut && text.len() <= text_cap {
             if is_json(ct)
                 && let Ok(v) = serde_json::from_str::<Value>(&text)
             {
@@ -440,7 +456,15 @@ async fn render(res: axum::response::Response) -> Result<ApiResponse, String> {
                 out.text = Some(text.into_owned());
             }
         } else {
-            out.text = Some(truncate(&text, MAX_RESULT_BYTES));
+            out.text = Some(if plain_cut {
+                let mut end = text_cap.min(text.len());
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text[..end].to_string()
+            } else {
+                truncate(&text, text_cap)
+            });
             out.truncated = true;
             out.note = Some(
                 "the response is larger than what is returned; narrow the request (smaller \

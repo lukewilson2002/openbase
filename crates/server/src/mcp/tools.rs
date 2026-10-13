@@ -24,6 +24,8 @@ pub enum Level {
     Write,
     /// A token with the `manage` permission (and write).
     Manage,
+    /// Like `Manage`, and the token's user must be an instance administrator.
+    Admin,
 }
 
 impl Level {
@@ -35,6 +37,7 @@ impl Level {
             Level::Read => true,
             Level::Write => scope.write,
             Level::Manage => scope.write && scope.manage,
+            Level::Admin => scope.write && scope.manage && actor.is_admin,
         }
     }
 
@@ -45,6 +48,10 @@ impl Level {
             Level::Manage => {
                 "an API token with write access and the 'manage' permission \
                  (\"Allow managing workspaces, members and settings\" when creating the token)"
+            }
+            Level::Admin => {
+                "an API token with write access and the 'manage' permission, created by an \
+                 instance administrator"
             }
         }
     }
@@ -62,6 +69,73 @@ pub struct ToolDef {
 }
 
 impl ToolDef {
+    /// A read-only tool any token can use; refine with the builder methods below.
+    pub fn new(
+        name: &'static str,
+        title: &'static str,
+        description: &'static str,
+        schema: Value,
+    ) -> ToolDef {
+        ToolDef {
+            name,
+            title,
+            description,
+            schema,
+            level: Level::Read,
+            read_only: true,
+            destructive: false,
+            idempotent: true,
+        }
+    }
+
+    /// Changes data: needs a token with write access.
+    pub fn write(mut self) -> ToolDef {
+        self.level = Level::Write;
+        self.read_only = false;
+        self.idempotent = false;
+        self
+    }
+
+    /// Needs the 'manage' permission (and changes data).
+    pub fn manage(mut self) -> ToolDef {
+        self.level = Level::Manage;
+        self.read_only = false;
+        self.idempotent = false;
+        self
+    }
+
+    /// Needs the 'manage' permission and an instance administrator (reads only unless
+    /// followed by [`ToolDef::changes`]).
+    pub fn admin(mut self) -> ToolDef {
+        self.level = Level::Admin;
+        self
+    }
+
+    /// The tool changes data (without touching the access level).
+    pub fn changes(mut self) -> ToolDef {
+        self.read_only = false;
+        self.idempotent = false;
+        self
+    }
+
+    /// Needs the 'manage' permission but only reads.
+    pub fn manage_read(mut self) -> ToolDef {
+        self.level = Level::Manage;
+        self
+    }
+
+    pub fn destructive(mut self) -> ToolDef {
+        self.destructive = true;
+        self.idempotent = false;
+        self
+    }
+
+    /// Repeating the call with the same arguments changes nothing more.
+    pub fn idempotent(mut self) -> ToolDef {
+        self.idempotent = true;
+        self
+    }
+
     fn to_json(&self) -> Value {
         json!({
             "name": self.name,
@@ -145,7 +219,7 @@ pub fn truncate(text: &str, max: usize) -> String {
 
 pub fn registry() -> &'static [ToolDef] {
     static TOOLS: OnceLock<Vec<ToolDef>> = OnceLock::new();
-    TOOLS.get_or_init(super::data::definitions)
+    TOOLS.get_or_init(super::definitions)
 }
 
 pub struct Page {
@@ -199,7 +273,7 @@ pub async fn call(ctx: &McpCtx, name: &str, args: Value) -> Option<ToolResult> {
         )));
     }
     tracing::debug!(tool = name, user = %ctx.actor.user_id, "mcp tool call");
-    Some(super::data::run(ctx, name, args).await)
+    Some(super::run(ctx, name, args).await)
 }
 
 #[cfg(test)]

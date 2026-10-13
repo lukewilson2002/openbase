@@ -4,6 +4,9 @@
 
 use serde_json::{Value, json};
 
+mod live;
+pub use live::*;
+
 use crate::common::{Client, Response, TestApp};
 
 pub const LEGACY: &str = "2025-06-18";

@@ -10,12 +10,12 @@
 use axum::http::HeaderMap;
 use og_core::view::Direction;
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 
 use super::McpCtx;
-use super::api::{self, ApiCall, ApiResponse};
+use super::api::{self, ApiCall};
 use super::catalogue;
+use super::support::*;
 use super::tools::{Level, ToolDef, ToolResult};
 use crate::error::AppError;
 use crate::perm::{self, Role};
@@ -31,49 +31,6 @@ const MAX_HINT_NAMES: usize = 40;
 
 // ---------------------------------------------------------------------------------------------
 // Definitions
-
-fn string(description: &str) -> Value {
-    json!({ "type": "string", "description": description })
-}
-
-fn integer(description: &str, min: u64, max: u64) -> Value {
-    json!({ "type": "integer", "minimum": min, "maximum": max, "description": description })
-}
-
-fn object(properties: Value, required: &[&str]) -> Value {
-    json!({
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": false,
-    })
-}
-
-const BASE_ID: &str = "Base id (from list_bases), e.g. appXXXXXXXXXXXXXX.";
-const TABLE: &str = "Table name or table id (from get_base_schema).";
-
-#[allow(clippy::too_many_arguments)]
-fn tool(
-    name: &'static str,
-    title: &'static str,
-    description: &'static str,
-    schema: Value,
-    level: Level,
-    read_only: bool,
-    destructive: bool,
-    idempotent: bool,
-) -> ToolDef {
-    ToolDef {
-        name,
-        title,
-        description,
-        schema,
-        level,
-        read_only,
-        destructive,
-        idempotent,
-    }
-}
 
 pub fn definitions() -> Vec<ToolDef> {
     let role_names = json!(["viewer", "commenter", "editor", "creator", "owner"]);
@@ -413,23 +370,6 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
     }
 }
 
-fn parse<T: DeserializeOwned>(args: Value) -> Result<T, ToolResult> {
-    serde_json::from_value(args).map_err(|e| {
-        ToolResult::error(format!(
-            "Invalid arguments: {e}. Check the tool's input schema from tools/list."
-        ))
-    })
-}
-
-fn no_args(args: Value) -> Result<(), ToolResult> {
-    match args.as_object() {
-        Some(o) if o.is_empty() => Ok(()),
-        _ => Err(ToolResult::error(
-            "This tool takes no arguments; send an empty object.",
-        )),
-    }
-}
-
 // ---------------------------------------------------------------------------------------------
 // Errors that help the model recover
 
@@ -616,7 +556,7 @@ async fn get_base_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
     }))
 }
 
-fn field_json(f: &og_core::field::Field) -> Value {
+pub fn field_json(f: &og_core::field::Field) -> Value {
     let kind = serde_json::to_value(&f.kind).unwrap_or(Value::Null);
     let mut out = json!({
         "id": f.id,
@@ -925,7 +865,7 @@ async fn delete_records(ctx: &McpCtx, a: DeleteArgs) -> ToolResult {
             "deleted": deleted.iter().map(|d| &d.id).collect::<Vec<_>>(),
             "count": deleted.len(),
             "note": format!(
-                "Moved to the trash, not erased: restorable for {} days (api_request POST /api/tables/{{table id}}/records/restore with {{\"ids\": [...]}}, or the trash in the web app).",
+                "Moved to the trash, not erased: restorable for {} days (restore_from_trash with kind 'record' and the record id, or the trash in the web app).",
                 ctx.state.config.trash_days
             ),
         })),
@@ -939,39 +879,6 @@ struct RecordArg {
     record_id: String,
 }
 
-/// Run a catalogued request as the caller and turn the response into a tool result.
-async fn call_api(
-    ctx: &McpCtx,
-    method: &str,
-    path: &str,
-    query: Option<Value>,
-    body: Option<Value>,
-) -> Result<ApiResponse, ToolResult> {
-    api::execute(
-        ctx,
-        ApiCall {
-            method: method.into(),
-            path: path.into(),
-            query,
-            body,
-        },
-    )
-    .await
-    .map_err(ToolResult::error)
-}
-
-fn api_failure(res: &ApiResponse) -> ToolResult {
-    let msg = res
-        .error_message()
-        .or_else(|| res.text.clone())
-        .unwrap_or_else(|| format!("the request failed with status {}", res.status));
-    ToolResult::error(match res.status {
-        401 => format!("{msg} (the token is no longer valid)"),
-        404 => format!("{msg} (not found, or you have no access to it)"),
-        _ => msg,
-    })
-}
-
 async fn list_comments(ctx: &McpCtx, a: RecordArg) -> ToolResult {
     let path = format!("/api/records/{}/comments", encode_segment(&a.record_id));
     match call_api(ctx, "GET", &path, None, None).await {
@@ -979,7 +886,7 @@ async fn list_comments(ctx: &McpCtx, a: RecordArg) -> ToolResult {
             let comments = res.body.unwrap_or(Value::Null);
             ToolResult::ok(json!({ "comments": comments }))
         }
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
 }
@@ -1000,17 +907,9 @@ async fn add_comment(ctx: &McpCtx, a: CommentArgs) -> ToolResult {
         Ok(res) if res.ok() => {
             ToolResult::ok(json!({ "comment": res.body.unwrap_or(Value::Null) }))
         }
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
-}
-
-/// Percent-encode a value placed in one path segment (ids are plain, but arguments are not
-/// trusted).
-fn encode_segment(s: &str) -> String {
-    url::form_urlencoded::byte_serialize(s.as_bytes())
-        .collect::<String>()
-        .replace('+', "%20")
 }
 
 #[derive(Deserialize)]
@@ -1074,20 +973,20 @@ async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
         Ok(res) if res.ok() => {
             ToolResult::ok(json!({ "workspace": res.body.unwrap_or(Value::Null) }))
         }
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
 }
 
 #[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
-enum Scope {
+pub enum Scope {
     Workspace,
     Base,
 }
 
 impl Scope {
-    fn collection(self) -> &'static str {
+    pub fn collection(self) -> &'static str {
         match self {
             Scope::Workspace => "workspaces",
             Scope::Base => "bases",
@@ -1112,7 +1011,7 @@ async fn list_members(ctx: &McpCtx, a: ScopeArgs) -> ToolResult {
         Ok(res) if res.ok() => {
             ToolResult::ok(json!({ "members": res.body.unwrap_or(Value::Null) }))
         }
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
 }
@@ -1135,7 +1034,7 @@ async fn set_member_role(ctx: &McpCtx, a: MemberRoleArgs) -> ToolResult {
     );
     match call_api(ctx, "PATCH", &path, None, Some(json!({ "role": a.role }))).await {
         Ok(res) if res.ok() => ToolResult::ok(json!({ "ok": true })),
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
 }
@@ -1162,7 +1061,7 @@ async fn create_invite(ctx: &McpCtx, a: InviteArgs) -> ToolResult {
     }
     match call_api(ctx, "POST", &path, None, Some(body)).await {
         Ok(res) if res.ok() => ToolResult::ok(res.body.unwrap_or(Value::Null)),
-        Ok(res) => api_failure(&res),
+        Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
 }

@@ -180,7 +180,7 @@ pub async fn send_with(
     })
 }
 
-fn describe(e: reqwest::Error) -> HttpError {
+pub(crate) fn describe(e: reqwest::Error) -> HttpError {
     let transient = e.is_timeout() || e.is_connect() || e.is_request() || e.is_body();
     let message = if e.is_timeout() {
         "the request timed out".to_string()

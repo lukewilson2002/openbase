@@ -29,6 +29,7 @@
 //! transaction commits the executor publishes the write's events.
 
 pub mod actions;
+pub mod download;
 pub mod http;
 pub mod runner;
 pub mod schedule;

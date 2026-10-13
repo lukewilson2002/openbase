@@ -31,10 +31,20 @@
 //! are capped; every request counts against a per-token and a per-user rate limit; token use is
 //! stamped like on every other API.
 
+pub mod admin;
 pub mod api;
+pub mod automations;
 pub mod catalogue;
 pub mod data;
+pub mod files;
+pub mod history;
+pub mod people;
+pub mod resolve;
+pub mod schema;
+pub mod sharing;
+pub mod support;
 pub mod tools;
+pub mod views;
 
 use std::net::SocketAddr;
 
@@ -79,14 +89,59 @@ const TOOLS_PAGE: usize = 100;
 
 /// Guidance shown to the model by clients (`instructions` of `initialize` / `server/discover`).
 const INSTRUCTIONS: &str = "\
-OpenGrid is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions. \
-Start with list_bases, then get_base_schema to learn table and field names. \
-list_records, search_records, get_record, create_records, update_records and delete_records work with field NAMES (like the Airtable API); \
-table can be a table name or id. Writes are limited to 10 records per call; deleted records go to the trash and can be restored. \
-For anything the curated tools do not cover (creating tables, fields and views, automations, share links, CSV import, trash restore, ...) \
-call api_reference to see every REST endpoint and api_request to call one; it runs through the same permission checks as the web app. \
-Some actions (workspaces, members, invites, admin) need a token with the 'manage' permission; credentials, sessions and API tokens can never be changed through MCP. \
-Errors name what to fix (valid table or field names, missing permission).";
+OpenGrid is a self-hosted Airtable alternative. These tools act as the token's user, within the token's permissions: you can do everything the user can do in the web app. \
+Start with list_bases, then get_base_schema to learn table and field names. Tables, fields and views can be given by NAME or id. \
+Records: list_records, search_records, get_record, create_records, update_records, delete_records work with field NAMES (like the Airtable API); writes are limited to 10 records per call; deleted records go to the trash (restore_from_trash). \
+Structure: create_table, create_field (field_types explains all 28 types and their options), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups use field names), query_view reads a view as the app shows it. \
+Also: formulas (check_formula), comments, record history, trash, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
+Tokens with the 'manage' permission can also manage workspaces, members, invites and bases; instance administrators get admin_* tools (users, audit log, stats, backups). \
+For anything else call api_reference to see every REST endpoint and api_request to call one; it runs through the same permission checks as the web app. \
+Credentials, sessions and API tokens can never be changed through MCP. \
+Errors name what to fix (valid table or field names, missing role or token permission).";
+
+/// Every tool, in the order `tools/list` shows them: the data tools first, then the
+/// application-management groups.
+pub fn definitions() -> Vec<tools::ToolDef> {
+    let mut all = data::definitions();
+    all.extend(people::definitions());
+    all.extend(schema::definitions());
+    all.extend(views::definitions());
+    all.extend(history::definitions());
+    all.extend(sharing::definitions());
+    all.extend(automations::definitions());
+    all.extend(files::definitions());
+    all.extend(admin::definitions());
+    all
+}
+
+/// Run the tool `name` (its level was already checked against the token).
+pub async fn run(ctx: &McpCtx, name: &str, args: Value) -> tools::ToolResult {
+    if let Some(r) = people::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = schema::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = views::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = history::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = sharing::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = automations::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = files::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = admin::run(ctx, name, &args).await {
+        return r;
+    }
+    data::run(ctx, name, args).await
+}
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/mcp", post(handle).get(no_stream).delete(no_session))
