@@ -1,0 +1,17 @@
+---
+// Starlight's footer (edit link, previous / next) plus the site links used on every page.
+import Default from "@astrojs/starlight/components/Footer.astro";
+
+const REPO = "https://github.com/lukewilson2002/openbase";
+const isLanding = Astro.url.pathname === "/";
+---
+
+{!isLanding && <Default {...Astro.props}><slot /></Default>}
+<nav class="ob-footer-links" aria-label="Footer">
+  <a href="/docs/">Docs</a>
+  <a href={REPO}>GitHub</a>
+  <a href={`${REPO}/blob/main/LICENSE-MIT`}>MIT</a>
+  <a href={`${REPO}/blob/main/LICENSE-APACHE`}>Apache-2.0</a>
+  <a href={`${REPO}/security/policy`}>Report a vulnerability</a>
+  <a href="/docs/security/">Security</a>
+</nav>

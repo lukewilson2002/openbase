@@ -1,0 +1,28 @@
+---
+// Inline Lucide icon (see src/data/icons.ts). Decorative: hidden from assistive technology.
+import { icons } from "../data/icons";
+
+interface Props {
+  name: string;
+  size?: number;
+}
+const { name, size = 22 } = Astro.props;
+const node = icons[name];
+if (!node) throw new Error(`Unknown icon: ${name}`);
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+  focusable="false"
+>
+  {node.map(([tag, attrs]) => (tag === "path" ? <path {...attrs} /> : tag === "circle" ? <circle {...attrs} /> : tag === "rect" ? <rect {...attrs} /> : tag === "line" ? <line {...attrs} /> : tag === "polyline" ? <polyline {...attrs} /> : tag === "ellipse" ? <ellipse {...attrs} /> : <path {...attrs} />))}
+</svg>

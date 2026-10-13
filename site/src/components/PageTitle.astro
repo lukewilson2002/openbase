@@ -1,0 +1,8 @@
+---
+// Default page title, except on the landing page, which draws its own h1 in the hero.
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+
+const isLanding = Astro.url.pathname === "/";
+---
+
+{!isLanding && <Default {...Astro.props}><slot /></Default>}
