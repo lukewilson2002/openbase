@@ -52,6 +52,9 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           onSearchOpenChange={setup.setSearchOpen}
           searchInputRef={searchInputRef}
           canManageFields={false}
+          // Interim: the transient (unsaved) view-override wiring for these views is still to come, so nothing is local yet.
+          hasLocalQuery={false}
+          onResetLocalQuery={() => {}}
           features={{ shareView: true, ...features }}
           hideFieldsNoun={hideFieldsNoun}
           extra={toolbarExtra}
