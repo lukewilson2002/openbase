@@ -70,7 +70,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- configuration, columns ------------------------------------------------------------------
   const cfg = useViewConfig(schema, table, view, role);
-  const { config, queryConfig } = cfg;
+  const { config, queryConfig, transient } = cfg;
   const order = useMemo(() => resolveFieldOrder(table, config), [table, config]);
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
   const columns = useMemo<GridColumnSpec[]>(() => toColumnSpecs(order.visible, table.primary_field_id, config.field_widths, liveWidths), [order.visible, table.primary_field_id, config.field_widths, liveWidths]);
@@ -87,7 +87,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- data ------------------------------------------------------------------------------------
   const configKey = useMemo(() => queryRelevantKey(queryConfig), [queryConfig]);
-  const data = useGridData({ tableId: table.id, viewId: view.id, configKey, search: debouncedSearch, timeZone });
+  const data = useGridData({ tableId: table.id, viewId: view.id, configKey, search: debouncedSearch, timeZone, transient });
   const dataRef = useRef(data);
   dataRef.current = data;
 
@@ -107,7 +107,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const hasSummary = Object.keys(queryConfig.summaries).length > 0;
   const aggregations = useQuery({
     queryKey: recordKeys.aggregations(table.id, view.id, `${configKey}|${summaryKey}`, debouncedSearch),
-    queryFn: ({ signal }) => recordsApi.aggregations(view.id, debouncedSearch, signal),
+    // Only the filter of a local override matters to summaries.
+    queryFn: ({ signal }) => recordsApi.aggregations(view.id, { search: debouncedSearch, timezone: timeZone, transient: transient?.filter ? { filter: transient.filter } : null, signal }),
     enabled: hasSummary,
     placeholderData: (prev) => prev,
   });
@@ -473,18 +474,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const rec = recordAtRow(row);
       if (!rec) return;
       if (where === "below") await opsRef.current.createRecords({ afterRecordId: rec.id });
-      else {
-        const prev = (() => {
-          for (let r = row - 1; r >= 0; r--) {
-            const p = recordAtRow(r);
-            if (p) return p;
-            if (rowMapRef.current.recordIndexAt(r) >= 0) return undefined;
-          }
-          return undefined;
-        })();
-        if (prev) await opsRef.current.createRecords({ afterRecordId: prev.id });
-        else await opsRef.current.createRecords({ beforeRecordId: rec.id });
-      }
+      else await opsRef.current.createRecords({ beforeRecordId: rec.id });
     },
     [recordAtRow],
   );
@@ -656,6 +646,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           role={role}
           config={config}
           canConfigure={cfg.canConfigure}
+          hasLocalQuery={transient !== null}
+          onResetLocalQuery={cfg.resetTransient}
           saving={cfg.saving}
           update={cfg.update}
           collaborators={people}
@@ -672,9 +664,16 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
-              <Button size="sm" onClick={() => dataRef.current.refresh()}>
-                Try again
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => dataRef.current.refresh()}>
+                  Try again
+                </Button>
+                {transient && (
+                  <Button size="sm" variant="secondary" onClick={cfg.resetTransient}>
+                    Reset my filters
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <GlideGrid ref={gridRef} {...gridProps} />
@@ -709,7 +708,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         config={config}
         cfg={cfg}
         canManageFields={canManageFields}
-        canSort={cfg.canConfigure}
+        canSort
         onClose={() => setColMenu(null)}
         onEditField={(f, focus) => setFieldDialog({ mode: "edit", field: f, focus })}
         onInsert={(side) => colSpec && setFieldDialog({ mode: "create", relativeTo: { fieldId: colSpec.id, side } })}

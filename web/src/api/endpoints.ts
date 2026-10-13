@@ -10,11 +10,12 @@ import type {
   AdminUpdateUser,
   AdminUser,
   AuditPage,
+  Automation,
   BackupInfo,
   BaseSchema,
-  BaseSummary,
   ChangePasswordRequest,
   Collaborator,
+  CreateAutomation,
   CreateBase,
   CreateInviteRequest,
   CreateTokenRequest,
@@ -30,15 +31,22 @@ import type {
   Member,
   NotificationsResponse,
   OkResponse,
+  RestoreRequest,
+  RestoreResponse,
+  RunsPage,
   PasswordResetConfirm,
   ResetLink,
   SessionInfo,
   SetupStatus,
   SignupRequest,
   Table,
+  TestAutomation,
+  TestResult,
   TokenInfo,
+  TrashListing,
   TwoFactorDisable,
   TwoFactorSetup,
+  UpdateAutomation,
   UpdateBase,
   UpdateMeRequest,
   UpdateMember,
@@ -60,8 +68,8 @@ const enc = encodeURIComponent;
  *   - creates answer 201 with the DTO; deletes answer 204 (no body, `void` here);
  *   - actions without a result answer `{"ok": true}` (`OkResponse`);
  *   - `PATCH` answers the updated resource.
- * Workspaces, bases and members are not implemented server-side yet; they follow the same
- * conventions (bare arrays, no wrapper DTO exists in og_core::api::workspaces).
+ * Schema deletes and member changes answer `200 {"ok": true}`; creates answer 201 with the DTO;
+ * renames/updates answer the updated resource (`WorkspaceSummary`, `BaseSchema`, `Table`, `View`).
  */
 export const api = {
   setup: {
@@ -133,49 +141,76 @@ export const api = {
 
   workspaces: {
     list: () => http.get<WorkspaceSummary[]>("/api/workspaces"),
-    create: (name: string) => http.post<WorkspaceSummary | undefined>("/api/workspaces", { name }),
-    update: (id: string, body: UpdateWorkspace) => http.patch<void>(`/api/workspaces/${enc(id)}`, body),
-    remove: (id: string) => http.delete<void>(`/api/workspaces/${enc(id)}`),
+    create: (name: string) => http.post<WorkspaceSummary>("/api/workspaces", { name }),
+    update: (id: string, body: UpdateWorkspace) => http.patch<WorkspaceSummary>(`/api/workspaces/${enc(id)}`, body),
+    remove: (id: string) => http.delete<OkResponse>(`/api/workspaces/${enc(id)}`),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
-      http.patch<void>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
+      http.patch<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>
-      http.delete<void>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`),
+      http.delete<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`),
   },
 
   bases: {
     create: (workspaceId: string, body: CreateBase) =>
-      http.post<BaseSummary | BaseSchema>(`/api/workspaces/${enc(workspaceId)}/bases`, body),
+      http.post<BaseSchema>(`/api/workspaces/${enc(workspaceId)}/bases`, body),
     get: (id: string) => http.get<BaseSchema>(`/api/bases/${enc(id)}`),
-    update: (id: string, body: UpdateBase) => http.patch<void>(`/api/bases/${enc(id)}`, body),
-    remove: (id: string) => http.delete<void>(`/api/bases/${enc(id)}`),
-    duplicate: (id: string, body: DuplicateBase) =>
-      http.post<BaseSummary | BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
+    update: (id: string, body: UpdateBase) => http.patch<BaseSchema>(`/api/bases/${enc(id)}`, body),
+    remove: (id: string) => http.delete<OkResponse>(`/api/bases/${enc(id)}`),
+    duplicate: (id: string, body: DuplicateBase) => http.post<BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
     collaborators: (id: string) => http.get<Collaborator[]>(`/api/bases/${enc(id)}/collaborators`),
     members: (id: string) => http.get<Member[]>(`/api/bases/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
-      http.patch<void>(`/api/bases/${enc(id)}/members/${enc(userId)}`, body),
+      http.patch<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>
-      http.delete<void>(`/api/bases/${enc(id)}/members/${enc(userId)}`),
+      http.delete<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`),
     /** SSE endpoint path (see events.ts). */
     eventsUrl: (id: string) => `/api/bases/${enc(id)}/events`,
   },
 
   tables: {
     create: (baseId: string, name: string) => http.post<Table>(`/api/bases/${enc(baseId)}/tables`, { name }),
-    update: (id: string, body: UpdateTable) => http.patch<void>(`/api/tables/${enc(id)}`, body),
-    remove: (id: string) => http.delete<void>(`/api/tables/${enc(id)}`),
-    duplicate: (id: string) => http.post<Table | undefined>(`/api/tables/${enc(id)}/duplicate`),
+    update: (id: string, body: UpdateTable) => http.patch<Table>(`/api/tables/${enc(id)}`, body),
+    remove: (id: string) => http.delete<OkResponse>(`/api/tables/${enc(id)}`),
+    /** `include_records` defaults to true server-side. */
+    duplicate: (id: string, body: { name?: string | null; include_records?: boolean } = {}) =>
+      http.post<Table>(`/api/tables/${enc(id)}/duplicate`, body),
+    setPrimaryField: (id: string, fieldId: string) => http.post<Table>(`/api/tables/${enc(id)}/primary-field`, { field_id: fieldId }),
   },
 
   views: {
     create: (tableId: string, body: CreateView) => http.post<View>(`/api/tables/${enc(tableId)}/views`, body),
-    update: (id: string, body: UpdateView) => http.patch<void>(`/api/views/${enc(id)}`, body),
-    remove: (id: string) => http.delete<void>(`/api/views/${enc(id)}`),
-    duplicate: (id: string) => http.post<View | undefined>(`/api/views/${enc(id)}/duplicate`),
+    update: (id: string, body: UpdateView) => http.patch<View>(`/api/views/${enc(id)}`, body),
+    remove: (id: string) => http.delete<OkResponse>(`/api/views/${enc(id)}`),
+    duplicate: (id: string, body: { name?: string | null; personal?: boolean } = {}) =>
+      http.post<View>(`/api/views/${enc(id)}/duplicate`, body),
   },
 
   notifications: {
     list: () => http.get<NotificationsResponse>("/api/notifications"),
+    /** Without `ids` everything is marked read. */
+    markRead: (ids?: string[]) => http.post<OkResponse>("/api/notifications/read", ids ? { ids } : {}),
+  },
+
+  trash: {
+    /** Creators and above. */
+    forBase: (baseId: string) => http.get<TrashListing>(`/api/bases/${enc(baseId)}/trash`),
+    /** Workspace owners. */
+    forWorkspace: (workspaceId: string) => http.get<TrashListing>(`/api/workspaces/${enc(workspaceId)}/trash`),
+    /** `kind` is one of workspace | base | table | field | view | record. */
+    restore: (body: RestoreRequest) => http.post<RestoreResponse>("/api/trash/restore", body),
+  },
+
+  automations: {
+    list: (baseId: string) => http.get<Automation[]>(`/api/bases/${enc(baseId)}/automations`),
+    /** A webhook trigger's token is in `webhook_token` of this response only. */
+    create: (baseId: string, body: CreateAutomation) => http.post<Automation>(`/api/bases/${enc(baseId)}/automations`, body),
+    get: (id: string) => http.get<Automation>(`/api/automations/${enc(id)}`),
+    update: (id: string, body: UpdateAutomation) => http.patch<Automation>(`/api/automations/${enc(id)}`, body),
+    remove: (id: string) => http.delete<OkResponse>(`/api/automations/${enc(id)}`),
+    /** A dry run (the default) sends and writes nothing. */
+    test: (id: string, body: TestAutomation = { dry_run: true }) => http.post<TestResult>(`/api/automations/${enc(id)}/test`, body),
+    /** Newest first; pass the previous page's `next_before` as `before`. */
+    runs: (id: string, opts: { limit?: number; before?: number } = {}) => http.get<RunsPage>(`/api/automations/${enc(id)}/runs`, { query: { limit: opts.limit, before: opts.before } }),
   },
 };

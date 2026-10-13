@@ -5,15 +5,16 @@
  *   the owner of a personal view) persists changes with `PATCH /api/views/{id}` (a full config
  *   replacement), applied optimistically to the cached base schema and debounced.
  * - Everyone else keeps presentational changes (hidden fields, column order and widths, frozen
- *   columns, row height) locally in localStorage; query-affecting changes (filter, sorts,
- *   groups, colours, summaries) are not available to them, because the server runs the saved
- *   config (see notes_for_integrator: QueryRequest has no config override).
+ *   columns, row height) locally in localStorage, and can still filter, sort and group for
+ *   themselves: those three travel with each query as the `transient` override
+ *   (`TransientConfig`, docs/plans §3.1), are never saved to the view, and are shown as "not
+ *   saved". Colours and summaries stay read-only for them (the override does not cover them).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { schemaApi } from "@/api/records";
+import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { BaseSchema, Table, View, ViewConfig } from "@/api/types";
+import type { BaseSchema, Filter, Sort, Table, TransientConfig, View, ViewConfig } from "@/api/types";
 import { useToast } from "@/components/ui/toast";
 import { queryRelevantKey, sanitizeConfig } from "@/components/viewbar/config";
 import { atLeast } from "@/lib/roles";
@@ -31,6 +32,54 @@ export function canConfigureView(role: string, view: Pick<View, "personal" | "lo
 
 function storageKey(viewId: string): string {
   return `og-view-local:${viewId}`;
+}
+
+function transientKey(viewId: string): string {
+  return `og-view-transient:${viewId}`;
+}
+
+const EMPTY_FILTER: Filter = { conjunction: "and", items: [] };
+
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** The parts of `next` (filter, sorts, groups) that differ from the saved config, as a request override. */
+export function diffTransient(saved: ViewConfig, next: ViewConfig): TransientConfig | null {
+  const t: TransientConfig = {};
+  // "No filter" is sent as a filter without items: leaving the part out would keep the saved one.
+  if (!sameJson(saved.filter, next.filter)) t.filter = next.filter && next.filter.items.length > 0 ? next.filter : EMPTY_FILTER;
+  if (!sameJson(saved.sorts, next.sorts)) t.sorts = next.sorts;
+  if (!sameJson(saved.groups, next.groups)) t.groups = next.groups;
+  return Object.keys(t).length > 0 ? t : null;
+}
+
+/** The config the server runs for a query carrying `transient`. */
+export function applyTransient(saved: ViewConfig, transient: TransientConfig | null): ViewConfig {
+  if (!transient) return saved;
+  return {
+    ...saved,
+    filter: transient.filter !== undefined && transient.filter !== null ? (transient.filter.items.length > 0 ? transient.filter : null) : saved.filter,
+    sorts: (transient.sorts ?? saved.sorts) as Sort[],
+    groups: (transient.groups ?? saved.groups) as Sort[],
+  };
+}
+
+function readTransient(viewId: string): TransientConfig | null {
+  try {
+    const raw = localStorage.getItem(transientKey(viewId));
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? (parsed as TransientConfig) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTransient(viewId: string, t: TransientConfig | null): void {
+  try {
+    if (t) localStorage.setItem(transientKey(viewId), JSON.stringify(t));
+    else localStorage.removeItem(transientKey(viewId));
+  } catch {
+    /* storage unavailable: the override lasts for this page view */
+  }
 }
 
 function readLocal(viewId: string): LocalOverlay {
@@ -54,11 +103,16 @@ export interface ViewConfigApi {
   /** The config the grid should render: saved config plus any unsaved or local changes. */
   config: ViewConfig;
   /**
-   * The config the server will use for queries: only the saved one. Query keys must be built
-   * from this (not `config`), otherwise a page could be fetched before the PATCH lands and be
-   * cached under the new key with the old results.
+   * The config the server will use for queries: the saved one, plus the `transient` override
+   * for people who cannot save. Query keys must be built from this (not `config`), otherwise a
+   * page could be fetched before the PATCH lands and be cached under the new key with the old
+   * results.
    */
   queryConfig: ViewConfig;
+  /** The override to send with every query and aggregation request (null for people who can save, or when nothing differs). */
+  transient: TransientConfig | null;
+  /** Drop the local filter/sort/group and go back to the saved ones. */
+  resetTransient(): void;
   canConfigure: boolean;
   /** True while a change is waiting to be saved or in flight. */
   saving: boolean;
@@ -75,20 +129,30 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSeq = useRef(0);
   const [local, setLocal] = useState<LocalOverlay>(() => readLocal(view.id));
+  const [storedTransient, setStoredTransient] = useState<TransientConfig | null>(() => readTransient(view.id));
   const [saving, setSaving] = useState(false);
   const fieldIds = useMemo(() => new Set(table.fields.map((f) => f.id)), [table.fields]);
 
   // A different view starts from its own saved state.
   useEffect(() => {
     setLocal(readLocal(view.id));
+    setStoredTransient(readTransient(view.id));
     setPending(null);
     pendingRef.current = null;
   }, [view.id]);
 
+  // Fields that were deleted since the override was made are dropped from it.
+  const transient = useMemo<TransientConfig | null>(() => {
+    if (canConfigure || !storedTransient) return null;
+    return diffTransient(view.config, sanitizeConfig(applyTransient(view.config, storedTransient), fieldIds));
+  }, [canConfigure, storedTransient, view.config, fieldIds]);
+
+  const queryConfig = useMemo(() => applyTransient(view.config, transient), [view.config, transient]);
+
   const config = useMemo<ViewConfig>(() => {
-    const base = pending ?? view.config;
-    return canConfigure ? base : { ...base, ...local };
-  }, [pending, view.config, canConfigure, local]);
+    if (canConfigure) return pending ?? view.config;
+    return { ...queryConfig, ...local };
+  }, [pending, view.config, queryConfig, canConfigure, local]);
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -100,7 +164,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
     const seq = ++saveSeq.current;
     setSaving(true);
     try {
-      const saved = await schemaApi.updateView(view.id, { config: next });
+      const saved = await api.views.update(view.id, { config: next });
       if (seq === saveSeq.current) {
         pendingRef.current = null;
         setPending(null);
@@ -147,11 +211,19 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
       for (const k of LOCAL_KEYS) (overlay as Record<string, unknown>)[k] = next[k];
       setLocal(overlay);
       writeLocal(view.id, overlay);
+      const nextTransient = diffTransient(view.config, next);
+      setStoredTransient(nextTransient);
+      writeTransient(view.id, nextTransient);
     },
-    [canConfigure, fieldIds, flush, view.id],
+    [canConfigure, fieldIds, flush, view.id, view.config],
   );
 
-  return { config, queryConfig: view.config, canConfigure, saving: saving || pending !== null, update };
+  const resetTransient = useCallback(() => {
+    setStoredTransient(null);
+    writeTransient(view.id, null);
+  }, [view.id]);
+
+  return { config, queryConfig, transient, resetTransient, canConfigure, saving: saving || pending !== null, update };
 }
 
 function replaceViewConfig(schema: BaseSchema, tableId: string, viewId: string, config: ViewConfig): BaseSchema {

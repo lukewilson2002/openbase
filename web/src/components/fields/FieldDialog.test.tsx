@@ -175,7 +175,7 @@ describe("FieldDialog: create", () => {
 
   it("formula with a live check shows the server's verdict", async () => {
     const api = mockApi({
-      "POST /api/tables/tbl1/formula/check": { ok: false, error: "Unbalanced parentheses" },
+      "POST /api/tables/tbl1/formula/check": { ok: false, error: { message: "Unbalanced parentheses", pos: 3 } },
     });
     render(
       <Providers client={createQueryClient()}>

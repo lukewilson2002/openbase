@@ -100,7 +100,8 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit }: RecordOp
   const moveRecords = useCallback(
     async (ids: readonly string[], target: { beforeId?: string; afterId?: string }): Promise<boolean> => {
       try {
-        await recordsApi.move(tableId, { ids: [...ids], before_id: target.beforeId ?? null, after_id: target.afterId ?? null });
+        const res = await recordsApi.move(tableId, { ids: [...ids], before_id: target.beforeId ?? null, after_id: target.afterId ?? null });
+        data.upsertRecords(res.records);
         invalidate(false);
         return true;
       } catch (e) {
@@ -108,7 +109,7 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit }: RecordOp
         return false;
       }
     },
-    [tableId, toast, invalidate],
+    [tableId, data, toast, invalidate],
   );
 
   const createRecords = useCallback<RecordOps["createRecords"]>(
@@ -117,22 +118,27 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit }: RecordOp
       const list = values ?? Array.from({ length: count }, () => ({}));
       const created: TableRecord[] = [];
       try {
+        // Batches keep their order: the first goes where asked, each next one right after the previous.
         let after = afterRecordId;
+        let before = beforeRecordId;
         for (const part of chunk(list, BATCH)) {
-          const res = await recordsApi.create(tableId, { records: part.map((v) => ({ values: v as Record<string, never> })), typecast: true, after_record_id: after ?? null });
+          const res = await recordsApi.create(tableId, { records: part.map((v) => ({ values: v as Record<string, never> })), typecast: true, after_record_id: after ?? null, before_record_id: before ?? null });
           created.push(...res.records);
-          after = res.records[res.records.length - 1]?.id ?? after;
+          const last = res.records[res.records.length - 1]?.id;
+          if (last) {
+            after = last;
+            before = undefined;
+          }
         }
       } catch (e) {
         toast.error(e, "Could not add the record");
         return created;
       }
-      if (beforeRecordId && created.length > 0) await moveRecords(created.map((r) => r.id), { beforeId: beforeRecordId });
       if (created.length > 0) stack.push({ kind: "create", label: created.length === 1 ? "Add record" : `Add ${created.length} records`, ids: created.map((r) => r.id) });
       invalidate(false);
       return created;
     },
-    [canEdit, tableId, toast, stack, invalidate, moveRecords],
+    [canEdit, tableId, toast, stack, invalidate],
   );
 
   const duplicateRecords = useCallback<RecordOps["duplicateRecords"]>(
