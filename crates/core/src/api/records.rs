@@ -58,6 +58,7 @@ pub struct DateRange {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct QueryRequest {
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<usize>", optional))]
     pub offset: usize,
     /// Defaults to 100, max `limits::MAX_PAGE_SIZE`.
     #[serde(default)]
@@ -119,6 +120,7 @@ pub struct AggregationsResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct NewRecord {
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<BTreeMap<String, Json>>", optional))]
     pub values: BTreeMap<String, Json>,
 }
 
@@ -128,6 +130,7 @@ pub struct CreateRecords {
     pub records: Vec<NewRecord>,
     /// Coerce values leniently and create missing select choices.
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub typecast: bool,
     /// Insert after this record in manual order (default: at the end).
     #[serde(default)]
@@ -147,6 +150,7 @@ pub struct RecordPatch {
 pub struct UpdateRecords {
     pub records: Vec<RecordPatch>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub typecast: bool,
 }
 
@@ -273,5 +277,6 @@ pub struct NotificationsResponse {
 pub struct MarkRead {
     /// Empty = mark all read.
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
     pub ids: Vec<String>,
 }

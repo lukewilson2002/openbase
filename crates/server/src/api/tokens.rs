@@ -11,6 +11,7 @@ use serde_json::json;
 
 use crate::auth::{Actor, ClientInfo};
 use crate::error::AppResult;
+use crate::extract::ApiJson;
 use crate::state::AppState;
 use crate::store::audit::{self, actions};
 use crate::store::tokens;
@@ -35,7 +36,7 @@ async fn create(
     State(state): State<AppState>,
     actor: Actor,
     client: ClientInfo,
-    Json(req): Json<CreateTokenRequest>,
+    ApiJson(req): ApiJson<CreateTokenRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedToken>)> {
     actor.require_session()?;
     let created = state

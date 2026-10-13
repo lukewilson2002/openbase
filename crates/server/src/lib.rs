@@ -12,6 +12,7 @@ pub mod email;
 pub mod engine;
 pub mod error;
 pub mod events;
+pub mod extract;
 pub mod http;
 pub mod ids;
 pub mod perm;

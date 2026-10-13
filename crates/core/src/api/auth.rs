@@ -228,6 +228,7 @@ pub struct AdminCreateUser {
     #[serde(default)]
     pub password: Option<String>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub is_admin: bool,
 }
 
@@ -242,11 +243,13 @@ pub struct AdminUpdateUser {
     pub is_admin: Option<bool>,
     /// Turn off the user's two-factor authentication (e.g. lost device).
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub disable_2fa: bool,
 }
 
 /// Result of `POST /api/admin/users`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AdminCreatedUser {
     pub user: AdminUser,
     /// Present when no password was given: send this link to the user so they
@@ -282,6 +285,7 @@ pub struct AuditEntry {
 
 /// One page of `GET /api/admin/audit?before=<id>&limit=<n>` (newest first).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct AuditPage {
     pub entries: Vec<AuditEntry>,
     /// Pass as `before` to fetch the next (older) page; None when exhausted.
@@ -292,6 +296,7 @@ pub struct AuditPage {
 /// `GET /api/tokens/whoami`: who the caller is and, for API tokens, the scope.
 /// Works with a session or a token, so integrations can check their token.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct WhoAmI {
     pub user_id: String,
     pub email: String,

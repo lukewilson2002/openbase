@@ -5,7 +5,7 @@ export type CreateRecords = { records: Array<NewRecord>,
 /**
  * Coerce values leniently and create missing select choices.
  */
-typecast: boolean, 
+typecast?: boolean, 
 /**
  * Insert after this record in manual order (default: at the end).
  */

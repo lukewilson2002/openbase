@@ -4,4 +4,4 @@ export type AdminCreateUser = { email: string, name: string,
 /**
  * If omitted, a reset link is returned for the user to set their password.
  */
-password?: string | null, is_admin: boolean, };
+password?: string | null, is_admin?: boolean, };

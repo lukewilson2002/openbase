@@ -21,9 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use axum::body::{Body, Bytes};
-use axum::extract::{
-    DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Query, Request, State,
-};
+use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Request, State};
 use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -38,6 +36,7 @@ use tokio::sync::Semaphore;
 use crate::auth::{Actor, MaybeActor};
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
+use crate::extract::ApiQuery;
 use crate::ids::new_id;
 use crate::perm::{self, Role};
 use crate::state::AppState;
@@ -390,7 +389,7 @@ async fn download(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
     UrlPath((id, _filename)): UrlPath<(String, String)>,
-    Query(q): Query<ShareQuery>,
+    ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, q.share, &headers, id).await?;
@@ -412,7 +411,7 @@ async fn thumbnail(
     State(state): State<AppState>,
     MaybeActor(actor): MaybeActor,
     UrlPath(id): UrlPath<String>,
-    Query(q): Query<ShareQuery>,
+    ApiQuery(q): ApiQuery<ShareQuery>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, q.share, &headers, id).await?;

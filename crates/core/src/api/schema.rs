@@ -117,6 +117,7 @@ pub struct CreateView {
     #[serde(rename = "type")]
     pub view_type: ViewType,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub personal: bool,
     /// Optional initial config (otherwise defaults; forms get all editable fields).
     #[serde(default)]

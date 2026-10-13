@@ -2,7 +2,7 @@
 import type { ViewConfig } from "./ViewConfig";
 import type { ViewType } from "./ViewType";
 
-export type CreateView = { name: string, type: ViewType, personal: boolean, 
+export type CreateView = { name: string, type: ViewType, personal?: boolean, 
 /**
  * Optional initial config (otherwise defaults; forms get all editable fields).
  */

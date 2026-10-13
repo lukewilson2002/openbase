@@ -4,4 +4,4 @@ export type AdminUpdateUser = { name?: string | null, is_active?: boolean | null
 /**
  * Turn off the user's two-factor authentication (e.g. lost device).
  */
-disable_2fa: boolean, };
+disable_2fa?: boolean, };
