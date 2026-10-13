@@ -22,6 +22,8 @@ import type {
   CreateView,
   CreatedInvite,
   CreatedToken,
+  EmailSettings,
+  EmailTestResult,
   DuplicateBase,
   InstanceStats,
   InviteInfo,
@@ -37,6 +39,7 @@ import type {
   PasswordResetConfirm,
   ResetLink,
   SessionInfo,
+  UpdateEmailSettings,
   SetupStatus,
   SignupRequest,
   Table,
@@ -135,6 +138,11 @@ export const api = {
     stats: () => http.get<InstanceStats>("/api/admin/stats"),
     backups: () => http.get<BackupInfo[]>("/api/admin/backups"),
     createBackup: () => http.post<BackupInfo>("/api/admin/backups"),
+    /** The effective SMTP settings and where each comes from (the password is never returned). */
+    email: () => http.get<EmailSettings>("/api/admin/email"),
+    updateEmail: (body: UpdateEmailSettings) => http.patch<EmailSettings>("/api/admin/email", body),
+    /** A failed delivery is a normal answer (`ok: false` with the mail server's own error). */
+    sendTestEmail: (to?: string) => http.post<EmailTestResult>("/api/admin/email/test", to ? { to } : {}),
     /** Plain URL: downloads go through the browser (session cookie), not fetch. */
     backupUrl: (name: string) => `/api/admin/backups/${enc(name)}`,
   },
