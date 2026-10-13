@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { Browser, BrowserContext, CDPSession, Page } from "@playwright/test";
+import { request, type Browser, type BrowserContext, type CDPSession, type Page } from "@playwright/test";
 import { totp } from "../contract/totp";
 import { expect, test } from "./fixtures";
 
@@ -64,9 +64,23 @@ async function virtualAuthenticator(page: Page): Promise<Virtual> {
   };
 }
 
-async function signUp(page: Page, name: string): Promise<string> {
+/**
+ * A new account, signed in in `page`'s browser profile. Created by the administrator the journey spec
+ * set up rather than through sign-up: the server allows only 10 sign-ups an hour from one address and
+ * the other specs already use most of them.
+ */
+async function newUser(page: Page, name: string): Promise<string> {
   const email = `e2e-passkey-${rand()}@example.com`;
-  const res = await page.request.post("/api/auth/signup", { data: { email, name, password: PASSWORD }, headers: CSRF });
+  const admin = await request.newContext({ baseURL: process.env["OPENBASE_E2E_URL"] });
+  try {
+    const login = await admin.post("/api/auth/login", { data: { email: ADMIN_EMAIL, password: PASSWORD }, headers: CSRF });
+    expect(login.ok(), await login.text()).toBeTruthy();
+    const created = await admin.post("/api/admin/users", { data: { email, name, password: PASSWORD, is_admin: false }, headers: CSRF });
+    expect(created.ok(), await created.text()).toBeTruthy();
+  } finally {
+    await admin.dispose();
+  }
+  const res = await page.request.post("/api/auth/login", { data: { email, password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();
   return email;
 }
@@ -103,7 +117,7 @@ test("a passkey is added in the account page, signs the person in without a pass
   // The refused sign-in at the end is a 401 on purpose; Chrome logs every failed fetch.
   diagnostics.allow(/status of 401.*\/api\/auth\/passkey-login\/finish/);
   const auth = await virtualAuthenticator(page);
-  const email = await signUp(page, "Passkey E2E");
+  const email = await newUser(page, "Passkey E2E");
 
   await addPasskey(page, "E2E laptop");
   // The authenticator holds a discoverable credential with the server's user handle.
@@ -163,7 +177,7 @@ test("a passkey is added in the account page, signs the person in without a pass
 
 test("a sign-in with a passkey skips the two-factor code that a password sign-in still asks for", async ({ page }) => {
   const auth = await virtualAuthenticator(page);
-  const email = await signUp(page, "Passkey 2FA E2E");
+  const email = await newUser(page, "Passkey 2FA E2E");
 
   // Two-factor on, set up through the API the way the account page does.
   const setup = await (await page.request.post("/api/auth/2fa/setup", { data: {}, headers: CSRF })).json();
@@ -196,7 +210,7 @@ test("an administrator removes another user's passkeys, and that user falls back
   const userContext = await freshContext(browser, baseURL);
   const user = await userContext.newPage();
   const auth = await virtualAuthenticator(user);
-  const email = await signUp(user, "Lost Device");
+  const email = await newUser(user, "Lost Device");
   await addPasskey(user, "Lost phone");
   await auth.present(false);
   await logOut(user);
@@ -234,7 +248,7 @@ test("an administrator removes another user's passkeys, and that user falls back
 
 test("the background request for the autofill list signs the person in once the authenticator answers it", async ({ page }) => {
   const auth = await virtualAuthenticator(page);
-  const email = await signUp(page, "Passkey Autofill E2E");
+  const email = await newUser(page, "Passkey Autofill E2E");
   await addPasskey(page, "Autofill laptop");
 
   // The login page asks the browser for the account's passkeys as soon as it opens (conditional
