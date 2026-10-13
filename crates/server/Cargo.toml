@@ -79,5 +79,5 @@ rmcp = { version = "3.5", default-features = false, features = ["client", "trans
 # the authenticator side (an interop check); tests/passkey_support is the authenticator the other
 # tests use, because it can also hold discoverable credentials and set the signature counter.
 webauthn-authenticator-rs = { version = "=0.6.1-dev", default-features = false, features = ["softpasskey"] }
-p256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
 serde_cbor_2 = "0.13"
