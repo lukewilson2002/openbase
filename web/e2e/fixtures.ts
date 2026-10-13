@@ -235,9 +235,20 @@ const GLIDE_DOUBLE_CLICK_MS = 500;
 export async function clickGrid(page: Page, x: number, y: number, opts: { double?: boolean; right?: boolean } = {}): Promise<void> {
   await hoverAt(page, x, y);
   if (opts.double) {
-    await page.mouse.dblclick(x, y);
-    await editorFocused(page);
-    return;
+    // A person's two clicks are a frame or more apart. Playwright's dblclick sends them back to back,
+    // before a slow page has rendered the selection the first one made, and Glide opens the editor
+    // only of a cell that was already selected when the second click began.
+    for (let attempt = 1; ; attempt++) {
+      await page.mouse.click(x, y);
+      await frames(page);
+      if (!(await editorHasFocus(page))) await page.mouse.click(x, y);
+      try {
+        await editorFocused(page, attempt < 3 ? 2_000 : WAIT_MS);
+        return;
+      } catch (error) {
+        if (attempt === 3) throw error;
+      }
+    }
   }
   if (opts.right) {
     await page.mouse.click(x, y, { button: "right" });
