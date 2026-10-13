@@ -1,4 +1,5 @@
-//! Admin backup endpoints (instance administrators, session auth only):
+//! Admin backup endpoints (instance administrators; signed in, or an audited API token with
+//! the `manage` permission):
 //!
 //! - `GET /api/admin/backups` lists archives and pre-migration snapshots.
 //! - `POST /api/admin/backups` writes a manual backup now.
@@ -13,7 +14,7 @@ use axum::{Json, Router};
 use og_core::api::auth::BackupInfo;
 use tokio::sync::Mutex;
 
-use crate::auth::Actor;
+use crate::auth::{Actor, ClientInfo, admin_guard};
 use crate::backup;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -28,8 +29,12 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/backups/{name}", get(download))
 }
 
-async fn list(State(state): State<AppState>, actor: Actor) -> AppResult<Json<Vec<BackupInfo>>> {
-    actor.require_admin()?;
+async fn list(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+) -> AppResult<Json<Vec<BackupInfo>>> {
+    admin_guard(&state, &actor, &client, "GET /api/admin/backups").await?;
     let dir = state.config.backups_dir();
     let items = tokio::task::spawn_blocking(move || backup::list(&dir))
         .await
@@ -37,8 +42,12 @@ async fn list(State(state): State<AppState>, actor: Actor) -> AppResult<Json<Vec
     Ok(Json(items))
 }
 
-async fn create(State(state): State<AppState>, actor: Actor) -> AppResult<Json<BackupInfo>> {
-    actor.require_admin()?;
+async fn create(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+) -> AppResult<Json<BackupInfo>> {
+    admin_guard(&state, &actor, &client, "POST /api/admin/backups").await?;
     let _guard = CREATE_LOCK.lock().await;
     let st = state.clone();
     let path = tokio::task::spawn_blocking(move || backup::create(&st, None))
@@ -62,9 +71,10 @@ async fn create(State(state): State<AppState>, actor: Actor) -> AppResult<Json<B
 async fn download(
     State(state): State<AppState>,
     actor: Actor,
+    client: ClientInfo,
     Path(name): Path<String>,
 ) -> AppResult<Response> {
-    actor.require_admin()?;
+    admin_guard(&state, &actor, &client, "GET /api/admin/backups/{name}").await?;
     if !backup::is_backup_name(&name) {
         return Err(AppError::not_found("backup"));
     }

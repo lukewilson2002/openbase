@@ -24,6 +24,20 @@ pub const CSRF_HEADER: &str = "x-opengrid-csrf";
 const JSON_BODY_LIMIT: usize = 4 * 1024 * 1024;
 
 pub fn router(state: AppState) -> Router {
+    // The MCP tools run requests through a second assembly of this router (same middleware and
+    // handlers, but without `/mcp` itself, which `api_request` refuses to call anyway). Its
+    // state has its own empty `app_router` cell: storing a router that holds the very state
+    // that points back at it would be a reference cycle that never frees the database.
+    // Building the router twice for one state keeps the first.
+    if state.app_router.get().is_none() {
+        let mut inner = state.clone();
+        inner.app_router = Default::default();
+        let _ = state.app_router.set(assemble(inner, false));
+    }
+    assemble(state, true)
+}
+
+fn assemble(state: AppState, with_mcp: bool) -> Router {
     let api = Router::new()
         .route("/api/health", get(health))
         .merge(api::router())
@@ -32,9 +46,13 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), csrf_guard))
         .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT));
 
-    Router::new()
-        .merge(api)
-        .merge(crate::web::router())
+    // `/mcp` takes bearer tokens only (cookies are refused), so it needs no CSRF header and
+    // sits outside the cookie guard above; it enforces its own body limit.
+    let mut app = Router::new().merge(api);
+    if with_mcp {
+        app = app.merge(crate::mcp::router());
+    }
+    app.merge(crate::web::router())
         .layer(CompressionLayer::new())
         // CSP for the React SPA: only same-origin scripts (no inline, no eval, no WASM).
         // `style-src 'unsafe-inline'` is needed because Radix UI and canvas widgets set

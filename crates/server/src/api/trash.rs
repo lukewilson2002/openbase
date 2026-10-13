@@ -11,7 +11,7 @@ use og_core::api::events::BaseEvent;
 use og_core::api::records::{RestoreRequest, RestoreResponse, TrashListing};
 
 use crate::api::schema_support::{publish, publish_schema};
-use crate::auth::Actor;
+use crate::auth::{Actor, Capability};
 use crate::error::AppResult;
 use crate::extract::ApiJson;
 use crate::perm::{self, Role};
@@ -61,7 +61,7 @@ async fn deleted_workspaces(
     State(state): State<AppState>,
     actor: Actor,
 ) -> AppResult<Json<TrashListing>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::ManageUnscoped)?;
     let out = state
         .db
         .read(move |c| trash::list_deleted_workspaces(c, &actor.user_id))

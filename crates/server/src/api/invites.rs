@@ -13,7 +13,7 @@ use og_core::api::auth::{CreateInviteRequest, CreatedInvite, InviteInfo, InviteP
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::json;
 
-use crate::auth::{Actor, ClientInfo};
+use crate::auth::{Actor, Capability, ClientInfo};
 use crate::email;
 use crate::error::{AppError, AppResult};
 use crate::extract::ApiJson;
@@ -38,10 +38,13 @@ pub fn router() -> Router<AppState> {
 /// Check the actor may manage invites for `target`; returns the highest role
 /// they may grant.
 fn require_manage(conn: &Connection, actor: &Actor, target: &InviteTarget) -> AppResult<Role> {
-    actor.require_session()?;
     match target {
+        // `require_workspace` asks for the `manage` permission itself.
         InviteTarget::Workspace(w) => perm::require_workspace(conn, actor, w, Role::Owner),
-        InviteTarget::Base(b) => perm::require_base(conn, actor, b, Role::Creator),
+        InviteTarget::Base(b) => {
+            actor.require_capability(Capability::Manage)?;
+            perm::require_base(conn, actor, b, Role::Creator)
+        }
     }
 }
 
@@ -229,7 +232,7 @@ async fn accept(
     client: ClientInfo,
     Path(token): Path<String>,
 ) -> AppResult<Json<InviteInfo>> {
-    actor.require_session()?;
+    actor.require_capability(Capability::ManageUnscoped)?;
     let info = state
         .db
         .write(move |tx| {

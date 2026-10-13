@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value as Json, json};
 
 use crate::auth::Actor;
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::schema::Touched;
 
@@ -44,15 +44,6 @@ pub fn client_id(headers: &HeaderMap) -> Option<String> {
     let v = headers.get(CLIENT_ID_HEADER)?.to_str().ok()?.trim();
     (!v.is_empty() && v.len() <= 64 && v.chars().all(|c| c.is_ascii_graphic()))
         .then(|| v.to_string())
-}
-
-/// Workspace administration, base sharing and similar actions are for people
-/// in the web app, never for API tokens.
-pub fn require_session(actor: &Actor) -> AppResult<()> {
-    if actor.token_scope.is_some() {
-        return Err(AppError::forbidden("API tokens cannot do this"));
-    }
-    Ok(())
 }
 
 /// Publish an event on a base's channel on behalf of the actor.

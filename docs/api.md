@@ -21,7 +21,7 @@ Create a token with `POST /api/tokens` from a signed-in session (tokens cannot
 create or list tokens themselves):
 
 ```json
-{ "name": "n8n", "write": true, "base_ids": ["bseXXXX"], "expires_in_days": 90 }
+{ "name": "n8n", "write": true, "manage": false, "base_ids": ["bseXXXX"], "expires_in_days": 90 }
 ```
 
 The secret is shown once. A token acts as its owner, limited further by:
@@ -30,6 +30,9 @@ The secret is shown once. A token acts as its owner, limited further by:
   read. Every state-changing request (anything but GET/HEAD, apart from view
   queries, which are POSTs) answers `403`, including actions on the owner's own
   data such as deleting a comment or marking notifications read.
+- **manage** (needs `write`; default `false`): lets the token do the account-level
+  things a signed-in user can do in the web app, see
+  [token permissions](#token-permissions) below.
 - **base_ids**: the bases the token may reach; any other base answers 404.
   `/api/notifications` only lists (and marks read) notifications of those bases.
 - expiry: expired tokens answer 401. Open event streams (`/api/bases/{id}/events`)
@@ -39,6 +42,31 @@ The secret is shown once. A token acts as its owner, limited further by:
 Roles are the owner's: Viewer < Commenter < Editor < Creator < Owner. Records
 can be written by Editors and above. The Airtable API changes no schema, except
 that `typecast` may add select options.
+
+### Token permissions
+
+Every endpoint of the internal API (`/api/...`) falls into one of these classes.
+The class is decided in one place (`Actor::require_capability`), and
+`tests/token_capabilities.rs` proves it route by route.
+
+| Class | Read-only token | Write token | Write + `manage` token | Session |
+|---|---|---|---|---|
+| Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace and base members (role changes, removal), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone) | 403 | 403 | yes (the owner's role still applies) | yes |
+| **Admin** pages (`/api/admin/*`: users, reset links, audit log, stats, backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token) | administrators |
+| **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}` | 403 | 403 | **403** | yes |
+
+A request that needs `manage` and does not have it answers `403` with a message that
+names the `manage` permission. Actions that reach beyond a single base (workspaces,
+workspace members and invites, the admin pages) are also refused for a `manage` token
+that is limited to specific bases (`base_ids`): such a token cannot touch what it
+cannot see. Base-level management (deleting a base, base members, base invites,
+restoring a base) works on the bases in its list only; others answer 404. Credentials,
+sessions and tokens are never reachable with a token, so a leaked token cannot take
+over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` reports
+`write` and `manage`.
+
+An AI agent can use all of this through the built-in MCP server; see [mcp.md](mcp.md).
 
 ---
 
