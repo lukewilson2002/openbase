@@ -11,6 +11,9 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026-10-13
+
+
 ### Added
 
 - Release candidate for OpenBase 0.1.0, published to test the release pipeline end to end
@@ -49,5 +52,6 @@ small businesses, in one Rust binary with the web client embedded and a SQLite d
 - Deployment: a container image, a docker-compose stack with Caddy for automatic HTTPS, and a
   hardened systemd unit.
 
-[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.1.0-rc.1...HEAD
+[0.1.0-rc.1]: https://github.com/lukewilson2002/openbase/compare/v0.1.0...v0.1.0-rc.1
 [0.1.0]: https://github.com/lukewilson2002/openbase/releases/tag/v0.1.0
