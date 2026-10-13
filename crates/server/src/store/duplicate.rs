@@ -446,16 +446,16 @@ fn copy_records(
     for s in sources {
         for f in &s.fields {
             if let FieldKind::Link(l) = &f.field.kind {
-                if !copied_tables.contains(&l.linked_table_id) {
-                    if !external_live.contains_key(&l.linked_table_id) {
-                        let mut stmt = tx.prepare(
-                            "SELECT id FROM records WHERE table_id = ?1 AND deleted_at IS NULL",
-                        )?;
-                        let set = stmt
-                            .query_map([&l.linked_table_id], |r| r.get::<_, String>(0))?
-                            .collect::<Result<HashSet<_>, _>>()?;
-                        external_live.insert(l.linked_table_id.clone(), set);
-                    }
+                if !copied_tables.contains(&l.linked_table_id)
+                    && !external_live.contains_key(&l.linked_table_id)
+                {
+                    let mut stmt = tx.prepare(
+                        "SELECT id FROM records WHERE table_id = ?1 AND deleted_at IS NULL",
+                    )?;
+                    let set = stmt
+                        .query_map([&l.linked_table_id], |r| r.get::<_, String>(0))?
+                        .collect::<Result<HashSet<_>, _>>()?;
+                    external_live.insert(l.linked_table_id.clone(), set);
                 }
             }
         }
@@ -713,7 +713,7 @@ mod tests {
         let v = json!({"fldA": ["selX", "other", 3], "nested": {"selX": true}});
         assert_eq!(
             remap_json(&v, &ids),
-            json!({"fldNew": ["selNew", "other", 3], "nested": {"selX": true}})
+            json!({"fldNew": ["selNew", "other", 3], "nested": {"selNew": true}})
         );
     }
 

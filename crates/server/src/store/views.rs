@@ -524,8 +524,10 @@ mod tests {
     #[test]
     fn form_rules() {
         let f = fields();
-        let mut c = ViewConfig::default();
-        c.form = default_form_config(&f);
+        let mut c = ViewConfig {
+            form: default_form_config(&f),
+            ..Default::default()
+        };
         assert_eq!(c.form.fields.len(), 2, "computed fields are left out");
         assert!(validate_config(&f, &c).is_ok());
         c.form.redirect_url = Some("javascript:alert(1)".into());

@@ -307,3 +307,356 @@ pub fn ids_in(v: &Value, out: &mut Vec<String>) {
         _ => {}
     }
 }
+
+// ---------------------------------------------------------------------------
+// A base exercising everything duplication has to remap.
+// ---------------------------------------------------------------------------
+
+pub struct Rich {
+    pub f: Fixture,
+    pub t1: String,
+    pub t2: String,
+    pub status: Value,
+    pub tags: Value,
+    pub qty: Value,
+    pub files: Value,
+    pub orders: Value,
+    pub price: Value,
+    pub prices: Value,
+    pub parent: Value,
+    pub double_id: String,
+    pub att_id: String,
+    pub r1: String,
+    pub r2: String,
+    pub o1: String,
+    pub o2: String,
+    pub o3_trashed: String,
+}
+
+pub fn id_of(v: &Value) -> String {
+    v["id"].as_str().unwrap().to_string()
+}
+
+/// T1 "Table 1": Name, Notes, Status (single select), Tags (multi select), Qty,
+/// Files (attachment), Orders (link to T2), Prices (lookup), N (count), Total
+/// (rollup). T2 "Orders": Name, Price, Table 1 (inverse), Parent + inverse
+/// (self link), Double (a stored formula `{Price} * 2`). Views with ids in
+/// their configs, a personal view of the owner and one of someone else, and
+/// records on both sides including a trashed one.
+pub async fn rich_base() -> Rich {
+    let f = Fixture::new().await;
+    let t1 = f.table_id.clone();
+    let t2tbl = f.add_table("Orders").await;
+    let t2 = id_of(&t2tbl);
+    let status = f
+        .add_field(
+            &t1,
+            json!({ "name": "Status", "type": "single_select",
+                "options": { "choices": [ { "name": "Todo" }, { "name": "Done" } ] } }),
+        )
+        .await;
+    let tags = f
+        .add_field(
+            &t1,
+            json!({ "name": "Tags", "type": "multiple_select",
+                "options": { "choices": [ { "name": "a" }, { "name": "b" } ] } }),
+        )
+        .await;
+    let qty = f
+        .add_field(
+            &t1,
+            json!({ "name": "Qty", "type": "number", "options": {} }),
+        )
+        .await;
+    let files = f
+        .add_field(
+            &t1,
+            json!({ "name": "Files", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let orders = f.add_link(&t1, "Orders", &t2).await;
+    let price = f
+        .add_field(
+            &t2,
+            json!({ "name": "Price", "type": "number", "options": {} }),
+        )
+        .await;
+    let prices = f
+        .add_field(
+            &t1,
+            json!({ "name": "Prices", "type": "lookup",
+                "options": { "link_field_id": orders["id"], "target_field_id": price["id"] } }),
+        )
+        .await;
+    let count = f
+        .add_field(
+            &t1,
+            json!({ "name": "N", "type": "count", "options": { "link_field_id": orders["id"] } }),
+        )
+        .await;
+    f.add_field(
+        &t1,
+        json!({ "name": "Total", "type": "rollup",
+            "options": { "link_field_id": orders["id"], "target_field_id": price["id"], "expression": "SUM(values)" } }),
+    )
+    .await;
+    let parent = f.add_link(&t2, "Parent", &t2).await;
+
+    // A formula in stored form: the placeholder API cannot make one, the real engine will.
+    let double_id = opengrid::ids::new_id("fld");
+    {
+        let (did, t2c, expr) = (
+            double_id.clone(),
+            t2.clone(),
+            format!("{{{}}} * 2", id_of(&price)),
+        );
+        sql(&f.app, move |tx| {
+            tx.execute(
+                "INSERT INTO fields (id, table_id, name, type, options, position, created_at)
+                 VALUES (?1, ?2, 'Double', 'formula', ?3, 99, 1)",
+                params![
+                    did,
+                    t2c,
+                    json!({ "expression": expr, "result_type": "number" }).to_string()
+                ],
+            )
+        });
+    }
+
+    // Views.
+    let todo = status["options"]["choices"][0]["id"].clone();
+    let grid_id = f.view_id.clone();
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/views/{grid_id}"),
+            json!({ "config": {
+                "filter": { "items": [ { "field_id": status["id"], "op": "is_any_of", "value": [todo] } ] },
+                "sorts": [ { "field_id": qty["id"], "direction": "desc" } ],
+                "hidden_fields": [tags["id"]],
+                "field_widths": { (id_of(&qty)): 120 },
+                "summaries": { (id_of(&qty)): "sum" } } }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/tables/{t1}/views"),
+            json!({ "name": "Board", "type": "kanban",
+                "config": { "kanban": { "stack_field_id": status["id"], "stack_order": [todo] } } }),
+        )
+        .await
+        .assert_status(201);
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/tables/{t1}/views"),
+            json!({ "name": "Intake", "type": "form" }),
+        )
+        .await
+        .assert_status(201);
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/tables/{t1}/views"),
+            json!({ "name": "Mine", "type": "grid", "personal": true }),
+        )
+        .await
+        .assert_status(201);
+    let other = f.member("other-editor@example.com", Role::Editor);
+    f.app
+        .post(
+            &other,
+            &format!("/api/tables/{t1}/views"),
+            json!({ "name": "Theirs", "type": "grid", "personal": true }),
+        )
+        .await
+        .assert_status(201);
+
+    // Attachment and records.
+    let att_id = opengrid::ids::new_id("att");
+    {
+        let (aid, base) = (att_id.clone(), f.base_id.clone());
+        sql(&f.app, move |tx| {
+            tx.execute(
+                "INSERT INTO attachments (id, sha256, filename, mime, size, base_id, created_at)
+                 VALUES (?1, 'abc123', 'doc.pdf', 'application/pdf', 10, ?2, 1)",
+                params![aid, base],
+            )
+        });
+    }
+    let pid = f.primary_id.clone();
+    let t2_primary = id_of(&f.table(&t2).await["fields"][0]);
+    let inverse_of_orders = id_of(&orders["inverse"]);
+    let parent_inv = id_of(&parent["inverse"]);
+    let choice = |field: &Value, i: usize| field["options"]["choices"][i]["id"].clone();
+
+    let o1 = insert_record(&f.app, &t2, json!({}));
+    let o2 = insert_record(&f.app, &t2, json!({}));
+    let o3 = insert_record(&f.app, &t2, json!({}));
+    let r1 = insert_record(&f.app, &t1, json!({}));
+    let r2 = insert_record(&f.app, &t1, json!({}));
+    set_data(
+        &f.app,
+        &r1,
+        json!({
+            &pid: "Alice", id_of(&status): choice(&status, 0), id_of(&tags): [choice(&tags, 0), choice(&tags, 1)],
+            id_of(&qty): 3, id_of(&files): [ { "id": att_id, "filename": "doc.pdf", "mime": "application/pdf", "size": 10 } ],
+            id_of(&orders): [o1, o2], id_of(&prices): [10, 20], id_of(&count): 2 }),
+    );
+    set_data(
+        &f.app,
+        &r2,
+        json!({ &pid: "Bob", id_of(&status): choice(&status, 1), id_of(&orders): [o3] }),
+    );
+    set_data(
+        &f.app,
+        &o1,
+        json!({ &t2_primary: "Order 1", id_of(&price): 10, &inverse_of_orders: [r1], id_of(&parent): [o2] }),
+    );
+    set_data(
+        &f.app,
+        &o2,
+        json!({ &t2_primary: "Order 2", id_of(&price): 20, &inverse_of_orders: [r1], &parent_inv: [o1] }),
+    );
+    set_data(
+        &f.app,
+        &o3,
+        json!({ &t2_primary: "Order 3", &inverse_of_orders: [r2] }),
+    );
+    trash_record(&f.app, &o3, 5);
+
+    Rich {
+        f,
+        t1,
+        t2,
+        status,
+        tags,
+        qty,
+        files,
+        orders,
+        price,
+        prices,
+        parent,
+        double_id,
+        att_id,
+        r1,
+        r2,
+        o1,
+        o2,
+        o3_trashed: o3,
+    }
+}
+
+pub fn set_data(app: &TestApp, record_id: &str, data: Value) {
+    let (rid, d) = (record_id.to_string(), data.to_string());
+    sql(app, |tx| {
+        tx.execute(
+            "UPDATE records SET data = ?2 WHERE id = ?1",
+            params![rid, d],
+        )
+    });
+}
+
+pub type RecordDump = std::collections::BTreeMap<String, (String, Value, Option<i64>)>;
+
+/// All records (live and trashed) of every table of a base: id -> (table id, data, deleted_at).
+pub fn dump_records(app: &TestApp, base_id: &str) -> RecordDump {
+    let b = base_id.to_string();
+    sql(app, |tx| {
+        let mut stmt = tx.prepare(
+            "SELECT r.id, r.table_id, r.data, r.deleted_at FROM records r
+             JOIN tables t ON t.id = r.table_id WHERE t.base_id = ?1",
+        )?;
+        let rows = stmt
+            .query_map([&b], |r| {
+                let data: String = r.get(2)?;
+                Ok((
+                    r.get::<_, String>(0)?,
+                    (
+                        r.get::<_, String>(1)?,
+                        serde_json::from_str(&data).unwrap(),
+                        r.get(3)?,
+                    ),
+                ))
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(rows)
+    })
+}
+
+pub fn id_str(v: &Value) -> &str {
+    v.as_str().unwrap()
+}
+
+/// Link pairs agree on both sides in the schema.
+pub fn assert_link_pairs_consistent(schema: &Value) -> usize {
+    let tables = schema["tables"].as_array().unwrap();
+    let find = |id: &str| {
+        tables
+            .iter()
+            .flat_map(|t| t["fields"].as_array().unwrap().iter())
+            .find(|f| f["id"] == id)
+    };
+    let mut links = 0;
+    for t in tables {
+        for f in t["fields"].as_array().unwrap() {
+            if f["type"] != "link" {
+                continue;
+            }
+            links += 1;
+            let inv = find(id_str(&f["options"]["inverse_field_id"]))
+                .expect("inverse exists in the copy");
+            assert_eq!(inv["type"], "link");
+            assert_eq!(
+                inv["options"]["inverse_field_id"], f["id"],
+                "inverse points back"
+            );
+            assert_eq!(inv["table_id"], f["options"]["linked_table_id"]);
+            assert_eq!(f["table_id"], inv["options"]["linked_table_id"]);
+        }
+    }
+    links
+}
+
+/// Both sides of every link array agree.
+pub fn assert_link_arrays_consistent(schema: &Value, records: &RecordDump) -> usize {
+    let mut checked = 0;
+    for t in schema["tables"].as_array().unwrap() {
+        for f in t["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["type"] == "link")
+        {
+            let (lid, inv) = (id_str(&f["id"]), id_str(&f["options"]["inverse_field_id"]));
+            for (rid, (table_id, data, _)) in records {
+                if table_id != id_str(&t["id"]) {
+                    continue;
+                }
+                for other in data
+                    .get(lid)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let (other_table, other_data, _) = records
+                        .get(id_str(other))
+                        .unwrap_or_else(|| panic!("dangling link {other}"));
+                    assert_eq!(other_table, id_str(&f["options"]["linked_table_id"]));
+                    let back = other_data
+                        .get(inv)
+                        .and_then(Value::as_array)
+                        .unwrap_or_else(|| panic!("no inverse array on {other}"));
+                    assert!(
+                        back.iter().any(|v| v == rid.as_str()),
+                        "{other}.{inv} should contain {rid}"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+    }
+    checked
+}
