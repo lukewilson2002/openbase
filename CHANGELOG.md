@@ -11,6 +11,21 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+Second release candidate for OpenBase 0.1.0. It replaces 0.1.0-rc.1, whose release build
+stopped at the end-to-end test gate and published nothing. It contains everything listed under
+0.1.0 below. Not recommended for production use yet.
+
+### Fixed
+
+- Grid: right after "Add record", a delayed selection of the new row could move the selection
+  under your next click, which then opened a cell editor or sent your typing to the button.
+
+### Changed
+
+- The release build now refuses to publish when any end-to-end test only passes on a retry.
+- `scripts/release.sh` writes changelog links only to tags that exist and refuses to cut a
+  release without notes under Unreleased.
+
 ## [0.1.0-rc.1] - 2026-10-13
 
 ### Added
