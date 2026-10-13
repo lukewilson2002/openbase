@@ -84,6 +84,12 @@ retried. See [docs/automations.md](docs/automations.md).
 **API.** An Airtable-compatible REST API under `/api/v1`. Existing Airtable
 clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 
+**AI agents (MCP).** The server is also an MCP (Model Context Protocol) server at
+`/mcp`. An agent with a personal access token can do everything you can do in the
+web app, within that token's permissions, so you do not have to use the app
+yourself if you would rather not. Credentials, sessions and API tokens stay out
+of reach. See [docs/mcp.md](docs/mcp.md).
+
 **Operations.** CSV import and export. Daily automatic backups with retention,
 plus `opengrid backup` and `opengrid restore`. An automatic database snapshot
 before a schema upgrade. A trash that keeps deleted items for 30 days. Record
@@ -96,7 +102,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 |---|---|
 | Interface designer (dashboards, page builder, portals) | It would be a second app-builder product and roughly double the frontend work. Views, forms and share links cover what small businesses need. |
 | Extensions, scripting, "run script" automation action | Running user JavaScript safely needs an embedded sandboxed JS engine, which costs too much memory, security risk and maintenance. Use the HTTP-request action or the API instead. |
-| AI features | They depend on external paid model APIs. Use the REST API to connect your own AI tools. |
+| Built-in AI features (chat, generated content) | They depend on external paid model APIs. Bring your own agent instead: the built-in [MCP server](docs/mcp.md) and the REST API let any AI tool do whatever you can do in the app. |
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
 | SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords plus TOTP 2FA are solid. |
@@ -218,6 +224,9 @@ in `deploy/.env`; with systemd in `/etc/opengrid/opengrid.env`.
 | `OPENGRID_ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow automation HTTP requests to private and loopback addresses. Off by default to prevent SSRF. |
 | `OPENGRID_V1_RATE_PER_TOKEN` | `5` | Requests per second one API token may make to `/api/v1`; more answer `429`. |
 | `OPENGRID_V1_RATE_PER_USER` | `50` | Requests per second all tokens of one user may make to `/api/v1` together. |
+| `OPENGRID_MCP_RATE_PER_TOKEN` | `30` | Requests per second one API token may make to the MCP endpoint `/mcp`; more answer `429`. |
+| `OPENGRID_MCP_RATE_PER_USER` | `100` | Requests per second all tokens of one user may make to `/mcp` together. |
+| `OPENGRID_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
 | `OPENGRID_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
 | `OPENGRID_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
 | `OPENGRID_ADMIN_PASSWORD` | – | Password for `create-admin`. |

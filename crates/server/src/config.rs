@@ -110,11 +110,11 @@ pub struct Config {
 
     /// Requests per second one API token may make to the MCP endpoint (`/mcp`;
     /// every JSON-RPC call is one request). Excess requests answer 429.
-    #[arg(long, env = "OPENGRID_MCP_RATE_PER_TOKEN", default_value_t = 10)]
+    #[arg(long, env = "OPENGRID_MCP_RATE_PER_TOKEN", default_value_t = 30)]
     pub mcp_rate_per_token: u32,
 
     /// Requests per second all API tokens of one user may make to `/mcp` together.
-    #[arg(long, env = "OPENGRID_MCP_RATE_PER_USER", default_value_t = 50)]
+    #[arg(long, env = "OPENGRID_MCP_RATE_PER_USER", default_value_t = 100)]
     pub mcp_rate_per_user: u32,
 
     /// Extra browser origins (comma separated, e.g. https://inspector.example.com) allowed to

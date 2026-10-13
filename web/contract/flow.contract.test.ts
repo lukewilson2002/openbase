@@ -306,9 +306,9 @@ describe("personal access tokens", () => {
     const bearer = { headers: { Authorization: `Bearer ${created.token}` } };
     // Admin pages and workspace management work; both are real endpoints, not mocks.
     await asAnon(() => http.get("/api/admin/stats", bearer));
-    expect(admin.lastStatus).toBe(200);
+    expect(anon.lastStatus).toBe(200);
     await asAnon(() => http.get("/api/workspaces", bearer));
-    expect(admin.lastStatus).toBe(200);
+    expect(anon.lastStatus).toBe(200);
     expectError(await failure(asAnon(() => http.get("/api/tokens", bearer))), 403, "forbidden");
     expectError(await failure(asAnon(() => http.post("/api/tokens", { name: "child", write: true }, bearer))), 403, "forbidden");
     await asAdmin(() => api.tokens.revoke(created.info.id));

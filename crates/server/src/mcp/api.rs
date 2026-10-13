@@ -278,8 +278,8 @@ pub fn preflight(call: &ApiCall) -> Result<(String, String), String> {
     {
         return Err(match ep.access {
             catalogue::Access::SessionOnly => format!(
-                "{method} {} is not available through MCP: it changes credentials, sessions or \
-                 API tokens, which can only be done by signing in to the web app.",
+                "{method} {} is not available through MCP: it deals with credentials, sessions \
+                 or API tokens, which only a signed-in user can reach in the web app.",
                 ep.path
             ),
             _ => format!(

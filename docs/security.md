@@ -40,8 +40,11 @@ We defend against:
 - **Stolen or leaked credentials**: a leaked API token, an old session or invite
   link, a compromised session that mints a token.
 - **Cross-site requests** from a browser that is signed in to OpenGrid.
-- **API tokens** (the Airtable-compatible `/api/v1`) act as their owner, limited
-  by the token's scope, and are rate limited per token and per user.
+- **API tokens** (the Airtable-compatible `/api/v1`, the internal API and the MCP
+  endpoint) act as their owner, limited by the token's scope, and are rate limited
+  per token and per user. An AI agent connected through MCP is such a token holder:
+  anything it may do, it may also do wrongly or because text it read told it to
+  (prompt injection), so scope its token to what the task needs.
 
 Not defended against: an administrator or anyone with shell access to the server
 (they own the database), a compromised reverse proxy or host, a stolen session
@@ -90,6 +93,11 @@ disable 2FA, which is a path to any account.
   [self-hosting](self-hosting.md#6-backups).
 - **Turn on 2FA** for administrators and other important accounts (Account →
   Security).
+- **Treat MCP tokens like sessions.** An AI agent holding a `manage` token can do
+  nearly everything you can in the app except change credentials; give agents the
+  least permission that works (read-only, or write without `manage`), restrict
+  them to the bases they need, set an expiry, and revoke the token when the work
+  is done. See [MCP](mcp.md#security).
 - **Lower the Airtable-compatible API limits** with `OPENGRID_V1_RATE_PER_TOKEN`
   (default 5 per second) and `OPENGRID_V1_RATE_PER_USER` (default 50 per second)
   on a small host.
@@ -108,6 +116,18 @@ disable 2FA, which is a path to any account.
   `HttpOnly`, `SameSite=Lax` cookies, `Secure` when the public URL is `https`.
   Optional TOTP two-factor authentication; turning it on signs out the account's
   other sessions.
+- **MCP endpoint (`/mcp`).** Bearer personal access tokens only: a session cookie
+  is refused with 401, which is why the route needs no CSRF header. A request with
+  a browser `Origin` header is served only for the public URL's origin (or
+  `OPENGRID_MCP_ALLOWED_ORIGINS`), the MCP spec's DNS-rebinding protection;
+  requests without `Origin` (every non-browser client) are unaffected. Bodies are
+  capped at 8 MB and every request counts against `OPENGRID_MCP_RATE_PER_TOKEN` /
+  `OPENGRID_MCP_RATE_PER_USER`. The tools `api_request` / `api_reference` run
+  catalogued REST requests through the real router with the caller's own token,
+  so permissions, validation and audit are the web app's; the paths are checked
+  up front (only `/api/...`, no `..`, no `/mcp` recursion) and credential, session
+  and token endpoints are refused before anything is sent. A test fails when a
+  route is registered without an entry in the endpoint catalogue.
 - **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenGrid-CSRF`
   header; no CORS is ever enabled, so cross-site pages cannot add it. Only a
   well-formed `Authorization: Bearer` header exempts a request; other
@@ -150,6 +170,7 @@ disable 2FA, which is a path to any account.
 | Password-reset requests, per client address / per mailbox | 5 per hour / 3 per hour (extra requests are answered 200 and send nothing) |
 | Invite and automation emails | `OPENGRID_EMAIL_PER_USER_HOUR` (100) per user and `OPENGRID_EMAIL_PER_HOUR` (500) per instance; each recipient counts. Over the limit: invite creation answers 429, an automation run fails with an explanatory error |
 | Airtable-compatible API (`/api/v1`) | `OPENGRID_V1_RATE_PER_TOKEN` (5 per second) per token and `OPENGRID_V1_RATE_PER_USER` (50 per second) per user; over the limit answers 429 |
+| MCP endpoint (`/mcp`) | `OPENGRID_MCP_RATE_PER_TOKEN` (30 per second) per token and `OPENGRID_MCP_RATE_PER_USER` (100 per second) per user, one JSON-RPC message per request; body up to 8 MB; over the limit answers 429 with `Retry-After` |
 | Audit log | detail capped at 2 KiB per row; rows older than `OPENGRID_AUDIT_DAYS` (365) deleted daily |
 
 ### Behaviour worth knowing
