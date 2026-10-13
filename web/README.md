@@ -75,6 +75,7 @@ administrator already exists for the data plane:
 | `views.contract.test.ts` | every view type, config replacement, personal and locked views, duplicate, delete |
 | `records.contract.test.ts` | create / update / delete / restore / move, typecast, links from both sides, `before_record_id`, view query (filter, sort, group, search, range, paging, colors, `transient`), aggregations, link lookup, history |
 | `collab.contract.test.ts` | comments, mentions and notifications, trash, automations (CRUD, dry-run test, webhook runs, run history) |
+| `automations.contract.test.ts` | what the automations UI relies on: every trigger and action type as the editor sends it, the `action N: ...` error wording, on/off rules, `next_run_at`, real test runs in the history, roles |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
 
 `OPENGRID_CONTRACT_SKIP_BUILD=1` reuses already built binaries.
@@ -93,7 +94,9 @@ the app with `web/dist` moved away. The projects run in order on that one instan
 build loads `/` without console errors or CSP violations), `journey` (first-run setup, workspace and base, rename a
 table, add number / single select / date / formula fields through the dialog, add records and edit cells,
 filter and sort, expanded record and a comment, log out and in) and `grid` (`grid.spec.ts`: cell editing,
-undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records). Every test
+undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records). The last project, `automations` (`automations.spec.ts`), builds "record created in Table 1 -> create a record in
+Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, and checks through the API
+and the Runs tab that it ran; it then runs it for real from the Test panel. Every test
 fails on a console error, an uncaught exception, a CSP violation or a failed request (`e2e/fixtures.ts`).
 The grid is a canvas, so cells are operated by position with real mouse and keyboard input and results
 are asserted against the API. `OPENGRID_E2E_URL=...` uses a running server, `OPENGRID_E2E_SKIP_BUILD=1`
@@ -109,6 +112,7 @@ src/components/ design-system primitives (ui/) and shared dialogs
 src/pages/      setup, login, signup, invite, password reset, home, account/, admin/
 src/theme/      light/dark theme provider (the pre-paint script is public/theme-init.js)
 src/views/      ViewHost + registry.ts: the extension point where grid/kanban/... plug in
+src/automations/ the automations page (list, editor, test panel, run history); its own lazy chunk
 ```
 
 ### Plugging in a view
@@ -161,6 +165,27 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 ### Trash and notifications
 
 `components/trash`: `TrashButton` in the base top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
+
+### Automations (`src/automations`)
+
+`/base/:baseId/automations/:automationId?/:tab?` renders inside the base shell (`BaseShell section="automations"`, lazy chunk), reached
+from the "Automations" button in the top bar. Creators and owners only (`basePermissions.manageAutomations`): the server lets editors
+read run history, but listing automations needs a creator, so editors have no way to learn an automation's id.
+
+| Where | What |
+|---|---|
+| `model.ts` | Pure: the editor's draft (the DTOs plus a stable key per action), `toCreate` / `toUpdate`, `isDirty` (key-order-insensitive), defaults for new triggers and actions, summaries, `parseSaveError` (the server prefixes action errors with `action N: `, which the editor puts on that action's card) |
+| `cron.ts` | Schedule presets (every 5-30 minutes, hourly, daily, weekly, monthly) <-> 5-field cron; anything else stays "custom" and is sent untouched |
+| `templates.ts` | The tokens the "Insert data" menu offers (trigger, trigger record fields, webhook body path, earlier steps' outputs) and insertion at the caret |
+| `runs.ts` | Durations, trigger labels and step titles for the run history |
+| `AutomationsPage`, `AutomationList`, `CreateAutomationDialog` | List with name, trigger summary, on/off switch and last run (one `limit=1` runs request per row: the list DTO has no last-run field); create, rename, delete |
+| `AutomationEditor` | The draft, Save (sends `{name, trigger, actions}`), on/off (saved on its own), Discard; trigger, actions, test and the Runs tab |
+| `TriggerEditor`, `ScheduleEditor`, `WebhookPanel` | One editor per trigger type; the webhook token is shown once (create / rotate / switching an automation to a webhook) and kept in page state only |
+| `ActionList`, `ActionEditors`, `ValuesEditor`, `TemplateInput` | Ordered actions (max 25, reorder, remove), one editor per action type, per-action conditions with the view `FilterBuilder`, record values as typed `FieldEditor variant="form"` editors or text templates |
+| `TestPanel`, `RunsTab`, `StepLogView` | Dry run by default, "run for real" behind a confirmation; paged run history (polled every 5 s while open) with expandable step logs |
+
+Not in the UI because the server has no endpoint for it: duplicating an automation, previewing the next few run times of a schedule
+(the saved automation's `next_run_at` is shown instead), re-showing a webhook token.
 
 ### Conventions
 

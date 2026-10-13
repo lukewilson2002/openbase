@@ -15,7 +15,7 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * The projects depend on each other on purpose: they share one server and one data directory, and
  * the first one to run sees a fresh instance (smoke: the first-run screen), the second sets it up
- * through the UI (journey), the third works on that instance (grid).
+ * through the UI (journey), the third works on that instance (grid), the fourth builds an automation and runs it (automations).
  */
 const chrome = { ...devices["Desktop Chrome"], channel: "chrome" as const };
 
@@ -39,5 +39,6 @@ export default defineConfig({
     { name: "smoke", testMatch: /smoke\.spec\.ts$/, use: chrome },
     { name: "journey", testMatch: /journey\.spec\.ts$/, use: chrome, dependencies: ["smoke"] },
     { name: "grid", testMatch: /grid\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
+    { name: "automations", testMatch: /automations\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
   ],
 });
