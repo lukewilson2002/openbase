@@ -155,3 +155,143 @@ async fn wrong_method_on_a_known_route_gets_the_envelope() {
     assert_eq!(res.status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(res.body["error"]["code"], "method_not_allowed");
 }
+
+/// Records, schema, views, comments, trash and automations endpoints (the
+/// handlers that once had their own extractor) answer malformed bodies with
+/// the envelope, and well-formed requests still work.
+#[tokio::test]
+async fn record_and_schema_endpoints_get_the_envelope_for_malformed_bodies() {
+    let app = TestApp::new();
+    let user = app.user("user@example.com", "User");
+    let json = Some("application/json");
+
+    for (method, path) in [
+        // records
+        ("POST", "/api/tables/tblX/records"),
+        ("PATCH", "/api/tables/tblX/records"),
+        ("DELETE", "/api/tables/tblX/records"),
+        ("POST", "/api/tables/tblX/records/restore"),
+        ("POST", "/api/tables/tblX/records/move"),
+        ("POST", "/api/views/viwX/query"),
+        // schema
+        ("POST", "/api/workspaces"),
+        ("PATCH", "/api/workspaces/wspX"),
+        ("POST", "/api/workspaces/wspX/bases"),
+        ("PATCH", "/api/bases/appX"),
+        ("POST", "/api/bases/appX/tables"),
+        ("PATCH", "/api/tables/tblX"),
+        ("POST", "/api/tables/tblX/fields"),
+        ("PATCH", "/api/fields/fldX"),
+        ("POST", "/api/tables/tblX/views"),
+        ("PATCH", "/api/views/viwX"),
+        ("POST", "/api/trash/restore"),
+        // comments and automations
+        ("POST", "/api/records/recX/comments"),
+        ("POST", "/api/bases/appX/automations"),
+        ("PATCH", "/api/automations/autX"),
+    ] {
+        for body in ["{", "[1,2"] {
+            let res = raw(&app, &user, method, path, json, body).await;
+            assert_envelope(&res, "invalid JSON request body");
+        }
+        // Valid JSON of the wrong shape: still the envelope (the message
+        // comes from the type or from the handler's own validation).
+        let res = raw(&app, &user, method, path, json, "\"text\"").await;
+        assert_envelope(&res, "");
+        let res = raw(&app, &user, method, path, None, "{}").await;
+        assert_envelope(&res, "Content-Type");
+    }
+
+    // The right shape reaches the handler: the table does not exist (404),
+    // which is a different error than a rejected body.
+    let res = raw(
+        &app,
+        &user,
+        "POST",
+        "/api/tables/tblX/records",
+        json,
+        r#"{"records":[{"values":{}}]}"#,
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND, "{}", res.body);
+    // Wrong shape of a typed body names the field.
+    let res = raw(
+        &app,
+        &user,
+        "POST",
+        "/api/tables/tblX/records",
+        json,
+        r#"{"rows":[]}"#,
+    )
+    .await;
+    assert_envelope(&res, "missing field `records`");
+    // A wrong type inside the body.
+    let res = raw(
+        &app,
+        &user,
+        "POST",
+        "/api/views/viwX/query",
+        json,
+        r#"{"offset":"zero"}"#,
+    )
+    .await;
+    assert_envelope(&res, "invalid type");
+}
+
+/// Query strings of the data endpoints get the envelope too.
+#[tokio::test]
+async fn data_endpoints_get_the_envelope_for_bad_query_strings() {
+    let app = TestApp::new();
+    let user = app.user("user@example.com", "User");
+    for path in [
+        "/api/views/viwX/aggregations?timezone=a&timezone=b",
+        "/api/tables/tblX/records/lookup?limit=abc",
+        "/api/records/recX/history?before=abc",
+        "/api/records/recX/history?limit=-1",
+        "/api/automations/autX/runs?limit=abc",
+    ] {
+        let res = app.get(&user, path).await;
+        assert_envelope(&res, "invalid query string");
+    }
+}
+
+/// Static guard: no handler may take `axum::Json` / `axum::extract::Query` as
+/// a request extractor (they reject with plain text). `Json` as a response is
+/// fine.
+#[test]
+fn no_handler_uses_axum_json_or_query_as_a_request_extractor() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut offenders = Vec::new();
+    let mut stack = vec![dir];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs")
+                || path.file_name().and_then(|n| n.to_str()) == Some("extract.rs")
+            {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            for (n, line) in text.lines().enumerate() {
+                let t = line.trim_start();
+                let request_json = t.starts_with("Json(") && t.contains("): Json<");
+                let request_query = t.starts_with("Query(") && t.contains("): Query<");
+                let imports_query = t.starts_with("use axum::extract::")
+                    && t.split(|c: char| !c.is_alphanumeric() && c != '_')
+                        .any(|w| w == "Query");
+                if request_json || request_query || imports_query {
+                    offenders.push(format!("{}:{}: {t}", path.display(), n + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "use crate::extract::{{ApiJson, ApiQuery}}:\n{}",
+        offenders.join("\n")
+    );
+}
