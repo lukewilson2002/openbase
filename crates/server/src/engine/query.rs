@@ -778,12 +778,16 @@ fn scan(
 ) -> AppResult<Scanned> {
     let table_id = view.view.table_id.as_str();
     let table = schema::live_table(conn, table_id)?;
+    // Version first, data second (see store::versions): the plan below reads
+    // the field definitions, so a schema change that commits after this read
+    // must not end up cached under the version that includes it.
+    #[cfg(test)]
+    tests::before_version_read();
+    let version = versions.current(&table.base_id);
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
     let config = effective_config(conn, view, req.transient.as_ref())?;
     let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz)?;
 
-    // Version first, data second: see store::versions.
-    let version = versions.current(&table.base_id);
     let key = CacheKey {
         view_id: view.view.id.clone(),
         // The effective config, so a transient override has its own entries.
@@ -1074,6 +1078,20 @@ mod tests {
     use super::*;
     use og_core::field::{DateOptions, Empty, TextOptions};
     use serde_json::{Map, json};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static BEFORE_VERSION_READ: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+    }
+
+    /// Test seam called by `scan` just before it reads the data version.
+    pub(super) fn before_version_read() {
+        BEFORE_VERSION_READ.with(|h| {
+            if let Some(f) = h.borrow().as_ref() {
+                f();
+            }
+        });
+    }
 
     fn owned(id: &str, data: Json) -> OwnedRow {
         let data: Map<String, Json> = data.as_object().cloned().unwrap_or_default();
@@ -1111,6 +1129,83 @@ mod tests {
             ids: (0..n).map(|i| format!("rec{i}")).collect(),
             groups: Vec::new(),
         })
+    }
+
+    /// A table with a name and a note field, a view that filters on the note
+    /// containing "x", and two records (note "x" and note "y").
+    fn scan_fixture() -> (std::rc::Rc<Connection>, ViewRow) {
+        use og_core::api::schema::View;
+        use og_core::view::ViewType;
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'w', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('b', 'w', 'b', 1);
+             INSERT INTO tables (id, base_id, name, primary_field_id, created_at)
+                 VALUES ('t', 'b', 't', 'fldName', 1);",
+        )
+        .unwrap();
+        for (i, id) in ["fldName", "fldNote"].into_iter().enumerate() {
+            let f = field(id, FieldKind::SingleLineText(TextOptions::default()));
+            let f = Field {
+                table_id: "t".into(),
+                ..f
+            };
+            schema::insert_field(&conn, &f, i as f64, 1).unwrap();
+        }
+        for (id, note) in [("rec1", "x"), ("rec2", "y")] {
+            conn.execute(
+                "INSERT INTO records (id, table_id, data, position, autonumber, created_at, updated_at)
+                 VALUES (?1, 't', ?2, 1, 1, 1, 1)",
+                rusqlite::params![id, json!({ "fldNote": note }).to_string()],
+            )
+            .unwrap();
+        }
+        let config: ViewConfig = serde_json::from_value(json!({
+            "filter": { "conjunction": "and", "items": [
+                { "field_id": "fldNote", "op": "contains", "value": "x" } ] }
+        }))
+        .unwrap();
+        let view = View {
+            id: "viw".into(),
+            table_id: "t".into(),
+            name: "v".into(),
+            view_type: ViewType::Grid,
+            config,
+            personal: false,
+            locked: false,
+        };
+        schema::insert_view(&conn, &view, 1.0, None, None, 1).unwrap();
+        let row = schema::live_view(&conn, "viw").unwrap();
+        (std::rc::Rc::new(conn), row)
+    }
+
+    #[test]
+    fn a_schema_change_during_a_scan_is_not_cached_under_its_own_version() {
+        let (conn, view) = scan_fixture();
+        let cache = QueryCache::new();
+        let versions = DataVersions::default();
+        let req = QueryRequest::default();
+
+        // The note field is deleted (and the base version bumped) right
+        // before the scan reads the data version.
+        let (c, v) = (conn.clone(), versions.clone());
+        BEFORE_VERSION_READ.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move || {
+                c.execute("UPDATE fields SET deleted_at = 2 WHERE id = 'fldNote'", [])
+                    .unwrap();
+                v.bump("b");
+            }));
+        });
+        let first = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        BEFORE_VERSION_READ.with(|h| *h.borrow_mut() = None);
+        // With the field gone its condition is ignored, so both records match.
+        assert_eq!(first.entry.ids.len(), 2, "plan must see the new schema");
+
+        // A later request is served from the cache under the new version and
+        // must agree with a fresh scan.
+        let again = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        assert_eq!(again.entry.ids.len(), 2);
     }
 
     #[test]
