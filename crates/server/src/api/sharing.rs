@@ -71,6 +71,15 @@ pub const UPLOAD_LIMIT: u32 = 20;
 /// Largest file a public form accepts (further capped by the configured
 /// upload limit).
 pub const PUBLIC_UPLOAD_MAX: u64 = 25 * 1024 * 1024;
+/// Byte budgets for anonymous form uploads, in MB per [`UPLOAD_BYTES_WINDOW`]
+/// (in memory: a restart resets them). A request is charged when it starts,
+/// for its declared length (the 25 MB cap when the client declares none), so
+/// parallel uploads cannot overshoot. Per client IP, per base, and for the
+/// whole server.
+pub const UPLOAD_MB_PER_IP: u32 = 200;
+pub const UPLOAD_MB_PER_BASE: u32 = 500;
+pub const UPLOAD_MB_GLOBAL: u32 = 1000;
+pub const UPLOAD_BYTES_WINDOW: Duration = Duration::from_secs(3600);
 /// Password length bounds for share links.
 pub const MIN_SHARE_PASSWORD: usize = 4;
 pub const MAX_SHARE_PASSWORD: usize = 256;
@@ -600,6 +609,33 @@ async fn submit_form(
     Ok(Json(json!({ "ok": true })))
 }
 
+/// Charge the byte budgets of anonymous uploads (see [`UPLOAD_MB_PER_IP`]);
+/// 429 when one is used up. One limiter hit per MB.
+fn charge_upload_bytes(
+    state: &AppState,
+    client: &ClientInfo,
+    base_id: &str,
+    headers: &HeaderMap,
+    cap: u64,
+) -> AppResult<()> {
+    const MB: u64 = 1024 * 1024;
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    let mb = declared.unwrap_or(cap).min(cap).div_ceil(MB).max(1);
+    for (bucket, key, max) in [
+        ("form_upload_mb_ip", client.ip.as_str(), UPLOAD_MB_PER_IP),
+        ("form_upload_mb_base", base_id, UPLOAD_MB_PER_BASE),
+        ("form_upload_mb_all", "all", UPLOAD_MB_GLOBAL),
+    ] {
+        for _ in 0..mb {
+            state.limiter.check(bucket, key, max, UPLOAD_BYTES_WINDOW)?;
+        }
+    }
+    Ok(())
+}
+
 async fn upload_form_file(
     State(state): State<AppState>,
     client: ClientInfo,
@@ -626,6 +662,7 @@ async fn upload_form_file(
         return Err(AppError::bad_request("this form has no file upload field").into());
     }
     let cap = state.config.max_upload_bytes().min(PUBLIC_UPLOAD_MAX);
+    charge_upload_bytes(&state, &client, &r.table.base_id, &headers, cap)?;
     let multipart = crate::api::csv::limited_multipart(&state, req, cap).await?;
     let saved =
         crate::api::attachments::save_upload(&state, &r.table.base_id, None, multipart).await?;

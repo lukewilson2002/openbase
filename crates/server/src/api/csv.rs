@@ -22,6 +22,7 @@
 //!   imports every row, again all or nothing.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Request, State};
@@ -37,6 +38,7 @@ use og_core::cell::display_text;
 use og_core::field::{Field, FieldKind};
 use serde::Deserialize;
 use serde_json::{Value as Json2, json};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 use crate::api::attachments::content_disposition;
 use crate::api::records::publish_outcome;
@@ -52,13 +54,28 @@ use crate::store::csv_io::{self, Csv, ImportColumn, ImportOutcome};
 use crate::store::links::NameCache;
 use crate::store::schema::{self, Touched};
 use crate::store::sharing::visible_fields;
-use crate::store::{attachments, fields, tables};
+use crate::store::{attachments, fields, records, tables};
 
 /// Records fetched from the query engine per streamed chunk.
 const EXPORT_PAGE: usize = 500;
 /// Framing allowance on top of the file in an import request.
 const MULTIPART_SLACK: u64 = 1024 * 1024;
 const MAX_MAPPING_BYTES: usize = 1024 * 1024;
+
+/// Imports that may parse and write at the same time, whoever starts them: a
+/// parsed file can take a few hundred MB, so a few Editors importing at once
+/// must queue instead of exhausting memory.
+pub const IMPORT_CONCURRENCY: usize = 2;
+pub static IMPORT_PERMITS: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(IMPORT_CONCURRENCY));
+
+/// Wait for an import slot (held until the returned permit drops).
+async fn import_slot() -> AppResult<SemaphorePermit<'static>> {
+    IMPORT_PERMITS
+        .acquire()
+        .await
+        .map_err(|_| AppError::internal("import limiter closed"))
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -120,12 +137,15 @@ struct ExportParams {
 /// Everything the streaming loop needs after the first page.
 struct ExportStream {
     state: AppState,
-    user_id: String,
     view: schema::ViewRow,
     fields: Vec<Field>,
     timezone: String,
+    /// The matching record ids in display order, taken once when the export
+    /// starts: later pages load exactly these records, so edits made while
+    /// the file streams cannot repeat or skip rows (deleted records are
+    /// skipped, edited ones show their current values).
+    ids: std::sync::Arc<query::CachedQuery>,
     offset: usize,
-    total: usize,
     first: Option<Vec<u8>>,
 }
 
@@ -202,9 +222,8 @@ async fn export(
 ) -> AppResult<Response> {
     let cache = state.query_cache.clone();
     let versions = state.events.versions().clone();
-    let user_id = actor.user_id.clone();
     let tz_param = params.timezone.clone();
-    let (first, view, fields, total, timezone) = state
+    let (first, view, fields, ids, timezone) = state
         .db
         .read(move |conn| {
             let base = perm::base_of_view(conn, &view_id)?;
@@ -220,28 +239,26 @@ async fn export(
                     None => user_timezone(conn, &actor.user_id),
                 };
             let req = QueryRequest {
-                offset: 0,
-                limit: Some(EXPORT_PAGE),
                 timezone: Some(tz.name().to_string()),
                 ..QueryRequest::default()
             };
-            let resp = query::run_query(conn, &cache, &versions, &actor.user_id, &view, &req)?;
-            let total = resp.total;
+            let ids = query::query_ids(conn, &cache, &versions, &actor.user_id, &view, &req)?;
+            let page = &ids.ids[..ids.ids.len().min(EXPORT_PAGE)];
+            let records = records::load_dtos(conn, &view.view.table_id, page, tz)?;
             let mut bytes = vec![0xEF, 0xBB, 0xBF];
-            bytes.extend(render_rows(conn, &fields, resp.records, tz, true)?);
-            Ok((bytes, view, fields, total, tz.name().to_string()))
+            bytes.extend(render_rows(conn, &fields, records, tz, true)?);
+            Ok((bytes, view, fields, ids, tz.name().to_string()))
         })
         .await?;
 
     let filename = export_filename(&view.view.name);
     let st = ExportStream {
         state,
-        user_id,
         view,
         fields,
         timezone,
+        ids,
         offset: EXPORT_PAGE,
-        total,
         first: Some(first),
     };
     let stream = futures::stream::unfold(Some(st), |st| async move {
@@ -249,39 +266,29 @@ async fn export(
         if let Some(first) = st.first.take() {
             return Some((Ok::<_, std::io::Error>(Bytes::from(first)), Some(st)));
         }
-        if st.offset >= st.total {
+        if st.offset >= st.ids.ids.len() {
             return None;
         }
-        let cache = st.state.query_cache.clone();
-        let versions = st.state.events.versions().clone();
-        let (user_id, view, fields, tzname, offset) = (
-            st.user_id.clone(),
+        let end = (st.offset + EXPORT_PAGE).min(st.ids.ids.len());
+        let (ids, view, fields, tzname) = (
+            st.ids.clone(),
             st.view.clone(),
             st.fields.clone(),
             st.timezone.clone(),
-            st.offset,
         );
+        let range = st.offset..end;
         let page = st
             .state
             .db
             .read(move |conn| {
                 let tz: chrono_tz::Tz = tzname.parse().unwrap_or(chrono_tz::Tz::UTC);
-                let req = QueryRequest {
-                    offset,
-                    limit: Some(EXPORT_PAGE),
-                    timezone: Some(tzname),
-                    ..QueryRequest::default()
-                };
-                let resp = query::run_query(conn, &cache, &versions, &user_id, &view, &req)?;
-                let n = resp.records.len();
-                Ok((render_rows(conn, &fields, resp.records, tz, false)?, n))
+                let records = records::load_dtos(conn, &view.view.table_id, &ids.ids[range], tz)?;
+                render_rows(conn, &fields, records, tz, false)
             })
             .await;
         match page {
-            // An empty page means the table shrank under us: stop cleanly.
-            Ok((_, 0)) => None,
-            Ok((bytes, n)) => {
-                st.offset += n;
+            Ok(bytes) => {
+                st.offset = end;
                 Some((Ok(Bytes::from(bytes)), Some(st)))
             }
             Err(e) => {
@@ -487,6 +494,9 @@ async fn import_table(
     let file = form
         .file
         .ok_or_else(|| AppError::bad_request("missing multipart field \"file\""))?;
+    // After the upload is read (a slow client must not hold a slot), before
+    // the big allocations of parsing.
+    let _slot = import_slot().await?;
     let csv = parse_csv(file, form.has_header).await?;
     let explicit = form.mapping.as_deref().map(parse_mapping).transpose()?;
 
@@ -556,6 +566,7 @@ async fn import_base(
     let file = form
         .file
         .ok_or_else(|| AppError::bad_request("missing multipart field \"file\""))?;
+    let _slot = import_slot().await?;
     let csv = parse_csv(file, form.has_header).await?;
     let explicit_name = form
         .name

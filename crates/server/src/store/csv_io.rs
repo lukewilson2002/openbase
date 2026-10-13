@@ -10,8 +10,8 @@
 //!
 //! Importing goes through [`crate::engine::write::create_records`] in batches
 //! of [`limits::MAX_RECORDS_PER_BATCH`] inside one transaction. When a batch
-//! fails, its rows are replayed one by one (in savepoints) to find which rows
-//! are wrong; the scan continues so that up to [`MAX_ROW_ERRORS`] bad rows are
+//! fails, its rows are bisected (in savepoints) to find which rows are
+//! wrong; the scan continues so that up to [`MAX_ROW_ERRORS`] bad rows are
 //! reported at once, then everything is rolled back. Nothing is written
 //! unless every row is accepted.
 
@@ -41,6 +41,11 @@ pub const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
 pub const MAX_ROWS: usize = 100_000;
 /// Most columns in one import.
 pub const MAX_COLUMNS: usize = 500;
+/// Most cells (rows x columns, counting the header row and every short row
+/// as padded to the widest one) in one import. Each cell is a heap `String`,
+/// so this bounds the parse at roughly 150-250 MB however the 20 MB file is
+/// shaped (`a,a,a,...` or one wide row plus many short ones).
+pub const MAX_CELLS: usize = 3_000_000;
 /// Row errors reported before the scan stops.
 pub const MAX_ROW_ERRORS: usize = 50;
 /// A text column with at most this many distinct values (and repeated
@@ -210,6 +215,14 @@ pub fn parse(bytes: &[u8], has_header: bool) -> AppResult<Csv> {
         if width > MAX_COLUMNS {
             return Err(AppError::bad_request(format!(
                 "a CSV import can have at most {MAX_COLUMNS} columns"
+            )));
+        }
+        // Rows are padded to the widest row, so rows x width (which only
+        // grows) is the final cell count; refuse before allocating it.
+        if (records.len() + 1).saturating_mul(width) > MAX_CELLS {
+            return Err(AppError::bad_request(format!(
+                "a CSV import can have at most {MAX_CELLS} cells (rows x columns); \
+                 split the file or drop unused columns"
             )));
         }
         records.push((row_number, rec.iter().map(str::to_string).collect()));
@@ -563,6 +576,69 @@ pub fn import_rows(
     result
 }
 
+/// Collected while importing: the created outcomes and the bad rows.
+struct Scan {
+    outcomes: Vec<WriteOutcome>,
+    errors: Vec<ImportRowError>,
+    truncated: bool,
+}
+
+thread_local! {
+    static CREATE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Diagnostics (used by tests): how many `create_records` calls imports on
+/// the current thread have made so far.
+pub fn create_calls_on_this_thread() -> usize {
+    CREATE_CALLS.with(std::cell::Cell::get)
+}
+
+/// Create `rows` in one savepoint. When that fails with a row problem the
+/// rows are halved and each half retried, so finding `k` bad rows costs
+/// about `2 k log2(n)` creates instead of replaying every row of the batch
+/// one by one (which held the single writer for ages). Returns `true` when
+/// the scan must stop because [`MAX_ROW_ERRORS`] was reached.
+fn try_rows(
+    tx: &Transaction,
+    ctx: &WriteCtx,
+    table_id: &str,
+    columns: &[ImportColumn],
+    rows: &[CsvRow],
+    scan: &mut Scan,
+) -> AppResult<bool> {
+    exec(tx, "SAVEPOINT og_batch")?;
+    let batch: Vec<NewRecord> = rows.iter().map(|r| new_record(columns, r)).collect();
+    CREATE_CALLS.with(|c| c.set(c.get() + 1));
+    match create_records(tx, ctx, table_id, batch, &CreateOpts::default()) {
+        Ok(outcome) => {
+            exec(tx, "RELEASE og_batch")?;
+            scan.outcomes.push(outcome);
+            Ok(false)
+        }
+        Err(AppError::BadRequest(message)) => {
+            exec(tx, "ROLLBACK TO og_batch")?;
+            exec(tx, "RELEASE og_batch")?;
+            if let [row] = rows {
+                scan.errors.push(ImportRowError {
+                    row: row.number,
+                    message,
+                });
+                if scan.errors.len() >= MAX_ROW_ERRORS {
+                    scan.truncated = true;
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+            let (left, right) = rows.split_at(rows.len() / 2);
+            if try_rows(tx, ctx, table_id, columns, left, scan)? {
+                return Ok(true);
+            }
+            try_rows(tx, ctx, table_id, columns, right, scan)
+        }
+        Err(other) => Err(other),
+    }
+}
+
 fn import_in_savepoint(
     tx: &Transaction,
     ctx: &WriteCtx,
@@ -570,56 +646,29 @@ fn import_in_savepoint(
     columns: &[ImportColumn],
     rows: &[CsvRow],
 ) -> AppResult<ImportOutcome> {
-    let opts = CreateOpts::default();
-    let mut outcomes = Vec::new();
-    let mut errors: Vec<ImportRowError> = Vec::new();
-    let mut truncated = false;
-    'chunks: for chunk in rows.chunks(limits::MAX_RECORDS_PER_BATCH) {
-        exec(tx, "SAVEPOINT og_batch")?;
-        let batch: Vec<NewRecord> = chunk.iter().map(|r| new_record(columns, r)).collect();
-        match create_records(tx, ctx, table_id, batch, &opts) {
-            Ok(outcome) => {
-                exec(tx, "RELEASE og_batch")?;
-                outcomes.push(outcome);
-                continue;
-            }
-            Err(AppError::BadRequest(_)) => {
-                exec(tx, "ROLLBACK TO og_batch")?;
-                exec(tx, "RELEASE og_batch")?;
-            }
-            Err(other) => return Err(other),
-        }
-        // Something in this batch is wrong: find the rows.
-        for row in chunk {
-            exec(tx, "SAVEPOINT og_row")?;
-            match create_records(tx, ctx, table_id, vec![new_record(columns, row)], &opts) {
-                Ok(outcome) => {
-                    exec(tx, "RELEASE og_row")?;
-                    outcomes.push(outcome);
-                }
-                Err(AppError::BadRequest(message)) => {
-                    exec(tx, "ROLLBACK TO og_row")?;
-                    exec(tx, "RELEASE og_row")?;
-                    errors.push(ImportRowError {
-                        row: row.number,
-                        message,
-                    });
-                    if errors.len() >= MAX_ROW_ERRORS {
-                        truncated = true;
-                        break 'chunks;
-                    }
-                }
-                Err(other) => return Err(other),
-            }
+    let mut scan = Scan {
+        outcomes: Vec::new(),
+        errors: Vec::new(),
+        truncated: false,
+    };
+    for chunk in rows.chunks(limits::MAX_RECORDS_PER_BATCH) {
+        if try_rows(tx, ctx, table_id, columns, chunk, &mut scan)? {
+            break;
         }
     }
-    if errors.is_empty() {
+    if scan.errors.is_empty() {
         let created = rows.len();
-        Ok(ImportOutcome::Imported { created, outcomes })
+        Ok(ImportOutcome::Imported {
+            created,
+            outcomes: scan.outcomes,
+        })
     } else {
         // The caller rolls everything back; whether more rows would have
         // failed is unknown when the scan stopped early.
-        Ok(ImportOutcome::Rejected { errors, truncated })
+        Ok(ImportOutcome::Rejected {
+            errors: scan.errors,
+            truncated: scan.truncated,
+        })
     }
 }
 

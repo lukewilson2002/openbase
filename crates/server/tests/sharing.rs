@@ -1251,3 +1251,199 @@ async fn a_share_does_not_open_attachments_of_other_bases() {
     );
     pub_get(&f.app, &url).await.assert_status(404);
 }
+
+// ------------------------------------------- share-scoped attachments (B2)
+
+#[tokio::test]
+async fn a_share_token_only_opens_attachments_its_view_shows() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let files = id_of(&f.attachment_field(&t, "Files").await);
+    let secret = id_of(&f.attachment_field(&t, "Secret files").await);
+    let up = |name: &'static str| async move { f.upload(name, name.as_bytes()).await };
+    let (shown, hidden, filtered, trashed, loose) = (
+        up("shown.txt").await,
+        up("hidden.txt").await,
+        up("filtered.txt").await,
+        up("trashed.txt").await,
+        up("loose.txt").await,
+    );
+    let other_table = id_of(&f.add_table("Other").await);
+    let other_files = id_of(&f.attachment_field(&other_table, "Files").await);
+    let elsewhere = up("elsewhere.txt").await;
+    f.create(&other_table, json!({ &other_files: [elsewhere.clone()] }))
+        .await;
+    let kept = f
+        .create(
+            &t,
+            json!({ &p.name: "Kept", &p.age: 40, &files: [shown.clone()], &secret: [hidden.clone()] }),
+        )
+        .await;
+    f.create(
+        &t,
+        json!({ &p.name: "Young", &p.age: 5, &files: [filtered.clone()] }),
+    )
+    .await;
+    let gone = f
+        .create(
+            &t,
+            json!({ &p.name: "Gone", &p.age: 50, &files: [trashed.clone()] }),
+        )
+        .await;
+    f.delete_records(&t, &[gone["id"].as_str().unwrap()])
+        .await
+        .assert_status(204);
+
+    let view = f
+        .view_of(
+            &t,
+            "Public",
+            "grid",
+            json!({
+                "filter": and(vec![cond(&p.age, "gte", json!(30))]),
+                "hidden_fields": [secret],
+            }),
+        )
+        .await;
+    let token = f.share(&view, "view", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let url = |att: &Value, name: &str| {
+        format!(
+            "/api/attachments/{}/{name}?share={token}",
+            att["id"].as_str().unwrap()
+        )
+    };
+    // What the view shows opens (file and thumbnail route alike).
+    let ok = pub_get(&f.app, &url(&shown, "shown.txt")).await;
+    ok.assert_status(200);
+    assert_eq!(ok.bytes, b"shown.txt");
+    // Nothing else of the base does, though the ids are real.
+    for (att, name) in [
+        (&hidden, "hidden.txt"),
+        (&filtered, "filtered.txt"),
+        (&trashed, "trashed.txt"),
+        (&loose, "loose.txt"),
+        (&elsewhere, "elsewhere.txt"),
+    ] {
+        pub_get(&f.app, &url(att, name)).await.assert_status(404);
+    }
+    // The owner still reads everything in the base.
+    f.app
+        .get(
+            &f.owner,
+            &format!(
+                "/api/attachments/{}/hidden.txt",
+                hidden["id"].as_str().unwrap()
+            ),
+        )
+        .await
+        .assert_status(200);
+
+    // Taking the file off the record closes the download at once.
+    f.set(&t, kept["id"].as_str().unwrap(), json!({ &files: [] }))
+        .await;
+    pub_get(&f.app, &url(&shown, "shown.txt"))
+        .await
+        .assert_status(404);
+    f.set(
+        &t,
+        kept["id"].as_str().unwrap(),
+        json!({ &files: [shown.clone()] }),
+    )
+    .await;
+    pub_get(&f.app, &url(&shown, "shown.txt"))
+        .await
+        .assert_status(200);
+
+    // Hiding the field in the view closes it too.
+    f.configure_view(&view, json!({ "hidden_fields": [files, secret] }))
+        .await;
+    pub_get(&f.app, &url(&shown, "shown.txt"))
+        .await
+        .assert_status(404);
+    f.configure_view(&view, json!({ "hidden_fields": [secret] }))
+        .await;
+    pub_get(&f.app, &url(&shown, "shown.txt"))
+        .await
+        .assert_status(200);
+
+    // A trashed workspace takes its share links with it.
+    let ws = f.ws.clone();
+    schema_support::sql(&f.app, move |tx| {
+        tx.execute("UPDATE workspaces SET deleted_at = 1 WHERE id = ?1", [&ws])
+    });
+    pub_get(&f.app, &url(&shown, "shown.txt"))
+        .await
+        .assert_status(404);
+}
+
+#[tokio::test]
+async fn a_file_uploaded_through_a_public_form_is_not_readable_with_a_view_share() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let files = id_of(&f.attachment_field(&t, "Files").await);
+    let form_view = f
+        .view_of(
+            &t,
+            "Form",
+            "form",
+            json!({ "form": { "fields": [ { "field_id": files } ] } }),
+        )
+        .await;
+    let form_token = f.share(&form_view, "form", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let view_token = f.share(&f.view_id, "view", None).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let up = post_multipart(
+        &f.app,
+        &f.app.anon(),
+        &format!("/api/public/forms/{form_token}/attachments"),
+        &[("file", Some("drive-by.txt"), b"mine")],
+        &[],
+    )
+    .await;
+    up.assert_status(200);
+    let id = up.body["id"].as_str().unwrap();
+    pub_get(
+        &f.app,
+        &format!("/api/attachments/{id}/drive-by.txt?share={view_token}"),
+    )
+    .await
+    .assert_status(404);
+}
+
+#[tokio::test]
+async fn attachment_password_guesses_are_rate_limited() {
+    let p = people().await;
+    let f = &p.f;
+    let t = f.table_id.clone();
+    let files = id_of(&f.attachment_field(&t, "Files").await);
+    let att = f.upload("a.txt", b"a").await;
+    f.set(&t, &p.ids[0], json!({ &files: [att.clone()] })).await;
+    let token = f.share(&f.view_id, "view", Some("pw-1234")).await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let url = format!(
+        "/api/attachments/{}/a.txt?share={token}",
+        att["id"].as_str().unwrap()
+    );
+    let mut statuses = Vec::new();
+    for i in 0..(opengrid::api::sharing::PASSWORD_LIMIT + 5) {
+        let r = pub_get_pw(&f.app, &url, &format!("wrong-{i}")).await;
+        statuses.push(r.status.as_u16());
+    }
+    let limit = opengrid::api::sharing::PASSWORD_LIMIT as usize;
+    assert!(statuses[..limit].iter().all(|s| *s == 404), "{statuses:?}");
+    assert!(statuses[limit..].iter().all(|s| *s == 429), "{statuses:?}");
+    // Even the right password waits for the window.
+    pub_get_pw(&f.app, &url, "pw-1234").await.assert_status(429);
+}

@@ -648,3 +648,73 @@ async fn personal_views_are_restored_by_their_owner_only() {
         "the owner's schema view does not show another user's personal view"
     );
 }
+
+#[tokio::test]
+async fn restoring_a_table_recomputes_its_counts_after_linked_records_changed_meanwhile() {
+    let f = Fixture::new().await;
+    let a = f.table_id.clone();
+    let b = sid(&f.add_table("Orders").await["id"]).to_string();
+    let link = f.add_link(&a, "Orders", &b).await;
+    let inverse = sid(&link["inverse"]["id"]).to_string();
+    let count = sid(&f
+        .add_field(
+            &b,
+            json!({ "name": "How many", "type": "count", "options": { "link_field_id": inverse } }),
+        )
+        .await["id"])
+    .to_string();
+    let create = |table: String, values: Value| {
+        let (app, owner) = (&f.app, &f.owner);
+        async move {
+            let r = app
+                .post(
+                    owner,
+                    &format!("/api/tables/{table}/records"),
+                    json!({ "records": [ { "values": values } ] }),
+                )
+                .await;
+            r.assert_status(201);
+            sid(&r.body["records"][0]["id"]).to_string()
+        }
+    };
+    let order = create(b.clone(), json!({})).await;
+    let a1 = create(
+        a.clone(),
+        json!({ link["id"].as_str().unwrap(): [order.clone()] }),
+    )
+    .await;
+    let a2 = create(
+        a.clone(),
+        json!({ link["id"].as_str().unwrap(): [order.clone()] }),
+    )
+    .await;
+    let counted = || async {
+        let r = f
+            .app
+            .get(&f.owner, &format!("/api/tables/{b}/records/{order}"))
+            .await;
+        r.assert_status(200);
+        r.body["values"][&count].clone()
+    };
+    assert_eq!(counted().await, json!(2));
+
+    // The Orders table goes to the trash; meanwhile one of the linked records
+    // in the other table is deleted.
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{b}"))
+        .await
+        .assert_status(200);
+    f.app
+        .request(
+            &f.owner,
+            "DELETE",
+            &format!("/api/tables/{a}/records"),
+            Some(json!({ "ids": [a1] })),
+        )
+        .await
+        .assert_status(204);
+    restore(&f, &f.owner, "table", &b).await.assert_status(200);
+    // The restored table's count reflects the live links, not the state at deletion.
+    assert_eq!(counted().await, json!(1));
+    let _ = a2;
+}

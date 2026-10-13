@@ -116,6 +116,24 @@ pub fn create(
     Ok(view)
 }
 
+/// Whether `new` differs from `old` in something a public link exposes: the
+/// shown fields and their order, the filter, or the form (fields, texts,
+/// redirect). Widths, sorts, colours and the like are not.
+fn changes_exposure(old: &ViewConfig, new: &ViewConfig) -> bool {
+    let key =
+        |c: &ViewConfig| serde_json::json!([c.hidden_fields, c.field_order, c.filter, c.form]);
+    key(old) != key(new)
+}
+
+/// Whether the view has an enabled share link (read-only link or form).
+fn has_enabled_share(conn: &rusqlite::Connection, view_id: &str) -> AppResult<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM share_links WHERE view_id = ?1 AND enabled = 1)",
+        [view_id],
+        |r| r.get(0),
+    )?)
+}
+
 /// Update name / config / lock / position of a view.
 pub fn update(
     tx: &Transaction,
@@ -139,6 +157,16 @@ pub fn update(
             need(role, Role::Creator, "reordering or locking a view")?;
         } else if row.view.locked && content {
             need(role, Role::Creator, "changing a locked view")?;
+        } else if role < Role::Creator
+            && patch
+                .config
+                .as_ref()
+                .is_some_and(|c| changes_exposure(&row.view.config, c))
+            && has_enabled_share(tx, view_id)?
+        {
+            // A public link follows the view's live config, and managing links
+            // is a Creator permission: an Editor must not widen what it exposes.
+            need(role, Role::Creator, "changing what a public link shows")?;
         } else {
             need(role, Role::Editor, "changing a view")?;
         }

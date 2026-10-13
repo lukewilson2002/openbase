@@ -6,19 +6,41 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use og_core::api::events::{BaseEvent, EventEnvelope};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 use crate::store::versions::DataVersions;
 
 const CHANNEL_CAPACITY: usize = 256;
 
+/// Flipped to `true` when the server begins to shut down.
+#[derive(Clone)]
+struct Shutdown(Arc<watch::Sender<bool>>);
+
+impl Default for Shutdown {
+    fn default() -> Self {
+        Shutdown(Arc::new(watch::channel(false).0))
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct EventBus {
     channels: Arc<Mutex<HashMap<String, broadcast::Sender<Arc<EventEnvelope>>>>>,
     versions: DataVersions,
+    shutdown: Shutdown,
 }
 
 impl EventBus {
+    /// Tell every open event stream to end: graceful shutdown waits for open
+    /// connections, and an SSE stream otherwise never finishes by itself.
+    pub fn begin_shutdown(&self) {
+        self.shutdown.0.send_replace(true);
+    }
+
+    /// Becomes `true` once [`EventBus::begin_shutdown`] was called.
+    pub fn shutdown_signal(&self) -> watch::Receiver<bool> {
+        self.shutdown.0.subscribe()
+    }
+
     /// The per-base data versions bumped by [`EventBus::publish`]; the view
     /// query cache is keyed by them.
     pub fn versions(&self) -> &DataVersions {

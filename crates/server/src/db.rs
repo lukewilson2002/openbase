@@ -165,6 +165,17 @@ impl Db {
         Ok(out)
     }
 
+    /// Fold the WAL back into the database file and truncate it (what
+    /// dropping the last handle does). A server calls this explicitly on
+    /// shutdown: background tasks keep handles alive until the process exits,
+    /// so the drop never runs, and `opengrid restore` treats a non-empty WAL
+    /// as "the server is still running".
+    pub fn checkpoint(&self) -> AppResult<()> {
+        let conn = self.inner.writer.lock().unwrap_or_else(|p| p.into_inner());
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+            .map_err(AppError::internal)
+    }
+
     /// Consistent online snapshot of the database into `dest` (VACUUM INTO).
     pub fn snapshot_to(&self, dest: &Path) -> AppResult<()> {
         let conn = self.inner.writer.lock().unwrap_or_else(|p| p.into_inner());

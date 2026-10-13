@@ -447,3 +447,21 @@ async fn dropping_the_stream_releases_the_channel() {
         .publish(&f.base_id, None, None, BaseEvent::BaseChanged);
     assert_eq!(f.app.state.events.active_channels(), 0);
 }
+
+#[tokio::test]
+async fn shutdown_ends_open_streams_so_graceful_shutdown_can_finish() {
+    let f = Fixture::new().await;
+    let mut a = open(&f.app, &f.owner, &f.base_id).await.stream();
+    let mut b = open(&f.app, &f.owner, &f.base_id).await.stream();
+    a.next_msg(SOON).await.unwrap().unwrap(); // greeting
+    f.create(&f.table_id, json!({ &f.primary_id: "before" }))
+        .await;
+    assert_eq!(a.next_event().await.0, "records_changed");
+    f.app.state.events.begin_shutdown();
+    // Both end promptly, including the one that never read its greeting.
+    a.expect_closed(SOON).await;
+    b.expect_closed(SOON).await;
+    // Streams opened after the signal end at once too.
+    let mut late = open(&f.app, &f.owner, &f.base_id).await.stream();
+    late.expect_closed(SOON).await;
+}

@@ -743,3 +743,95 @@ async fn configs_that_still_mention_deleted_fields_can_be_saved_again() {
         .await
         .assert_status(400);
 }
+
+#[tokio::test]
+async fn editors_cannot_widen_what_a_public_link_shows() {
+    let f = Fixture::new().await;
+    let editor = f.member("ed2@example.com", Role::Editor);
+    let v = shared_view(&f, "Public").await;
+    let id = sid(&v["id"]).to_string();
+    let secret = id_of(
+        &f.add_field(
+            &f.table_id,
+            json!({ "name": "Secret", "type": "number", "options": {} }),
+        )
+        .await,
+    );
+    // The creator hides a field, then publishes the view.
+    f.app
+        .patch(
+            &f.owner,
+            &view_path(&id),
+            json!({ "config": { "hidden_fields": [secret] } }),
+        )
+        .await
+        .assert_status(200);
+    let share = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/views/{id}/shares"),
+            json!({ "kind": "view" }),
+        )
+        .await;
+    share.assert_status(201);
+    // An editor cannot unhide it, reorder shown fields or change the filter.
+    for config in [
+        json!({ "hidden_fields": [] }),
+        json!({ "hidden_fields": [secret], "field_order": [secret] }),
+        json!({ "hidden_fields": [secret], "filter": { "op": "and", "items": [] } }),
+    ] {
+        f.app
+            .patch(&editor, &view_path(&id), json!({ "config": config }))
+            .await
+            .assert_status(403);
+    }
+    // Layout changes that expose nothing new stay open to editors (the grid
+    // saves column widths as you drag them), as do renames.
+    f.app
+        .patch(
+            &editor,
+            &view_path(&id),
+            json!({ "config": { "hidden_fields": [secret], "frozen_columns": 1 } }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .patch(&editor, &view_path(&id), json!({ "name": "Renamed" }))
+        .await
+        .assert_status(200);
+    // Creators can change anything; editors can copy it into a personal view.
+    f.app
+        .patch(
+            &f.owner,
+            &view_path(&id),
+            json!({ "config": { "hidden_fields": [] } }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .post(
+            &editor,
+            &format!("/api/views/{id}/duplicate"),
+            json!({ "personal": true }),
+        )
+        .await
+        .assert_status(201);
+    // Disabling the link frees the view again.
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/shares/{}", sid(&share.body["id"])),
+            json!({ "enabled": false }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .patch(
+            &editor,
+            &view_path(&id),
+            json!({ "config": { "hidden_fields": [secret] } }),
+        )
+        .await
+        .assert_status(200);
+}

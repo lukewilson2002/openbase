@@ -16,6 +16,9 @@
 //! * **Lag.** The bus is a bounded broadcast channel. A client too slow to keep
 //!   up misses events; it is told with a synthetic `base_changed` event, which
 //!   by contract means "refetch everything".
+//! * **Shutdown.** When the server is asked to stop, every stream ends
+//!   ([`crate::events::EventBus::begin_shutdown`]); otherwise graceful
+//!   shutdown would wait for them forever.
 //! * **Echoes.** Every event carries the `client_id` (the `X-Client-Id` of the
 //!   request that caused it) so a client can skip its own changes.
 
@@ -111,6 +114,8 @@ struct Feed {
     actor: Actor,
     base_id: String,
     rx: broadcast::Receiver<std::sync::Arc<EventEnvelope>>,
+    /// `true` once the server is shutting down: the stream ends.
+    shutdown: tokio::sync::watch::Receiver<bool>,
     greeted: bool,
     next_recheck: Instant,
 }
@@ -162,6 +167,10 @@ fn feed_stream(feed: Feed) -> impl Stream<Item = Result<Event, Infallible>> {
         }
         loop {
             let received = tokio::select! {
+                // Checked first so a closing server is never kept waiting by
+                // a busy stream.
+                biased;
+                _ = feed.shutdown.wait_for(|down| *down) => return None,
                 msg = feed.rx.recv() => Some(msg),
                 _ = tokio::time::sleep_until(feed.next_recheck) => None,
             };
@@ -203,11 +212,13 @@ async fn stream_events(
     // Subscribe only after the access check: subscribing creates the base's
     // channel, which must not be possible for ids the caller cannot read.
     let rx = subscribe(&state.events, &base_id);
+    let shutdown = state.events.shutdown_signal();
     let feed = Feed {
         state,
         actor,
         base_id,
         rx,
+        shutdown,
         greeted: false,
         next_recheck: Instant::now() + recheck_interval(),
     };

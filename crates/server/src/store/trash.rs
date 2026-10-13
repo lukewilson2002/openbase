@@ -435,6 +435,19 @@ fn restore_table(tx: &Transaction, id: &str) -> AppResult<Restored> {
     for t in fields::restore_incoming_links(tx, &table, stamp)?.0 {
         touched.add(&t);
     }
+    // While the table was in the trash, records of the tables it links to
+    // were deleted or edited without reaching it (the engine only sees live
+    // tables), so its counts, lookups, rollups and formulas are as old as the
+    // deletion. Bring them up to date, for every record including trashed
+    // ones; whatever depends on them in other tables follows.
+    let computed: Vec<String> = schema::table_fields(tx, id)?
+        .into_iter()
+        .filter(|f| crate::engine::recompute::is_materialized(&f.kind))
+        .map(|f| f.id)
+        .collect();
+    if !computed.is_empty() {
+        crate::engine::recompute::recompute_fields(tx, &table.base_id, id, &computed)?;
+    }
     Ok(Restored {
         base_ids: vec![table.base_id],
         schema: Some(touched),

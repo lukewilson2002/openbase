@@ -87,7 +87,9 @@ and writes a step log after every step.
   (resuming after their last logged step); a second interruption fails them.
 * **No loops.** Records written by an automation do not fire record triggers.
 * **Disabled automations never run**; turning one off cancels its queued runs.
-* **Retention.** Finished runs older than 30 days are deleted. At most 5,000
+* **Retention.** Finished runs older than 30 days are deleted. A finished
+  webhook run keeps at most the first 16,384 characters of its request body
+  (`trigger_data.body` becomes `{"truncated": true, "preview": "..."}`). At most 5,000
   runs (200 for webhooks) wait in the queue per automation; further events are
   dropped with a log warning.
 

@@ -113,6 +113,15 @@ pub struct Executor {
     pub state: AppState,
 }
 
+/// What an action that must not repeat needs to record its own success in the
+/// run log inside the transaction of its effect: the log so far and the facts
+/// of the step's log line.
+struct StepCommit<'a> {
+    log: &'a [StepLog],
+    index: u32,
+    started: Instant,
+}
+
 /// What the executor loads once per run.
 struct Snapshot {
     fields: Vec<Field>,
@@ -216,7 +225,12 @@ impl Executor {
                 body: trigger.body.as_ref(),
                 steps: &outputs,
             };
-            match self.run_action(input, &ctx, step).await {
+            let commit = StepCommit {
+                log: log.as_slice(),
+                index: i as u32,
+                started,
+            };
+            match self.run_action(input, &ctx, step, commit).await {
                 Ok(output) => {
                     log.push(line(StepStatus::Succeeded, Some(log_output(&output)), None));
                     outputs[i] = output;
@@ -293,10 +307,12 @@ impl Executor {
         input: &RunInput<'_>,
         ctx: &RenderCtx<'_>,
         step: &ActionStep,
+        commit: StepCommit<'_>,
     ) -> Result<Json, StepError> {
         match &step.action {
             Action::CreateRecord { table_id, values } => {
-                self.create_record(input, ctx, table_id, values).await
+                self.create_record(input, ctx, table_id, values, commit)
+                    .await
             }
             Action::UpdateRecord {
                 table_id,
@@ -332,6 +348,7 @@ impl Executor {
         ctx: &RenderCtx<'_>,
         table_id: &str,
         values: &BTreeMap<String, Json>,
+        commit: StepCommit<'_>,
     ) -> Result<Json, StepError> {
         let rendered = render_values(ctx, values)?;
         let auto = input.automation.clone();
@@ -346,6 +363,12 @@ impl Executor {
             shown = Some(prepared);
             DRY_RUN_RECORD_ID.to_string()
         } else {
+            // The record and the step's "succeeded" log line commit together:
+            // a crash between the two (or a failed log write) would otherwise
+            // run the step again on resume and create the record twice.
+            let (run_id, attempt) = (input.run_id, input.attempt);
+            let mut log = commit.log.to_vec();
+            let (index, started) = (commit.index, commit.started);
             let outcome = self
                 .state
                 .db
@@ -354,7 +377,23 @@ impl Executor {
                     let ctx = AutomationCtx {
                         user_id: auto.created_by.as_deref(),
                     };
-                    writer::create_record(tx, &ctx, &table, &prepared)
+                    let outcome = writer::create_record(tx, &ctx, &table, &prepared)?;
+                    if let Some(run_id) = run_id {
+                        let output =
+                            json!({ "record_id": writer::created_id(&outcome)?, "table_id": table });
+                        log.push(StepLog {
+                            index: Some(index),
+                            action: "create_record".to_string(),
+                            status: StepStatus::Succeeded,
+                            attempt,
+                            output: Some(log_output(&output)),
+                            error: None,
+                            duration_ms: started.elapsed().as_millis() as i64,
+                            retry_at: None,
+                        });
+                        store::save_log(tx, run_id, &log)?;
+                    }
+                    Ok(outcome)
                 })
                 .await?;
             // After the commit: tell SSE clients and invalidate cached queries.
