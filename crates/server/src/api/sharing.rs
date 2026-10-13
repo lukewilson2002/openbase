@@ -384,14 +384,13 @@ async fn public_query(
             }
             // No signed-in user: "me" filters match nobody and dates use UTC
             // unless the request names a zone.
-            let mut resp = query::run_query(conn, &cache, &versions, "", &r.view, &req)?;
+            let mut resp = query::run_query_public(conn, &cache, &versions, &r.view, &req, &ids)?;
             let mut names: HashMap<String, Option<String>> = HashMap::new();
             let records = resp
                 .records
                 .drain(..)
                 .map(|rec| sharing::public_record(conn, rec, &visible, &mut names))
                 .collect();
-            resp.groups.retain(|g| ids.contains(g.field_id.as_str()));
             let colors_ok = matches!(
                 &config.row_color,
                 Some(RowColor::BySelect { field_id }) if ids.contains(field_id.as_str())

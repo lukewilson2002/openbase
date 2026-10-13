@@ -39,7 +39,7 @@ pub use filter::{
     CompiledFilter, CompiledRowColor, compile_filter, compile_row_color, filter_ops_for, matches,
     row_color, row_color_compiled,
 };
-pub use search::matches_search;
+pub use search::{matches_search, search_needle};
 pub use sort::{
     Chunk, EMPTY_GROUP_LABEL, GroupKey, GroupSpan, SortKey, compare, group_key, group_spans,
     sort_key, sort_rows, sort_rows_with_groups, validate_groups, validate_sorts,

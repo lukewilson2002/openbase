@@ -122,6 +122,30 @@ fn dates() {
 }
 
 #[test]
+fn non_ascii_digits_in_dates_are_rejected_without_panicking() {
+    // Arabic-Indic and fullwidth digits used to satisfy `\d` in the date
+    // patterns, and the multi-byte fraction digits panicked a byte slice.
+    let f = date_field(true, DateFormat::Us, None);
+    let zeros = "\u{660}".repeat(9);
+    for s in [
+        format!("2026-10-12 10:30:00.{zeros}"),
+        format!("2026-10-12 10:30:00,{zeros}"),
+        format!("10/12/2026 10:30:00.{zeros}"),
+        format!("October 12, 2026 10:30:00.{zeros}"),
+        format!("12 October 2026 10:30:00.{zeros}"),
+        "\u{661}\u{662}/\u{661}\u{662}/\u{662}\u{660}\u{662}\u{666}".to_string(),
+        "\u{ff12}\u{ff10}\u{ff12}\u{ff16}-\u{ff11}\u{ff10}-\u{ff11}\u{ff12}".to_string(),
+    ] {
+        assert!(matches!(perr(&f, &s), CellError::Invalid(_)), "{s:?}");
+    }
+    // The ASCII equivalent still parses, with the fraction kept.
+    assert_eq!(
+        p(&f, "2026-10-12 10:30:00.5"),
+        Some(json!("2026-10-12T10:30:00.500Z"))
+    );
+}
+
+#[test]
 fn contact_types() {
     assert_eq!(
         p(&sample_field(FieldType::Email), " a@b.co "),

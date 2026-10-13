@@ -17,7 +17,7 @@ use std::sync::OnceLock;
 
 use super::ast::Expr;
 use super::coerce::{R, err, to_number, to_text};
-use super::eval::Evaluator;
+use super::eval::{Evaluator, weight};
 use super::types::{Ty, check_arity};
 use crate::value::Value;
 
@@ -125,18 +125,50 @@ pub(crate) fn call(ev: &Evaluator, name: &str, args: &[Expr]) -> Value {
     let result = match spec.imp {
         Imp::Lazy(f) => f(args, ev),
         Imp::Eager(f) => {
-            let vals: Vec<Value> = args.iter().map(|a| ev.eval(a)).collect();
-            match vals.iter().find(|v| v.is_error()) {
+            let (vals, held) = eval_args(ev, args);
+            let r = match vals.iter().find(|v| v.is_error()) {
                 Some(e) => Err(e.clone()),
-                None => f(&vals, ev),
-            }
+                None => ev.charge(call_cost(&vals)).and_then(|()| f(&vals, ev)),
+            };
+            ev.release(held);
+            r
         }
         Imp::Raw(f) => {
-            let vals: Vec<Value> = args.iter().map(|a| ev.eval(a)).collect();
-            f(&vals, ev)
+            let (vals, held) = eval_args(ev, args);
+            let r = ev.charge(call_cost(&vals)).and_then(|()| f(&vals, ev));
+            ev.release(held);
+            r
         }
     };
     result.unwrap_or_else(|e| e)
+}
+
+/// Work charged for a call: a base cost plus the bytes of its arguments.
+fn call_cost(vals: &[Value]) -> u64 {
+    16 + vals.iter().map(|v| weight(v) as u64).sum::<u64>()
+}
+
+/// Evaluates every argument, tracking the bytes of the ones already
+/// computed so a call with many large arguments is cut off before they all
+/// pile up. Returns the values and the byte count to release afterwards.
+fn eval_args(ev: &Evaluator, args: &[Expr]) -> (Vec<Value>, usize) {
+    let mut vals = Vec::with_capacity(args.len());
+    let mut held = 0;
+    for a in args {
+        let v = ev.eval(a);
+        match ev.hold(&v) {
+            Ok(w) => {
+                held += w;
+                vals.push(v);
+            }
+            Err(e) => {
+                // Over budget: stop evaluating; the error becomes the result.
+                vals.push(e);
+                break;
+            }
+        }
+    }
+    (vals, held)
 }
 
 // ---------------------------------------------------------------------------

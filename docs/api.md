@@ -158,7 +158,7 @@ its exact name (ids win). Response: `{"records": [{"id", "createdTime",
 | `view` | a view id or name. Only that view's records, in its order (its filter and sort apply). Fields hidden in the view are still returned, as in Airtable. Personal views of other users and views of other tables are `VIEW_NAME_NOT_FOUND`. |
 | `fields[]` | only these fields, by name or id (`fields[]=Name&fields[]=Status`; `fields=` also works). |
 | `sort[i][field]`, `sort[i][direction]` | sort levels (`asc` default, or `desc`), field by name or id; at most 10 levels. Replaces the view's sort. |
-| `filterByFormula` | keep records for which the formula is truthy (see below). |
+| `filterByFormula` | keep records for which the formula is truthy (see below). Evaluation is cut off after 5 seconds per request (422 `INVALID_FILTER_BY_FORMULA`); a single record whose formula exceeds the evaluation budget counts as not matching. |
 | `returnFieldsByFieldId` | key `fields` by field id instead of name. |
 | `cellFormat` | only `json` (the default). `string` is a 422. |
 | `timeZone`, `userLocale` | accepted. `timeZone` (validated IANA name) sets the zone for relative date filters of the `view` and for the formula; `userLocale` is accepted and ignored (English only). |
@@ -320,7 +320,7 @@ and 20 uploads per 10 minutes per IP and link).
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
-| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
+| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
 | `GET /api/attachments/{id}/{filename}?share={token}` | attachment files of the shared view (send `X-Share-Password` when protected) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |

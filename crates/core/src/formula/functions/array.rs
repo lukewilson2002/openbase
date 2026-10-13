@@ -113,9 +113,12 @@ fn arrayjoin(a: &[Value], _: &Evaluator) -> R {
 }
 
 /// `ARRAYUNIQUE(values)`: first occurrence of each distinct item.
-fn arrayunique(a: &[Value], _: &Evaluator) -> R {
+fn arrayunique(a: &[Value], ev: &Evaluator) -> R {
+    let all = items(arg(a, 0))?;
+    // Quadratic in the item count (values cannot be hashed).
+    ev.charge((all.len() as u64).saturating_mul(all.len() as u64) / 16)?;
     let mut out: Vec<Value> = Vec::new();
-    for v in items(arg(a, 0))? {
+    for v in all {
         if !out.contains(&v) {
             out.push(v);
         }

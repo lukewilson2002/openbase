@@ -64,7 +64,7 @@ use og_core::limits;
 use og_core::query::{
     CompiledFilter, CompiledRowColor, OwnedRow, QueryCtx, Row, aggregate, aggregations_for,
     compile_filter, compile_row_color, group_spans, matches, matches_search, row_color_compiled,
-    sort_rows_with_groups,
+    search_needle, sort_rows_with_groups,
 };
 use og_core::value::Value;
 use og_core::view::{Aggregation, Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
@@ -87,6 +87,12 @@ pub const CACHE_ENTRIES: usize = 64;
 pub const CACHE_WEIGHT: usize = 600_000;
 /// How long a cache entry may be served.
 pub const CACHE_TTL: Duration = Duration::from_secs(300);
+/// Most group headers one public-share response carries. A visitor can group
+/// by any shown field, so the number of headers is theirs to inflate; past
+/// this the later groups simply have no header (their records still page).
+pub const PUBLIC_MAX_GROUP_HEADERS: usize = 1_000;
+/// Longest key or label (in characters) of a public group header.
+pub const PUBLIC_GROUP_TEXT_CHARS: usize = 200;
 /// Default and maximum number of link-picker candidates.
 pub const DEFAULT_LOOKUP_LIMIT: usize = 20;
 pub const MAX_LOOKUP_LIMIT: usize = 100;
@@ -103,8 +109,16 @@ pub struct CachedQuery {
 }
 
 impl CachedQuery {
+    /// Ids count one each; a group header counts four plus its text (a group
+    /// key, label and value can be as long as a text cell), at about one id
+    /// per 64 bytes.
     fn weight(&self) -> usize {
-        self.ids.len() + self.groups.len() * 4
+        let header_bytes: usize = self
+            .groups
+            .iter()
+            .map(|g| g.key.len() + g.label.len() + g.value.to_string().len())
+            .sum();
+        self.ids.len() + self.groups.len() * 4 + header_bytes / 64
     }
 }
 
@@ -508,11 +522,9 @@ impl Plan {
             }
             None => (CompiledFilter::match_all(), false, false),
         };
-        let search = req
-            .and_then(|r| r.search.as_deref())
-            .unwrap_or_default()
-            .trim()
-            .to_string();
+        // Lower-cased once here, not per row; also length-capped.
+        let search = search_needle(req.and_then(|r| r.search.as_deref()).unwrap_or_default())
+            .map_err(AppError::bad_request)?;
         let search_fields: Vec<Field> = if search.is_empty() {
             Vec::new()
         } else {
@@ -780,12 +792,16 @@ fn scan(
 ) -> AppResult<Scanned> {
     let table_id = view.view.table_id.as_str();
     let table = schema::live_table(conn, table_id)?;
+    // Version first, data second (see store::versions): the plan below reads
+    // the field definitions, so a schema change that commits after this read
+    // must not end up cached under the version that includes it.
+    #[cfg(test)]
+    tests::before_version_read();
+    let version = versions.current(&table.base_id);
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
     let config = effective_config(conn, view, req.transient.as_ref())?;
     let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz)?;
 
-    // Version first, data second: see store::versions.
-    let version = versions.current(&table.base_id);
     let key = CacheKey {
         view_id: view.view.id.clone(),
         // The effective config, so a transient override has its own entries.
@@ -836,6 +852,73 @@ pub fn run_query(
     view: &ViewRow,
     req: &QueryRequest,
 ) -> AppResult<QueryResponse> {
+    run_query_with(conn, cache, versions, user_id, view, req, |entry, _| {
+        entry.groups.clone()
+    })
+}
+
+/// [`run_query`] for a public share link: the group headers are cut down to
+/// what an anonymous visitor may see and what is cheap to send. Only headers
+/// of `visible` fields are kept, at most [`PUBLIC_MAX_GROUP_HEADERS`] of them
+/// (cloned one by one, so a huge cached list costs nothing extra); keys and
+/// labels are cut to [`PUBLIC_GROUP_TEXT_CHARS`]; the raw `value` (which holds
+/// ids of users and linked records) is dropped; and the keys of user-valued
+/// fields, which are user ids, are replaced by per-response placeholders.
+pub fn run_query_public(
+    conn: &Connection,
+    cache: &QueryCache,
+    versions: &DataVersions,
+    view: &ViewRow,
+    req: &QueryRequest,
+    visible: &HashSet<&str>,
+) -> AppResult<QueryResponse> {
+    run_query_with(conn, cache, versions, "", view, req, |entry, plan| {
+        // Placeholder keys, numbered per field in order of appearance.
+        let mut aliases: HashMap<(&str, &str), String> = HashMap::new();
+        entry
+            .groups
+            .iter()
+            .filter(|g| visible.contains(g.field_id.as_str()))
+            .take(PUBLIC_MAX_GROUP_HEADERS)
+            .map(|g| {
+                let holds_user_ids = plan.by_id.get(&g.field_id).is_some_and(|f| {
+                    matches!(
+                        f.kind,
+                        FieldKind::User(_) | FieldKind::CreatedBy(_) | FieldKind::LastModifiedBy(_)
+                    )
+                });
+                let key = if holds_user_ids && !g.key.is_empty() {
+                    let n = aliases.len();
+                    aliases
+                        .entry((g.field_id.as_str(), g.key.as_str()))
+                        .or_insert_with(|| format!("user-{n}"))
+                        .clone()
+                } else {
+                    g.key.chars().take(PUBLIC_GROUP_TEXT_CHARS).collect()
+                };
+                GroupHeader {
+                    depth: g.depth,
+                    field_id: g.field_id.clone(),
+                    key,
+                    label: g.label.chars().take(PUBLIC_GROUP_TEXT_CHARS).collect(),
+                    value: Json::Null,
+                    start: g.start,
+                    count: g.count,
+                }
+            })
+            .collect()
+    })
+}
+
+fn run_query_with(
+    conn: &Connection,
+    cache: &QueryCache,
+    versions: &DataVersions,
+    user_id: &str,
+    view: &ViewRow,
+    req: &QueryRequest,
+    groups: impl FnOnce(&CachedQuery, &Plan) -> Vec<GroupHeader>,
+) -> AppResult<QueryResponse> {
     let scanned = scan(conn, cache, versions, user_id, view, req)?;
     let limit = req
         .limit
@@ -857,7 +940,7 @@ pub fn run_query(
         total,
         offset: req.offset,
         records,
-        groups: entry.groups.clone(),
+        groups: groups(entry, &scanned.plan),
         colors,
     })
 }
@@ -1076,6 +1159,20 @@ mod tests {
     use super::*;
     use og_core::field::{DateOptions, Empty, TextOptions};
     use serde_json::{Map, json};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static BEFORE_VERSION_READ: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+    }
+
+    /// Test seam called by `scan` just before it reads the data version.
+    pub(super) fn before_version_read() {
+        BEFORE_VERSION_READ.with(|h| {
+            if let Some(f) = h.borrow().as_ref() {
+                f();
+            }
+        });
+    }
 
     fn owned(id: &str, data: Json) -> OwnedRow {
         let data: Map<String, Json> = data.as_object().cloned().unwrap_or_default();
@@ -1113,6 +1210,83 @@ mod tests {
             ids: (0..n).map(|i| format!("rec{i}")).collect(),
             groups: Vec::new(),
         })
+    }
+
+    /// A table with a name and a note field, a view that filters on the note
+    /// containing "x", and two records (note "x" and note "y").
+    fn scan_fixture() -> (std::rc::Rc<Connection>, ViewRow) {
+        use og_core::api::schema::View;
+        use og_core::view::ViewType;
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'w', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('b', 'w', 'b', 1);
+             INSERT INTO tables (id, base_id, name, primary_field_id, created_at)
+                 VALUES ('t', 'b', 't', 'fldName', 1);",
+        )
+        .unwrap();
+        for (i, id) in ["fldName", "fldNote"].into_iter().enumerate() {
+            let f = field(id, FieldKind::SingleLineText(TextOptions::default()));
+            let f = Field {
+                table_id: "t".into(),
+                ..f
+            };
+            schema::insert_field(&conn, &f, i as f64, 1).unwrap();
+        }
+        for (id, note) in [("rec1", "x"), ("rec2", "y")] {
+            conn.execute(
+                "INSERT INTO records (id, table_id, data, position, autonumber, created_at, updated_at)
+                 VALUES (?1, 't', ?2, 1, 1, 1, 1)",
+                rusqlite::params![id, json!({ "fldNote": note }).to_string()],
+            )
+            .unwrap();
+        }
+        let config: ViewConfig = serde_json::from_value(json!({
+            "filter": { "conjunction": "and", "items": [
+                { "field_id": "fldNote", "op": "contains", "value": "x" } ] }
+        }))
+        .unwrap();
+        let view = View {
+            id: "viw".into(),
+            table_id: "t".into(),
+            name: "v".into(),
+            view_type: ViewType::Grid,
+            config,
+            personal: false,
+            locked: false,
+        };
+        schema::insert_view(&conn, &view, 1.0, None, None, 1).unwrap();
+        let row = schema::live_view(&conn, "viw").unwrap();
+        (std::rc::Rc::new(conn), row)
+    }
+
+    #[test]
+    fn a_schema_change_during_a_scan_is_not_cached_under_its_own_version() {
+        let (conn, view) = scan_fixture();
+        let cache = QueryCache::new();
+        let versions = DataVersions::default();
+        let req = QueryRequest::default();
+
+        // The note field is deleted (and the base version bumped) right
+        // before the scan reads the data version.
+        let (c, v) = (conn.clone(), versions.clone());
+        BEFORE_VERSION_READ.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move || {
+                c.execute("UPDATE fields SET deleted_at = 2 WHERE id = 'fldNote'", [])
+                    .unwrap();
+                v.bump("b");
+            }));
+        });
+        let first = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        BEFORE_VERSION_READ.with(|h| *h.borrow_mut() = None);
+        // With the field gone its condition is ignored, so both records match.
+        assert_eq!(first.entry.ids.len(), 2, "plan must see the new schema");
+
+        // A later request is served from the cache under the new version and
+        // must agree with a fresh scan.
+        let again = scan(&conn, &cache, &versions, "", &view, &req).unwrap();
+        assert_eq!(again.entry.ids.len(), 2);
     }
 
     #[test]

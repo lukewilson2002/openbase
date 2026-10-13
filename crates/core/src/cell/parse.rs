@@ -121,7 +121,7 @@ fn parse_colon_duration(s: &str) -> Option<f64> {
 }
 
 static UNIT_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^\s*(\d+(?:\.\d+)?)\s*(hours|hour|hrs|hr|h|minutes|minute|mins|min|m|seconds|second|secs|sec|s)\s*,?").expect("valid regex")
+    Regex::new(r"(?i)^\s*([0-9]+(?:\.[0-9]+)?)\s*(hours|hour|hrs|hr|h|minutes|minute|mins|min|m|seconds|second|secs|sec|s)\s*,?").expect("valid regex")
 });
 
 fn parse_unit_duration(s: &str) -> Option<f64> {
@@ -262,29 +262,29 @@ pub(crate) enum ParsedDate {
     Instant(DateTime<Utc>),
 }
 
-const TIME: &str = r"(?:\s*(?:,|T|at)?\s*(\d{1,2})(?::(\d{2}))?(?::(\d{2})(?:[.,](\d{1,9}))?)?\s*([aApP]\.?[mM]?\.?)?)?";
+const TIME: &str = r"(?:\s*(?:,|T|at)?\s*([0-9]{1,2})(?::([0-9]{2}))?(?::([0-9]{2})(?:[.,]([0-9]{1,9}))?)?\s*([aApP]\.?[mM]?\.?)?)?";
 
 static ISO_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
-        r"^(\d{{4}})[-/](\d{{1,2}})[-/](\d{{1,2}}){TIME}\s*(Z|z|UTC|[+-]\d{{2}}(?::?\d{{2}})?)?$"
+        r"^([0-9]{{4}})[-/]([0-9]{{1,2}})[-/]([0-9]{{1,2}}){TIME}\s*(Z|z|UTC|[+-][0-9]{{2}}(?::?[0-9]{{2}})?)?$"
     ))
     .expect("valid regex")
 });
 static SLASH_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
-        r"^(\d{{1,2}})[/.-](\d{{1,2}})[/.-](\d{{4}}|\d{{2}}){TIME}$"
+        r"^([0-9]{{1,2}})[/.-]([0-9]{{1,2}})[/.-]([0-9]{{4}}|[0-9]{{2}}){TIME}$"
     ))
     .expect("valid regex")
 });
 static MONTH_FIRST_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
-        r"^(?:[A-Za-z]+,\s*)?([A-Za-z]+)\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}}){TIME}$"
+        r"^(?:[A-Za-z]+,\s*)?([A-Za-z]+)\.?\s+([0-9]{{1,2}})(?:st|nd|rd|th)?,?\s+([0-9]{{4}}){TIME}$"
     ))
     .expect("valid regex")
 });
 static DAY_FIRST_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
-        r"^(?:[A-Za-z]+,\s*)?(\d{{1,2}})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?,?\s+(\d{{4}}){TIME}$"
+        r"^(?:[A-Za-z]+,\s*)?([0-9]{{1,2}})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?,?\s+([0-9]{{4}}){TIME}$"
     ))
     .expect("valid regex")
 });
@@ -392,9 +392,15 @@ fn time_from(c: &regex::Captures<'_>, first: usize) -> Option<Option<NaiveTime>>
         .map_or(Some(0), |m| m.as_str().parse().ok())?;
     let nanos: u32 = match c.get(first + 3) {
         Some(f) => {
-            let digits = f.as_str();
-            let padded = format!("{digits:0<9}");
-            padded[..9].parse().ok()?
+            // Pad or cut to nine digits (never by bytes: the pattern only
+            // matches ASCII digits, but this must not panic regardless).
+            let padded: String = f
+                .as_str()
+                .chars()
+                .chain(std::iter::repeat('0'))
+                .take(9)
+                .collect();
+            padded.parse().ok()?
         }
         None => 0,
     };

@@ -132,6 +132,30 @@ async fn system_fields_appear_in_values_under_their_field_ids() {
     assert_eq!(page["records"][0]["created_by"], owner.as_str());
 }
 
+// ---------------------------------------------------------- search limits
+
+#[tokio::test]
+async fn search_text_is_length_capped_and_case_insensitive() {
+    let p = people().await;
+    // Matching is case-insensitive (the needle is lower-cased once).
+    let upper = p.f.query(json!({ "search": "ALICE" })).await;
+    assert_eq!(upper["total"], 1);
+
+    // 500 characters are fine; 501 are refused, on the query and on the
+    // aggregations endpoint alike.
+    let ok = "a".repeat(500);
+    assert_eq!(p.f.query(json!({ "search": ok })).await["total"], 0);
+    let long = "a".repeat(501);
+    let r =
+        p.f.query_as(&p.f.owner, p.view(), json!({ "search": long }))
+            .await;
+    r.assert_status(400);
+    let view = p.view().to_string();
+    aggregations_with(&p, &view, &format!("search={long}"))
+        .await
+        .assert_status(400);
+}
+
 // ----------------------------------------------------- aggregations search
 
 #[tokio::test]

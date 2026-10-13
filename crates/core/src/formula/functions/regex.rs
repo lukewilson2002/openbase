@@ -17,6 +17,11 @@ use crate::value::Value;
 const MAX_PATTERN_LEN: usize = 2_000;
 const REGEX_SIZE_LIMIT: usize = 1 << 20;
 const CACHE_SIZE: usize = 64;
+/// Work charged when a pattern is not in the cache: compiling one (or
+/// finding out that it is invalid) can take milliseconds.
+const COMPILE_COST: u64 = 500_000;
+/// Work per byte of text a pattern is run over.
+const SCAN_COST: u64 = 8;
 
 pub(crate) const SPECS: &[FnSpec] = &[
     FnSpec::new(
@@ -45,7 +50,7 @@ pub(crate) const SPECS: &[FnSpec] = &[
 /// Save-time check of a literal pattern.
 fn check_literal(args: &[Expr]) -> Result<(), String> {
     match literal_text(args.get(1)) {
-        Some(p) => compile(p).map(|_| ()).map_err(|e| match e {
+        Some(p) => compile(p, None).map(|_| ()).map_err(|e| match e {
             Value::Error(m) => m.trim_start_matches("#ERROR: ").to_string(),
             _ => "invalid regular expression".into(),
         }),
@@ -63,20 +68,37 @@ fn r_regex_bool(tys: &[Ty], args: &[Expr]) -> Result<Ty, String> {
     r_bool(tys, args)
 }
 
-/// Compiles (or fetches from the per-thread cache) a pattern.
-fn compile(pattern: &str) -> R<Regex> {
+/// Compiles (or fetches from the per-thread cache) a pattern. Failures are
+/// cached too, so a formula built from patterns that blow the size limit
+/// cannot make every record pay for the failed compile again. Evaluation
+/// passes its [`Evaluator`] so uncached compiles are charged to its budget;
+/// the save-time check passes `None`.
+fn compile(pattern: &str, ev: Option<&Evaluator>) -> R<Regex> {
+    type Entry = (Result<Regex, String>, u64);
     thread_local! {
-        static CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+        static CACHE: RefCell<(HashMap<String, Entry>, u64)> = RefCell::new((HashMap::new(), 0));
     }
     if pattern.len() > MAX_PATTERN_LEN {
         return Err(err(format!(
             "Regular expression is too long (maximum {MAX_PATTERN_LEN} characters)"
         )));
     }
-    if let Some(re) = CACHE.with(|c| c.borrow().get(pattern).cloned()) {
-        return Ok(re);
+    let hit = CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        c.1 += 1;
+        let tick = c.1;
+        c.0.get_mut(pattern).map(|e| {
+            e.1 = tick;
+            e.0.clone()
+        })
+    });
+    if let Some(r) = hit {
+        return r.map_err(err);
     }
-    let re = RegexBuilder::new(pattern)
+    if let Some(ev) = ev {
+        ev.charge(COMPILE_COST)?;
+    }
+    let built = RegexBuilder::new(pattern)
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)
         .build()
@@ -84,29 +106,39 @@ fn compile(pattern: &str) -> R<Regex> {
             let msg = e.to_string();
             let last = msg.lines().last().unwrap_or("").trim();
             let last = last.strip_prefix("error: ").unwrap_or(last);
-            err(format!("Invalid regular expression: {last}"))
-        })?;
+            format!("Invalid regular expression: {last}")
+        });
     CACHE.with(|c| {
         let mut c = c.borrow_mut();
-        if c.len() >= CACHE_SIZE {
-            c.clear();
+        let (map, tick) = &mut *c;
+        if map.len() >= CACHE_SIZE
+            && let Some(oldest) = map.iter().min_by_key(|(_, e)| e.1).map(|(k, _)| k.clone())
+        {
+            map.remove(&oldest);
         }
-        c.insert(pattern.to_string(), re.clone());
+        map.insert(pattern.to_string(), (built.clone(), *tick));
     });
-    Ok(re)
+    built.map_err(err)
+}
+
+/// Charges the cost of scanning `s`.
+fn charge_scan(ev: &Evaluator, s: &str) -> R<()> {
+    ev.charge(s.len() as u64 * SCAN_COST)
 }
 
 /// `REGEX_MATCH(text, regex)`: true if the pattern matches anywhere.
-fn regex_match(a: &[Value], _: &Evaluator) -> R {
+fn regex_match(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?)?;
+    let re = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s)?;
     Ok(Value::Bool(re.is_match(&s)))
 }
 
 /// `REGEX_EXTRACT(text, regex)`: the first match, or blank if none.
-fn regex_extract(a: &[Value], _: &Evaluator) -> R {
+fn regex_extract(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?)?;
+    let re = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s)?;
     Ok(re
         .find(&s)
         .map(|m| Value::Text(m.as_str().to_string()))
@@ -115,9 +147,10 @@ fn regex_extract(a: &[Value], _: &Evaluator) -> R {
 
 /// `REGEX_REPLACE(text, regex, replacement)`: replaces every match;
 /// `$1` / `${name}` in the replacement refer to capture groups.
-fn regex_replace(a: &[Value], _: &Evaluator) -> R {
+fn regex_replace(a: &[Value], ev: &Evaluator) -> R {
     let s = text_arg(a, 0)?;
-    let re = compile(&text_arg(a, 1)?)?;
+    let re = compile(&text_arg(a, 1)?, Some(ev))?;
+    charge_scan(ev, &s)?;
     let replacement = text_arg(a, 2)?;
     let mut out = String::with_capacity(s.len());
     let mut last = 0;

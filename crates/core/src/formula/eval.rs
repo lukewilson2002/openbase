@@ -42,22 +42,90 @@ pub trait EvalContext {
     }
 }
 
+/// Work units one evaluation may spend before it is cut off. One unit is
+/// about a byte of text touched by a function; an uncached regular
+/// expression compile costs a fixed amount (see `functions::regex`). Generous
+/// for any real formula, but bounds the CPU a hostile one can burn per record.
+pub(crate) const WORK_BUDGET: u64 = 20_000_000;
+/// Bytes of intermediate values that may be alive at once during one
+/// evaluation (arguments already evaluated while later ones are computed).
+pub(crate) const LIVE_BYTES_BUDGET: usize = 4 << 20;
+
 /// Evaluates `expr` for the record described by `ctx`.
 pub fn eval(expr: &Expr, ctx: &dyn EvalContext) -> Value {
-    Evaluator {
+    let ev = Evaluator {
         ctx,
         depth: Cell::new(0),
+        work: Cell::new(0),
+        live: Cell::new(0),
+        exhausted: Cell::new(false),
+    };
+    let v = ev.eval(expr);
+    // A formula that ran out of budget never yields a normal value, even if
+    // a surrounding `IF(ISERROR(..))` swallowed the error on the way up.
+    if ev.exhausted.get() {
+        return budget_error();
     }
-    .eval(expr)
+    v
+}
+
+fn budget_error() -> Value {
+    err("Formula is too expensive to evaluate")
+}
+
+/// Approximate heap footprint of a value, in bytes.
+pub(crate) fn weight(v: &Value) -> usize {
+    match v {
+        Value::Text(s) | Value::Error(s) => s.len(),
+        Value::Array(items) => items.iter().map(|i| 16 + weight(i)).sum(),
+        _ => 0,
+    }
 }
 
 pub(crate) struct Evaluator<'a> {
     pub ctx: &'a dyn EvalContext,
     depth: Cell<usize>,
+    work: Cell<u64>,
+    live: Cell<usize>,
+    exhausted: Cell<bool>,
 }
 
 impl Evaluator<'_> {
+    /// Spends `units` of the work budget; `Err` once it is gone.
+    pub(crate) fn charge(&self, units: u64) -> R<()> {
+        if self.exhausted.get() {
+            return Err(budget_error());
+        }
+        let used = self.work.get().saturating_add(units);
+        self.work.set(used);
+        if used > WORK_BUDGET {
+            self.exhausted.set(true);
+            return Err(budget_error());
+        }
+        Ok(())
+    }
+
+    /// Records that `v` stays alive while other operands are evaluated.
+    /// Returns the amount to pass to [`Evaluator::release`] later.
+    pub(crate) fn hold(&self, v: &Value) -> R<usize> {
+        let w = weight(v);
+        let live = self.live.get().saturating_add(w);
+        self.live.set(live);
+        if live > LIVE_BYTES_BUDGET {
+            self.exhausted.set(true);
+            return Err(budget_error());
+        }
+        Ok(w)
+    }
+
+    pub(crate) fn release(&self, bytes: usize) {
+        self.live.set(self.live.get().saturating_sub(bytes));
+    }
+
     pub(crate) fn eval(&self, e: &Expr) -> Value {
+        if let Err(e) = self.charge(1) {
+            return e;
+        }
         // Parsed trees are height-limited already; this guards hand-built ones.
         let depth = self.depth.get();
         if depth > MAX_EXPR_HEIGHT + crate::limits::MAX_FORMULA_DEPTH {
@@ -90,7 +158,15 @@ impl Evaluator<'_> {
             },
             Expr::Binary { op, lhs, rhs } => {
                 let a = self.eval(lhs);
+                let held = match self.hold(&a) {
+                    Ok(w) => w,
+                    Err(e) => return e,
+                };
                 let b = self.eval(rhs);
+                self.release(held);
+                if let Err(e) = self.charge((weight(&a) + weight(&b)) as u64) {
+                    return e;
+                }
                 binary(*op, &a, &b).unwrap_or_else(|e| e)
             }
             Expr::Call { name, args, .. } => functions::call(self, name, args),

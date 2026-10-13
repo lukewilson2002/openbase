@@ -13,6 +13,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::Json as AxumJson;
 use axum::extract::{Path, State};
@@ -314,8 +315,14 @@ impl EvalContext for RowCtx<'_> {
     }
 }
 
+/// How long one list request may spend evaluating its `filterByFormula`
+/// (the read connection is held for that long). Generous: a sane formula over
+/// a 100,000-record table takes a second or two.
+const FORMULA_TIME_BUDGET: Duration = Duration::from_secs(5);
+
 /// The ids among `ids` (order kept) for which `formula_text` is truthy.
-/// `{Field Name}` references resolve against the table's field names.
+/// `{Field Name}` references resolve against the table's field names. Fails
+/// with 422 if the evaluation takes longer than `budget`.
 fn filter_by_formula(
     conn: &Connection,
     table: &TableRow,
@@ -323,6 +330,7 @@ fn filter_by_formula(
     formula_text: &str,
     ids: &[String],
     tz: Tz,
+    budget: Duration,
 ) -> V1Result<Vec<String>> {
     let (stored, _ty) = fields_engine::check_formula(fields, formula_text)
         .map_err(|e| invalid_formula(e.to_string()))?;
@@ -330,6 +338,7 @@ fn filter_by_formula(
     let by_id: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let names = NameCache::new(conn, tz);
     let now = Utc::now();
+    let started = Instant::now();
     let mut kept = Vec::new();
     for chunk in ids.chunks(FORMULA_CHUNK) {
         let mut rows: HashMap<String, RecordRow> = record_store::get_many(conn, chunk)?
@@ -339,6 +348,12 @@ fn filter_by_formula(
             .collect();
         for id in chunk {
             let Some(row) = rows.remove(id) else { continue };
+            if started.elapsed() > budget {
+                return Err(invalid_formula(
+                    "it took too long to evaluate; use a simpler formula or a view that \
+                     narrows the records first",
+                ));
+            }
             let ctx = RowCtx {
                 fields: &by_id,
                 values: record_store::full_values(conn, fields, &row, &names),
@@ -445,7 +460,15 @@ fn list_in(
                 &req,
             )?;
             if let Some(text) = &p.filter_by_formula {
-                let kept = filter_by_formula(conn, &table, &fields, text, &entry.ids, tz)?;
+                let kept = filter_by_formula(
+                    conn,
+                    &table,
+                    &fields,
+                    text,
+                    &entry.ids,
+                    tz,
+                    FORMULA_TIME_BUDGET,
+                )?;
                 entry = Arc::new(CachedQuery {
                     ids: kept,
                     groups: Vec::new(),
@@ -942,4 +965,57 @@ pub async fn delete_one(
         .pop()
         .map(AxumJson)
         .ok_or_else(|| V1Error::not_found("Record"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use og_core::field::{FieldKind, TextOptions};
+
+    /// A table with a text field and `n` records.
+    fn fixture(n: usize) -> (Connection, TableRow, Vec<Field>, Vec<String>) {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'w', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('b', 'w', 'b', 1);
+             INSERT INTO tables (id, base_id, name, primary_field_id, created_at)
+                 VALUES ('t', 'b', 't', 'fldName', 1);",
+        )
+        .unwrap();
+        let name = Field {
+            id: "fldName".into(),
+            table_id: "t".into(),
+            name: "Name".into(),
+            description: None,
+            kind: FieldKind::SingleLineText(TextOptions::default()),
+        };
+        schema::insert_field(&conn, &name, 1.0, 1).unwrap();
+        let mut ids = Vec::new();
+        for i in 0..n {
+            let id = format!("rec{i}");
+            conn.execute(
+                "INSERT INTO records (id, table_id, data, position, autonumber, created_at, updated_at)
+                 VALUES (?1, 't', '{}', ?2, ?2, 1, 1)",
+                rusqlite::params![id, i as f64],
+            )
+            .unwrap();
+            ids.push(id);
+        }
+        let table = schema::live_table(&conn, "t").unwrap();
+        let fields = schema::table_fields(&conn, "t").unwrap();
+        (conn, table, fields, ids)
+    }
+
+    #[test]
+    fn filter_by_formula_gives_up_after_its_time_budget() {
+        let (conn, table, fields, ids) = fixture(20);
+        let run =
+            |budget| filter_by_formula(&conn, &table, &fields, "TRUE()", &ids, Tz::UTC, budget);
+        assert_eq!(run(Duration::from_secs(60)).unwrap().len(), 20);
+        let err = run(Duration::ZERO).unwrap_err();
+        assert_eq!(err.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(err.kind, "INVALID_FILTER_BY_FORMULA");
+        assert!(err.message.contains("too long"), "{}", err.message);
+    }
 }

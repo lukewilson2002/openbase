@@ -8,7 +8,10 @@
 //! in between show their current state or drop out, nothing is skipped or
 //! repeated.
 //!
-//! Snapshots live in memory for [`SNAPSHOT_TTL`] and are bounded; an offset
+//! Snapshots live in memory for [`SNAPSHOT_TTL`] and are bounded, per user
+//! ([`MAX_SNAPSHOTS_PER_USER`]) and overall, and when the overall bounds bite
+//! the user holding the most pays, so one integration cannot push out
+//! everyone else's listings. An offset
 //! whose snapshot is gone, belongs to another user or table, or was made for
 //! different query parameters is "not available" (422
 //! `LIST_RECORDS_ITERATOR_NOT_AVAILABLE`), exactly like an expired Airtable
@@ -28,6 +31,8 @@ use crate::ids::new_token;
 pub const SNAPSHOT_TTL: Duration = Duration::from_secs(300);
 /// Snapshots kept at once.
 pub const MAX_SNAPSHOTS: usize = 256;
+/// Snapshots one user may have in progress; their oldest goes first.
+pub const MAX_SNAPSHOTS_PER_USER: usize = 16;
 /// Ids kept across all snapshots (about 20 MB).
 pub const MAX_SNAPSHOT_IDS: usize = 1_000_000;
 
@@ -48,6 +53,23 @@ struct Inner {
     map: HashMap<String, Snapshot>,
     weight: usize,
     seq: u64,
+}
+
+impl Inner {
+    /// Removes the oldest snapshot matching `pick`; false if none matched.
+    fn evict_oldest_of(&mut self, pick: impl Fn(&Snapshot) -> bool) -> bool {
+        let oldest = self
+            .map
+            .iter()
+            .filter(|(_, s)| pick(s))
+            .min_by_key(|(_, s)| s.seq)
+            .map(|(k, _)| k.clone());
+        let Some(oldest) = oldest else { return false };
+        if let Some(s) = self.map.remove(&oldest) {
+            self.weight -= s.ids.ids.len();
+        }
+        true
+    }
 }
 
 /// The snapshots of in-progress listings.
@@ -96,18 +118,35 @@ impl Cursors {
         });
         inner.weight -= expired.iter().map(|(_, n)| n).sum::<usize>();
         let new_weight = ids.ids.len();
-        // Evict the oldest until the newcomer fits.
-        while !inner.map.is_empty()
-            && (inner.map.len() >= MAX_SNAPSHOTS || inner.weight + new_weight > MAX_SNAPSHOT_IDS)
+        // A user over their own limit loses their oldest snapshot...
+        while inner.map.values().filter(|s| s.user_id == user_id).count() >= MAX_SNAPSHOTS_PER_USER
         {
-            let oldest = inner
-                .map
-                .iter()
-                .min_by_key(|(_, s)| s.seq)
-                .map(|(k, _)| k.clone());
-            let Some(oldest) = oldest else { break };
-            if let Some(s) = inner.map.remove(&oldest) {
-                inner.weight -= s.ids.ids.len();
+            if !inner.evict_oldest_of(|s| s.user_id == user_id) {
+                break;
+            }
+        }
+        // ...and when the whole store is full, the user holding the most
+        // (by count, or by ids when it is the id budget that is exhausted)
+        // loses their oldest, never simply the globally oldest.
+        loop {
+            let by_count = inner.map.len() >= MAX_SNAPSHOTS;
+            let by_weight = inner.weight + new_weight > MAX_SNAPSHOT_IDS;
+            if inner.map.is_empty() || !(by_count || by_weight) {
+                break;
+            }
+            let mut per_user: HashMap<&str, (usize, usize)> = HashMap::new();
+            for s in inner.map.values() {
+                let e = per_user.entry(s.user_id.as_str()).or_default();
+                e.0 += 1;
+                e.1 += s.ids.ids.len();
+            }
+            let heaviest = per_user
+                .into_iter()
+                .max_by_key(|(_, (count, ids))| if by_weight { *ids } else { *count })
+                .map(|(u, _)| u.to_string());
+            let Some(victim) = heaviest else { break };
+            if !inner.evict_oldest_of(|s| s.user_id == victim) {
+                break;
             }
         }
         inner.weight += new_weight;
@@ -208,6 +247,53 @@ mod tests {
         assert!(c.get("nope", "u1", "t1", 7).is_none());
         c.clear();
         assert!(c.get(&id, "u1", "t1", 7).is_none());
+    }
+
+    #[test]
+    fn one_user_cannot_evict_another_users_snapshots() {
+        let c = Cursors::default();
+        let theirs = c.create("victim", "t", 1, ids(5));
+        // A user opening far more listings than the per-user cap, enough
+        // to cycle the whole store several times over.
+        let mut mine = Vec::new();
+        for _ in 0..MAX_SNAPSHOTS * 3 {
+            mine.push(c.create("noisy", "t", 1, ids(2)));
+        }
+        assert!(
+            c.get(&theirs, "victim", "t", 1).is_some(),
+            "the victim's snapshot survived"
+        );
+        // The noisy user keeps only their newest ones.
+        let alive = mine
+            .iter()
+            .filter(|id| c.get(id, "noisy", "t", 1).is_some())
+            .count();
+        assert_eq!(alive, MAX_SNAPSHOTS_PER_USER);
+        assert!(c.get(mine.last().unwrap(), "noisy", "t", 1).is_some());
+        assert!(c.get(&mine[0], "noisy", "t", 1).is_none());
+    }
+
+    #[test]
+    fn a_full_store_takes_from_the_biggest_holder() {
+        let c = Cursors::default();
+        // Fill the store with one snapshot each for many users (the oldest
+        // ones), then one user at their cap.
+        let mut small = Vec::new();
+        for i in 0..MAX_SNAPSHOTS - MAX_SNAPSHOTS_PER_USER {
+            small.push((format!("u{i}"), c.create(&format!("u{i}"), "t", 1, ids(1))));
+        }
+        let mut big = Vec::new();
+        for _ in 0..MAX_SNAPSHOTS_PER_USER {
+            big.push(c.create("big", "t", 1, ids(1)));
+        }
+        assert_eq!(c.len(), MAX_SNAPSHOTS);
+        // A newcomer displaces the biggest holder's oldest, not the globally
+        // oldest snapshot (which belongs to a user holding just one).
+        c.create("new", "t", 1, ids(1));
+        assert!(c.get(&big[0], "big", "t", 1).is_none());
+        for (u, id) in &small {
+            assert!(c.get(id, u, "t", 1).is_some(), "{u} lost a snapshot");
+        }
     }
 
     #[test]
