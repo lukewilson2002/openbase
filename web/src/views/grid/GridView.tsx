@@ -70,7 +70,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- configuration, columns ------------------------------------------------------------------
   const cfg = useViewConfig(schema, table, view, role);
-  const { config, queryConfig } = cfg;
+  const { config, queryConfig, transient } = cfg;
   const order = useMemo(() => resolveFieldOrder(table, config), [table, config]);
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
   const columns = useMemo<GridColumnSpec[]>(() => toColumnSpecs(order.visible, table.primary_field_id, config.field_widths, liveWidths), [order.visible, table.primary_field_id, config.field_widths, liveWidths]);
@@ -87,7 +87,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- data ------------------------------------------------------------------------------------
   const configKey = useMemo(() => queryRelevantKey(queryConfig), [queryConfig]);
-  const data = useGridData({ tableId: table.id, viewId: view.id, configKey, search: debouncedSearch, timeZone });
+  const data = useGridData({ tableId: table.id, viewId: view.id, configKey, search: debouncedSearch, timeZone, transient });
   const dataRef = useRef(data);
   dataRef.current = data;
 
@@ -107,7 +107,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const hasSummary = Object.keys(queryConfig.summaries).length > 0;
   const aggregations = useQuery({
     queryKey: recordKeys.aggregations(table.id, view.id, `${configKey}|${summaryKey}`, debouncedSearch),
-    queryFn: ({ signal }) => recordsApi.aggregations(view.id, debouncedSearch, signal),
+    // Only the filter of a local override matters to summaries.
+    queryFn: ({ signal }) => recordsApi.aggregations(view.id, { search: debouncedSearch, timezone: timeZone, transient: transient?.filter ? { filter: transient.filter } : null, signal }),
     enabled: hasSummary,
     placeholderData: (prev) => prev,
   });
@@ -380,6 +381,15 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const [colMenu, setColMenu] = useState<{ index: number; at: ScreenRect } | null>(null);
   const [rowMenu, setRowMenu] = useState<{ row: number; col: number; at: ScreenRect } | null>(null);
   const [sumMenu, setSumMenu] = useState<{ col: number; at: ScreenRect } | null>(null);
+  /**
+   * Close a context menu and hand the keyboard back to the grid. The menus hang off an invisible
+   * anchor, so Radix has nothing to return focus to and it would fall to <body>, where Ctrl+Z (undo
+   * of a delete done from the menu) and the other grid shortcuts no longer work.
+   */
+  const closeMenu = useCallback((set: (v: null) => void) => {
+    set(null);
+    gridRef.current?.focus();
+  }, []);
   const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
   const [confirmField, setConfirmField] = useState<Field | null>(null);
@@ -455,10 +465,13 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- add / delete rows -----------------------------------------------------------------------
   const addRecord = useCallback(async () => {
+    const selectionBefore = selectionRef.current;
     const created = await opsRef.current.createRecords({});
     if (created.length === 0) return;
-    // Wait for the refreshed pages, then bring the new row into view.
+    // Wait for the refreshed pages, then bring the new row into view. Someone who has meanwhile
+    // clicked into another cell (or is typing in one) keeps their selection.
     window.setTimeout(() => {
+      if (selectionRef.current !== selectionBefore) return;
       const idx = dataRef.current.indexOf(created[0]!.id);
       const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.length - 1;
       if (row >= 0) {
@@ -473,18 +486,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const rec = recordAtRow(row);
       if (!rec) return;
       if (where === "below") await opsRef.current.createRecords({ afterRecordId: rec.id });
-      else {
-        const prev = (() => {
-          for (let r = row - 1; r >= 0; r--) {
-            const p = recordAtRow(r);
-            if (p) return p;
-            if (rowMapRef.current.recordIndexAt(r) >= 0) return undefined;
-          }
-          return undefined;
-        })();
-        if (prev) await opsRef.current.createRecords({ afterRecordId: prev.id });
-        else await opsRef.current.createRecords({ beforeRecordId: rec.id });
-      }
+      else await opsRef.current.createRecords({ beforeRecordId: rec.id });
     },
     [recordAtRow],
   );
@@ -656,6 +658,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           role={role}
           config={config}
           canConfigure={cfg.canConfigure}
+          hasLocalQuery={transient !== null}
+          onResetLocalQuery={cfg.resetTransient}
           saving={cfg.saving}
           update={cfg.update}
           collaborators={people}
@@ -672,9 +676,16 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
-              <Button size="sm" onClick={() => dataRef.current.refresh()}>
-                Try again
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => dataRef.current.refresh()}>
+                  Try again
+                </Button>
+                {transient && (
+                  <Button size="sm" variant="secondary" onClick={cfg.resetTransient}>
+                    Reset my filters
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <GlideGrid ref={gridRef} {...gridProps} />
@@ -709,8 +720,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         config={config}
         cfg={cfg}
         canManageFields={canManageFields}
-        canSort={cfg.canConfigure}
-        onClose={() => setColMenu(null)}
+        canSort
+        onClose={() => closeMenu(setColMenu)}
         onEditField={(f, focus) => setFieldDialog({ mode: "edit", field: f, focus })}
         onInsert={(side) => colSpec && setFieldDialog({ mode: "create", relativeTo: { fieldId: colSpec.id, side } })}
         onDelete={(f) => setConfirmField(f)}
@@ -718,7 +729,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       <RowMenu
         at={rowMenu?.at ?? null}
         canEdit={canEdit}
-        onClose={() => setRowMenu(null)}
+        onClose={() => closeMenu(setRowMenu)}
         onExpand={() => rowMenu && onExpand(rowMenu.row)}
         onInsert={(where) => rowMenu && void insertRecord(rowMenu.row, where)}
         onDuplicate={() => {
@@ -740,7 +751,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         field={sumMenu ? columns[sumMenu.col]?.field : undefined}
         current={sumMenu ? (queryConfig.summaries[columns[sumMenu.col]?.id ?? ""] ?? "none") : "none"}
         canConfigure={cfg.canConfigure}
-        onClose={() => setSumMenu(null)}
+        onClose={() => closeMenu(setSumMenu)}
         onPick={(agg) => {
           const id = sumMenu ? columns[sumMenu.col]?.id : undefined;
           if (id) cfg.update((c) => setSummary(c, id, agg));

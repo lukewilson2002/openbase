@@ -3,6 +3,11 @@
 # checks, and the live contract tests (TypeScript API client against the real server).
 # Run before every commit.
 #
+# OPENGRID_E2E=1 scripts/check.sh additionally runs the Playwright end-to-end tests in the
+# locally installed Google Chrome (builds the web client and the server, starts it on a temporary
+# data directory; see web/playwright.config.ts). They are opt-in because they need Chrome and take
+# a minute or two.
+#
 # The web steps need `npm ci --ignore-scripts` in web/ once; without node_modules this script
 # stops there with a hint (it does not silently skip them).
 set -euo pipefail
@@ -40,5 +45,12 @@ step "web: production build"
 (cd web && npm run build)
 step "web: live contract tests (builds and starts target/debug/opengrid)"
 (cd web && npm run test:contract)
+
+if [[ "${OPENGRID_E2E:-}" == "1" ]]; then
+  step "web: end-to-end tests (Chrome; builds web/dist and the embedded server, then drives them)"
+  (cd web && npm run e2e)
+else
+  printf '\n(skipping the end-to-end tests; run with OPENGRID_E2E=1 to include them)\n'
+fi
 
 printf '\nAll checks passed.\n'

@@ -61,6 +61,29 @@ describe("typecheck against the generated bindings", () => {
   });
 });
 
+describe("typecheck of intersections and discriminated unions (Field, ActionStep)", () => {
+  const field = { id: "fld1", table_id: "tbl1", name: "Qty", type: "number", options: { precision: 2, allow_negative: true } };
+
+  it("accepts the keys of every part of `A & (B | C)` and checks the matching alternative", () => {
+    expect(parse("Field", field)).toEqual(field);
+    expect(parse("Field", { ...field, description: "d" })).toBeTruthy();
+    expect(problemsFor("ActionStep", { type: "notify", user_ids: ["usr1"], message: "hi", condition: null })).toEqual([]);
+  });
+
+  it("still reports wrong, missing and unknown keys inside an intersection", () => {
+    expect(problemsFor("Field", { ...field, options: { precision: "2", allow_negative: true } })[0]).toContain("Field");
+    expect(problemsFor("Field", { ...field, type: "hologram" }).length).toBeGreaterThan(0);
+    expect(problemsFor("Field", { ...field, inverse: {} })).toContain("Field.inverse: unknown field (not in the generated type)");
+    const { name: _name, ...noName } = field;
+    expect(problemsFor("Field", noName)[0]).toContain("Field.name: required field is missing");
+  });
+
+  it("rejects empty-object option types that gained keys", () => {
+    expect(problemsFor("Field", { ...field, type: "email", options: { extra: 1 } }).length).toBeGreaterThan(0);
+    expect(problemsFor("Field", { ...field, type: "email", options: {} })).toEqual([]);
+  });
+});
+
 describe("cookie jar", () => {
   it("starts empty and remembers its client address", () => {
     const jar = createCookieJar("10.9.9.9");

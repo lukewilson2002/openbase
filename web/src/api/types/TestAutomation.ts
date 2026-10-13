@@ -17,4 +17,4 @@ body?: JsonValue | null,
  * Default true: render templates and evaluate conditions but send,
  * write and request nothing. Pass false to really run the actions once.
  */
-dry_run: boolean, };
+dry_run?: boolean, };

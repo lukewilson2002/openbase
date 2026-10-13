@@ -6,4 +6,4 @@ export type CreateAutomation = { name: string,
 /**
  * New automations are off unless asked otherwise.
  */
-enabled: boolean, trigger: Trigger, actions: Array<ActionStep>, };
+enabled?: boolean, trigger: Trigger, actions?: Array<ActionStep>, };

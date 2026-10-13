@@ -1,6 +1,9 @@
 /**
  * Formula text area with field-name autocomplete after `{` and a live check against
- * `POST /api/tables/{id}/formula/check` when the server offers it (a 404 turns the preview off).
+ * `POST /api/tables/{id}/formula/check` (parse, type check and a preview on the first record).
+ * Rollup expressions run over the linked `values`, which that endpoint does not model, so they
+ * are only checked by the server when the field is saved. A 404/405 (an older server) turns the
+ * live check off.
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CircleAlert, CircleCheck } from "lucide-react";
@@ -47,6 +50,14 @@ export function applyCompletion(text: string, caret: number, c: Completion, fiel
   return { text: next, caret: c.start + fieldName.length + 2 };
 }
 
+/** Text for the server's preview value (a stored cell value; formula errors are `{error}`). */
+function previewText(preview: unknown): string | undefined {
+  if (preview === undefined || preview === null) return undefined;
+  if (typeof preview === "string") return preview;
+  if (typeof preview === "object" && !Array.isArray(preview) && "error" in preview) return `#ERROR (${String((preview as { error: unknown }).error)})`;
+  return JSON.stringify(preview);
+}
+
 type CheckState = { status: "idle" } | { status: "checking" } | { status: "ok"; preview?: string } | { status: "error"; message: string } | { status: "unavailable" };
 
 export function FormulaEditor({ tableId, fields, value, onChange, label, placeholder, kind = "formula", rows = 4 }: FormulaEditorProps) {
@@ -84,18 +95,17 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
 
   const debounced = useDebounced(value, 500);
   useEffect(() => {
-    if (!debounced.trim() || unavailable.current) {
-      setCheck(unavailable.current ? { status: "unavailable" } : { status: "idle" });
+    if (!debounced.trim() || unavailable.current || kind === "rollup") {
+      setCheck(unavailable.current || kind === "rollup" ? { status: "unavailable" } : { status: "idle" });
       return;
     }
     const ctl = new AbortController();
     setCheck({ status: "checking" });
     schemaApi
-      .checkFormula(tableId, debounced, kind, ctl.signal)
+      .checkFormula(tableId, debounced, { signal: ctl.signal })
       .then((res) => {
-        if (res && res.ok === false) setCheck({ status: "error", message: res.error || "The formula is not valid." });
-        else if (res?.error) setCheck({ status: "error", message: res.error });
-        else setCheck({ status: "ok", preview: res?.preview === undefined || res.preview === null ? undefined : String(res.preview) });
+        if (!res.ok) setCheck({ status: "error", message: res.error?.message || "The formula is not valid." });
+        else setCheck({ status: "ok", preview: previewText(res.preview) });
       })
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === "AbortError") return;

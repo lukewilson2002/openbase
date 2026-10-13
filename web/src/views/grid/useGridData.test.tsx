@@ -18,11 +18,11 @@ function recordAt(i: number, label = "r"): TableRecord {
 /** A server with TOTAL records whose names can be changed to simulate other users' edits. */
 function server() {
   let label = "r";
-  const requests: { offset: number; limit: number; search: unknown }[] = [];
+  const requests: { offset: number; limit: number; search: unknown; transient?: unknown }[] = [];
   const api = mockApi({
     "POST /api/views/viw1/query": (call: { body: unknown }) => {
-      const b = call.body as { offset: number; limit: number; search?: string | null };
-      requests.push({ offset: b.offset, limit: b.limit, search: b.search });
+      const b = call.body as { offset: number; limit: number; search?: string | null; transient?: unknown };
+      requests.push({ offset: b.offset, limit: b.limit, search: b.search, transient: b.transient });
       const n = Math.max(0, Math.min(b.limit, TOTAL - b.offset));
       const res: QueryResponse = { total: TOTAL, offset: b.offset, records: Array.from({ length: n }, (_, i) => recordAt(b.offset + i, label)), groups: [], colors: { [`rec${b.offset}`]: "red" } };
       return res;
@@ -50,7 +50,7 @@ describe("useGridData", () => {
     expect(hook.result.current.getRecord(PAGE_SIZE - 1)?.id).toBe(`rec${PAGE_SIZE - 1}`);
     expect(hook.result.current.getRecord(PAGE_SIZE)).toBeUndefined();
     expect(hook.result.current.rowColor("rec0")).toBe("red");
-    expect(s.requests).toEqual([{ offset: 0, limit: PAGE_SIZE, search: null }]);
+    expect(s.requests).toEqual([{ offset: 0, limit: PAGE_SIZE, search: null, transient: null }]);
   });
 
   it("fetches further pages only as they are requested", async () => {
@@ -80,6 +80,22 @@ describe("useGridData", () => {
     await waitFor(() => expect(s.requests.some((r) => r.search === "alpha")).toBe(true));
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.getRecord(0)?.id).toBe("rec0");
+  });
+
+  it("sends the local filter/sort/group override with every page and starts over when it changes", async () => {
+    const s = server();
+    const client = createQueryClient();
+    client.setDefaultOptions({ queries: { retry: false } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const override = { sorts: [{ field_id: "fld_name", direction: "desc" as const }] };
+    const hook = renderHook((p: { key: string; transient: typeof override | null }) => useGridData({ tableId: "tbl1", viewId: "viw1", configKey: p.key, search: "", timeZone: "UTC", transient: p.transient }), {
+      wrapper,
+      initialProps: { key: "k", transient: null as typeof override | null },
+    });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    hook.rerender({ key: "k+sort", transient: override });
+    await waitFor(() => expect(s.requests.some((r) => r.transient !== null)).toBe(true));
+    expect(s.requests.find((r) => r.transient !== null)).toMatchObject({ offset: 0, transient: override });
   });
 
   it("applies optimistic patches and can roll them back", async () => {

@@ -17,44 +17,98 @@ import { fileURLToPath } from "node:url";
 import type {
   AdminCreatedUser,
   AdminUser,
+  AggregationsResponse,
+  Automation,
+  AutomationRun,
+  AttachmentRef,
   AuditPage,
   BackupInfo,
+  BaseSchema,
+  BaseSummary,
+  Collaborator,
+  Comment,
   CreatedInvite,
   CreatedToken,
+  DeleteFieldResponse,
+  EventEnvelope,
+  Field,
+  FormulaCheckResult,
+  HistoryEntry,
   InstanceStats,
   InviteInfo,
   InvitePreview,
+  LinkCandidates,
   LoginResponse,
+  Member,
+  NotificationsResponse,
   OkResponse,
+  QueryResponse,
+  RecordsResponse,
   ResetLink,
+  RestoreResponse,
+  RunsPage,
   SessionInfo,
   SetupStatus,
+  Table,
+  TableRecord,
+  TestResult,
   TokenInfo,
+  TrashListing,
   TwoFactorSetup,
   User,
+  View,
+  WebhookAccepted,
   WhoAmI,
+  WorkspaceSummary,
 } from "../src/api/types";
 
 /** Names usable with {@link parse}, mapped to their generated type. */
 export interface TypeMap {
   AdminCreatedUser: AdminCreatedUser;
   AdminUser: AdminUser;
+  AggregationsResponse: AggregationsResponse;
+  Automation: Automation;
+  AutomationRun: AutomationRun;
+  AttachmentRef: AttachmentRef;
   AuditPage: AuditPage;
   BackupInfo: BackupInfo;
+  BaseSchema: BaseSchema;
+  BaseSummary: BaseSummary;
+  Collaborator: Collaborator;
+  Comment: Comment;
   CreatedInvite: CreatedInvite;
   CreatedToken: CreatedToken;
+  DeleteFieldResponse: DeleteFieldResponse;
+  EventEnvelope: EventEnvelope;
+  Field: Field;
+  FormulaCheckResult: FormulaCheckResult;
+  HistoryEntry: HistoryEntry;
   InstanceStats: InstanceStats;
   InviteInfo: InviteInfo;
   InvitePreview: InvitePreview;
+  LinkCandidates: LinkCandidates;
   LoginResponse: LoginResponse;
+  Member: Member;
+  NotificationsResponse: NotificationsResponse;
   OkResponse: OkResponse;
+  QueryResponse: QueryResponse;
+  RecordsResponse: RecordsResponse;
   ResetLink: ResetLink;
+  RestoreResponse: RestoreResponse;
+  RunsPage: RunsPage;
   SessionInfo: SessionInfo;
   SetupStatus: SetupStatus;
+  Table: Table;
+  TableRecord: TableRecord;
+  TestResult: TestResult;
   TokenInfo: TokenInfo;
+  TrashListing: TrashListing;
   TwoFactorSetup: TwoFactorSetup;
   User: User;
+  View: View;
+  WebhookAccepted: WebhookAccepted;
   WhoAmI: WhoAmI;
+  WorkspaceSummary: WorkspaceSummary;
 }
 
 const typesDir = join(dirname(fileURLToPath(import.meta.url)), "../src/api/types");
@@ -267,8 +321,26 @@ function describe(v: unknown): string {
   return typeof v;
 }
 
+/** Every object key a type mentions (through references, unions and intersections). */
+function knownKeys(ty: Ty, seen = new Set<string>()): Set<string> {
+  switch (ty.k) {
+    case "obj":
+      return new Set(ty.fields.map((f) => f.name));
+    case "union":
+    case "inter":
+      return new Set(ty.ts.flatMap((t) => [...knownKeys(t, seen)]));
+    case "ref": {
+      if (ty.n === "JsonValue" || ty.n === "Record" || seen.has(ty.n)) return new Set();
+      seen.add(ty.n);
+      return knownKeys(load(ty.n), seen);
+    }
+    default:
+      return new Set();
+  }
+}
+
 /** Returns a list of problems (empty when `value` conforms to `ty`). */
-function check(ty: Ty, value: unknown, path: string): string[] {
+function check(ty: Ty, value: unknown, path: string, extra?: ReadonlySet<string>): string[] {
   switch (ty.k) {
     case "prim":
       switch (ty.n) {
@@ -295,24 +367,31 @@ function check(ty: Ty, value: unknown, path: string): string[] {
       return ty.ts.flatMap((t, i) => check(t, value[i], `${path}[${i}]`));
     }
     case "union": {
-      const attempts = ty.ts.map((t) => check(t, value, path));
+      const attempts = ty.ts.map((t) => check(t, value, path, extra));
       if (attempts.some((a) => a.length === 0)) return [];
       // Report the closest alternative (fewest problems) to keep the message readable.
       const best = attempts.reduce((a, b) => (b.length < a.length ? b : a));
       return [`${path}: matches no alternative of the union; closest: ${best.join("; ")}`];
     }
-    case "inter":
-      return ty.ts.flatMap((t) => check(t, value, path));
+    case "inter": {
+      // `A & (B | C)`: a key that any part knows is not "unknown" to the others.
+      const all = ty.ts.map((t) => knownKeys(t));
+      return ty.ts.flatMap((t, i) => {
+        const siblings = new Set(extra);
+        all.forEach((keys, j) => j !== i && keys.forEach((k) => siblings.add(k)));
+        return check(t, value, path, siblings);
+      });
+    }
     case "ref": {
       if (ty.n === "JsonValue") return [];
-      if (ty.n === "Record") return check({ k: "obj", fields: [], index: ty.args[1] ?? { k: "prim", n: "unknown" } }, value, path);
-      return check(load(ty.n), value, path);
+      if (ty.n === "Record") return check({ k: "obj", fields: [], index: ty.args[1] ?? { k: "prim", n: "unknown" } }, value, path, extra);
+      return check(load(ty.n), value, path, extra);
     }
     case "obj": {
       if (value === null || typeof value !== "object" || Array.isArray(value)) return [`${path}: expected object, got ${describe(value)}`];
       const rec = value as Record<string, unknown>;
       const problems: string[] = [];
-      const known = new Set(ty.fields.map((f) => f.name));
+      const known = new Set([...ty.fields.map((f) => f.name), ...(extra ?? [])]);
       for (const f of ty.fields) {
         const v = rec[f.name];
         if (v === undefined) {

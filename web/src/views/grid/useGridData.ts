@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { recordKeys, recordsApi } from "@/api/records";
-import type { GroupHeader, QueryResponse, TableRecord } from "@/api/types";
+import type { GroupHeader, QueryResponse, TableRecord, TransientConfig } from "@/api/types";
 import { PAGE_SIZE, pagesFor } from "./rowMap";
 
 export interface GridDataParams {
@@ -22,6 +22,8 @@ export interface GridDataParams {
   configKey: string;
   search: string;
   timeZone: string;
+  /** Local filter/sort/group override sent with every page request (already reflected in `configKey`). */
+  transient?: TransientConfig | null;
 }
 
 export interface GridData {
@@ -48,7 +50,7 @@ export interface GridData {
   refresh(): void;
 }
 
-export function useGridData({ tableId, viewId, configKey, search, timeZone }: GridDataParams): GridData {
+export function useGridData({ tableId, viewId, configKey, search, timeZone, transient = null }: GridDataParams): GridData {
   const qc = useQueryClient();
   const pages = useRef(new Map<number, QueryResponse>());
   const index = useRef(new Map<string, number>());
@@ -77,7 +79,7 @@ export function useGridData({ tableId, viewId, configKey, search, timeZone }: Gr
       try {
         const res = await qc.fetchQuery({
           queryKey: pageKey(page),
-          queryFn: ({ signal }) => recordsApi.query(viewId, { offset: page * PAGE_SIZE, limit: PAGE_SIZE, search: search || null, timezone: timeZone }, signal),
+          queryFn: ({ signal }) => recordsApi.query(viewId, { offset: page * PAGE_SIZE, limit: PAGE_SIZE, search: search || null, timezone: timeZone, transient }, signal),
           staleTime: force ? 0 : 10_000,
         });
         if (gen !== generation.current) return;
@@ -92,7 +94,7 @@ export function useGridData({ tableId, viewId, configKey, search, timeZone }: Gr
         setLoading(false);
       }
     },
-    [qc, pageKey, viewId, search, timeZone, store, bump],
+    [qc, pageKey, viewId, search, timeZone, transient, store, bump],
   );
 
   // A different query (view, filter, sort, search...) starts from scratch.

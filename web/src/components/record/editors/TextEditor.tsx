@@ -61,16 +61,14 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus]);
 
-  const firstRun = useRef(true);
+  // A value typed to start the edit is the first thing to report. Later edits are reported straight
+  // from the input handler: the host (the grid's overlay) commits what it was last told when the
+  // editor refuses to (an invalid value) and Enter falls through to it, so a report that waited for
+  // an effect could be a keystroke behind.
   useEffect(() => {
-    // Report edits (not the initial seed) so an outside click can commit them and previews can follow.
-    if (firstRun.current) {
-      firstRun.current = false;
-      if (initialText === undefined) return;
-    }
-    onChange?.({ text });
+    if (initialText !== undefined) onChange?.({ text: initialText });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  }, []);
 
   const finish = (move?: Move) => {
     if (doneRef.current) return;
@@ -87,9 +85,14 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
     } else if (e.key === "Enter" && !(isLong && e.shiftKey)) {
       if (isLong && variant === "form") return; // plain Enter adds a line in the form's text area
       e.preventDefault();
+      // In the grid, Enter and Tab also reach the overlay's own handler, which would close the editor
+      // and commit whatever it last heard. When the value is invalid the editor must stay open with its
+      // message, so the key stops here.
+      e.stopPropagation();
       finish(variant === "cell" ? [0, e.shiftKey ? -1 : 1] : undefined);
     } else if (e.key === "Tab" && variant === "cell") {
       e.preventDefault();
+      e.stopPropagation();
       finish([e.shiftKey ? -1 : 1, 0]);
     }
   };
@@ -97,7 +100,10 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   const common = {
     ref: inputRef as never,
     value: text,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setText(e.target.value),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setText(e.target.value);
+      onChange?.({ text: e.target.value });
+    },
     onKeyDown,
     onBlur: () => {
       if (variant === "form" && !doneRef.current) {

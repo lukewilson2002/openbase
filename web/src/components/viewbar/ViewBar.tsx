@@ -1,8 +1,10 @@
 /**
  * The grid toolbar: hide fields, filter, group, sort, colour, row height, search, share.
  * Every change is a pure mutation of the view config (see ./config.ts) applied through
- * `update`, which persists the full config with PATCH /api/views/{id}. Viewers and commenters
- * (and editors on locked views) see the query-affecting menus read-only.
+ * `update`, which persists the full config with PATCH /api/views/{id}. People who cannot save
+ * the view (viewers and commenters, editors on locked views) can still filter, sort and group
+ * for themselves: `update` then keeps those as a local override that is sent with each query
+ * and marked "not saved" here. Colours stay read-only for them.
  */
 import { useState, type RefObject } from "react";
 import { EyeOff, Filter, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, Share2, X } from "lucide-react";
@@ -42,8 +44,11 @@ export interface ViewBarProps {
   view: View;
   role: string;
   config: ViewConfig;
-  /** Whether query-affecting changes (filter, sort, group, colour) can be saved. */
+  /** Whether changes can be saved to the view. When false, filter/sort/group apply to this viewer only. */
   canConfigure: boolean;
+  /** A local (unsaved) filter, sort or group is in effect. */
+  hasLocalQuery: boolean;
+  onResetLocalQuery: () => void;
   saving: boolean;
   update: (mutate: (c: ViewConfig) => ViewConfig) => void;
   collaborators: readonly Collaborator[];
@@ -190,7 +195,11 @@ function ColorMenu({ table, config, update, props, readOnly }: { table: Table; c
 export function ViewBar(props: ViewBarProps) {
   const { table, view, config, canConfigure, update, collaborators, schema, search, onSearchChange, searchOpen, onSearchOpenChange, searchInputRef } = props;
   const readOnly = !canConfigure;
-  const note = readOnly ? (view.locked ? "This view is locked. Only a creator can change it." : "You do not have permission to change this view.") : undefined;
+  const why = view.locked ? "This view is locked. Only a creator can change it." : "You do not have permission to change this view.";
+  // Colours are not part of the per-viewer override, so they stay read-only without save rights.
+  const colorNote = readOnly ? why : undefined;
+  // Filter, sort and group still work for this viewer alone.
+  const queryNote = readOnly ? `${why} Your filters, sorts and groups apply only to you and are not saved.` : undefined;
   const hiddenCount = config.hidden_fields.filter((id) => id !== table.primary_field_id).length;
   const filterCount = countConditions(config.filter);
   const sortable = table.fields.filter(isSortable);
@@ -210,17 +219,17 @@ export function ViewBar(props: ViewBarProps) {
         <HideFields table={table} config={config} update={update} />
       </ToolButton>
 
-      <ToolButton icon={<Filter aria-hidden className="size-4" />} label={filterCount > 0 ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "Filter"} active={filterCount > 0} disabledNote={note} wide>
-        <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={readOnly} />
+      <ToolButton icon={<Filter aria-hidden className="size-4" />} label={filterCount > 0 ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "Filter"} active={filterCount > 0} disabledNote={queryNote} wide>
+        <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={false} />
       </ToolButton>
 
-      <ToolButton icon={<Group aria-hidden className="size-4" />} label={config.groups.length > 0 ? `Grouped by ${config.groups.length} field${config.groups.length === 1 ? "" : "s"}` : "Group"} active={config.groups.length > 0} disabledNote={note} wide>
+      <ToolButton icon={<Group aria-hidden className="size-4" />} label={config.groups.length > 0 ? `Grouped by ${config.groups.length} field${config.groups.length === 1 ? "" : "s"}` : "Group"} active={config.groups.length > 0} disabledNote={queryNote} wide>
         <SortListEditor
           noun="group"
           items={config.groups}
           fields={groupable}
           max={MAX_GROUPS}
-          readOnly={readOnly}
+          readOnly={false}
           onAdd={(id) => update((c) => addSortLike(c, "groups", id))}
           onUpdate={(i, p) => update((c) => updateSortLike(c, "groups", i, p))}
           onRemove={(i) => update((c) => removeSortLike(c, "groups", i))}
@@ -228,13 +237,13 @@ export function ViewBar(props: ViewBarProps) {
         />
       </ToolButton>
 
-      <ToolButton icon={<ListFilter aria-hidden className="size-4" />} label={config.sorts.length > 0 ? `Sorted by ${config.sorts.length} field${config.sorts.length === 1 ? "" : "s"}` : "Sort"} active={config.sorts.length > 0} disabledNote={note} wide>
+      <ToolButton icon={<ListFilter aria-hidden className="size-4" />} label={config.sorts.length > 0 ? `Sorted by ${config.sorts.length} field${config.sorts.length === 1 ? "" : "s"}` : "Sort"} active={config.sorts.length > 0} disabledNote={queryNote} wide>
         <SortListEditor
           noun="sort"
           items={config.sorts}
           fields={sortable}
           max={MAX_SORTS}
-          readOnly={readOnly}
+          readOnly={false}
           onAdd={(id) => update((c) => addSortLike(c, "sorts", id))}
           onUpdate={(i, p) => update((c) => updateSortLike(c, "sorts", i, p))}
           onRemove={(i) => update((c) => removeSortLike(c, "sorts", i))}
@@ -242,7 +251,7 @@ export function ViewBar(props: ViewBarProps) {
         />
       </ToolButton>
 
-      <ToolButton icon={<PaintBucket aria-hidden className="size-4" />} label="Color" active={rowColorActive} disabledNote={note} wide>
+      <ToolButton icon={<PaintBucket aria-hidden className="size-4" />} label="Color" active={rowColorActive} disabledNote={colorNote} wide>
         <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} />
       </ToolButton>
 
@@ -256,6 +265,15 @@ export function ViewBar(props: ViewBarProps) {
           ))}
         </fieldset>
       </ToolButton>
+
+      {props.hasLocalQuery && !canConfigure && (
+        <span role="status" className="ml-1 inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs" title="Your filters, sorts and groups are only applied for you">
+          Not saved
+          <button type="button" className="rounded px-1 font-medium underline hover:bg-hover" onClick={props.onResetLocalQuery}>
+            Reset
+          </button>
+        </span>
+      )}
 
       <div className="ml-auto flex items-center gap-1">
         {props.canManageFields && (

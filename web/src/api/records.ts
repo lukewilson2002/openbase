@@ -1,19 +1,14 @@
 /**
  * Typed endpoint functions for records, view queries, comments, history, attachments and the
- * schema calls the grid issues (fields, view config). Response shapes are exactly the DTOs in
- * `og_core::api::records` (the client never guesses; see the convention note in
- * crates/core/src/api/mod.rs and the response contract in ./client.ts).
+ * schema calls the grid issues (fields, formula check). Every shape here is the one the server
+ * sends (docs/plans §3.1) and is verified by the live contract tests in web/contract, which run
+ * these functions against the real server and check the responses against the generated types.
  *
- * TODO(records handlers): crates/server/src/api/{records,comments}.rs are still stubs, so the
- * shapes below are assumed from the DTOs and must be re-checked against the live contract
- * tests once the handlers land:
- *   - GET    /api/records/{id}/comments  -> bare `Comment[]`
- *   - GET    /api/records/{id}/history   -> bare `HistoryEntry[]`
- *   - POST   /api/records/{id}/comments, PATCH /api/comments/{id} -> `Comment`
- *   - POST/PATCH /api/tables/{id}/records, POST .../records/restore, POST .../records/move
- *                                        -> `RecordsResponse`
- *   - DELETE /api/tables/{id}/records, DELETE /api/comments/{id} -> 204 No Content (`void`)
- * (Field create/update/delete are implemented server-side and typed from crates/server/src/api/fields.rs.)
+ *   - record writes (create 201, update 200, restore 200, move 200) answer `RecordsResponse`;
+ *   - `DELETE` of records and comments answers 204 (no body, `void` here);
+ *   - lists (history, comments) are bare arrays;
+ *   - field create/update answer the `Field` plus the link `inverse` and `removed_field_ids`
+ *     when the change touched other fields; field delete answers `DeleteFieldResponse`.
  */
 import { http, request } from "./client";
 import type {
@@ -22,7 +17,9 @@ import type {
   Comment,
   CreateField,
   CreateRecords,
+  DeleteFieldResponse,
   Field,
+  FormulaCheckResult,
   HistoryEntry,
   LinkCandidates,
   MoveRecords,
@@ -30,10 +27,9 @@ import type {
   QueryResponse,
   RecordsResponse,
   TableRecord,
+  TransientConfig,
   UpdateField,
   UpdateRecords,
-  UpdateView,
-  View,
 } from "./types";
 
 const enc = encodeURIComponent;
@@ -52,34 +48,29 @@ export const recordKeys = {
 /** A field as returned by create/update, plus the inverse link field the server maintains. */
 export type FieldMutationResult = Field & { inverse?: Field; removed_field_ids?: string[] };
 
-/** `DELETE /api/fields/{id}` answer (crates/server/src/api/fields.rs): the field plus fields trashed with it. */
-export interface DeleteFieldResult {
-  ok: boolean;
-  deleted_field_ids: string[];
-}
-
-export interface FormulaCheckResult {
-  ok?: boolean;
-  error?: string | null;
-  result_type?: unknown;
-  /** Rendered preview of the formula against a sample record. */
-  preview?: unknown;
-}
-
 export const recordsApi = {
   query: (viewId: string, body: QueryRequest, signal?: AbortSignal) => http.post<QueryResponse>(`/api/views/${enc(viewId)}/query`, body, { signal }),
-  aggregations: (viewId: string, search?: string, signal?: AbortSignal) =>
-    http.get<AggregationsResponse>(`/api/views/${enc(viewId)}/aggregations`, { query: { search: search || undefined }, signal }),
+  /**
+   * Summaries over the records that pass the view filter and `search`. `transient` (only its
+   * filter matters here) is sent JSON-encoded in the query string.
+   */
+  aggregations: (viewId: string, opts: { search?: string; timezone?: string; transient?: TransientConfig | null; signal?: AbortSignal } = {}) =>
+    http.get<AggregationsResponse>(`/api/views/${enc(viewId)}/aggregations`, {
+      query: { search: opts.search || undefined, timezone: opts.timezone, transient: opts.transient ? JSON.stringify(opts.transient) : undefined },
+      signal: opts.signal,
+    }),
   get: (tableId: string, recordId: string) => http.get<TableRecord>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}`),
   create: (tableId: string, body: CreateRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
   update: (tableId: string, body: UpdateRecords) => http.patch<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
-  /** DELETE with a JSON body of ids (soft delete: restorable from the trash). */
+  /** DELETE with a JSON body of ids (soft delete: restorable from the trash); answers 204. */
   remove: (tableId: string, ids: string[]) => request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } }),
   restore: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids }),
   move: (tableId: string, body: MoveRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/move`, body),
   lookup: (tableId: string, q: string, opts: { limit?: number; viewId?: string | null; signal?: AbortSignal } = {}) =>
     http.get<LinkCandidates>(`/api/tables/${enc(tableId)}/records/lookup`, { query: { q, limit: opts.limit ?? 30, view_id: opts.viewId ?? undefined }, signal: opts.signal }),
-  history: (recordId: string) => http.get<HistoryEntry[]>(`/api/records/${enc(recordId)}/history`),
+  /** Newest first. Pass the last entry's id as `before` for the next page. */
+  history: (recordId: string, opts: { before?: number; limit?: number } = {}) =>
+    http.get<HistoryEntry[]>(`/api/records/${enc(recordId)}/history`, { query: { before: opts.before, limit: opts.limit } }),
 };
 
 export const commentsApi = {
@@ -103,10 +94,8 @@ export const attachmentsApi = {
 export const schemaApi = {
   createField: (tableId: string, body: CreateField) => http.post<FieldMutationResult>(`/api/tables/${enc(tableId)}/fields`, body),
   updateField: (fieldId: string, body: UpdateField) => http.patch<FieldMutationResult>(`/api/fields/${enc(fieldId)}`, body),
-  deleteField: (fieldId: string) => http.delete<DeleteFieldResult>(`/api/fields/${enc(fieldId)}`),
-  /** The server answers with the updated view; the generated wrapper in endpoints.ts types it as void. */
-  updateView: (viewId: string, body: UpdateView) => http.patch<View>(`/api/views/${enc(viewId)}`, body),
-  /** Optional endpoint: a 404 means the server has no live formula check. */
-  checkFormula: (tableId: string, expression: string, kind: "formula" | "rollup" = "formula", signal?: AbortSignal) =>
-    http.post<FormulaCheckResult>(`/api/tables/${enc(tableId)}/formula/check`, { expression, kind }, { signal }),
+  deleteField: (fieldId: string) => http.delete<DeleteFieldResponse>(`/api/fields/${enc(fieldId)}`),
+  /** Live parse + type check of a formula against the table; `preview` is evaluated on `recordId` (default: the first record). */
+  checkFormula: (tableId: string, expression: string, opts: { recordId?: string | null; signal?: AbortSignal } = {}) =>
+    http.post<FormulaCheckResult>(`/api/tables/${enc(tableId)}/formula/check`, { expression, record_id: opts.recordId ?? null }, { signal: opts.signal }),
 };

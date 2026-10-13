@@ -14,13 +14,19 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestProject } from "vitest/node";
 
-export interface ContractEnv {
+export interface ServerEnv {
   /** e.g. `http://127.0.0.1:41234` */
   baseUrl: string;
   /** OPENGRID_DATA_DIR of the running server. */
   dataDir: string;
-  /** Path to the `contract_seed` example binary (adds a workspace + base for a user). */
-  seedBin: string;
+}
+
+export interface ContractEnv extends ServerEnv {
+  /**
+   * A second server whose first administrator already exists, for the tests that exercise the
+   * workspace, schema and record APIs (the first server stays fresh for the first-run flow).
+   */
+  seeded: ServerEnv & { adminEmail: string; adminPassword: string };
 }
 
 declare module "vitest" {
@@ -66,17 +72,12 @@ async function waitForHealth(baseUrl: string, child: ChildProcess, output: () =>
   throw new Error(`opengrid did not answer ${baseUrl}/api/health within 30s.\n${output()}`);
 }
 
-export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  if (!process.env["OPENGRID_CONTRACT_SKIP_BUILD"]) {
-    console.log("[contract] cargo build -p opengrid (server binary + contract_seed example)");
-    run("cargo", ["build", "-p", "opengrid", "--bin", "opengrid", "--example", "contract_seed"], "cargo build");
-  }
-  const meta = JSON.parse(run("cargo", ["metadata", "--format-version", "1", "--no-deps"], "cargo metadata")) as { target_directory: string };
-  const bin = join(meta.target_directory, "debug", `opengrid${exe}`);
-  const seedBin = join(meta.target_directory, "debug", "examples", `contract_seed${exe}`);
-  for (const f of [bin, seedBin]) if (!existsSync(f)) throw new Error(`${f} not found; run without OPENGRID_CONTRACT_SKIP_BUILD.`);
+interface Running extends ServerEnv {
+  stop(): Promise<void>;
+}
 
-  const dataDir = mkdtempSync(join(tmpdir(), "opengrid-contract-"));
+async function startServer(bin: string, label: string): Promise<Running> {
+  const dataDir = mkdtempSync(join(tmpdir(), `opengrid-contract-${label}-`));
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let log = "";
@@ -108,18 +109,59 @@ export default async function setup(project: TestProject): Promise<() => Promise
     rmSync(dataDir, { recursive: true, force: true });
     throw e;
   }
-  console.log(`[contract] opengrid listening on ${baseUrl} (data dir ${dataDir})`);
-  project.provide("contract", { baseUrl, dataDir, seedBin });
+  console.log(`[contract] opengrid (${label}) listening on ${baseUrl} (data dir ${dataDir})`);
+  return {
+    baseUrl,
+    dataDir,
+    async stop() {
+      if (child.exitCode === null) {
+        const exited = new Promise<void>((r) => child.once("exit", () => r()));
+        child.kill("SIGTERM");
+        const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+        await exited;
+        clearTimeout(timer);
+      }
+      if (process.env["OPENGRID_CONTRACT_KEEP_DATA"]) console.log(`[contract] data dir kept: ${dataDir}`);
+      else rmSync(dataDir, { recursive: true, force: true });
+    },
+  };
+}
+
+/** First-run signup over plain HTTP (the first account becomes the administrator). */
+async function signUpFirstAdmin(baseUrl: string, email: string, password: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/api/auth/signup`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-opengrid-csrf": "1", "x-forwarded-for": "10.0.0.1" },
+    body: JSON.stringify({ email, name: "Seeded Admin", password }),
+  });
+  if (!res.ok) throw new Error(`could not create the seeded administrator: ${res.status} ${await res.text()}`);
+}
+
+export default async function setup(project: TestProject): Promise<() => Promise<void>> {
+  if (!process.env["OPENGRID_CONTRACT_SKIP_BUILD"]) {
+    console.log("[contract] cargo build -p opengrid");
+    // Same feature set as the end-to-end tests (e2e/globalSetup.ts), so both share one binary.
+    run("cargo", ["build", "-p", "opengrid", "--bin", "opengrid", "--features", "debug-embed"], "cargo build");
+  }
+  const meta = JSON.parse(run("cargo", ["metadata", "--format-version", "1", "--no-deps"], "cargo metadata")) as { target_directory: string };
+  const bin = join(meta.target_directory, "debug", `opengrid${exe}`);
+  if (!existsSync(bin)) throw new Error(`${bin} not found; run without OPENGRID_CONTRACT_SKIP_BUILD.`);
+
+  const fresh = await startServer(bin, "fresh");
+  let seeded: Running | undefined;
+  try {
+    seeded = await startServer(bin, "seeded");
+    const adminEmail = `seed-admin-${Math.random().toString(16).slice(2, 10)}@example.test`;
+    const adminPassword = `pw-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+    await signUpFirstAdmin(seeded.baseUrl, adminEmail, adminPassword);
+    project.provide("contract", { baseUrl: fresh.baseUrl, dataDir: fresh.dataDir, seeded: { baseUrl: seeded.baseUrl, dataDir: seeded.dataDir, adminEmail, adminPassword } });
+  } catch (e) {
+    await seeded?.stop();
+    await fresh.stop();
+    throw e;
+  }
 
   return async () => {
-    if (child.exitCode === null) {
-      const exited = new Promise<void>((r) => child.once("exit", () => r()));
-      child.kill("SIGTERM");
-      const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
-      await exited;
-      clearTimeout(timer);
-    }
-    if (process.env["OPENGRID_CONTRACT_KEEP_DATA"]) console.log(`[contract] data dir kept: ${dataDir}`);
-    else rmSync(dataDir, { recursive: true, force: true });
+    await Promise.all([fresh.stop(), seeded?.stop()]);
   };
 }
