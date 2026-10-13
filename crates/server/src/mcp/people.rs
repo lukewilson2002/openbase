@@ -6,7 +6,7 @@
 //! `manage` permission are the server's own.
 
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::McpCtx;
 use super::data::Scope;
@@ -29,14 +29,15 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         ToolDef::new(
             "rename_workspace",
-            "Rename a workspace",
-            "Rename a workspace. Needs the manage permission and the owner role on the workspace.",
+            "Rename a workspace or change its icon",
+            "Change a workspace's name and/or icon (either; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the manage permission and the owner role on the workspace.",
             object(
                 json!({
                     "workspace_id": string("Workspace id (from list_workspaces)."),
                     "name": string("New name."),
+                    "icon": icon_schema("workspace"),
                 }),
-                &["workspace_id", "name"],
+                &["workspace_id"],
             ),
         )
         .manage()
@@ -107,7 +108,10 @@ struct WorkspaceArg {
 #[serde(deny_unknown_fields)]
 struct RenameWorkspace {
     workspace_id: String,
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 #[derive(Deserialize)]
@@ -162,16 +166,22 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 }
 
 async fn rename_workspace(ctx: &McpCtx, a: RenameWorkspace) -> ToolResult {
+    let mut body = Map::new();
+    if let Some(name) = a.name {
+        body.insert("name".into(), json!(name));
+    }
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if body.is_empty() {
+        return ToolResult::error("Give a new name and/or icon.");
+    }
     let path = format!("/api/workspaces/{}", encode_segment(&a.workspace_id));
-    fetch_as(
-        ctx,
-        "PATCH",
-        &path,
-        None,
-        Some(json!({ "name": a.name })),
-        "workspace",
-    )
-    .await
+    match fetch(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {
+        Ok(v) => ToolResult::ok(with_note(json!({ "workspace": v }), note)),
+        Err(e) => e,
+    }
 }
 
 async fn delete_workspace(ctx: &McpCtx, a: WorkspaceArg) -> ToolResult {

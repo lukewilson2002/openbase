@@ -93,7 +93,7 @@ OpenGrid is a self-hosted Airtable alternative. These tools act as the token's u
 Start with list_bases, then get_base_schema to learn table and field names. Tables, fields and views can be given by NAME or id. \
 Records: list_records, search_records, get_record, create_records, update_records, delete_records work with field NAMES (like the Airtable API); writes are limited to 10 records per call; deleted records go to the trash (restore_from_trash). \
 Structure: create_table, create_field (field_types explains all 28 types and their options), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups use field names), query_view reads a view as the app shows it. \
-Also: formulas (check_formula), comments, record history, trash, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
+Workspaces, bases and tables can have an icon (a Lucide name: pass `icon` to the create_* and rename_* tools, null removes it; list_icons searches the names). Also: formulas (check_formula), comments, record history, trash, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
 Tokens with the 'manage' permission can also manage workspaces, members, invites and bases; instance administrators get admin_* tools (users, audit log, stats, backups). \
 For anything else call api_reference to see every REST endpoint and api_request to call one; it runs through the same permission checks as the web app. \
 Credentials, sessions and API tokens can never be changed through MCP. \

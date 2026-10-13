@@ -44,13 +44,13 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_base",
             "Create a base",
-            "Create a base in a workspace (you become its owner). Needs the creator role on the workspace and a token with write access that is not limited to specific bases.",
+            "Create a base in a workspace (you become its owner), optionally with a colour and an icon. Needs the creator role on the workspace and a token with write access that is not limited to specific bases.",
             object(
                 json!({
                     "workspace_id": string("Workspace id (from list_bases or list_workspaces)."),
                     "name": string("Base name."),
                     "color": string("Optional colour name, e.g. blue, green, red, purple."),
-                    "icon": string("Optional icon name."),
+                    "icon": icon_schema("base"),
                 }),
                 &["workspace_id", "name"],
             ),
@@ -59,13 +59,13 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "rename_base",
             "Rename or restyle a base",
-            "Change a base's name, colour or icon. Needs the creator role.",
+            "Change a base's name, colour or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
                     "name": string("New name."),
                     "color": string("New colour name."),
-                    "icon": string("New icon name."),
+                    "icon": icon_schema("base"),
                 }),
                 &["base_id"],
             ),
@@ -75,7 +75,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "duplicate_base",
             "Duplicate a base",
-            "Copy a base (tables, fields, views; records only with include_records) into the same workspace. Needs the manage permission and the creator role.",
+            "Copy a base (tables, fields, views and icons; records only with include_records) into the same workspace. Needs the manage permission and the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -97,23 +97,28 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a base. It starts with a primary text field and a grid view; add fields with create_field. Needs the creator role.",
+            "Add a table to a base, optionally with an icon. It starts with a primary text field and a grid view; add fields with create_field. Needs the creator role.",
             object(
-                json!({ "base_id": string(BASE_ID), "name": string("Table name.") }),
+                json!({
+                    "base_id": string(BASE_ID),
+                    "name": string("Table name."),
+                    "icon": icon_schema("table"),
+                }),
                 &["base_id", "name"],
             ),
         )
         .write(),
         ToolDef::new(
             "rename_table",
-            "Rename a table",
-            "Change a table's name and/or description. Needs the creator role.",
+            "Rename a table or change its icon",
+            "Change a table's name, description and/or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("New name."),
                     "description": string("New description."),
+                    "icon": icon_schema("table"),
                 }),
                 &["base_id", "table"],
             ),
@@ -123,7 +128,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "duplicate_table",
             "Duplicate a table",
-            "Copy a table (fields and views, and the records unless include_records is false) within its base. Needs the creator role.",
+            "Copy a table (fields, views and icon, and the records unless include_records is false) within its base. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -232,6 +237,18 @@ pub fn definitions() -> Vec<ToolDef> {
         .write()
         .idempotent(),
         ToolDef::new(
+            "list_icons",
+            "Search icon names",
+            "Search the Lucide icon names that workspaces, bases and tables can have (set with the `icon` argument of create_workspace / rename_workspace, create_base / rename_base and create_table / rename_table). Every word of `query` has to match an icon's name or one of its old names ('cart shop' finds shopping-cart, 'home' finds house); without a query the first icons alphabetically are listed. Names are kebab-case, e.g. briefcase, users, chart-column.",
+            object(
+                json!({
+                    "query": string("Words to search for, e.g. 'money' or 'truck delivery'."),
+                    "limit": integer("Icons to return (default 40, max 200).", 1, 200),
+                }),
+                &[],
+            ),
+        ),
+        ToolDef::new(
             "field_types",
             "Field types help",
             "Explain the field types: without `type` a one-line overview of all 28; with a type its create_field options, the value shape for create_records/update_records, and an example.",
@@ -266,12 +283,48 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
         "delete_field" => with_args!(FieldArg, delete_field),
         "set_primary_field" => with_args!(FieldArg, set_primary_field),
         "check_formula" => with_args!(CheckFormula, check_formula),
+        "list_icons" => Some(match parse::<ListIconsArg>(args.clone()) {
+            Ok(a) => list_icons(a),
+            Err(e) => e,
+        }),
         "field_types" => Some(match parse::<FieldTypesArg>(args.clone()) {
             Ok(a) => field_types(a),
             Err(e) => e,
         }),
         _ => None,
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListIconsArg {
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+fn list_icons(a: ListIconsArg) -> ToolResult {
+    let set = crate::icons::icons();
+    let limit = a.limit.unwrap_or(40).clamp(1, 200);
+    let query = a.query.unwrap_or_default();
+    let all = set.search(&query, usize::MAX);
+    let mut out = json!({
+        "icons": all.iter().take(limit).collect::<Vec<_>>(),
+        "matches": all.len(),
+        "total_icons": set.len(),
+    });
+    if all.len() > limit {
+        out["note"] = json!(format!(
+            "Showing the best {limit} of {} matches; narrow the query or raise limit.",
+            all.len()
+        ));
+    } else if all.is_empty() {
+        out["note"] = json!(
+            "No icon matches every word; try fewer or different words (e.g. 'cart' instead of 'shopping basket')."
+        );
+    }
+    ToolResult::ok(out)
 }
 
 #[derive(Deserialize)]
@@ -346,6 +399,9 @@ fn table_out(v: &Value) -> Value {
     if let Some(d) = v["description"].as_str().filter(|d| !d.is_empty()) {
         out["description"] = json!(d);
     }
+    if let Some(i) = v["icon"].as_str() {
+        out["icon"] = json!(i);
+    }
     out
 }
 
@@ -381,18 +437,21 @@ struct CreateBase {
     name: String,
     #[serde(default)]
     color: Option<String>,
-    #[serde(default)]
-    icon: Option<String>,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 async fn create_base(ctx: &McpCtx, a: CreateBase) -> ToolResult {
     let mut body = Map::new();
     body.insert("name".into(), json!(a.name));
     insert_some(&mut body, "color", a.color);
-    insert_some(&mut body, "icon", a.icon);
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     let path = format!("/api/workspaces/{}/bases", encode_segment(&a.workspace_id));
     match fetch(ctx, "POST", &path, None, Some(Value::Object(body))).await {
-        Ok(v) => ToolResult::ok(json!({ "base": base_out(&v) })),
+        Ok(v) => ToolResult::ok(with_note(json!({ "base": base_out(&v) }), note)),
         Err(e) => e,
     }
 }
@@ -405,15 +464,18 @@ struct RenameBase {
     name: Option<String>,
     #[serde(default)]
     color: Option<String>,
-    #[serde(default)]
-    icon: Option<String>,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 async fn rename_base(ctx: &McpCtx, a: RenameBase) -> ToolResult {
     let mut body = Map::new();
     insert_some(&mut body, "name", a.name);
     insert_some(&mut body, "color", a.color);
-    insert_some(&mut body, "icon", a.icon);
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     if body.is_empty() {
         return ToolResult::error("Give a new name, colour or icon.");
     }
@@ -426,7 +488,7 @@ async fn rename_base(ctx: &McpCtx, a: RenameBase) -> ToolResult {
     )
     .await
     {
-        Ok(v) => ToolResult::ok(json!({ "base": base_out(&v) })),
+        Ok(v) => ToolResult::ok(with_note(json!({ "base": base_out(&v) }), note)),
         Err(e) => e,
     }
 }
@@ -482,19 +544,27 @@ async fn delete_base(ctx: &McpCtx, a: BaseArg) -> ToolResult {
 struct CreateTable {
     base_id: String,
     name: String,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
+    let mut body = Map::new();
+    body.insert("name".into(), json!(a.name));
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     match fetch(
         ctx,
         "POST",
         &base_path(&a.base_id, "/tables"),
         None,
-        Some(json!({ "name": a.name })),
+        Some(Value::Object(body)),
     )
     .await
     {
-        Ok(v) => ToolResult::ok(json!({ "table": table_out(&v) })),
+        Ok(v) => ToolResult::ok(with_note(json!({ "table": table_out(&v) }), note)),
         Err(e) => e,
     }
 }
@@ -508,14 +578,20 @@ struct RenameTable {
     name: Option<String>,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 async fn rename_table(ctx: &McpCtx, a: RenameTable) -> ToolResult {
     let mut body = Map::new();
     insert_some(&mut body, "name", a.name);
     insert_some(&mut body, "description", a.description);
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     if body.is_empty() {
-        return ToolResult::error("Give a new name and/or description.");
+        return ToolResult::error("Give a new name, description and/or icon.");
     }
     let schema = match load_schema(ctx, &a.base_id).await {
         Ok(s) => s,
@@ -534,7 +610,7 @@ async fn rename_table(ctx: &McpCtx, a: RenameTable) -> ToolResult {
     )
     .await
     {
-        Ok(v) => ToolResult::ok(json!({ "table": table_out(&v) })),
+        Ok(v) => ToolResult::ok(with_note(json!({ "table": table_out(&v) }), note)),
         Err(e) => e,
     }
 }

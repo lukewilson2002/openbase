@@ -14,6 +14,7 @@ pub mod error;
 pub mod events;
 pub mod extract;
 pub mod http;
+pub mod icons;
 pub mod ids;
 pub mod mcp;
 pub mod perm;

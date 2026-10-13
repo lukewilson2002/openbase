@@ -39,7 +39,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "list_bases",
             "List workspaces and bases",
-            "List the workspaces and bases this token can reach, with your role on each. Start here to get base ids (and workspace ids for creating bases).",
+            "List the workspaces and bases this token can reach, with your role on each (and their icons, when set). Start here to get base ids (and workspace ids for creating bases).",
             object(json!({}), &[]),
             Level::Read,
             true,
@@ -269,8 +269,14 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_workspace",
             "Create a workspace",
-            "Create a workspace; you become its owner. Needs the manage permission.",
-            object(json!({ "name": string("Workspace name.") }), &["name"]),
+            "Create a workspace, optionally with an icon; you become its owner. Needs the manage permission.",
+            object(
+                json!({
+                    "name": string("Workspace name."),
+                    "icon": icon_schema("workspace"),
+                }),
+                &["name"],
+            ),
             Level::Manage,
             false,
             false,
@@ -488,12 +494,12 @@ async fn list_bases(ctx: &McpCtx) -> ToolResult {
     };
     ToolResult::ok(json!({
         "access": access,
-        "workspaces": workspaces.iter().map(|w| json!({
+        "workspaces": workspaces.iter().map(|w| with_icon(json!({
             "id": w.id,
             "name": w.name,
             "role": w.role,
-            "bases": w.bases.iter().map(|b| json!({"id": b.id, "name": b.name, "role": b.role})).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
+            "bases": w.bases.iter().map(|b| with_icon(json!({"id": b.id, "name": b.name, "role": b.role}), &b.icon)).collect::<Vec<_>>(),
+        }), &w.icon)).collect::<Vec<_>>(),
     }))
 }
 
@@ -533,27 +539,42 @@ async fn get_base_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
                 .iter()
                 .find(|f| f.id == t.primary_field_id)
                 .map(|f| f.name.clone());
-            json!({
-                "id": t.id,
-                "name": t.name,
-                "description": t.description,
-                "primary_field": primary,
-                "fields": t.fields.iter().map(field_json).collect::<Vec<_>>(),
-                "views": t.views.iter().map(|v| json!({
-                    "id": v.id,
-                    "name": v.name,
-                    "type": serde_json::to_value(v.view_type).unwrap_or(Value::Null),
-                })).collect::<Vec<_>>(),
-            })
+            with_icon(
+                json!({
+                    "id": t.id,
+                    "name": t.name,
+                    "description": t.description,
+                    "primary_field": primary,
+                    "fields": t.fields.iter().map(field_json).collect::<Vec<_>>(),
+                    "views": t.views.iter().map(|v| json!({
+                        "id": v.id,
+                        "name": v.name,
+                        "type": serde_json::to_value(v.view_type).unwrap_or(Value::Null),
+                    })).collect::<Vec<_>>(),
+                }),
+                &t.icon,
+            )
         })
         .collect();
-    ToolResult::ok(json!({
-        "id": schema.id,
-        "name": schema.name,
-        "workspace_id": schema.workspace_id,
-        "your_role": schema.role,
-        "tables": tables,
-    }))
+    ToolResult::ok(with_icon(
+        json!({
+            "id": schema.id,
+            "name": schema.name,
+            "workspace_id": schema.workspace_id,
+            "your_role": schema.role,
+            "tables": tables,
+        }),
+        &schema.icon,
+    ))
+}
+
+/// `value` (an object) with its `icon` when it has one (icons are left out when unset, like
+/// other optional properties in tool results).
+fn with_icon(mut value: Value, icon: &Option<String>) -> Value {
+    if let (Some(icon), Some(o)) = (icon, value.as_object_mut()) {
+        o.insert("icon".into(), json!(icon));
+    }
+    value
 }
 
 pub fn field_json(f: &og_core::field::Field) -> Value {
@@ -958,21 +979,30 @@ async fn api_request(ctx: &McpCtx, a: RequestArgs) -> ToolResult {
 #[serde(deny_unknown_fields)]
 struct WorkspaceArgs {
     name: String,
+    #[serde(default, deserialize_with = "og_core::api::double_option")]
+    icon: Option<Option<String>>,
 }
 
 async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
+    let mut body = serde_json::Map::new();
+    body.insert("name".into(), json!(a.name));
+    let note = match put_icon(&mut body, a.icon) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     match call_api(
         ctx,
         "POST",
         "/api/workspaces",
         None,
-        Some(json!({ "name": a.name })),
+        Some(Value::Object(body)),
     )
     .await
     {
-        Ok(res) if res.ok() => {
-            ToolResult::ok(json!({ "workspace": res.body.unwrap_or(Value::Null) }))
-        }
+        Ok(res) if res.ok() => ToolResult::ok(with_note(
+            json!({ "workspace": res.body.unwrap_or(Value::Null) }),
+            note,
+        )),
         Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
