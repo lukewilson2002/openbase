@@ -15,8 +15,8 @@ OpenBase is one process that uses SQLite, so a small VPS is enough.
 
 These are suggestions, not tested configurations. What has been measured (on a
 fast laptop, not a VPS; see [Resource usage](../README.md#resource-usage-and-scale)):
-the server idles at about 15-19 MB and stayed at or under about 105 MB with a
-50,000-record, 11-field table, and the Docker image is about 181 MB on disk. The
+the server idles at about 16-20 MB and stayed at or under about 105 MB with a
+50,000-record, 11-field table, and the Docker image is about 184 MB on disk. The
 systemd unit caps memory at 400 MB.
 
 Disk usage is roughly the database (a 50,000-record test table with 11 fields

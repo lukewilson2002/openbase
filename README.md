@@ -16,7 +16,7 @@ You run it on a small server you control, and your data stays in one folder.
   (axum + SQLite) with the web app compiled into it. The database
   (`openbase.db`), uploaded files (`attachments/`) and backups (`backups/`) all
   live in one directory. No Postgres, no Redis, no Node at runtime.
-- **Built for a small VPS.** Idle, the server uses about 15 MB of memory; a
+- **Built for a small VPS.** Idle, the server uses about 16 MB of memory; a
   50,000-record table stayed under about 105 MB in our tests
   ([measured numbers](#resource-usage-and-scale), taken on a fast laptop, not on a
   $5 VPS).
@@ -340,10 +340,10 @@ it on your own server.
 
 | | Measured |
 |---|---|
-| Release binary (web client embedded), macOS arm64 | 21.5 MB |
-| Docker image, linux/arm64 | 181 MB on disk, 40.6 MB compressed; the binary in it is 22.8 MB |
-| Server idle, release binary, right after start (RSS) | 15.1 MB |
-| Container idle (`/proc` RSS of the server / `docker stats`) | 18.6 MB / 5.6 MiB (`docker stats` leaves out page cache) |
+| Release binary (web client embedded), macOS arm64 | 24.1 MB |
+| Docker image, linux/arm64 | 184 MB on disk, 41.5 MB compressed; the binary in it is 25.3 MB |
+| Server idle, release binary, right after start (RSS) | 16.1 MB |
+| Container idle (`/proc` RSS of the server / `docker stats`) | 19.9 MB / 6.4 MiB (`docker stats` leaves out page cache) |
 | After the first password sign-in (a password hash uses 19 MiB while it runs) | 38 MB on macOS; 18 MB in the Linux container |
 | 50,000-record table loaded through the API, 11 fields incl. a formula | 58 MB |
 | ...after fetching the first page of that table | 77 MB |
@@ -351,7 +351,9 @@ it on your own server.
 | Same load in a container limited to 1 CPU and 1 GB | 101 MB peak RSS |
 
 (`scripts/smoke-install.sh` with `SEED_RECORDS=50000`, which runs
-`scripts/loadtest.sh`; the container run used `docker run --cpus=1 --memory=1g`.)
+`scripts/loadtest.sh`; the container run used `docker run --cpus=1 --memory=1g`.
+The binary and image sizes and the idle rows were re-measured after the rename to OpenBase
+(2026-10-13); the 50,000-record rows are from the build before it and were not repeated.)
 
 ### Measured: speed at 50,000 records
 
@@ -390,7 +392,7 @@ we have not measured.
 |---|---|
 | Grid page fetch (cached), p95 under 50 ms at 50k rows | met (1.4 ms) |
 | View re-query after a write, under 1 s at 50k rows | met (about 0.1 s) |
-| Memory, under 60 MB idle | met (15 MB) |
+| Memory, under 60 MB idle | met (16 MB) |
 | Memory, under 300 MB under load at 50k rows | met (at most 104 MB over HTTP) |
 
 Not measured: a real 1 vCPU VPS, 100,000-record tables, 25 simultaneous users,
