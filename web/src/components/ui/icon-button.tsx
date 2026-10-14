@@ -20,7 +20,7 @@ export function IconButton({ label, size = "md", variant = "ghost", noTooltip, c
         "inline-flex shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg",
         "disabled:pointer-events-none disabled:opacity-50",
         variant === "secondary" && "border border-line-strong bg-surface",
-        size === "sm" ? "size-7" : "size-8",
+        size === "sm" ? "size-7 pointer-coarse:size-9" : "size-8 pointer-coarse:size-10",
         className,
       )}
       {...props}

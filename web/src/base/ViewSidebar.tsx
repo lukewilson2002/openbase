@@ -86,7 +86,7 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
           onClick={onNavigate}
           aria-current={active ? "page" : undefined}
           className={cn(
-            "flex h-8 items-center gap-2 rounded-md px-2 pr-8 text-[0.8125rem] text-fg no-underline",
+            "flex h-8 items-center gap-2 rounded-md px-2 pr-8 text-[0.8125rem] text-fg no-underline pointer-coarse:h-10 pointer-coarse:pr-10",
             active ? "bg-primary-soft font-medium" : "hover:bg-hover",
           )}
         >
@@ -98,7 +98,7 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
         {(canConfigure || canLock) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <IconButton label={`Options for ${v.name}`} size="sm" noTooltip className="absolute right-0.5 top-0.5 size-7 opacity-100 md:opacity-0 md:focus-visible:opacity-100 md:group-hover/item:opacity-100 data-[state=open]:opacity-100">
+              <IconButton label={`Options for ${v.name}`} size="sm" noTooltip className="absolute right-0.5 top-0.5 size-7 opacity-100 pointer-coarse:size-9 md:pointer-fine:opacity-0 md:pointer-fine:focus-visible:opacity-100 md:pointer-fine:group-hover/item:opacity-100 data-[state=open]:opacity-100">
                 <Ellipsis aria-hidden className="size-4" />
               </IconButton>
             </DropdownMenuTrigger>
@@ -178,7 +178,7 @@ export function ViewSidebar({ schema, table, activeViewId, open, onNavigate }: V
                       setPersonal(!canCreateShared);
                       setDialog({ kind: "create", type });
                     }}
-                    className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.8125rem] text-muted hover:bg-hover hover:text-fg"
+                    className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.8125rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-10"
                   >
                     <meta.icon aria-hidden className="size-4 shrink-0" />
                     <span>{meta.label}</span>

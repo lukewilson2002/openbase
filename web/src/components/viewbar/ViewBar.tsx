@@ -81,7 +81,7 @@ function ToolButton({ icon, label, active, children, disabledNote, wide }: { ico
         <button
           type="button"
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium hover:bg-hover",
+            "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium hover:bg-hover pointer-coarse:h-10 pointer-coarse:px-2.5",
             active ? "bg-primary-soft text-primary hover:bg-primary-soft" : "text-fg",
           )}
         >

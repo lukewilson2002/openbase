@@ -25,7 +25,7 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
   const canEdit = basePermissions.editBase(schema.role);
   const onAutomations = useLocation().pathname.startsWith(`/base/${schema.id}/automations`);
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3 sm:gap-3">
+    <header className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-surface px-3 min-[400px]:gap-2 sm:gap-3">
       <Link to="/" aria-label="Back to all bases" className="shrink-0">
         <Logo showName={false} />
       </Link>
@@ -47,7 +47,7 @@ export function TopBar({ schema }: { schema: BaseSchema }) {
           setSharing(true);
         }}
       >
-        <Share2 aria-hidden className="size-3.5" /> Share
+        <Share2 aria-hidden className="size-3.5" /> <span className="max-sm:sr-only">Share</span>
       </Button>
       <TrashButton schema={schema} />
       <NotificationBell />

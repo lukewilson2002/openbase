@@ -219,8 +219,10 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       <Button onClick={onClose}>Close</Button>
     </div>
   ) : (
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+    // Below md the fields and the comments stack in one scrolling column: two scroll areas on a phone
+    // left the fields about half the screen and the comments pane fighting it for every swipe.
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
             <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} onSave={onSave} />
@@ -292,7 +294,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               </IconButton>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="Record actions" className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
+                  <button type="button" aria-label="Record actions" className="inline-flex size-8 pointer-coarse:size-10 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
                     <MoreHorizontal aria-hidden className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
@@ -305,7 +307,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <D.Close aria-label="Close" className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
+              <D.Close aria-label="Close" className="inline-flex size-8 pointer-coarse:size-10 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
                 <X aria-hidden className="size-4" />
               </D.Close>
             </header>

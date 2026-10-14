@@ -7,11 +7,12 @@ export const DropdownMenu = M.Root;
 export const DropdownMenuTrigger = M.Trigger;
 export const DropdownMenuRadioGroup = M.RadioGroup;
 
-export function DropdownMenuContent({ className, sideOffset = 4, align = "end", ...props }: ComponentProps<typeof M.Content>) {
+export function DropdownMenuContent({ className, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {
   return (
     <M.Portal>
       <M.Content
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         align={align}
         className={cn(
           "ob-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop",
@@ -24,7 +25,7 @@ export function DropdownMenuContent({ className, sideOffset = 4, align = "end", 
 }
 
 const itemClass =
-  "relative flex cursor-default select-none items-center gap-2 rounded px-2 py-1.5 text-[0.8125rem] outline-none " +
+  "relative flex cursor-default select-none items-center gap-2 rounded px-2 py-1.5 text-[0.8125rem] outline-none pointer-coarse:py-2.5 " +
   "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-hover";
 
 export function DropdownMenuItem({ className, danger, ...props }: ComponentProps<typeof M.Item> & { danger?: boolean }) {

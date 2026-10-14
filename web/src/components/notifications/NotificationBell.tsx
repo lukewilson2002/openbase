@@ -75,7 +75,7 @@ export function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label={label} className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg">
+        <button type="button" aria-label={label} className="relative inline-flex size-8 shrink-0 pointer-coarse:size-10 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg">
           <Bell aria-hidden className="size-4" />
           {unread > 0 && (
             <span aria-hidden data-testid="notification-badge" className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[0.625rem] font-semibold leading-4 text-danger-fg">
@@ -149,7 +149,7 @@ export function NotificationBell() {
                         type="button"
                         aria-label={`Mark "${v.title}" as read`}
                         onClick={() => markRead.mutate([n.id])}
-                        className="absolute right-2 top-2.5 inline-flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
+                        className="absolute right-2 top-2.5 inline-flex size-6 pointer-coarse:right-0.5 pointer-coarse:top-1 pointer-coarse:size-10 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
                       >
                         <span aria-hidden className="size-2 rounded-full bg-primary" />
                       </button>

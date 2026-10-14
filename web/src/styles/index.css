@@ -138,6 +138,20 @@
   }
 }
 
+/*
+ * iOS Safari zooms the whole page when a focused field's text is under 16px, and the app's 13-14px
+ * controls triggered that on every tap into a field. Unlayered so it wins over Tailwind's text-*
+ * utilities; desktops with a mouse keep the compact size.
+ */
+@media (pointer: coarse), (max-width: 639.98px) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
+  textarea,
+  select,
+  [contenteditable]:not([contenteditable="false"]) {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* Dialog / popover animations (Radix data-state). */
 @keyframes ob-fade-in {
   from {

@@ -85,7 +85,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
         type="button"
         aria-label="Dismiss"
         onClick={() => onDismiss(id)}
-        className="-m-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
+        className="-m-1 inline-flex size-6 shrink-0 pointer-coarse:-m-2 pointer-coarse:size-9 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
       >
         <X aria-hidden className="size-3.5" />
       </button>

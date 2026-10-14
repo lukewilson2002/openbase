@@ -11,6 +11,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Fixed
+
+- Phones: tapping a text field no longer zooms the page in on iOS (form fields are 16px on touch
+  screens and narrow windows), and the base's top bar no longer makes the page wider than a small
+  phone. Buttons, menu items and the view list are larger on touch screens, the view options button
+  is always visible there, and the expanded record scrolls as one column below tablet width.
+
 ## [0.1.0] - 2026-10-13
 
 First release. OpenBase is a self-hosted alternative to Airtable for individuals and very
