@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NameDialog } from "@/components/NameDialog";
 import { IconPicker, IconPickerDialog } from "./IconPicker";
 import { resetIconRegistryForTests } from "./registry";
 import { fakeIconSet, gatedImporter } from "./testSet";
@@ -180,6 +181,13 @@ describe("IconPicker", () => {
     expect(screen.queryByRole("button", { name: "Remove icon" })).not.toBeInTheDocument();
   });
 
+  it("focuses the search box on open with a mouse, as a popover", async () => {
+    await open();
+    expect(await screen.findByRole("searchbox", { name: "Search icons" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Icon picker" })).toBeInTheDocument();
+    expect(screen.queryByTestId("icon-picker-backdrop")).not.toBeInTheDocument();
+  });
+
   it("closes on Escape without changing anything", async () => {
     const { user, onChange } = await open();
     await screen.findByRole("searchbox", { name: "Search icons" });
@@ -226,6 +234,121 @@ describe("IconPickerDialog", () => {
     render(<IconPickerDialog open onOpenChange={onOpenChange} title="Table icon" value="star" onChange={onChange} />);
     const dialog = await screen.findByRole("dialog", { name: "Table icon" });
     await user.click(await within(dialog).findByRole("button", { name: "Target" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("target");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+/** A phone: `(pointer: coarse)` matches (and so does any query that lists it). */
+function touchScreen() {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: /pointer:\s*coarse/.test(query),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
+
+/** A finger lifting where it went down, with no click after it (what iOS Safari does on the backdrop). */
+function tap(el: Element, moveBy = 0) {
+  fireEvent.touchStart(el, { touches: [{ clientX: 20, clientY: 20 }], changedTouches: [{ clientX: 20, clientY: 20 }] });
+  fireEvent.touchEnd(el, { touches: [], changedTouches: [{ clientX: 20, clientY: 20 + moveBy }] });
+}
+
+describe("IconPicker on a touch screen", () => {
+  beforeEach(touchScreen);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens as a sheet without focusing the search box, so the keyboard stays down", async () => {
+    const { user } = await open();
+    const sheet = await screen.findByRole("dialog", { name: "Choose icon" });
+    await loaded();
+    expect(sheet).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Search icons" })).not.toHaveFocus();
+    expect(within(sheet).getByRole("group", { name: "Popular icons" })).toBeInTheDocument();
+    await user.click(screen.getByRole("searchbox", { name: "Search icons" }));
+    expect(screen.getByRole("searchbox", { name: "Search icons" })).toHaveFocus();
+  });
+
+  it("closes on a tap on the backdrop, without a click event, and returns focus to the trigger", async () => {
+    const { onChange } = await open();
+    await screen.findByRole("dialog", { name: "Choose icon" });
+    tap(screen.getByTestId("icon-picker-backdrop"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Choose icon" })).toHaveFocus();
+  });
+
+  it("stays open when a swipe ends on the backdrop", async () => {
+    await open();
+    await screen.findByRole("dialog", { name: "Choose icon" });
+    tap(screen.getByTestId("icon-picker-backdrop"), 60);
+    expect(screen.getByRole("dialog", { name: "Choose icon" })).toBeInTheDocument();
+  });
+
+  it("closes and reports the icon when one is chosen", async () => {
+    const { user, onChange } = await open();
+    const sheet = await screen.findByRole("dialog", { name: "Choose icon" });
+    await user.click(within(sheet).getByRole("button", { name: "Truck" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("truck");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("closes on Escape and with the close button", async () => {
+    const { user, onChange } = await open();
+    await screen.findByRole("dialog", { name: "Choose icon" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Choose icon" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Choose icon" })).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("inside the name dialog: a tap outside or Escape closes only the picker, and the chosen icon is kept", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(<NameDialog open onOpenChange={onOpenChange} title="New workspace" submitLabel="Create workspace" withIcon onSubmit={onSubmit} />);
+    const nameDialog = await screen.findByRole("dialog", { name: "New workspace" });
+    await user.type(within(nameDialog).getByRole("textbox", { name: "Name" }), "Kitchen");
+    await user.click(within(nameDialog).getByRole("button", { name: "Choose icon" }));
+    await screen.findByRole("dialog", { name: "Choose icon" });
+    tap(screen.getByTestId("icon-picker-backdrop"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose icon" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Choose icon" }));
+    await screen.findByRole("dialog", { name: "Choose icon" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose icon" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Choose icon" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Choose icon" })).getByRole("button", { name: "Truck" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose icon" })).not.toBeInTheDocument());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Kitchen", "truck");
+  });
+
+  it("shows the menu's icon dialog as a sheet too", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onOpenChange = vi.fn();
+    render(<IconPickerDialog open onOpenChange={onOpenChange} title="Table icon" value="star" onChange={onChange} />);
+    const sheet = await screen.findByRole("dialog", { name: "Table icon" });
+    expect(screen.getByTestId("icon-picker-backdrop")).toBeInTheDocument();
+    await loaded();
+    expect(screen.getByRole("searchbox", { name: "Search icons" })).not.toHaveFocus();
+    await user.click(within(sheet).getByRole("button", { name: "Target" }));
     expect(onChange).toHaveBeenCalledExactlyOnceWith("target");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

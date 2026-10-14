@@ -7,7 +7,8 @@ import { expect, test } from "./fixtures";
  * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome). The
  * home page, a base and its record panel must fit the screen without horizontal scrolling (a page
  * wider than the screen makes the phone zoom it out), and every focusable text field must be at least
- * 16px, or iOS Safari zooms the page in when it is tapped. Signs up its own user. Runs only with
+ * 16px, or iOS Safari zooms the page in when it is tapped. The icon picker opens as a bottom sheet
+ * inside the screen and closes on a tap outside. Signs up its own users. Runs only with
  * OPENBASE_E2E=1.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
@@ -69,4 +70,37 @@ test("the home page, a base, its toolbar and the record panel fit a phone", asyn
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Write a comment" })).toBeVisible();
   await expectFits(page, "record panel");
+});
+
+test("the icon picker opens as a sheet that fits the screen, without the keyboard, and a tap outside closes only it", async ({ page }) => {
+  const email = `e2e-mobile-icon-${randomBytes(4).toString("hex")}@example.com`;
+  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
+  expect(signup.ok(), await signup.text()).toBeTruthy();
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "New workspace" }).first().tap();
+  const create = page.getByRole("dialog", { name: "New workspace" });
+  await create.getByRole("textbox", { name: "Name" }).fill("Kitchen");
+  await create.getByRole("button", { name: "Choose icon" }).tap();
+
+  const sheet = page.getByRole("dialog", { name: "Choose icon" });
+  await expect(sheet.getByTestId("icon-list")).toBeVisible();
+  const box = (await sheet.boundingBox())!;
+  const screen = page.viewportSize()!;
+  expect(box.y, "sheet top").toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height, "sheet bottom").toBeLessThanOrEqual(screen.height + 0.5);
+  expect(box.width, "sheet width").toBeLessThanOrEqual(screen.width);
+  await expect(sheet.getByRole("searchbox", { name: "Search icons" })).not.toBeFocused();
+  await expectFits(page, "icon picker");
+
+  // Above the sheet is the backdrop.
+  await page.touchscreen.tap(screen.width / 2, box.y / 2);
+  await expect(sheet).toBeHidden();
+  await expect(create).toBeVisible();
+  await expect(create.getByRole("button", { name: "Choose icon" })).toBeFocused();
+
+  await create.getByRole("button", { name: "Choose icon" }).tap();
+  await sheet.getByRole("button", { name: "Truck" }).tap();
+  await expect(sheet).toBeHidden();
+  await expect(create.getByRole("button", { name: "Change icon" })).toBeVisible();
 });

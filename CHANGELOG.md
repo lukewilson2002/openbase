@@ -17,6 +17,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   screens and narrow windows), and the base's top bar no longer makes the page wider than a small
   phone. Buttons, menu items and the view list are larger on touch screens, the view options button
   is always visible there, and the expanded record scrolls as one column below tablet width.
+- Phones: the icon picker opens as a bottom sheet that fits the visible screen and shrinks above the
+  on-screen keyboard instead of running off the top, and the keyboard only opens when you tap the
+  search box. A tap outside now closes it on iPhone, also when it was opened from the
+  create/rename dialog, which stays open.
 
 ## [0.1.0] - 2026-10-13
 

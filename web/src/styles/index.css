@@ -170,6 +170,11 @@
     transform: translateX(12px);
   }
 }
+@keyframes ob-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
 @keyframes ob-spin {
   to {
     transform: rotate(360deg);
@@ -184,13 +189,17 @@
 .ob-slide-in {
   animation: ob-slide-in 160ms ease-out;
 }
+.ob-sheet-in {
+  animation: ob-sheet-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
 .ob-spin {
   animation: ob-spin 0.8s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .ob-fade-in,
   .ob-pop-in,
-  .ob-slide-in {
+  .ob-slide-in,
+  .ob-sheet-in {
     animation: none;
   }
   .ob-spin {
