@@ -46,6 +46,7 @@ import type {
   RestoreRequest,
   RestoreResponse,
   RunsPage,
+  SearchResponse,
   PasswordResetConfirm,
   ResetLink,
   SessionInfo,
@@ -230,6 +231,9 @@ export const api = {
     duplicate: (id: string, body: { name?: string | null; personal?: boolean } = {}) =>
       http.post<View>(`/api/views/${enc(id)}/duplicate`, body),
   },
+
+  /** Workspaces, bases, tables, views and records the caller can open whose name (or a record's text) matches. */
+  search: (q: string, limit = 20) => http.get<SearchResponse>("/api/search", { query: { q, limit } }),
 
   notifications: {
     list: () => http.get<NotificationsResponse>("/api/notifications"),

@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { NavLink } from "react-router";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { cn } from "@/lib/cn";
 import { ProfileMenu } from "./ProfileMenu";
@@ -8,12 +8,16 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, clampWidth } from "./sidebarPrefs";
 
 const KEY_STEP = 16;
 
-function SidebarBody({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+/** The menu's column: the Inbox row, the page's own content (scrolling), the footer, the profile. */
+function SidebarBody({ inbox, children, footer }: { inbox?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">{children}</div>
-      {footer && <div className="flex flex-col gap-0.5 border-t border-line px-2 py-2">{footer}</div>}
-      <div className="border-t border-line p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-3">
+        {inbox && <div className="mb-1.5">{inbox}</div>}
+        {children}
+      </div>
+      {footer && <div className="flex flex-col gap-0.5 px-3 pb-2">{footer}</div>}
+      <div className="mx-3 border-t border-line py-2">
         <ProfileMenu />
       </div>
     </>
@@ -24,6 +28,7 @@ export function DockedSidebar({
   id,
   width,
   onResize,
+  inbox,
   footer,
   children,
 }: {
@@ -31,6 +36,7 @@ export function DockedSidebar({
   width: number;
   /** `persist` is false while dragging, so storage is written once per drag rather than per pixel. */
   onResize: (width: number, persist: boolean) => void;
+  inbox?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -64,7 +70,9 @@ export function DockedSidebar({
 
   return (
     <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-14 flex h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-line bg-surface">
-      <SidebarBody footer={footer}>{children}</SidebarBody>
+      <SidebarBody inbox={inbox} footer={footer}>
+        {children}
+      </SidebarBody>
       <div
         role="separator"
         aria-orientation="vertical"
@@ -91,6 +99,10 @@ export function SidebarDrawer({
   open,
   onOpenChange,
   returnFocus,
+  header,
+  inbox,
+  inboxPanel,
+  onCloseInbox,
   footer,
   children,
 }: {
@@ -98,6 +110,12 @@ export function SidebarDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLButtonElement | null>;
+  /** The drawer's top row beside the close button (a base's place pickers); "Menu" when absent. */
+  header?: ReactNode;
+  inbox?: ReactNode;
+  /** The notifications, shown in place of the menu while the Inbox row is open. */
+  inboxPanel?: ReactNode;
+  onCloseInbox?: () => void;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -114,17 +132,35 @@ export function SidebarDrawer({
             e.preventDefault();
             returnFocus.current?.focus();
           }}
-          className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(20rem,calc(100vw-3rem))] flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
+          className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
         >
-          <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line pl-4 pr-2">
-            <D.Title className="text-[0.9375rem] font-semibold">Menu</D.Title>
-            <D.Close aria-label="Close menu" className="inline-flex size-10 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg">
+          <div className="mx-2.5 flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line py-1.5">
+            {header ? (
+              <>
+                <D.Title className="sr-only">Menu</D.Title>
+                <div className="flex min-w-0 flex-1 items-center gap-0.5">{header}</div>
+              </>
+            ) : (
+              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
+            )}
+            <D.Close aria-label="Close menu" className="inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-muted hover:bg-hover hover:text-fg">
               <X aria-hidden className="size-5" />
             </D.Close>
           </div>
-          <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
-            <SidebarBody footer={footer}>{children}</SidebarBody>
-          </nav>
+          {inboxPanel ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <button type="button" onClick={onCloseInbox} className="mx-2.5 mt-1.5 flex h-11 items-center gap-1 self-start rounded-[10px] px-2 text-[0.9375rem] text-muted hover:bg-hover hover:text-fg">
+                <ChevronLeft aria-hidden className="size-4" /> Back to the menu
+              </button>
+              {inboxPanel}
+            </div>
+          ) : (
+            <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
+              <SidebarBody inbox={inbox} footer={footer}>
+                {children}
+              </SidebarBody>
+            </nav>
+          )}
         </D.Content>
       </D.Portal>
     </D.Root>
@@ -136,31 +172,55 @@ export function SidebarDrawer({
 export function SidebarSection({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cn("flex flex-col gap-0.5", className)} aria-label={title}>
-      {(title || action) && (
-        <div className="flex h-8 items-center justify-between gap-2 pl-2">
-          {title && <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</h2>}
-          {action}
-        </div>
-      )}
+      {(title || action) && <SidebarHeading action={action}>{title}</SidebarHeading>}
       {children}
     </section>
   );
 }
 
-const itemClass =
-  "flex h-9 min-w-0 items-center gap-2.5 rounded-md px-2 text-[0.8125rem] font-medium text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11";
-const activeClass = "bg-primary-soft text-fg hover:bg-primary-soft";
+/** A plain section heading ("Workspaces", "Tables") with an optional action (a +) at its end. */
+export function SidebarHeading({ children, action }: { children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex h-9 items-center justify-between gap-2 pl-3 pr-1">
+      {children && <h2 className="text-[0.8125rem] font-semibold tracking-normal text-muted">{children}</h2>}
+      {action}
+    </div>
+  );
+}
+
+export const sidebarItemClass =
+  "flex h-9 min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11";
+export const sidebarActiveClass = "bg-primary-soft font-semibold text-primary-ink hover:bg-primary-soft";
 
 /** A menu link; it is highlighted (and `aria-current`) on its own page. */
-export function SidebarLink({ to, icon, children, end = true, active, indent, className }: { to: string; icon?: ReactNode; children: ReactNode; end?: boolean; active?: boolean; indent?: boolean; className?: string }) {
+export function SidebarLink({
+  to,
+  icon,
+  children,
+  end = true,
+  active,
+  muted,
+  className,
+  iconClassName,
+}: {
+  to: string;
+  icon?: ReactNode;
+  children: ReactNode;
+  end?: boolean;
+  active?: boolean;
+  /** Grey text, like the footer's links (Trash, Members) and a workspace's sub-items. */
+  muted?: boolean;
+  className?: string;
+  iconClassName?: string;
+}) {
   return (
     <NavLink
       to={to}
       end={end}
       aria-current={active === undefined ? undefined : active ? "page" : false}
-      className={({ isActive }) => cn(itemClass, (active ?? isActive) && activeClass, indent && "pl-9", className)}
+      className={({ isActive }) => cn(sidebarItemClass, muted && "text-muted hover:text-fg", (active ?? isActive) && sidebarActiveClass, className)}
     >
-      {icon && <span className="flex shrink-0 items-center text-muted [&>svg]:size-4">{icon}</span>}
+      {icon && <span className={cn("flex shrink-0 items-center [&>svg]:size-[1.125rem]", iconClassName)}>{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </NavLink>
   );
@@ -168,8 +228,8 @@ export function SidebarLink({ to, icon, children, end = true, active, indent, cl
 
 export function SidebarButton({ icon, children, onClick, className }: { icon?: ReactNode; children: ReactNode; onClick: () => void; className?: string }) {
   return (
-    <button type="button" onClick={onClick} className={cn(itemClass, "w-full text-left", className)}>
-      {icon && <span className="flex shrink-0 items-center text-muted [&>svg]:size-4">{icon}</span>}
+    <button type="button" onClick={onClick} className={cn(sidebarItemClass, "w-full text-left text-muted hover:text-fg", className)}>
+      {icon && <span className="flex shrink-0 items-center [&>svg]:size-[1.125rem]">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </button>
   );

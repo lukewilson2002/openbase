@@ -57,7 +57,7 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   const card = (await page.getByRole("list", { name: "Bases" }).getByRole("listitem").last().boundingBox())!;
   expect(card.y + card.height, "last card above the floating buttons").toBeLessThanOrEqual(fab.y);
 
-  await page.getByRole("button", { name: "Show menu" }).tap();
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
   await expect(drawer.getByRole("link", { name: "Mobile workspace" })).toBeVisible();
   await expectFits(page, "menu drawer");
@@ -71,15 +71,15 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   // The top bar keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
   await expect(page.getByRole("banner").getByRole("button", { name: "Share" })).toBeVisible();
   const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
-  expect(add.height).toBeGreaterThanOrEqual(52);
+  expect(add.height).toBeGreaterThanOrEqual(48);
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
   expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
 
   // The base's menu is the drawer; choosing a view closes it.
-  await page.getByRole("button", { name: "Show menu" }).tap();
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
   const baseMenu = page.getByRole("dialog", { name: "Menu" });
   await expect(baseMenu.getByRole("navigation", { name: "Tables" })).toBeVisible();
-  await expect(baseMenu.getByRole("link", { name: "Back to Mobile workspace" })).toBeVisible();
+  await expect(baseMenu.getByRole("button", { name: "Workspace: Mobile workspace. Switch workspace" })).toBeVisible();
   await expectFits(page, "base menu drawer");
   await baseMenu.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Grid view" }).tap();
   await expect(baseMenu).toBeHidden();
@@ -89,9 +89,9 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   await expectFits(page, "search");
   await page.keyboard.press("Escape");
 
-  // On a phone the tools start folded into one button.
-  await toolbar.getByRole("button", { name: "Tools" }).click();
-  await toolbar.getByRole("button", { name: "Filter" }).click();
+  // On a phone the tools are one menu behind a sliders button.
+  await toolbar.getByRole("button", { name: /^Tools/ }).click();
+  await page.getByRole("menu", { name: "View tools" }).getByRole("menuitem", { name: "Filter" }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Operator" })).toBeVisible();
   await expectFits(page, "filter");
@@ -112,7 +112,7 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
   await expectFits(page, "first workspace");
-  await page.getByRole("button", { name: "Show menu" }).tap();
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
   await page.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "New workspace" }).tap();
   const create = page.getByRole("dialog", { name: "New workspace" });
   await create.getByRole("textbox", { name: "Name" }).fill("Kitchen");

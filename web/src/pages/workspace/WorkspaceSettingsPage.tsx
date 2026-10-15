@@ -14,7 +14,7 @@ export function WorkspaceSettingsPage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
   return (
-    <HomeShell workspaceId={workspaceId} section="settings" topBar={ws && <span className="truncate text-[0.9375rem] font-semibold md:hidden" aria-hidden>{ws.name}</span>}>
+    <HomeShell workspaceId={workspaceId} section="settings">
       {ws ? <Settings key={ws.id} ws={ws} /> : fallback}
     </HomeShell>
   );
