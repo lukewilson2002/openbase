@@ -194,14 +194,17 @@ export function TimelineChart(props: TimelineChartProps) {
     report(el);
   });
 
-  // The visible width changes with the window and the sidebar, not only with scrolling.
+  // The visible width changes with the window and the sidebar, not only with scrolling. One
+  // observer for the chart's life, calling the latest `report` (it closes over the current axis).
+  const reportRef = useRef(report);
+  reportRef.current = report;
   useEffect(() => {
     const el = scroller.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => report(el));
+    const ro = new ResizeObserver(() => reportRef.current(el));
     ro.observe(el);
     return () => ro.disconnect();
-  });
+  }, []);
 
   const onScroll = () => {
     const el = scroller.current;
