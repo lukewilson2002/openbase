@@ -95,6 +95,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
   return (
     <AppShell
       fill
+      hidePhoneLogo
       mainLabel={automations ? "Automations" : (view?.name ?? "Base content")}
       topBar={<BaseTopBar schema={schema} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
       sidebar={<BaseSidebar schema={schema} activeTableId={table?.id} activeViewId={view?.id} onDialog={setDialog} />}

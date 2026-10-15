@@ -43,9 +43,11 @@ export interface AppShellProps {
   fill?: boolean;
   /** Accessible name of the page's main landmark (e.g. the open view's name). */
   mainLabel?: string;
+  /** Leave the logo out on phones, where a page title with its own tile needs the room more. */
+  hidePhoneLogo?: boolean;
 }
 
-export function AppShell({ sidebar, sidebarFooter, topBar, children, className, fill, mainLabel }: AppShellProps) {
+export function AppShell({ sidebar, sidebarFooter, topBar, children, className, fill, mainLabel, hidePhoneLogo }: AppShellProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [prefs, setPrefs] = useSidebarPrefs();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -80,7 +82,7 @@ export function AppShell({ sidebar, sidebarFooter, topBar, children, className, 
           >
             <PanelLeft aria-hidden className="size-5" />
           </button>
-          <Link to="/" aria-label="OpenBase home" className="flex shrink-0 items-center">
+          <Link to="/" aria-label="OpenBase home" className={cn("flex shrink-0 items-center", hidePhoneLogo && "max-sm:hidden")}>
             {/* The lockup needs ~120 px; on a phone the page title needs that room more. */}
             <Logo className="hidden h-9 sm:block" />
             <BrandMark small className="size-7 sm:hidden" />

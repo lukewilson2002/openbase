@@ -349,7 +349,8 @@ export function ViewBar(props: ViewBarProps) {
             className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8125rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-10"
           >
             <ChevronsLeft aria-hidden className="size-4" />
-            <span aria-hidden className="hidden lg:inline">
+            {/* Spelled out only where the toolbar has room to spare beside the base menu. */}
+            <span aria-hidden className="hidden 2xl:inline">
               Hide tools
             </span>
           </button>
