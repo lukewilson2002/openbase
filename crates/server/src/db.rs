@@ -531,24 +531,34 @@ mod tests {
                  ('owner', 'o@example.com', 'O', '!', 1, 1),
                  ('guest', 'g@example.com', 'G', '!', 1, 1),
                  ('double', 'd@example.com', 'D', '!', 1, 1),
-                 ('bowner', 'b@example.com', 'B', '!', 1, 1);
-             INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'One', 1), ('w2', 'Two', 1);
+                 ('bowner', 'b@example.com', 'B', '!', 1, 1),
+                 ('trashed', 't@example.com', 'T', '!', 1, 1),
+                 ('gone', 'x@example.com', 'X', '!', 1, 1);
+             INSERT INTO workspaces (id, name, created_at, deleted_at) VALUES
+                 ('w1', 'One', 1, NULL), ('w2', 'Two', 1, NULL), ('w3', 'Gone', 1, 7);
              INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES
                  ('w1', 'owner', 'owner', 1), ('w2', 'owner', 'owner', 1),
+                 ('w3', 'owner', 'owner', 1),
                  ('w1', 'double', 'viewer', 1);
-             INSERT INTO bases (id, workspace_id, name, created_at) VALUES
-                 ('b1', 'w1', 'CRM', 1), ('b2', 'w1', 'Ops', 1), ('b3', 'w2', 'Other', 1),
-                 ('b4', 'w1', 'Unshared', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at, deleted_at) VALUES
+                 ('b1', 'w1', 'CRM', 1, NULL), ('b2', 'w1', 'Ops', 1, NULL),
+                 ('b3', 'w2', 'Other', 1, NULL), ('b4', 'w1', 'Unshared', 1, NULL),
+                 ('b5', 'w1', 'Trashed', 1, 7), ('b6', 'w3', 'In trashed', 1, NULL);
              -- base-only member of two bases of w1, plus a double member
              INSERT INTO base_members (base_id, user_id, role, created_at) VALUES
                  ('b1', 'guest', 'viewer', 5), ('b2', 'guest', 'editor', 3),
                  ('b1', 'double', 'creator', 1),
-                 ('b3', 'bowner', 'owner', 1);
+                 ('b3', 'bowner', 'owner', 1),
+                 -- trashed bases: their own members, and a higher role for guest
+                 ('b5', 'trashed', 'editor', 1), ('b6', 'gone', 'editor', 1),
+                 ('b5', 'guest', 'owner', 1);
              INSERT INTO invites (id, token_hash, workspace_id, base_id, role, created_at, expires_at, accepted_at)
                  VALUES ('i1', 'h1', NULL, 'b1', 'editor', 1, 9999999999999, NULL),
                         ('i2', 'h2', NULL, 'b3', 'owner', 1, 9999999999999, NULL),
                         ('i3', 'h3', NULL, 'b2', 'viewer', 1, 9999999999999, 2),
-                        ('i4', 'h4', 'w1', NULL, 'viewer', 1, 9999999999999, NULL);",
+                        ('i4', 'h4', 'w1', NULL, 'viewer', 1, 9999999999999, NULL),
+                        ('i5', 'h5', NULL, 'b5', 'viewer', 1, 9999999999999, NULL),
+                        ('i6', 'h6', NULL, 'b6', 'viewer', 1, 9999999999999, NULL);",
         )
         .unwrap();
         migrate(&conn).unwrap();
@@ -576,7 +586,8 @@ mod tests {
             (role, all, bases)
         };
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        // Base-only member: highest role, limited to the bases they had.
+        // Base-only member: highest role, limited to the live bases they had
+        // (the trashed base's owner role neither counts nor stays listed).
         assert_eq!(
             member("w1", "guest"),
             ("editor".into(), false, s(&["b1", "b2"]))
@@ -590,6 +601,17 @@ mod tests {
             ("creator".into(), false, s(&["b3"]))
         );
         assert_eq!(member("w1", "owner"), ("owner".into(), true, s(&[])));
+        // Only on a trashed base, or a base of a trashed workspace: no member.
+        let memberships = |u: &str| -> i64 {
+            conn.query_row(
+                "SELECT count(*) FROM workspace_members WHERE user_id = ?1",
+                [u],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(memberships("trashed"), 0);
+        assert_eq!(memberships("gone"), 0);
         let role = |u: &str, b: &str| crate::perm::base_role(&conn, u, b).unwrap();
         use crate::perm::Role;
         assert_eq!(role("guest", "b1"), Some(Role::Editor));
@@ -597,6 +619,11 @@ mod tests {
         assert_eq!(role("double", "b1"), Some(Role::Viewer));
         assert_eq!(role("double", "b4"), Some(Role::Viewer));
         assert_eq!(role("bowner", "b3"), Some(Role::Creator));
+        // Restoring the trashed base does not bring the old access back.
+        conn.execute("UPDATE bases SET deleted_at = NULL WHERE id = 'b5'", [])
+            .unwrap();
+        assert_eq!(role("guest", "b5"), None);
+        assert_eq!(role("trashed", "b5"), None);
 
         // Base invites became workspace invites limited to their base.
         let invite = |id: &str| -> (Option<String>, Option<String>, String, bool, Vec<String>) {
@@ -631,13 +658,18 @@ mod tests {
             (w("w1"), None, "viewer".into(), false, s(&["b2"]))
         );
         assert_eq!(invite("i4"), (w("w1"), None, "viewer".into(), true, s(&[])));
-
+        // Invites to a trashed base or a base of a trashed workspace are gone.
         let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert_eq!(
+            count("SELECT count(*) FROM invites WHERE id IN ('i5', 'i6')"),
+            0
+        );
+
         assert_eq!(
             count("SELECT count(*) FROM sqlite_master WHERE name = 'base_members'"),
             0
         );
-        assert_eq!(count("SELECT count(*) FROM users WHERE intro_seen = 0"), 4);
+        assert_eq!(count("SELECT count(*) FROM users WHERE intro_seen = 0"), 6);
         assert_eq!(count("SELECT count(*) FROM pragma_foreign_key_check"), 0);
         // Leaving a workspace takes the base list with it.
         conn.execute(

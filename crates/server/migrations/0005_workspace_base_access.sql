@@ -3,16 +3,24 @@
 -- (all_bases = 1, including bases created later) or a picked list of bases
 -- (workspace_member_bases). Per-base roles (base_members) go away.
 --
--- Existing data is converted without widening anyone's access:
+-- Existing data is converted as follows:
 --  * someone who was only a member of individual bases becomes a workspace
 --    member limited to those bases, with their highest role among them (an
 --    "owner" of a single base becomes a "creator": owners always see every
---    base, so keeping "owner" would hand them the whole workspace);
+--    base, so keeping "owner" would hand them the whole workspace). Being a
+--    workspace member, they now also see its member list, and a creator can
+--    add new bases to the workspace;
+--  * only live bases of live workspaces count: someone who was only on
+--    trashed bases (or bases of a trashed workspace) becomes no member at
+--    all, since they could open nothing, and their access to those bases
+--    goes away instead of coming back with a restore;
 --  * someone who was a workspace member AND a base member keeps their
 --    workspace role on all bases; the base row only ever raised their role on
 --    that one base, and that raise is dropped rather than widened;
 --  * base invites become workspace invites limited to that base (owner role
---    capped at creator for the same reason as above).
+--    capped at creator for the same reason as above); invites to trashed
+--    bases or bases of trashed workspaces are deleted, for the same reason
+--    as trashed-base members.
 -- Everyone sees the new introduction once (intro_seen starts at 0).
 
 ALTER TABLE users ADD COLUMN intro_seen INTEGER NOT NULL DEFAULT 0;
@@ -59,20 +67,31 @@ SELECT b.workspace_id,
        0
 FROM base_members bm
 JOIN bases b ON b.id = bm.base_id
-WHERE NOT EXISTS (SELECT 1 FROM workspace_members wm
+JOIN workspaces w ON w.id = b.workspace_id
+WHERE b.deleted_at IS NULL AND w.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM workspace_members wm
                   WHERE wm.workspace_id = b.workspace_id AND wm.user_id = bm.user_id)
 GROUP BY b.workspace_id, bm.user_id;
 
--- Only the members created just above have all_bases = 0.
+-- Only the members created just above have all_bases = 0. Their trashed
+-- bases stay off the list, so restoring one does not bring access back.
 INSERT INTO workspace_member_bases (workspace_id, user_id, base_id)
 SELECT b.workspace_id, bm.user_id, bm.base_id
 FROM base_members bm
 JOIN bases b ON b.id = bm.base_id
 JOIN workspace_members wm ON wm.workspace_id = b.workspace_id AND wm.user_id = bm.user_id
-WHERE wm.all_bases = 0;
+WHERE wm.all_bases = 0 AND b.deleted_at IS NULL;
 
--- Base invites (pending or not, so the workspace's invite history stays
--- complete) become workspace invites limited to their base.
+-- Invites to trashed bases go (see the header): converted, restoring the
+-- base would revive them as invites into a workspace.
+DELETE FROM invites
+WHERE base_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+                  WHERE b.id = invites.base_id
+                    AND b.deleted_at IS NULL AND w.deleted_at IS NULL);
+
+-- The remaining base invites (pending or not, so the workspace's invite
+-- history stays complete) become workspace invites limited to their base.
 INSERT INTO invite_bases (invite_id, base_id)
 SELECT id, base_id FROM invites WHERE base_id IS NOT NULL;
 
