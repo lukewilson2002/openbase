@@ -103,7 +103,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    // Exact: the workspace (the menu's "Back to …" link) is named after this spec too.
+    // Exact: the workspace (in the top bar's picker) is named after this spec too.
     await page.getByRole("link", { name: "Automations", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/automations$`));
     await expect(page.getByText("No automations yet")).toBeVisible();
@@ -156,7 +156,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   await test.step("adds a record in the grid", async () => {
     await page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Table 1" }).click();
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    await expect(page.getByText("0 records")).toBeVisible();
+    await expect(page.getByText("0 items")).toBeVisible();
     await page.getByRole("button", { name: "Add record" }).click();
     await expect(page.getByText("1 record")).toBeVisible();
     // Name it, as a person would.

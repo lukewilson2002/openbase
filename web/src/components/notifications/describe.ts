@@ -48,6 +48,12 @@ function actorName(p: Record<string, unknown>): string {
   return text(p, "author_name") ?? text(p, "actor_name") ?? "Someone";
 }
 
+/** The person behind a notification, when the payload names one (mentions and invites). */
+export function notificationActor(n: Notification): string | null {
+  const p = payloadOf(n);
+  return text(p, "author_name") ?? text(p, "actor_name");
+}
+
 /** A base or table a notification is about, with the icon it had when the notification was written. */
 export interface PlaceName {
   name: string;

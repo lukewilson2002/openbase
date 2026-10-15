@@ -27,7 +27,7 @@ describe("GalleryView", () => {
     expect(img.className).toContain("object-contain"); // fit
     expect(within(card).getByText("2.00")).toBeInTheDocument();
     expect(document.querySelector("[data-record-id='r2'] [data-row-color='green']")).not.toBeNull();
-    expect(screen.getByText("2 records")).toBeInTheDocument();
+    expect(screen.getByText("2 items")).toBeInTheDocument();
   });
 
   it("crops covers when the view says so", async () => {
@@ -42,7 +42,7 @@ describe("GalleryView", () => {
     const { asked } = setup("editor", gallery(), many);
     await screen.findByRole("button", { name: "M0" });
     expect(screen.getAllByRole("button", { name: /^M\d+$/ })).toHaveLength(GALLERY_PAGE);
-    expect(screen.getByText(`${GALLERY_PAGE} of ${GALLERY_PAGE + 10} records`)).toBeInTheDocument();
+    expect(screen.getByText(`${GALLERY_PAGE} of ${GALLERY_PAGE + 10} items`)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: /^M\d+$/ })).toHaveLength(GALLERY_PAGE + 10));
     expect(asked.map((a) => [a.offset, a.limit])).toEqual([

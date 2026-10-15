@@ -1,15 +1,33 @@
 import { Link } from "react-router";
-import { Bot, ChevronsUpDown, LogOut, CirclePlay, Settings, ShieldCheck } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { useMe } from "@/auth/useAuth";
 import { ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
 import { Avatar } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useIntro } from "@/onboarding/IntroContext";
+import { useTheme } from "@/theme/ThemeProvider";
 
-/** The signed-in person at the bottom of the menu, opening their account actions upwards. */
+const MODE_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
+const item = "px-3 py-2.5 text-[0.875rem] rounded-lg";
+
+/**
+ * The signed-in person at the bottom of the menu, opening their account actions upwards: the
+ * account settings (the menu's only way there), connecting an assistant, the intro, the theme,
+ * administration for administrators, and signing out.
+ */
 export function ProfileMenu() {
   const { data: user } = useMe();
   const { openIntro } = useIntro();
+  const { mode } = useTheme();
   const logOut = useLogOutAndLeave();
   if (!user) return null;
 
@@ -20,46 +38,40 @@ export function ProfileMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex w-full min-w-0 items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover"
+          className="flex w-full min-w-0 items-center gap-2.5 rounded-[10px] p-1.5 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover"
         >
           <Avatar name={user.name} email={user.email} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[0.8125rem] font-medium text-fg">{user.name}</span>
+            <span className="block truncate text-[0.875rem] font-semibold text-fg">{user.name}</span>
             <span className="block truncate text-xs text-muted">{user.email}</span>
           </span>
           <ChevronsUpDown aria-hidden className="size-4 shrink-0 text-muted" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-[max(var(--radix-dropdown-menu-trigger-width),15rem)]">
-        <DropdownMenuItem asChild>
-          <Link to="/account">
-            <Settings aria-hidden className="size-4" /> Account settings
-          </Link>
+      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[max(var(--radix-dropdown-menu-trigger-width),14rem)] rounded-xl p-1.5">
+        <DropdownMenuItem asChild className={item}>
+          <Link to="/account">Settings</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/account?tab=assistants">
-            <Bot aria-hidden className="size-4" /> Connect an assistant
-          </Link>
+        <DropdownMenuItem asChild className={item}>
+          <Link to="/account?tab=assistants">Connect an assistant</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={openIntro}>
-          <CirclePlay aria-hidden className="size-4" /> Replay the intro
+        <DropdownMenuItem onSelect={openIntro} className={item}>
+          Replay the intro
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-        <ThemeRadioItems />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className={item}>Appearance: {MODE_LABEL[mode]}</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <ThemeRadioItems />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         {user.is_admin && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/admin">
-                <ShieldCheck aria-hidden className="size-4" /> Administration
-              </Link>
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem asChild className={item}>
+            <Link to="/admin">Administration</Link>
+          </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem danger onSelect={logOut}>
-          <LogOut aria-hidden className="size-4" /> Log out
+        <DropdownMenuSeparator className="mx-1 my-1.5" />
+        <DropdownMenuItem danger onSelect={logOut} className={item}>
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

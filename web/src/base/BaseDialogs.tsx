@@ -4,7 +4,7 @@
  * because on a phone the sidebar is a drawer that unmounts when it closes, and a dialog inside it
  * would vanish with it.
  */
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
@@ -31,7 +31,20 @@ export type BaseDialog =
   | { kind: "create-view"; table: Table; type: ViewType }
   | { kind: "rename-view"; view: View }
   | { kind: "delete-view"; table: Table; view: View }
-  | { kind: "share"; table: Table | null; view: View | null; tab: "invite" | "view" };
+  | { kind: "share"; table: Table | null; view: View | null; tab: "invite" | "view" }
+  | { kind: "rename-base" }
+  | { kind: "base-icon" }
+  | { kind: "create-base"; workspaceId: string };
+
+/**
+ * Opens one of these dialogs from anywhere inside the base (the view toolbar's table and view
+ * picker); null outside a base, where the callers leave those actions out.
+ */
+export const BaseDialogContext = createContext<((dialog: BaseDialog) => void) | null>(null);
+
+export function useBaseDialog(): ((dialog: BaseDialog) => void) | null {
+  return useContext(BaseDialogContext);
+}
 
 export interface BaseDialogsProps {
   schema: BaseSchema;
@@ -88,6 +101,23 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
     onSuccess: async (_r, v) => {
       await refresh();
       if (v.id === activeViewId) navigate(`/base/${schema.id}/${v.tableId}`, { replace: true });
+    },
+  });
+
+  const refreshBase = () => {
+    void qc.invalidateQueries({ queryKey: keys.base(schema.id) });
+    void qc.invalidateQueries({ queryKey: keys.workspaces });
+  };
+  const updateBase = useMutation({
+    mutationFn: (body: { name?: string; icon?: string | null }) => api.bases.update(schema.id, body),
+    onSuccess: refreshBase,
+    onError: (e) => toast.error(e, "Could not change the base"),
+  });
+  const createBase = useMutation({
+    mutationFn: (v: { workspaceId: string; name: string; icon: string | null }) => api.bases.create(v.workspaceId, { name: v.name, ...(v.icon ? { icon: v.icon } : {}), empty: true }),
+    onSuccess: async (base) => {
+      void qc.invalidateQueries({ queryKey: keys.workspaces });
+      await navigate(`/base/${base.id}`);
     },
   });
 
@@ -156,6 +186,24 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
         confirmLabel="Delete view"
         destructive
         onConfirm={() => (dialog?.kind === "delete-view" ? removeView.mutateAsync({ id: dialog.view.id, tableId: dialog.table.id }) : undefined)}
+      />
+
+      <NameDialog
+        open={dialog?.kind === "rename-base"}
+        onOpenChange={onOpenChange}
+        title="Rename base"
+        label="Base name"
+        initialValue={schema.name}
+        onSubmit={(name) => (name !== schema.name ? updateBase.mutateAsync({ name }) : undefined)}
+      />
+      <IconPickerDialog open={dialog?.kind === "base-icon"} onOpenChange={onOpenChange} title="Base icon" value={schema.icon} onChange={(icon) => updateBase.mutate({ icon })} />
+      <NameDialog
+        open={dialog?.kind === "create-base"}
+        onOpenChange={onOpenChange}
+        title="New base"
+        submitLabel="Create base"
+        withIcon
+        onSubmit={(name, icon) => (dialog?.kind === "create-base" ? createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, icon }) : undefined)}
       />
 
       {dialog?.kind === "share" && (

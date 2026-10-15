@@ -62,7 +62,7 @@ describe("KanbanView", () => {
     // Cards show the visible fields (the stack field itself is left out).
     expect(within(screen.getByRole("button", { name: "R1" })).getByText("5.00")).toBeInTheDocument();
     expect(asked[0]).toMatchObject({ offset: 0, timezone: "UTC" });
-    expect(screen.getByText("4 cards")).toBeInTheDocument();
+    expect(screen.getByText("4 items")).toBeInTheDocument();
   });
 
   it("shows the setup prompt when no stack field is chosen and saves the choice", async () => {

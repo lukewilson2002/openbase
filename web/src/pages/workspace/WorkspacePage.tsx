@@ -39,19 +39,9 @@ export function WorkspacePage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
   return (
-    <HomeShell workspaceId={workspaceId} section="bases" topBar={ws && <PhoneTitle ws={ws} />}>
+    <HomeShell workspaceId={workspaceId} section="bases">
       {ws ? <Workspace key={ws.id} ws={ws} /> : fallback}
     </HomeShell>
-  );
-}
-
-/** On a phone the workspace's name lives in the top bar; the page header is reduced to its actions. */
-function PhoneTitle({ ws }: { ws: WorkspaceSummary }) {
-  return (
-    <span aria-hidden className="flex min-w-0 items-center gap-2 md:hidden">
-      <EntityTile name={ws.name} icon={ws.icon} size="sm" />
-      <span className="truncate text-[0.9375rem] font-semibold">{ws.name}</span>
-    </span>
   );
 }
 

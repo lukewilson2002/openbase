@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useBaseEvents } from "@/hooks/useBaseEvents";
-import { AppShell } from "@/shell/AppShell";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { AppShell, DESKTOP_QUERY } from "@/shell/AppShell";
 import { ViewHost } from "@/views/ViewHost";
-import { BaseDialogs, type BaseDialog } from "./BaseDialogs";
+import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
 import { BaseSidebar, BaseSidebarFooter } from "./BaseSidebar";
-import { BaseTopBar } from "./BaseTopBar";
+import { BasePlaces, BaseTopBar } from "./BaseTopBar";
 import { EmptyBase } from "./EmptyBase";
 import { basePermissions } from "./permissions";
 
@@ -29,6 +30,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
   const { baseId = "", tableId, viewId } = useParams();
   const location = useLocation();
   const [dialog, setDialog] = useState<BaseDialog | null>(null);
+  const desktop = useMediaQuery(DESKTOP_QUERY);
   const base = useQuery({
     queryKey: keys.base(baseId),
     queryFn: () => api.bases.get(baseId),
@@ -93,16 +95,20 @@ export function BaseShell({ section }: { section?: "automations" }) {
   }
 
   return (
-    <AppShell
-      fill
-      hidePhoneLogo
-      mainLabel={automations ? "Automations" : (view?.name ?? "Base content")}
-      topBar={<BaseTopBar schema={schema} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
-      sidebar={<BaseSidebar schema={schema} activeTableId={table?.id} activeViewId={view?.id} onDialog={setDialog} />}
-      sidebarFooter={<BaseSidebarFooter schema={schema} section={section} />}
-    >
-      {page}
-      <BaseDialogs schema={schema} activeTableId={table?.id} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
-    </AppShell>
+    <BaseDialogContext.Provider value={setDialog}>
+      <AppShell
+        fill
+        hidePhoneLogo
+        mainLabel={automations ? "Automations" : (view?.name ?? "Base content")}
+        brand={<BasePlaces schema={schema} onDialog={setDialog} />}
+        drawerHeader={<BasePlaces schema={schema} onDialog={setDialog} compact />}
+        topBar={<BaseTopBar schema={schema} desktop={desktop} onDialog={setDialog} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
+        sidebar={<BaseSidebar schema={schema} activeTableId={table?.id} activeViewId={view?.id} onDialog={setDialog} />}
+        sidebarFooter={<BaseSidebarFooter schema={schema} section={section} />}
+      >
+        {page}
+        <BaseDialogs schema={schema} activeTableId={table?.id} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
+      </AppShell>
+    </BaseDialogContext.Provider>
   );
 }

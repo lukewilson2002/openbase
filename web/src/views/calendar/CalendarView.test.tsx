@@ -45,7 +45,7 @@ describe("CalendarView", () => {
     expect(screen.queryByText("R3")).not.toBeInTheDocument(); // no date: unscheduled
     const link = ev1.closest("a")!;
     expect(link).toHaveStyle({ backgroundColor: "rgb(207, 223, 255)" }); // palette "blue"
-    expect(screen.getByText(/2 records in this range/)).toBeInTheDocument();
+    expect(screen.getByText(/2 items in this range/)).toBeInTheDocument();
   });
 
   it("opens the record when an event is clicked", async () => {

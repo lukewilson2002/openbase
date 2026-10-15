@@ -105,9 +105,12 @@ describe("home menu", () => {
     expect(await within(menu).findByRole("link", { name: "Shared with me" })).toHaveAttribute("href", "/workspace/wsp2");
     expect(within(menu).getByRole("link", { name: "Bases" })).toHaveAttribute("aria-current", "page");
     expect(within(menu).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
-    expect(within(menu).getByRole("link", { name: "Workspace settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
-    expect(within(menu).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash");
-    expect(within(menu).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/account");
+    const acme = within(menu).getByRole("group", { name: "Acme" });
+    expect(within(acme).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
+    expect(within(acme).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
+    // The Trash of everything closes the menu; account settings are in the profile menu now.
+    expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
+    expect(within(menu).getAllByRole("link").some((l) => l.getAttribute("href") === "/account")).toBe(false);
 
     await user.click(within(menu).getByRole("button", { name: "New workspace" }));
     const dialog = await screen.findByRole("dialog", { name: "New workspace" });

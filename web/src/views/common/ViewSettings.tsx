@@ -1,6 +1,5 @@
 /** Toolbar control for view-type specific settings (stack field, date fields, scale...). */
 import type { ReactNode } from "react";
-import { SlidersHorizontal } from "lucide-react";
 import type { Field } from "@/api/types";
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { Field as FormField, Select } from "@/components/ui/input";
@@ -10,10 +9,9 @@ export function ViewSettings({ label = "Settings", note, children }: { label?: s
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-fg hover:bg-hover">
-          <SlidersHorizontal aria-hidden className="size-4" />
-          <span className="hidden sm:inline">{label}</span>
-          <span className="sr-only sm:hidden">{label}</span>
+        {/* Worded like the toolbar's other tools; in the phone's tools menu it sits under them. */}
+        <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-[9px] px-2.5 text-[0.875rem] text-fg hover:bg-hover data-[state=open]:bg-hover pointer-coarse:h-11">
+          {label}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex max-h-[min(34rem,80dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-y-auto p-3">

@@ -35,7 +35,7 @@ describe("ListView", () => {
       ["1", "Doing1"],
     ]);
     expect(screen.getByRole("button", { name: "R1" })).toBeInTheDocument();
-    expect(screen.getByText("3 records")).toBeInTheDocument();
+    expect(screen.getByText("3 items")).toBeInTheDocument();
   });
 
   it("collapses and expands everything", async () => {

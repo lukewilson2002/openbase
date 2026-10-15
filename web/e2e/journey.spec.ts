@@ -145,7 +145,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   const addField = async (name: string, type: RegExp, fill?: () => Promise<void>) => {
-    await page.getByRole("button", { name: "Add field" }).first().click();
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Add field" }).click();
     const dialog = page.getByRole("dialog", { name: "Add a field" });
     await dialog.getByLabel("Field name").fill(name);
     await dialog.getByRole("option", { name: type }).click();
@@ -184,7 +185,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   const fid = (name: string) => table.fields.find((f) => f.name === name)!.id;
 
   await test.step("adds records and edits cells in the grid", async () => {
-    await expect(page.getByText("0 records")).toBeVisible();
+    await expect(page.getByText("0 items")).toBeVisible();
     for (let i = 1; i <= 3; i++) {
       await page.getByRole("button", { name: "Add record" }).click();
       await expect(page.getByText(`${i} record${i === 1 ? "" : "s"}`)).toBeVisible();
@@ -224,15 +225,15 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
     await page.getByLabel("Operator").selectOption("gte");
     await page.getByLabel("Value").fill("20");
-    await expect(page.getByText("2 records")).toBeVisible();
+    await expect(page.getByText("2 items")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: /1 filter/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Filtered by / })).toBeVisible();
 
     await page.getByRole("button", { name: /^Sort/ }).click();
     await page.getByRole("button", { name: "Add sort" }).click();
     await page.getByLabel("Field for sort 1").selectOption({ label: "Qty" });
     await page.getByLabel("Direction for sort 1").selectOption("desc");
-    await expect(page.getByRole("button", { name: /Sorted by 1 field/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
     await page.keyboard.press("Escape");
 
     // The server applies the saved view config: only Qty >= 20, biggest first.
@@ -241,8 +242,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect(view.config).toMatchObject({ filter: { items: [{ field_id: fid("Qty"), op: "gte", value: 20 }] }, sorts: [{ field_id: fid("Qty"), direction: "desc" }] });
     // The saved view survives a reload.
     await page.reload();
-    await expect(page.getByText("2 records")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Sorted by 1 field/ })).toBeVisible();
+    await expect(page.getByText("2 items")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
   });
 
   await test.step("opens the expanded record and comments on it", async () => {
@@ -265,7 +266,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   await test.step("logs out and back in; the data is where it was left", async () => {
     await page.getByRole("button", { name: "Account menu" }).click();
-    await page.getByRole("menuitem", { name: "Log out" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
     // The session is gone for real, not just hidden.
     expect((await page.request.get("/api/auth/me")).status()).toBe(401);
@@ -281,7 +282,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     // The login returns to the page that was asked for.
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/${viewId}$`));
     await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
-    await expect(page.getByText("2 records")).toBeVisible();
+    await expect(page.getByText("2 items")).toBeVisible();
     expect((await records()).map((r) => r.values[table.primary_field_id])).toEqual(["Charlie", "Bravo"]);
   });
 
@@ -310,7 +311,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     const clients = (await created.json()) as { id: string };
     await expect(page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Clients" }).locator("svg[data-icon='users']")).toBeVisible();
 
-    await page.getByRole("button", { name: "Add field" }).first().click();
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Add field" }).click();
     const dialog = page.getByRole("dialog", { name: "Add a field" });
     await dialog.getByLabel("Field name").fill("Client");
     await dialog.getByRole("option", { name: /^Link to another record/ }).click();
@@ -330,11 +332,13 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   await test.step("gives the base and the workspace icons; the workspace page shows them instead of the letters", async () => {
-    await page.getByRole("button", { name: "Change base icon" }).click();
+    await page.getByRole("heading", { level: 1 }).getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Change icon" }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
-    await expect(page.locator("header [data-entity-tile] svg[data-icon='store']")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
 
-    await page.getByRole("link", { name: "Back to Journey workspace" }).click();
+    await page.getByRole("heading", { level: 1 }).getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Workspace home" }).click();
     const card = page.getByRole("link", { name: "Journey base" }).locator("xpath=ancestor::li");
     await expect(card.locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
     await expect(card.locator("[data-entity-tile]")).not.toContainText("J");
