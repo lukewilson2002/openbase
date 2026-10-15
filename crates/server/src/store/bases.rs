@@ -212,11 +212,13 @@ pub fn update(tx: &Transaction, base_id: &str, patch: &UpdateBase) -> AppResult<
     live_base(tx, base_id)
 }
 
-/// Move a base to the trash.
-pub fn soft_delete(tx: &Transaction, base_id: &str) -> AppResult<()> {
+/// Move a base to the trash, as deleted by `user_id`. Only the base row is
+/// stamped: its tables and records are unreachable while it is in the trash
+/// and come back unchanged with it.
+pub fn soft_delete(tx: &Transaction, base_id: &str, user_id: &str) -> AppResult<()> {
     let n = tx.execute(
-        "UPDATE bases SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
-        params![base_id, now_ms()],
+        "UPDATE bases SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+        params![base_id, now_ms(), user_id],
     )?;
     if n == 0 {
         return Err(AppError::not_found("base"));

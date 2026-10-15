@@ -587,6 +587,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
     // ---------------------------------------------------------------------- trash
     e(
         GET,
+        "/api/trash",
+        "trash",
+        "-",
+        Read,
+        "Everything you could restore, from every workspace you belong to, newest first: records, fields, tables and shared views of bases where you are a creator, your own personal views, and (with the manage permission) bases and workspaces you own. Each item says where it was (workspace, base, table), who deleted it and when it is removed for good (expires_at).",
+        "query: workspace_id?, base_id?, kind? (workspace|base|table|field|view|record)",
+        "TrashListing {items: [{kind, id, name, icon, table_id, deleted_at, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_name, deleted_by_id, deleted_by_name, expires_at}]}",
+    ),
+    e(
+        GET,
         "/api/bases/{id}/trash",
         "trash",
         "creator",

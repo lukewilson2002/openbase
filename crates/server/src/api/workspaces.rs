@@ -124,7 +124,7 @@ async fn remove(
         .write(move |tx| {
             perm::require_workspace(tx, &actor, &id, Role::Owner)?;
             let bases = workspaces::base_ids(tx, &id)?;
-            workspaces::soft_delete(tx, &id)?;
+            workspaces::soft_delete(tx, &id, &actor.user_id)?;
             Ok(bases)
         })
         .await?;

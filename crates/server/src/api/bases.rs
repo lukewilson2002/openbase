@@ -95,7 +95,7 @@ async fn remove(
         .db
         .write(move |tx| {
             perm::require_base(tx, &actor, &id, Role::Owner)?;
-            bases::soft_delete(tx, &id)
+            bases::soft_delete(tx, &id, &actor.user_id)
         })
         .await?;
     publish(&state, &headers, &who, &base_id, BaseEvent::BaseChanged);

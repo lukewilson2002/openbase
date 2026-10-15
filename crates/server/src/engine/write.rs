@@ -1160,7 +1160,7 @@ pub fn delete_records(
     }
     let at = ctx.now_ms();
     for row in rows {
-        records::set_deleted_at(w.conn(), &row.id, Some(at))?;
+        records::set_deleted_at(w.conn(), &row.id, Some(at), ctx.actor_str())?;
         history::record(
             w.conn(),
             &row.id,
@@ -1216,7 +1216,7 @@ pub fn restore_records(
     }
     let at = ctx.now_ms();
     for row in rows {
-        records::set_deleted_at(w.conn(), &row.id, None)?;
+        records::set_deleted_at(w.conn(), &row.id, None, None)?;
         history::record(
             w.conn(),
             &row.id,

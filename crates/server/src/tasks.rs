@@ -215,7 +215,7 @@ pub fn purge_trash(
     trash_days: u32,
     now_ms: i64,
 ) -> AppResult<crate::store::trash::PurgeStats> {
-    let cutoff = now_ms - i64::from(trash_days) * 24 * 3600 * 1000;
+    let cutoff = now_ms - crate::store::trash::retention_ms(trash_days);
     crate::store::trash::purge_expired(tx, cutoff)
 }
 

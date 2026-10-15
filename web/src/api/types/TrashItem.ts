@@ -8,4 +8,30 @@ kind: string, id: string, name: string,
 /**
  * Lucide icon name of a trashed workspace, base or table.
  */
-icon?: string | null, table_id?: string | null, deleted_at: number, };
+icon?: string | null, 
+/**
+ * The table of a trashed field, view or record.
+ */
+table_id?: string | null, deleted_at: number, 
+/**
+ * The workspace the item is in (for a workspace, itself).
+ */
+workspace_id: string, workspace_name: string, workspace_color: string, 
+/**
+ * The base the item is in (for a base, itself); null for a workspace.
+ */
+base_id?: string | null, base_name?: string | null, base_icon?: string | null, base_color?: string | null, 
+/**
+ * Name of `table_id`'s table (fields, views and records).
+ */
+table_name?: string | null, 
+/**
+ * Who moved it to the trash; null when unknown (trashed before this was
+ * recorded, or by an automation).
+ */
+deleted_by_id?: string | null, deleted_by_name?: string | null, 
+/**
+ * When the trash purge removes it for good (`deleted_at` plus the
+ * server's trash retention), in milliseconds.
+ */
+expires_at: number, };

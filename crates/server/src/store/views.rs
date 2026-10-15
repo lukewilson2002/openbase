@@ -203,7 +203,7 @@ pub fn update(
     Ok(live_view(tx, view_id)?.view)
 }
 
-/// Move a view to the trash.
+/// Move a view to the trash, as deleted by `user_id`.
 pub fn delete(tx: &Transaction, view_id: &str, user_id: &str, role: Role) -> AppResult<()> {
     let row = live_view(tx, view_id)?;
     ensure_visible(&row, user_id)?;
@@ -222,8 +222,8 @@ pub fn delete(tx: &Transaction, view_id: &str, user_id: &str, role: Role) -> App
         }
     }
     tx.execute(
-        "UPDATE views SET deleted_at = ?2 WHERE id = ?1",
-        params![view_id, now_ms()],
+        "UPDATE views SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1",
+        params![view_id, now_ms(), user_id],
     )?;
     Ok(())
 }

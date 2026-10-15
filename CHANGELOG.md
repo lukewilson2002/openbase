@@ -73,6 +73,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   none of your workspaces uses yet. `GET /api/bases/{id}` adds `workspace_color` and the invite
   preview `target_color`. Upgrading (database schema 6) colours existing workspaces in that order,
   oldest first, per person who created them.
+- **One trash for everything.** `GET /api/trash` lists everything you could restore from every
+  workspace you belong to, newest first, optionally filtered by `workspace_id`, `base_id` and
+  `kind`; editors and viewers now find their own deleted personal views there. Trash items say
+  where they were (`workspace_name`, `workspace_color`, `base_name`, `base_icon`, `base_color`,
+  `table_name`), who deleted them (`deleted_by_id`, `deleted_by_name`) and when they are removed
+  for good (`expires_at`); the existing trash listings carry the same fields. Who deleted
+  something is recorded from this version on, so older items show no one.
 
 ### Fixed
 

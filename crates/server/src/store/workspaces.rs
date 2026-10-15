@@ -407,11 +407,13 @@ pub fn rename(tx: &Transaction, workspace_id: &str, name: &str) -> AppResult<Str
     Ok(name)
 }
 
-/// Move a workspace (with everything in it) to the trash.
-pub fn soft_delete(tx: &Transaction, workspace_id: &str) -> AppResult<()> {
+/// Move a workspace (with everything in it) to the trash, as deleted by
+/// `user_id`. Like a base, only the workspace row is stamped.
+pub fn soft_delete(tx: &Transaction, workspace_id: &str, user_id: &str) -> AppResult<()> {
     let n = tx.execute(
-        "UPDATE workspaces SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
-        params![workspace_id, now_ms()],
+        "UPDATE workspaces SET deleted_at = ?2, deleted_by = ?3
+         WHERE id = ?1 AND deleted_at IS NULL",
+        params![workspace_id, now_ms(), user_id],
     )?;
     if n == 0 {
         return Err(AppError::not_found("workspace"));

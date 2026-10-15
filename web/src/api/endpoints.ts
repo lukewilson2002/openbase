@@ -74,6 +74,15 @@ import type {
 
 const enc = encodeURIComponent;
 
+export type TrashKind = "workspace" | "base" | "table" | "field" | "view" | "record";
+
+/** Query of `GET /api/trash` (`api.trash.all`). */
+export type TrashFilter = {
+  workspace_id?: string;
+  base_id?: string;
+  kind?: TrashKind;
+};
+
 /**
  * Response shapes are exactly what crates/server/src/api sends (see the live contract tests in
  * web/contract, which run this client against the real server):
@@ -238,6 +247,11 @@ export const api = {
   },
 
   trash: {
+    /**
+     * Everything the caller could restore, from every workspace they belong to, newest first.
+     * Each filter is optional; `kind` is one of workspace | base | table | field | view | record.
+     */
+    all: (filter: TrashFilter = {}) => http.get<TrashListing>("/api/trash", { query: filter }),
     /** Creators and above. */
     forBase: (baseId: string) => http.get<TrashListing>(`/api/bases/${enc(baseId)}/trash`),
     /** Workspace owners. */

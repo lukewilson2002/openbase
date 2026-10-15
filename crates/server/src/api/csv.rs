@@ -693,6 +693,7 @@ fn build_table(
                     kind: (!matches!(kind, FieldKind::SingleLineText(_))).then_some(kind),
                     position: None,
                 },
+                &actor.user_id,
             )?;
             change.field
         } else {
