@@ -85,7 +85,7 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
             <li key={t.id} className="shrink-0">
               <div
                 className={cn(
-                  "flex h-8 items-center rounded-t-md border border-b-0 text-[0.8125rem]",
+                  "flex h-8 items-center rounded-t-md border border-b-0 text-[0.8125rem] pointer-coarse:h-9",
                   active ? "border-line bg-surface font-medium" : "border-transparent text-muted hover:bg-hover hover:text-fg",
                 )}
               >
@@ -96,7 +96,7 @@ export function TableTabs({ schema, activeTableId, onToggleSidebar, sidebarOpen 
                 {active && (canManage || canImport) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className="-ml-1.5 mr-0.5 size-6">
+                      <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className="-ml-1.5 mr-0.5 size-6 pointer-coarse:size-8">
                         <ChevronDown aria-hidden className="size-3.5" />
                       </IconButton>
                     </DropdownMenuTrigger>

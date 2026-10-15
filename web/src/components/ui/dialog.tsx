@@ -41,7 +41,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             </div>
             <D.Close
               aria-label="Close"
-              className="-mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg"
+              className="-mr-1 inline-flex size-7 shrink-0 pointer-coarse:-my-1.5 pointer-coarse:size-10 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-fg"
             >
               <X aria-hidden className="size-4" />
             </D.Close>

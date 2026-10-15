@@ -7,12 +7,16 @@
  * Keyboard: the search box owns the text; ArrowDown moves into the grid, where the arrow keys,
  * Home/End and PageUp/PageDown move between icons (one tab stop, roving tabindex), ArrowUp from the
  * first row goes back to the search box, Enter/Space on an icon picks it, and Enter in the search
- * box picks the best match. Escape closes the popover (Radix).
+ * box picks the best match. Escape closes the popover or sheet (Radix).
+ *
+ * With `fill`, the panel takes the height its parent gives it and the list gets whatever is left
+ * (the phone sheet); otherwise the list is six rows tall.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/cn";
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { ICON_COLS, IconCell, PopularSection } from "./PopularSection";
 import { POPULAR_ICONS } from "./popular";
@@ -29,9 +33,13 @@ export interface IconPickerPanelProps {
   value?: string | null;
   /** `null` = remove the icon. */
   onSelect: (icon: string | null) => void;
+  /** Focus the search box on open (off on touch screens, where that opens the keyboard). */
+  autoFocusSearch?: boolean;
+  /** Fill the parent's height instead of showing six rows. */
+  fill?: boolean;
 }
 
-export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProps) {
+export default function IconPickerPanel({ value, onSelect, autoFocusSearch = true, fill = false }: IconPickerPanelProps) {
   const set = useSyncExternalStore(subscribeIconSet, peekFullIconSet, () => null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -42,7 +50,24 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
   const [pendingFocus, setPendingFocus] = useState<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const scroller = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const attachScroller = useCallback((el: HTMLDivElement | null) => {
+    scroller.current = el;
+    setScrollerEl(el);
+  }, []);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const viewHeight = fill && measuredHeight > 0 ? measuredHeight : VIEW_HEIGHT;
+  const pageRows = Math.max(1, Math.floor(viewHeight / ROW_HEIGHT));
+
+  useLayoutEffect(() => {
+    if (!fill || !scrollerEl) return;
+    const measure = () => setMeasuredHeight(scrollerEl.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scrollerEl);
+    return () => observer.disconnect();
+  }, [fill, scrollerEl]);
 
   // The full set loads as the picker opens (it is cached, so reopening is instant).
   useEffect(() => {
@@ -70,7 +95,7 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
 
   const rows = Math.ceil(results.length / ICON_COLS);
   const firstRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
-  const lastRow = Math.min(rows - 1, Math.floor((scrollTop + VIEW_HEIGHT) / ROW_HEIGHT) + OVERSCAN_ROWS);
+  const lastRow = Math.min(rows - 1, Math.floor((scrollTop + viewHeight) / ROW_HEIGHT) + OVERSCAN_ROWS);
   const visible: { name: string; index: number; row: number; col: number }[] = [];
   for (let r = firstRow; r <= lastRow; r++) {
     for (let c = 0; c < ICON_COLS; c++) {
@@ -88,7 +113,7 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
       const el = scroller.current;
       if (el) {
         if (top < el.scrollTop) el.scrollTop = top;
-        else if (top + ROW_HEIGHT > el.scrollTop + VIEW_HEIGHT) el.scrollTop = top + ROW_HEIGHT - VIEW_HEIGHT;
+        else if (top + ROW_HEIGHT > el.scrollTop + viewHeight) el.scrollTop = top + ROW_HEIGHT - viewHeight;
         setScrollTop(el.scrollTop);
       }
     }
@@ -137,10 +162,10 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
         next = e.ctrlKey ? total - 1 : Math.min(total - 1, i - (i % ICON_COLS) + ICON_COLS - 1);
         break;
       case "PageDown":
-        next = Math.min(total - 1, i + VIEW_ROWS * ICON_COLS);
+        next = Math.min(total - 1, i + pageRows * ICON_COLS);
         break;
       case "PageUp":
-        next = Math.max(0, i - VIEW_ROWS * ICON_COLS);
+        next = Math.max(0, i - pageRows * ICON_COLS);
         break;
       default:
         return;
@@ -164,13 +189,13 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
   const status = searching ? (results.length === 0 ? `No icons match “${term}”` : `${results.length.toLocaleString()} icon${results.length === 1 ? "" : "s"}`) : set ? `${set.names.length.toLocaleString()} icons` : "";
 
   return (
-    <div ref={root} onKeyDown={onGridKey} className="flex flex-col">
+    <div ref={root} onKeyDown={onGridKey} className={cn("flex flex-col", fill && "min-h-0 flex-1")}>
       <div className="relative border-b border-line p-2">
         <Search aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint" />
         <input
           ref={search}
           type="search"
-          autoFocus
+          autoFocus={autoFocusSearch}
           autoComplete="off"
           spellCheck={false}
           aria-label="Search icons"
@@ -184,7 +209,7 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
 
       {!searching && <PopularSection value={value} active={active} onPick={onSelect} />}
 
-      <section aria-labelledby="icon-all" className="border-t border-line px-2 pb-2 pt-2">
+      <section aria-labelledby="icon-all" className={cn("border-t border-line px-2 pb-2 pt-2", fill && "flex min-h-0 flex-1 flex-col")}>
         <div className="mb-1 flex items-baseline justify-between px-1">
           <h3 id="icon-all" className="text-xs font-medium uppercase tracking-wide text-muted">
             {searching ? "Results" : "All icons"}
@@ -194,30 +219,30 @@ export default function IconPickerPanel({ value, onSelect }: IconPickerPanelProp
           </span>
         </div>
         {!set && !loadFailed && !searching ? (
-          <div role="status" className="flex items-center justify-center gap-2" style={{ height: VIEW_HEIGHT }}>
+          <div role="status" className={cn("flex items-center justify-center gap-2", fill && "flex-1")} style={fill ? undefined : { height: VIEW_HEIGHT }}>
             <Spinner className="size-4" label="Loading icons" />
             <span className="text-[0.8125rem] text-muted">Loading all icons…</span>
           </div>
         ) : !set && loadFailed && !searching ? (
-          <div role="alert" className="flex flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted" style={{ height: VIEW_HEIGHT }}>
+          <div role="alert" className={cn("flex flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted", fill && "flex-1")} style={fill ? undefined : { height: VIEW_HEIGHT }}>
             <p>The full icon list could not be loaded.</p>
             <Button size="sm" onClick={() => setAttempt((n) => n + 1)}>
               Try again
             </Button>
           </div>
         ) : results.length === 0 ? (
-          <p className="flex items-center justify-center text-[0.8125rem] text-muted" style={{ height: searching ? 72 : VIEW_HEIGHT }}>
+          <p className={cn("flex items-center justify-center text-[0.8125rem] text-muted", fill && !searching && "flex-1")} style={{ height: searching ? 72 : fill ? undefined : VIEW_HEIGHT }}>
             {searching ? "Try another word, such as “cart” or “chart”." : "No icons."}
           </p>
         ) : (
           <div
-            ref={scroller}
+            ref={attachScroller}
             role="group"
             aria-label={searching ? "Matching icons" : "All icons"}
             data-testid="icon-list"
             onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-            className="overflow-y-auto overscroll-contain"
-            style={{ height: Math.min(VIEW_HEIGHT, rows * ROW_HEIGHT) }}
+            className={cn("overflow-y-auto overscroll-contain", fill && "min-h-0 flex-1")}
+            style={fill ? undefined : { height: Math.min(VIEW_HEIGHT, rows * ROW_HEIGHT) }}
           >
             <div className="relative" style={{ height: rows * ROW_HEIGHT }}>
               {visible.map(({ name, index, row, col }) => (
