@@ -71,3 +71,33 @@ export function colorDotClass(color: string | null | undefined): string {
 export function baseAccentButtonClass(color: string | null | undefined): string {
   return accentClass(color, "button");
 }
+
+/** Stable colour per identity (email, else name), so the same person looks the same everywhere. */
+export function personColor(seed: string): ChoiceColor {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return COLORS[h % 10] ?? "gray";
+}
+
+/**
+ * The `.ob-hue-*` shades as hex, for the grid, which draws on a canvas and cannot use the CSS
+ * classes. colors.test.ts checks these against styles/index.css so the two cannot drift apart.
+ */
+export const ACCENT_SHADES: Readonly<Record<string, string>> = {
+  blue: "#1f5ae0",
+  cyan: "#0e7490",
+  teal: "#0f766e",
+  green: "#157a39",
+  yellow: "#8a5a00",
+  orange: "#a85a0a",
+  red: "#c4261d",
+  pink: "#b0175a",
+  purple: "#6b3fc4",
+  gray: "#566070",
+};
+
+/** The strong shade of a palette colour as hex (see ACCENT_SHADES). */
+export function accentShade(color: string | null | undefined): string {
+  return ACCENT_SHADES[accentHue(color)] ?? ACCENT_SHADES.gray!;
+}
+

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COLORS, accentClass, accentHue, choiceClass, colorLabel, isChoiceColor } from "./colors";
+import { ACCENT_SHADES, COLORS, accentClass, accentHue, choiceClass, colorLabel, isChoiceColor } from "./colors";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
@@ -69,3 +69,11 @@ describe("accent shades", () => {
   });
 });
 
+describe("accent shades for the canvas", () => {
+  it("match the .ob-hue-* classes in styles/index.css", () => {
+    const css = read("../styles/index.css");
+    for (const [hue, hex] of Object.entries(ACCENT_SHADES)) {
+      expect(new RegExp(`\\.ob-hue-${hue}\\s*\\{\\s*--accent:\\s*${hex}`, "i").test(css), `.ob-hue-${hue} is ${hex}`).toBe(true);
+    }
+  });
+});

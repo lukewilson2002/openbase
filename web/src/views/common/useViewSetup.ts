@@ -62,7 +62,7 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const people = useMemo(() => collaborators.data ?? [], [collaborators.data]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id) }), [timeZone, userNames]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id) }), [timeZone, userNames, emails]);
   const currentUserId = me.data?.id ?? null;
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions, format, currentUserId }),

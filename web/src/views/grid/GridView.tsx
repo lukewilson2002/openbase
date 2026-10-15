@@ -117,7 +117,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // ---- formatting and editing environment ------------------------------------------------------
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id) }), [timeZone, userNames]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id) }), [timeZone, userNames, emails]);
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null }),
     [schema.id, table.id, people, timeZone, canManageFields, format, me.data?.id],

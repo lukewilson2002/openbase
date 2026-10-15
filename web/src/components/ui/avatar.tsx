@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import { COLORS, accentClass } from "@/lib/colors";
+import { accentClass, personColor } from "@/lib/colors";
 
 /** Up to two initials from a display name (falls back to the email local part). */
 export function initials(name: string | null | undefined, email?: string | null): string {
@@ -11,12 +11,7 @@ export function initials(name: string | null | undefined, email?: string | null)
 }
 
 /** Stable colour per identity, so the same person always looks the same. */
-export function avatarColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const lights = COLORS.slice(0, 10);
-  return lights[h % lights.length] ?? "gray";
-}
+export const avatarColor = personColor;
 
 export interface AvatarProps {
   name?: string | null;
