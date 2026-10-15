@@ -434,6 +434,37 @@ async fn one_trash_lists_only_what_the_caller_could_restore() {
 }
 
 #[tokio::test]
+async fn read_only_tokens_do_not_list_personal_views_they_cannot_restore() {
+    let f = Fixture::new().await;
+    let editor = f.member("ed@example.com", Role::Editor);
+    let view = f
+        .app
+        .post(
+            &editor,
+            &format!("/api/tables/{}/views", f.table_id),
+            json!({ "name": "Mine", "type": "grid", "personal": true }),
+        )
+        .await;
+    view.assert_status(201);
+    let view = sid(&view.body["id"]).to_string();
+    f.app
+        .delete(&editor, &format!("/api/views/{view}"))
+        .await
+        .assert_status(200);
+
+    let write = token_client(&f.app, &editor, true);
+    assert_eq!(
+        listed(&trash(&f.app, &write, "").await),
+        [pair("view", &view)]
+    );
+    let read_only = token_client(&f.app, &editor, false);
+    restore(&f.app, &read_only, "view", &view)
+        .await
+        .assert_status(403);
+    assert!(listed(&trash(&f.app, &read_only, "").await).is_empty());
+}
+
+#[tokio::test]
 async fn deleted_by_is_recorded_for_every_kind_and_cleared_on_restore() {
     let f = Fixture::new().await;
     let creator = f.member("cr@example.com", Role::Creator);

@@ -509,7 +509,7 @@ fn token_reaches_base(actor: &Actor, base_id: &str) -> bool {
 /// - trashed bases of live workspaces they own (the manage permission, and a
 ///   base-limited token only sees its bases);
 /// - inside each live base they can open: everything with the creator role,
-///   and their own personal views at any role.
+///   and their own personal views at any role (nothing for a read-only token).
 ///
 /// Items inside trashed bases or workspaces are not listed: they come back
 /// with the base or workspace, and cannot be restored on their own.
@@ -553,7 +553,9 @@ pub fn list_all(
                     .filter(|i| filter.wants_base(&i.id) && token_reaches_base(actor, &i.id)),
             );
         }
-        if !filter.wants_inside_bases() {
+        // A read-only token may restore nothing (it acts as a viewer, whose
+        // own personal views would otherwise be listed but refused).
+        if !filter.wants_inside_bases() || actor.token_scope.as_ref().is_some_and(|s| !s.write) {
             continue;
         }
         let bases: Vec<String> = {
