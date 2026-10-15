@@ -3,7 +3,7 @@
  * window focus), opening the person's notifications beside the menu (inside the drawer on a
  * phone). Clicking a notification marks it read and goes to its record.
  */
-import type { ComponentProps } from "react";
+import { useMemo, type ComponentProps } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, Bell, Mail, UserCheck, Zap } from "lucide-react";
@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/relativeTime";
 import { notificationsApi } from "./api";
-import { describeNotification, notificationActor, notificationPlace, type NotificationKind } from "./describe";
+import { describeNotification, notificationActor, notificationActorId, notificationPlace, type NotificationKind } from "./describe";
 
 export const NOTIFICATION_POLL_MS = 60_000;
 
@@ -106,6 +106,7 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
   const list = useNotifications();
   const markRead = useMarkRead();
   const unread = list.data?.unread ?? 0;
+  const emails = useKnownEmails();
 
   const open = (n: Notification, href: string | null) => {
     if (n.read_at == null) markRead.mutate([n.id]);
@@ -144,7 +145,7 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
         ) : (
           <ul aria-label="Notifications">
             {list.data.notifications.map((n) => (
-              <InboxItem key={n.id} n={n} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
+              <InboxItem key={n.id} n={n} emails={emails} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
             ))}
           </ul>
         )}
@@ -153,10 +154,25 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
   );
 }
 
-function InboxItem({ n, onOpen, onMarkRead }: { n: Notification; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
+/**
+ * Emails of the people in the caller's workspaces, by user id. A face's colour comes from the
+ * person's email, and notifications only carry a name, so without this the same person would get
+ * another colour in the Inbox than everywhere else.
+ */
+function useKnownEmails(): ReadonlyMap<string, string> {
+  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
+  return useMemo(() => {
+    const out = new Map<string, string>();
+    for (const w of workspaces.data ?? []) for (const b of w.bases) for (const p of b.people) if (p.user_id && p.email) out.set(p.user_id, p.email);
+    return out;
+  }, [workspaces.data]);
+}
+
+function InboxItem({ n, emails, onOpen, onMarkRead }: { n: Notification; emails: ReadonlyMap<string, string>; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
   const v = describeNotification(n);
   const Icon = ICONS[v.kind];
   const actor = notificationActor(n);
+  const actorId = notificationActorId(n);
   const isUnread = n.read_at == null;
   const place = notificationPlace(n);
   const where = [place?.base?.name, place?.table?.name].filter(Boolean).join(" › ");
@@ -165,7 +181,7 @@ function InboxItem({ n, onOpen, onMarkRead }: { n: Notification; onOpen: (n: Not
       <button type="button" onClick={() => onOpen(n, v.href)} className="flex w-full items-start gap-3 px-4 py-3 pr-10 text-left hover:bg-hover focus-visible:bg-hover">
         {actor && (v.kind === "mention" || v.kind === "invite") ? (
           <span aria-hidden className="flex">
-            <Avatar name={actor} size="md" />
+            <Avatar name={actor} email={actorId ? emails.get(actorId) : undefined} size="md" />
           </span>
         ) : (
           <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-surface">

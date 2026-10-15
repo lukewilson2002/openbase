@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Notification, NotificationsResponse } from "@/api/types";
 import { IntroProvider } from "@/onboarding/IntroContext";
 import { AppShell } from "@/shell/AppShell";
-import { USER, mockApi, renderWithProviders, stubDesktop, type Handler } from "@/test/utils";
+import { avatarColor } from "@/components/ui/avatar";
+import { accentHue } from "@/lib/colors";
+import { USER, makeWorkspace, mockApi, renderWithProviders, stubDesktop, type Handler } from "@/test/utils";
 import { markedRead } from "./Inbox";
 
 afterEach(() => {
@@ -158,6 +160,21 @@ describe("Inbox in the docked menu", () => {
     const item = (await within(panel).findByText("You were assigned to Fix login")).closest("li")!;
     expect(item).toHaveTextContent("In Owner");
     expect(item).toHaveTextContent("Roadmap › Tasks · 1 minute ago");
+  });
+
+  it("gives the person who mentioned you the face they have everywhere else", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const grace = { user_id: "usr2", name: "Grace", email: "grace@example.com", pending: false, role: "editor" };
+    routes(
+      { unread: 1, notifications: [note("n1", "mention", { base_id: "app1", record_id: "rec1", record_name: "Launch plan", author_id: "usr2", author_name: "Grace" })] },
+      { "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", people: [grace], tables: [] }])] },
+    );
+    renderShell();
+    const panel = await openInbox(user);
+    await within(panel).findByText("Grace mentioned you in Launch plan");
+    const hue = `ob-hue-${accentHue(avatarColor("grace@example.com"))}`;
+    await waitFor(() => expect(panel.querySelector("[role=img]")).toHaveClass("ob-solid", hue));
   });
 
   it("polls every 60 seconds and refetches when the window regains focus", async () => {
