@@ -13,7 +13,7 @@
  * Sharing a view lives in the base's Share dialog ("Share a view") and in each view's menu.
  */
 import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
 import type { BaseSchema, Collaborator, Filter, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
 import { useExportCsv } from "@/components/csv/ExportCsvButton";
 import { Button } from "@/components/ui/button";
@@ -81,15 +81,37 @@ export interface ViewBarProps {
   timeZone?: string;
   /** Label of the hide-fields menu ("Hide fields" in the grid, "Card fields" on card views). */
   hideFieldsNoun?: string;
-  /** View-type specific settings (stack field, date fields...), shown after the tools. */
+  /**
+   * The view type's main setting ("Stacked by How often", "Dates from Last done"), shown first: it
+   * decides what the view is, so it reads before the tools that narrow it down.
+   */
+  setting?: ReactNode;
+  /** View-type specific controls shown after the tools. */
   extra?: ReactNode;
+  /** View-type switches for the More menu ("Hide empty stacks"), listed after the colour settings. */
+  moreToggles?: readonly MoreToggle[];
   /** Adds a record (the toolbar's "Add"); omitted where the view adds records its own way or the viewer cannot. */
   onAdd?: () => void;
+}
+
+/** An on/off item of the More menu. */
+export interface MoreToggle {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onToggle: (on: boolean) => void;
 }
 
 const toolClass =
   "inline-flex h-9 items-center gap-1.5 rounded-[9px] px-2.5 text-[0.875rem] text-fg transition-colors hover:bg-hover data-[state=open]:bg-hover pointer-coarse:h-11";
 const toolActiveClass = "bg-primary-soft text-primary-ink hover:bg-primary-soft data-[state=open]:bg-primary-soft";
+
+/** Classes of a toolbar tool, tinted while it is in use; views use it for their own settings. */
+export function toolButtonClass(active?: boolean): string {
+  return cn(toolClass, active && toolActiveClass);
+}
 
 /** A desktop tool: a plain word that opens its editor below it, tinted while the tool is in use. */
 function ToolButton({ label, active, children, note, wide }: { label: string; active?: boolean; children: ReactNode; note?: string; wide?: boolean }) {
@@ -111,6 +133,7 @@ function ToolButton({ label, active, children, note, wide }: { label: string; ac
 type ToolEntry =
   | { kind: "panel"; id: string; label: string; icon: ReactNode; value?: string; active?: boolean; note?: string; wide?: boolean; panel: ReactNode }
   | { kind: "action"; id: string; label: string; icon: ReactNode; busy?: boolean; onSelect: () => void }
+  | { kind: "toggle"; id: string; label: string; icon: ReactNode; checked: boolean; disabled?: boolean; onSelect: () => void }
   | { kind: "separator"; id: string };
 
 /**
@@ -125,7 +148,7 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
 
   const onListKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
-    const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[role=menuitem]:not([disabled])") ?? []);
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[role=menuitem]:not([disabled]),[role=menuitemcheckbox]:not([disabled])") ?? []);
     if (items.length === 0) return;
     e.preventDefault();
     const at = items.indexOf(document.activeElement as HTMLElement);
@@ -147,7 +170,7 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
         onOpenAutoFocus={(e) => {
           // The first tool, not the popover itself, so the arrow keys work straight away.
           e.preventDefault();
-          listRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+          listRef.current?.querySelector<HTMLElement>("[role=menuitem],[role=menuitemcheckbox]")?.focus();
         }}
         className={cn("max-h-[min(34rem,80dvh)] overflow-y-auto rounded-xl p-1.5", panel ? (panel.wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]") : "w-[min(15.5rem,calc(100vw-1.5rem))]")}
       >
@@ -171,8 +194,9 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
                 <button
                   key={e.id}
                   type="button"
-                  role="menuitem"
-                  disabled={e.kind === "action" && e.busy}
+                  role={e.kind === "toggle" ? "menuitemcheckbox" : "menuitem"}
+                  aria-checked={e.kind === "toggle" ? e.checked : undefined}
+                  disabled={(e.kind === "action" && e.busy) || (e.kind === "toggle" && e.disabled)}
                   onClick={() => {
                     if (e.kind === "panel") setPanelId(e.id);
                     else {
@@ -181,13 +205,14 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
                     }
                   }}
                   className={cn(
-                    "flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[0.875rem] text-fg outline-none hover:bg-hover focus-visible:bg-hover pointer-coarse:min-h-11 pointer-coarse:text-[0.9375rem]",
+                    "flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[0.875rem] text-fg outline-none hover:bg-hover focus-visible:bg-hover disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:text-[0.9375rem]",
                     e.kind === "panel" && e.active && "bg-primary-soft font-semibold text-primary-ink hover:bg-primary-soft",
                   )}
                 >
                   <span className="flex shrink-0 items-center [&>svg]:size-4">{e.kind === "action" && e.busy ? <Spinner className="size-4" label="Working" /> : e.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{e.label}</span>
                   {e.kind === "panel" && e.value && <span className="max-w-[45%] truncate text-[0.8125rem] font-semibold text-primary">{e.value}</span>}
+                  {e.kind === "toggle" && e.checked && <Check aria-hidden className="size-4 shrink-0 text-primary" />}
                 </button>
               ),
             )}
@@ -388,9 +413,10 @@ export function ViewBar(props: ViewBarProps) {
     ...(props.onAddField ? [{ kind: "action", id: "add-field", label: "Add field", icon: <Plus aria-hidden />, onSelect: props.onAddField } as const, { kind: "separator", id: "sep-field" } as const] : []),
     ...(features.color ? [{ kind: "panel", id: "color", label: "Color", icon: <PaintBucket aria-hidden />, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> } as const] : []),
     ...(features.rowHeight ? [{ kind: "panel", id: "row-height", label: "Row height", icon: <Rows3 aria-hidden />, panel: rowHeightPanel } as const] : []),
+    ...(props.moreToggles ?? []).map((t) => ({ kind: "toggle", id: t.id, label: t.label, icon: t.icon, checked: t.checked, disabled: t.disabled, onSelect: () => t.onToggle(!t.checked) }) as const),
     ...(features.csv
       ? [
-          ...(features.color || features.rowHeight ? [{ kind: "separator", id: "sep-csv" } as const] : []),
+          ...(features.color || features.rowHeight || (props.moreToggles?.length ?? 0) > 0 ? [{ kind: "separator", id: "sep-csv" } as const] : []),
           { kind: "action", id: "csv", label: csv.busy ? "Preparing…" : "Download CSV", icon: <Download aria-hidden />, busy: csv.busy, onSelect: () => void csv.run() } as const,
         ]
       : []),
@@ -456,7 +482,14 @@ export function ViewBar(props: ViewBarProps) {
           label="View tools"
           align="end"
           entries={tools}
-          footer={props.extra && <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-line px-1 pt-1.5">{props.extra}</div>}
+          footer={
+            (props.setting || props.extra) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-line px-1 pt-1.5">
+                {props.setting}
+                {props.extra}
+              </div>
+            )
+          }
           trigger={
             <button
               type="button"
@@ -491,6 +524,7 @@ export function ViewBar(props: ViewBarProps) {
       <ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink-0" />
       {locked}
       <div className="flex flex-wrap items-center gap-0.5">
+        {props.setting}
         <ToolButton label={filterWhat ? `Filtered by ${filterWhat}` : "Filter"} active={filterCount > 0} note={queryNote} wide>
           {filterPanel}
         </ToolButton>

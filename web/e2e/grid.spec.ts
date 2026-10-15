@@ -24,8 +24,8 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (see views/grid/cellModels.ts defaultWidth and the Glide setup in GlideGrid.tsx).
 const MARKER_W = 56;
-const HEADER_H = 34;
-const ROW_H = 33;
+const HEADER_H = 44;
+const ROW_H = 42;
 // A new table starts with Name and Notes; the fixture adds Qty, Status and Done after them.
 const WIDTHS = { name: 220, notes: 260, qty: 140, status: 170, done: 110 };
 

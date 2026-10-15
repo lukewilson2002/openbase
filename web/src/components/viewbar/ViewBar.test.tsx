@@ -270,3 +270,27 @@ describe("ViewBar Add", () => {
     expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
   });
 });
+
+describe("ViewBar: a view type's own setting and switches", () => {
+  it("puts the view's main setting before the tools", () => {
+    renderBar({ setting: <button type="button">Stacked by Status</button> });
+    const tools = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(tools.indexOf("Stacked by Status")).toBeLessThan(tools.indexOf("Filter"));
+  });
+
+  it("lists the view's switches in More, checked or not, and flips them", async () => {
+    const onToggle = vi.fn();
+    renderBar({ moreToggles: [{ id: "hide", label: "Hide empty stacks", icon: null, checked: true, onToggle }] });
+    await userEvent.click(screen.getByRole("button", { name: /^More/ }));
+    const item = await screen.findByRole("menuitemcheckbox", { name: "Hide empty stacks" });
+    expect(item).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(item);
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("shows a switch that cannot be used as disabled", async () => {
+    renderBar({ moreToggles: [{ id: "crop", label: "Crop cover images", icon: null, checked: false, disabled: true, onToggle: vi.fn() }] });
+    await userEvent.click(screen.getByRole("button", { name: /^More/ }));
+    expect(await screen.findByRole("menuitemcheckbox", { name: "Crop cover images" })).toBeDisabled();
+  });
+});

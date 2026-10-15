@@ -7,13 +7,17 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import type { SpriteMap } from "@glideapps/glide-data-grid";
+import { Plus } from "lucide-react";
 import { FIELD_TYPE_ICONS } from "@/components/ui/field-type-icon";
+
+/** Sprite key of the "Add field" column's plus. */
+export const ADD_ICON = "__add_field";
 
 function render(): SpriteMap {
   const sprites: SpriteMap = {};
   if (typeof document === "undefined") return sprites;
   const host = document.createElement("div");
-  for (const [type, Icon] of Object.entries(FIELD_TYPE_ICONS)) {
+  for (const [type, Icon] of [...Object.entries(FIELD_TYPE_ICONS), [ADD_ICON, Plus] as const]) {
     try {
       const root = createRoot(host);
       flushSync(() => root.render(createElement(Icon, { size: 20, strokeWidth: 2 })));

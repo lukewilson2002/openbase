@@ -8,6 +8,11 @@ import { resolveFieldOrder } from "@/components/viewbar/config";
 import { displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
 
+/** Text of a count line: "1 item", "8 items". */
+export function itemsLabel(n: number): string {
+  return `${n.toLocaleString()} item${n === 1 ? "" : "s"}`;
+}
+
 /** Most fields one card shows (non-empty ones, in the view's field order). */
 export const CARD_FIELD_LIMIT = 6;
 

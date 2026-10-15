@@ -12,6 +12,7 @@ import { Lock } from "lucide-react";
 import type { Field, FormConfig, FormField, Table } from "@/api/types";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import type { EditValue } from "@/components/record/editors/env";
+import { cn } from "@/lib/cn";
 import { liveEntries, publicStatus } from "@/lib/forms/formConfig";
 import type { Drafts } from "@/lib/forms/drafts";
 
@@ -35,6 +36,8 @@ export interface FormSurfaceProps {
   footer?: ReactNode;
   /** Small notice above the fields (for example "Preview: nothing is saved"). */
   banner?: ReactNode;
+  /** Width of the card (the preview is narrower than "Fill in form"). */
+  className?: string;
 }
 
 /** The value an editor starts with: what was last entered (JSON drafts only; typed text restarts empty). */
@@ -49,7 +52,7 @@ function FieldBlock({ entry, field, internalOnlyNote, error, value, onEdit }: { 
   return (
     <div className="flex flex-col gap-1.5" role="group" aria-labelledby={labelId} data-field-id={field.id}>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span id={labelId} className="text-[0.875rem] font-medium">
+        <span id={labelId} className="text-[0.875rem] font-semibold">
           {label}
           {entry.required && (
             <span aria-hidden className="ml-0.5 text-danger">
@@ -84,22 +87,25 @@ function FieldBlock({ entry, field, internalOnlyNote, error, value, onEdit }: { 
   );
 }
 
-export function FormSurface({ title, label = "Form", form, table, hiddenFields, publicOnly, drafts, onEdit, errors, resetKey, footer, banner }: FormSurfaceProps) {
+export function FormSurface({ title, label = "Form", form, table, hiddenFields, publicOnly, drafts, onEdit, errors, resetKey, footer, banner, className }: FormSurfaceProps) {
   const entries = liveEntries(form, table);
   const shown = entries.filter(({ field }) => !publicOnly || publicStatus(field, hiddenFields).public);
   const anyRequired = shown.some((e) => e.entry.required);
   return (
-    <section aria-label={label} className="mx-auto flex w-full max-w-xl flex-col gap-5 rounded-lg border border-line bg-surface p-5 shadow-sm">
+    <section
+      aria-label={label}
+      className={cn("mx-auto flex w-full max-w-[600px] flex-col gap-[18px] rounded-[14px] border border-line bg-surface px-5 py-6 shadow-[0_10px_28px_rgb(15_20_30/0.06)] sm:px-8 sm:pb-[30px] sm:pt-7", className)}
+    >
       {banner}
       <header className="flex flex-col gap-1.5">
-        <h2 className="text-xl">{form.title.trim() || title}</h2>
-        {form.description.trim() && <p className="whitespace-pre-wrap text-[0.875rem] text-muted">{form.description}</p>}
+        <h2 className="text-[1.375rem] leading-tight tracking-[-0.01em]">{form.title.trim() || title}</h2>
+        {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{form.description}</p>}
         {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
       </header>
       {shown.length === 0 ? (
         <p className="rounded-md bg-subtle px-3 py-4 text-center text-[0.8125rem] text-muted">{entries.length === 0 ? "This form has no fields yet." : "None of this form's fields are collected by the public form."}</p>
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-[18px]">
           {shown.map(({ entry, field }) => {
             const status = publicStatus(field, hiddenFields);
             return (

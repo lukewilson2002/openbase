@@ -9,7 +9,6 @@ import type { Field, Filter, TableRecord, TransientConfig } from "@/api/types";
 import { cardTitle } from "../common/cardFields";
 import { resolveDateFields, type DateFields } from "../common/dateFields";
 import type { FormatCtx } from "@/lib/cells/format";
-import { paletteColor } from "@/lib/cells/palette";
 import { DAY_MS, floorDay, isWritableDate, padRange, recordSpan, wallIso, wallToStored, wallYmd } from "../common/wallTime";
 
 export type CalendarFields = DateFields;
@@ -23,12 +22,10 @@ export interface CalendarEvent {
   start: string;
   end?: string;
   allDay: boolean;
-  backgroundColor?: string;
-  borderColor?: string;
-  textColor?: string;
   startEditable: boolean;
   durationEditable: boolean;
-  extendedProps: { recordId: string };
+  /** `color` is the record's palette colour; the calendar draws the chip in it. */
+  extendedProps: { recordId: string; color?: string };
 }
 
 export interface EventContext {
@@ -61,12 +58,7 @@ export function recordsToEvents(records: readonly TableRecord[], ctx: EventConte
     };
     if (span.hasEnd) ev.end = span.startDateOnly ? wallYmd(span.endMs) : wallIso(span.endMs);
     const color = ctx.colors[r.id];
-    if (color) {
-      const p = paletteColor(color);
-      ev.backgroundColor = p.bg;
-      ev.borderColor = p.bg;
-      ev.textColor = p.fg;
-    }
+    if (color) ev.extendedProps.color = color;
     events.push(ev);
   }
   return events;

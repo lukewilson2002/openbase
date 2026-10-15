@@ -4,15 +4,15 @@ import type { Theme } from "@glideapps/glide-data-grid";
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 const common: Partial<Theme> = {
-  cellHorizontalPadding: 8,
+  cellHorizontalPadding: 14,
   cellVerticalPadding: 3,
-  headerFontStyle: "600 13px",
-  baseFontStyle: "13px",
+  headerFontStyle: "600 14px",
+  baseFontStyle: "14px",
   markerFontStyle: "11px",
   fontFamily: FONT,
   editorFontSize: "13px",
   lineHeight: 1.4,
-  headerIconSize: 18,
+  headerIconSize: 16,
   roundingRadius: 4,
   bgSearchResult: "#fff3a3",
 };
@@ -28,7 +28,7 @@ export const LIGHT_THEME: Partial<Theme> = {
   textBubble: "#1b1f27",
   bgIconHeader: "#566070",
   fgIconHeader: "#ffffff",
-  textHeader: "#3b4452",
+  textHeader: "#566070",
   textHeaderSelected: "#ffffff",
   bgCell: "#ffffff",
   bgCellMedium: "#f6f7f9",
@@ -38,6 +38,7 @@ export const LIGHT_THEME: Partial<Theme> = {
   bgBubble: "#e8ebf0",
   bgBubbleSelected: "#ffffff",
   borderColor: "#dfe3ea",
+  horizontalBorderColor: "#eef0f4",
   drilldownBorder: "#c4cad4",
   linkColor: "#1d4fd0",
 };
@@ -53,7 +54,7 @@ export const DARK_THEME: Partial<Theme> = {
   textBubble: "#e8ebf1",
   bgIconHeader: "#a4adbd",
   fgIconHeader: "#1a1e26",
-  textHeader: "#c9d0dc",
+  textHeader: "#a4adbd",
   textHeaderSelected: "#0b1220",
   bgCell: "#1a1e26",
   bgCellMedium: "#232833",
@@ -63,6 +64,7 @@ export const DARK_THEME: Partial<Theme> = {
   bgBubble: "#2c3240",
   bgBubbleSelected: "#1a1e26",
   borderColor: "#2f3542",
+  horizontalBorderColor: "#262b35",
   drilldownBorder: "#444c5c",
   linkColor: "#7aa1ff",
 };

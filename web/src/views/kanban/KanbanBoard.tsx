@@ -7,7 +7,7 @@
  * Keyboard: Tab to a card, Space to pick it up, arrow keys to move between stacks and cards,
  * Space to drop, Escape to cancel; Enter opens the record.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -25,14 +25,16 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, MoreHorizontal, Plus } from "lucide-react";
 import type { Field, TableRecord } from "@/api/types";
+import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { swatchColor } from "@/lib/cells/palette";
+import { colorDotClass } from "@/lib/colors";
 import { CardBody } from "../common/CardBody";
-import { cardTitle } from "../common/cardFields";
+import { cardTitle, itemsLabel } from "../common/cardFields";
 import { planDrop, type DropPlan, type Stack } from "./stacks";
 
 const STACK_PREFIX = "stack:";
@@ -59,6 +61,8 @@ export interface KanbanBoardProps {
   onMoveStack(key: string, dir: -1 | 1): void;
   onDrop(plan: DropPlan): void;
   onAddCard(key: string): void;
+  /** Adds a stack (a new choice of the stack field); omitted where that is not possible or allowed. */
+  onAddStack?: (name: string) => Promise<void>;
   onOpen(recordId: string): void;
 }
 
@@ -172,7 +176,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={finish} onDragCancel={() => setDrag(IDLE)}>
-      <div className="flex h-full gap-3 overflow-x-auto p-3" role="list" aria-label="Stacks">
+      <div className="flex h-full items-start gap-3 overflow-x-auto p-3 md:p-4" role="list" aria-label="Stacks">
         {stacks.map((stack, i) => (
           <StackColumn
             key={stack.key}
@@ -187,10 +191,11 @@ export function KanbanBoard(props: KanbanBoardProps) {
             {...props}
           />
         ))}
+        {props.onAddStack && <AddStack onAdd={props.onAddStack} />}
       </div>
       <DragOverlay>
         {activeRecord ? (
-          <div data-drag-overlay className="relative cursor-grabbing rounded-lg border border-primary bg-surface shadow-pop">
+          <div data-drag-overlay className="relative cursor-grabbing overflow-hidden rounded-[10px] border border-primary bg-surface shadow-pop">
             <CardBody record={activeRecord} primary={props.primary} fields={props.fields} coverField={props.coverField} format={props.format} emails={props.emails} color={props.colors[activeRecord.id]} />
           </div>
         ) : null}
@@ -213,44 +218,65 @@ interface StackColumnProps extends KanbanBoardProps {
 function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore, activeId, ...p }: StackColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `${STACK_PREFIX}${stack.key}` });
   const isCollapsed = p.collapsed.has(stack.key);
-  const swatch = stack.color ? swatchColor(stack.color) : undefined;
   const visible = ids.slice(0, limit);
   if (activeId && ids.includes(activeId) && !visible.includes(activeId)) visible.push(activeId);
   const hidden = ids.length - visible.length;
 
   const header = (
-    <div className="flex items-center gap-1.5 px-2.5 py-2">
-      {swatch && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatch }} />}
-      <h3 className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">{stack.label}</h3>
-      <span className="text-xs tabular-nums text-muted" aria-label={`${ids.length} cards`}>
-        {ids.length}
-      </span>
-      <button
-        type="button"
-        aria-expanded={!isCollapsed}
-        aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${stack.label}`}
-        onClick={() => p.onToggleCollapse(stack.key)}
-        className="inline-flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg"
-      >
-        <ChevronDown aria-hidden className={cn("size-4 transition-transform", isCollapsed && "-rotate-90")} />
-      </button>
-      {p.canConfigure && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" aria-label={`Options for ${stack.label}`} className="inline-flex size-6 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg">
-              <MoreHorizontal aria-hidden className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem disabled={index === 0} onSelect={() => p.onMoveStack(stack.key, -1)}>
-              <ChevronLeft aria-hidden className="size-4" /> Move left
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={index === count - 1} onSelect={() => p.onMoveStack(stack.key, 1)}>
-              <ChevronRight aria-hidden className="size-4" /> Move right
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <div className="flex min-h-8 items-center gap-2 pl-1.5 pr-0.5">
+      {stack.color && <span aria-hidden className={cn("size-2 shrink-0 rounded-full", colorDotClass(stack.color))} />}
+      <h2 className="min-w-0 flex-1 truncate text-[0.875rem] font-[650]">{stack.label}</h2>
+      {isCollapsed && (
+        <button
+          type="button"
+          aria-expanded={false}
+          aria-label={`Expand ${stack.label}`}
+          onClick={() => p.onToggleCollapse(stack.key)}
+          className="inline-flex size-[30px] items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg pointer-coarse:size-11"
+        >
+          <ChevronDown aria-hidden className="size-4 -rotate-90" />
+        </button>
       )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" aria-label={`Options for ${stack.label}`} className="inline-flex size-[30px] items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:size-11">
+            <MoreHorizontal aria-hidden className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => p.onToggleCollapse(stack.key)}>
+            <ChevronsDownUp aria-hidden className="size-4" /> {isCollapsed ? "Expand stack" : "Collapse stack"}
+          </DropdownMenuItem>
+          {p.canConfigure && (
+            <>
+              <DropdownMenuItem disabled={index === 0} onSelect={() => p.onMoveStack(stack.key, -1)}>
+                <ChevronLeft aria-hidden className="size-4" /> Move left
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={index === count - 1} onSelect={() => p.onMoveStack(stack.key, 1)}>
+                <ChevronRight aria-hidden className="size-4" /> Move right
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
+  const foot = (
+    <div className="flex min-h-9 items-center justify-between gap-2">
+      {p.canEdit && !isCollapsed ? (
+        <button
+          type="button"
+          aria-label={`Add card to ${stack.label}`}
+          onClick={() => p.onAddCard(stack.key)}
+          className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-[0.875rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
+        >
+          <Plus aria-hidden className="size-[15px]" /> Add
+        </button>
+      ) : (
+        <span />
+      )}
+      <span className="pr-2 text-[0.8125rem] text-muted">{itemsLabel(ids.length)}</span>
     </div>
   );
 
@@ -260,38 +286,87 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       role="listitem"
       aria-label={`Stack: ${stack.label}`}
       data-stack-key={stack.key}
-      className={cn("flex max-h-full shrink-0 flex-col rounded-lg border bg-subtle transition-colors", isCollapsed ? "w-44" : "w-[min(18rem,85vw)]", isOver ? "border-primary" : "border-line")}
+      className={cn(
+        "flex max-h-full shrink-0 flex-col gap-2 rounded-xl bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))] p-2 outline-2 -outline-offset-2 transition-[outline-color]",
+        isCollapsed ? "w-48" : "w-[min(280px,85vw)]",
+        isOver ? "outline-primary" : "outline-transparent",
+      )}
     >
       {header}
       {!isCollapsed && (
         <>
           <SortableContext items={visible} strategy={verticalListSortingStrategy}>
-            <div role="group" className="flex min-h-12 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" aria-label={`Cards in ${stack.label}`}>
+            <div role="group" className="-mx-1 flex min-h-10 flex-col gap-2 overflow-y-auto px-1 py-px" aria-label={`Cards in ${stack.label}`}>
               {visible.map((id) => {
                 const rec = recordsById.get(id);
                 return rec ? <KanbanCard key={id} record={rec} {...p} /> : null;
               })}
-              {ids.length === 0 && <p className="px-2 py-3 text-center text-xs text-faint">No cards</p>}
+              {ids.length === 0 && <p className="px-2 py-2 text-center text-xs text-faint">No cards</p>}
             </div>
           </SortableContext>
           {hidden > 0 && (
-            <button type="button" onClick={onShowMore} className="mx-2 mb-2 rounded-md py-1 text-xs text-muted hover:bg-hover">
+            <button type="button" onClick={onShowMore} className="rounded-lg py-1.5 text-xs text-muted hover:bg-hover">
               Show {Math.min(hidden, CARDS_PER_STACK)} more ({hidden} hidden)
-            </button>
-          )}
-          {p.canEdit && (
-            <button
-              type="button"
-              aria-label={`Add card to ${stack.label}`}
-              onClick={() => p.onAddCard(stack.key)}
-              className="mx-2 mb-2 flex items-center gap-1 rounded-md px-2 py-1.5 text-[0.8125rem] text-muted hover:bg-hover hover:text-fg"
-            >
-              <Plus aria-hidden className="size-4" /> Add card
             </button>
           )}
         </>
       )}
+      {foot}
     </section>
+  );
+}
+
+/** "+ Add a stack" after the last stack: a new choice of the stack field, named in place. */
+function AddStack({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 text-[0.875rem] text-muted hover:bg-hover hover:text-fg"
+      >
+        <Plus aria-hidden className="size-[15px]" /> Add a stack
+      </button>
+    );
+  }
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    try {
+      await onAdd(n);
+      setName("");
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={(e) => void submit(e)} className="flex w-[min(280px,85vw)] shrink-0 flex-col gap-2 rounded-xl bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))] p-2">
+      <Input
+        autoFocus
+        aria-label="Name of the new stack"
+        placeholder="Stack name"
+        value={name}
+        maxLength={255}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setEditing(false);
+        }}
+      />
+      <div className="flex gap-2">
+        <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!name.trim()}>
+          Add stack
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -321,7 +396,7 @@ function KanbanCard({ record, ...p }: { record: TableRecord } & KanbanBoardProps
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
+        "relative shrink-0 overflow-hidden rounded-[10px] border border-line bg-surface text-left shadow-[0_1px_2px_rgb(15_20_30/0.04)] outline-none transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
         p.canEdit ? "cursor-grab touch-manipulation" : "cursor-pointer",
         isDragging && "opacity-40",
       )}

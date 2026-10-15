@@ -21,7 +21,8 @@ import { OptionsEditor } from "./OptionsEditor";
 import { FIELD_TYPE_GROUPS, canBePrimary, conversionRisk, conversionWarning, defaultKind, draftFromField, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
 
 export type FieldDialogState =
-  | { mode: "create"; relativeTo?: { fieldId: string; side: "left" | "right" } }
+  /** `type` starts the new field as that type ("Add a date field" from a calendar that has none). */
+  | { mode: "create"; relativeTo?: { fieldId: string; side: "left" | "right" }; type?: FieldType }
   | { mode: "edit"; field: Field; focus?: "name" | "type" };
 
 export interface FieldDialogProps {
@@ -128,7 +129,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
   const qc = useQueryClient();
   const existing = state.mode === "edit" ? state.field : undefined;
   const ctx = useMemo<KindContext>(() => ({ table, tables: schema.tables }), [table, schema.tables]);
-  const [draft, setDraft] = useState<FieldDraft>(() => (existing ? draftFromField(existing) : { name: "", description: "", kind: defaultKind("single_line_text", ctx), inverseName: "" }));
+  const [draft, setDraft] = useState<FieldDraft>(() => (existing ? draftFromField(existing) : { name: "", description: "", kind: defaultKind((state.mode === "create" && state.type) || "single_line_text", ctx), inverseName: "" }));
   const [showDescription, setShowDescription] = useState(!!draft.description);
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -213,7 +214,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
         <TypePicker
           value={draft.kind.type}
           primary={isPrimary}
-          initiallyOpen={state.mode === "create" || state.focus === "type"}
+          initiallyOpen={(state.mode === "create" && !state.type) || (state.mode === "edit" && state.focus === "type")}
           onChange={(t) => {
             if (t !== draft.kind.type) {
               setKind(defaultKind(t, ctx));

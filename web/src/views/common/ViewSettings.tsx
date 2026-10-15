@@ -1,16 +1,19 @@
 /** Toolbar control for view-type specific settings (stack field, date fields, scale...). */
 import type { ReactNode } from "react";
 import type { Field } from "@/api/types";
-import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { Field as FormField, Select } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toolButtonClass } from "@/components/viewbar/ViewBar";
 
-export function ViewSettings({ label = "Settings", note, children }: { label?: string; note?: string; children: ReactNode }) {
+/**
+ * The view's own setting as a toolbar tool. Worded like the other tools and tinted once it is set
+ * ("Stacked by How often"), the way "Sorted by Who" is; in the phone's tools menu it sits under them.
+ */
+export function ViewSettings({ label = "Settings", active, note, children }: { label?: string; active?: boolean; note?: string; children: ReactNode }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        {/* Worded like the toolbar's other tools; in the phone's tools menu it sits under them. */}
-        <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-[9px] px-2.5 text-[0.875rem] text-fg hover:bg-hover data-[state=open]:bg-hover pointer-coarse:h-11">
+        <button type="button" className={toolButtonClass(active)}>
           {label}
         </button>
       </PopoverTrigger>
@@ -59,27 +62,5 @@ export function FieldSelect({
         </Select>
       )}
     </FormField>
-  );
-}
-
-/** Small field name with its type icon (for lists in pickers). */
-export function FieldLabel({ field }: { field: Field }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <FieldTypeIcon type={field.type} /> {field.name}
-    </span>
-  );
-}
-
-/** Shown in place of a view that needs a field choice first. */
-export function SetupPrompt({ title, description, children }: { title: string; description: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-line bg-surface p-5 shadow-pop">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="text-[0.8125rem] text-muted">{description}</p>
-        {children}
-      </div>
-    </div>
   );
 }
