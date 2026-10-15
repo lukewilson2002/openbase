@@ -155,7 +155,7 @@ function KanbanInner(props: ViewProps) {
           <>
             <span aria-live="polite">
               <LayoutGrid aria-hidden className="mr-1 inline size-3.5" />
-              {total.toLocaleString()} card{total === 1 ? "" : "s"}
+              {total.toLocaleString()} item{total === 1 ? "" : "s"}
             </span>
             {data.truncated && (
               <span role="status">

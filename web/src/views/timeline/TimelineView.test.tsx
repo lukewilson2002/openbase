@@ -48,7 +48,7 @@ describe("TimelineView", () => {
     expect(await screen.findByRole("button", { name: /^R1, Mar 2 – Mar 6/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^R4, Mar 15/ })).toHaveAttribute("data-milestone", "true");
     expect(screen.getByRole("button", { name: /^R1/ })).not.toHaveAttribute("data-milestone");
-    expect(screen.getByText("4 records in this window")).toBeInTheDocument();
+    expect(screen.getByText("4 items in this window")).toBeInTheDocument();
   });
 
   it("draws dependency arrows from predecessors and flags overlaps in red", async () => {

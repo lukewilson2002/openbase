@@ -9,6 +9,14 @@ import { EditorEnvProvider } from "@/components/record/editors/env";
 import { ViewBar } from "@/components/viewbar/ViewBar";
 import type { ViewSetup } from "./useViewSetup";
 
+/**
+ * A view's body: on a desktop a rounded card on the page's grey, under the toolbar; on a phone it
+ * runs edge to edge, where a margin would cost a column of the grid.
+ */
+export const viewBodyClass = "relative min-h-0 flex-1 border-t border-line bg-surface md:mx-4 md:mt-4 md:overflow-hidden md:rounded-xl md:border";
+/** The count line under a view ("4 items"): a bar on a phone, plain text under the card on a desktop. */
+export const viewFooterClass = "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted md:border-t-0 md:bg-transparent md:px-5";
+
 export interface ViewFrameProps {
   setup: ViewSetup;
   /** Record ids in display order, for the previous/next buttons of the expanded record. */
@@ -55,15 +63,14 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           searchOpen={setup.searchOpen}
           onSearchOpenChange={setup.setSearchOpen}
           searchInputRef={searchInputRef}
-          canManageFields={false}
           timeZone={setup.timeZone}
-          features={{ shareView: true, ...features }}
+          features={features}
           hideFieldsNoun={hideFieldsNoun}
           extra={toolbarExtra}
           onAdd={onAdd}
         />
-        <div className="relative min-h-0 flex-1 border-t border-line bg-surface">{children}</div>
-        {footer && <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted">{footer}</div>}
+        <div className={viewBodyClass}>{children}</div>
+        {footer ? <div className={viewFooterClass}>{footer}</div> : <div aria-hidden className="max-md:hidden md:h-4" />}
       </div>
       {setup.openRecordId && (
         <ExpandedRecord

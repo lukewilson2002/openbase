@@ -73,7 +73,7 @@ function GalleryInner(props: ViewProps) {
         <>
           <span aria-live="polite">
             {data.records.length.toLocaleString()}
-            {data.total > data.records.length ? ` of ${data.total.toLocaleString()}` : ""} record{data.total === 1 ? "" : "s"}
+            {data.total > data.records.length ? ` of ${data.total.toLocaleString()}` : ""} item{data.total === 1 ? "" : "s"}
             {setup.debouncedSearch ? " found" : ""}
           </span>
           {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}

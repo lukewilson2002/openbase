@@ -217,7 +217,7 @@ function CalendarInner(props: ViewProps) {
         fields ? (
           <>
             <span aria-live="polite">
-              {events.length.toLocaleString()} record{events.length === 1 ? "" : "s"} in this range
+              {events.length.toLocaleString()} item{events.length === 1 ? "" : "s"} in this range
             </span>
             {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this range.</span>}
             {records.error && !data && <span role="alert">Could not load records: {records.error.message}</span>}

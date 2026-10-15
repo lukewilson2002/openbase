@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { ViewBar } from "@/components/viewbar/ViewBar";
+import { viewBodyClass, viewFooterClass } from "@/views/common/ViewFrame";
 import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
@@ -692,12 +693,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchOpen={searchOpen}
           onSearchOpenChange={setSearchOpen}
           searchInputRef={searchInputRef}
-          onAddField={() => setFieldDialog({ mode: "create" })}
-          canManageFields={canManageFields}
+          onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
           onAdd={canEdit ? () => void addRecord() : undefined}
         />
-        <div className="relative min-h-0 flex-1 border-t border-line bg-surface">
+        <div className={viewBodyClass}>
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
@@ -724,9 +724,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
             <p className="pointer-events-none absolute inset-x-0 top-14 text-center text-[0.8125rem] text-muted">{debouncedSearch ? "No records match your search." : "No records yet."}</p>
           )}
         </div>
-        <div className="flex h-9 shrink-0 items-center gap-3 border-t border-line bg-subtle px-3 text-[0.8125rem] text-muted">
+        <div className={viewFooterClass}>
           <span aria-live="polite">
-            {total.toLocaleString()} record{total === 1 ? "" : "s"}
+            {total.toLocaleString()} item{total === 1 ? "" : "s"}
             {debouncedSearch ? " found" : ""}
           </span>
           {grouped && <span className="hidden sm:inline">· grouped</span>}

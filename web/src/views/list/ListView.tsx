@@ -95,7 +95,7 @@ function ListInner(props: ViewProps) {
       footer={
         <>
           <span aria-live="polite">
-            {total.toLocaleString()} record{total === 1 ? "" : "s"}
+            {total.toLocaleString()} item{total === 1 ? "" : "s"}
             {setup.debouncedSearch ? " found" : ""}
           </span>
           {!grouped && data && <span className="hidden sm:inline">Use Group in the toolbar to turn this list into an outline.</span>}

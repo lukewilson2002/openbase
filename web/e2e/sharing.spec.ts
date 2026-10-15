@@ -208,7 +208,7 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     expect(found.total).toBe(1);
     expect(found.records[0]!.values).toMatchObject({ [fx.fields.name]: "Zed Visitor", [fx.fields.qty]: 9 });
     await openView(page);
-    await expect(page.getByText("4 records")).toBeVisible();
+    await expect(page.getByText("4 items")).toBeVisible();
     // The grid is a canvas, so look for the record with the search box.
     await page.keyboard.press("Control+F");
     await page.getByRole("searchbox", { name: "Search records" }).fill("Zed");
@@ -227,8 +227,11 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     viewId = created.id;
     await call(page.request, "patch", `/api/views/${viewId}`, { config: { ...created.config, hidden_fields: [fx.fields.salary] } });
     await openView(page, viewId);
-    await page.getByRole("button", { name: "Share view" }).click();
-    const dialog = page.getByRole("dialog", { name: "Share Team sheet" });
+    // Sharing a view lives in the base's Share dialog, with the view on screen picked.
+    await page.getByRole("banner").getByRole("button", { name: "Share" }).click();
+    const dialog = page.getByRole("dialog", { name: /^Share / });
+    await dialog.getByRole("tab", { name: "Share a view" }).click();
+    await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);
     await expect(dialog.getByText(/The 1 hidden field never leaves the server/)).toBeVisible();
     await dialog.getByRole("switch", { name: "Protect with a password" }).click();
     await dialog.getByRole("textbox", { name: "Password" }).fill("open sesame");
@@ -302,7 +305,8 @@ test("downloads a view as CSV: visible fields, the view's sort, BOM and quoting"
   const created = await call<{ id: string; config: Record<string, unknown> }>(page.request, "post", `/api/tables/${fx.tableId}/views`, { name: "Export me", type: "grid", config: null });
   await call(page.request, "patch", `/api/views/${created.id}`, { config: { ...created.config, hidden_fields: [fx.fields.salary], sorts: [{ field_id: fx.fields.qty, direction: "desc" }] } });
   await openView(page, created.id);
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
+  await page.getByRole("button", { name: "More" }).click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download CSV" }).click()]);
   expect(download.suggestedFilename()).toBe("Export me.csv");
   const text = await readFile((await download.path())!, "utf8");
   expect(text.startsWith("﻿")).toBe(true);

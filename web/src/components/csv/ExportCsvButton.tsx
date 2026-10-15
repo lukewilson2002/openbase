@@ -8,7 +8,8 @@ import { useToast } from "@/components/ui/toast";
 import { saveBlob, safeFilename } from "@/lib/download";
 import { browserTimeZone } from "@/lib/format";
 
-export function ExportCsvButton({ view, timeZone }: { view: Pick<View, "id" | "name">; timeZone?: string }) {
+/** Downloads the view as CSV; `busy` while the server prepares the file. Failures become a toast. */
+export function useExportCsv(view: Pick<View, "id" | "name">, timeZone?: string) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const run = async () => {
@@ -23,6 +24,11 @@ export function ExportCsvButton({ view, timeZone }: { view: Pick<View, "id" | "n
       setBusy(false);
     }
   };
+  return { busy, run };
+}
+
+export function ExportCsvButton({ view, timeZone }: { view: Pick<View, "id" | "name">; timeZone?: string }) {
+  const { busy, run } = useExportCsv(view, timeZone);
   return (
     <Button size="sm" variant="ghost" loading={busy} onClick={() => void run()} title="Download this view as a CSV file (its visible fields, filter and sort)">
       {!busy && <Download aria-hidden className="size-4" />} <span className="max-sm:sr-only">{busy ? "Preparing…" : "Download CSV"}</span>

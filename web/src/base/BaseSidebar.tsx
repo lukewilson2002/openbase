@@ -1,24 +1,24 @@
 /**
- * The base's menu: back to its workspace, the tables (the open one expanded into its views, each
- * with a "…" menu for its actions), then Automations, Trash and Members above the profile. The
- * dialogs those actions open live in BaseDialogs, outside the menu.
+ * The base's menu (below the Inbox, which the shell adds): the tables, the open one expanded into
+ * its views, each with a "…" menu for its actions; then Automations, Trash and Members above the
+ * profile. The workspace is reached from the top bar's pickers. The dialogs these actions open live
+ * in BaseDialogs, outside the menu.
  */
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Copy, Ellipsis, FileUp, Lock, LockOpen, Pencil, Plus, Shapes, Share2, Table2, Trash2, User as UserIcon, Users, Zap } from "lucide-react";
+import { ChevronRight, Copy, Ellipsis, FileUp, Lock, LockOpen, Pencil, Plus, Shapes, Share2, Table2, Trash2, User as UserIcon, Users, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { EntityIcon } from "@/components/icons/EntityIcon";
 import { canShareView } from "@/components/share/shareView";
-import { TrashButton } from "@/components/trash/TrashButton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { useCloseMenu } from "@/shell/AppShell";
-import { SidebarLink } from "@/shell/Sidebar";
+import { SidebarHeading, SidebarLink } from "@/shell/Sidebar";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import type { BaseDialog } from "./BaseDialogs";
 import { basePermissions } from "./permissions";
@@ -41,23 +41,14 @@ export function BaseSidebar({ schema, activeTableId, activeViewId, onDialog }: B
   const isExpanded = (t: Table) => toggled[t.id] ?? t.id === activeTableId;
 
   return (
-    <div className="flex flex-col gap-3">
-      <Link
-        to={`/workspace/${schema.workspace_id}`}
-        aria-label={`Back to ${schema.workspace_name}`}
-        className="flex h-9 min-w-0 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-muted no-underline transition-colors hover:bg-hover hover:text-fg pointer-coarse:h-11"
-      >
-        <ChevronLeft aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 truncate">{schema.workspace_name}</span>
-      </Link>
-
+    <div className="flex flex-col">
       <nav aria-label="Tables" className="flex flex-col gap-0.5">
-        <div className="flex h-8 items-center justify-between gap-2 pl-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Tables</h2>
-          {canManage && (
+        <SidebarHeading
+          action={
+            canManage && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <IconButton label="Add table" size="sm" noTooltip>
+                <IconButton label="Add table" size="sm" noTooltip className="size-8 rounded-lg">
                   <Plus aria-hidden className="size-4" />
                 </IconButton>
               </DropdownMenuTrigger>
@@ -70,10 +61,13 @@ export function BaseSidebar({ schema, activeTableId, activeViewId, onDialog }: B
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-        </div>
+            )
+          }
+        >
+          Tables
+        </SidebarHeading>
         {schema.tables.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted">No tables yet.</p>
+          <p className="px-3 py-1 text-xs text-muted">No tables yet.</p>
         ) : (
           <ul className="flex flex-col gap-0.5">
             {schema.tables.map((t) => (
@@ -137,7 +131,7 @@ function TableItem({
           aria-expanded={expanded}
           aria-controls={expanded ? viewsId : undefined}
           aria-label={`${expanded ? "Hide" : "Show"} views of ${t.name}`}
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg pointer-coarse:size-9"
+          className="inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg pointer-coarse:h-11"
         >
           <ChevronRight aria-hidden className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
         </button>
@@ -146,11 +140,12 @@ function TableItem({
           onClick={closeMenu}
           aria-current={active ? "page" : undefined}
           className={cn(
-            "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md pl-1.5 pr-8 text-[0.8125rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11 pointer-coarse:pr-10",
-            active ? "font-semibold" : "font-medium",
+            "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] pl-1.5 pr-8 text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11 pointer-coarse:pr-10",
+            active && "font-semibold",
           )}
         >
-          {t.icon ? <EntityIcon name={t.icon} className="size-4 shrink-0" /> : <Table2 aria-hidden className="size-4 shrink-0 text-muted" />}
+          {/* A table's own icon when it has one; the chevron already marks a plain table. */}
+          {t.icon && <EntityIcon name={t.icon} className="size-4 shrink-0 text-muted" />}
           <span className="min-w-0 flex-1 truncate">{t.name}</span>
         </Link>
         {(canManage || canImport) && (
@@ -206,7 +201,7 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
       </ul>
       {mine.length > 0 && (
         <>
-          <div className="pb-0.5 pl-9 pt-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">Personal</div>
+          <div className="pb-0.5 pl-[38px] pt-1.5 text-xs font-semibold text-muted">Personal</div>
           <ul className="flex flex-col gap-0.5" aria-label="Personal views">
             {mine.map(item)}
           </ul>
@@ -217,9 +212,9 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex h-8 w-full items-center gap-2 rounded-md pl-9 pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-10"
+              className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[38px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
             >
-              <Plus aria-hidden className="size-4 shrink-0" /> Add view
+              <Plus aria-hidden className="size-3.5 shrink-0" /> Add view
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-72">
@@ -274,11 +269,11 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
         onClick={closeMenu}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex h-8 items-center gap-2 rounded-md pl-9 pr-8 text-[0.8125rem] text-fg no-underline transition-colors pointer-coarse:h-10 pointer-coarse:pr-10",
-          active ? "bg-primary-soft font-medium" : "hover:bg-hover",
+          "flex h-[34px] items-center gap-2.5 rounded-[10px] pl-[38px] pr-8 text-[0.875rem] no-underline transition-colors pointer-coarse:h-11 pointer-coarse:pr-10",
+          active ? "bg-primary-soft font-semibold text-primary-ink" : "text-muted hover:bg-hover hover:text-fg",
         )}
       >
-        <Icon aria-hidden className="size-4 shrink-0 text-muted" />
+        <Icon aria-hidden className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{v.name}</span>
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}
         {v.locked && <Lock aria-label="Locked view" role="img" className="size-3.5 shrink-0 text-muted" />}
@@ -327,17 +322,24 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
   );
 }
 
-/** Pinned above the profile: the base's automations (creators), its trash (creators) and the workspace's members. */
+/**
+ * Pinned above the profile: the base's automations (creators), its trash (creators: the one Trash
+ * page, filtered to this base) and the workspace's members.
+ */
 export function BaseSidebarFooter({ schema, section }: { schema: BaseSchema; section?: "automations" }) {
   return (
     <>
       {basePermissions.manageAutomations(schema.role) && (
-        <SidebarLink to={`/base/${schema.id}/automations`} end={false} active={section === "automations"} icon={<Zap />}>
+        <SidebarLink to={`/base/${schema.id}/automations`} end={false} muted active={section === "automations"} icon={<Zap />}>
           Automations
         </SidebarLink>
       )}
-      <TrashButton schema={schema} />
-      <SidebarLink to={`/workspace/${schema.workspace_id}/members`} active={false} icon={<Users />}>
+      {basePermissions.manageTables(schema.role) && (
+        <SidebarLink to={`/trash?base=${encodeURIComponent(schema.id)}`} muted active={false} icon={<Trash2 />}>
+          Trash
+        </SidebarLink>
+      )}
+      <SidebarLink to={`/workspace/${schema.workspace_id}/members`} muted active={false} icon={<Users />}>
         Members
       </SidebarLink>
     </>

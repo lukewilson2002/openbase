@@ -268,7 +268,7 @@ function TimelineInner(props: ViewProps) {
         fields ? (
           <>
             <span aria-live="polite">
-              {barCount.toLocaleString()} record{barCount === 1 ? "" : "s"} in this window
+              {barCount.toLocaleString()} item{barCount === 1 ? "" : "s"} in this window
             </span>
             {depField && edges.some((e) => e.violated) && <span className="text-danger">{edges.filter((e) => e.violated).length} dependencies overlap</span>}
             {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this window.</span>}

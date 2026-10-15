@@ -111,7 +111,7 @@ async function clickCell(page: Page, col: keyof typeof WIDTHS, row: number, opts
 async function gotoGrid(page: Page) {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.viewId}`);
   await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-  await expect(page.getByText(/\d+ records?/)).toBeVisible();
+  await expect(page.getByText(/\d+ items?/)).toBeVisible();
   await expect(canvas(page)).toBeVisible();
 }
 
@@ -132,7 +132,7 @@ test.use({ viewport: { width: 1360, height: 820 } });
 
 test("shows the seeded records and the record count", async ({ page }) => {
   await gotoGrid(page);
-  await expect(page.getByText("5 records")).toBeVisible();
+  await expect(page.getByText("5 items")).toBeVisible();
   expect((await rows(page)).map((r) => r.name)).toEqual(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
 });
 
@@ -191,9 +191,9 @@ test("filters by a text condition and shows the record count", async ({ page }) 
   await page.getByLabel("Value").fill("lph");
   await expect(page.getByText("1 record")).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /1 filter/ }).click();
+  await page.getByRole("button", { name: /^Filtered by / }).click();
   await page.getByRole("button", { name: "Remove condition" }).click();
-  await expect(page.getByText("5 records")).toBeVisible();
+  await expect(page.getByText("5 items")).toBeVisible();
 });
 
 test("sorts by a field descending from the toolbar", async ({ page }) => {
@@ -201,7 +201,7 @@ test("sorts by a field descending from the toolbar", async ({ page }) => {
   await page.getByRole("button", { name: /^Sort/ }).click();
   await page.getByRole("button", { name: "Add sort" }).click();
   await page.getByLabel("Direction for sort 1").selectOption("desc");
-  await expect(page.getByRole("button", { name: /Sorted by 1 field/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
   await expect.poll(async () => (await rows(page))[0]!.name).toBe("Echo");
   await page.getByRole("button", { name: "Remove sort 1" }).click();
 });
@@ -212,7 +212,7 @@ test("searches with Ctrl+F", async ({ page }) => {
   await page.getByRole("searchbox", { name: "Search records" }).fill("char");
   await expect(page.getByText(/1 record found/)).toBeVisible();
   await page.getByRole("searchbox", { name: "Search records" }).press("Escape");
-  await expect(page.getByText("5 records")).toBeVisible();
+  await expect(page.getByText("5 items")).toBeVisible();
 });
 
 test("hides a field and shows it again", async ({ page }) => {
@@ -229,7 +229,8 @@ test("hides a field and shows it again", async ({ page }) => {
 
 test("adds a field from the dialog", async ({ page }) => {
   await gotoGrid(page);
-  await page.getByRole("button", { name: "Add field" }).click();
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Add field" }).click();
   await page.getByLabel("Field name").fill("Remarks");
   await page.getByRole("option", { name: /Long text/ }).click();
   await page.getByRole("button", { name: "Create field" }).click();
@@ -261,18 +262,18 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
 test("adds and deletes records, with undo", async ({ page }) => {
   await gotoGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
-  await expect(page.getByText("6 records")).toBeVisible();
+  await expect(page.getByText("6 items")).toBeVisible();
   // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
   await expect.poll(async () => (await rows(page)).length).toBe(6);
   await undo(page);
-  await expect(page.getByText("5 records")).toBeVisible();
+  await expect(page.getByText("5 items")).toBeVisible();
   await expect.poll(async () => (await rows(page)).length).toBe(5);
   await clickCell(page, "name", 4, { right: true });
   await page.getByRole("menuitem", { name: /Delete record/ }).click();
-  await expect(page.getByText("4 records")).toBeVisible();
+  await expect(page.getByText("4 items")).toBeVisible();
   await expect.poll(async () => (await rows(page)).length).toBe(4);
   await undo(page);
-  await expect(page.getByText("5 records")).toBeVisible();
+  await expect(page.getByText("5 items")).toBeVisible();
   await expect.poll(async () => (await rows(page)).length).toBe(5);
 });
 
