@@ -5,9 +5,13 @@
  * the view (viewers and commenters, editors on locked views) can still filter, sort and group
  * for themselves: `update` then keeps those as a local override that is sent with each query
  * and marked "not saved" here. Colours stay read-only for them.
+ *
+ * The tools fold into one "Tools" button (remembered per device; folded by default on phones,
+ * where they would take several rows), and views that add records get a primary "Add" at the end,
+ * floating at the bottom corner on phones.
  */
 import { useState, type RefObject } from "react";
-import { EyeOff, Filter, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, Share2, X } from "lucide-react";
+import { ChevronsLeft, EyeOff, Filter, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, Share2, SlidersHorizontal, X } from "lucide-react";
 import type { BaseSchema, Collaborator, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
 import { ExportCsvButton } from "@/components/csv/ExportCsvButton";
 import { ShareViewDialog } from "@/components/share/LazyShareViewDialog";
@@ -19,9 +23,11 @@ import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input, Select } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { countConditions, isFilterable } from "@/lib/cells/filters";
+import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { FilterBuilder } from "./FilterBuilder";
 import { SortListEditor } from "./SortListEditor";
 import {
@@ -72,6 +78,33 @@ export interface ViewBarProps {
   hideFieldsNoun?: string;
   /** View-type specific settings (stack field, date fields...), shown before the search box. */
   extra?: React.ReactNode;
+  /** Adds a record (the toolbar's primary "Add"); omitted where the view adds records its own way or the viewer cannot. */
+  onAdd?: () => void;
+}
+
+export const TOOLS_KEY = "ob-tools-collapsed";
+
+function readToolsCollapsed(): boolean | null {
+  try {
+    const raw = localStorage.getItem(TOOLS_KEY);
+    return raw === "1" ? true : raw === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Folded or not: the person's last choice on this device, else folded on phones only. */
+function useToolsCollapsed(desktop: boolean): [boolean, (collapsed: boolean) => void] {
+  const [stored, setStored] = useState(readToolsCollapsed);
+  const set = (collapsed: boolean) => {
+    setStored(collapsed);
+    try {
+      localStorage.setItem(TOOLS_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* storage unavailable (private mode, quota): the choice lasts for this page view */
+    }
+  };
+  return [stored ?? !desktop, set];
 }
 
 function ToolButton({ icon, label, active, children, disabledNote, wide }: { icon: React.ReactNode; label: string; active?: boolean; children: React.ReactNode; disabledNote?: string; wide?: boolean }) {
@@ -222,6 +255,9 @@ export function ViewBar(props: ViewBarProps) {
   const features = { group: true, color: true, rowHeight: true, shareView: true, csv: true, ...props.features };
   const [sharing, setSharing] = useState(false);
   const mayShare = atLeast(props.role, "creator");
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const [collapsed, setCollapsed] = useToolsCollapsed(desktop);
+  const activeTools = [hiddenCount > 0, filterCount > 0, features.group && config.groups.length > 0, config.sorts.length > 0, features.color && rowColorActive].filter(Boolean).length;
 
   return (
     <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-0.5 bg-surface px-2 py-1">
@@ -230,63 +266,95 @@ export function ViewBar(props: ViewBarProps) {
           <Lock aria-hidden className="size-3" /> Locked
         </span>
       )}
-      <ToolButton icon={<EyeOff aria-hidden className="size-4" />} label={hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : (props.hideFieldsNoun ?? "Hide fields")} active={hiddenCount > 0}>
-        <HideFields table={table} config={config} update={update} />
-      </ToolButton>
+      {collapsed ? (
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setCollapsed(false)}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium hover:bg-hover pointer-coarse:h-10 pointer-coarse:px-2.5",
+            activeTools > 0 ? "bg-primary-soft text-primary hover:bg-primary-soft" : "text-fg",
+          )}
+        >
+          <SlidersHorizontal aria-hidden className="size-4" />
+          {activeTools > 0 ? `Tools · ${activeTools} on` : "Tools"}
+        </button>
+      ) : (
+        <>
+          <ToolButton icon={<EyeOff aria-hidden className="size-4" />} label={hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : (props.hideFieldsNoun ?? "Hide fields")} active={hiddenCount > 0}>
+            <HideFields table={table} config={config} update={update} />
+          </ToolButton>
 
-      <ToolButton icon={<Filter aria-hidden className="size-4" />} label={filterCount > 0 ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "Filter"} active={filterCount > 0} disabledNote={queryNote} wide>
-        <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={false} />
-      </ToolButton>
+          <ToolButton icon={<Filter aria-hidden className="size-4" />} label={filterCount > 0 ? `${filterCount} filter${filterCount === 1 ? "" : "s"}` : "Filter"} active={filterCount > 0} disabledNote={queryNote} wide>
+            <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={false} />
+          </ToolButton>
 
-      {features.group && (
-      <ToolButton icon={<Group aria-hidden className="size-4" />} label={config.groups.length > 0 ? `Grouped by ${config.groups.length} field${config.groups.length === 1 ? "" : "s"}` : "Group"} active={config.groups.length > 0} disabledNote={queryNote} wide>
-        <SortListEditor
-          noun="group"
-          items={config.groups}
-          fields={groupable}
-          max={MAX_GROUPS}
-          readOnly={false}
-          onAdd={(id) => update((c) => addSortLike(c, "groups", id))}
-          onUpdate={(i, p) => update((c) => updateSortLike(c, "groups", i, p))}
-          onRemove={(i) => update((c) => removeSortLike(c, "groups", i))}
-          onMove={(a, b) => update((c) => moveSortLike(c, "groups", a, b))}
-        />
-      </ToolButton>
-      )}
+          {features.group && (
+          <ToolButton icon={<Group aria-hidden className="size-4" />} label={config.groups.length > 0 ? `Grouped by ${config.groups.length} field${config.groups.length === 1 ? "" : "s"}` : "Group"} active={config.groups.length > 0} disabledNote={queryNote} wide>
+            <SortListEditor
+              noun="group"
+              items={config.groups}
+              fields={groupable}
+              max={MAX_GROUPS}
+              readOnly={false}
+              onAdd={(id) => update((c) => addSortLike(c, "groups", id))}
+              onUpdate={(i, p) => update((c) => updateSortLike(c, "groups", i, p))}
+              onRemove={(i) => update((c) => removeSortLike(c, "groups", i))}
+              onMove={(a, b) => update((c) => moveSortLike(c, "groups", a, b))}
+            />
+          </ToolButton>
+          )}
 
-      <ToolButton icon={<ListFilter aria-hidden className="size-4" />} label={config.sorts.length > 0 ? `Sorted by ${config.sorts.length} field${config.sorts.length === 1 ? "" : "s"}` : "Sort"} active={config.sorts.length > 0} disabledNote={queryNote} wide>
-        <SortListEditor
-          noun="sort"
-          items={config.sorts}
-          fields={sortable}
-          max={MAX_SORTS}
-          readOnly={false}
-          onAdd={(id) => update((c) => addSortLike(c, "sorts", id))}
-          onUpdate={(i, p) => update((c) => updateSortLike(c, "sorts", i, p))}
-          onRemove={(i) => update((c) => removeSortLike(c, "sorts", i))}
-          onMove={(a, b) => update((c) => moveSortLike(c, "sorts", a, b))}
-        />
-      </ToolButton>
+          <ToolButton icon={<ListFilter aria-hidden className="size-4" />} label={config.sorts.length > 0 ? `Sorted by ${config.sorts.length} field${config.sorts.length === 1 ? "" : "s"}` : "Sort"} active={config.sorts.length > 0} disabledNote={queryNote} wide>
+            <SortListEditor
+              noun="sort"
+              items={config.sorts}
+              fields={sortable}
+              max={MAX_SORTS}
+              readOnly={false}
+              onAdd={(id) => update((c) => addSortLike(c, "sorts", id))}
+              onUpdate={(i, p) => update((c) => updateSortLike(c, "sorts", i, p))}
+              onRemove={(i) => update((c) => removeSortLike(c, "sorts", i))}
+              onMove={(a, b) => update((c) => moveSortLike(c, "sorts", a, b))}
+            />
+          </ToolButton>
 
-      {features.color && (
-      <ToolButton icon={<PaintBucket aria-hidden className="size-4" />} label="Color" active={rowColorActive} disabledNote={colorNote} wide>
-        <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} />
-      </ToolButton>
-      )}
+          {features.color && (
+          <ToolButton icon={<PaintBucket aria-hidden className="size-4" />} label="Color" active={rowColorActive} disabledNote={colorNote} wide>
+            <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} />
+          </ToolButton>
+          )}
 
-      {props.extra}
+          {props.extra}
 
-      {features.rowHeight && (
-      <ToolButton icon={<Rows3 aria-hidden className="size-4" />} label="Row height">
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1 text-[0.8125rem] font-medium">Row height</legend>
-          {heights.map((h) => (
-            <label key={h} className="flex items-center gap-2 text-[0.8125rem]">
-              <input type="radio" name="row-height" checked={config.row_height === h} onChange={() => update((c) => setRowHeight(c, h))} /> {ROW_HEIGHT_LABELS[h]}
-            </label>
-          ))}
-        </fieldset>
-      </ToolButton>
+          {features.rowHeight && (
+          <ToolButton icon={<Rows3 aria-hidden className="size-4" />} label="Row height">
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1 text-[0.8125rem] font-medium">Row height</legend>
+              {heights.map((h) => (
+                <label key={h} className="flex items-center gap-2 text-[0.8125rem]">
+                  <input type="radio" name="row-height" checked={config.row_height === h} onChange={() => update((c) => setRowHeight(c, h))} /> {ROW_HEIGHT_LABELS[h]}
+                </label>
+              ))}
+            </fieldset>
+          </ToolButton>
+          )}
+
+          <button
+            type="button"
+            aria-label="Hide tools"
+            aria-expanded
+            title="Hide tools"
+            onClick={() => setCollapsed(true)}
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8125rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-10"
+          >
+            <ChevronsLeft aria-hidden className="size-4" />
+            {/* Spelled out only where the toolbar has room to spare beside the base menu. */}
+            <span aria-hidden className="hidden 2xl:inline">
+              Hide tools
+            </span>
+          </button>
+        </>
       )}
 
       {props.hasLocalQuery && !canConfigure && (
@@ -341,7 +409,23 @@ export function ViewBar(props: ViewBarProps) {
             {sharing && <ShareViewDialog open onOpenChange={setSharing} view={view} table={table} />}
           </>
         )}
+        {props.onAdd && desktop && (
+          <Button size="sm" variant="primary" aria-label="Add record" onClick={props.onAdd} className="ml-1">
+            <Plus aria-hidden className="size-4" /> Add
+          </Button>
+        )}
       </div>
+      {props.onAdd && !desktop && (
+        // Within thumb reach and clear of the toolbar, like the workspace page's "New base".
+        <button
+          type="button"
+          aria-label="Add record"
+          onClick={props.onAdd}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-[52px] items-center gap-2 rounded-full bg-primary px-5 text-[0.9375rem] font-semibold text-primary-fg shadow-pop transition-colors hover:bg-primary-hover"
+        >
+          <Plus aria-hidden className="size-5" /> Add
+        </button>
+      )}
     </div>
   );
 }

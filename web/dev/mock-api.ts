@@ -796,6 +796,14 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     return send(res, 200, { ok: true }), true;
   }
   if (p === `/api/bases/${BASE_ID}` && m === "GET") return send(res, 200, baseDto(req)), true;
+  // Only the main base has tables in the mock; every other one opens as an empty base (the page a
+  // new base starts on), with the role cookie applied like the main one.
+  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && m === "GET") {
+    const b = ws.bases.find((x) => x.id === g![1]);
+    if (!b) return err(res, 404, "not_found", "base not found"), true;
+    const role = roleOverride ?? /ob-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1] ?? "owner";
+    return send(res, 200, { ...baseSummary(b, role), tables: [], workspace_name: ws.workspaces.find((w) => w.id === b.workspace_id)?.name ?? "" }), true;
+  }
   if (p === `/api/bases/${BASE_ID}/collaborators`) return send(res, 200, USERS), true;
   if (p === `/api/bases/${BASE_ID}/events`) {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });

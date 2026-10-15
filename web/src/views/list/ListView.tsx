@@ -3,7 +3,7 @@
  * three levels, from `QueryResponse.groups`), with compact rows and an add button per group.
  */
 import { useMemo } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cardFields } from "../common/cardFields";
@@ -80,11 +80,6 @@ function ListInner(props: ViewProps) {
           onAdd={(defaults) => void add(defaults)}
         />
         {data.records.length === 0 && <p className="pt-10 text-center text-[0.8125rem] text-muted">{setup.debouncedSearch ? "No records match your search." : "No records yet."}</p>}
-        {!grouped && setup.canEdit && (
-          <Button variant="ghost" size="sm" className="m-2" onClick={() => void add({})}>
-            <Plus aria-hidden className="size-4" /> Add record
-          </Button>
-        )}
       </>
     );
   }
@@ -96,6 +91,7 @@ function ListInner(props: ViewProps) {
       features={{ rowHeight: false }}
       hideFieldsNoun="Row fields"
       toolbarExtra={toolbarExtra}
+      onAdd={setup.canEdit ? () => void add({}) : undefined}
       footer={
         <>
           <span aria-live="polite">

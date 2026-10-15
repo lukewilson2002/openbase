@@ -1,4 +1,4 @@
-/** Pieces shared by the account menus (the shell's ProfileMenu and the base top bar's UserMenu). */
+/** Pieces of the account menu (the shell's ProfileMenu): the theme choice and logging out. */
 import { useNavigate } from "react-router";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useLogout } from "@/auth/useAuth";

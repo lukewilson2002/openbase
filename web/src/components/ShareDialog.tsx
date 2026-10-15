@@ -1,7 +1,7 @@
 /**
  * "Share": invite people into the workspace (choosing which of its bases they can open) and, from
- * a base, share one view as a read-only link. Opened from the workspace page (invites only) and
- * from a base's top bar.
+ * a base, share one view as a read-only link. Opened from the workspace page (invites only), from
+ * a base's top bar, and from a view's menu in the base sidebar (on "Share a view").
  */
 import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router";
@@ -35,6 +35,8 @@ export type ShareDialogTarget =
       table?: Pick<Table, "views"> | null;
       /** The view on screen, picked by default in "Share a view". */
       view?: Pick<View, "id"> | null;
+      /** Open on "Share a view" (a view's own "Share view…" item) instead of "Invite people". */
+      initialTab?: "invite" | "view";
     };
 
 export type ShareDialogProps = ShareDialogTarget & {
@@ -48,7 +50,7 @@ export function ShareDialog(props: ShareDialogProps) {
   const role = props.scope === "workspace" ? props.workspace.role : props.base.role;
   const views = props.scope === "base" ? (props.table?.views ?? []) : [];
   const viewTab = props.scope === "base" && views.some((v) => canShareView(role, v));
-  const [tab, setTab] = useState("invite");
+  const [tab, setTab] = useState<string>(props.scope === "base" ? (props.initialTab ?? "invite") : "invite");
 
   const invite = <InviteForm target={props} onNavigate={() => onOpenChange(false)} />;
   return (

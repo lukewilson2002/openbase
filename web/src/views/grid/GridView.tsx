@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { recordKeys, recordsApi, schemaApi } from "@/api/records";
@@ -490,7 +489,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       if (row >= 0) {
         gridRef.current?.scrollToRow(row);
         gridRef.current?.selectCell(0, row);
-        // The keyboard is still on the "Add record" button (or nowhere) that was used: hand it to the
+        // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
         // grid, or the new row looks selected while typing goes to the button, and a click on that
         // already selected cell would not move the focus either.
         if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
@@ -696,6 +695,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           onAddField={() => setFieldDialog({ mode: "create" })}
           canManageFields={canManageFields}
           timeZone={timeZone}
+          onAdd={canEdit ? () => void addRecord() : undefined}
         />
         <div className="relative min-h-0 flex-1 border-t border-line bg-surface">
           {data.error && !data.loading && total === 0 ? (
@@ -725,9 +725,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           )}
         </div>
         <div className="flex h-9 shrink-0 items-center gap-3 border-t border-line bg-subtle px-3 text-[0.8125rem] text-muted">
-          <Button size="sm" variant="ghost" disabled={!canEdit} onClick={() => void addRecord()}>
-            <Plus aria-hidden className="size-4" /> Add record
-          </Button>
           <span aria-live="polite">
             {total.toLocaleString()} record{total === 1 ? "" : "s"}
             {debouncedSearch ? " found" : ""}

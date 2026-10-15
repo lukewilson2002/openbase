@@ -18,10 +18,12 @@ export interface ViewFrameProps {
   /** View-specific toolbar controls. */
   toolbarExtra?: ReactNode;
   footer?: ReactNode;
+  /** The toolbar's "Add" (see ViewBar); omit when the view has no single obvious way to add a record. */
+  onAdd?: () => void;
   children: ReactNode;
 }
 
-export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarExtra, footer, children }: ViewFrameProps) {
+export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarExtra, footer, onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +60,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           features={{ shareView: true, ...features }}
           hideFieldsNoun={hideFieldsNoun}
           extra={toolbarExtra}
+          onAdd={onAdd}
         />
         <div className="relative min-h-0 flex-1 border-t border-line bg-surface">{children}</div>
         {footer && <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted">{footer}</div>}

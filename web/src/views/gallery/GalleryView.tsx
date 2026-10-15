@@ -3,7 +3,6 @@
  * page by page as you scroll.
  */
 import { useEffect, useMemo, useRef } from "react";
-import { Plus } from "lucide-react";
 import type { ViewConfig } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -69,6 +68,7 @@ function GalleryInner(props: ViewProps) {
       features={{ group: false, rowHeight: false }}
       hideFieldsNoun="Card fields"
       toolbarExtra={settings}
+      onAdd={setup.canEdit ? () => void addRecord() : undefined}
       footer={
         <>
           <span aria-live="polite">
@@ -92,15 +92,6 @@ function GalleryInner(props: ViewProps) {
         ) : (
           <>
             <div role="list" aria-label="Records" className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}>
-              {setup.canEdit && (
-                <button
-                  type="button"
-                  onClick={() => void addRecord()}
-                  className="flex h-28 items-center justify-center gap-1.5 self-start rounded-lg border border-dashed border-line-strong text-[0.8125rem] text-muted hover:border-primary hover:text-primary"
-                >
-                  <Plus aria-hidden className="size-4" /> Add record
-                </button>
-              )}
               {data.records.map((rec) => {
                 const open = () => setup.openRecord(rec.id);
                 return (

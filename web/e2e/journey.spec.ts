@@ -20,7 +20,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 const MARKER_W = 56;
 const HEADER_H = 34;
 const ROW_H = 33;
-// A table made with "New empty table" has only its primary field, so the added fields follow "Name".
+// A table made on the empty base's page has only its primary field, so the added fields follow "Name".
 const COLUMNS = [
   { key: "name", width: 220 },
   { key: "qty", width: 140 },
@@ -119,12 +119,12 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("button", { name: "New base" }).first().click();
     await page.getByRole("textbox", { name: "Name" }).fill("Journey base");
     await page.getByRole("button", { name: "Create base" }).click();
-    // A new base starts without tables; its first one comes from the tab bar's "Add table".
+    // A new base starts without tables, and the page asks for the first one by name.
     await expect(page).toHaveURL(/\/base\/app[^/]+$/);
     baseId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
-    await page.getByRole("button", { name: "Add table" }).click();
-    await page.getByRole("menuitem", { name: "New empty table" }).click();
-    await page.getByRole("textbox", { name: "Name" }).fill("Table 1");
+    await expect(page.getByRole("heading", { name: "Create your first table" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Tables" }).getByText("No tables yet.")).toBeVisible();
+    await page.getByRole("textbox", { name: "Table name" }).fill("Table 1");
     await page.getByRole("button", { name: "Create table" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     viewId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
@@ -334,7 +334,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
     await expect(page.locator("header [data-entity-tile] svg[data-icon='store']")).toBeVisible();
 
-    await page.getByRole("link", { name: "Back to all bases" }).click();
+    await page.getByRole("link", { name: "Back to Journey workspace" }).click();
     const card = page.getByRole("link", { name: "Journey base" }).locator("xpath=ancestor::li");
     await expect(card.locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
     await expect(card.locator("[data-entity-tile]")).not.toContainText("J");

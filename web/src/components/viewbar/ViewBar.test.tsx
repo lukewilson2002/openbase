@@ -4,13 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, makeTable } from "@/test/fields";
-import { makeSchema, makeView } from "@/test/utils";
-import { ViewBar, type ViewBarProps } from "./ViewBar";
+import { makeSchema, makeView, stubDesktop } from "@/test/utils";
+import { TOOLS_KEY, ViewBar, type ViewBarProps } from "./ViewBar";
 
 const name = { ...ALL_FIELDS.single_line_text, id: "fld_name", name: "Name" };
 const table = makeTable([name]);
 
-function renderBar(over: Partial<ViewBarProps> = {}) {
+/** `keepStorage` leaves the tools' remembered state alone; otherwise they start unfolded. */
+function renderBar(over: Partial<ViewBarProps> = {}, { keepStorage = false } = {}) {
+  // jsdom matches no media query (a phone, where the tools start folded); most tests want them out.
+  if (!keepStorage) localStorage.setItem(TOOLS_KEY, "0");
   const view = over.view ?? makeView({ id: "viw1" });
   const props: ViewBarProps = {
     schema: makeSchema("viewer"),
@@ -34,12 +37,12 @@ function renderBar(over: Partial<ViewBarProps> = {}) {
     canManageFields: false,
     ...over,
   };
-  render(
+  const { unmount } = render(
     <Providers client={createQueryClient()}>
       <ViewBar {...props} />
     </Providers>,
   );
-  return props;
+  return { ...props, unmount };
 }
 
 describe("ViewBar for people who cannot save the view", () => {
@@ -120,5 +123,65 @@ describe("ViewBar sharing and export", () => {
     const button = screen.getByRole("button", { name: "Share view" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Personal views cannot be shared");
+  });
+});
+
+describe("ViewBar tools", () => {
+  it("folds the tools into one button that counts the active ones, and remembers the choice", async () => {
+    const user = userEvent.setup();
+    const view = makeView({ id: "viw1", config: { ...makeView({ id: "viw1" }).config, sorts: [{ field_id: "fld_name", direction: "asc" }], filter: { conjunction: "and", items: [{ field_id: "fld_name", op: "contains", value: "a" }] } } });
+    const { unmount } = renderBar({ view, config: view.config });
+    expect(screen.getByRole("button", { name: /^Filter|1 filter/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide tools" }));
+    expect(screen.queryByRole("button", { name: /1 filter/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sorted by/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tools · 2 on" })).toBeInTheDocument();
+    expect(localStorage.getItem(TOOLS_KEY)).toBe("1");
+
+    // A new page view starts folded, and unfolding is remembered too.
+    unmount();
+    renderBar({ view, config: view.config }, { keepStorage: true });
+    await user.click(screen.getByRole("button", { name: "Tools · 2 on" }));
+    expect(screen.getByRole("button", { name: /Sorted by 1 field/ })).toBeInTheDocument();
+    expect(localStorage.getItem(TOOLS_KEY)).toBe("0");
+  });
+
+  it("starts folded on a phone and unfolded on a desktop until a choice is made", () => {
+    const phone = renderBar({}, { keepStorage: true });
+    expect(screen.getByRole("button", { name: "Tools" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Filter/ })).not.toBeInTheDocument();
+    phone.unmount();
+    stubDesktop();
+    renderBar({}, { keepStorage: true });
+    expect(screen.getByRole("button", { name: /^Filter/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tools" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ViewBar Add", () => {
+  it("adds a record from the toolbar on a desktop", async () => {
+    stubDesktop();
+    const onAdd = vi.fn();
+    renderBar({ onAdd });
+    const add = screen.getByRole("button", { name: "Add record" });
+    expect(add).toHaveTextContent("Add");
+    expect(add.closest("[role=toolbar]")).not.toBeNull();
+    await userEvent.click(add);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("floats at the bottom corner on a phone", async () => {
+    const onAdd = vi.fn();
+    renderBar({ onAdd });
+    const add = screen.getByRole("button", { name: "Add record" });
+    expect(add).toHaveClass("fixed");
+    await userEvent.click(add);
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("is left out when there is no way to add", () => {
+    stubDesktop();
+    renderBar();
+    expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
   });
 });

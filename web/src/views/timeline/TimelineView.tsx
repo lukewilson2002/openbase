@@ -5,7 +5,7 @@
  * scroll toward its edges.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarCheck, Plus, ZoomIn, ZoomOut } from "lucide-react";
+import { CalendarCheck, ZoomIn, ZoomOut } from "lucide-react";
 import type { DateRange, TimelineScale, ViewConfig } from "@/api/types";
 import { isGroupable } from "@/components/viewbar/config";
 import { IconButton } from "@/components/ui/icon-button";
@@ -215,11 +215,6 @@ function TimelineInner(props: ViewProps) {
           <Button size="sm" variant="ghost" onClick={goToday}>
             <CalendarCheck aria-hidden className="size-4" /> Today
           </Button>
-          {canEditDates && (
-            <Button size="sm" variant="ghost" onClick={() => void create(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone))}>
-              <Plus aria-hidden className="size-4" /> Add record
-            </Button>
-          )}
         </>
       )}
     </>
@@ -268,6 +263,7 @@ function TimelineInner(props: ViewProps) {
       features={{ group: true, rowHeight: false }}
       hideFieldsNoun="Bar fields"
       toolbarExtra={settings}
+      onAdd={fields && canEditDates ? () => void create(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone)) : undefined}
       footer={
         fields ? (
           <>

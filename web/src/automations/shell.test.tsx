@@ -1,8 +1,8 @@
 /** The automations page inside the real route table and base shell. */
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { USER, mockApi, renderApp } from "@/test/utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { USER, mockApi, renderApp, stubDesktop } from "@/test/utils";
 import { PEOPLE } from "@/test/fields";
 import { automationSchema, makeAutomation } from "./testUtils";
 
@@ -25,7 +25,10 @@ function open(role: string, route: string) {
 }
 
 describe("automations in the base shell", () => {
-  it("is reached from the top bar by creators, keeps the table tabs and does not mistake the path for a table", async () => {
+  // The links live in the base menu, docked from tablet width up (a drawer on phones).
+  beforeEach(() => stubDesktop());
+
+  it("is reached from the base menu by creators, keeps the tables listed and does not mistake the path for a table", async () => {
     const user = userEvent.setup();
     open("creator", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
@@ -33,7 +36,7 @@ describe("automations in the base shell", () => {
     expect(await screen.findByRole("list", { name: "Automations" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Automations" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Automations" })).toHaveAttribute("aria-current", "page");
-    // The table tabs stay, as a way back.
+    // The tables stay in the menu, as a way back.
     const tabs = screen.getByRole("navigation", { name: "Tables" });
     expect(within(tabs).getByRole("link", { name: "Tasks" })).not.toHaveAttribute("aria-current");
     await user.click(within(tabs).getByRole("link", { name: "Tasks" }));
