@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { APIRequestContext, Browser, BrowserContext, Cookie, Page, TestInfo } from "@playwright/test";
-import { expect, newClientContext, test } from "./fixtures";
+import { expect, newClientContext, skipIntro, test } from "./fixtures";
 
 /**
  * Forms, share links and CSV against a live server, in Chrome:
@@ -60,6 +60,7 @@ async function seed(page: Page): Promise<Fixture> {
     const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
     expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
   }
+  await skipIntro(req);
   const ws = await call<{ id: string }>(req, "post", "/api/workspaces", { name: `E2E sharing ${Date.now()}` });
   const base = await call<{ id: string; tables: TableDto[] }>(req, "post", `/api/workspaces/${ws.id}/bases`, { name: "Sharing E2E" });
   const t = base.tables[0] ?? (await call<TableDto>(req, "post", `/api/bases/${base.id}/tables`, { name: "Contacts" }));
@@ -398,6 +399,7 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   const email = `viewer-${Date.now()}@example.com`;
   const signup = await g.request.post("/api/auth/signup", { data: { email, name: "Viewer Vera", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(g.request);
   const accept = await g.request.post(`/api/invites/by-token/${invite.url.split("/invite/")[1]}/accept`, { data: {}, headers: CSRF });
   expect(accept.ok(), await accept.text()).toBeTruthy();
 

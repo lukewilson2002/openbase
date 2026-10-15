@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Cookie } from "@playwright/test";
-import { expect, newClientContext, test } from "./fixtures";
+import { expect, newClientContext, skipIntro, test } from "./fixtures";
 
 /**
  * The "AI assistants" tab of the account page against the real server: the MCP address comes from
@@ -24,6 +24,7 @@ test.beforeAll(async ({ browser }, testInfo) => {
   const email = `e2e-assistants-${randomBytes(4).toString("hex")}@example.com`;
   const res = await ctx.request.post("/api/auth/signup", { data: { email, name: "Assistants E2E", password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();
+  await skipIntro(ctx.request);
   session = await ctx.cookies();
   await ctx.close();
 });

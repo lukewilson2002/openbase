@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, test as base, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type TestInfo } from "@playwright/test";
+import { expect, test as base, type APIRequestContext, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type TestInfo } from "@playwright/test";
 
 /**
  * `test` with an automatic watchdog: every page opened by a test is observed, and the test fails
@@ -126,6 +126,16 @@ export const test = base.extend<{ diagnostics: Diagnostics }>({
     { auto: true },
   ],
 });
+
+/**
+ * Record that the signed-in account (of `request`'s cookies) has seen the intro. A new account gets
+ * the full-screen intro over the first app page it opens, which would cover whatever the test came
+ * to drive; journey.spec.ts and the unit tests cover the intro itself.
+ */
+export async function skipIntro(request: APIRequestContext): Promise<void> {
+  const res = await request.patch("/api/auth/me", { data: { intro_seen: true }, headers: { "X-OpenBase-CSRF": "1" } });
+  expect(res.ok(), `marking the intro seen: ${res.status()} ${await res.text()}`).toBeTruthy();
+}
 
 /** How long a wait for the page may take before the test says what it was waiting for. */
 const WAIT_MS = 5_000;

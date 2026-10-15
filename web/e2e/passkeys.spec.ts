@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Browser, BrowserContext, CDPSession, Cookie, Page, TestInfo } from "@playwright/test";
 import { totp } from "../contract/totp";
-import { expect, newClientContext, test } from "./fixtures";
+import { expect, newClientContext, skipIntro, test } from "./fixtures";
 
 /**
  * Passkeys in a real browser against the real server, with Chrome's virtual authenticator
@@ -85,6 +85,7 @@ async function signUp(browser: Browser, testInfo: TestInfo, name: string): Promi
   const email = `e2e-passkey-${rand()}@example.com`;
   const res = await ctx.request.post("/api/auth/signup", { data: { email, name, password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();
+  await skipIntro(ctx.request);
   const cookies = await ctx.cookies();
   await ctx.close();
   return { email, name, cookies };

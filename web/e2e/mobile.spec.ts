@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { devices } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, skipIntro, test } from "./fixtures";
 
 /**
  * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome). The
@@ -40,6 +40,7 @@ test("the home page, a base, its toolbar and the record panel fit a phone", asyn
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
   const ws = await (await page.request.post("/api/workspaces", { data: { name: "Mobile workspace" }, headers: CSRF })).json();
   const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "A base with a fairly long name" }, headers: CSRF })).json();
   const table = base.tables[0] as { id: string };
@@ -76,6 +77,7 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   const email = `e2e-mobile-icon-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
 
   await page.goto("/");
   await page.getByRole("button", { name: "New workspace" }).first().tap();
