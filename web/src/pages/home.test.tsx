@@ -19,7 +19,18 @@ const workspaces: WorkspaceSummary[] = [
     member_count: 2,
     pending_invite_count: 1,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [me, grace, jordan], tables: [] },
+      {
+        id: "app1",
+        workspace_id: "wsp1",
+        name: "Project tracker",
+        color: "green_dark",
+        role: "owner",
+        people: [me, grace, jordan],
+        tables: [
+          { id: "tbl1", name: "Tasks", icon: null },
+          { id: "tbl2", name: "People", icon: "users" },
+        ],
+      },
       { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", people: [me], tables: [] },
     ],
   },
@@ -126,7 +137,7 @@ describe("home menu", () => {
 describe("workspace page", () => {
   it("lists the bases with their tables, who can open every base, and who else can open each", async () => {
     stubDesktop();
-    routes({ "GET /api/bases/app1": makeSchema("owner") });
+    const api = routes();
     renderApp({ route: "/workspace/wsp1" });
     expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Can open every base in Acme: you" })).toHaveAttribute("href", "/workspace/wsp1/members");
@@ -141,14 +152,16 @@ describe("workspace page", () => {
     const crm = within(bases).getByRole("link", { name: "CRM" }).closest("li")!;
     expect(within(crm).queryByRole("img", { name: /Also opens/ })).not.toBeInTheDocument();
     expect(crm.querySelector("svg.lucide-users")).toBeInTheDocument();
+    // A table's own icon on its chip; the names come with the workspace list, not from each base.
+    expect(within(tracker).getByText("People").parentElement!.querySelector("svg.lucide-users")).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.path.startsWith("/api/bases/"))).toEqual([]);
   });
 
   it("shows a few tables of a base, then how many more", async () => {
     stubDesktop();
-    const schema = makeSchema("owner");
-    const table = schema.tables[1]!;
-    const tables = ["Tasks", "People", "Sprints", "Bugs", "Ideas"].map((name, i) => ({ ...table, id: `tbl${i}`, name }));
-    routes({ "GET /api/bases/app1": { ...schema, tables } });
+    const tables = ["Tasks", "People", "Sprints", "Bugs", "Ideas"].map((name, i) => ({ id: `tbl${i}`, name, icon: null }));
+    const [acme] = workspaces;
+    routes({ "GET /api/workspaces": [{ ...acme!, bases: [{ ...acme!.bases[0]!, tables }, acme!.bases[1]!] }] });
     renderApp({ route: "/workspace/wsp1" });
     const chips = await screen.findByRole("list", { name: /^Tables in Project tracker/ });
     expect(within(chips).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Tasks", "People", "Sprints", "+2"]);
@@ -305,12 +318,14 @@ describe("workspace page", () => {
   it("opens the Share dialog for the whole workspace, with the views of every base", async () => {
     stubDesktop();
     const user = userEvent.setup();
-    routes({ "GET /api/bases/app1": makeSchema("owner"), "GET /api/bases/app2": makeSchema("owner", { id: "app2", name: "CRM", tables: [] }) });
+    const api = routes({ "GET /api/bases/app1": makeSchema("owner"), "GET /api/bases/app2": makeSchema("owner", { id: "app2", name: "CRM", tables: [] }) });
     renderApp({ route: "/workspace/wsp1" });
     await user.click(await screen.findByRole("button", { name: "Share" }));
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
     expect(within(dialog).getByRole("radio", { name: "All bases in Acme" })).toBeChecked();
     expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeInTheDocument();
+    // The bases' schemas (for their views) load only once "Share a view" is opened.
+    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
 
     await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
     const select = await within(dialog).findByLabelText("View");

@@ -5,16 +5,16 @@
  */
 import { useState, type ComponentProps } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Ellipsis, FileDown, Pencil, Plus, Shapes, Share2, Table2, Trash2, Upload } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { BasePerson, BaseSummary, WorkspaceSummary } from "@/api/types";
+import type { BasePerson, BaseSummary, TableSummary, WorkspaceSummary } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
 import { NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
-import { EntityTile } from "@/components/icons/EntityIcon";
+import { EntityIcon, EntityTile } from "@/components/icons/EntityIcon";
 import { IconPicker, IconPickerDialog } from "@/components/icons/IconPicker";
 import { iconPatch } from "@/components/icons/iconPatch";
 import { Avatar } from "@/components/ui/avatar";
@@ -63,7 +63,6 @@ function Workspace({ ws }: { ws: WorkspaceSummary }) {
   const refresh = () => qc.invalidateQueries({ queryKey: keys.workspaces });
   const close = () => setDialog(null);
   const updateWorkspace = useUpdateWorkspace();
-  const tables = useBaseTables(ws.bases);
   const { everyone, only } = splitPeople(ws.bases);
 
   const createBase = useMutation({
@@ -183,7 +182,6 @@ function Workspace({ ws }: { ws: WorkspaceSummary }) {
             <BaseCard
               key={b.id}
               base={b}
-              tables={tables.get(b.id)}
               people={only.get(b.id) ?? []}
               desktop={desktop}
               onAction={(d) => {
@@ -291,14 +289,12 @@ function FloatingButton({ side, soft, className, ...props }: { side: "left" | "r
 
 function BaseCard({
   base,
-  tables,
   people,
   desktop,
   onAction,
   onDuplicate,
 }: {
   base: BaseSummary;
-  tables: readonly { id: string; name: string }[] | undefined;
   people: readonly BasePerson[];
   desktop: boolean;
   onAction: (d: BaseDialog) => void;
@@ -359,13 +355,13 @@ function BaseCard({
           </DropdownMenu>
         )}
       </div>
-      {tables && tables.length > 0 && <TableChips base={base.name} tables={tables} max={desktop ? 3 : 2} />}
+      {base.tables.length > 0 && <TableChips base={base.name} tables={base.tables} max={desktop ? 3 : 2} />}
       {desktop && people.length > 0 && <div className="flex">{faces(FACE_SIZES.md)}</div>}
     </li>
   );
 }
 
-function TableChips({ base, tables, max }: { base: string; tables: readonly { id: string; name: string }[]; max: number }) {
+function TableChips({ base, tables, max }: { base: string; tables: readonly TableSummary[]; max: number }) {
   const shown = tables.slice(0, max);
   const rest = tables.length - shown.length;
   const chip = "inline-flex h-6 min-w-0 items-center gap-[5px] rounded-md bg-subtle px-2 text-xs font-medium text-fg/85";
@@ -374,7 +370,7 @@ function TableChips({ base, tables, max }: { base: string; tables: readonly { id
       {shown.map((t) => (
         <li key={t.id} className="flex min-w-0">
           <span className={chip}>
-            <Table2 aria-hidden className="size-3 shrink-0 text-faint" />
+            {t.icon ? <EntityIcon name={t.icon} className="size-3 text-faint" /> : <Table2 aria-hidden className="size-3 shrink-0 text-faint" />}
             <span className="truncate">{t.name}</span>
           </span>
         </li>
@@ -428,20 +424,4 @@ export function splitPeople(bases: readonly Pick<BaseSummary, "id" | "people">[]
   const common = new Set(everyone.map((p) => personKey(p)));
   for (const b of bases) only.set(b.id, b.people.filter((p) => !common.has(personKey(p))));
   return { everyone, only };
-}
-
-/**
- * The tables of each base, for the chips on the cards. The workspace list has no tables, so they
- * come from the bases' schemas (the same queries the base page uses, so opening a base is instant).
- */
-function useBaseTables(bases: readonly BaseSummary[]): Map<string, { id: string; name: string }[]> {
-  const schemas = useQueries({
-    queries: bases.map((b) => ({ queryKey: keys.base(b.id), queryFn: () => api.bases.get(b.id), retry: false })),
-  });
-  const out = new Map<string, { id: string; name: string }[]>();
-  bases.forEach((b, i) => {
-    const tables = schemas[i]?.data?.tables;
-    if (tables) out.set(b.id, tables);
-  });
-  return out;
 }
