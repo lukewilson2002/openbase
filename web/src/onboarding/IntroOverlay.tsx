@@ -163,7 +163,8 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
                     ))}
                   </ol>
                 )}
-                <div className="flex items-center gap-2.5 max-[420px]:w-full max-[420px]:justify-end">
+                {/* Phones: on the closing screen Back and Connect drop below "I'll do it myself", to the right. */}
+                <div className={cn("flex items-center gap-2.5", closing && "max-[420px]:w-full max-[420px]:justify-end")}>
                   {step > 0 && (
                     <Button className={BUTTON} onClick={back}>
                       Back
