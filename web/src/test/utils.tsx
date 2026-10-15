@@ -194,3 +194,20 @@ export async function chooseOption(trigger: HTMLElement, optionName: string | Re
   await userEvent.click(trigger);
   await userEvent.click(await screen.findByRole("option", { name: optionName }));
 }
+
+/** Make `useMediaQuery` see a desktop-wide window (jsdom matches no media query, so pages render their phone layout by default). */
+export function stubDesktop(): void {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes("min-width: 768px"),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}

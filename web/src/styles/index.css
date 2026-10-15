@@ -175,6 +175,11 @@
     transform: translateY(100%);
   }
 }
+@keyframes ob-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
 @keyframes ob-spin {
   to {
     transform: rotate(360deg);
@@ -192,6 +197,9 @@
 .ob-sheet-in {
   animation: ob-sheet-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
 }
+.ob-drawer-in {
+  animation: ob-drawer-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
 .ob-spin {
   animation: ob-spin 0.8s linear infinite;
 }
@@ -199,7 +207,8 @@
   .ob-fade-in,
   .ob-pop-in,
   .ob-slide-in,
-  .ob-sheet-in {
+  .ob-sheet-in,
+  .ob-drawer-in {
     animation: none;
   }
   .ob-spin {
