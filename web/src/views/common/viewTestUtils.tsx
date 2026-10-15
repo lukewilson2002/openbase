@@ -8,6 +8,7 @@ import { keys } from "@/api/keys";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
 import { USER, makeView, mockApi, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
+import { TOOLS_KEY } from "@/components/viewbar/ViewBar";
 import type { ViewProps } from "../types";
 
 export const F = {
@@ -77,6 +78,9 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
   });
   const table = opts.schema.tables[0]!;
   const view = table.views.find((v) => v.id === opts.viewId)!;
+  // jsdom matches no media query, so the toolbar would start with its tools folded as on a phone;
+  // these tests reach for Sort, Filter and the view settings directly.
+  localStorage.setItem(TOOLS_KEY, "0");
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false, staleTime: 0, gcTime: 0 } });
   // The shell has loaded the user before any view renders; without this the time zone would change mid-test.
