@@ -121,11 +121,20 @@ fn require_manage_invite(conn: &Connection, actor: &Actor, invite: &InviteRow) -
         Err(_) => {}
     }
     let mut max = Role::Owner;
+    let mut any_live = false;
     for b in &invite.info.base_ids {
         if bases::live_base(conn, b).is_err() {
             continue;
         }
+        any_live = true;
         max = max.min(perm::require_base(conn, actor, b, Role::Creator)?);
+    }
+    // With every listed base in the trash nothing above was checked, so any
+    // member (even a viewer) would pass; restoring a base revives the invite.
+    if !any_live {
+        return Err(AppError::forbidden(
+            "only workspace owners can revoke this invite: all of its bases are in the trash",
+        ));
     }
     if invite.role()? > max {
         return Err(AppError::forbidden(
