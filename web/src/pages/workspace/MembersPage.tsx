@@ -1,7 +1,7 @@
 /**
  * The people of a workspace: one role each, and the bases each of them can open (every base,
  * including later ones, or a picked list). Owners change both, remove people and look after the
- * invites that are still waiting; everyone else sees the list as it is.
+ * invites that are still waiting; everyone else sees the list as it is and can leave.
  */
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -19,7 +19,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
@@ -71,9 +71,11 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
   });
   // A new invite with the same terms, then the old one goes: the old link can't be shown again
   // (only its hash is stored), so "resend" always means a fresh link.
+  // Bases in the trash are left out: the server refuses to list them on a new invite.
   const resend = useMutation({
     mutationFn: async (old: InviteInfo) => {
-      const created = await api.invites.createForWorkspace(ws.id, { email: old.email ?? null, role: old.role, all_bases: old.all_bases, ...(old.all_bases ? {} : { base_ids: old.base_ids }) });
+      const baseIds = liveBaseIds(old, ws);
+      const created = await api.invites.createForWorkspace(ws.id, { email: old.email ?? null, role: old.role, all_bases: old.all_bases, ...(old.all_bases ? {} : { base_ids: baseIds }) });
       await api.invites.remove(old.id);
       return created;
     },
@@ -91,6 +93,7 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
   });
 
   const pending = (invites.data ?? []).filter((i) => !i.accepted_at);
+  const lastOwner = (members.data ?? []).filter((m) => m.role === "owner").length <= 1;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:py-8">
@@ -122,6 +125,7 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
               ws={ws}
               isMe={m.user_id === me?.id}
               canManage={isOwner}
+              lastOwner={lastOwner}
               open={editing === m.user_id}
               onToggle={() => setEditing((cur) => (cur === m.user_id ? null : m.user_id))}
               saving={update.isPending && update.variables?.userId === m.user_id}
@@ -178,6 +182,7 @@ function MemberRow({
   ws,
   isMe,
   canManage,
+  lastOwner,
   open,
   onToggle,
   saving,
@@ -188,6 +193,7 @@ function MemberRow({
   ws: WorkspaceSummary;
   isMe: boolean;
   canManage: boolean;
+  lastOwner: boolean;
   open: boolean;
   onToggle: () => void;
   saving: boolean;
@@ -195,7 +201,9 @@ function MemberRow({
   onRemove: () => void;
 }) {
   const owner = m.role === "owner";
-  const summary = accessSummary(m, ws.bases);
+  const summary = accessSummary(m, ws.bases, canManage);
+  // A workspace must keep an owner; the server refuses, so say why before they try.
+  const cannotLeave = isMe && owner && lastOwner;
   const editorId = `access-${m.user_id}`;
   return (
     <li>
@@ -238,7 +246,7 @@ function MemberRow({
           ) : (
             <span className="w-32 px-2 text-[0.8125rem] text-muted max-sm:w-28">{roleLabel(m.role)}</span>
           )}
-          {canManage && (
+          {canManage || isMe ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton label={`Actions for ${m.name}`} size="sm" noTooltip>
@@ -246,11 +254,15 @@ function MemberRow({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem danger onSelect={onRemove}>
+                <DropdownMenuItem danger disabled={cannotLeave} onSelect={onRemove}>
                   <UserMinus aria-hidden className="size-4" /> {isMe ? "Leave workspace" : "Remove from workspace"}
                 </DropdownMenuItem>
+                {cannotLeave && <DropdownMenuLabel className="max-w-56 font-normal">You are the only owner. Make someone else an owner first.</DropdownMenuLabel>}
               </DropdownMenuContent>
             </DropdownMenu>
+          ) : (
+            // Keeps the role column lined up with the rows that have an actions button.
+            <span aria-hidden className="w-7 pointer-coarse:w-9" />
           )}
         </div>
       </div>
@@ -295,12 +307,12 @@ function AccessEditor({ id, m, ws, saving, onSave, onDone }: { id: string; m: Me
           <Checkbox key={b.id} checked={all || picked.has(b.id)} disabled={all} onCheckedChange={(on) => toggle(b.id, on)} label={b.name} />
         ))}
       </div>
-      {!all && ids.length === 0 && <p className="ml-6 mt-2 text-xs text-muted">With no base picked, {m.name} stays in the workspace but can't open anything in it.</p>}
+      {!all && ids.length === 0 && <p className="ml-6 mt-2 text-xs text-muted">Pick at least one base, or remove them from the workspace.</p>}
       <div className="mt-3 flex justify-end gap-2">
         <Button size="sm" onClick={onDone} disabled={saving}>
           Cancel
         </Button>
-        <Button size="sm" variant="primary" loading={saving} onClick={() => void save()}>
+        <Button size="sm" variant="primary" loading={saving} disabled={!all && ids.length === 0} onClick={() => void save()}>
           Save access
         </Button>
       </div>
@@ -326,6 +338,7 @@ function InviteRow({
   emailEnabled: boolean;
 }) {
   const who = invite.email || "Anyone with the link";
+  const basesGone = !invite.all_bases && liveBaseIds(invite, ws).length === 0;
   return (
     <li aria-label={`${who}, invited`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
@@ -337,7 +350,13 @@ function InviteRow({
           </p>
           <p className="text-xs text-muted">
             Not joined yet ·{" "}
-            <button type="button" disabled={busy} onClick={onResend} className="text-primary hover:underline disabled:opacity-50">
+            <button
+              type="button"
+              disabled={busy || basesGone}
+              title={basesGone ? "Its bases are in the trash. Cancel it and invite them again." : undefined}
+              onClick={onResend}
+              className="text-primary hover:underline disabled:opacity-50"
+            >
               Resend
             </button>{" "}
             ·{" "}
@@ -360,4 +379,9 @@ function InviteRow({
       )}
     </li>
   );
+}
+
+/** The bases a limited invite lists that are still live (the workspace summary has no trashed bases). */
+function liveBaseIds(invite: InviteInfo, ws: WorkspaceSummary): string[] {
+  return invite.base_ids.filter((id) => ws.bases.some((b) => b.id === id));
 }
