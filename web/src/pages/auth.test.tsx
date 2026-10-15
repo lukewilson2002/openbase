@@ -84,7 +84,7 @@ describe("login", () => {
   it("sends first-time visitors to setup", async () => {
     mockApi({ "GET /api/setup": { needs_setup: true, open_signup: false, email_enabled: false }, "GET /api/auth/me": LOGGED_OUT });
     renderApp({ route: "/login" });
-    expect(await screen.findByRole("heading", { name: "Set up OpenBase" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome to your OpenBase" })).toBeInTheDocument();
   });
 
   it("redirects protected routes to login when there is no session", async () => {
@@ -95,40 +95,45 @@ describe("login", () => {
 });
 
 describe("setup", () => {
-  it("creates the first administrator and signs in", async () => {
+  it("creates the owner's account, signs in and opens the intro", async () => {
     const user = userEvent.setup();
     let signedIn = false;
+    const owner = { ...USER, is_admin: true, intro_seen: false };
     const api = mockApi({
-      "GET /api/setup": () => ({ needs_setup: !signedIn, open_signup: false, email_enabled: false }),
-      "GET /api/auth/me": () => (signedIn ? { ...USER, is_admin: true } : LOGGED_OUT),
+      "GET /api/setup": () => ({ needs_setup: !signedIn, open_signup: false, email_enabled: false, public_url: "https://base.example.org" }),
+      "GET /api/auth/me": () => (signedIn ? owner : LOGGED_OUT),
       "POST /api/auth/signup": () => {
         signedIn = true;
-        return { ...USER, is_admin: true };
+        return owner;
       },
+      "PATCH /api/auth/me": { ...owner, intro_seen: true },
       "GET /api/workspaces": [],
     });
     renderApp({ route: "/setup" });
 
-    await user.type(await screen.findByLabelText("Your name"), "Ada");
+    expect(await screen.findByRole("heading", { name: "Welcome to your OpenBase" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Confirm password")).not.toBeInTheDocument();
+    expect(screen.getByText("As the owner you can manage accounts, email and backups in Settings.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Your name"), "Ada");
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
     await user.type(screen.getByLabelText("Password"), "longenough1");
-    await user.type(screen.getByLabelText("Confirm password"), "longenough1");
-    await user.click(screen.getByRole("button", { name: "Create administrator" }));
+    await user.click(screen.getByRole("button", { name: "Create my account" }));
 
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "A base holds one project" })).toBeInTheDocument();
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ name: "Ada", email: "ada@example.com", password: "longenough1" });
+    await user.click(screen.getByRole("button", { name: "Skip the intro" }));
+    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
   });
 
-  it("rejects mismatched passwords without calling the server", async () => {
+  it("rejects a short password without calling the server", async () => {
     const user = userEvent.setup();
     const api = mockApi({ "GET /api/setup": { needs_setup: true, open_signup: false, email_enabled: false }, "GET /api/auth/me": LOGGED_OUT });
     renderApp({ route: "/setup" });
     await user.type(await screen.findByLabelText("Your name"), "Ada");
     await user.type(screen.getByLabelText("Email"), "ada@example.com");
-    await user.type(screen.getByLabelText("Password"), "longenough1");
-    await user.type(screen.getByLabelText("Confirm password"), "different123");
-    await user.click(screen.getByRole("button", { name: "Create administrator" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Passwords do not match");
+    await user.type(screen.getByLabelText("Password"), "short");
+    await user.click(screen.getByRole("button", { name: "Create my account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Password must be at least 10 characters");
     expect(api.callsTo("POST /api/auth/signup")).toHaveLength(0);
   });
 });

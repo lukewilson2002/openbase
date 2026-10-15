@@ -1,0 +1,136 @@
+/*
+ * Intro illustrations. Every element's resting style is its FINAL state and the keyframes only
+ * describe where it starts from, so `animation: none` (reduced motion) shows the finished picture.
+ * Delays use `animation-fill-mode: both` so an element waits in its start state until its turn.
+ */
+
+.ob-intro-anim {
+  animation-duration: 0.5s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes ob-intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes ob-intro-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ob-intro-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+@keyframes ob-intro-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+@keyframes ob-intro-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes ob-intro-turn {
+  from {
+    transform: rotate(0deg);
+  }
+}
+@keyframes ob-intro-unfold {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+@keyframes ob-intro-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes ob-intro-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+/* The typing dots appear, wait for the "reply", then go: their final state is hidden. */
+@keyframes ob-intro-typing {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  15%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ob-intro-dot {
+  0%,
+  60%,
+  100% {
+    transform: none;
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.ob-intro-rise {
+  animation-name: ob-intro-rise;
+}
+.ob-intro-fade {
+  animation-name: ob-intro-fade;
+}
+.ob-intro-pop {
+  animation-name: ob-intro-pop;
+}
+.ob-intro-slide {
+  animation-name: ob-intro-slide;
+}
+.ob-intro-drop {
+  animation-name: ob-intro-drop;
+}
+.ob-intro-turn {
+  transform: rotate(90deg);
+  animation-name: ob-intro-turn;
+}
+.ob-intro-unfold {
+  animation-name: ob-intro-unfold;
+}
+/* Paths carry pathLength="1", so a dash of 1 is the whole line whatever its real length. */
+.ob-intro-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation-name: ob-intro-draw;
+}
+.ob-intro-grow-y {
+  transform-origin: top;
+  animation-name: ob-intro-grow-y;
+}
+.ob-intro-typing {
+  opacity: 0;
+  animation-name: ob-intro-typing;
+  animation-duration: 1.2s;
+}
+.ob-intro-dot {
+  animation: ob-intro-dot 0.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-intro-anim,
+  .ob-intro-dot {
+    animation: none !important;
+  }
+}

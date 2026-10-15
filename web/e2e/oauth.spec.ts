@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { APIRequestContext } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, skipIntro, test } from "./fixtures";
 
 /**
  * An MCP OAuth client in a real browser against the real server, the way Claude Code or another
@@ -55,6 +55,7 @@ function pkce(): { verifier: string; challenge: string } {
 async function signUp(request: APIRequestContext, email: string): Promise<{ baseId: string; baseName: string }> {
   const res = await request.post("/api/auth/signup", { data: { email, name: "OAuth E2E", password: PASSWORD }, headers: CSRF });
   expect(res.ok(), await res.text()).toBeTruthy();
+  await skipIntro(request);
   const ws = await (await request.post("/api/workspaces", { data: { name: "OAuth workspace" }, headers: CSRF })).json();
   const base = await (await request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "OAuth base" }, headers: CSRF })).json();
   return { baseId: base.id, baseName: "OAuth base" };

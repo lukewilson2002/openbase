@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Locator, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, redo, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, newClientContext, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
@@ -49,9 +49,11 @@ async function post<T>(req: APIRequestContext, path: string, data: unknown): Pro
 async function signIn(page: Page): Promise<void> {
   const req = page.request;
   const signup = await req.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Grid", password: PASSWORD }, headers: CSRF });
-  if (signup.ok()) return;
-  const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  if (!signup.ok()) {
+    const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
+    expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  }
+  await skipIntro(req);
 }
 
 type TableDto = { id: string; fields: { id: string; name: string }[]; views: { id: string }[] };

@@ -90,23 +90,25 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     return ((await res.json()) as { total: number; records: { id: string; values: Record<string, unknown> }[] }).records;
   };
 
-  await test.step("the first visit leads to the first-run screen and creates the administrator", async () => {
+  await test.step("the first visit leads to the first-run screen, creates the owner and shows the intro", async () => {
     test.skip((await (await page.request.get("/api/setup")).json()).needs_setup === false, "this instance was already set up; the journey needs a fresh one");
     await page.goto("/");
     await expect(page).toHaveURL(/\/setup$/);
-    await expect(page.getByRole("heading", { name: "Set up OpenBase" })).toBeVisible();
-    // Mismatched passwords are caught before any request is made.
+    await expect(page.getByRole("heading", { name: "Welcome to your OpenBase" })).toBeVisible();
+    // A too-short password is caught before any request is made.
     await page.getByLabel("Your name").fill("Journey Admin");
     await page.getByLabel("Email").fill(EMAIL);
-    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-    await page.getByLabel("Confirm password").fill("something else entirely");
-    await page.getByRole("button", { name: "Create administrator" }).click();
+    await page.getByLabel("Password", { exact: true }).fill("short");
+    await page.getByRole("button", { name: "Create my account" }).click();
     await expect(page.getByRole("alert").or(page.locator("[role=alert], .text-danger")).first()).toBeVisible();
-    await page.getByLabel("Confirm password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Create administrator" }).click();
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await page.getByRole("button", { name: "Create my account" }).click();
+    // A new account meets the intro first; skipping it is remembered by the server.
+    await expect(page.getByRole("dialog", { name: "A base holds one project" })).toBeVisible();
+    await page.getByRole("button", { name: "Skip the intro" }).click();
     await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
     expect(await api<{ needs_setup: boolean }>(page, "/api/setup")).toMatchObject({ needs_setup: false });
-    expect(await api<{ email: string; is_admin: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true });
+    await expect.poll(async () => api<{ intro_seen: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true, intro_seen: true });
   });
 
   await test.step("creates a workspace and a base", async () => {

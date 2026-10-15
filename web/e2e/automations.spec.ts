@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, test, typeToEdit } from "./fixtures";
+import { clickGrid, expect, newClientContext, skipIntro, test, typeToEdit } from "./fixtures";
 
 /**
  * The automations journey against a live server: build "when a record is created in Table 1,
@@ -44,9 +44,11 @@ async function call<T>(req: APIRequestContext, method: "post" | "get", path: str
 
 async function signIn(page: Page): Promise<void> {
   const signup = await page.request.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Automations", password: PASSWORD }, headers: CSRF });
-  if (signup.ok()) return;
-  const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  if (!signup.ok()) {
+    const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
+    expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  }
+  await skipIntro(page.request);
 }
 
 async function seed(page: Page): Promise<Fixture> {
