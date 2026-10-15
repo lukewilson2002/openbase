@@ -1,35 +1,41 @@
 /**
- * "Share": invite people into the workspace (choosing which of its bases they can open) and, from
- * a base, share one view as a read-only link. Opened from the workspace page (invites only), from
- * a base's top bar, and from a view's menu in the base sidebar (on "Share a view").
+ * "Share": invite people into the workspace (choosing which of its bases they can open) and share
+ * one view as a read-only link. Opened from a base's top bar and from a view's menu in the base
+ * sidebar ("Share Chores", the base picked, the table's views on offer), and from the workspace
+ * page and the Members page ("Share Household", every base picked, the views of every base on
+ * offer, named after their base: "Chores › All chores").
  */
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send } from "lucide-react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs as T } from "radix-ui";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { BaseSchema, CreateInviteRequest, CreatedInvite, Table, View, WorkspaceSummary } from "@/api/types";
+import type { BaseSchema, BaseSummary, CreateInviteRequest, CreatedInvite, Table, View, WorkspaceSummary } from "@/api/types";
 import { InviteLinkResult, useEmailEnabled } from "@/components/invites/InviteLinkResult";
+import { EntityTile } from "@/components/icons/EntityIcon";
 import { ShareViewTab } from "@/components/share/ShareViewLink";
 import { canShareView } from "@/components/share/shareView";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/cn";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, atLeast, grantableRoles, type Role } from "@/lib/roles";
 
 /** The order roles are offered in: the common choice first. */
 const ROLE_CHOICES: readonly Role[] = ["editor", "commenter", "viewer", "creator", "owner"];
 
 export type ShareDialogTarget =
-  | { scope: "workspace"; workspace: Pick<WorkspaceSummary, "id" | "name" | "role"> }
+  | {
+      scope: "workspace";
+      workspace: Pick<WorkspaceSummary, "id" | "name" | "role"> & { bases?: readonly Pick<BaseSummary, "id" | "name" | "role">[] };
+    }
   | {
       scope: "base";
-      base: Pick<BaseSchema, "id" | "name" | "role" | "workspace_id">;
+      base: Pick<BaseSchema, "id" | "name" | "role" | "workspace_id"> & Partial<Pick<BaseSchema, "color" | "icon">>;
       workspaceName: string;
       /** The table on screen: its views can be shared. */
       table?: Pick<Table, "views"> | null;
@@ -44,36 +50,40 @@ export type ShareDialogProps = ShareDialogTarget & {
   onOpenChange: (open: boolean) => void;
 };
 
+const TAB_LIST = "mb-5 grid grid-cols-2 gap-1 rounded-xl bg-subtle p-1";
+const TAB =
+  "h-10 rounded-[9px] text-sm font-semibold text-muted transition-colors hover:text-fg data-[state=active]:bg-surface data-[state=active]:text-fg data-[state=active]:shadow-[0_1px_3px_rgb(15_20_30/0.12)]";
+
 export function ShareDialog(props: ShareDialogProps) {
   const { open, onOpenChange } = props;
   const name = props.scope === "workspace" ? props.workspace.name : props.base.name;
   const role = props.scope === "workspace" ? props.workspace.role : props.base.role;
-  const views = props.scope === "base" ? (props.table?.views ?? []) : [];
-  const viewTab = props.scope === "base" && views.some((v) => canShareView(role, v));
+  const baseViews = props.scope === "base" ? (props.table?.views ?? []) : [];
+  // From the workspace, any base the person may share views of brings its views along.
+  const viewTab = props.scope === "base" ? baseViews.some((v) => canShareView(role, v)) : (props.workspace.bases ?? []).some((b) => atLeast(b.role, "creator"));
   const [tab, setTab] = useState<string>(props.scope === "base" ? (props.initialTab ?? "invite") : "invite");
 
-  // The server refuses base invites below creator; a form that can only fail would waste their time.
-  const canInvite = props.scope === "workspace" || atLeast(role, "creator");
+  // The server refuses workspace invites below owner and base invites below creator; a form that
+  // can only fail would waste their time.
+  const canInvite = props.scope === "workspace" ? atLeast(role, "owner") : atLeast(role, "creator");
   const invite = canInvite ? (
     <InviteForm target={props} onNavigate={() => onOpenChange(false)} />
   ) : (
-    <Notice>Only creators and owners can invite people. Ask one of them, or share a view.</Notice>
+    <Notice>
+      {props.scope === "workspace" ? "Only owners can invite people to the whole workspace. Open a base to invite people to it, or share a view." : "Only creators and owners can invite people. Ask one of them, or share a view."}
+    </Notice>
   );
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={`Share ${name}`} className="max-w-[520px]">
+    <Dialog open={open} onOpenChange={onOpenChange} title={`Share ${name}`} roomy className="max-w-[520px]">
       {open &&
         (viewTab ? (
           <T.Root value={tab} onValueChange={setTab}>
-            <T.List aria-label="How to share" className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-subtle p-1">
+            <T.List aria-label="How to share" className={TAB_LIST}>
               {[
                 ["invite", "Invite people"],
                 ["view", "Share a view"],
               ].map(([value, label]) => (
-                <T.Trigger
-                  key={value}
-                  value={value!}
-                  className="h-8 rounded-md text-[0.8125rem] font-medium text-muted transition-colors hover:text-fg data-[state=active]:bg-surface data-[state=active]:text-fg data-[state=active]:shadow-pop pointer-coarse:h-10"
-                >
+                <T.Trigger key={value} value={value!} className={TAB}>
                   {label}
                 </T.Trigger>
               ))}
@@ -82,7 +92,11 @@ export function ShareDialog(props: ShareDialogProps) {
               {invite}
             </T.Content>
             <T.Content value="view" className="focus-visible:outline-none">
-              <ShareViewTab views={views} initialViewId={props.scope === "base" ? props.view?.id : null} />
+              {props.scope === "base" ? (
+                <ShareViewTab views={baseViews} initialViewId={props.view?.id} />
+              ) : (
+                <WorkspaceViews bases={(props.workspace.bases ?? []).filter((b) => atLeast(b.role, "creator"))} />
+              )}
             </T.Content>
           </T.Root>
         ) : (
@@ -90,6 +104,31 @@ export function ShareDialog(props: ShareDialogProps) {
         ))}
     </Dialog>
   );
+}
+
+/** "Share a view" from the workspace: the views of every base the person may share, named after their base. */
+function WorkspaceViews({ bases }: { bases: readonly Pick<BaseSummary, "id" | "name" | "role">[] }) {
+  // The base page's own schema queries: whatever was opened before is already here.
+  const schemas = useQueries({ queries: bases.map((b) => ({ queryKey: keys.base(b.id), queryFn: () => api.bases.get(b.id) })) });
+  if (schemas.some((s) => s.isPending)) return <Spinner label="Loading the views" />;
+  const failed = schemas.find((s) => s.isError);
+  if (failed && schemas.every((s) => !s.data)) return <Notice tone="error">{errorMessage(failed.error)}</Notice>;
+
+  const views: View[] = [];
+  const labels = new Map<string, string>();
+  for (const s of schemas) {
+    const schema = s.data;
+    if (!schema) continue;
+    for (const table of schema.tables) {
+      for (const view of table.views) {
+        if (!canShareView(schema.role, view)) continue;
+        views.push(view);
+        // The table is named only when it is not the base's namesake: "Chores › All chores", "Chores › Shopping list › Grid".
+        labels.set(view.id, [schema.name, ...(table.name === schema.name ? [] : [table.name]), view.name].join(" › "));
+      }
+    }
+  }
+  return <ShareViewTab views={views} label={(v) => labels.get(v.id) ?? v.name} emptyText="None of these bases has a view that can be shared yet. Personal views stay private." />;
 }
 
 function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavigate: () => void }) {
@@ -102,7 +141,8 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
   const myRole = fromBase ? target.base.role : target.workspace.role;
   const isOwner = atLeast(myRole, "owner");
   // The bases the inviter can open: nobody can hand out access they do not have.
-  const bases = workspaces.data?.find((w) => w.id === workspaceId)?.bases ?? (fromBase ? [{ id: target.base.id, name: target.base.name }] : []);
+  const bases: readonly Pick<BaseSummary, "id" | "name" | "color" | "icon">[] =
+    workspaces.data?.find((w) => w.id === workspaceId)?.bases ?? (fromBase ? [{ id: target.base.id, name: target.base.name, color: target.base.color ?? "", icon: target.base.icon }] : []);
 
   const roles = ROLE_CHOICES.filter((r) => grantableRoles(myRole).includes(r));
   const [email, setEmail] = useState("");
@@ -144,17 +184,17 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
     });
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" aria-label="Invite people">
-      <p className="text-[0.8125rem] text-muted">
+    <form onSubmit={submit} className="flex flex-col gap-[18px]" aria-label="Invite people">
+      <p className="text-sm leading-normal text-muted">
         People you invite join the <strong className="font-semibold text-fg">{workspaceName}</strong> workspace. Choose which of its bases they can open.
       </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-        <Field label="Email" hint="Leave it empty to get a link anyone can use.">
-          {(ctl) => <Input {...ctl} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
+        <Field label="Email" hint="Leave it empty to get a link anyone can use." className={FIELD}>
+          {(ctl) => <Input {...ctl} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={CONTROL} />}
         </Field>
-        <Field label="Role" hint={ROLE_DESCRIPTIONS[role]}>
+        <Field label="Role" hint={ROLE_DESCRIPTIONS[role]} className={FIELD}>
           {(ctl) => (
-            <Select {...ctl} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <Select {...ctl} value={role} onChange={(e) => setRole(e.target.value as Role)} className={CONTROL}>
               {roles.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
@@ -165,24 +205,34 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
         </Field>
       </div>
 
-      <fieldset disabled={role === "owner"} className="flex flex-col gap-2 rounded-md border border-line p-3 disabled:opacity-70">
-        <legend className="px-1 text-[0.8125rem] font-medium">Bases they can open</legend>
+      <fieldset disabled={role === "owner"} className="flex flex-col gap-1.5 disabled:opacity-70">
+        <legend className="mb-2 text-sm font-semibold">Bases they can open</legend>
         {role === "owner" ? (
-          <p className="text-[0.8125rem] text-muted">Owners can always open every base in {workspaceName}.</p>
+          <p className="text-sm text-muted">Owners can always open every base in {workspaceName}.</p>
         ) : (
           <>
-            <Radio name="share-access" checked={mode === "pick"} onChange={() => setMode("pick")} label="Only the bases I pick" />
+            <Choice type="radio" name="share-access" checked={mode === "pick"} onChange={() => setMode("pick")}>
+              Only the bases I pick
+            </Choice>
             {mode === "pick" && (
-              <div className="ml-6 flex flex-col gap-2" role="group" aria-label="Bases">
+              <div className="ml-[42px] flex flex-col gap-0.5" role="group" aria-label="Bases">
                 {bases.length === 0 ? (
-                  <p className="text-[0.8125rem] text-muted">This workspace has no bases yet.</p>
+                  <p className="px-2.5 py-2 text-sm text-muted">This workspace has no bases yet.</p>
                 ) : (
-                  bases.map((b) => <Checkbox key={b.id} checked={picked.has(b.id)} onCheckedChange={(on) => toggle(b.id, on)} label={b.name} />)
+                  bases.map((b) => (
+                    <Choice key={b.id} type="checkbox" small checked={picked.has(b.id)} onChange={(on) => toggle(b.id, on)} icon={<EntityTile name={b.name} icon={b.icon} color={b.color} tone="tint" size="sm" className="rounded-md" />}>
+                      {b.name}
+                    </Choice>
+                  ))
                 )}
-                {bases.length > 0 && pickedIds.length === 0 && <p className="text-xs text-danger">Pick at least one base.</p>}
+                {bases.length > 0 && pickedIds.length === 0 && <p className="px-2.5 text-xs text-danger">Pick at least one base.</p>}
               </div>
             )}
-            {isOwner && <Radio name="share-access" checked={mode === "all"} onChange={() => setMode("all")} label={`All bases in ${workspaceName}`} hint="Including bases made later" />}
+            {isOwner && (
+              <Choice type="radio" name="share-access" checked={mode === "all"} onChange={() => setMode("all")} hint="Including bases made later">
+                All bases in {workspaceName}
+              </Choice>
+            )}
           </>
         )}
       </fieldset>
@@ -190,33 +240,70 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
       {send.isError && <Notice tone="error">{errorMessage(send.error)}</Notice>}
       {created && <InviteLinkResult created={created} emailEnabled={emailEnabled} />}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to={`/workspace/${workspaceId}/members`} onClick={onNavigate} className="text-[0.8125rem]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <Link to={`/workspace/${workspaceId}/members`} onClick={onNavigate} className="text-sm">
           Manage all members
         </Link>
-        <Button type="submit" variant="primary" loading={send.isPending} disabled={!everything && pickedIds.length === 0}>
-          <Send aria-hidden className="size-4" /> Send invite
+        <Button type="submit" variant="primary" size="lg" className="h-11 rounded-[10px] px-5 font-semibold" loading={send.isPending} disabled={!everything && pickedIds.length === 0}>
+          Send invite
         </Button>
       </div>
     </form>
   );
 }
 
-function Radio({ name, checked, onChange, label, hint }: { name: string; checked: boolean; onChange: () => void; label: string; hint?: string }) {
+const FIELD = "gap-1.5 [&>label]:text-sm [&>label]:font-semibold";
+// 16 px text: smaller makes iOS zoom into the field on focus.
+const CONTROL = "h-11 rounded-[10px] px-3 text-base";
+
+/**
+ * One choice as a whole clickable row (radio or checkbox), with an optional tile and hint. Native
+ * inputs: the radios form one group by `name`, and the label covers the row for a bigger target.
+ */
+function Choice({
+  type,
+  name,
+  checked,
+  onChange,
+  hint,
+  icon,
+  small,
+  children,
+}: {
+  type: "radio" | "checkbox";
+  name?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  hint?: string;
+  icon?: ReactNode;
+  small?: boolean;
+  children: ReactNode;
+}) {
   const id = useId();
   return (
-    <div className="flex items-start gap-2 text-[0.8125rem]">
-      <input id={id} type="radio" name={name} checked={checked} onChange={onChange} aria-describedby={hint ? `${id}-hint` : undefined} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
-      <div>
-        <label htmlFor={id} className="cursor-pointer font-medium">
-          {label}
-        </label>
+    <label htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 rounded-[10px] hover:bg-bg has-[:disabled]:cursor-default", small ? "px-2.5 py-2" : "px-3 py-2.5")}>
+      <input
+        id={id}
+        type={type}
+        name={name}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        // Named by the text alone: the hint is its description, not part of its name.
+        aria-labelledby={`${id}-text`}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        className="m-0 size-[18px] shrink-0 accent-[var(--primary)]"
+      />
+      {icon}
+      <span className="flex min-w-0 flex-col">
+        <span id={`${id}-text`} className={small ? "truncate text-sm" : "text-[0.9375rem]"}>
+          {children}
+        </span>
         {hint && (
-          <p id={`${id}-hint`} className="text-xs text-muted">
+          <span id={`${id}-hint`} className="text-[0.8125rem] text-muted">
             {hint}
-          </p>
+          </span>
         )}
-      </div>
-    </div>
+      </span>
+    </label>
   );
 }
