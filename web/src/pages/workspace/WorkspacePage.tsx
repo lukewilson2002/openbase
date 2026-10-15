@@ -1,21 +1,23 @@
 /**
- * A workspace: its bases as cards (with who can open each), and the ways to add one (empty or from
- * a spreadsheet) and to invite people. On a phone the header shrinks into the top bar and the two
- * "add" buttons float at the bottom corners, within thumb reach.
+ * A workspace: its bases as cards (their tables, and who else can open each), the people who can
+ * open every base, and the ways to add a base (empty or from a spreadsheet) and to share. On a
+ * phone the two "add" buttons float at the bottom corners, within thumb reach.
  */
 import { useState, type ComponentProps } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, Pencil, Plus, Shapes, Trash2, Upload, UserPlus } from "lucide-react";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { Copy, Ellipsis, FileDown, Pencil, Plus, Shapes, Share2, Table2, Trash2, Upload } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { BaseSummary, WorkspaceSummary } from "@/api/types";
+import type { BasePerson, BaseSummary, WorkspaceSummary } from "@/api/types";
+import { useMe } from "@/auth/useAuth";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
 import { NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
 import { EntityTile } from "@/components/icons/EntityIcon";
 import { IconPicker, IconPickerDialog } from "@/components/icons/IconPicker";
 import { iconPatch } from "@/components/icons/iconPatch";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -25,15 +27,18 @@ import { useToast } from "@/components/ui/toast";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
+import { workspaceColor } from "@/lib/workspaceColor";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
-import { BaseAvatars, PendingFace } from "@/shell/BaseAvatars";
+import { PendingFace, peopleLabel } from "@/shell/BaseAvatars";
 import { HomeShell } from "@/shell/HomeShell";
 import { WorkspaceDialogs, useUpdateWorkspace, type WorkspaceDialog } from "./WorkspaceDialogs";
 import { membersLine, useWorkspace } from "./useWorkspace";
 
 const BASE_COLOR_DEFAULT = "blue_dark";
+// The header buttons are a step larger than the app's default, as on the design.
+const HEADER_BUTTON = "h-10 rounded-[10px] px-3.5 text-sm font-semibold";
 
-type BaseDialog = { kind: "create" } | { kind: "edit"; base: BaseSummary } | { kind: "icon"; base: BaseSummary } | { kind: "delete"; base: BaseSummary } | { kind: "import" } | { kind: "invite" };
+type BaseDialog = { kind: "create" } | { kind: "edit"; base: BaseSummary } | { kind: "icon"; base: BaseSummary } | { kind: "delete"; base: BaseSummary } | { kind: "import" } | { kind: "share" };
 
 export function WorkspacePage() {
   const { workspaceId } = useParams();
@@ -45,11 +50,11 @@ export function WorkspacePage() {
   );
 }
 
-/** On a phone the workspace's name lives in the top bar; the page header is reduced to its actions. */
+/** On a phone the workspace's name lives in the top bar; the page header is reduced to who and what. */
 function PhoneTitle({ ws }: { ws: WorkspaceSummary }) {
   return (
     <span aria-hidden className="flex min-w-0 items-center gap-2 md:hidden">
-      <EntityTile name={ws.name} icon={ws.icon} size="sm" />
+      <EntityTile name={ws.name} icon={ws.icon} color={workspaceColor(ws)} tone="solid" size="sm" />
       <span className="truncate text-[0.9375rem] font-semibold">{ws.name}</span>
     </span>
   );
@@ -68,6 +73,8 @@ function Workspace({ ws }: { ws: WorkspaceSummary }) {
   const refresh = () => qc.invalidateQueries({ queryKey: keys.workspaces });
   const close = () => setDialog(null);
   const updateWorkspace = useUpdateWorkspace();
+  const tables = useBaseTables(ws.bases);
+  const { everyone, only } = splitPeople(ws.bases);
 
   const createBase = useMutation({
     mutationFn: (v: { name: string; color?: string; icon?: string | null; empty: boolean }) =>
@@ -94,108 +101,118 @@ function Workspace({ ws }: { ws: WorkspaceSummary }) {
     setDialog({ kind: "create" });
   };
   const importSheet = () => setDialog({ kind: "import" });
-  const pending = ws.bases.some((b) => b.people.some((p) => p.pending));
+  const share = () => setDialog({ kind: "share" });
+
+  const tile = <EntityTile name={ws.name} icon={ws.icon} color={workspaceColor(ws)} tone="solid" size="lg" className="rounded-xl text-xl" />;
+  const actions = isOwner && (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={`Workspace actions for ${ws.name}`} noTooltip className="md:size-10">
+          <Ellipsis aria-hidden className="size-4" />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => setWsDialog("rename")}>
+          <Pencil aria-hidden className="size-4" /> Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setWsDialog("icon")}>
+          <Shapes aria-hidden className="size-4" /> Change icon…
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem danger onSelect={() => setWsDialog("delete")}>
+          <Trash2 aria-hidden className="size-4" /> Delete workspace
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-32 pt-4 sm:px-6 md:pb-10 md:pt-8">
-      <header className="mb-5 flex items-center gap-3 md:mb-6">
+    <div className="mx-auto w-full max-w-[1000px] px-4 pb-32 pt-4 sm:px-6 md:px-8 md:pb-12 md:pt-8">
+      <header className="mb-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-3 md:mb-6">
         <span className="hidden md:block">
           {isOwner ? (
             <IconPicker value={ws.icon} onChange={(icon) => updateWorkspace.mutate({ id: ws.id, icon })}>
-              <button type="button" aria-label={`Change icon of ${ws.name}`} title="Change icon" className="block rounded-lg hover:opacity-80 focus-visible:outline-2 focus-visible:outline-ring">
-                <EntityTile name={ws.name} icon={ws.icon} size="lg" />
+              <button type="button" aria-label={`Change icon of ${ws.name}`} title="Change icon" className="block rounded-xl hover:opacity-85 focus-visible:outline-2 focus-visible:outline-ring">
+                {tile}
               </button>
             </IconPicker>
           ) : (
-            <EntityTile name={ws.name} icon={ws.icon} size="lg" />
+            tile
           )}
         </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl max-md:sr-only">{ws.name}</h1>
-          <Link to={`/workspace/${ws.id}/members`} className="text-[0.8125rem] text-muted no-underline hover:text-fg hover:underline">
-            {membersLine(ws)}
-          </Link>
+        <div className="min-w-0 flex-[1_1_200px]">
+          <h1 className="truncate text-[1.625rem] leading-tight tracking-[-0.015em] max-md:sr-only">{ws.name}</h1>
+          <WhoLine ws={ws} everyone={everyone} />
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isOwner && (
-            <Button onClick={() => setDialog({ kind: "invite" })}>
-              <UserPlus aria-hidden className="size-4" /> Invite
-            </Button>
-          )}
+        {/* Phones: Share and the menu stay beside the faces; adding a base is the floating buttons' job. */}
+        <div className="flex shrink-0 items-center gap-2 max-md:-my-1">
+          {isOwner &&
+            (desktop ? (
+              <Button size="lg" className={HEADER_BUTTON} onClick={share}>
+                <Share2 aria-hidden className="size-4" /> Share
+              </Button>
+            ) : (
+              <IconButton label="Share" onClick={share} noTooltip>
+                <Share2 aria-hidden className="size-4" />
+              </IconButton>
+            ))}
           {canCreate && desktop && (
             <>
-              <Button onClick={importSheet}>
-                <Upload aria-hidden className="size-4" /> Import a spreadsheet
+              <Button size="lg" className={HEADER_BUTTON} onClick={importSheet}>
+                Import a spreadsheet
               </Button>
-              <Button variant="primary" onClick={newBase}>
-                <Plus aria-hidden className="size-4" /> New base
+              <Button size="lg" variant="soft" className={cn(HEADER_BUTTON, "pl-3.5 pr-4")} onClick={newBase}>
+                <Plus aria-hidden className="size-4" strokeWidth={2.2} /> New base
               </Button>
             </>
           )}
-          {isOwner && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label={`Workspace actions for ${ws.name}`} noTooltip>
-                  <Ellipsis aria-hidden className="size-4" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onSelect={() => setWsDialog("rename")}>
-                  <Pencil aria-hidden className="size-4" /> Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setWsDialog("icon")}>
-                  <Shapes aria-hidden className="size-4" /> Change icon…
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem danger onSelect={() => setWsDialog("delete")}>
-                  <Trash2 aria-hidden className="size-4" /> Delete workspace
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {actions}
         </div>
       </header>
 
       {ws.bases.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-line-strong px-6 py-12 text-center">
-          <h2 className="text-base">{canCreate ? "Make your first base" : "No bases here yet"}</h2>
-          <p className="mx-auto mt-1 max-w-md text-[0.8125rem] text-muted">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
+          <h2 className="text-[1.1875rem]">{canCreate ? "Make your first base" : "No bases here yet"}</h2>
+          <p className="max-w-[420px] text-[0.9375rem] leading-relaxed text-muted">
             {canCreate ? "A base holds one project. Start empty, or bring in a spreadsheet you already have." : "When someone adds a base you can open, it shows up here."}
           </p>
           {canCreate && desktop && (
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Button variant="primary" onClick={newBase}>
-                <Plus aria-hidden className="size-4" /> New base
+            <div className="flex flex-wrap justify-center gap-2.5">
+              <Button variant="primary" size="lg" className="h-11 rounded-[10px] px-[18px] font-semibold" onClick={newBase}>
+                <Plus aria-hidden className="size-4" strokeWidth={2.2} /> New base
               </Button>
-              <Button onClick={importSheet}>
+              <Button size="lg" className="h-11 rounded-[10px] px-[18px] font-semibold" onClick={importSheet}>
                 <Upload aria-hidden className="size-4" /> Import a spreadsheet
               </Button>
             </div>
           )}
         </div>
       ) : (
-        <ul aria-label="Bases" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul aria-label="Bases" className="grid grid-cols-1 gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">
           {ws.bases.map((b) => (
-            <BaseCard key={b.id} base={b} onAction={(d) => {
+            <BaseCard
+              key={b.id}
+              base={b}
+              tables={tables.get(b.id)}
+              people={only.get(b.id) ?? []}
+              desktop={desktop}
+              onAction={(d) => {
                 if (d.kind === "edit") setColor(d.base.color);
                 setDialog(d);
-              }} onDuplicate={(b) => duplicateBase.mutate(b)} />
+              }}
+              onDuplicate={(b) => duplicateBase.mutate(b)}
+            />
           ))}
         </ul>
-      )}
-      {pending && (
-        <p className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <PendingFace /> A grey, dashed face is someone invited who has not joined yet.
-        </p>
       )}
 
       {canCreate && !desktop && (
         <>
           <FloatingButton side="left" onClick={importSheet} aria-label="Import a spreadsheet">
-            <Upload aria-hidden className="size-5" /> Import
+            <FileDown aria-hidden className="size-4" /> Import
           </FloatingButton>
-          <FloatingButton side="right" primary onClick={newBase}>
-            <Plus aria-hidden className="size-5" /> New base
+          <FloatingButton side="right" soft onClick={newBase}>
+            <Plus aria-hidden className="size-4" strokeWidth={2.4} /> New base
           </FloatingButton>
         </>
       )}
@@ -243,20 +260,38 @@ function Workspace({ ws }: { ws: WorkspaceSummary }) {
           createBase={async (name) => (await createBase.mutateAsync({ name, empty: true })).id}
         />
       )}
-      {dialog?.kind === "invite" && <ShareDialog open onOpenChange={(o) => !o && close()} scope="workspace" workspace={ws} />}
+      {dialog?.kind === "share" && <ShareDialog open onOpenChange={(o) => !o && close()} scope="workspace" workspace={ws} />}
       {isOwner && <WorkspaceDialogs ws={ws} open={wsDialog} onClose={() => setWsDialog(null)} />}
     </div>
   );
 }
 
-function FloatingButton({ side, primary, className, ...props }: { side: "left" | "right"; primary?: boolean } & ComponentProps<"button">) {
+/** The faces of who can open every base, linked to Members; without bases, just how many members. */
+function WhoLine({ ws, everyone }: { ws: WorkspaceSummary; everyone: readonly BasePerson[] }) {
+  const { data: me } = useMe();
+  const alone = everyone.length <= 1 && ws.member_count <= 1 && ws.pending_invite_count === 0;
+  const text = ws.bases.length === 0 ? membersLine(ws) : alone ? "Only you" : "Can open every base";
+  const faces = ws.bases.length > 0 && everyone.length > 0;
+  return (
+    <Link
+      to={`/workspace/${ws.id}/members`}
+      aria-label={faces && !alone ? `${text} in ${ws.name}: ${peopleLabel(everyone, me?.id)}` : text}
+      className="mt-1 inline-flex max-w-full items-center gap-2 text-sm text-muted no-underline hover:text-fg hover:underline max-md:mt-0 max-md:gap-2.5"
+    >
+      {faces && <Faces people={everyone} ring="ring-bg" size={cn(FACE_SIZES.md, "md:size-6 md:text-[0.625rem]")} />}
+      <span className="truncate">{text}</span>
+    </Link>
+  );
+}
+
+function FloatingButton({ side, soft, className, ...props }: { side: "left" | "right"; soft?: boolean } & ComponentProps<"button">) {
   return (
     <button
       type="button"
       className={cn(
-        "fixed bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 inline-flex h-[52px] items-center gap-2 rounded-full px-5 text-[0.9375rem] font-semibold shadow-pop transition-colors",
+        "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full border pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-[0_4px_12px_rgb(15_20_30/0.12)] transition-colors",
         side === "left" ? "left-[max(1rem,env(safe-area-inset-left))]" : "right-[max(1rem,env(safe-area-inset-right))]",
-        primary ? "bg-primary text-primary-fg hover:bg-primary-hover" : "border border-line-strong bg-surface text-fg hover:bg-hover",
+        soft ? "border-primary/25 bg-primary-soft text-primary hover:bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface))]" : "border-line-strong bg-surface text-fg hover:bg-hover",
         className,
       )}
       {...props}
@@ -264,50 +299,159 @@ function FloatingButton({ side, primary, className, ...props }: { side: "left" |
   );
 }
 
-function BaseCard({ base, onAction, onDuplicate }: { base: BaseSummary; onAction: (d: BaseDialog) => void; onDuplicate: (b: BaseSummary) => void }) {
-  // Below 400 px the faces would squeeze the name into a sliver; fewer faces, more "+N".
-  const roomy = useMediaQuery("(min-width: 400px)");
+function BaseCard({
+  base,
+  tables,
+  people,
+  desktop,
+  onAction,
+  onDuplicate,
+}: {
+  base: BaseSummary;
+  tables: readonly { id: string; name: string }[] | undefined;
+  people: readonly BasePerson[];
+  desktop: boolean;
+  onAction: (d: BaseDialog) => void;
+  onDuplicate: (b: BaseSummary) => void;
+}) {
+  const { data: me } = useMe();
   const canEdit = atLeast(base.role, "creator");
   const canDelete = atLeast(base.role, "owner");
+  const label = `Also opens ${base.name}: ${peopleLabel(people, me?.id)}`;
+  const faces = (size: string) => people.length > 0 && <Faces people={people} label={label} ring="ring-surface" size={size} className="relative z-10" />;
   return (
-    <li className="relative grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2.5 rounded-xl border border-line bg-surface p-3 transition-shadow focus-within:shadow-pop hover:shadow-pop md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-x-3 md:gap-y-4 md:p-4">
-      <EntityTile name={base.name} icon={base.icon} color={base.color} size="lg" className="max-md:size-10" />
-      <Link to={`/base/${base.id}`} className="block text-[0.9375rem] font-semibold text-fg no-underline after:absolute after:inset-0 after:rounded-xl after:content-[''] max-md:line-clamp-2 max-md:break-words md:truncate">
-        {base.name}
-      </Link>
-      <BaseAvatars people={base.people} max={roomy ? 4 : 3} summary summaryClassName="hidden md:inline" className="justify-self-end md:col-span-3 md:row-start-2 md:justify-self-start" />
-      {(canEdit || canDelete) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton label={`Actions for ${base.name}`} size="sm" noTooltip className="relative z-10 md:col-start-3 md:row-start-1">
-              <Ellipsis aria-hidden className="size-4" />
-            </IconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {canEdit && (
-              <>
-                <DropdownMenuItem onSelect={() => onAction({ kind: "edit", base })}>
-                  <Pencil aria-hidden className="size-4" /> Rename or recolour
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onAction({ kind: "icon", base })}>
-                  <Shapes aria-hidden className="size-4" /> Change icon…
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onDuplicate(base)}>
-                  <Copy aria-hidden className="size-4" /> Duplicate
-                </DropdownMenuItem>
-              </>
-            )}
-            {canDelete && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem danger onSelect={() => onAction({ kind: "delete", base })}>
-                  <Trash2 aria-hidden className="size-4" /> Delete base
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+    <li className="group relative flex flex-col gap-3 rounded-[14px] border border-line bg-surface px-4 py-3.5 transition-[box-shadow,border-color,transform] duration-150 focus-within:border-primary/40 focus-within:shadow-pop hover:border-primary/40 hover:shadow-pop motion-safe:md:hover:-translate-y-0.5 md:gap-3.5 md:p-[18px]">
+      <div className="flex min-w-0 items-center gap-3">
+        <EntityTile name={base.name} icon={base.icon} color={base.color} tone="tint" size="lg" className="size-9 rounded-[9px] md:size-10 md:rounded-[10px] [&_svg]:size-5 md:[&_svg]:size-[22px]" />
+        <Link
+          to={`/base/${base.id}`}
+          className="min-w-0 flex-1 truncate text-base font-[650] text-fg no-underline after:absolute after:inset-0 after:rounded-[14px] after:content-[''] hover:text-fg"
+        >
+          {base.name}
+        </Link>
+        {!desktop && faces(FACE_SIZES.sm)}
+        {(canEdit || canDelete) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {/* Out of the way until the card is hovered or focused; always there for touch. */}
+              <IconButton
+                label={`Actions for ${base.name}`}
+                size="sm"
+                noTooltip
+                className="relative z-10 -my-1 -mr-1.5 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 md:data-[state=open]:opacity-100 pointer-coarse:opacity-100"
+              >
+                <Ellipsis aria-hidden className="size-4" />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canEdit && (
+                <>
+                  <DropdownMenuItem onSelect={() => onAction({ kind: "edit", base })}>
+                    <Pencil aria-hidden className="size-4" /> Rename or recolour
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onAction({ kind: "icon", base })}>
+                    <Shapes aria-hidden className="size-4" /> Change icon…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onDuplicate(base)}>
+                    <Copy aria-hidden className="size-4" /> Duplicate
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem danger onSelect={() => onAction({ kind: "delete", base })}>
+                    <Trash2 aria-hidden className="size-4" /> Delete base
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+      {tables && tables.length > 0 && <TableChips base={base.name} tables={tables} max={desktop ? 3 : 2} />}
+      {desktop && people.length > 0 && <div className="flex">{faces(FACE_SIZES.md)}</div>}
     </li>
   );
+}
+
+function TableChips({ base, tables, max }: { base: string; tables: readonly { id: string; name: string }[]; max: number }) {
+  const shown = tables.slice(0, max);
+  const rest = tables.length - shown.length;
+  const chip = "inline-flex h-6 min-w-0 items-center gap-[5px] rounded-md bg-subtle px-2 text-xs font-medium text-fg/85";
+  return (
+    <ul aria-label={`Tables in ${base}: ${tables.map((t) => t.name).join(", ")}`} className="flex min-w-0 gap-1.5 max-md:overflow-hidden md:flex-wrap">
+      {shown.map((t) => (
+        <li key={t.id} className="flex min-w-0">
+          <span className={chip}>
+            <Table2 aria-hidden className="size-3 shrink-0 text-faint" />
+            <span className="truncate">{t.name}</span>
+          </span>
+        </li>
+      ))}
+      {rest > 0 && (
+        <li className="flex shrink-0">
+          <span className={chip}>+{rest}</span>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+const FACE_SIZES = { sm: "size-6 text-[0.625rem]", md: "size-7 text-xs" };
+
+/** Overlapping faces, the leftmost on top. Without a `label` they are decorative (the text beside them says it). */
+function Faces({ people, label, ring, size, className }: { people: readonly BasePerson[]; label?: string; ring: string; size: string; className?: string }) {
+  const max = 5;
+  const shown = people.length > max ? people.slice(0, max - 1) : people;
+  const rest = people.length - shown.length;
+  return (
+    <span {...(label ? { role: "img", "aria-label": label, title: label } : { "aria-hidden": true })} className={cn("flex shrink-0 -space-x-1.5", className)}>
+      {shown.map((p, i) => (
+        <span key={personKey(p, i)} aria-hidden className={cn("relative inline-flex rounded-full ring-2", ring)} style={{ zIndex: shown.length - i }}>
+          {p.pending ? <PendingFace email={p.email || p.name} className={cn("border-2", size)} /> : <Avatar name={p.name} email={p.email} size="sm" className={size} />}
+        </span>
+      ))}
+      {rest > 0 && (
+        <span aria-hidden className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-subtle font-semibold text-muted ring-2", size, ring)}>
+          +{rest}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function personKey(p: BasePerson, fallback: number | string = ""): string {
+  return p.pending ? `invite:${p.email || p.name || fallback}` : `user:${p.user_id ?? p.email}`;
+}
+
+/**
+ * Who can open every base (shown once, in the header) and, per base, who can open it without being
+ * one of those (shown on its card). Worked out from the bases' people because the workspace list
+ * does not say who has "all bases"; a person who happens to have each base picked counts as every.
+ */
+export function splitPeople(bases: readonly Pick<BaseSummary, "id" | "people">[]): { everyone: BasePerson[]; only: Map<string, BasePerson[]> } {
+  const only = new Map<string, BasePerson[]>();
+  if (bases.length === 0) return { everyone: [], only };
+  const sets = bases.map((b) => new Set(b.people.map((p) => personKey(p))));
+  const everyone = bases[0]!.people.filter((p) => sets.every((s) => s.has(personKey(p))));
+  const common = new Set(everyone.map((p) => personKey(p)));
+  for (const b of bases) only.set(b.id, b.people.filter((p) => !common.has(personKey(p))));
+  return { everyone, only };
+}
+
+/**
+ * The tables of each base, for the chips on the cards. The workspace list has no tables, so they
+ * come from the bases' schemas (the same queries the base page uses, so opening a base is instant).
+ */
+function useBaseTables(bases: readonly BaseSummary[]): Map<string, { id: string; name: string }[]> {
+  const schemas = useQueries({
+    queries: bases.map((b) => ({ queryKey: keys.base(b.id), queryFn: () => api.bases.get(b.id), retry: false })),
+  });
+  const out = new Map<string, { id: string; name: string }[]>();
+  bases.forEach((b, i) => {
+    const tables = schemas[i]?.data?.tables;
+    if (tables) out.set(b.id, tables);
+  });
+  return out;
 }

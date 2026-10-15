@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BasePerson, WorkspaceSummary } from "@/api/types";
-import { USER, apiError, mockApi, renderApp, stubDesktop, type Handler } from "@/test/utils";
+import { USER, apiError, makeSchema, mockApi, renderApp, stubDesktop, type Handler } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -145,22 +145,34 @@ describe("home menu", () => {
 });
 
 describe("workspace page", () => {
-  it("lists the bases with who can open them", async () => {
-    routes();
+  it("lists the bases with their tables, who can open every base, and who else can open each", async () => {
+    stubDesktop();
+    routes({ "GET /api/bases/app1": makeSchema("owner") });
     renderApp({ route: "/workspace/wsp1" });
     expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "2 members · 1 invite waiting" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    expect(screen.getByRole("link", { name: "Can open every base in Acme: you" })).toHaveAttribute("href", "/workspace/wsp1/members");
     const bases = screen.getByRole("list", { name: "Bases" });
     expect(within(bases).getByRole("link", { name: "Project tracker" })).toHaveAttribute("href", "/base/app1");
 
     const tracker = within(bases).getByRole("link", { name: "Project tracker" }).closest("li")!;
-    expect(await within(tracker).findByRole("img", { name: "Who can open this base: you, Grace Hopper, and jordan@example.com (invited, not joined yet)" })).toBeInTheDocument();
-    expect(within(tracker).getByText("You, Grace, jordan (invited)")).toBeInTheDocument();
+    expect(await within(tracker).findByRole("list", { name: "Tables in Project tracker: Tasks, People" })).toBeInTheDocument();
+    // Only the people beyond those who can open every base, with the invited one dashed.
+    expect(within(tracker).getByRole("img", { name: "Also opens Project tracker: Grace Hopper and jordan@example.com (invited, not joined yet)" })).toBeInTheDocument();
     expect(tracker.querySelector("[data-pending]")).toHaveClass("border-dashed");
     const crm = within(bases).getByRole("link", { name: "CRM" }).closest("li")!;
-    expect(within(crm).getByText("Only you")).toBeInTheDocument();
+    expect(within(crm).queryByRole("img", { name: /Also opens/ })).not.toBeInTheDocument();
     expect(crm.querySelector("svg.lucide-users")).toBeInTheDocument();
-    expect(screen.getByText("A grey, dashed face is someone invited who has not joined yet.")).toBeInTheDocument();
+  });
+
+  it("shows a few tables of a base, then how many more", async () => {
+    stubDesktop();
+    const schema = makeSchema("owner");
+    const table = schema.tables[1]!;
+    const tables = ["Tasks", "People", "Sprints", "Bugs", "Ideas"].map((name, i) => ({ ...table, id: `tbl${i}`, name }));
+    routes({ "GET /api/bases/app1": { ...schema, tables } });
+    renderApp({ route: "/workspace/wsp1" });
+    const chips = await screen.findByRole("list", { name: /^Tables in Project tracker/ });
+    expect(within(chips).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Tasks", "People", "Sprints", "+2"]);
   });
 
   it("says Only you for a workspace nobody else is in, and leaves out the legend without invites", async () => {
@@ -175,7 +187,7 @@ describe("workspace page", () => {
     renderApp({ route: "/workspace/wsp2" });
     await screen.findByRole("heading", { level: 1, name: "Shared with me" });
     expect(screen.getByRole("link", { name: "Roadmap" })).toBeInTheDocument();
-    for (const name of ["New base", "Import a spreadsheet", "Invite", "Workspace actions for Shared with me", "Actions for Roadmap"]) {
+    for (const name of ["New base", "Import a spreadsheet", "Share", "Workspace actions for Shared with me", "Actions for Roadmap"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: /Change icon of/ })).not.toBeInTheDocument();
@@ -311,13 +323,18 @@ describe("workspace page", () => {
     expect(localStorage.getItem("ob-last-workspace")).toBeNull();
   });
 
-  it("opens the Share dialog for invites only", async () => {
+  it("opens the Share dialog for the whole workspace, with the views of every base", async () => {
+    stubDesktop();
     const user = userEvent.setup();
-    routes();
+    routes({ "GET /api/bases/app1": makeSchema("owner"), "GET /api/bases/app2": makeSchema("owner", { id: "app2", name: "CRM", tables: [] }) });
     renderApp({ route: "/workspace/wsp1" });
-    await user.click(await screen.findByRole("button", { name: "Invite" }));
+    await user.click(await screen.findByRole("button", { name: "Share" }));
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-    expect(within(dialog).queryByRole("tab")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: "All bases in Acme" })).toBeChecked();
     expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
+    const select = await within(dialog).findByLabelText("View");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Project tracker › Tasks › All tasks", "Project tracker › Tasks › Board", "Project tracker › People › Everyone"]);
   });
 });
