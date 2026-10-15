@@ -58,10 +58,12 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
   const [resent, setResent] = useState<CreatedInvite | null>(null);
   const emailEnabled = useEmailEnabled();
 
+  // The faces of who can open each base come with the base schemas and the workspace list.
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: keys.workspaceMembers(ws.id) });
     void qc.invalidateQueries({ queryKey: keys.workspaceInvites(ws.id) });
     void qc.invalidateQueries({ queryKey: keys.workspaces });
+    void qc.invalidateQueries({ queryKey: keys.allBases });
   };
 
   const update = useMutation({
@@ -167,6 +169,7 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
           if (removing.user_id === me?.id) {
             rememberWorkspace(null);
             await qc.invalidateQueries({ queryKey: keys.workspaces });
+            void qc.invalidateQueries({ queryKey: keys.allBases });
             await navigate("/", { replace: true });
             return;
           }

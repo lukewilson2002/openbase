@@ -22,6 +22,8 @@ export const keys = {
   deletedWorkspaces: ["workspaces", "deleted"] as const,
   workspaceMembers: (id: string) => ["workspace", id, "members"] as const,
   workspaceInvites: (id: string) => ["workspace", id, "invites"] as const,
+  /** Prefix of every base's queries: who can open a base shows on all of them. */
+  allBases: ["base"] as const,
   base: (id: string) => ["base", id] as const,
   baseMembers: (id: string) => ["base", id, "members"] as const,
   baseInvites: (id: string) => ["base", id, "invites"] as const,

@@ -125,7 +125,8 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
       setEmail("");
       void qc.invalidateQueries({ queryKey: keys.workspaces });
       void qc.invalidateQueries({ queryKey: keys.workspaceInvites(workspaceId) });
-      if (fromBase) void qc.invalidateQueries({ queryKey: keys.base(target.base.id) });
+      // The pending face shows on every base the invite gives, not just the one open here.
+      void qc.invalidateQueries({ queryKey: keys.allBases });
     },
   });
 

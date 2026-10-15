@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InviteInfo, Member, WorkspaceSummary } from "@/api/types";
 import { USER, mockApi, renderApp, type Handler } from "@/test/utils";
@@ -181,6 +182,18 @@ describe("members page", () => {
     await user.click(within(pending).getByRole("button", { name: "Resend" }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(1));
     expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]!.body).toEqual({ email: "jordan@example.com", role: "viewer", all_bases: false, base_ids: ["app2"] });
+  });
+
+  it("refreshes the bases' faces and the workspace list after a change", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    routes({ "DELETE /api/invites/inv1": { status: 204 } });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
+    await user.click(within(pending).getByRole("button", { name: "Cancel invite" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ["base"] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["workspaces"] });
+    spy.mockRestore();
   });
 
   it("cancels an invite", async () => {
