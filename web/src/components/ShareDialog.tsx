@@ -52,7 +52,13 @@ export function ShareDialog(props: ShareDialogProps) {
   const viewTab = props.scope === "base" && views.some((v) => canShareView(role, v));
   const [tab, setTab] = useState<string>(props.scope === "base" ? (props.initialTab ?? "invite") : "invite");
 
-  const invite = <InviteForm target={props} onNavigate={() => onOpenChange(false)} />;
+  // The server refuses base invites below creator; a form that can only fail would waste their time.
+  const canInvite = props.scope === "workspace" || atLeast(role, "creator");
+  const invite = canInvite ? (
+    <InviteForm target={props} onNavigate={() => onOpenChange(false)} />
+  ) : (
+    <Notice>Only creators and owners can invite people. Ask one of them, or share a view.</Notice>
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={`Share ${name}`} className="max-w-[520px]">
       {open &&
