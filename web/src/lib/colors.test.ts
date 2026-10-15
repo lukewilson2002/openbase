@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COLORS, choiceClass, colorLabel, isChoiceColor } from "./colors";
+import { COLORS, choiceClass, colorHue, colorLabel, isChoiceColor } from "./colors";
+import { workspaceColor } from "./workspaceColor";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
@@ -47,5 +48,24 @@ describe("choice colours", () => {
     expect(isChoiceColor("nope")).toBe(false);
     expect(colorLabel("blue")).toBe("Blue");
     expect(colorLabel("purple_dark")).toBe("Dark purple");
+  });
+});
+
+describe("strong shades", () => {
+  it("keep white text readable on every colour, and share a shade between a colour and its dark variant", () => {
+    for (const color of COLORS) expect(contrast(colorHue(color), "#ffffff"), `${color} on white`).toBeGreaterThanOrEqual(4.5);
+    expect(colorHue("green_dark")).toBe(colorHue("green"));
+    expect(colorHue("chartreuse")).toBe(colorHue("gray"));
+  });
+});
+
+describe("workspace colours", () => {
+  it("uses the workspace's own colour, or a stable one from its name", () => {
+    expect(workspaceColor({ name: "Household", color: "green" })).toBe("green");
+    expect(workspaceColor({ name: "Household", color: "not-a-colour" })).toBe(workspaceColor({ name: "Household" }));
+    expect(workspaceColor({ name: "Household", color: null })).toBe(workspaceColor({ name: "Household" }));
+    const picked = workspaceColor({ name: "Side business" });
+    expect(isChoiceColor(picked)).toBe(true);
+    expect(picked).not.toBe("gray");
   });
 });

@@ -1,7 +1,7 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { Icon } from "lucide-react";
+import { useEffect, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { Database, Icon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { choiceClass } from "@/lib/colors";
+import { choiceClass, colorHue } from "@/lib/colors";
 import { POPULAR_BY_NAME } from "./popular";
 import { peekFullIconSet, requestFullIconSet, subscribeIconSet } from "./registry";
 
@@ -52,13 +52,41 @@ const TILE_SIZES = {
 
 /**
  * The coloured square for a base (or a neutral one for a workspace): its icon, or the first letter
- * of its name when it has none.
+ * of its name when it has none. `tone` "tint" draws a base the redesigned way (a soft tint, the icon
+ * in the strong shade) and "solid" a workspace (the strong shade, a white icon or initial); without
+ * it the colour is a choice pill, as before.
  */
-export function EntityTile({ name, icon, color, size = "md", className }: { name: string; icon?: string | null; color?: string | null; size?: keyof typeof TILE_SIZES; className?: string }) {
+export function EntityTile({
+  name,
+  icon,
+  color,
+  size = "md",
+  tone,
+  className,
+}: {
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  size?: keyof typeof TILE_SIZES;
+  tone?: "tint" | "solid";
+  className?: string;
+}) {
   const s = TILE_SIZES[size];
+  const toned = tone && color;
   return (
-    <span aria-hidden data-entity-tile className={cn("flex shrink-0 items-center justify-center font-semibold", s.box, color ? choiceClass(color) : "bg-subtle text-muted", className)}>
-      <EntityIcon name={icon} fallbackLetter={entityLetter(name)} className={s.icon} />
+    <span
+      aria-hidden
+      data-entity-tile
+      className={cn(
+        "flex shrink-0 items-center justify-center font-semibold",
+        s.box,
+        toned ? (tone === "tint" ? "tint" : "text-white") : color ? choiceClass(color) : "bg-subtle text-muted",
+        className,
+      )}
+      style={toned ? (tone === "tint" ? ({ "--tint": colorHue(color) } as CSSProperties) : { background: colorHue(color) }) : undefined}
+    >
+      {/* A tinted (base) tile without an icon of its own shows the generic base icon, not a letter. */}
+      {tone === "tint" && !icon ? <Database aria-hidden className={cn("shrink-0", s.icon)} /> : <EntityIcon name={icon} fallbackLetter={entityLetter(name)} className={s.icon} />}
     </span>
   );
 }

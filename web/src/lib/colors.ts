@@ -43,3 +43,26 @@ export function colorLabel(color: ChoiceColor): string {
   const name = hue.charAt(0).toUpperCase() + hue.slice(1);
   return dark ? `Dark ${hue}` : name;
 }
+
+/**
+ * The strong shade of each hue (a colour and its "_dark" variant share one), for colours drawn as
+ * a solid tile with white text (workspaces) or as a soft tint with the icon in this shade (bases).
+ * Every shade keeps white text at 4.5:1 or better (colors.test.ts).
+ */
+const HUES: Record<string, string> = {
+  blue: "#1f5ae0",
+  cyan: "#0e7490",
+  teal: "#0f766e",
+  green: "#157a39",
+  yellow: "#8a5a00",
+  orange: "#ad600a",
+  red: "#c4261d",
+  pink: "#b0175a",
+  purple: "#6b3fc4",
+  gray: "#566070",
+};
+
+/** The strong shade of a palette colour ("green_dark" gives the green one); unknown names get gray. */
+export function colorHue(color: string | null | undefined): string {
+  return HUES[(color ?? "").replace(/_dark$/, "")] ?? HUES.gray!;
+}

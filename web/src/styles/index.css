@@ -217,6 +217,20 @@
 }
 
 /*
+ * Base tiles: a soft tint of the base's colour with the icon in its strong shade (`--tint`, from
+ * colorHue() in lib/colors.ts). On the dark theme the shade itself is too dark to read on the
+ * tint, so the icon is lifted toward white there.
+ */
+.tint {
+  background: color-mix(in srgb, var(--tint) 13%, var(--surface));
+  color: var(--tint);
+}
+:root[data-theme="dark"] .tint {
+  background: color-mix(in srgb, var(--tint) 28%, var(--surface));
+  color: color-mix(in srgb, var(--tint) 40%, #ffffff);
+}
+
+/*
  * Choice colours: one class per entry of ob_core::field::COLORS (20 colours:
  * ten light pills and ten saturated "_dark" variants). Text colours are chosen
  * for >= 4.5:1 contrast (checked in src/lib/colors.test.ts). Used for select
