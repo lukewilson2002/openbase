@@ -52,7 +52,7 @@ describe("/", () => {
     expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
 
-  it("offers to create the first workspace, filling the name from a suggestion, and opens it", async () => {
+  it("offers to create the first workspace and opens it", async () => {
     const user = userEvent.setup();
     let list: WorkspaceSummary[] = [];
     const api = routes({
@@ -64,11 +64,10 @@ describe("/", () => {
     });
     renderApp();
     expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
-    expect(screen.getByText("Only you can see it until you invite someone.")).toBeInTheDocument();
+    expect(screen.getByText("Workspaces are private until you invite someone.")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Suggestions" })).not.toBeInTheDocument();
     const name = screen.getByRole("textbox", { name: "Workspace name" });
-    await user.click(within(screen.getByRole("group", { name: "Suggestions" })).getByRole("button", { name: "Side business" }));
-    expect(name).toHaveValue("Side business");
-    await user.clear(name);
+    expect(name).toHaveAttribute("placeholder", "For example, Personal");
     await user.type(name, "Studio");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 

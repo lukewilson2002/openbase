@@ -4,16 +4,34 @@ import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
 
 /** Centered card for unauthenticated pages (login, setup, signup, ...). */
-export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+export function AuthLayout({
+  title,
+  subtitle,
+  children,
+  footer,
+  roomy = false,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  /** The larger card of the redesigned first-run screen (Setup). */
+  roomy?: boolean;
+}) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <Link to="/" className="mb-6" aria-label="OpenBase home">
         <Logo className="h-10" />
       </Link>
-      <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-6 shadow-pop">
-        <h1 className="text-xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-[0.8125rem] text-muted">{subtitle}</p>}
-        <div className="mt-5">{children}</div>
+      <div
+        className={cn(
+          "w-full rounded-lg border border-line bg-surface shadow-pop",
+          roomy ? "max-w-[420px] rounded-[18px] p-6 shadow-[0_1px_2px_rgb(15_20_30/0.06),0_12px_40px_rgb(15_20_30/0.08)] sm:p-8" : "max-w-sm p-6",
+        )}
+      >
+        <h1 className={roomy ? "text-2xl leading-tight tracking-[-0.015em]" : "text-xl"}>{title}</h1>
+        {subtitle && <p className={roomy ? "mt-2 text-[0.9375rem] leading-normal text-muted" : "mt-1 text-[0.8125rem] text-muted"}>{subtitle}</p>}
+        <div className={roomy ? "mt-[18px]" : "mt-5"}>{children}</div>
       </div>
       {footer && <div className="mt-4 text-[0.8125rem] text-muted">{footer}</div>}
     </main>

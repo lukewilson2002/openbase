@@ -450,7 +450,7 @@ describe("an empty base", () => {
     const create = screen.getByRole("button", { name: "Create table" });
     expect(create).toBeDisabled();
     const name = screen.getByRole("textbox", { name: "Table name" });
-    expect(name).toHaveAttribute("placeholder", "For example, Chores");
+    expect(name).toHaveAttribute("placeholder", "For example, Tasks");
     await user.type(name, "Chores");
     await user.click(create);
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
