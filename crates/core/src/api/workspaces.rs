@@ -20,6 +20,21 @@ pub struct BaseSummary {
     /// Who can open this base: workspace members with access to it, then
     /// pending invites that would give access to it.
     pub people: Vec<BasePerson>,
+    /// Live tables in sidebar order, so a list of bases can name their tables
+    /// without loading every base's schema.
+    #[serde(default)]
+    pub tables: Vec<TableSummary>,
+}
+
+/// A table as a base summary lists it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct TableSummary {
+    pub id: String,
+    pub name: String,
+    /// Lucide icon name (kebab-case); the client falls back to the name's initial.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// Someone who can open a base, or will once they accept their invite.

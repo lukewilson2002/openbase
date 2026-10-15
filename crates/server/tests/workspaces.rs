@@ -96,6 +96,45 @@ async fn list_includes_bases_with_the_member_role_people_and_counts() {
 }
 
 #[tokio::test]
+async fn base_summaries_list_live_tables_in_sidebar_order() {
+    let f = Fixture::new().await;
+    let mut ids = Vec::new();
+    for name in ["Deals", "Old"] {
+        let res = f
+            .app
+            .post(
+                &f.owner,
+                &format!("/api/bases/{}/tables", f.base_id),
+                json!({ "name": name }),
+            )
+            .await;
+        res.assert_status(201);
+        ids.push(res.body["id"].as_str().unwrap().to_string());
+    }
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/tables/{}", ids[0]),
+            json!({ "position": -1.0, "icon": "handshake" }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{}", ids[1]))
+        .await
+        .assert_status(200);
+
+    let list = f.app.get(&f.owner, "/api/workspaces").await;
+    list.assert_status(200);
+    let tables = list.body[0]["bases"][0]["tables"].as_array().unwrap();
+    let names: Vec<&str> = tables.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Deals", "Table 1"], "{tables:?}");
+    assert_eq!(tables[0]["id"], ids[0].as_str());
+    assert_eq!(tables[0]["icon"], "handshake");
+    assert_eq!(tables[1]["id"], f.table_id.as_str());
+}
+
+#[tokio::test]
 async fn a_limited_member_sees_only_their_bases() {
     let f = Fixture::new().await;
     let other = base(&f.app, &f.owner, &f.ws, "Secret").await;

@@ -35,7 +35,7 @@ function openBase(role: string, extra: Record<string, unknown> = {}, route = "/b
   const api = mockApi({
     "GET /api/auth/me": USER,
     "GET /api/bases/app1": makeSchema(role),
-    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [] }])],
+    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [], tables: [] }])],
     "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org", passkeys_enabled: true },
     ...extra,
   });
@@ -92,7 +92,7 @@ describe("base shell on a desktop", () => {
   it("switches workspace from the workspace picker, which can also start a new one", async () => {
     const user = userEvent.setup();
     openBase("owner", {
-      "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [] }]), { ...makeWorkspace("editor"), id: "wsp2", name: "Home" }],
+      "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [], tables: [] }]), { ...makeWorkspace("editor"), id: "wsp2", name: "Home" }],
     });
     await screen.findByText("Grid view coming soon");
     await user.click(screen.getByRole("button", { name: "Workspace: Acme. Switch workspace" }));
@@ -439,18 +439,18 @@ describe("base shell on a desktop", () => {
       expect(within(menu()).queryByRole("link", { name: "Trash" })).not.toBeInTheDocument();
     });
 
-    it("links a creator to the one Trash page, filtered to this base, where the base's trash opens", async () => {
+    it("links a creator to the one Trash page, filtered to this base", async () => {
       const user = userEvent.setup();
-      openBase("creator", { "GET /api/bases/app1/trash": { items: [{ kind: "table", id: "tbl9", name: "Old budget", table_id: null, deleted_at: Date.now() - 86_400_000 }] } });
+      const api = openBase("creator", {
+        "GET /api/trash": { items: [{ kind: "table", id: "tbl9", name: "Old budget", table_id: null, deleted_at: Date.now() - 86_400_000, expires_at: Date.now() + 29 * 86_400_000, workspace_id: "wsp1", workspace_name: "Acme", workspace_color: "green", base_id: "app1", base_name: "Project tracker" }] },
+      });
       await screen.findByText("Grid view coming soon");
       const link = within(menu()).getByRole("link", { name: "Trash" });
       expect(link).toHaveAttribute("href", "/trash?base=app1");
       await user.click(link);
-      const dialog = await screen.findByRole("dialog", { name: "Trash" });
-      expect(await within(dialog).findByText("Old budget")).toBeInTheDocument();
-      // Closing it goes back to the base.
-      await user.keyboard("{Escape}");
-      expect(await screen.findByText("Grid view coming soon")).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
+      expect(await screen.findByText("Old budget")).toBeInTheDocument();
+      expect(api.callsTo("GET /api/trash")[0]!.query.get("base_id")).toBe("app1");
     });
 
     it("links creators to the automations", async () => {

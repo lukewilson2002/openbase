@@ -150,7 +150,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "Workspaces the user belongs to, each with the bases they can open and who can open each (a base-limited token sees only its bases).",
         NO_BODY,
-        "WorkspaceSummary[] {id, name, icon, color, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people}]}",
+        "WorkspaceSummary[] {id, name, icon, color, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people, tables: [{id, name, icon}]}]}",
     ),
     e(
         POST,
@@ -914,6 +914,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "Revoke a pending invite.",
         NO_BODY,
         "204",
+    ),
+    e(
+        PATCH,
+        "/api/invites/{id}",
+        "invites",
+        "owner (workspace) / creator of every base the invite gives, before and after",
+        Manage,
+        "Change a pending invite's role and bases; the link stays the same. The new terms follow the rules for creating an invite: all_bases and the owner role only for workspace owners, and not with a token limited to specific bases.",
+        "{role?, all_bases?, base_ids?}",
+        "InviteInfo",
     ),
     e(
         GET,

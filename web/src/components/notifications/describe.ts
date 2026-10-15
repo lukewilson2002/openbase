@@ -54,6 +54,12 @@ export function notificationActor(n: Notification): string | null {
   return text(p, "author_name") ?? text(p, "actor_name");
 }
 
+/** The user id of that person, when the payload has it (a mention's `author_id`). */
+export function notificationActorId(n: Notification): string | null {
+  const p = payloadOf(n);
+  return text(p, "author_id") ?? text(p, "actor_id");
+}
+
 /** A base or table a notification is about, with the icon it had when the notification was written. */
 export interface PlaceName {
   name: string;

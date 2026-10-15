@@ -628,7 +628,9 @@ function basePeople(b: Obj): Obj[] {
 }
 
 function baseSummary(b: Obj, role: string): Obj {
-  return { ...b, role, people: basePeople(b) };
+  // Every mock base serves the same three tables (see baseDto).
+  const tables = [T_TASKS, T_PEOPLE, T_PROJECTS].map((id) => ({ id, name: tableDto(id).name, icon: null }));
+  return { ...b, role, people: basePeople(b), tables };
 }
 
 function workspaceList(): Obj[] {
@@ -662,7 +664,7 @@ function createInvite(workspaceId: string, body: Obj, fromBase: string | null): 
   return { url: `https://openbase.example.com/invite/${newId("tok")}${newId("x")}`, info };
 }
 
-function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse): boolean {
+function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, url: URL): boolean {
   let g: RegExpExecArray | null;
   if ((g = /^\/api\/__mock\/workspaces\/(none|reset)$/.exec(p))) {
     ws = workspaceFixtures();
@@ -726,6 +728,14 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse): 
     ws.invites = ws.invites.filter((i) => i.id !== g![1]);
     return send(res, 204), true;
   }
+  if ((g = /^\/api\/invites\/([^/]+)$/.exec(p)) && m === "PATCH") {
+    const inv = ws.invites.find((i) => i.id === g![1]);
+    if (!inv) return err(res, 404, "not_found", "invite not found"), true;
+    if (body.role) inv.role = body.role;
+    if (body.all_bases === true || inv.role === "owner") Object.assign(inv, { all_bases: true, base_ids: [] });
+    else if (body.base_ids) Object.assign(inv, { all_bases: false, base_ids: body.base_ids });
+    return send(res, 200, inv), true;
+  }
   if ((g = /^\/api\/workspaces\/([^/]+)\/bases$/.exec(p)) && m === "POST") {
     const b = { id: newId("app"), workspace_id: g[1], name: body.name, color: body.color ?? "blue_dark", icon: body.icon ?? null };
     ws.bases.push(b);
@@ -739,6 +749,23 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse): 
     return send(res, 200, { ok: true }), true;
   }
   if (p === "/api/trash/workspaces" && m === "GET") return send(res, 200, { items: ws.deleted }), true;
+  if (p === "/api/trash" && m === "GET") {
+    const q = url.searchParams;
+    const project = ws.bases.find((b) => b.id === BASE_ID)!;
+    const home = ws.workspaces.find((w) => w.id === project.workspace_id)!;
+    const tableName = (id: string | null) => (id ? (tableDto(id).name as string) : null);
+    const inBase = [...records.values()]
+      .filter((r) => r.deleted)
+      .map((r) => ({ kind: "record", id: r.id, name: String(r.values[PRIMARY[r.table_id]!] ?? ""), table_id: r.table_id, deleted_at: r.updated_at }))
+      .concat(trashedExtras as never[])
+      .map((i: Obj) => ({ ...i, workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: BASE_ID, base_name: project.name, base_color: project.color, table_name: i.kind === "table" ? null : tableName(i.table_id), deleted_by_id: ME, deleted_by_name: "Ada Lovelace" }));
+    const workspaces = ws.deleted.map((d) => ({ ...d, workspace_id: d.id, workspace_name: d.name, workspace_color: "teal" }));
+    const items = [...inBase, ...workspaces]
+      .map((i: Obj) => ({ ...i, expires_at: i.deleted_at + 30 * 86_400_000 }))
+      .filter((i: Obj) => (!q.get("workspace_id") || i.workspace_id === q.get("workspace_id")) && (!q.get("base_id") || i.base_id === q.get("base_id")) && (!q.get("kind") || i.kind === q.get("kind")))
+      .sort((a: Obj, b: Obj) => b.deleted_at - a.deleted_at);
+    return send(res, 200, { items }), true;
+  }
   if (p === "/api/trash/restore" && m === "POST" && body.kind === "workspace") {
     const item = ws.deleted.find((d) => d.id === body.id);
     if (!item) return err(res, 404, "not_found", "nothing to restore"), true;
@@ -783,7 +810,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     introSeen = g[1] === "seen";
     return send(res, 200, { intro_seen: introSeen }), true;
   }
-  if (workspaceRoutes(m, p, body, res)) return true;
+  if (workspaceRoutes(m, p, body, res, url)) return true;
   if ((g = /^\/api\/__mock\/role\/(\w+)$/.exec(p))) {
     roleOverride = g[1] === "reset" ? null : g[1]!;
     return send(res, 200, { role: roleOverride }), true;

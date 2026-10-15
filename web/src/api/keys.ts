@@ -20,8 +20,6 @@ export const keys = {
   /** A pending OAuth authorization request (consent page). */
   oauthRequest: (id: string) => ["oauth", "request", id] as const,
   workspaces: ["workspaces"] as const,
-  /** The caller's deleted workspaces (home page, "Recently deleted workspaces"). */
-  deletedWorkspaces: ["workspaces", "deleted"] as const,
   /** Prefix of every one-Trash listing: invalidate it after deleting or restoring anything. */
   trash: ["trash"] as const,
   /** `GET /api/trash` with these filters (`api.trash.all`). */
