@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
-import { UserMenu } from "./UserMenu";
 
 /** Centered card for unauthenticated pages (login, setup, signup, ...). */
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -18,30 +17,6 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
       </div>
       {footer && <div className="mt-4 text-[0.8125rem] text-muted">{footer}</div>}
     </main>
-  );
-}
-
-/** Top bar + content container for app pages (home, account, admin). */
-export function AppPage({ title, actions, children, wide }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; wide?: boolean }) {
-  return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-line bg-surface px-4">
-        <Link to="/" aria-label="OpenBase home">
-          <Logo />
-        </Link>
-        <div className="flex-1" />
-        <UserMenu />
-      </header>
-      <main className={cn("mx-auto w-full px-4 py-6", wide ? "max-w-6xl" : "max-w-4xl")}>
-        {(title || actions) && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            {title && <h1 className="text-xl">{title}</h1>}
-            {actions}
-          </div>
-        )}
-        {children}
-      </main>
-    </div>
   );
 }
 

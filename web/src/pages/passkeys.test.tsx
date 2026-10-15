@@ -273,7 +273,7 @@ describe("login with a passkey", () => {
     renderApp({ route: "/login" });
 
     await user.click(await screen.findByRole("button", { name: "Sign in with a passkey" }));
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
     expect(webauthn.get).toHaveBeenCalledWith({ publicKey: { challenge: "BAUG" } }, { mediation: undefined, signal: undefined });
     expect(api.callsTo("POST /api/auth/passkey-login/finish")[0]?.body).toEqual({ challenge_id: "pkc_9", credential });
     // No password and no second-factor step were involved.
@@ -385,7 +385,7 @@ describe("login with a passkey", () => {
 
     // Using the button cancels the waiting request first (a page can have one at a time).
     await user.click(screen.getByRole("button", { name: "Sign in with a passkey" }));
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
     expect(aborted.length).toBeGreaterThan(0);
   });
 

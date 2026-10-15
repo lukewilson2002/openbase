@@ -30,7 +30,7 @@ describe("intro", () => {
   it("stays closed for someone who has seen it", async () => {
     routes({ "GET /api/auth/me": USER });
     renderApp({ route: "/" });
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -70,7 +70,7 @@ describe("intro", () => {
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.callsTo("PATCH /api/auth/me").map((c) => c.body)).toEqual([{ intro_seen: true }]);
-    expect(screen.getByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
   });
 
   it("Escape skips it", async () => {

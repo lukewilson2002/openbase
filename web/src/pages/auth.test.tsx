@@ -27,7 +27,7 @@ describe("login", () => {
     await user.type(screen.getByLabelText("Password"), "correct horse");
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
     const login = api.callsTo("POST /api/auth/login")[0]!;
     expect(login.body).toEqual({ email: "ada@example.com", password: "correct horse" });
     expect(login.headers.get("X-OpenBase-CSRF")).toBe("1");
@@ -122,7 +122,7 @@ describe("setup", () => {
     expect(await screen.findByRole("dialog", { name: "A base holds one project" })).toBeInTheDocument();
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ name: "Ada", email: "ada@example.com", password: "longenough1" });
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
   });
 
   it("rejects a short password without calling the server", async () => {
@@ -168,7 +168,7 @@ describe("signup and invites", () => {
     await user.type(screen.getByLabelText("Confirm password"), "longenough1");
     await user.click(screen.getByRole("button", { name: "Create account" }));
 
-    expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ invite_token: "tok123" });
   });
 

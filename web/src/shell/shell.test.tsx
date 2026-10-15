@@ -192,12 +192,12 @@ describe("BaseAvatars", () => {
     expect(container.querySelector("[data-pending]")).toHaveClass("border-dashed");
   });
 
-  it("shows four faces, then +N", async () => {
+  it("shows at most four circles: three faces, then +N", async () => {
     routes();
     const many = ["b", "c", "d", "e", "f"].map((x, i): BasePerson => ({ user_id: `u${i}`, name: `${x.toUpperCase()} Person`, email: `${x}@example.com`, pending: false, role: "viewer" }));
     renderWithProviders(<BaseAvatars people={[me, ...many]} />);
     const group = await screen.findByRole("img", { name: /^Who can open this base: you, B Person/ });
-    expect(group).toHaveTextContent("+2");
+    expect(group).toHaveTextContent("+3");
     expect(peopleSummary([me, ...many], "usr1")).toBe("You, B, C and 3 more");
   });
 });

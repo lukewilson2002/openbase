@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router";
-import { AppPage } from "@/components/layouts";
+import { AppPage } from "@/shell/AppPage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useMe } from "@/auth/useAuth";

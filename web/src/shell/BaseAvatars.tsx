@@ -54,6 +54,8 @@ export function PendingFace({ email, size = "sm", className }: { email?: string 
 
 export interface BaseAvatarsProps {
   people: readonly BasePerson[];
+  /** Faces drawn before the rest become "+N" (default 4). */
+  max?: number;
   /** Show the short names beside the faces. */
   summary?: boolean;
   /** Extra classes for the summary text (e.g. to hide it on phones). */
@@ -66,7 +68,7 @@ export interface BaseAvatarsProps {
  * not joined yet is a grey face with a dashed outline. When nobody else can open it: a lock and
  * "Only you".
  */
-export function BaseAvatars({ people, summary = false, summaryClassName, className }: BaseAvatarsProps) {
+export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryClassName, className }: BaseAvatarsProps) {
   const { data: me } = useMe();
   const meId = me?.id;
 
@@ -80,13 +82,13 @@ export function BaseAvatars({ people, summary = false, summaryClassName, classNa
 
   // Me first, like the summary line.
   const ordered = [...people].sort((a, b) => Number(isMe(b, meId)) - Number(isMe(a, meId)));
-  const faces = ordered.slice(0, MAX_FACES);
+  const faces = ordered.length > max ? ordered.slice(0, Math.max(1, max - 1)) : ordered;
   const rest = ordered.length - faces.length;
   const label = `Who can open this base: ${peopleLabel(ordered, meId)}`;
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
-      <span role="img" aria-label={label} title={label} className="flex shrink-0 -space-x-1.5">
+      <span role="img" aria-label={label} title={label} className="flex shrink-0 -space-x-1">
         {faces.map((p, i) =>
           p.pending ? (
             <PendingFace key={`invite-${i}`} email={p.email || p.name} className="ring-2 ring-surface" />
