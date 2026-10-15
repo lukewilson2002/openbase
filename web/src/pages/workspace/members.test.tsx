@@ -48,12 +48,15 @@ describe("members page", () => {
     expect(within(ada).getByText("Owner")).toBeInTheDocument();
     expect(within(ada).queryByRole("combobox")).not.toBeInTheDocument();
     expect(within(await row("Tori Smith")).getByRole("button", { name: "Bases Tori Smith can open: Chores only" })).toBeInTheDocument();
-    expect(within(await row("Sam Lee")).getByRole("button", { name: "Bases Sam Lee can open: All bases, incl. new" })).toBeInTheDocument();
+    expect(within(await row("Sam Lee")).getByRole("button", { name: "Bases Sam Lee can open: All bases" })).toBeInTheDocument();
     expect(within(await row("Kim Park")).getByRole("button", { name: "Bases Kim Park can open: 2 of 3 bases" })).toBeInTheDocument();
 
     const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
     expect(within(pending).getByText("Invited")).toBeInTheDocument();
-    expect(within(pending).getByText(/Not joined yet/)).toBeInTheDocument();
+    expect(within(pending).getByRole("button", { name: "Resend" })).toBeInTheDocument();
+    // An invite's terms can only be replaced, not edited: its access and role are plain text.
+    expect(within(pending).queryByRole("button", { name: /can open/ })).not.toBeInTheDocument();
+    expect(within(pending).getByText("Viewer")).toBeInTheDocument();
     expect(within(pending).getByText("Budget only")).toBeInTheDocument();
     expect(pending.querySelector("[data-pending]")).toHaveClass("border-dashed");
     expect(screen.getByText(/Want someone outside the workspace to see a few records\? Share a view instead\./)).toBeInTheDocument();
