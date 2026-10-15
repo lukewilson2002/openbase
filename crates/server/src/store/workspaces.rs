@@ -6,7 +6,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ob_core::api::workspaces::{BasePerson, BaseSummary, Member, WorkspaceSummary};
+use ob_core::api::workspaces::{
+    BasePerson, BaseSummary, CreateWorkspace, Member, WorkspaceSummary,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::db::now_ms;
@@ -248,19 +250,27 @@ pub fn people_for_base(conn: &Connection, base: &bases::BaseRow) -> AppResult<Ve
 /// role, the live bases they can open, and who else can open each.
 pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<WorkspaceSummary>> {
     let mut out = Vec::new();
-    let member_of: Vec<(String, String, Option<String>, String, bool)> = {
+    type MemberOf = (String, String, Option<String>, String, String, bool);
+    let member_of: Vec<MemberOf> = {
         let mut stmt = conn.prepare(
-            "SELECT w.id, w.name, w.icon, m.role, m.all_bases FROM workspace_members m
+            "SELECT w.id, w.name, w.icon, w.color, m.role, m.all_bases FROM workspace_members m
              JOIN workspaces w ON w.id = m.workspace_id
              WHERE m.user_id = ?1 AND w.deleted_at IS NULL
              ORDER BY w.created_at, w.id",
         )?;
         let rows = stmt.query_map([user_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
         })?;
         rows.collect::<Result<_, _>>()?
     };
-    for (id, name, icon, role, all_bases) in member_of {
+    for (id, name, icon, color, role, all_bases) in member_of {
         let role = Role::parse(&role)?;
         let people = People::load(conn, &id)?;
         let listed: HashSet<String> = if all_bases {
@@ -277,6 +287,7 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
             id,
             name,
             icon,
+            color,
             role: role.as_str().to_string(),
             bases,
             member_count: people.member_count(),
@@ -286,20 +297,52 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
     Ok(out)
 }
 
-/// Create a workspace owned by `user_id`.
+/// Colours handed out to new workspaces, in order. Migration 0006 colours the
+/// workspaces that existed before with the same cycle; keep them in step.
+pub const DEFAULT_COLORS: [&str; 8] = [
+    "green", "blue", "gray", "purple", "orange", "teal", "pink", "yellow",
+];
+
+/// The first of [`DEFAULT_COLORS`] that none of `user_id`'s live workspaces
+/// uses, so workspaces side by side in the sidebar look different; once all
+/// are taken, the cycle continues by how many workspaces they have.
+fn next_default_color(conn: &Connection, user_id: &str) -> AppResult<&'static str> {
+    let mut stmt = conn.prepare(
+        "SELECT w.color FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+         WHERE m.user_id = ?1 AND w.deleted_at IS NULL",
+    )?;
+    let used: Vec<String> = stmt
+        .query_map([user_id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(DEFAULT_COLORS
+        .iter()
+        .find(|c| !used.iter().any(|u| u == *c))
+        .copied()
+        .unwrap_or(DEFAULT_COLORS[used.len() % DEFAULT_COLORS.len()]))
+}
+
+/// Create a workspace owned by `user_id`, in `color` or else the next default
+/// colour (see [`next_default_color`]).
 pub fn create(
     tx: &Transaction,
     user_id: &str,
-    name: &str,
-    icon: Option<&str>,
+    input: &CreateWorkspace,
 ) -> AppResult<WorkspaceSummary> {
-    let name = schema::validate_name(name, "workspace")?;
-    let icon = schema::icon_on_create(icon)?;
+    let name = schema::validate_name(&input.name, "workspace")?;
+    let icon = schema::icon_on_create(input.icon.as_deref())?;
+    let color = match &input.color {
+        Some(c) => {
+            schema::validate_color(c)?;
+            c.clone()
+        }
+        None => next_default_color(tx, user_id)?.to_string(),
+    };
     let id = new_id(ob_core::ids::WORKSPACE);
     let now = now_ms();
     tx.execute(
-        "INSERT INTO workspaces (id, name, icon, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![id, name, icon, user_id, now],
+        "INSERT INTO workspaces (id, name, icon, color, created_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id, name, icon, color, user_id, now],
     )?;
     tx.execute(
         "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
@@ -310,6 +353,7 @@ pub fn create(
         id,
         name,
         icon,
+        color,
         role: Role::Owner.as_str().to_string(),
         bases: Vec::new(),
         member_count: 1,
@@ -337,6 +381,19 @@ pub fn set_icon(
     Ok(())
 }
 
+/// Change a live workspace's colour.
+pub fn set_color(tx: &Transaction, workspace_id: &str, color: &str) -> AppResult<()> {
+    schema::validate_color(color)?;
+    let n = tx.execute(
+        "UPDATE workspaces SET color = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![workspace_id, color],
+    )?;
+    if n == 0 {
+        return Err(AppError::not_found("workspace"));
+    }
+    Ok(())
+}
+
 /// Rename a live workspace.
 pub fn rename(tx: &Transaction, workspace_id: &str, name: &str) -> AppResult<String> {
     let name = schema::validate_name(name, "workspace")?;
@@ -350,11 +407,13 @@ pub fn rename(tx: &Transaction, workspace_id: &str, name: &str) -> AppResult<Str
     Ok(name)
 }
 
-/// Move a workspace (with everything in it) to the trash.
-pub fn soft_delete(tx: &Transaction, workspace_id: &str) -> AppResult<()> {
+/// Move a workspace (with everything in it) to the trash, as deleted by
+/// `user_id`. Like a base, only the workspace row is stamped.
+pub fn soft_delete(tx: &Transaction, workspace_id: &str, user_id: &str) -> AppResult<()> {
     let n = tx.execute(
-        "UPDATE workspaces SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
-        params![workspace_id, now_ms()],
+        "UPDATE workspaces SET deleted_at = ?2, deleted_by = ?3
+         WHERE id = ?1 AND deleted_at IS NULL",
+        params![workspace_id, now_ms(), user_id],
     )?;
     if n == 0 {
         return Err(AppError::not_found("workspace"));

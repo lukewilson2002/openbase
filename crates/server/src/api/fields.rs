@@ -85,7 +85,7 @@ async fn update(
         .write(move |tx| {
             let base = perm::base_of_field(tx, &id)?;
             perm::require_base(tx, &actor, &base, Role::Creator)?;
-            Ok((base, fields::update(tx, &id, &patch)?))
+            Ok((base, fields::update(tx, &id, &patch, &actor.user_id)?))
         })
         .await?;
     publish_schema(&state, &headers, &who, &base, &change.touched);
@@ -104,7 +104,7 @@ async fn remove(
         .write(move |tx| {
             let base = perm::base_of_field(tx, &id)?;
             perm::require_base(tx, &actor, &base, Role::Creator)?;
-            Ok((base, fields::delete(tx, &id)?))
+            Ok((base, fields::delete(tx, &id, &actor.user_id)?))
         })
         .await?;
     publish_schema(&state, &headers, &who, &base, &out.touched);

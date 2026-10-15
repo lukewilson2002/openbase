@@ -277,11 +277,38 @@ pub struct TrashItem {
     /// Lucide icon name of a trashed workspace, base or table.
     #[serde(default)]
     pub icon: Option<String>,
+    /// The table of a trashed field, view or record.
     #[serde(default)]
     pub table_id: Option<String>,
     pub deleted_at: i64,
+    /// The workspace the item is in (for a workspace, itself).
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub workspace_color: String,
+    /// The base the item is in (for a base, itself); null for a workspace.
+    #[serde(default)]
+    pub base_id: Option<String>,
+    #[serde(default)]
+    pub base_name: Option<String>,
+    #[serde(default)]
+    pub base_icon: Option<String>,
+    #[serde(default)]
+    pub base_color: Option<String>,
+    /// Name of `table_id`'s table (fields, views and records).
+    #[serde(default)]
+    pub table_name: Option<String>,
+    /// Who moved it to the trash; null when unknown (trashed before this was
+    /// recorded, or by an automation).
+    #[serde(default)]
+    pub deleted_by_id: Option<String>,
+    #[serde(default)]
+    pub deleted_by_name: Option<String>,
+    /// When the trash purge removes it for good (`deleted_at` plus the
+    /// server's trash retention), in milliseconds.
+    pub expires_at: i64,
 }
 
+/// `GET /api/trash` and the per-base and per-workspace trash listings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TrashListing {

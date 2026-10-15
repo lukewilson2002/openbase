@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { TrashItem } from "@/api/types";
 import { groupTrash, trashItemName } from "./groupTrash";
 
-const item = (kind: string, id: string, deleted_at: number, name = id): TrashItem => ({ kind, id, name, table_id: null, deleted_at });
+const item = (kind: string, id: string, deleted_at: number, name = id): TrashItem => ({
+  kind,
+  id,
+  name,
+  table_id: null,
+  deleted_at,
+  workspace_id: "wsp1",
+  workspace_name: "Acme",
+  workspace_color: "green",
+  expires_at: deleted_at + 30 * 86_400_000,
+});
 
 describe("groupTrash", () => {
   it("orders kinds tables, fields, views, records and items newest first", () => {

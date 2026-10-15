@@ -153,8 +153,9 @@ pub fn update(tx: &Transaction, table_id: &str, patch: &UpdateTable) -> AppResul
 /// Move a table to the trash. The last live table of a base cannot be deleted.
 /// Link fields in other tables that point at it go to the trash with it (as do
 /// the lookups/rollups/counts built on them), so no live field ever references
-/// a trashed table; restoring the table brings them back.
-pub fn soft_delete(tx: &Transaction, table_id: &str) -> AppResult<Touched> {
+/// a trashed table; restoring the table brings them back. Both are recorded as
+/// deleted by `user_id`.
+pub fn soft_delete(tx: &Transaction, table_id: &str, user_id: &str) -> AppResult<Touched> {
     let table = schema::live_table(tx, table_id)?;
     let live: i64 = tx.query_row(
         "SELECT count(*) FROM tables WHERE base_id = ?1 AND deleted_at IS NULL",
@@ -168,11 +169,11 @@ pub fn soft_delete(tx: &Transaction, table_id: &str) -> AppResult<Touched> {
     }
     let now = now_ms();
     tx.execute(
-        "UPDATE tables SET deleted_at = ?2 WHERE id = ?1",
-        params![table_id, now],
+        "UPDATE tables SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1",
+        params![table_id, now, user_id],
     )?;
     let mut touched = Touched::of(table_id);
-    for other in fields::cascade_delete_incoming_links(tx, &table, now)?.0 {
+    for other in fields::cascade_delete_incoming_links(tx, &table, now, user_id)?.0 {
         touched.add(&other);
     }
     Ok(touched)

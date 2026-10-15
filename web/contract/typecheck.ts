@@ -59,6 +59,7 @@ import type {
   ResetLink,
   RestoreResponse,
   RunsPage,
+  SearchResponse,
   SessionInfo,
   SetupStatus,
   ShareLink,
@@ -121,6 +122,7 @@ export interface TypeMap {
   ResetLink: ResetLink;
   RestoreResponse: RestoreResponse;
   RunsPage: RunsPage;
+  SearchResponse: SearchResponse;
   SessionInfo: SessionInfo;
   SetupStatus: SetupStatus;
   ShareLink: ShareLink;

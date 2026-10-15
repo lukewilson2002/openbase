@@ -12,7 +12,7 @@ const bases = [
   { id: "app2", workspace_id: "wsp1", name: "Budget", color: "blue", role: "owner", people: [] },
   { id: "app3", workspace_id: "wsp1", name: "Recipes", color: "red", role: "owner", people: [] },
 ];
-const ws: WorkspaceSummary = { id: "wsp1", name: "Household", role: "owner", member_count: 4, pending_invite_count: 1, bases };
+const ws: WorkspaceSummary = { id: "wsp1", name: "Household", color: "green", role: "owner", member_count: 4, pending_invite_count: 1, bases };
 const members: Member[] = [
   { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] },
   { user_id: "usr2", name: "Tori Smith", email: "tori@example.com", role: "editor", all_bases: false, base_ids: ["app1"] },

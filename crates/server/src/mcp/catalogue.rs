@@ -117,6 +117,10 @@ pub const AREAS: &[(&str, &str)] = &[
         "records: query, get, create, update, delete, restore, move, history",
     ),
     ("comments", "record comments"),
+    (
+        "search",
+        "search names and record text across everything you can open",
+    ),
     ("trash", "trash listings and restore"),
     ("csv", "CSV import and export"),
     ("attachments", "file uploads and downloads"),
@@ -146,7 +150,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "Workspaces the user belongs to, each with the bases they can open and who can open each (a base-limited token sees only its bases).",
         NO_BODY,
-        "WorkspaceSummary[] {id, name, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people}]}",
+        "WorkspaceSummary[] {id, name, icon, color, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people}]}",
     ),
     e(
         POST,
@@ -154,8 +158,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "workspaces",
         "-",
         ManageUnscoped,
-        "Create a workspace; the caller becomes its owner. icon: a Lucide icon name in kebab-case (the REST API checks the format only; the MCP tool create_workspace checks the name and list_icons searches them).",
-        "{name, icon?}",
+        "Create a workspace; the caller becomes its owner. icon: a Lucide icon name in kebab-case (the REST API checks the format only; the MCP tool create_workspace checks the name and list_icons searches them). color: a palette colour like a base's (default: the next one the caller's workspaces don't use yet).",
+        "{name, icon?, color?}",
         "201 WorkspaceSummary",
     ),
     e(
@@ -164,8 +168,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "workspaces",
         "owner (workspace)",
         ManageUnscoped,
-        "Rename a workspace or change its icon (absent = unchanged, null = clear).",
-        "{name?, icon?}",
+        "Rename a workspace or change its icon (absent = unchanged, null = clear) or colour.",
+        "{name?, icon?, color?}",
         "WorkspaceSummary",
     ),
     e(
@@ -247,7 +251,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "The full schema of a base: tables, fields (with types and options), views, the caller's role and who can open the base.",
         NO_BODY,
-        "BaseSchema {id, name, color, icon, role, workspace_name, people: [{user_id, name, email, pending, role}], tables: [{id, name, icon, primary_field_id, fields, views}]}",
+        "BaseSchema {id, name, color, icon, role, workspace_name, workspace_color, people: [{user_id, name, email, pending, role}], tables: [{id, name, icon, primary_field_id, fields, views}]}",
     ),
     e(
         PATCH,
@@ -584,7 +588,28 @@ pub static ENDPOINTS: &[Endpoint] = &[
         NO_BODY,
         "204",
     ),
+    // --------------------------------------------------------------------- search
+    e(
+        GET,
+        "/api/search",
+        "search",
+        "viewer",
+        Read,
+        "Search everything you can open: workspace, base, table and view names, and the text of records (primary field and text, email, URL and phone fields). Names come before records, text that starts with q before text that contains it. Large instances: records are read up to a budget per request, so very many or very large tables may not all be searched.",
+        "query: q (1-200 characters), limit? (default 20, max 50)",
+        "SearchResponse {results: [{kind: workspace|base|table|view|record, id, name, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, view_id, view_type, record_id, snippet}]}",
+    ),
     // ---------------------------------------------------------------------- trash
+    e(
+        GET,
+        "/api/trash",
+        "trash",
+        "-",
+        Read,
+        "Everything you could restore, from every workspace you belong to, newest first: records, fields, tables and shared views of bases where you are a creator, your own personal views, and (with the manage permission) bases and workspaces you own. Each item says where it was (workspace, base, table), who deleted it and when it is removed for good (expires_at).",
+        "query: workspace_id?, base_id?, kind? (workspace|base|table|field|view|record)",
+        "TrashListing {items: [{kind, id, name, icon, table_id, deleted_at, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_name, deleted_by_id, deleted_by_name, expires_at}]}",
+    ),
     e(
         GET,
         "/api/bases/{id}/trash",

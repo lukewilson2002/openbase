@@ -6,6 +6,8 @@
  *                           workstreams must put their record queries under this prefix.
  *   ["comments", recordId]  comment threads
  */
+import type { TrashFilter } from "./endpoints";
+
 export const keys = {
   setup: ["setup"] as const,
   me: ["me"] as const,
@@ -20,6 +22,11 @@ export const keys = {
   workspaces: ["workspaces"] as const,
   /** The caller's deleted workspaces (home page, "Recently deleted workspaces"). */
   deletedWorkspaces: ["workspaces", "deleted"] as const,
+  /** Prefix of every one-Trash listing: invalidate it after deleting or restoring anything. */
+  trash: ["trash"] as const,
+  /** `GET /api/trash` with these filters (`api.trash.all`). */
+  trashListing: (filter: TrashFilter = {}) =>
+    ["trash", filter.workspace_id ?? "", filter.base_id ?? "", filter.kind ?? ""] as const,
   workspaceMembers: (id: string) => ["workspace", id, "members"] as const,
   workspaceInvites: (id: string) => ["workspace", id, "invites"] as const,
   /** Prefix of every base's queries: who can open a base shows on all of them. */
@@ -39,6 +46,8 @@ export const keys = {
   adminBackups: ["admin", "backups"] as const,
   adminEmail: ["admin", "email"] as const,
   notifications: ["notifications"] as const,
+  /** "Search everything" results for `q` (`api.search.everything`). */
+  search: (q: string, limit?: number) => ["search", q, limit ?? null] as const,
   /** Share links of one view (Creators). */
   shares: (viewId: string) => ["shares", viewId] as const,
   /** Automations of a base, and (under the same prefix) each one's run pages. */

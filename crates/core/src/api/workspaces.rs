@@ -47,6 +47,8 @@ pub struct WorkspaceSummary {
     /// Lucide icon name (kebab-case); the client falls back to the name's initial.
     #[serde(default)]
     pub icon: Option<String>,
+    /// One of `ob_core::field::COLORS`, like a base's colour.
+    pub color: String,
     /// Caller's workspace role.
     pub role: RoleName,
     pub bases: Vec<BaseSummary>,
@@ -61,6 +63,10 @@ pub struct CreateWorkspace {
     pub name: String,
     #[serde(default)]
     pub icon: Option<String>,
+    /// One of `ob_core::field::COLORS`. Absent: the first of the default
+    /// workspace colours the creator is not using yet.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -76,6 +82,9 @@ pub struct UpdateWorkspace {
     )]
     #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
     pub icon: Option<Option<String>>,
+    /// One of `ob_core::field::COLORS`; absent or null leaves it unchanged.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

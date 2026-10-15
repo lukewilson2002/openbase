@@ -67,6 +67,25 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   without it a base still starts with "Table 1".
 - `intro_seen` on the signed-in user (`GET /api/auth/me`), set with `PATCH /api/auth/me`;
   everyone, including existing accounts after the upgrade, starts with `false`.
+- **Workspace colours** from the same palette as bases. `color` on workspaces
+  (`GET /api/workspaces`), accepted by `POST /api/workspaces` and `PATCH /api/workspaces/{id}`;
+  a new workspace gets the first of green, blue, gray, purple, orange, teal, pink and yellow that
+  none of your workspaces uses yet. `GET /api/bases/{id}` adds `workspace_color` and the invite
+  preview `target_color`. Upgrading (database schema 6) colours existing workspaces in that order,
+  oldest first, per person who created them.
+- **One trash for everything.** `GET /api/trash` lists everything you could restore from every
+  workspace you belong to, newest first, optionally filtered by `workspace_id`, `base_id` and
+  `kind`; editors and viewers now find their own deleted personal views there. Trash items say
+  where they were (`workspace_name`, `workspace_color`, `base_name`, `base_icon`, `base_color`,
+  `table_name`), who deleted them (`deleted_by_id`, `deleted_by_name`) and when they are removed
+  for good (`expires_at`); the existing trash listings carry the same fields. Who deleted
+  something is recorded from this version on, so older items show no one.
+- **Search everything.** `GET /api/search?q=` finds workspaces, bases, tables and views by name
+  and records by the text of their primary field and their text, email, URL and phone fields,
+  in everything you can open (`limit`, default 20, at most 50). Names come first, and text that
+  starts with what you typed before text that contains it; a record found by another field
+  carries a `snippet` of it. Record text is read up to a fixed budget per search (about one full
+  table), so on very large instances some tables may not be searched.
 
 ### Fixed
 

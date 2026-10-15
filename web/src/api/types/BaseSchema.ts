@@ -13,4 +13,8 @@ role: string, tables: Array<Table>,
 /**
  * Who can open this base (members first, then pending invites).
  */
-people: Array<BasePerson>, workspace_name: string, };
+people: Array<BasePerson>, workspace_name: string, 
+/**
+ * The workspace's colour (one of `ob_core::field::COLORS`).
+ */
+workspace_color: string, };

@@ -256,6 +256,8 @@ pub struct InvitePreview {
     /// Lucide icon name of the workspace or base, if it has one.
     #[serde(default)]
     pub target_icon: Option<String>,
+    /// The workspace's colour (one of `ob_core::field::COLORS`).
+    pub target_color: String,
     pub target_kind: String,
     pub role: String,
     #[serde(default)]
