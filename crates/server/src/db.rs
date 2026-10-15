@@ -20,6 +20,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0003_oauth.sql"),
     include_str!("../migrations/0004_passkeys.sql"),
     include_str!("../migrations/0005_workspace_base_access.sql"),
+    include_str!("../migrations/0006_workspace_color_deleted_by.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -339,7 +340,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 5);
+        assert_eq!(schema_version(), 6);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -562,7 +563,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 5);
+        assert_eq!(schema_version(), 6);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -681,6 +682,39 @@ mod tests {
             count("SELECT count(*) FROM workspace_member_bases WHERE user_id = 'guest'"),
             0
         );
+        migrate(&conn).unwrap();
+    }
+
+    #[test]
+    fn v5_workspaces_are_coloured_in_creation_order_per_creator() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrate_with(&conn, &MIGRATIONS[..5], None).unwrap();
+        let mut sql = String::from(
+            "INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
+                 ('a', 'a@example.com', 'A', '!', 1, 1), ('b', 'b@example.com', 'B', '!', 1, 1);
+             INSERT INTO workspaces (id, name, created_by, created_at, deleted_at) VALUES
+                 ('b1', 'B first', 'b', 1, NULL), ('orphan', 'No creator', NULL, 1, NULL)",
+        );
+        // Out of id order on purpose: creation time decides. Nine of them, so
+        // the ninth wraps around to the first colour.
+        for i in 0..9 {
+            sql.push_str(&format!(", ('a{}', 'A {i}', 'a', {}, NULL)", 9 - i, 10 + i));
+        }
+        conn.execute_batch(&format!("{sql};")).unwrap();
+        migrate(&conn).unwrap();
+        let color = |id: &str| -> String {
+            conn.query_row("SELECT color FROM workspaces WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        let a: Vec<String> = (0..9).map(|i| color(&format!("a{}", 9 - i))).collect();
+        let mut expected: Vec<&str> = crate::store::workspaces::DEFAULT_COLORS.to_vec();
+        expected.push("green");
+        assert_eq!(a, expected);
+        assert_eq!(color("b1"), "green");
+        assert_eq!(color("orphan"), "green");
         migrate(&conn).unwrap();
     }
 

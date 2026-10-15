@@ -11,6 +11,10 @@ export type WorkspaceSummary = { id: string, name: string,
  */
 icon?: string | null, 
 /**
+ * One of `ob_core::field::COLORS`, like a base's colour.
+ */
+color: string, 
+/**
  * Caller's workspace role.
  */
 role: string, bases: Array<BaseSummary>, member_count: number, 

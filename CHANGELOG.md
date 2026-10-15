@@ -67,6 +67,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   without it a base still starts with "Table 1".
 - `intro_seen` on the signed-in user (`GET /api/auth/me`), set with `PATCH /api/auth/me`;
   everyone, including existing accounts after the upgrade, starts with `false`.
+- **Workspace colours** from the same palette as bases. `color` on workspaces
+  (`GET /api/workspaces`), accepted by `POST /api/workspaces` and `PATCH /api/workspaces/{id}`;
+  a new workspace gets the first of green, blue, gray, purple, orange, teal, pink and yellow that
+  none of your workspaces uses yet. `GET /api/bases/{id}` adds `workspace_color` and the invite
+  preview `target_color`. Upgrading (database schema 6) colours existing workspaces in that order,
+  oldest first, per person who created them.
 
 ### Fixed
 

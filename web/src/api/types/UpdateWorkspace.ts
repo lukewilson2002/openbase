@@ -4,4 +4,8 @@ export type UpdateWorkspace = { name?: string | null,
 /**
  * Lucide icon name (kebab-case). Absent = unchanged, `null` = clear.
  */
-icon?: string | null, };
+icon?: string | null, 
+/**
+ * One of `ob_core::field::COLORS`; absent or null leaves it unchanged.
+ */
+color?: string | null, };

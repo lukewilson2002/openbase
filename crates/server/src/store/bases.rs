@@ -159,6 +159,11 @@ pub fn schema(
                 .collect(),
         });
     }
+    let (workspace_name, workspace_color) = conn.query_row(
+        "SELECT name, color FROM workspaces WHERE id = ?1",
+        [&base.workspace_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
     Ok(BaseSchema {
         id: base.id.clone(),
         workspace_id: base.workspace_id.clone(),
@@ -168,11 +173,8 @@ pub fn schema(
         role: role.as_str().to_string(),
         tables: out,
         people: workspaces::people_for_base(conn, base)?,
-        workspace_name: conn.query_row(
-            "SELECT name FROM workspaces WHERE id = ?1",
-            [&base.workspace_id],
-            |r| r.get(0),
-        )?,
+        workspace_name,
+        workspace_color,
     })
 }
 

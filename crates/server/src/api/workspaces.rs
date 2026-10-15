@@ -81,7 +81,7 @@ async fn create(
     actor.require_capability(Capability::ManageUnscoped)?;
     let out = state
         .db
-        .write(move |tx| workspaces::create(tx, &actor.user_id, &body.name, body.icon.as_deref()))
+        .write(move |tx| workspaces::create(tx, &actor.user_id, &body))
         .await?;
     Ok((StatusCode::CREATED, Json(out)))
 }
@@ -100,6 +100,9 @@ async fn rename(
                 workspaces::rename(tx, &id, name)?;
             }
             workspaces::set_icon(tx, &id, &body.icon)?;
+            if let Some(color) = &body.color {
+                workspaces::set_color(tx, &id, color)?;
+            }
             workspaces::list_for_user(tx, &actor.user_id)?
                 .into_iter()
                 .find(|w| w.id == id)

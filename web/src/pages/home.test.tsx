@@ -14,6 +14,7 @@ const workspaces: WorkspaceSummary[] = [
   {
     id: "wsp1",
     name: "Acme",
+    color: "green",
     role: "owner",
     member_count: 2,
     pending_invite_count: 1,
@@ -25,6 +26,7 @@ const workspaces: WorkspaceSummary[] = [
   {
     id: "wsp2",
     name: "Shared with me",
+    color: "blue",
     role: "viewer",
     member_count: 3,
     pending_invite_count: 0,
@@ -58,7 +60,7 @@ describe("/", () => {
     const api = routes({
       "GET /api/workspaces": () => list,
       "POST /api/workspaces": (call) => {
-        list = [{ id: "wsp9", name: (call.body as { name: string }).name, role: "owner", bases: [], member_count: 1, pending_invite_count: 0 }];
+        list = [{ id: "wsp9", name: (call.body as { name: string }).name, color: "green", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 }];
         return list[0];
       },
     });
@@ -93,7 +95,7 @@ describe("home menu", () => {
     const api = routes({
       "GET /api/workspaces": () => list,
       "POST /api/workspaces": (call) => {
-        const ws: WorkspaceSummary = { id: "wsp9", name: (call.body as { name: string }).name, icon: "store", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 };
+        const ws: WorkspaceSummary = { id: "wsp9", name: (call.body as { name: string }).name, icon: "store", color: "blue", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 };
         list = [...list, ws];
         return ws;
       },

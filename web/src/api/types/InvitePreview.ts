@@ -11,4 +11,8 @@ target_name: string,
 /**
  * Lucide icon name of the workspace or base, if it has one.
  */
-target_icon?: string | null, target_kind: string, role: string, email?: string | null, invited_by?: string | null, };
+target_icon?: string | null, 
+/**
+ * The workspace's colour (one of `ob_core::field::COLORS`).
+ */
+target_color: string, target_kind: string, role: string, email?: string | null, invited_by?: string | null, };

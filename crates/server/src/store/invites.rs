@@ -216,16 +216,16 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Name and icon of the invite's workspace, if it is not deleted.
+/// Name, icon and colour of the invite's workspace, if it is not deleted.
 fn live_workspace(
     conn: &Connection,
     invite: &InviteRow,
-) -> AppResult<Option<(String, Option<String>)>> {
+) -> AppResult<Option<(String, Option<String>, String)>> {
     Ok(conn
         .query_row(
-            "SELECT name, icon FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT name, icon, color FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
             [invite.workspace_id()?],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?)
 }
@@ -326,7 +326,7 @@ pub fn require_valid_by_token(conn: &Connection, token: &str) -> AppResult<Invit
 /// Public preview for the accept page. Every invite joins a workspace, so the
 /// target is always the workspace, even when it gives only some of its bases.
 pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview> {
-    let (target_name, target_icon) =
+    let (target_name, target_icon, target_color) =
         live_workspace(conn, invite)?.ok_or_else(|| AppError::not_found("invite"))?;
     let invited_by: Option<String> = match &invite.created_by {
         Some(uid) => conn
@@ -337,6 +337,7 @@ pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview
     Ok(InvitePreview {
         target_name,
         target_icon,
+        target_color,
         target_kind: "workspace".into(),
         role: invite.info.role.clone(),
         email: invite.info.email.clone(),

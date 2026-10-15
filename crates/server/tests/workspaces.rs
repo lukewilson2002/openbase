@@ -258,6 +258,127 @@ async fn deleted_workspace_and_bases_disappear_from_lists() {
 }
 
 #[tokio::test]
+async fn new_workspaces_get_a_colour_their_creator_is_not_using_yet() {
+    let app = new_app();
+    let alice = app.user("alice@example.com", "Alice");
+    let create = async |c: &common::Client, body: serde_json::Value| {
+        let r = app.post(c, "/api/workspaces", body).await;
+        r.assert_status(201);
+        r.body
+    };
+    let first = create(&alice, json!({ "name": "Household" })).await;
+    let second = create(&alice, json!({ "name": "Side business" })).await;
+    let third = create(&alice, json!({ "name": "Personal" })).await;
+    assert_eq!(
+        [&first["color"], &second["color"], &third["color"]],
+        ["green", "blue", "gray"]
+    );
+    // Someone else's workspaces do not count: Bob starts at the beginning.
+    let bob = app.user("bob@example.com", "Bob");
+    assert_eq!(
+        create(&bob, json!({ "name": "Bob's" })).await["color"],
+        "green"
+    );
+
+    // A colour that is freed up is handed out again before the next new one.
+    app.patch(
+        &alice,
+        &format!("/api/workspaces/{}", second["id"].as_str().unwrap()),
+        json!({ "color": "red_dark" }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(
+        create(&alice, json!({ "name": "Next" })).await["color"],
+        "blue"
+    );
+
+    // An explicit colour is kept, and must be one of the palette.
+    assert_eq!(
+        create(&alice, json!({ "name": "Picked", "color": "teal_dark" })).await["color"],
+        "teal_dark"
+    );
+    let r = app
+        .post(
+            &alice,
+            "/api/workspaces",
+            json!({ "name": "Bad", "color": "mauve" }),
+        )
+        .await;
+    r.assert_status(400);
+    assert_eq!(r.body["error"]["code"], "bad_request");
+
+    let list = app.get(&alice, "/api/workspaces").await;
+    let mut colors: Vec<&str> = list
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["color"].as_str().unwrap())
+        .collect();
+    colors.sort_unstable();
+    assert_eq!(colors, ["blue", "gray", "green", "red_dark", "teal_dark"]);
+}
+
+#[tokio::test]
+async fn workspace_colour_can_be_changed_by_owners_and_shows_on_bases_and_invites() {
+    let f = Fixture::new().await;
+    let path = format!("/api/workspaces/{}", f.ws);
+    let r = f
+        .app
+        .patch(&f.owner, &path, json!({ "color": "purple" }))
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["color"], "purple");
+    // Absent or null leaves it alone; an unknown colour is refused.
+    let r = f
+        .app
+        .patch(&f.owner, &path, json!({ "name": "Renamed", "color": null }))
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["color"], "purple");
+    f.app
+        .patch(&f.owner, &path, json!({ "color": "mauve" }))
+        .await
+        .assert_status(400);
+    let creator = f.member("cr@example.com", Role::Creator);
+    f.app
+        .patch(&creator, &path, json!({ "color": "red" }))
+        .await
+        .assert_status(403);
+
+    let schema = f
+        .app
+        .get(&f.owner, &format!("/api/bases/{}", f.base_id))
+        .await;
+    assert_eq!(schema.body["workspace_name"], "Renamed");
+    assert_eq!(schema.body["workspace_color"], "purple");
+
+    let invite = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/workspaces/{}/invites", f.ws),
+            json!({ "role": "viewer" }),
+        )
+        .await;
+    invite.assert_status(201);
+    let token = invite.body["url"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
+    let preview = f
+        .app
+        .get(&f.app.anon(), &format!("/api/invites/by-token/{token}"))
+        .await;
+    preview.assert_status(200);
+    assert_eq!(preview.body["target_color"], "purple");
+}
+
+#[tokio::test]
 async fn rename_trims_validates_and_returns_summary() {
     let f = Fixture::new().await;
     let r = f

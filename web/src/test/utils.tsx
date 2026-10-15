@@ -166,12 +166,13 @@ export function makeSchema(role: string, over: Partial<BaseSchema> = {}): BaseSc
     ],
     people: [],
     workspace_name: "Acme",
+    workspace_color: "green",
     ...over,
   };
 }
 
 export function makeWorkspace(role: string, bases: WorkspaceSummary["bases"] = []): WorkspaceSummary {
-  return { id: "wsp1", name: "Acme", role, bases, member_count: 1, pending_invite_count: 0 };
+  return { id: "wsp1", name: "Acme", color: "green", role, bases, member_count: 1, pending_invite_count: 0 };
 }
 
 export const ADMIN_USER_ROW: AdminUser = {

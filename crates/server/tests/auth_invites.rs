@@ -364,6 +364,7 @@ async fn preview_is_public_and_hides_invalid_invites() {
         json!({
             "target_name": "Acme",
             "target_icon": null,
+            "target_color": "blue",
             "target_kind": "workspace",
             "role": "commenter",
             "email": "z@example.com",

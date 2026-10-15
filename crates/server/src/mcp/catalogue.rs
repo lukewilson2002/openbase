@@ -146,7 +146,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "Workspaces the user belongs to, each with the bases they can open and who can open each (a base-limited token sees only its bases).",
         NO_BODY,
-        "WorkspaceSummary[] {id, name, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people}]}",
+        "WorkspaceSummary[] {id, name, icon, color, role, member_count, pending_invite_count, bases: [{id, name, role, workspace_id, color, icon, people}]}",
     ),
     e(
         POST,
@@ -154,8 +154,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "workspaces",
         "-",
         ManageUnscoped,
-        "Create a workspace; the caller becomes its owner. icon: a Lucide icon name in kebab-case (the REST API checks the format only; the MCP tool create_workspace checks the name and list_icons searches them).",
-        "{name, icon?}",
+        "Create a workspace; the caller becomes its owner. icon: a Lucide icon name in kebab-case (the REST API checks the format only; the MCP tool create_workspace checks the name and list_icons searches them). color: a palette colour like a base's (default: the next one the caller's workspaces don't use yet).",
+        "{name, icon?, color?}",
         "201 WorkspaceSummary",
     ),
     e(
@@ -164,8 +164,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "workspaces",
         "owner (workspace)",
         ManageUnscoped,
-        "Rename a workspace or change its icon (absent = unchanged, null = clear).",
-        "{name?, icon?}",
+        "Rename a workspace or change its icon (absent = unchanged, null = clear) or colour.",
+        "{name?, icon?, color?}",
         "WorkspaceSummary",
     ),
     e(
@@ -247,7 +247,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "The full schema of a base: tables, fields (with types and options), views, the caller's role and who can open the base.",
         NO_BODY,
-        "BaseSchema {id, name, color, icon, role, workspace_name, people: [{user_id, name, email, pending, role}], tables: [{id, name, icon, primary_field_id, fields, views}]}",
+        "BaseSchema {id, name, color, icon, role, workspace_name, workspace_color, people: [{user_id, name, email, pending, role}], tables: [{id, name, icon, primary_field_id, fields, views}]}",
     ),
     e(
         PATCH,
