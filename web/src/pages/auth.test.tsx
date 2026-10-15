@@ -179,12 +179,12 @@ describe("signup and invites", () => {
     expect(screen.queryByRole("button", { name: "Accept invitation" })).not.toBeInTheDocument();
   });
 
-  it("lets a signed-in user accept the invite and lands in the base", async () => {
+  it("lets a signed-in user accept an invite to one base and lands in it", async () => {
     const user = userEvent.setup();
     const api = mockApi({
       "GET /api/auth/me": USER,
-      "GET /api/invites/by-token/tok123": { target_name: "Roadmap", target_kind: "base", role: "viewer", invited_by: null },
-      "POST /api/invites/by-token/tok123/accept": { base_id: "app9" },
+      "GET /api/invites/by-token/tok123": { target_name: "Acme", target_kind: "workspace", role: "viewer", invited_by: null },
+      "POST /api/invites/by-token/tok123/accept": { workspace_id: "wsp1", all_bases: false, base_ids: ["app9"] },
       "GET /api/bases/app9": { status: 404, json: { error: { code: "not_found", message: "x" } } },
     });
     renderApp({ route: "/invite/tok123" });

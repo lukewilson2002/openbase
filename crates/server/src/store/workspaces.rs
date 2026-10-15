@@ -4,18 +4,170 @@
 //! functions here enforce data rules such as "a workspace always keeps at
 //! least one owner".
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use ob_core::api::workspaces::{BaseSummary, Member, WorkspaceSummary};
+use ob_core::api::workspaces::{BasePerson, BaseSummary, Member, WorkspaceSummary};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
-use crate::store::{bases, schema};
+use crate::store::{bases, invites, schema};
 
-fn summary_of(base: &bases::BaseRow, role: Role) -> BaseSummary {
+/// Which bases of a workspace a member (or an invite) gives access to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BaseAccess {
+    /// Every base, including bases created later.
+    All,
+    /// Only these bases.
+    Only(Vec<String>),
+}
+
+impl BaseAccess {
+    fn includes(&self, base_id: &str) -> bool {
+        match self {
+            BaseAccess::All => true,
+            BaseAccess::Only(ids) => ids.iter().any(|b| b == base_id),
+        }
+    }
+}
+
+/// Check a picked list of bases: at least one, each a live base of
+/// `workspace_id`. Returns the list without duplicates.
+pub fn validate_base_ids(
+    conn: &Connection,
+    workspace_id: &str,
+    base_ids: &[String],
+) -> AppResult<Vec<String>> {
+    if base_ids.is_empty() {
+        return Err(AppError::bad_request(
+            "pick at least one base, or give access to all bases",
+        ));
+    }
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for b in base_ids {
+        if !seen.insert(b.as_str()) {
+            continue;
+        }
+        let ok: bool = conn
+            .query_row(
+                "SELECT count(*) > 0 FROM bases
+                 WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NULL",
+                [b, workspace_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        if !ok {
+            return Err(AppError::bad_request(format!(
+                "base '{b}' is not a base of this workspace"
+            )));
+        }
+        out.push(b.clone());
+    }
+    Ok(out)
+}
+
+/// A member row: role and whether they have every base.
+fn member_row(
+    conn: &Connection,
+    workspace_id: &str,
+    user_id: &str,
+) -> AppResult<Option<(Role, bool)>> {
+    let row: Option<(String, bool)> = conn
+        .query_row(
+            "SELECT role, all_bases FROM workspace_members WHERE workspace_id = ?1 AND user_id = ?2",
+            [workspace_id, user_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(r, all)| Ok((Role::parse(&r)?, all))).transpose()
+}
+
+/// Live bases on a limited member's list, in display order.
+fn listed_live_bases(
+    conn: &Connection,
+    workspace_id: &str,
+    user_id: &str,
+) -> AppResult<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT b.id FROM workspace_member_bases mb JOIN bases b ON b.id = mb.base_id
+         WHERE mb.workspace_id = ?1 AND mb.user_id = ?2 AND b.deleted_at IS NULL
+         ORDER BY b.position, b.created_at, b.id",
+    )?;
+    let rows = stmt.query_map([workspace_id, user_id], |r| r.get(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+fn add_listed_bases(
+    conn: &Connection,
+    workspace_id: &str,
+    user_id: &str,
+    base_ids: &[String],
+) -> AppResult<()> {
+    for b in base_ids {
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_member_bases (workspace_id, user_id, base_id)
+             VALUES (?1, ?2, ?3)",
+            params![workspace_id, user_id, b],
+        )?;
+    }
+    Ok(())
+}
+
+/// Make `user_id` a member of `workspace_id` with `role` and `access`, or merge
+/// that into their membership: the higher role wins and base access is the
+/// union (all bases if either side has them). Owners always get all bases.
+pub fn grant(
+    conn: &Connection,
+    workspace_id: &str,
+    user_id: &str,
+    role: Role,
+    access: &BaseAccess,
+) -> AppResult<Role> {
+    let existing = member_row(conn, workspace_id, user_id)?;
+    let role = existing.map_or(role, |(r, _)| r.max(role));
+    let all = role == Role::Owner
+        || matches!(access, BaseAccess::All)
+        || existing.is_some_and(|(_, all)| all);
+    conn.execute(
+        "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role,
+                                                          all_bases = excluded.all_bases",
+        params![workspace_id, user_id, role.as_str(), all, now_ms()],
+    )?;
+    if all {
+        conn.execute(
+            "DELETE FROM workspace_member_bases WHERE workspace_id = ?1 AND user_id = ?2",
+            [workspace_id, user_id],
+        )?;
+    } else if let BaseAccess::Only(ids) = access {
+        add_listed_bases(conn, workspace_id, user_id, ids)?;
+    }
+    Ok(role)
+}
+
+/// A member without all bases who creates (or duplicates) a base gets it on
+/// their list; otherwise they could not open the base they just made.
+pub fn add_new_base_for_creator(
+    tx: &Transaction,
+    workspace_id: &str,
+    user_id: &str,
+    base_id: &str,
+) -> AppResult<()> {
+    tx.execute(
+        "INSERT OR IGNORE INTO workspace_member_bases (workspace_id, user_id, base_id)
+         SELECT workspace_id, user_id, ?3 FROM workspace_members
+         WHERE workspace_id = ?1 AND user_id = ?2 AND all_bases = 0",
+        params![workspace_id, user_id, base_id],
+    )?;
+    Ok(())
+}
+
+fn summary_of(base: &bases::BaseRow, role: Role, people: Vec<BasePerson>) -> BaseSummary {
     BaseSummary {
         id: base.id.clone(),
         workspace_id: base.workspace_id.clone(),
@@ -23,83 +175,112 @@ fn summary_of(base: &bases::BaseRow, role: Role) -> BaseSummary {
         color: base.color.clone(),
         icon: base.icon.clone(),
         role: role.as_str().to_string(),
+        people,
     }
 }
 
-/// `GET /api/workspaces`: workspaces the user belongs to (with their role and
-/// every live base, at the user's effective role), then workspaces the user
-/// only reaches through bases shared directly with them (role None, only
-/// those bases).
-pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<WorkspaceSummary>> {
-    let mut base_roles: HashMap<String, Role> = HashMap::new();
-    {
-        let mut stmt = conn.prepare("SELECT base_id, role FROM base_members WHERE user_id = ?1")?;
-        let rows = stmt.query_map([user_id], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        })?;
-        for row in rows {
-            let (base_id, role) = row?;
-            base_roles.insert(base_id, Role::parse(&role)?);
-        }
+/// Members and pending invites of a workspace, to answer "who can open this
+/// base" for each of its bases without a query per base.
+pub struct People {
+    members: Vec<Member>,
+    invites: Vec<invites::InviteRow>,
+}
+
+impl People {
+    pub fn load(conn: &Connection, workspace_id: &str) -> AppResult<People> {
+        Ok(People {
+            members: members(conn, workspace_id)?,
+            invites: invites::pending_for_workspace(conn, workspace_id)?,
+        })
     }
 
+    /// Members who can open `base_id`, then pending invites (sent to an
+    /// address) that would let someone open it. Unaddressed invite links are
+    /// left out: they are not a person yet.
+    pub fn for_base(&self, base_id: &str) -> Vec<BasePerson> {
+        let members = self
+            .members
+            .iter()
+            .filter(|m| member_can_open(m, base_id))
+            .map(|m| BasePerson {
+                user_id: Some(m.user_id.clone()),
+                name: m.name.clone(),
+                email: m.email.clone(),
+                pending: false,
+                role: m.role.clone(),
+            });
+        let invited = self
+            .invites
+            .iter()
+            .filter(|i| i.access().includes(base_id))
+            .filter_map(|i| {
+                let email = i.info.email.clone()?;
+                Some(BasePerson {
+                    user_id: None,
+                    name: email.clone(),
+                    email,
+                    pending: true,
+                    role: i.info.role.clone(),
+                })
+            });
+        members.chain(invited).collect()
+    }
+
+    fn member_count(&self) -> i64 {
+        self.members.len() as i64
+    }
+
+    fn pending_invite_count(&self) -> i64 {
+        self.invites.len() as i64
+    }
+}
+
+fn member_can_open(m: &Member, base_id: &str) -> bool {
+    m.all_bases || m.base_ids.iter().any(|b| b == base_id)
+}
+
+/// Who can open `base` (for the base schema and base cards).
+pub fn people_for_base(conn: &Connection, base: &bases::BaseRow) -> AppResult<Vec<BasePerson>> {
+    Ok(People::load(conn, &base.workspace_id)?.for_base(&base.id))
+}
+
+/// `GET /api/workspaces`: the workspaces the user is a member of, with their
+/// role, the live bases they can open, and who else can open each.
+pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<WorkspaceSummary>> {
     let mut out = Vec::new();
-    let member_of: Vec<(String, String, Option<String>, String)> = {
+    let member_of: Vec<(String, String, Option<String>, String, bool)> = {
         let mut stmt = conn.prepare(
-            "SELECT w.id, w.name, w.icon, m.role FROM workspace_members m
+            "SELECT w.id, w.name, w.icon, m.role, m.all_bases FROM workspace_members m
              JOIN workspaces w ON w.id = m.workspace_id
              WHERE m.user_id = ?1 AND w.deleted_at IS NULL
              ORDER BY w.created_at, w.id",
         )?;
         let rows = stmt.query_map([user_id], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })?;
         rows.collect::<Result<_, _>>()?
     };
-    for (id, name, icon, role) in member_of {
-        let ws_role = Role::parse(&role)?;
+    for (id, name, icon, role, all_bases) in member_of {
+        let role = Role::parse(&role)?;
+        let people = People::load(conn, &id)?;
+        let listed: HashSet<String> = if all_bases {
+            HashSet::new()
+        } else {
+            listed_live_bases(conn, &id, user_id)?.into_iter().collect()
+        };
         let bases = bases::live_bases_in(conn, &id)?
             .iter()
-            .map(|b| {
-                summary_of(
-                    b,
-                    base_roles.get(&b.id).map_or(ws_role, |r| ws_role.max(*r)),
-                )
-            })
+            .filter(|b| all_bases || listed.contains(&b.id))
+            .map(|b| summary_of(b, role, people.for_base(&b.id)))
             .collect();
         out.push(WorkspaceSummary {
             id,
             name,
             icon,
-            role: Some(ws_role.as_str().to_string()),
+            role: role.as_str().to_string(),
             bases,
-        });
-    }
-
-    let shared_only: Vec<(String, String, Option<String>)> = {
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT w.id, w.name, w.icon, w.created_at FROM base_members bm
-             JOIN bases b ON b.id = bm.base_id AND b.deleted_at IS NULL
-             JOIN workspaces w ON w.id = b.workspace_id AND w.deleted_at IS NULL
-             WHERE bm.user_id = ?1
-               AND NOT EXISTS (SELECT 1 FROM workspace_members wm
-                               WHERE wm.workspace_id = w.id AND wm.user_id = ?1)
-             ORDER BY w.created_at, w.id",
-        )?;
-        let rows = stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
-        rows.collect::<Result<_, _>>()?
-    };
-    for (id, name, icon) in shared_only {
-        let bases = bases::live_bases_in(conn, &id)?
-            .iter()
-            .filter_map(|b| base_roles.get(&b.id).map(|r| summary_of(b, *r)))
-            .collect();
-        out.push(WorkspaceSummary {
-            id,
-            name,
-            icon,
-            role: None,
-            bases,
+            member_count: people.member_count(),
+            pending_invite_count: people.pending_invite_count(),
         });
     }
     Ok(out)
@@ -121,16 +302,18 @@ pub fn create(
         params![id, name, icon, user_id, now],
     )?;
     tx.execute(
-        "INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
-         VALUES (?1, ?2, 'owner', ?3)",
+        "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+         VALUES (?1, ?2, 'owner', 1, ?3)",
         params![id, user_id, now],
     )?;
     Ok(WorkspaceSummary {
         id,
         name,
         icon,
-        role: Some(Role::Owner.as_str().to_string()),
+        role: Role::Owner.as_str().to_string(),
         bases: Vec::new(),
+        member_count: 1,
+        pending_invite_count: 0,
     })
 }
 
@@ -187,10 +370,26 @@ pub fn base_ids(conn: &Connection, workspace_id: &str) -> AppResult<Vec<String>>
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-/// Members of a workspace, oldest first.
+/// Members of a workspace, oldest first, with the bases each can open.
 pub fn members(conn: &Connection, workspace_id: &str) -> AppResult<Vec<Member>> {
+    let mut lists: HashMap<String, Vec<String>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT mb.user_id, b.id FROM workspace_member_bases mb
+             JOIN bases b ON b.id = mb.base_id
+             WHERE mb.workspace_id = ?1 AND b.deleted_at IS NULL
+             ORDER BY b.position, b.created_at, b.id",
+        )?;
+        let rows = stmt.query_map([workspace_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (user, base) = row?;
+            lists.entry(user).or_default().push(base);
+        }
+    }
     let mut stmt = conn.prepare(
-        "SELECT u.id, u.name, u.email, m.role FROM workspace_members m
+        "SELECT u.id, u.name, u.email, m.role, m.all_bases FROM workspace_members m
          JOIN users u ON u.id = m.user_id
          WHERE m.workspace_id = ?1 ORDER BY m.created_at, u.name, u.id",
     )?;
@@ -200,23 +399,21 @@ pub fn members(conn: &Connection, workspace_id: &str) -> AppResult<Vec<Member>> 
             name: r.get(1)?,
             email: r.get(2)?,
             role: r.get(3)?,
+            all_bases: r.get(4)?,
+            base_ids: Vec::new(),
         })
     })?;
-    Ok(rows.collect::<Result<_, _>>()?)
+    let mut out: Vec<Member> = rows.collect::<Result<_, _>>()?;
+    for m in out.iter_mut().filter(|m| !m.all_bases) {
+        m.base_ids = lists.remove(&m.user_id).unwrap_or_default();
+    }
+    Ok(out)
 }
 
 fn member_role(conn: &Connection, workspace_id: &str, user_id: &str) -> AppResult<Role> {
-    let role: Option<String> = conn
-        .query_row(
-            "SELECT role FROM workspace_members WHERE workspace_id = ?1 AND user_id = ?2",
-            [workspace_id, user_id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    match role {
-        Some(r) => Role::parse(&r),
-        None => Err(AppError::not_found("member")),
-    }
+    member_row(conn, workspace_id, user_id)?
+        .map(|(r, _)| r)
+        .ok_or_else(|| AppError::not_found("member"))
 }
 
 fn owner_count(conn: &Connection, workspace_id: &str) -> AppResult<i64> {
@@ -231,25 +428,114 @@ fn last_owner_error() -> AppError {
     AppError::conflict("a workspace must keep at least one owner")
 }
 
-/// Change a member's role. The last owner cannot be demoted.
-pub fn set_member_role(
+/// A change to a member: absent fields are unchanged.
+#[derive(Debug, Default)]
+pub struct MemberChange {
+    pub role: Option<Role>,
+    pub all_bases: Option<bool>,
+    pub base_ids: Option<Vec<String>>,
+}
+
+/// Change a member's role and/or the bases they can open. The last owner
+/// cannot be demoted; owners always have every base; a member limited to
+/// some bases keeps at least one.
+pub fn update_member(
     tx: &Transaction,
     workspace_id: &str,
     user_id: &str,
-    new_role: Role,
+    change: MemberChange,
 ) -> AppResult<()> {
-    let current = member_role(tx, workspace_id, user_id)?;
-    if current == Role::Owner && new_role != Role::Owner && owner_count(tx, workspace_id)? <= 1 {
+    let (current, current_all) =
+        member_row(tx, workspace_id, user_id)?.ok_or_else(|| AppError::not_found("member"))?;
+    let role = change.role.unwrap_or(current);
+    if current == Role::Owner && role != Role::Owner && owner_count(tx, workspace_id)? <= 1 {
         return Err(last_owner_error());
     }
+    let wants_limit = change.all_bases == Some(false)
+        || (change.base_ids.is_some() && change.all_bases != Some(true));
+    if role == Role::Owner && wants_limit {
+        return Err(AppError::bad_request(
+            "owners can always open every base; choose another role to limit their bases",
+        ));
+    }
+    let all = if role == Role::Owner {
+        true
+    } else {
+        match (change.all_bases, &change.base_ids) {
+            (Some(a), _) => a,
+            (None, Some(_)) => false,
+            (None, None) => current_all,
+        }
+    };
     tx.execute(
-        "UPDATE workspace_members SET role = ?3 WHERE workspace_id = ?1 AND user_id = ?2",
-        params![workspace_id, user_id, new_role.as_str()],
+        "UPDATE workspace_members SET role = ?3, all_bases = ?4
+         WHERE workspace_id = ?1 AND user_id = ?2",
+        params![workspace_id, user_id, role.as_str(), all],
+    )?;
+    if all {
+        tx.execute(
+            "DELETE FROM workspace_member_bases WHERE workspace_id = ?1 AND user_id = ?2",
+            [workspace_id, user_id],
+        )?;
+        return Ok(());
+    }
+    match change.base_ids {
+        Some(ids) => {
+            let ids = validate_base_ids(tx, workspace_id, &ids)?;
+            // Bases in the trash stay on the list: the member gets them back
+            // if the base is restored, and the client never sees them to resend.
+            tx.execute(
+                "DELETE FROM workspace_member_bases
+                 WHERE workspace_id = ?1 AND user_id = ?2
+                   AND base_id IN (SELECT id FROM bases WHERE deleted_at IS NULL)",
+                [workspace_id, user_id],
+            )?;
+            add_listed_bases(tx, workspace_id, user_id, &ids)?;
+        }
+        None if current_all => {
+            return Err(AppError::bad_request(
+                "pick the bases this member can open (base_ids), or keep all bases",
+            ));
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+/// Take one base off a limited member's list. Members with every base, and
+/// members for whom it is the last base, are changed elsewhere.
+pub fn remove_listed_base(
+    tx: &Transaction,
+    workspace_id: &str,
+    user_id: &str,
+    base_id: &str,
+) -> AppResult<()> {
+    let (_, all) =
+        member_row(tx, workspace_id, user_id)?.ok_or_else(|| AppError::not_found("member"))?;
+    if all {
+        return Err(AppError::bad_request(
+            "this member can open every base of the workspace; change their access on the \
+             workspace members page",
+        ));
+    }
+    let listed = listed_live_bases(tx, workspace_id, user_id)?;
+    if !listed.iter().any(|b| b == base_id) {
+        return Err(AppError::not_found("member"));
+    }
+    if listed.len() == 1 {
+        return Err(AppError::bad_request(
+            "this is the only base this member can open; remove them from the workspace instead",
+        ));
+    }
+    tx.execute(
+        "DELETE FROM workspace_member_bases WHERE workspace_id = ?1 AND user_id = ?2 AND base_id = ?3",
+        params![workspace_id, user_id, base_id],
     )?;
     Ok(())
 }
 
-/// Remove a member (or let them leave). The last owner cannot go.
+/// Remove a member (or let them leave); their base list goes with them. The
+/// last owner cannot go.
 pub fn remove_member(tx: &Transaction, workspace_id: &str, user_id: &str) -> AppResult<()> {
     let current = member_role(tx, workspace_id, user_id)?;
     if current == Role::Owner && owner_count(tx, workspace_id)? <= 1 {

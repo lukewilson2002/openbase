@@ -11,6 +11,42 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Changed
+
+- **One access model.** People get access only by being a member of a workspace. Each member
+  has one role there and either every base of the workspace (including bases created later) or
+  a picked list of bases; owners always have every base. Per-base roles and base-only members
+  are gone. A member limited to some bases who creates or duplicates a base gets it on their
+  list. `PATCH /api/workspaces/{id}/members/{user_id}` takes `role`, `all_bases` and
+  `base_ids`; members carry `all_bases` and `base_ids`; `GET /api/bases/{id}/members` lists the
+  workspace members who can open the base (any role may call it); `DELETE` on it takes the base
+  off a limited member's list, and `PATCH /api/bases/{id}/members/{user_id}` is removed.
+  `GET /api/workspaces` lists only workspaces you are a member of (with `role` always set),
+  with `member_count`, `pending_invite_count` and, for each base, `people` (who can open it,
+  including pending invites); `GET /api/bases/{id}` adds `people` and `workspace_name`.
+- **Invites always join a workspace**, giving every base or a list (`all_bases`, `base_ids`
+  on create and in listings). Owners invite from the workspace (every base by default); creators
+  invite from a base they can open (that base by default, or other bases they can open; never
+  every base, never above their own role). Accepting when already a member keeps the higher
+  role and adds up the bases. The invite page always names the workspace. The MCP tools
+  `set_member_role`, `create_invite`, `list_members`, `remove_member` and `list_invites` follow.
+- **Upgrading converts existing sharing (database schema 5)** without widening anyone's access:
+  someone who was only a member of individual bases becomes a workspace member limited to those
+  bases, with their highest role among them (a single-base owner becomes a creator, because
+  owners always have every base); someone who was already a workspace member keeps their
+  workspace role on all bases, and **a higher role they were given on a single base is
+  dropped** (a workspace viewer who was a creator on one base is now a viewer there too); base
+  invites become
+  workspace invites limited to that base. A snapshot of the old database is written to
+  `backups/` before the upgrade, as for every migration.
+
+### Added
+
+- `POST /api/workspaces/{id}/bases` accepts `empty: true` to create a base without tables;
+  without it a base still starts with "Table 1".
+- `intro_seen` on the signed-in user (`GET /api/auth/me`), set with `PATCH /api/auth/me`;
+  everyone, including existing accounts after the upgrade, starts with `false`.
+
 ### Fixed
 
 - Phones: tapping a text field no longer zooms the page in on iOS (form fields are 16px on touch

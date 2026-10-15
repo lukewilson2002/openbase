@@ -28,7 +28,7 @@ export function projectTable(views: View[]): Table {
 }
 
 export function projectSchema(role: string, views: View[]): BaseSchema {
-  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)] };
+  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)], people: [], workspace_name: "Acme" };
 }
 
 export function viewWithConfig(id: string, type: ViewType, patch: Partial<View["config"]>, over: Partial<View> = {}): View {

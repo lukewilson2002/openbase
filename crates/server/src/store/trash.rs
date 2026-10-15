@@ -235,25 +235,6 @@ fn workspace_role_any(
     role.as_deref().map(Role::parse).transpose()
 }
 
-/// Role of the user on a base even while the base is in the trash.
-fn base_role_any(conn: &Connection, user_id: &str, base_id: &str) -> AppResult<Option<Role>> {
-    let row: Option<(Option<String>, Option<String>)> = conn
-        .query_row(
-            "SELECT (SELECT role FROM workspace_members WHERE workspace_id = b.workspace_id AND user_id = ?2),
-                    (SELECT role FROM base_members WHERE base_id = b.id AND user_id = ?2)
-             FROM bases b WHERE b.id = ?1",
-            [base_id, user_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()?;
-    let Some((ws, base)) = row else {
-        return Ok(None);
-    };
-    let ws = ws.as_deref().map(Role::parse).transpose()?;
-    let base = base.as_deref().map(Role::parse).transpose()?;
-    Ok(ws.max(base))
-}
-
 /// Resolve `{kind, id}` to a [`Target`] and check the actor may restore it:
 /// Owner for workspaces and bases (session only), Creator for items inside a
 /// base, the owner for their own personal views.
@@ -286,7 +267,7 @@ pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppR
             {
                 return Err(AppError::not_found("base"));
             }
-            match base_role_any(conn, &actor.user_id, id)? {
+            match perm::base_role_including_trashed(conn, &actor.user_id, id)? {
                 None => Err(AppError::not_found("base")),
                 Some(r) if r < Role::Owner => Err(AppError::forbidden(
                     "this action requires the owner role on this base",

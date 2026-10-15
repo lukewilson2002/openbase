@@ -26,7 +26,8 @@ export function InvitePage() {
     mutationFn: () => api.invites.accept(token),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: keys.workspaces });
-      if (res?.base_id) navigate(`/base/${res.base_id}`, { replace: true });
+      const only = res && !res.all_bases && res.base_ids.length === 1 ? res.base_ids[0] : null;
+      if (only) navigate(`/base/${only}`, { replace: true });
       else navigate("/", { replace: true });
     },
   });

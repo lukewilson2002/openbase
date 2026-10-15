@@ -441,9 +441,20 @@ async fn duplicating_requires_creator_on_the_base_and_its_workspace() {
             "workspace role {role:?}"
         );
     }
-    // creator on the base only (no workspace role): cannot copy into a workspace they are not in
+    // a creator limited to this base may copy it, and can open the copy
     let guest = f.base_guest("guest@example.com", Role::Creator);
-    f.app.post(&guest, &url, json!({})).await.assert_status(404);
+    let res = f.app.post(&guest, &url, json!({})).await;
+    res.assert_status(201);
+    f.app
+        .get(
+            &guest,
+            &format!("/api/bases/{}", res.body["id"].as_str().unwrap()),
+        )
+        .await
+        .assert_status(200);
+    // a limited editor may not
+    let ed = f.base_guest("ed-guest@example.com", Role::Editor);
+    f.app.post(&ed, &url, json!({})).await.assert_status(403);
     // outsiders
     let outsider = f.app.user("o@example.com", "O");
     f.app

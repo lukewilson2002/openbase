@@ -533,9 +533,10 @@ async fn invite_preview_carries_the_target_icon() {
         .patch(&f.owner, &base_path(&f), json!({ "icon": "store" }))
         .await
         .assert_status(200);
+    // Every invite joins the workspace, so a base invite shows the workspace's icon too.
     for (url, icon) in [
         (format!("/api/workspaces/{}/invites", f.ws), "briefcase"),
-        (format!("/api/bases/{}/invites", f.base_id), "store"),
+        (format!("/api/bases/{}/invites", f.base_id), "briefcase"),
     ] {
         let res = f
             .app

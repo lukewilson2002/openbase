@@ -104,8 +104,8 @@ describe("OAuth consent page", () => {
       {
         "GET /api/workspaces": [
           makeWorkspace("owner", [
-            { id: "app1", workspace_id: "wsp1", name: "CRM", color: "green_dark", icon: null, role: "owner" },
-            { id: "app2", workspace_id: "wsp1", name: "Notes", color: "green_dark", icon: null, role: "owner" },
+            { id: "app1", workspace_id: "wsp1", name: "CRM", color: "green_dark", icon: null, role: "owner", people: [] },
+            { id: "app2", workspace_id: "wsp1", name: "Notes", color: "green_dark", icon: null, role: "owner", people: [] },
           ]),
         ],
       },

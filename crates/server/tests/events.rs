@@ -291,9 +291,12 @@ async fn removing_a_workspace_member_closes_their_stream() {
 }
 
 #[tokio::test]
-async fn removing_a_base_level_member_closes_their_stream() {
+async fn taking_a_base_off_a_members_list_closes_their_stream() {
     let f = Fixture::new().await;
+    let other = schema_support::base(&f.app, &f.owner, &f.ws, "Other").await;
+    let other_id = other["id"].as_str().unwrap().to_string();
     let guest = f.base_guest("guest@example.com", Role::Viewer);
+    schema_support::add_base_member(&f.app, &other_id, &guest, Role::Viewer);
     let guest_id = guest.user_id.clone().unwrap();
     let mut s = open(&f.app, &guest, &f.base_id).await.stream();
     f.app
@@ -304,6 +307,30 @@ async fn removing_a_base_level_member_closes_their_stream() {
         .await
         .assert_status(200);
     s.expect_closed(SOON).await;
+}
+
+#[tokio::test]
+async fn a_limited_member_streams_only_their_bases_and_loses_one_taken_away() {
+    let f = Fixture::new().await;
+    let other = schema_support::base(&f.app, &f.owner, &f.ws, "Other").await;
+    let other_id = other["id"].as_str().unwrap().to_string();
+    let guest = f.base_guest("guest@example.com", Role::Viewer);
+    let guest_id = guest.user_id.clone().unwrap();
+    // A base not on their list is refused like a base that does not exist.
+    let o = open(&f.app, &guest, &other_id).await;
+    assert_eq!(o.status, StatusCode::NOT_FOUND);
+    // Moving them to the other base on the members page closes the stream.
+    let mut s = open(&f.app, &guest, &f.base_id).await.stream();
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/workspaces/{}/members/{guest_id}", f.ws),
+            json!({ "base_ids": [other_id] }),
+        )
+        .await
+        .assert_status(200);
+    s.expect_closed(SOON).await;
+    assert_eq!(open(&f.app, &guest, &other_id).await.status, StatusCode::OK);
 }
 
 #[tokio::test]

@@ -52,6 +52,9 @@ pub struct User {
     pub timezone: Option<String>,
     #[serde(default)]
     pub totp_enabled: bool,
+    /// Whether the user has seen (or skipped) the introduction.
+    #[serde(default)]
+    pub intro_seen: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +99,8 @@ pub struct UpdateMeRequest {
     /// IANA zone, or empty string to clear (use browser zone).
     #[serde(default)]
     pub timezone: Option<String>,
+    #[serde(default)]
+    pub intro_seen: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,6 +205,15 @@ pub struct CreateInviteRequest {
     pub email: Option<String>,
     /// viewer | commenter | editor | creator | owner
     pub role: String,
+    /// Give access to every base of the workspace, including later ones.
+    /// Defaults to true for workspace invites and false for base invites
+    /// (which only owners may widen); always true for the owner role.
+    #[serde(default)]
+    pub all_bases: Option<bool>,
+    /// Bases the invitee can open when `all_bases` is false. Base invites
+    /// default to the base they were created from.
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -208,6 +222,8 @@ pub struct InviteInfo {
     pub id: String,
     #[serde(default)]
     pub workspace_id: Option<String>,
+    /// Always null: every invite is a workspace invite now (see `all_bases`
+    /// and `base_ids`). Kept so older clients still parse the response.
     #[serde(default)]
     pub base_id: Option<String>,
     #[serde(default)]
@@ -217,6 +233,10 @@ pub struct InviteInfo {
     pub expires_at: i64,
     #[serde(default)]
     pub accepted_at: Option<i64>,
+    /// Whether accepting gives access to every base of the workspace.
+    pub all_bases: bool,
+    /// The bases accepting gives access to when `all_bases` is false.
+    pub base_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

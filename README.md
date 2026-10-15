@@ -49,10 +49,12 @@ limited to some bases). Admin pages cover users, outgoing email (SMTP settings
 and a "Send test email" button, no restart needed), instance stats, the audit log
 and backups (list, create now, download).
 
-**Workspaces and sharing.** Workspaces with five roles: owner, creator, editor,
-commenter and viewer. Invites by link, or by email if SMTP is set up. Sharing per
-base: your effective role is the higher of your workspace role and your base
-role. Read-only view share links (optional password) and public form links.
+**Workspaces and sharing.** People get access by joining a workspace, with one
+of five roles (owner, creator, editor, commenter, viewer) and either every base
+of the workspace, including bases made later, or a picked list of bases. Owners
+always have every base. Invites by link, or by email if SMTP is set up; a
+creator can invite people to the bases they can open. Read-only view share
+links (optional password) and public form links show data to people outside.
 
 **Bases, tables and fields.** Create, rename, duplicate (with or without
 records), delete and restore bases and tables. 28 field types: single line text,
@@ -124,7 +126,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
 | SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords, passkeys and TOTP 2FA are solid. |
-| Field- and table-level permissions | Every write path would need an extra check. Five roles plus per-base sharing are enough for small teams. |
+| Field- and table-level permissions | Every write path would need an extra check. Five roles plus a per-member choice of bases are enough for small teams. |
 | S3 storage, multiple nodes, Postgres | Each adds a moving part. The design is one node, local disk and backups. |
 | Excel (.xlsx) and Airtable-base import | CSV covers it, since both Airtable and Excel export CSV. |
 | Airtable-style webhooks API | Automations ("record created / updated -> HTTP request") cover outbound notifications. |

@@ -11,22 +11,28 @@ const workspaces: WorkspaceSummary[] = [
     id: "wsp1",
     name: "Acme",
     role: "owner",
+    member_count: 1,
+    pending_invite_count: 0,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner" },
-      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner" },
+      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [] },
+      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner", people: [] },
     ],
   },
   {
     id: "wsp2",
     name: "Shared with me",
-    role: null,
-    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer" }],
+    role: "viewer",
+    member_count: 1,
+    pending_invite_count: 0,
+    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", people: [] }],
   },
   {
     id: "wsp3",
     name: "Read only space",
     role: "viewer",
-    bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", role: "viewer" }],
+    member_count: 1,
+    pending_invite_count: 0,
+    bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", role: "viewer", people: [] }],
   },
 ];
 
@@ -65,11 +71,6 @@ describe("home", () => {
     expect(within(ro).queryByRole("button", { name: /New base/ })).not.toBeInTheDocument();
     expect(within(ro).queryByRole("button", { name: "Actions for Wiki" })).not.toBeInTheDocument();
     expect(within(ro).getByRole("button", { name: "Workspace actions for Read only space" })).toBeInTheDocument();
-
-    // Only individual bases shared: no workspace role at all, so no workspace menu.
-    const shared = screen.getByRole("heading", { name: "Shared with me" }).closest("section")!;
-    expect(within(shared).queryByRole("button", { name: /Workspace actions/ })).not.toBeInTheDocument();
-    expect(within(shared).queryByRole("button", { name: /New base/ })).not.toBeInTheDocument();
   });
 
   it("only offers rename and delete of a workspace to its owner", async () => {
@@ -92,7 +93,7 @@ describe("home", () => {
       "GET /api/trash/workspaces": () => ({ items: deleted }),
       "POST /api/trash/restore": () => {
         deleted = [];
-        list = [{ id: "wspOld", name: "Old clients", role: "owner", bases: [] }];
+        list = [{ id: "wspOld", name: "Old clients", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 }];
         return { ok: true, restored_field_ids: [] };
       },
     });
@@ -140,7 +141,7 @@ describe("home", () => {
       "GET /api/auth/me": USER,
       "GET /api/workspaces": () => list,
       "POST /api/workspaces": (call) => {
-        list = [{ id: "wsp9", name: (call.body as { name: string }).name, role: "owner", bases: [] }];
+        list = [{ id: "wsp9", name: (call.body as { name: string }).name, role: "owner", bases: [], member_count: 1, pending_invite_count: 0 }];
         return list[0];
       },
     });
@@ -158,7 +159,7 @@ describe("home", () => {
     const api = mockApi({
       "GET /api/auth/me": USER,
       "GET /api/workspaces": workspaces,
-      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "New one", color: "pink", role: "owner" },
+      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "New one", color: "pink", role: "owner", people: [] },
     });
     renderApp();
     const acme = (await screen.findByRole("heading", { name: "Acme" })).closest("section")!;
@@ -246,12 +247,14 @@ describe("home icons", () => {
       name: "Acme",
       icon: "briefcase",
       role: "owner",
+      member_count: 1,
+      pending_invite_count: 0,
       bases: [
-        { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: "truck", role: "owner" },
-        { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner" },
+        { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: "truck", role: "owner", people: [] },
+        { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner", people: [] },
       ],
     },
-    { id: "wsp3", name: "Read only space", icon: "star", role: "viewer", bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", icon: "folder", role: "viewer" }] },
+    { id: "wsp3", name: "Read only space", icon: "star", role: "viewer", member_count: 1, pending_invite_count: 0, bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", icon: "folder", role: "viewer", people: [] }] },
   ];
   const tileOf = (el: HTMLElement) => el.querySelector("[data-entity-tile]")!;
 
@@ -306,7 +309,7 @@ describe("home icons", () => {
     const api = mockApi({
       "GET /api/auth/me": USER,
       "GET /api/workspaces": withIcons,
-      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "Fresh", color: "blue_dark", icon: "wallet", role: "owner" },
+      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "Fresh", color: "blue_dark", icon: "wallet", role: "owner", people: [] },
     });
     renderApp();
     const acme = (await screen.findByRole("heading", { name: "Acme" })).closest("section")!;

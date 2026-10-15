@@ -1,5 +1,6 @@
-//! Bases: create (with a starter table), schema view, update, trash,
-//! duplicate, base-level members and collaborators.
+//! Bases: create (with a starter table unless asked for an empty base),
+//! schema view, update, trash, duplicate, the members who can open a base and
+//! collaborators.
 
 use std::collections::HashMap;
 
@@ -13,7 +14,7 @@ use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
 use crate::store::schema::{self, PositionScope};
-use crate::store::{duplicate, tables};
+use crate::store::{duplicate, tables, workspaces};
 
 /// Colour of a base created without one.
 pub const DEFAULT_COLOR: &str = "blue";
@@ -76,8 +77,10 @@ pub fn live_bases_in(conn: &Connection, workspace_id: &str) -> AppResult<Vec<Bas
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-/// Create a base in `workspace_id` with a starter table "Table 1": primary
-/// field "Name", a long-text field "Notes" and a grid view "Grid view".
+/// Create a base in `workspace_id`, by default with a starter table "Table 1"
+/// (primary field "Name", a long-text field "Notes" and a grid view "Grid
+/// view"); with `empty: true`, without tables. A creator limited to some
+/// bases gets the new base on their list.
 pub fn create(
     tx: &Transaction,
     workspace_id: &str,
@@ -104,6 +107,10 @@ pub fn create(
             now_ms()
         ],
     )?;
+    workspaces::add_new_base_for_creator(tx, workspace_id, user_id, &id)?;
+    if input.empty == Some(true) {
+        return live_base(tx, &id);
+    }
     let table = tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
     let notes = Field {
         id: new_id(ob_core::ids::FIELD),
@@ -160,6 +167,12 @@ pub fn schema(
         icon: base.icon.clone(),
         role: role.as_str().to_string(),
         tables: out,
+        people: workspaces::people_for_base(conn, base)?,
+        workspace_name: conn.query_row(
+            "SELECT name FROM workspaces WHERE id = ?1",
+            [&base.workspace_id],
+            |r| r.get(0),
+        )?,
     })
 }
 
@@ -244,6 +257,7 @@ pub fn duplicate(
             now_ms()
         ],
     )?;
+    workspaces::add_new_base_for_creator(tx, &source.workspace_id, user_id, &id)?;
     duplicate::copy_tables(
         tx,
         &duplicate::CopyRequest {
@@ -259,64 +273,31 @@ pub fn duplicate(
 
 // ---------------------------------------------------------------- members
 
-/// Users who were given access to this base directly.
-pub fn members(conn: &Connection, base_id: &str) -> AppResult<Vec<Member>> {
-    let mut stmt = conn.prepare(
-        "SELECT u.id, u.name, u.email, m.role FROM base_members m
-         JOIN users u ON u.id = m.user_id
-         WHERE m.base_id = ?1 ORDER BY m.created_at, u.name, u.id",
-    )?;
-    let rows = stmt.query_map([base_id], |r| {
-        Ok(Member {
-            user_id: r.get(0)?,
-            name: r.get(1)?,
-            email: r.get(2)?,
-            role: r.get(3)?,
-        })
-    })?;
-    Ok(rows.collect::<Result<_, _>>()?)
+/// Workspace members who can open the base, oldest member first.
+pub fn members(conn: &Connection, base: &BaseRow) -> AppResult<Vec<Member>> {
+    Ok(workspaces::members(conn, &base.workspace_id)?
+        .into_iter()
+        .filter(|m| m.all_bases || m.base_ids.contains(&base.id))
+        .collect())
 }
 
-/// Change the role of a direct base member.
-pub fn set_member_role(
-    tx: &Transaction,
-    base_id: &str,
-    user_id: &str,
-    role: Role,
-) -> AppResult<()> {
-    let n = tx.execute(
-        "UPDATE base_members SET role = ?3 WHERE base_id = ?1 AND user_id = ?2",
-        params![base_id, user_id, role.as_str()],
-    )?;
-    if n == 0 {
-        return Err(AppError::not_found("member"));
-    }
-    Ok(())
+/// Take the base off a limited member's list (see
+/// [`workspaces::remove_listed_base`]).
+pub fn remove_member(tx: &Transaction, base: &BaseRow, user_id: &str) -> AppResult<()> {
+    workspaces::remove_listed_base(tx, &base.workspace_id, user_id, &base.id)
 }
 
-/// Remove a direct base member.
-pub fn remove_member(tx: &Transaction, base_id: &str, user_id: &str) -> AppResult<()> {
-    let n = tx.execute(
-        "DELETE FROM base_members WHERE base_id = ?1 AND user_id = ?2",
-        params![base_id, user_id],
-    )?;
-    if n == 0 {
-        return Err(AppError::not_found("member"));
-    }
-    Ok(())
-}
-
-/// Active users with any access to the base (workspace members plus direct
-/// base members), by name.
+/// Active users who can open the base, by name.
 pub fn collaborators(conn: &Connection, base: &BaseRow) -> AppResult<Vec<Collaborator>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT u.id, u.name, u.email FROM users u
-         WHERE u.is_active = 1
-           AND (u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id = ?1)
-                OR u.id IN (SELECT user_id FROM base_members WHERE base_id = ?2))
+         JOIN workspace_members m ON m.user_id = u.id
+         JOIN bases b ON b.workspace_id = m.workspace_id
+         WHERE u.is_active = 1 AND b.id = ?1 AND {}
          ORDER BY u.name COLLATE NOCASE, u.id",
-    )?;
-    let rows = stmt.query_map(params![base.workspace_id, base.id], |r| {
+        crate::perm::MEMBER_CAN_OPEN_BASE
+    ))?;
+    let rows = stmt.query_map(params![base.id], |r| {
         Ok(Collaborator {
             id: r.get(0)?,
             name: r.get(1)?,

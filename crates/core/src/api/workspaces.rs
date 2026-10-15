@@ -15,13 +15,30 @@ pub struct BaseSummary {
     /// Lucide icon name (kebab-case); the client falls back to the name's initial.
     #[serde(default)]
     pub icon: Option<String>,
-    /// Caller's effective role on the base.
+    /// Caller's role on the base (their workspace role).
+    pub role: RoleName,
+    /// Who can open this base: workspace members with access to it, then
+    /// pending invites that would give access to it.
+    pub people: Vec<BasePerson>,
+}
+
+/// Someone who can open a base, or will once they accept their invite.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct BasePerson {
+    /// None for a pending invite.
+    #[serde(default)]
+    pub user_id: Option<String>,
+    /// The member's name; for a pending invite, the invited email.
+    pub name: String,
+    /// Empty for a pending invite that is not restricted to an address.
+    pub email: String,
+    pub pending: bool,
     pub role: RoleName,
 }
 
-/// `GET /api/workspaces` item. Bases shared with the caller directly (base
-/// membership without workspace membership) appear under their workspace
-/// with `role: None` on the workspace.
+/// `GET /api/workspaces` item: a workspace the caller is a member of, with
+/// the bases they can open.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct WorkspaceSummary {
@@ -30,10 +47,12 @@ pub struct WorkspaceSummary {
     /// Lucide icon name (kebab-case); the client falls back to the name's initial.
     #[serde(default)]
     pub icon: Option<String>,
-    /// Caller's workspace role; None when only individual bases are shared.
-    #[serde(default)]
-    pub role: Option<RoleName>,
+    /// Caller's workspace role.
+    pub role: RoleName,
     pub bases: Vec<BaseSummary>,
+    pub member_count: i64,
+    /// Unaccepted, unexpired invites to the workspace.
+    pub pending_invite_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +86,10 @@ pub struct CreateBase {
     pub color: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
+    /// `true` creates the base without tables; by default it starts with
+    /// "Table 1" (fields Name and Notes, a grid view).
+    #[serde(default)]
+    pub empty: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -105,12 +128,25 @@ pub struct Member {
     pub name: String,
     pub email: String,
     pub role: RoleName,
+    /// Whether the member can open every base of the workspace, including
+    /// bases created later. Always true for owners.
+    pub all_bases: bool,
+    /// The bases a member without `all_bases` can open (empty otherwise).
+    pub base_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// `PATCH /api/workspaces/{id}/members/{user_id}`; absent fields are unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateMember {
-    pub role: RoleName,
+    #[serde(default)]
+    pub role: Option<RoleName>,
+    #[serde(default)]
+    pub all_bases: Option<bool>,
+    /// The bases the member can open; setting it turns `all_bases` off unless
+    /// `all_bases: true` is sent too.
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
 }
 
 /// Someone who can see a base (for user fields and @mentions).

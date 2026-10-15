@@ -253,16 +253,15 @@ describe("base shell", () => {
     it("manages members and invites at base level", async () => {
       const user = userEvent.setup();
       const api = openBase("creator", {
-        "GET /api/bases/app1/members": [{ user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", role: "commenter" }],
-        "GET /api/bases/app1/invites": [{ id: "inv1", workspace_id: null, base_id: "app1", email: "kim@example.com", role: "viewer", created_at: 1, expires_at: 1_900_000_000_000, accepted_at: null }],
+        "GET /api/bases/app1/members": [{ user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", role: "commenter", all_bases: false, base_ids: ["app1"] }],
+        "GET /api/bases/app1/invites": [{ id: "inv1", workspace_id: "wsp1", base_id: null, email: "kim@example.com", role: "viewer", created_at: 1, expires_at: 1_900_000_000_000, accepted_at: null, all_bases: false, base_ids: ["app1"] }],
         "DELETE /api/invites/inv1": { status: 204 },
       });
       await user.click(await screen.findByRole("button", { name: /Share/ }));
       const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
-      // A creator may grant up to creator, never owner.
-      const roleSelect = await within(dialog).findByLabelText("Role for Grace Hopper");
-      const options = within(roleSelect).getAllByRole("option").map((o) => o.textContent);
-      expect(options).toEqual(["Viewer", "Commenter", "Editor", "Creator"]);
+      // Roles belong to the workspace, so a base lists them without a role picker.
+      expect(await within(dialog).findByText("Grace Hopper")).toBeInTheDocument();
+      expect(within(dialog).queryByLabelText("Role for Grace Hopper")).not.toBeInTheDocument();
       await user.click(await within(dialog).findByRole("button", { name: "Revoke invite" }));
       await waitFor(() => expect(api.callsTo("DELETE /api/invites/inv1")).toHaveLength(1));
     });

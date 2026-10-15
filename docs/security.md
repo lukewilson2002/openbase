@@ -183,8 +183,11 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   `Strict-Transport-Security`.
 - **No dynamic SQL from user input.** User tables are JSON rows keyed by field id;
   adding, renaming or deleting a field never builds SQL from names.
-- **Roles are checked in one place** (`perm.rs`). No access answers 404 (no
-  existence leaks); insufficient role answers 403. API tokens can manage
+- **Roles are checked in one place** (`perm.rs`). Access comes only from workspace
+  membership: one role per member, for every base of the workspace or a picked list
+  (`workspace_member_bases`); the same SQL condition decides base access, collaborator
+  lists and notification recipients. No access answers 404 (no existence leaks);
+  insufficient role answers 403. API tokens can manage
   workspaces, members, invites and (for administrators) the admin pages only with
   the explicit `manage` permission, and can never touch credentials, 2FA, sessions
   or tokens (see below).
@@ -303,11 +306,15 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 - **Base-limited tokens** only see, and mark read, the notifications of their
   bases.
 - **Open event streams** end when their session or API token is deleted or
-  expires, the user is deactivated, or the role is lost (re-checked every 60 s).
-- **Invites** are valid only while their creator is active and still an Owner of
-  the workspace (Creator of the base) holding the invited role, and cannot be
-  accepted by their creator. Removing or demoting someone therefore voids what
-  they had pending.
+  expires, the user is deactivated, or access is lost: removal from the workspace or
+  the base taken off their list publishes `base_changed`, which re-checks access at
+  once (and it is re-checked every 60 s anyway).
+- **Invites** always join a workspace, for every base or a list of bases. They are
+  valid only while their creator is active and holds the invited role as an Owner of
+  the workspace or, for an invite limited to some bases, as a Creator who can still
+  open each of them; they cannot be accepted by their creator. Removing, demoting or
+  narrowing someone therefore voids what they had pending. Creators can never invite
+  to every base or to a base they cannot open.
 
 ## Passkeys
 
@@ -433,10 +440,8 @@ Authentication and email:
 - Any signed-in user can create a workspace and so send invite and automation
   emails to arbitrary addresses within the budgets. There is no setting to
   restrict workspace creation to admins; keep sign-up invite-only.
-- Removing a member from a workspace does not remove base-level grants they were
-  given separately by someone else (they are shown in the base's member list).
-  Self-granting by invite is closed, so such rows exist only if another owner or
-  creator added them.
+- A member limited to some bases still sees the workspace's member list (names and
+  email addresses of everyone in it), like any other member.
 - Reactivating a deactivated user restores their API tokens (see above); their connected
   apps (OAuth grants) were deleted when the account was deactivated.
 - **A passkey planted with a stolen session outlives a password reset.** Registering needs the

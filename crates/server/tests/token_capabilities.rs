@@ -55,9 +55,18 @@ impl Fx {
         let app = TestApp::new();
         let owner = app.admin("owner@example.com", "Owner");
         let (ws, base) = app.workspace_with_base(&owner, "Acme");
+        // A member limited to two bases, so taking one away is allowed.
+        let side = app
+            .post(
+                &owner,
+                &format!("/api/workspaces/{ws}/bases"),
+                json!({"name": "Side"}),
+            )
+            .await;
+        side.assert_status(201);
         let member = app.user("member@example.com", "Member");
-        app.grant_workspace_role(&member, &ws, "editor");
-        app.grant_base_role(&member, &base, "viewer");
+        app.grant_base_role(&member, &base, "editor");
+        app.grant_base_role(&member, side.body["id"].as_str().unwrap(), "editor");
         let ws_invite = app
             .post(
                 &owner,
@@ -338,17 +347,7 @@ const CASES: &[Case] = &[
         template: "/api/bases/{id}/members",
         path: |i| format!("/api/bases/{}/members", i.base),
         body: no_body,
-        min: Min::Role(Role::Owner),
-        ok: 200,
-        scoped: Scoped::Allowed,
-    },
-    Case {
-        name: "change base member role",
-        method: "PATCH",
-        template: "/api/bases/{id}/members/{user_id}",
-        path: |i| format!("/api/bases/{}/members/{}", i.base, i.member),
-        body: |_| Some(json!({"role": "commenter"})),
-        min: Min::Role(Role::Owner),
+        min: Min::Role(Role::Viewer),
         ok: 200,
         scoped: Scoped::Allowed,
     },

@@ -24,7 +24,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_workspaces",
             "List workspaces",
-            "List the workspaces you belong to with your role on each and the bases inside (a base-limited token sees only its bases). list_bases returns the same; use this one when you care about workspaces.",
+            "List the workspaces you belong to with your role on each, the bases inside you can open (with who else can open each) and member and pending-invite counts (a base-limited token sees only its bases). list_bases returns the same; use this one when you care about workspaces.",
             object(json!({}), &[]),
         ),
         ToolDef::new(
@@ -56,7 +56,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "remove_member",
             "Remove a member",
-            "Remove someone's access to a workspace or a single base (their role there disappears; access through the other level, if any, remains). A workspace always keeps an owner. Needs the manage permission and the owner role.",
+            "Scope 'workspace': remove someone from the workspace (they lose every base in it; a workspace always keeps an owner). Scope 'base': take that base off the list of a member who was given only some bases (not their last one; members with all bases are changed with set_member_role). You may also remove yourself. Needs the manage permission and the owner role.",
             object(
                 json!({
                     "scope": scope_schema(),
@@ -71,7 +71,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_invites",
             "List invites",
-            "List the pending invite links of a workspace (owner role) or a single base (creator role). Invite links are shown only when created (create_invite); this lists their ids, roles, emails and expiry so they can be revoked.",
+            "List the invite links of a workspace (owner role; accepted and expired included) or the pending ones that give access to a base (creator role). Invite links are shown only when created (create_invite); this lists their ids, roles, bases, emails and expiry so they can be revoked.",
             object(
                 json!({ "scope": scope_schema(), "id": string("Workspace id or base id.") }),
                 &["scope", "id"],

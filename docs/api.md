@@ -43,6 +43,32 @@ Roles are the owner's: Viewer < Commenter < Editor < Creator < Owner. Records
 can be written by Editors and above. The Airtable API changes no schema, except
 that `typecast` may add select options.
 
+### Who can open a base
+
+Access comes only from workspace membership. Each member has one role in the
+workspace and either every base (`all_bases`, including bases created later) or
+a picked list (`base_ids`); their role applies to each base they can open, and
+any other base answers 404. Owners always have every base. A member limited to
+some bases who creates or duplicates a base gets it added to their list.
+
+- `GET /api/workspaces` lists the caller's workspaces with the bases they can
+  open, `member_count`, `pending_invite_count` and, per base, `people` (members
+  who can open it, then pending invites sent to an address).
+- `GET|PATCH /api/workspaces/{id}/members[/{user_id}]`: members carry
+  `all_bases` and `base_ids`; the owner changes `role`, `all_bases` or
+  `base_ids` (at least one base; owners cannot be limited).
+- `GET /api/bases/{id}/members` (any role on the base) lists the members who can
+  open it; `DELETE /api/bases/{id}/members/{user_id}` takes the base off a
+  limited member's list (owners, or the member themself; not their last base,
+  and not for all-bases members).
+- Invites always join a workspace: `POST /api/workspaces/{id}/invites` (owners;
+  every base unless `base_ids` is given) or `POST /api/bases/{id}/invites`
+  (creators of that base; that base unless `base_ids` lists other bases they can
+  open; never `all_bases`, never above their role). Accepting keeps the higher
+  of the invited and existing role and adds up the bases.
+- `POST /api/workspaces/{id}/bases` accepts `empty: true` for a base without
+  tables; by default it starts with "Table 1".
+
 ### Token permissions
 
 Every endpoint of the internal API (`/api/...`) falls into one of these classes.
@@ -52,7 +78,7 @@ The class is decided in one place (`Actor::require_capability`), and
 | Class | Read-only token | Write token | Write + `manage` token | Session |
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
-| **Manage**: create / rename / delete / restore workspaces, workspace and base members (role changes, removal), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone) | 403 | 403 | yes (the owner's role still applies) | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace members (role and base access changes, removal), the members of a base (listing, taking a base off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
@@ -66,8 +92,8 @@ A request that needs `manage` and does not have it answers `403` with a message 
 names the `manage` permission. Actions that reach beyond a single base (workspaces,
 workspace members and invites, the admin pages) are also refused for a `manage` token
 that is limited to specific bases (`base_ids`): such a token cannot touch what it
-cannot see. Base-level management (deleting a base, base members, base invites,
-restoring a base) works on the bases in its list only; others answer 404. Credentials,
+cannot see. Base-level management (deleting a base, the members of a base, base
+invites, restoring a base) works on the bases in its list only; others answer 404. Credentials,
 sessions and tokens are never reachable with a token, so a leaked token cannot take
 over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` reports
 `write` and `manage`.

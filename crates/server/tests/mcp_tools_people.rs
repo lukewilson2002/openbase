@@ -101,6 +101,8 @@ async fn members_and_invites_for_workspaces_and_bases() {
         .find(|m| m["user_id"] == guest_id)
         .unwrap_or_else(|| panic!("guest in {members}"));
     assert_eq!(row["role"], "commenter");
+    assert_eq!(row["all_bases"], false);
+    assert_eq!(row["base_ids"], json!([r.base]));
     let collab = a
         .call("list_collaborators", json!({"base_id": r.base}))
         .await;
@@ -112,26 +114,42 @@ async fn members_and_invites_for_workspaces_and_bases() {
             .any(|c| c["email"] == "guest@example.com")
     );
 
+    // There are no per-base roles: the tool points to the workspace.
+    let e = a
+        .fails(
+            "set_member_role",
+            json!({"scope": "base", "id": r.base, "user_id": guest_id, "role": "editor"}),
+        )
+        .await;
+    assert!(e.contains("scope 'workspace'"), "{e}");
     a.call(
         "set_member_role",
-        json!({"scope": "base", "id": r.base, "user_id": guest_id, "role": "editor"}),
+        json!({"scope": "workspace", "id": r.ws, "user_id": guest_id, "role": "editor"}),
     )
     .await;
     let members = a
         .call("list_members", json!({"scope": "base", "id": r.base}))
         .await;
-    assert_eq!(
-        members["members"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|m| m["user_id"] == guest_id)
-            .unwrap()["role"],
-        "editor"
-    );
+    let row = members["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["user_id"] == guest_id)
+        .unwrap()
+        .clone();
+    assert_eq!(row["role"], "editor");
+    assert_eq!(row["all_bases"], false, "a role change keeps their bases");
+    // Their only base cannot be taken away on its own.
+    let e = a
+        .fails(
+            "remove_member",
+            json!({"scope": "base", "id": r.base, "user_id": guest_id}),
+        )
+        .await;
+    assert!(e.contains("remove them from the workspace"), "{e}");
     a.call(
         "remove_member",
-        json!({"scope": "base", "id": r.base, "user_id": guest_id}),
+        json!({"scope": "workspace", "id": r.ws, "user_id": guest_id}),
     )
     .await;
     let members = a
@@ -337,7 +355,7 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
     let e = creator
         .fails(
             "set_member_role",
-            json!({"scope": "base", "id": b, "user_id": "usrX", "role": "viewer"}),
+            json!({"scope": "workspace", "id": r.ws, "user_id": "usrX", "role": "viewer"}),
         )
         .await;
     assert!(e.contains("owner role"), "{e}");

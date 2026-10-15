@@ -8,4 +8,15 @@ email?: string | null,
 /**
  * viewer | commenter | editor | creator | owner
  */
-role: string, };
+role: string, 
+/**
+ * Give access to every base of the workspace, including later ones.
+ * Defaults to true for workspace invites and false for base invites
+ * (which only owners may widen); always true for the owner role.
+ */
+all_bases?: boolean | null, 
+/**
+ * Bases the invitee can open when `all_bases` is false. Base invites
+ * default to the base they were created from.
+ */
+base_ids?: Array<string> | null, };
