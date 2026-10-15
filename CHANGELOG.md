@@ -61,8 +61,30 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 - **One Share dialog** with two tabs: Invite people and Share a view.
 - New bases start empty, with "Create your first table". Tables and their views live in the
   sidebar; the table tabs and the views panel are gone.
-- The view toolbar folds its tools into one "Tools" button (remembered on each device) next to
-  a primary "Add" button.
+- **Inbox** at the top of every sidebar replaces the bell in the header: an unread count, and a
+  panel beside the sidebar with your notifications and "Mark all as read". On phones the menu
+  button shows a dot while something is unread.
+- **Search everything** in the top bar (Ctrl+K or ⌘K) finds workspaces, bases, tables, views and
+  records in everything you can open; on phones it is a search button.
+- **The sidebar lists your workspaces as a tree.** Each workspace opens into Bases, Members, Trash
+  and (for owners) Settings; account settings moved to the profile menu.
+- **Inside a base**, the header reads "Workspace ⌄ / Base ⌄": both are menus, and the base menu
+  starts with "Workspace home" and holds Rename base and Change icon. Each base's colour tints
+  its tile and its Add button; workspaces have solid tiles in their colour.
+- **The view toolbar is one row**: the table and view picker, Filter, Sort, Group and Hide fields
+  (each tinted and labelled when in use, such as "Sorted by Who"), the view's own setting, a More
+  menu (Color, Row height, Download CSV and per-view options), search and Add. Counts read
+  "N items".
+- **Every view type is redrawn**: the grid sits in a card; kanban stacks end with "+ Add" and their
+  count; the calendar has its own header with a Month | Week | List switch and a foldable
+  Unscheduled column; the timeline shows one row per record with a fixed name column; the list
+  folds its groups; the form builder shows its settings beside a live preview. Kanban, calendar
+  and timeline ask for their field on a full "choose a field" screen.
+- **One Trash page** lists everything you can restore, from every workspace, with workspace, base
+  and type filters, who deleted each item and how many days are left. The Trash links in a
+  workspace and in a base open it filtered to them; the trash dialog inside a base is gone.
+- **Members** shows each person's bases and role in one row, and pending invites can be changed
+  in place. Faces are solid circles in each person's colour, with the leftmost face on top.
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` to create a base without tables;
   without it a base still starts with "Table 1".
 - `intro_seen` on the signed-in user (`GET /api/auth/me`), set with `PATCH /api/auth/me`;
