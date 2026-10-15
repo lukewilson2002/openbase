@@ -23,25 +23,46 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   off a limited member's list, and `PATCH /api/bases/{id}/members/{user_id}` is removed.
   `GET /api/workspaces` lists only workspaces you are a member of (with `role` always set),
   with `member_count`, `pending_invite_count` and, for each base, `people` (who can open it,
-  including pending invites); `GET /api/bases/{id}` adds `people` and `workspace_name`.
+  including pending invites); `GET /api/bases/{id}` adds `people` and `workspace_name`. In
+  member listings, callers who are not workspace owners only see the `base_ids` they can open.
 - **Invites always join a workspace**, giving every base or a list (`all_bases`, `base_ids`
   on create and in listings). Owners invite from the workspace (every base by default); creators
   invite from a base they can open (that base by default, or other bases they can open; never
-  every base, never above their own role). Accepting when already a member keeps the higher
-  role and adds up the bases. The invite page always names the workspace. The MCP tools
+  every base, never above their own role). Accepting when already a member adds up the bases
+  and keeps the higher role; an invite from a creator never raises an existing member's role.
+  A base-limited API token cannot create an invite to every base or at the owner role. The
+  invite page always names the workspace. The MCP tools
   `set_member_role`, `create_invite`, `list_members`, `remove_member` and `list_invites` follow.
-- **Upgrading converts existing sharing (database schema 5)** without widening anyone's access:
-  someone who was only a member of individual bases becomes a workspace member limited to those
-  bases, with their highest role among them (a single-base owner becomes a creator, because
-  owners always have every base); someone who was already a workspace member keeps their
-  workspace role on all bases, and **a higher role they were given on a single base is
-  dropped** (a workspace viewer who was a creator on one base is now a viewer there too); base
-  invites become
-  workspace invites limited to that base. A snapshot of the old database is written to
-  `backups/` before the upgrade, as for every migration.
+- **Upgrading converts existing sharing (database schema 5).** Someone who was only a member of
+  individual bases becomes a workspace member limited to those bases, with their highest role
+  among them (a single-base owner becomes a creator, because owners always have every base).
+  Being a workspace member, they can now see the workspace's member list, and a base-level
+  creator or owner becomes a workspace creator, which lets them add new bases to the workspace.
+  Bases in the trash (or in a trashed workspace) do not count: access to them goes away, and
+  someone who was only on such bases becomes no member at all. Someone who was already a
+  workspace member keeps their workspace role on all bases, and **a higher role they were given
+  on a single base is dropped** (a workspace viewer who was a creator on one base is now a viewer
+  there too). Base invites become workspace invites limited to that base; invites to trashed
+  bases are deleted. A snapshot of the old database is written to `backups/` before the upgrade,
+  as for every migration.
 
 ### Added
 
+- **A first-run intro** to bases, tables, workspaces and the assistant, shown once per account;
+  replay it from the profile menu. The setup page is friendlier and no longer asks you to
+  confirm the password.
+- **A new app shell.** A menu button at the top left opens the sidebar, which you can resize and
+  collapse (remembered on each device); on phones it is a drawer. Your profile menu sits at the
+  bottom of the sidebar. Home opens the workspace you used last, or offers "Create your first
+  workspace".
+- **Workspace page** with avatars of who can open each base (dashed for pending invites); on
+  phones, Import and New base float at the bottom. A **Members page** sets each member's role
+  and the bases they can open.
+- **One Share dialog** with two tabs: Invite people and Share a view.
+- New bases start empty, with "Create your first table". Tables and their views live in the
+  sidebar; the table tabs and the views panel are gone.
+- The view toolbar folds its tools into one "Tools" button (remembered on each device) next to
+  a primary "Add" button.
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` to create a base without tables;
   without it a base still starts with "Table 1".
 - `intro_seen` on the signed-in user (`GET /api/auth/me`), set with `PATCH /api/auth/me`;
