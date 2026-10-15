@@ -32,7 +32,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
     onSuccess: async () => {
       rememberWorkspace(null);
       await qc.invalidateQueries({ queryKey: keys.workspaces });
-      void qc.invalidateQueries({ queryKey: keys.deletedWorkspaces });
+      void qc.invalidateQueries({ queryKey: keys.trash });
       await navigate("/", { replace: true });
     },
   });

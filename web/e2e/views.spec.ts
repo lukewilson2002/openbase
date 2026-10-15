@@ -298,12 +298,12 @@ test.describe("trash and notifications", () => {
     const del = await page.request.delete(`/api/tables/${fx.tableId}/records`, { data: { ids: [doomed] }, headers: CSRF });
     expect(del.ok()).toBeTruthy();
     await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.views.list}`);
-    await page.getByRole("button", { name: "Trash" }).click();
-    const dialog = page.getByRole("dialog", { name: "Trash" });
-    await expect(dialog.getByText(/30 days/)).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: /Records/ })).toBeVisible();
-    await dialog.getByRole("button", { name: "Restore Doomed" }).click();
-    await expect(dialog.getByText("Doomed")).toHaveCount(0);
+    await page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: "Trash" }).click();
+    await expect(page.getByText(/Things stay here for \d+ days/)).toBeVisible();
+    const list = page.getByRole("list", { name: "Deleted items" });
+    await expect(list.getByText("Doomed")).toBeVisible();
+    await list.getByRole("button", { name: "Restore Doomed" }).click();
+    await expect(list.getByText("Doomed")).toHaveCount(0);
     expect((await record(page, doomed)).values[fx.fields.name]).toBe("Doomed");
   });
 
