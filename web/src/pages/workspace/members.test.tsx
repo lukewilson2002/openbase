@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InviteInfo, Member, WorkspaceSummary } from "@/api/types";
 import { USER, mockApi, renderApp, type Handler } from "@/test/utils";
@@ -87,6 +88,21 @@ describe("members page", () => {
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr3")[0]?.body).toEqual({ all_bases: false, base_ids: ["app2"] }));
   });
 
+  it("will not save access to no base at all", async () => {
+    const user = userEvent.setup();
+    const api = routes();
+    renderApp({ route: "/workspace/wsp1/members" });
+    const tori = await row("Tori Smith");
+    await user.click(within(tori).getByRole("button", { name: /Bases Tori Smith can open/ }));
+    await user.click(within(tori).getByRole("checkbox", { name: "Chores" }));
+    expect(within(tori).getByText("Pick at least one base, or remove them from the workspace.")).toBeInTheDocument();
+    expect(within(tori).getByRole("button", { name: "Save access" })).toBeDisabled();
+    // "All bases" is a valid choice again.
+    await user.click(within(tori).getByRole("checkbox", { name: "All bases, including new ones" }));
+    expect(within(tori).getByRole("button", { name: "Save access" })).toBeEnabled();
+    expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")).toHaveLength(0);
+  });
+
   it("gives every base, including new ones", async () => {
     const user = userEvent.setup();
     const api = routes({ "PATCH /api/workspaces/wsp1/members/usr4": { ok: true } });
@@ -146,6 +162,40 @@ describe("members page", () => {
     expect(screen.getByText("Email is not set up on this server, so send jordan@example.com this link yourself:")).toBeInTheDocument();
   });
 
+  it("leaves trashed bases off a resent invite, and cannot resend one whose bases are all gone", async () => {
+    const user = userEvent.setup();
+    const partly: InviteInfo = { ...invite, base_ids: ["app2", "appGone"] };
+    const gone: InviteInfo = { ...invite, id: "inv3", email: "gone@example.com", base_ids: ["appGone"] };
+    const api = routes({
+      "GET /api/workspaces/wsp1/invites": [partly, gone],
+      "POST /api/workspaces/wsp1/invites": { url: "https://base.example.org/invite/newtoken", info: { ...invite, id: "inv2" } },
+      "DELETE /api/invites/inv1": { status: 204 },
+    });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const goneRow = await screen.findByRole("listitem", { name: "gone@example.com, invited" });
+    const goneResend = within(goneRow).getByRole("button", { name: "Resend" });
+    expect(goneResend).toBeDisabled();
+    expect(goneResend).toHaveAttribute("title", "Its bases are in the trash. Cancel it and invite them again.");
+    expect(within(goneRow).getByRole("button", { name: "Cancel invite" })).toBeEnabled();
+
+    const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
+    await user.click(within(pending).getByRole("button", { name: "Resend" }));
+    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(1));
+    expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]!.body).toEqual({ email: "jordan@example.com", role: "viewer", all_bases: false, base_ids: ["app2"] });
+  });
+
+  it("refreshes the bases' faces and the workspace list after a change", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    routes({ "DELETE /api/invites/inv1": { status: 204 } });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
+    await user.click(within(pending).getByRole("button", { name: "Cancel invite" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ["base"] }));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["workspaces"] });
+    spy.mockRestore();
+  });
+
   it("cancels an invite", async () => {
     const user = userEvent.setup();
     const api = routes({ "DELETE /api/invites/inv1": { status: 204 } });
@@ -156,16 +206,53 @@ describe("members page", () => {
   });
 
   it("is read-only for someone who is not an owner, without asking for the invites", async () => {
-    const api = routes({ "GET /api/workspaces": [{ ...ws, role: "editor" }] });
+    const me: Member = { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "editor", all_bases: false, base_ids: ["app1"] };
+    const api = routes({ "GET /api/workspaces": [{ ...ws, role: "editor" }], "GET /api/workspaces/wsp1/members": [me, ...members.slice(1)] });
     renderApp({ route: "/workspace/wsp1/members" });
     const tori = await row("Tori Smith");
-    expect(within(tori).getByText("Chores only")).toBeInTheDocument();
     expect(within(tori).getByText("Editor")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Bases .* can open/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Actions for/ })).not.toBeInTheDocument();
+    // Only their own row has actions (to leave).
+    expect(screen.getAllByRole("button", { name: /Actions for/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["Actions for Ada Lovelace"]);
     expect(screen.queryByRole("button", { name: /Invite people/ })).not.toBeInTheDocument();
     expect(api.callsTo("GET /api/workspaces/wsp1/invites")).toHaveLength(0);
+  });
+
+  it("tells someone who is not an owner only whether a member has every base", async () => {
+    routes({ "GET /api/workspaces": [{ ...ws, role: "editor" }] });
+    renderApp({ route: "/workspace/wsp1/members" });
+    // They cannot see every base or anyone's full list, so no counts or names.
+    expect(within(await row("Tori Smith")).getByText("Some bases")).toBeInTheDocument();
+    expect(within(await row("Kim Park")).getByText("Some bases")).toBeInTheDocument();
+    expect(within(await row("Sam Lee")).getByText("All bases")).toBeInTheDocument();
+    expect(within(await row("Ada Lovelace")).getByText("All bases")).toBeInTheDocument();
+  });
+
+  it("lets someone who is not an owner leave, then goes home", async () => {
+    const user = userEvent.setup();
+    const me: Member = { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "viewer", all_bases: true, base_ids: [] };
+    const owner: Member = { user_id: "usr9", name: "Olive Owner", email: "olive@example.com", role: "owner", all_bases: true, base_ids: [] };
+    const api = routes({ "GET /api/workspaces/wsp1/members": [owner, me], "DELETE /api/workspaces/wsp1/members/usr1": { ok: true } });
+    api.set("GET /api/workspaces", () => (api.callsTo("DELETE /api/workspaces/wsp1/members/usr1").length ? [] : [{ ...ws, role: "viewer" }]));
+    renderApp({ route: "/workspace/wsp1/members" });
+    expect(screen.queryByRole("button", { name: "Actions for Olive Owner" })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Actions for Ada Lovelace" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Leave workspace" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("Leave Household?");
+    await user.click(within(confirm).getByRole("button", { name: "Leave workspace" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/workspaces/wsp1/members/usr1")).toHaveLength(1));
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
+  });
+
+  it("does not let the only owner leave, and says why", async () => {
+    const user = userEvent.setup();
+    routes();
+    renderApp({ route: "/workspace/wsp1/members" });
+    await user.click(await screen.findByRole("button", { name: "Actions for Ada Lovelace" }));
+    expect(await screen.findByRole("menuitem", { name: "Leave workspace" })).toHaveAttribute("data-disabled");
+    expect(screen.getByText("You are the only owner. Make someone else an owner first.")).toBeInTheDocument();
   });
 
   it("opens the invite dialog from Invite people", async () => {

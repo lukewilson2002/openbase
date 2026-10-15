@@ -171,7 +171,14 @@ async fn list_members(
         .read(move |c| {
             perm::require_base(c, &actor, &id, Role::Viewer)?;
             let base = bases::live_base(c, &id)?;
-            bases::members(c, &base)
+            let mut members = bases::members(c, &base)?;
+            crate::api::workspaces::hide_unopenable_bases(
+                c,
+                &actor,
+                &base.workspace_id,
+                &mut members,
+            )?;
+            Ok(members)
         })
         .await?;
     Ok(Json(out))

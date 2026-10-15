@@ -60,6 +60,16 @@ describe("Share dialog: invite people", () => {
     expect(within(dialog).getByRole("link", { name: "Manage all members" })).toHaveAttribute("href", "/workspace/wsp1/members");
   });
 
+  it.each(["viewer", "commenter", "editor"])("from a base, tells a %s whom to ask instead of showing the form", async (role) => {
+    const api = routes(role);
+    fromBase(role);
+    const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Only creators and owners can invite people. Ask one of them, or share a view.");
+    expect(within(dialog).queryByRole("form", { name: "Invite people" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /Send invite/ })).not.toBeInTheDocument();
+    expect(api.callsTo("POST /api/bases/app1/invites")).toHaveLength(0);
+  });
+
   it("will not send an invite to no base at all", async () => {
     const user = userEvent.setup();
     routes("creator");

@@ -742,3 +742,42 @@ async fn owners_always_have_every_base() {
         .await
         .assert_status(200);
 }
+
+#[tokio::test]
+async fn member_lists_only_show_non_owners_the_bases_they_can_open() {
+    let f = Fixture::new().await;
+    let secret = base(&f.app, &f.owner, &f.ws, "Secret").await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    // `both` can open the shared base and the secret one; `guest` only the shared one.
+    let both = f.base_guest("both@example.com", Role::Editor);
+    add_base_member(&f.app, &secret, &both, Role::Editor);
+    let guest = f.base_guest("guest@example.com", Role::Viewer);
+    let creator = f.app.user("creator@example.com", "Creator");
+    add_ws_member(&f.app, &f.ws, &creator, Role::Creator);
+
+    let bases_of =
+        |body: &serde_json::Value| member_of(body, "both@example.com")["base_ids"].clone();
+    let ws_members = format!("/api/workspaces/{}/members", f.ws);
+    let base_members = format!("/api/bases/{}/members", f.base_id);
+    for path in [&ws_members, &base_members] {
+        let r = f.app.get(&guest, path).await;
+        r.assert_status(200);
+        assert_eq!(bases_of(&r.body), json!([f.base_id]), "{path}");
+        // An all-bases member who is not an owner can open both, so sees both.
+        let r = f.app.get(&creator, path).await;
+        assert_eq!(bases_of(&r.body), json!([f.base_id, secret]), "{path}");
+        let r = f.app.get(&f.owner, path).await;
+        assert_eq!(bases_of(&r.body), json!([f.base_id, secret]), "{path}");
+    }
+    // An owner's token limited to the shared base sees what that token can open.
+    let token = f
+        .app
+        .api_token(
+            &f.owner,
+            json!({"name": "lim", "write": true, "manage": true, "base_ids": [f.base_id]}),
+        )
+        .await;
+    let r = f.app.get(&token, &base_members).await;
+    r.assert_status(200);
+    assert_eq!(bases_of(&r.body), json!([f.base_id]));
+}

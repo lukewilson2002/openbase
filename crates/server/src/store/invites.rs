@@ -345,8 +345,9 @@ pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview
 }
 
 /// Accept a valid invite for a user: enforce the email restriction, grant the
-/// role and base access (merged with any membership they already have) and
-/// mark the invite used. Returns the updated invite.
+/// role and base access (merged with any membership they already have; only
+/// an owner's invite can raise an existing member's role) and mark the invite
+/// used. Returns the updated invite.
 pub fn accept(
     conn: &Connection,
     invite: &InviteRow,
@@ -376,13 +377,24 @@ pub fn accept(
             "invite (it may have already been used)",
         ));
     }
-    workspaces::grant(
-        conn,
-        invite.workspace_id()?,
-        user_id,
-        invite.role()?,
-        &invite.access(),
-    )?;
+    let ws = invite.workspace_id()?;
+    let mut role = invite.role()?;
+    // A workspace role applies to every base the member can open, so letting
+    // a creator's invite raise an existing member would promote them on
+    // bases the creator has no say over (a viewer of B made creator of B by
+    // someone limited to A). Such an invite only adds its bases, at the
+    // member's current role; that role is below owner (owners have every
+    // base already), so it never exceeds what the creator could have given.
+    if let Some(existing) = perm::workspace_role(conn, user_id, ws)? {
+        let by_owner = match &invite.created_by {
+            Some(c) => perm::workspace_role(conn, c, ws)? == Some(Role::Owner),
+            None => false,
+        };
+        if !by_owner {
+            role = existing;
+        }
+    }
+    workspaces::grant(conn, ws, user_id, role, &invite.access())?;
     let mut info = invite.info.clone();
     info.accepted_at = Some(now);
     Ok(info)
@@ -521,6 +533,44 @@ mod tests {
             .unwrap();
         assert!(find_valid_by_token(&c, &token2).unwrap().is_none());
         assert!(find_valid_by_token(&c, "inv_nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_creator_invite_adds_bases_to_an_existing_member_but_never_raises_their_role() {
+        let (c, owner, ws) = db();
+        c.execute(
+            "INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('app2', 'wsp1', 'Ops', 0)",
+            [],
+        )
+        .unwrap();
+        let creator = users::create(&c, "cr@example.com", "Cr", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &creator, Role::Creator, &only(&["app1"])).unwrap();
+        let limited = users::create(&c, "l@example.com", "L", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &limited, Role::Viewer, &only(&["app2"])).unwrap();
+        let everywhere = users::create(&c, "e@example.com", "E", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &everywhere, Role::Viewer, &BaseAccess::All).unwrap();
+        let invite_and_accept = |by: &str, user: &str, email: &str, role| {
+            let (token, _) = create(&c, by, &ws, None, role, &only(&["app1"])).unwrap();
+            let row = find_valid_by_token(&c, &token).unwrap().unwrap();
+            accept(&c, &row, user, email).unwrap();
+        };
+        let role = |u: &str, b: &str| crate::perm::base_role(&c, u, b).unwrap();
+
+        invite_and_accept(&creator, &limited, "l@example.com", Role::Creator);
+        assert_eq!(role(&limited, "app1"), Some(Role::Viewer), "base added");
+        assert_eq!(role(&limited, "app2"), Some(Role::Viewer), "not raised");
+        invite_and_accept(&creator, &everywhere, "e@example.com", Role::Creator);
+        assert_eq!(role(&everywhere, "app2"), Some(Role::Viewer));
+        assert_eq!(
+            crate::perm::workspace_role(&c, &everywhere, &ws).unwrap(),
+            Some(Role::Viewer)
+        );
+        // A newcomer gets the invited role; an owner's invite still raises.
+        let new = users::create(&c, "n@example.com", "N", "!", false).unwrap();
+        invite_and_accept(&creator, &new, "n@example.com", Role::Editor);
+        assert_eq!(role(&new, "app1"), Some(Role::Editor));
+        invite_and_accept(&owner, &limited, "l@example.com", Role::Editor);
+        assert_eq!(role(&limited, "app2"), Some(Role::Editor));
     }
 
     #[test]

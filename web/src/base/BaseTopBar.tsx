@@ -1,6 +1,8 @@
 /**
  * The base's part of the app's top bar: its tile, the workspace above the base's name, who can open
  * it, and Share. On a phone the name truncates, fewer faces show and Share shrinks to its icon.
+ * Share is for creators and owners: inviting and sharing a view both need that role, so below it the
+ * dialog would hold nothing to do.
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router";
@@ -22,6 +24,7 @@ import { basePermissions } from "./permissions";
 export function BaseTopBar({ schema, onShare }: { schema: BaseSchema; onShare: () => void }) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const canEdit = basePermissions.editBase(schema.role);
+  const canShare = basePermissions.manageSharing(schema.role);
   return (
     <>
       <BaseTile schema={schema} editable={canEdit} />
@@ -33,12 +36,14 @@ export function BaseTopBar({ schema, onShare }: { schema: BaseSchema; onShare: (
       <Link to={`/workspace/${schema.workspace_id}/members`} className="shrink-0 rounded-full no-underline max-[359px]:hidden">
         <BaseAvatars people={schema.people} max={desktop ? 4 : 3} />
       </Link>
-      <Button size="sm" onClick={onShare} aria-label="Share" className="shrink-0 max-md:size-9 max-md:px-0">
-        <Share2 aria-hidden className="size-4" />
-        <span aria-hidden className="max-md:hidden">
-          Share
-        </span>
-      </Button>
+      {canShare && (
+        <Button size="sm" onClick={onShare} aria-label="Share" className="shrink-0 max-md:size-9 max-md:px-0">
+          <Share2 aria-hidden className="size-4" />
+          <span aria-hidden className="max-md:hidden">
+            Share
+          </span>
+        </Button>
+      )}
     </>
   );
 }

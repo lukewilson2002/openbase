@@ -876,7 +876,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "invites",
         "creator (never a role above your own)",
         Manage,
-        "Create an invite link to the base's workspace, giving this base (default) or base_ids you can open yourself; all_bases only for workspace owners.",
+        "Create an invite link to the base's workspace, giving this base (default) or base_ids you can open yourself; all_bases and the owner role only for workspace owners, and not with a token limited to specific bases.",
         "{role, email?, all_bases?, base_ids?}",
         "201 {url, info}",
     ),

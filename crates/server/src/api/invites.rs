@@ -85,12 +85,18 @@ fn authorize_create(
                 ));
             }
             if role == Role::Owner || req.all_bases == Some(true) {
+                // Every base is beyond this one: without this, an owner's
+                // token limited to this base could mint an invite to the
+                // whole workspace and accept it from another account.
+                actor.require_capability(Capability::ManageUnscoped)?;
                 return Ok((ws, max, BaseAccess::All));
             }
             let ids = req.base_ids.clone().unwrap_or_else(|| vec![b.clone()]);
             let ids = workspaces::validate_base_ids(conn, &ws, &ids)?;
             for id in &ids {
-                // A creator can only hand out bases they can open themselves.
+                // A creator can only hand out bases they can open themselves,
+                // and a token only bases in its scope (`require_base` 404s
+                // the others).
                 perm::require_base(conn, actor, id, Role::Creator)?;
             }
             Ok((ws, max, BaseAccess::Only(ids)))
@@ -115,11 +121,20 @@ fn require_manage_invite(conn: &Connection, actor: &Actor, invite: &InviteRow) -
         Err(_) => {}
     }
     let mut max = Role::Owner;
+    let mut any_live = false;
     for b in &invite.info.base_ids {
         if bases::live_base(conn, b).is_err() {
             continue;
         }
+        any_live = true;
         max = max.min(perm::require_base(conn, actor, b, Role::Creator)?);
+    }
+    // With every listed base in the trash nothing above was checked, so any
+    // member (even a viewer) would pass; restoring a base revives the invite.
+    if !any_live {
+        return Err(AppError::forbidden(
+            "only workspace owners can revoke this invite: all of its bases are in the trash",
+        ));
     }
     if invite.role()? > max {
         return Err(AppError::forbidden(

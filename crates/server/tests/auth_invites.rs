@@ -761,3 +761,31 @@ async fn invite_preview_rate_limited() {
         .await
         .assert_status(429);
 }
+
+#[tokio::test]
+async fn only_owners_revoke_an_invite_whose_bases_are_all_in_the_trash() {
+    let app = TestApp::new();
+    let owner = app.user("owner@example.com", "O");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
+    let res = app
+        .post(
+            &owner,
+            &format!("/api/bases/{base}/invites"),
+            json!({"role": "viewer"}),
+        )
+        .await;
+    res.assert_status(201);
+    let id = res.body["info"]["id"].as_str().unwrap().to_string();
+    app.delete(&owner, &format!("/api/bases/{base}"))
+        .await
+        .assert_status(200);
+    for role in ["viewer", "creator"] {
+        let member = app.user(&format!("{role}@example.com"), role);
+        app.grant_workspace_role(&member, &ws, role);
+        let res = app.delete(&member, &format!("/api/invites/{id}")).await;
+        res.assert_status(403);
+    }
+    app.delete(&owner, &format!("/api/invites/{id}"))
+        .await
+        .assert_status(204);
+}

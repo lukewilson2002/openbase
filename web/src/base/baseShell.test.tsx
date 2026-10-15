@@ -69,7 +69,8 @@ describe("base shell on a desktop", () => {
     const header = document.querySelector("header")!;
     expect(within(header).getByText("Acme")).toBeInTheDocument();
     expect(within(header).getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
-    expect(within(header).getByRole("button", { name: "Share" })).toBeInTheDocument();
+    // A viewer can neither invite nor share a view, so there is no Share to open.
+    expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
     // The old top bar's own back link and avatar menu are gone; the menu has both now.
     expect(screen.queryByRole("link", { name: "Back to all bases" })).not.toBeInTheDocument();
     expect(within(menu()).getByRole("link", { name: "Back to Acme" })).toHaveAttribute("href", "/workspace/wsp1");
@@ -85,6 +86,18 @@ describe("base shell on a desktop", () => {
     openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { people }) });
     const faces = await screen.findByRole("img", { name: "Who can open this base: you and Grace Hopper" });
     expect(faces.closest("a")).toHaveAttribute("href", "/workspace/wsp1/members");
+  });
+
+  it.each([
+    ["commenter", false],
+    ["editor", false],
+    ["creator", true],
+    ["owner", true],
+  ])("offers Share to a %s: %s", async (role, offered) => {
+    openBase(role);
+    await screen.findByText("Grid view coming soon");
+    const header = document.querySelector("header")!;
+    expect(within(header).queryByRole("button", { name: "Share" }) !== null).toBe(offered);
   });
 
   it("switches views and renders the placeholder for each view type", async () => {
@@ -161,14 +174,11 @@ describe("base shell on a desktop", () => {
       expect(screen.getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
     });
 
-    it("can invite from the Share dialog but has no view links to share", async () => {
-      const user = userEvent.setup();
+    it("has no Share (nothing to invite or share) but still finds the members", async () => {
       openBase("viewer");
-      await user.click(await screen.findByRole("button", { name: "Share" }));
-      const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
-      expect(within(dialog).getByRole("form", { name: "Invite people" })).toBeInTheDocument();
-      expect(within(dialog).queryByRole("tab")).not.toBeInTheDocument();
-      expect(within(dialog).getByRole("link", { name: "Manage all members" })).toHaveAttribute("href", "/workspace/wsp1/members");
+      await screen.findByText("Grid view coming soon");
+      expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+      expect(within(menu()).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
     });
   });
 
