@@ -135,10 +135,10 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     {/* Phones: Back and "I'll do it myself" share a row above a full-width main button. */}
                     <div className="flex items-center justify-between gap-2 sm:contents">
-                      <Button variant="ghost" className={TAP} onClick={back}>
+                      <Button variant="ghost" className={cn(TAP, "-ml-3")} onClick={back}>
                         Back
                       </Button>
-                      <Button variant="link" className={cn(TAP, "px-2 text-[0.875rem] sm:ml-auto")} onClick={onFinish}>
+                      <Button variant="link" className={cn(TAP, "-mr-2 px-2 text-[0.875rem] sm:ml-auto sm:mr-0")} onClick={onFinish}>
                         I'll do it myself
                       </Button>
                     </div>
@@ -150,7 +150,7 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
                   <div className="flex items-center justify-between gap-3">
                     <ol aria-hidden className="flex items-center gap-1.5">
                       {Array.from({ length: STEPS }, (_, i) => (
-                        <li key={i} className={cn("h-2 rounded-full transition-all duration-300", i === step ? "w-5 bg-primary" : "w-2 bg-line-strong")} />
+                        <li key={i} className={cn("h-2 rounded-full transition-all duration-300 motion-reduce:transition-none", i === step ? "w-5 bg-primary" : "w-2 bg-line-strong")} />
                       ))}
                     </ol>
                     <div className="flex items-center gap-2">

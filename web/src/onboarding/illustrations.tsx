@@ -220,16 +220,16 @@ const WORKSPACES = [
 
 export function WorkspacesArt() {
   return (
-    <Fit width={466} height={204}>
-      <div className="flex h-[204px] w-[466px] items-stretch">
+    <Fit width={396} height={204}>
+      <div className="flex h-[204px] w-[396px] items-stretch">
         {WORKSPACES.map((w, wi) => (
           <div key={w.name} className="contents">
             {wi > 0 && (
-              <div className="flex w-[46px] shrink-0 justify-center py-2">
+              <div className="flex w-[36px] shrink-0 justify-center py-2">
                 <Animated motion="grow-y" delay={0.45} className="h-full border-l-2 border-dashed border-line-strong" />
               </div>
             )}
-            <Animated motion="pop" delay={0.05 + wi * 0.18} className="flex w-[210px] shrink-0 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-pop">
+            <Animated motion="pop" delay={0.05 + wi * 0.18} className="flex w-[180px] shrink-0 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-pop">
               <span className={cn("choice self-start rounded-full px-2.5 py-0.5 text-xs font-semibold", `choice-${w.pill}`)}>{w.name}</span>
               <div>
                 <div className="text-[0.6875rem] font-medium text-muted">People</div>
@@ -276,7 +276,7 @@ export function AssistantArt() {
               <span key={d} className="ob-intro-dot size-1.5 rounded-full bg-muted" style={{ animationDelay: `${d}s` }} />
             ))}
           </Animated>
-          <Animated motion="rise" delay={1.75} className="col-start-1 row-start-1 max-w-[330px] justify-self-start rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-2.5 text-[0.8125rem] leading-snug text-fg shadow-pop">
+          <Animated motion="rise" delay={1.75} className="col-start-1 row-start-1 max-w-[372px] justify-self-start rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-2.5 text-[0.8125rem] leading-snug text-fg shadow-pop">
             <p>
               Done. I made a <strong>Clients</strong> base with a table for them.
             </p>
