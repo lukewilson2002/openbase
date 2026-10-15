@@ -301,11 +301,15 @@ fn snippet(text: &str, needle: &str) -> String {
     for (i, c) in chars.iter().enumerate() {
         for l in c.to_lowercase() {
             let before = lower.len();
-            lower.push(l);
+            lower.push(fold_sigma(l));
             origin.resize(origin.len() + lower.len() - before, i);
         }
     }
-    let at = lower.find(needle).map_or(0, |b| origin[b]);
+    // The needle was lower-cased as a whole string, which writes a word-final
+    // Σ as ς where char-by-char gives σ; without folding both, "ΟΔΟΣ" would
+    // not be found here and the snippet would show the wrong part.
+    let needle: String = needle.chars().map(fold_sigma).collect();
+    let at = lower.find(&needle).map_or(0, |b| origin[b]);
     let end = (at.saturating_sub(SNIPPET_BEFORE) + SNIPPET_CHARS).min(chars.len());
     let start = end.saturating_sub(SNIPPET_CHARS);
     let mut out = String::new();
@@ -317,6 +321,12 @@ fn snippet(text: &str, needle: &str) -> String {
         out.push('…');
     }
     out
+}
+
+/// The final sigma as the ordinary one: the only context-dependent mapping in
+/// `str::to_lowercase`.
+fn fold_sigma(c: char) -> char {
+    if c == 'ς' { 'σ' } else { c }
 }
 
 #[cfg(test)]
@@ -349,5 +359,14 @@ mod tests {
         // Lower-casing that changes length does not shift the window.
         let s = snippet(&format!("{}İstanbul trip", "x".repeat(100)), "trip");
         assert!(s.contains("trip"), "{s}");
+    }
+
+    #[test]
+    fn snippets_find_a_word_final_sigma() {
+        // The needle is lower-cased as a whole string, which turns a final
+        // Σ into ς; the text must be folded the same way to find it.
+        let text = format!("{} ΟΔΟΣ end", "x".repeat(130));
+        let s = snippet(&text, &needle("ΟΔΟΣ").unwrap());
+        assert!(s.contains("ΟΔΟΣ"), "{s}");
     }
 }

@@ -214,6 +214,45 @@ async fn search_finds_only_what_the_caller_can_open() {
 }
 
 #[tokio::test]
+async fn trashed_fields_views_and_workspaces_are_not_found() {
+    let f = Fixture::new().await;
+    f.insert_record(
+        &f.table_id,
+        json!({ &f.primary_id: "Kitchen", &f.notes_id: "Dish rack" }),
+    );
+    let view = new_view(&f, &f.owner, "Dish board", false).await;
+    let club = workspace(&f.app, &f.owner, "Dish club").await;
+    let club_base = base(&f.app, &f.owner, &club, "Dish base").await;
+    let club_table = sid(&club_base["tables"][0]["id"]).to_string();
+    let club_primary = sid(&club_base["tables"][0]["primary_field_id"]).to_string();
+    insert_record(&f.app, &club_table, json!({ club_primary: "Dish in club" }));
+    assert_eq!(
+        found(&search(&f.app, &f.owner, "q=dish").await),
+        [
+            hit("workspace", "Dish club"),
+            hit("base", "Dish base"),
+            hit("view", "Dish board"),
+            hit("record", "Dish in club"),
+            hit("record", "Kitchen"),
+        ]
+    );
+
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{}", f.notes_id))
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/views/{view}"))
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/workspaces/{club}"))
+        .await
+        .assert_status(200);
+    assert!(found(&search(&f.app, &f.owner, "q=dish").await).is_empty());
+}
+
+#[tokio::test]
 async fn search_limits_and_validation() {
     let f = Fixture::new().await;
     for i in 0..60 {
