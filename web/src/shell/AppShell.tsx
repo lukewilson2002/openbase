@@ -3,7 +3,7 @@
  * page, notifications) over the main menu and the page itself. On a desktop the menu is docked,
  * resizable and collapsible; on a phone it is a drawer that the same toggle opens.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { PanelLeft } from "lucide-react";
 import { BrandMark, Logo } from "@/components/Logo";
@@ -16,6 +16,17 @@ import { DockedSidebar, SidebarDrawer } from "./Sidebar";
 /** Tailwind's `md`: from here up the menu is docked beside the page. */
 export const DESKTOP_QUERY = "(min-width: 768px)";
 
+/** Closes the phone drawer; a no-op on a desktop, where the menu is docked. */
+const CloseMenuContext = createContext<() => void>(() => {});
+
+/**
+ * For menu items that act without changing the URL (picking the view already open): the drawer
+ * closes only on navigation by itself and would otherwise stay over the page.
+ */
+export function useCloseMenu(): () => void {
+  return useContext(CloseMenuContext);
+}
+
 export interface AppShellProps {
   /** The menu's own content (sections and items); it scrolls when long. */
   sidebar: ReactNode;
@@ -25,9 +36,16 @@ export interface AppShellProps {
   topBar?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * The page is exactly one screen tall and scrolls inside itself (a base: its grid has its own
+   * scrollbars, and a page scrollbar next to them would scroll the toolbar away).
+   */
+  fill?: boolean;
+  /** Accessible name of the page's main landmark (e.g. the open view's name). */
+  mainLabel?: string;
 }
 
-export function AppShell({ sidebar, sidebarFooter, topBar, children, className }: AppShellProps) {
+export function AppShell({ sidebar, sidebarFooter, topBar, children, className, fill, mainLabel }: AppShellProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [prefs, setPrefs] = useSidebarPrefs();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -44,43 +62,46 @@ export function AppShell({ sidebar, sidebarFooter, topBar, children, className }
 
   const expanded = desktop ? !prefs.collapsed : drawerOpen;
   const toggle = () => (desktop ? setPrefs({ collapsed: !prefs.collapsed }) : setDrawerOpen((o) => !o));
+  const closeMenu = useCallback(() => setDrawerOpen(false), []);
 
   return (
-    <div className={cn("min-h-dvh", className)}>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface pl-2 pr-3 sm:gap-3">
-        <button
-          ref={toggleRef}
-          type="button"
-          onClick={toggle}
-          aria-label={expanded ? "Hide menu" : "Show menu"}
-          title={expanded ? "Hide menu" : "Show menu"}
-          aria-expanded={expanded}
-          aria-controls={expanded ? menuId : undefined}
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg"
-        >
-          <PanelLeft aria-hidden className="size-5" />
-        </button>
-        <Link to="/" aria-label="OpenBase home" className="flex shrink-0 items-center">
-          {/* The lockup needs ~120 px; on a phone the page title needs that room more. */}
-          <Logo className="hidden h-9 sm:block" />
-          <BrandMark small className="size-7 sm:hidden" />
-        </Link>
-        <div className="flex min-w-0 flex-1 items-center gap-2">{topBar}</div>
-        <NotificationBell />
-      </header>
-      <div className="flex">
-        {desktop && !prefs.collapsed && (
-          <DockedSidebar id={menuId} width={prefs.width} onResize={(width, persist) => setPrefs({ width }, persist)} footer={sidebarFooter}>
+    <CloseMenuContext.Provider value={closeMenu}>
+      <div className={cn(fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-dvh", className)}>
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface pl-2 pr-3 sm:gap-3">
+          <button
+            ref={toggleRef}
+            type="button"
+            onClick={toggle}
+            aria-label={expanded ? "Hide menu" : "Show menu"}
+            title={expanded ? "Hide menu" : "Show menu"}
+            aria-expanded={expanded}
+            aria-controls={expanded ? menuId : undefined}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg"
+          >
+            <PanelLeft aria-hidden className="size-5" />
+          </button>
+          <Link to="/" aria-label="OpenBase home" className="flex shrink-0 items-center">
+            {/* The lockup needs ~120 px; on a phone the page title needs that room more. */}
+            <Logo className="hidden h-9 sm:block" />
+            <BrandMark small className="size-7 sm:hidden" />
+          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-2">{topBar}</div>
+          <NotificationBell />
+        </header>
+        <div className={cn("flex", fill && "min-h-0 flex-1")}>
+          {desktop && !prefs.collapsed && (
+            <DockedSidebar id={menuId} width={prefs.width} onResize={(width, persist) => setPrefs({ width }, persist)} footer={sidebarFooter}>
+              {sidebar}
+            </DockedSidebar>
+          )}
+          <main aria-label={mainLabel} className={cn("min-w-0 flex-1", fill && "relative overflow-hidden")}>{children}</main>
+        </div>
+        {!desktop && (
+          <SidebarDrawer id={menuId} open={drawerOpen} onOpenChange={setDrawerOpen} returnFocus={toggleRef} footer={sidebarFooter}>
             {sidebar}
-          </DockedSidebar>
+          </SidebarDrawer>
         )}
-        <main className="min-w-0 flex-1">{children}</main>
       </div>
-      {!desktop && (
-        <SidebarDrawer id={menuId} open={drawerOpen} onOpenChange={setDrawerOpen} returnFocus={toggleRef} footer={sidebarFooter}>
-          {sidebar}
-        </SidebarDrawer>
-      )}
-    </div>
+    </CloseMenuContext.Provider>
   );
 }
