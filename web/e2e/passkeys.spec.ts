@@ -174,7 +174,7 @@ test("a passkey is added in the account page, signs the person in without a pass
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(/\/login/);
   await signInWithButton(page, auth);
-  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
   const me = await (await page.request.get("/api/auth/me")).json();
   expect(me.email).toBe(email);
   expect((await auth.credentials())[0]?.signCount).toBeGreaterThan(countBefore);
@@ -208,7 +208,7 @@ test("a passkey is added in the account page, signs the person in without a pass
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
 });
 
 test("a sign-in with a passkey skips the two-factor code that a password sign-in still asks for", async ({ page, context, browser }, testInfo) => {
@@ -236,7 +236,7 @@ test("a sign-in with a passkey skips the two-factor code that a password sign-in
   // ... the passkey does not.
   await page.goto("/login");
   await signInWithButton(page, auth);
-  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
   const me = await (await page.request.get("/api/auth/me")).json();
   expect(me).toMatchObject({ email, totp_enabled: true });
   expect((await auth.credentials())[0]?.signCount).toBeGreaterThan(countBefore);
@@ -252,7 +252,7 @@ test("a sign-in with a passkey skips the two-factor code that a password sign-in
   expect((await loggedOut).ok()).toBe(true);
   expect((await signedIn).status()).toBe(200);
   await expect(page).not.toHaveURL(/login/);
-  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
   expect((await (await page.request.get("/api/auth/me")).json()).email).toBe(email);
 });
 
@@ -294,6 +294,6 @@ test("an administrator removes another user's passkeys, and that user falls back
   await user.getByLabel("Email").fill(email);
   await user.getByLabel("Password").fill(PASSWORD);
   await user.getByRole("button", { name: "Log in" }).click();
-  await expect(user.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+  await expect(user.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
   await userContext.close();
 });
