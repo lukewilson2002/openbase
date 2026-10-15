@@ -790,3 +790,215 @@ async fn only_owners_revoke_an_invite_whose_bases_are_all_in_the_trash() {
         .await
         .assert_status(204);
 }
+
+/// Workspace "Acme" with bases `base`, `mine` and `hidden`; a creator limited
+/// to `base` and `mine`.
+async fn invite_fixture(app: &TestApp) -> (common::Client, common::Client, String, [String; 3]) {
+    let owner = app.user("owner@example.com", "O");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
+    let mut more = Vec::new();
+    for name in ["Mine", "Hidden"] {
+        let res = app
+            .post(
+                &owner,
+                &format!("/api/workspaces/{ws}/bases"),
+                json!({ "name": name }),
+            )
+            .await;
+        res.assert_status(201);
+        more.push(res.body["id"].as_str().unwrap().to_string());
+    }
+    let [mine, hidden] = <[String; 2]>::try_from(more).unwrap();
+    let creator = app.user("creator@example.com", "C");
+    app.grant_base_role(&creator, &base, "creator");
+    app.grant_base_role(&creator, &mine, "creator");
+    (owner, creator, ws, [base, mine, hidden])
+}
+
+#[tokio::test]
+async fn owners_change_an_invite_in_place_and_the_link_keeps_working() {
+    let app = TestApp::new();
+    let (owner, _, ws, [base, mine, _]) = invite_fixture(&app).await;
+    let res = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/invites"),
+            json!({"role": "viewer", "email": "new@example.com"}),
+        )
+        .await;
+    res.assert_status(201);
+    let id = res.body["info"]["id"].as_str().unwrap().to_string();
+    let token = token_of(res.body["url"].as_str().unwrap());
+    let expires = res.body["info"]["expires_at"].clone();
+
+    let path = format!("/api/invites/{id}");
+    let res = app
+        .patch(&owner, &path, json!({"role": "editor", "base_ids": [mine]}))
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["id"], id.as_str());
+    assert_eq!(res.body["role"], "editor");
+    assert_eq!(res.body["all_bases"], false);
+    assert_eq!(res.body["base_ids"], json!([mine]));
+    assert_eq!(res.body["email"], "new@example.com");
+    assert_eq!(res.body["expires_at"], expires);
+    // Only the role: the bases stay.
+    let res = app.patch(&owner, &path, json!({"role": "commenter"})).await;
+    res.assert_status(200);
+    assert_eq!(res.body["base_ids"], json!([mine]));
+    // The owner role always gives every base.
+    let res = app.patch(&owner, &path, json!({"role": "owner"})).await;
+    res.assert_status(200);
+    assert_eq!(res.body["all_bases"], true);
+    app.patch(&owner, &path, json!({"role": "editor", "all_bases": false}))
+        .await
+        .assert_status(400);
+    app.patch(&owner, &path, json!({"role": "boss"}))
+        .await
+        .assert_status(400);
+    app.patch(&owner, &path, json!({"role": "editor", "base_ids": [base]}))
+        .await
+        .assert_status(200);
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM audit_log WHERE action = 'invite_update' AND target = ?1",
+            &[&id],
+        ),
+        4
+    );
+
+    // The same link, with the latest terms.
+    let new = app.user("new@example.com", "New");
+    app.post(
+        &new,
+        &format!("/api/invites/by-token/{token}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(200);
+    let list = app.get(&new, "/api/workspaces").await;
+    let bases: Vec<&str> = list.body[0]["bases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(bases, [base.as_str()]);
+    assert_eq!(list.body[0]["role"], "editor");
+    // Used up: nothing left to change.
+    app.patch(&owner, &path, json!({"role": "viewer"}))
+        .await
+        .assert_status(409);
+}
+
+#[tokio::test]
+async fn creators_change_invites_only_within_what_they_could_create() {
+    let app = TestApp::new();
+    let (owner, creator, ws, [base, mine, hidden]) = invite_fixture(&app).await;
+    let res = app
+        .post(
+            &creator,
+            &format!("/api/bases/{base}/invites"),
+            json!({"role": "viewer"}),
+        )
+        .await;
+    res.assert_status(201);
+    let path = format!("/api/invites/{}", res.body["info"]["id"].as_str().unwrap());
+
+    let res = app
+        .patch(
+            &creator,
+            &path,
+            json!({"role": "creator", "base_ids": [base, mine]}),
+        )
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["base_ids"], json!([base, mine]));
+    // A base they cannot open, every base, or a role above their own.
+    app.patch(&creator, &path, json!({"base_ids": [hidden]}))
+        .await
+        .assert_status(404);
+    let res = app.patch(&creator, &path, json!({"all_bases": true})).await;
+    res.assert_status(403);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("owners")
+    );
+    app.patch(&creator, &path, json!({"role": "owner"}))
+        .await
+        .assert_status(403);
+    // Editors manage no invites.
+    let editor = app.user("editor@example.com", "E");
+    app.grant_workspace_role(&editor, &ws, "editor");
+    app.patch(&editor, &path, json!({"role": "viewer"}))
+        .await
+        .assert_status(403);
+    // An owner's invite to every base is beyond a creator, even to narrow it.
+    let res = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/invites"),
+            json!({"role": "viewer"}),
+        )
+        .await;
+    let all = format!("/api/invites/{}", res.body["info"]["id"].as_str().unwrap());
+    app.patch(&creator, &all, json!({"base_ids": [base]}))
+        .await
+        .assert_status(403);
+}
+
+#[tokio::test]
+async fn an_owners_invite_changed_by_a_creator_no_longer_raises_existing_members() {
+    let app = TestApp::new();
+    let (owner, creator, ws, [base, mine, _]) = invite_fixture(&app).await;
+    let member = app.user("member@example.com", "M");
+    app.grant_base_role(&member, &mine, "viewer");
+    let res = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/invites"),
+            json!({"role": "viewer", "base_ids": [base]}),
+        )
+        .await;
+    res.assert_status(201);
+    let token = token_of(res.body["url"].as_str().unwrap());
+    let path = format!("/api/invites/{}", res.body["info"]["id"].as_str().unwrap());
+    // From the owner, accepting this would make the member a creator on every
+    // base they have; with the terms set by a creator it only adds `base`.
+    app.patch(&creator, &path, json!({"role": "creator"}))
+        .await
+        .assert_status(200);
+    app.post(
+        &member,
+        &format!("/api/invites/by-token/{token}/accept"),
+        json!({}),
+    )
+    .await
+    .assert_status(200);
+    let list = app.get(&member, "/api/workspaces").await;
+    assert_eq!(list.body[0]["role"], "viewer");
+    assert_eq!(list.body[0]["bases"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn changing_only_the_role_keeps_a_trashed_base_on_the_invite() {
+    let app = TestApp::new();
+    let (owner, _, ws, [base, mine, _]) = invite_fixture(&app).await;
+    let res = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/invites"),
+            json!({"role": "viewer", "base_ids": [base, mine]}),
+        )
+        .await;
+    let path = format!("/api/invites/{}", res.body["info"]["id"].as_str().unwrap());
+    app.delete(&owner, &format!("/api/bases/{mine}"))
+        .await
+        .assert_status(200);
+    let res = app.patch(&owner, &path, json!({"role": "editor"})).await;
+    res.assert_status(200);
+    // Restoring the base restores what the invite gives.
+    assert_eq!(res.body["base_ids"], json!([base, mine]));
+}

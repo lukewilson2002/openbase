@@ -19,8 +19,8 @@ const workspaces: WorkspaceSummary[] = [
     member_count: 2,
     pending_invite_count: 1,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [me, grace, jordan] },
-      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", people: [me] },
+      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [me, grace, jordan], tables: [] },
+      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", people: [me], tables: [] },
     ],
   },
   {
@@ -30,7 +30,7 @@ const workspaces: WorkspaceSummary[] = [
     role: "viewer",
     member_count: 3,
     pending_invite_count: 0,
-    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", people: [me, grace] }],
+    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", people: [me, grace], tables: [] }],
   },
 ];
 

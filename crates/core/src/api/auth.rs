@@ -216,6 +216,22 @@ pub struct CreateInviteRequest {
     pub base_ids: Option<Vec<String>>,
 }
 
+/// `PATCH /api/invites/{id}`: change a pending invite's terms in place, so the
+/// link already sent keeps working. Fields left out stay as they are.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct UpdateInviteRequest {
+    /// viewer | commenter | editor | creator | owner
+    #[serde(default)]
+    pub role: Option<String>,
+    /// Every base of the workspace, including later ones.
+    #[serde(default)]
+    pub all_bases: Option<bool>,
+    /// The bases the invitee can open when `all_bases` is false.
+    #[serde(default)]
+    pub base_ids: Option<Vec<String>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct InviteInfo {

@@ -35,7 +35,7 @@ function openBase(role: string, extra: Record<string, unknown> = {}, route = "/b
   const api = mockApi({
     "GET /api/auth/me": USER,
     "GET /api/bases/app1": makeSchema(role),
-    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [] }])],
+    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [], tables: [] }])],
     "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org", passkeys_enabled: true },
     ...extra,
   });
@@ -92,7 +92,7 @@ describe("base shell on a desktop", () => {
   it("switches workspace from the workspace picker, which can also start a new one", async () => {
     const user = userEvent.setup();
     openBase("owner", {
-      "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [] }]), { ...makeWorkspace("editor"), id: "wsp2", name: "Home" }],
+      "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [], tables: [] }]), { ...makeWorkspace("editor"), id: "wsp2", name: "Home" }],
     });
     await screen.findByText("Grid view coming soon");
     await user.click(screen.getByRole("button", { name: "Workspace: Acme. Switch workspace" }));

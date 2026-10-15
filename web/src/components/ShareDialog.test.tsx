@@ -8,8 +8,8 @@ import { ShareDialog } from "./ShareDialog";
 afterEach(() => vi.unstubAllGlobals());
 
 const bases = [
-  { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [] },
-  { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner", people: [] },
+  { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [], tables: [] },
+  { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner", people: [], tables: [] },
 ];
 const created = (over: object = {}) => ({
   url: "https://base.example.org/invite/tok",
@@ -211,7 +211,7 @@ describe("Share dialog: share a view", () => {
     const ws = makeWorkspace("creator", [
       { ...bases[0]!, role: "creator" },
       { ...bases[1]!, role: "creator" },
-      { id: "app3", workspace_id: "wsp1", name: "Payroll", color: "red", role: "viewer", people: [] },
+      { id: "app3", workspace_id: "wsp1", name: "Payroll", color: "red", role: "viewer", people: [], tables: [] },
     ]);
     renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={ws} />);
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });

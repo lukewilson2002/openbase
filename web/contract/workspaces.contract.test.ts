@@ -63,6 +63,16 @@ describe("workspaces", () => {
     expect(parseList("Member", await owner.run(() => api.workspaces.members(workspaceId))).map((m) => m.user_id)).toEqual([owner.id]);
   });
 
+  it("changes a pending invite in place and answers the updated invite", async () => {
+    const created = parse("CreatedInvite", await owner.run(() => api.invites.createForWorkspace(workspaceId, { role: "viewer", email: null })));
+    const changed = parse("InviteInfo", await owner.run(() => api.invites.update(created.info.id, { role: "editor" })));
+    expect(owner.status).toBe(200);
+    expect(changed).toMatchObject({ id: created.info.id, role: "editor", all_bases: true, expires_at: created.info.expires_at });
+    expectError(await failure(owner.run(() => api.invites.update(created.info.id, { role: "overlord" }))), 400, "bad_request");
+    expectError(await failure(other.run(() => api.invites.update(created.info.id, { role: "owner" }))), 404, "not_found");
+    await owner.run(() => api.invites.remove(created.info.id));
+  });
+
   it("deletes a workspace into the trash and restores it with its bases", async () => {
     const base = parse("BaseSchema", await owner.run(() => api.bases.create(workspaceId, { name: "Inside" })));
     expect(parse("OkResponse", await owner.run(() => api.workspaces.remove(workspaceId)))).toEqual({ ok: true });

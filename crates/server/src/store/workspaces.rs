@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ob_core::api::workspaces::{
-    BasePerson, BaseSummary, CreateWorkspace, Member, WorkspaceSummary,
+    BasePerson, BaseSummary, CreateWorkspace, Member, TableSummary, WorkspaceSummary,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -169,7 +169,12 @@ pub fn add_new_base_for_creator(
     Ok(())
 }
 
-fn summary_of(base: &bases::BaseRow, role: Role, people: Vec<BasePerson>) -> BaseSummary {
+fn summary_of(
+    base: &bases::BaseRow,
+    role: Role,
+    people: Vec<BasePerson>,
+    tables: Vec<TableSummary>,
+) -> BaseSummary {
     BaseSummary {
         id: base.id.clone(),
         workspace_id: base.workspace_id.clone(),
@@ -178,7 +183,37 @@ fn summary_of(base: &bases::BaseRow, role: Role, people: Vec<BasePerson>) -> Bas
         icon: base.icon.clone(),
         role: role.as_str().to_string(),
         people,
+        tables,
     }
+}
+
+/// Live tables of every live base in a workspace, by base, in sidebar order:
+/// one query per workspace rather than one per base.
+fn tables_by_base(
+    conn: &Connection,
+    workspace_id: &str,
+) -> AppResult<HashMap<String, Vec<TableSummary>>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.base_id, t.id, t.name, t.icon FROM tables t JOIN bases b ON b.id = t.base_id
+         WHERE b.workspace_id = ?1 AND b.deleted_at IS NULL AND t.deleted_at IS NULL
+         ORDER BY t.position, t.created_at, t.id",
+    )?;
+    let rows = stmt.query_map([workspace_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            TableSummary {
+                id: r.get(1)?,
+                name: r.get(2)?,
+                icon: r.get(3)?,
+            },
+        ))
+    })?;
+    let mut out: HashMap<String, Vec<TableSummary>> = HashMap::new();
+    for row in rows {
+        let (base_id, table) = row?;
+        out.entry(base_id).or_default().push(table);
+    }
+    Ok(out)
 }
 
 /// Members and pending invites of a workspace, to answer "who can open this
@@ -278,10 +313,14 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
         } else {
             listed_live_bases(conn, &id, user_id)?.into_iter().collect()
         };
+        let mut tables = tables_by_base(conn, &id)?;
         let bases = bases::live_bases_in(conn, &id)?
             .iter()
             .filter(|b| all_bases || listed.contains(&b.id))
-            .map(|b| summary_of(b, role, people.for_base(&b.id)))
+            .map(|b| {
+                let tables = tables.remove(&b.id).unwrap_or_default();
+                summary_of(b, role, people.for_base(&b.id), tables)
+            })
             .collect();
         out.push(WorkspaceSummary {
             id,

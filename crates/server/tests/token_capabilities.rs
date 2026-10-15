@@ -306,6 +306,26 @@ const CASES: &[Case] = &[
         scoped: Scoped::Refused,
     },
     Case {
+        name: "update workspace invite",
+        method: "PATCH",
+        template: "/api/invites/{id}",
+        path: |i| format!("/api/invites/{}", i.ws_invite),
+        body: |_| Some(json!({"role": "commenter"})),
+        min: Min::Role(Role::Owner),
+        ok: 200,
+        scoped: Scoped::Refused,
+    },
+    Case {
+        name: "update base invite",
+        method: "PATCH",
+        template: "/api/invites/{id}",
+        path: |i| format!("/api/invites/{}", i.base_invite),
+        body: |_| Some(json!({"role": "commenter"})),
+        min: Min::Role(Role::Creator),
+        ok: 200,
+        scoped: Scoped::Allowed,
+    },
+    Case {
         name: "revoke workspace invite",
         method: "DELETE",
         template: "/api/invites/{id}",
@@ -1413,8 +1433,8 @@ fn the_capability_tables_match_the_endpoint_catalogue() {
             Scoped::Allowed | Scoped::OutOfScope => Access::Manage,
             Scoped::Refused => Access::ManageUnscoped,
         };
-        // Revoking an invite is one catalogue entry for workspace and base invites, and a base
-        // invite needs `manage` only, though one reaching every base needs it unscoped.
+        // Changing or revoking an invite is one catalogue entry for workspace and base invites,
+        // and a base invite needs `manage` only, though one reaching every base needs it unscoped.
         let one_entry = case.template == "/api/invites/{id}"
             || (case.template == "/api/bases/{id}/invites" && case.method == "POST");
         if !one_entry || case.scoped == Scoped::Allowed {

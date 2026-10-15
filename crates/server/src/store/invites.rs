@@ -211,6 +211,43 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Option<InviteRow>> {
     .pop())
 }
 
+/// Change a pending invite's role and, when `access` is given, its bases;
+/// the token and expiry stay. `updated_by` becomes the invite's creator: its
+/// validity and how far accepting it may raise an existing member follow the
+/// standing of whoever set its terms (see [`creator_may_still_invite`] and
+/// [`accept`]), so a creator editing an owner's invite cannot borrow the
+/// owner's standing.
+pub fn update_terms(
+    conn: &Connection,
+    id: &str,
+    updated_by: &str,
+    role: Role,
+    access: Option<&BaseAccess>,
+) -> AppResult<InviteInfo> {
+    conn.execute(
+        "UPDATE invites SET role = ?2, created_by = ?3 WHERE id = ?1",
+        params![id, role.as_str(), updated_by],
+    )?;
+    if let Some(access) = access {
+        conn.execute(
+            "UPDATE invites SET all_bases = ?2 WHERE id = ?1",
+            params![id, matches!(access, BaseAccess::All)],
+        )?;
+        conn.execute("DELETE FROM invite_bases WHERE invite_id = ?1", [id])?;
+        if let BaseAccess::Only(ids) = access {
+            for b in ids {
+                conn.execute(
+                    "INSERT OR IGNORE INTO invite_bases (invite_id, base_id) VALUES (?1, ?2)",
+                    params![id, b],
+                )?;
+            }
+        }
+    }
+    get(conn, id)?
+        .map(|r| r.info)
+        .ok_or_else(|| AppError::not_found("invite"))
+}
+
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM invites WHERE id = ?1", [id])?;
     Ok(())

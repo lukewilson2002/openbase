@@ -62,6 +62,7 @@ import type {
   TwoFactorSetup,
   UpdateAutomation,
   UpdateBase,
+  UpdateInviteRequest,
   UpdateMeRequest,
   UpdateMember,
   UpdateTable,
@@ -162,6 +163,8 @@ export const api = {
     /** Returns the accepted invite (`workspace_id` says where to go next). */
     accept: (token: string) => http.post<InviteInfo>(`/api/invites/by-token/${enc(token)}/accept`),
     remove: (id: string) => http.delete<void>(`/api/invites/${enc(id)}`),
+    /** Changes a pending invite's role and bases; the link already sent keeps working. */
+    update: (id: string, body: UpdateInviteRequest) => http.patch<InviteInfo>(`/api/invites/${enc(id)}`, body),
     forWorkspace: (workspaceId: string) => http.get<InviteInfo[]>(`/api/workspaces/${enc(workspaceId)}/invites`),
     createForWorkspace: (workspaceId: string, body: CreateInviteRequest) =>
       http.post<CreatedInvite>(`/api/workspaces/${enc(workspaceId)}/invites`, body),

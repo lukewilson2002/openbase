@@ -86,6 +86,14 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   starts with what you typed before text that contains it; a record found by another field
   carries a `snippet` of it. Record text is read up to a fixed budget per search (about one full
   table), so on very large instances some tables may not be searched.
+- **Change a pending invite** without sending a new link: `PATCH /api/invites/{id}` takes `role`,
+  `all_bases` and `base_ids` (each optional) and answers the updated invite. You need to be able
+  to revoke the invite and to create one with the new terms (the same rules, including for
+  base-limited API tokens); whoever changes it counts as its inviter from then on, so an invite
+  changed by a creator never raises an existing member's role when accepted. Recorded in the audit
+  log as `invite_update`.
+- Each base in `GET /api/workspaces` lists its live `tables` (`id`, `name`, `icon`) in sidebar
+  order, so the workspace page no longer loads every base to name its tables.
 
 ### Fixed
 

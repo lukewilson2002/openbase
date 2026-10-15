@@ -1,7 +1,7 @@
 //! `invites` API: invite links to a workspace, created by its owners (any
 //! role, any bases) or from a base by its creators (limited to bases they can
-//! open, never all bases, never above their own role); listing and revoking
-//! them, a public preview by token, and accepting as a signed-in user.
+//! open, never all bases, never above their own role); listing, changing and
+//! revoking them, a public preview by token, and accepting as a signed-in user.
 //! New users accept by signing up with `invite_token` (see `api::auth`).
 
 use std::time::Duration;
@@ -10,7 +10,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use ob_core::api::auth::{CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview};
+use ob_core::api::auth::{
+    CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview, UpdateInviteRequest,
+};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::json;
 
@@ -32,7 +34,7 @@ pub fn router() -> Router<AppState> {
             get(list_workspace).post(create_workspace),
         )
         .route("/api/bases/{id}/invites", get(list_base).post(create_base))
-        .route("/api/invites/{id}", delete(revoke))
+        .route("/api/invites/{id}", delete(revoke).patch(update))
         .route("/api/invites/by-token/{token}", get(preview))
         .route("/api/invites/by-token/{token}/accept", post(accept))
 }
@@ -298,6 +300,127 @@ async fn revoke(
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The terms of a pending invite as a create request: what the update asks
+/// for, the rest carried over. A carried-over base list keeps only live bases
+/// (creating an invite refuses trashed ones). The flag says whether the
+/// update asked for different bases; when it did not, the stored list
+/// (trashed bases included, so restoring one restores the invite's reach)
+/// stays as it is.
+fn merged_terms(
+    conn: &Connection,
+    invite: &InviteRow,
+    req: &UpdateInviteRequest,
+) -> AppResult<(CreateInviteRequest, bool)> {
+    let changes_access = req.all_bases.is_some() || req.base_ids.is_some();
+    let (all_bases, base_ids) = match (req.all_bases, &req.base_ids) {
+        (Some(true), _) => (true, None),
+        (_, Some(ids)) => (false, Some(ids.clone())),
+        (Some(false), None) => {
+            return Err(AppError::bad_request(
+                "pick the bases the invitee can open (base_ids), or give all bases",
+            ));
+        }
+        (None, None) if invite.info.all_bases => (true, None),
+        (None, None) => {
+            let live = invite
+                .info
+                .base_ids
+                .iter()
+                .filter(|b| bases::live_base(conn, b).is_ok())
+                .cloned()
+                .collect();
+            (false, Some(live))
+        }
+    };
+    let role = req
+        .role
+        .as_deref()
+        .unwrap_or(&invite.info.role)
+        .trim()
+        .to_string();
+    let terms = CreateInviteRequest {
+        email: invite.info.email.clone(),
+        role,
+        all_bases: Some(all_bases),
+        base_ids,
+    };
+    Ok((terms, changes_access))
+}
+
+/// `PATCH /api/invites/{id}`: change the role and bases of a pending invite
+/// in place, so the link already sent (or shown) keeps working. The caller
+/// must be allowed to manage the invite as it is and to create one with the
+/// new terms, under the same rules as creating it.
+async fn update(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+    Path(id): Path<String>,
+    ApiJson(req): ApiJson<UpdateInviteRequest>,
+) -> AppResult<Json<InviteInfo>> {
+    let info = state
+        .db
+        .write(move |tx| {
+            let invite = invites::get(tx, &id)?.ok_or_else(|| AppError::not_found("invite"))?;
+            require_manage_invite(tx, &actor, &invite)?;
+            if invite.info.accepted_at.is_some() || invite.info.expires_at <= crate::db::now_ms() {
+                return Err(AppError::conflict(
+                    "this invite was already used or has expired; invite them again instead",
+                ));
+            }
+            let (terms, changes_access) = merged_terms(tx, &invite, &req)?;
+            let role = Role::parse(&terms.role)?;
+            let ws = invite.workspace_id()?.to_string();
+            // An owner (without a base-limited token) may give anything, as
+            // from the workspace; anyone else is held to what they could
+            // create from one of the bases, and every base it would give is
+            // checked there.
+            let origin = if perm::require_workspace(tx, &actor, &ws, Role::Owner).is_ok() {
+                Origin::Workspace(ws)
+            } else {
+                let from = terms
+                    .base_ids
+                    .as_ref()
+                    .and_then(|ids| ids.first())
+                    .or_else(|| invite.info.base_ids.first())
+                    .cloned()
+                    .ok_or_else(|| {
+                        AppError::forbidden("only workspace owners can change this invite")
+                    })?;
+                Origin::Base(from)
+            };
+            let (_, max_role, access) = authorize_create(tx, &actor, &origin, role, &terms)?;
+            if role > max_role {
+                return Err(AppError::forbidden(
+                    "you cannot invite someone with a role above your own",
+                ));
+            }
+            // Only a limited invite whose bases were not asked about keeps its
+            // stored list; the owner role always widens it to every base.
+            let keep_stored = !changes_access
+                && !invite.info.all_bases
+                && matches!(access, workspaces::BaseAccess::Only(_));
+            let access = (!keep_stored).then_some(access);
+            let info = invites::update_terms(tx, &id, &actor.user_id, role, access.as_ref())?;
+            audit::record_as(
+                tx,
+                &actor,
+                actions::INVITE_UPDATE,
+                Some(&info.id),
+                Some(json!({
+                    "workspace_id": info.workspace_id,
+                    "role": info.role,
+                    "all_bases": info.all_bases,
+                    "base_ids": info.base_ids,
+                })),
+                Some(&client.ip),
+            )?;
+            Ok(info)
+        })
+        .await?;
+    Ok(Json(info))
 }
 
 async fn preview(

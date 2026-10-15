@@ -34,6 +34,8 @@ pub mod actions {
     pub const INVITE_CREATE: &str = "invite_create";
     pub const INVITE_ACCEPT: &str = "invite_accept";
     pub const INVITE_REVOKE: &str = "invite_revoke";
+    /// A pending invite's role or bases changed (detail: the new terms).
+    pub const INVITE_UPDATE: &str = "invite_update";
     pub const ADMIN_USER_CREATE: &str = "admin_user_create";
     pub const ADMIN_USER_UPDATE: &str = "admin_user_update";
     pub const ADMIN_RESET_LINK: &str = "admin_reset_link";
