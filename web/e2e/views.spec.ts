@@ -133,7 +133,8 @@ test.describe("kanban", () => {
   test("stacks cards by status in choice order with counts", async ({ page }) => {
     await open(page, "kanban");
     const stacks = page.getByRole("listitem", { name: /^Stack:/ });
-    await expect(stacks).toHaveText([/Uncategorized/, /Todo/, /Doing/, /Done/]);
+    // Every card has a status, so the empty Uncategorized stack stays out of the way.
+    await expect(stacks).toHaveText([/Todo/, /Doing/, /Done/]);
     await expect(page.getByRole("listitem", { name: "Stack: Todo" }).getByRole("button", { name: /Alpha|Bravo/ })).toHaveCount(2);
   });
 

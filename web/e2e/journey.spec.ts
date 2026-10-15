@@ -188,7 +188,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByText("0 items")).toBeVisible();
     for (let i = 1; i <= 3; i++) {
       await page.getByRole("button", { name: "Add record" }).click();
-      await expect(page.getByText(`${i} record${i === 1 ? "" : "s"}`)).toBeVisible();
+      await expect(page.getByText(`${i} item${i === 1 ? "" : "s"}`)).toBeVisible();
     }
     expect(await records()).toHaveLength(3);
 

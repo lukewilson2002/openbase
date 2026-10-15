@@ -213,7 +213,7 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     // The grid is a canvas, so look for the record with the search box.
     await page.keyboard.press("Control+F");
     await page.getByRole("searchbox", { name: "Search records" }).fill("Zed");
-    await expect(page.getByText(/1 record found/)).toBeVisible();
+    await expect(page.getByText(/1 item found/)).toBeVisible();
   });
 });
 
@@ -234,14 +234,15 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     await dialog.getByRole("tab", { name: "Share a view" }).click();
     await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);
     await expect(dialog.getByText(/The 1 hidden field never leaves the server/)).toBeVisible();
-    await dialog.getByRole("switch", { name: "Protect with a password" }).click();
+    await dialog.getByRole("checkbox", { name: "Require a password" }).click();
     await dialog.getByRole("textbox", { name: "Password" }).fill("open sesame");
     await dialog.getByRole("button", { name: "Create link" }).click();
     const address = dialog.getByRole("textbox", { name: "View link" });
     await expect(address).toHaveValue(/\/share\/[A-Za-z0-9_-]+$/);
     link = await address.inputValue();
     token = link.split("/").pop()!;
-    await expect(dialog.getByText("Password protected")).toBeVisible();
+    await expect(dialog.getByRole("checkbox", { name: "Require a password" })).toBeChecked();
+    await expect(dialog.getByText("Visitors type the password once per visit.")).toBeVisible();
     await page.keyboard.press("Escape");
   });
 
@@ -358,7 +359,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
     await dialog.getByRole("button", { name: "Done" }).click();
     const delta = (await records(page.request, fx.viewId, "Delta")).records[0]!;
     expect(delta.values[fx.fields.qty]).toBe(12);
-    await expect(page.getByText(/\d+ records/)).toBeVisible();
+    await expect(page.getByText(/\d+ items/)).toBeVisible();
   });
 
   await test.step("a file with a bad row is refused as a whole, with the row numbers", async () => {

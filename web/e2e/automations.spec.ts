@@ -158,7 +158,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
     await expect(page.getByText("0 items")).toBeVisible();
     await page.getByRole("button", { name: "Add record" }).click();
-    await expect(page.getByText("1 record")).toBeVisible();
+    await expect(page.getByText("1 item")).toBeVisible();
     // Name it, as a person would.
     const canvas = page.locator("canvas[data-testid='data-grid-canvas']").first();
     const box = (await canvas.boundingBox())!;

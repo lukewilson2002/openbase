@@ -189,7 +189,7 @@ test("filters by a text condition and shows the record count", async ({ page }) 
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await page.getByLabel("Operator").selectOption("contains");
   await page.getByLabel("Value").fill("lph");
-  await expect(page.getByText("1 record")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Filtered by / }).click();
   await page.getByRole("button", { name: "Remove condition" }).click();
@@ -210,7 +210,7 @@ test("searches with Ctrl+F", async ({ page }) => {
   await gotoGrid(page);
   await page.keyboard.press("Control+F");
   await page.getByRole("searchbox", { name: "Search records" }).fill("char");
-  await expect(page.getByText(/1 record found/)).toBeVisible();
+  await expect(page.getByText(/1 item found/)).toBeVisible();
   await page.getByRole("searchbox", { name: "Search records" }).press("Escape");
   await expect(page.getByText("5 items")).toBeVisible();
 });

@@ -56,7 +56,7 @@ export function ShareViewTab({
         <p>
           {kind === "form"
             ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the base."
-            : "Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the base."}
+            : `Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the base.${hiddenNote(view)}`}
         </p>
       </div>
       {/* Keyed by view: a half-typed password must not carry over to another view's link. */}
@@ -176,3 +176,13 @@ function ViewLink({ view }: { view: View }) {
     </div>
   );
 }
+
+/**
+ * Says the hidden fields stay private, the question people ask before sharing a sheet with a
+ * salary column in it. The server drops hidden fields from shared views, so this is a promise.
+ */
+function hiddenNote(view: View): string {
+  const n = view.config.hidden_fields.length;
+  return n > 0 ? ` The ${n} hidden field${n === 1 ? "" : "s"} never leave${n === 1 ? "s" : ""} the server.` : "";
+}
+
