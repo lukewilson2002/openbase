@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Link, Route, Routes, useNavigate } from "react-router";
+import { BrowserRouter, Link, Outlet, Route, Routes, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { setUnauthorizedHandler } from "@/api/client";
 import { keys } from "@/api/keys";
@@ -8,6 +8,7 @@ import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { HomePage } from "@/pages/HomePage";
+import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
 import { PageSpinner } from "@/components/ui/spinner";
@@ -30,88 +31,75 @@ const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));
 /** Routes without a router of their own (tests wrap this in a MemoryRouter). */
 export function AppRoutes() {
   return (
-    <Suspense fallback={<PageSpinner />}>
-      <Routes>
-        {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
-        <Route path="/form/:token" element={<PublicFormPage />} />
-        <Route path="/f/:token" element={<PublicFormPage />} />
-        <Route path="/share/:token" element={<PublicSharePage />} />
-        <Route path="/s/:token" element={<PublicSharePage />} />
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/2fa" element={<TwoFactorLoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/invite/:token" element={<InvitePage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <HomePage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/account"
-          element={
-            <RequireAuth>
-              <AccountPage />
-            </RequireAuth>
-          }
-        />
-        {/* Behind the login like every app page: the login redirect brings the person back here. */}
-        <Route
-          path="/oauth/consent"
-          element={
-            <RequireAuth>
-              <OAuthConsentPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <RequireAuth>
-              <RequireAdmin>
-                <AdminPage />
-              </RequireAdmin>
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/base/:baseId/automations/:automationId?/:tab?"
-          element={
-            <RequireAuth>
-              <BaseShell section="automations" />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/base/:baseId/:tableId?/:viewId?"
-          element={
-            <RequireAuth>
-              <BaseShell />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="*"
-          element={
-            <EmptyState
-              title="Page not found"
-              description="That address does not exist."
-              action={
-                <Button asChild variant="primary">
-                  <Link to="/">Go home</Link>
-                </Button>
+    <IntroProvider>
+      <Suspense fallback={<PageSpinner />}>
+        <Routes>
+          {/* Public links: no RequireAuth, no redirects. /s and /f are the paths the API reports. */}
+          <Route path="/form/:token" element={<PublicFormPage />} />
+          <Route path="/f/:token" element={<PublicFormPage />} />
+          <Route path="/share/:token" element={<PublicSharePage />} />
+          <Route path="/s/:token" element={<PublicSharePage />} />
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login/2fa" element={<TwoFactorLoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/invite/:token" element={<InvitePage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
+          <Route element={<SignedInArea />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/account" element={<AccountPage />} />
+            <Route
+              path="/admin"
+              element={
+                <RequireAdmin>
+                  <AdminPage />
+                </RequireAdmin>
               }
-              className="min-h-dvh justify-center"
             />
-          }
-        />
-      </Routes>
-    </Suspense>
+            <Route path="/base/:baseId/automations/:automationId?/:tab?" element={<BaseShell section="automations" />} />
+            <Route path="/base/:baseId/:tableId?/:viewId?" element={<BaseShell />} />
+          </Route>
+          {/*
+            Behind the login like every app page (the login redirect brings the person back here), but
+            outside SignedInArea: someone connecting an app mid-way should not meet the intro first.
+          */}
+          <Route
+            path="/oauth/consent"
+            element={
+              <RequireAuth>
+                <OAuthConsentPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <EmptyState
+                title="Page not found"
+                description="That address does not exist."
+                action={
+                  <Button asChild variant="primary">
+                    <Link to="/">Go home</Link>
+                  </Button>
+                }
+                className="min-h-dvh justify-center"
+              />
+            }
+          />
+        </Routes>
+      </Suspense>
+    </IntroProvider>
+  );
+}
+
+function SignedInArea() {
+  return (
+    <RequireAuth>
+      <IntroGate />
+      <Outlet />
+    </RequireAuth>
   );
 }
 
