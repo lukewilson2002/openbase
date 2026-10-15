@@ -23,7 +23,8 @@ describe("intro", () => {
     routes();
     renderApp({ route: "/" });
     const dialog = await screen.findByRole("dialog", { name: "A base holds one project" });
-    expect(within(dialog).getByText("Step 1 of 3 · Bases")).toBeInTheDocument();
+    // No "Step 1 of 3" line above the heading any more: the dots say where you are.
+    expect(within(dialog).queryByText(/^Step \d/)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("heading", { name: "A base holds one project" })).toHaveFocus());
   });
 
@@ -49,17 +50,32 @@ describe("intro", () => {
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByRole("heading", { name: "Tables are the lists inside a base" })).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Tables store your information" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("heading", { name: "A base holds one project" })).toBeInTheDocument();
 
     await user.keyboard("{ArrowRight}{ArrowRight}");
+    expect(screen.getByRole("heading", { name: "Views show your data in other ways" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Workspaces keep things apart" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByRole("heading", { name: "Let an assistant do the setup" })).toBeInTheDocument();
-    expect(screen.getByText("Optional · Works best for most people")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Let an assistant manage OpenBase for you" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+  });
+
+  it("lets people switch the chores between views on the views step", async () => {
+    const user = userEvent.setup();
+    routes();
+    renderApp({ route: "/" });
+    await screen.findByRole("dialog");
+    await user.keyboard("{ArrowRight}{ArrowRight}");
+    const views = screen.getByRole("group", { name: "Show the chores as" });
+    expect(within(views).getByRole("button", { name: "Kanban" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(views).getByRole("button", { name: "Calendar" }));
+    expect(within(views).getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(views).getByRole("button", { name: "Kanban" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("October")).toBeInTheDocument();
   });
 
   it("skipping closes it and saves that it was seen", async () => {
@@ -90,7 +106,7 @@ describe("intro", () => {
     api.set("GET /api/auth/me", () => (api.callsTo("PATCH /api/auth/me").length ? { ...NEW_USER, intro_seen: true } : NEW_USER));
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "I'll do it myself" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.callsTo("PATCH /api/auth/me")[0]?.body).toEqual({ intro_seen: true });
@@ -101,7 +117,7 @@ describe("intro", () => {
     const api = routes({ "GET /api/oauth/grants": [] });
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Connect an assistant" }));
     expect(await screen.findByRole("heading", { name: "Account settings" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "AI assistants" })).toHaveAttribute("aria-selected", "true");
@@ -114,8 +130,10 @@ describe("intro", () => {
     routes({ "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "http://localhost:8080", passkeys_enabled: false } });
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByText("Claude and ChatGPT on the web need OpenBase at a public https address. Claude Code works from this computer now.")).toBeInTheDocument();
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent("Claude and ChatGPT on the web need OpenBase at a public https address. Claude Code works from this computer now. Learn more");
+    expect(within(note).getByRole("link", { name: "Learn more" })).toHaveAttribute("href", expect.stringContaining("docs/self-hosting.md"));
   });
 
   it("has no https warning when the public address is https", async () => {
@@ -123,8 +141,8 @@ describe("intro", () => {
     routes();
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByRole("heading", { name: "Let an assistant do the setup" })).toBeInTheDocument();
+    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Let an assistant manage OpenBase for you" })).toBeInTheDocument();
     expect(screen.queryByText(/need OpenBase at a public https address/)).not.toBeInTheDocument();
   });
 
