@@ -26,7 +26,7 @@ describe("totp", () => {
 });
 
 describe("typecheck against the generated bindings", () => {
-  const user = { id: "usr1", email: "a@example.test", name: "A", is_admin: false, totp_enabled: false };
+  const user = { id: "usr1", email: "a@example.test", name: "A", is_admin: false, totp_enabled: false, intro_seen: true };
 
   it("accepts a conforming value, with optional keys absent or null", () => {
     expect(parse("User", user)).toEqual(user);

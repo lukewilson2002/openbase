@@ -110,7 +110,7 @@ export function renderWithProviders(ui: ReactElement, route = "/"): RenderResult
 // ---- fixtures -------------------------------------------------------------------------------
 
 
-export const USER: User = { id: "usr1", email: "ada@example.com", name: "Ada Lovelace", is_admin: false, timezone: null, totp_enabled: false };
+export const USER: User = { id: "usr1", email: "ada@example.com", name: "Ada Lovelace", is_admin: false, timezone: null, totp_enabled: false, intro_seen: true };
 export const ADMIN: User = { ...USER, id: "usr0", email: "root@example.com", name: "Root Admin", is_admin: true };
 
 export function makeView(over: Partial<View> & { id: string; type?: View["type"] }): View {
