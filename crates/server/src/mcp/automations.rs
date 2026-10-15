@@ -545,6 +545,8 @@ mod tests {
             color: "blue".into(),
             icon: None,
             role: "owner".into(),
+            people: Vec::new(),
+            workspace_name: "Acme".into(),
             tables: vec![Table {
                 id: "tbl1".into(),
                 base_id: "app1".into(),

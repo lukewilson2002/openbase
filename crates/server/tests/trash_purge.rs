@@ -389,7 +389,11 @@ async fn purging_a_base_and_a_workspace_cascades_everything() {
     assert_eq!(stats.bases, 1);
     assert_eq!(stats.tables, 1);
     assert_eq!(stats.records, 1);
-    for (table, col) in [("tables", "base_id"), ("base_members", "base_id")] {
+    for (table, col) in [
+        ("tables", "base_id"),
+        ("workspace_member_bases", "base_id"),
+        ("invite_bases", "base_id"),
+    ] {
         assert_eq!(
             count(
                 &f.app,

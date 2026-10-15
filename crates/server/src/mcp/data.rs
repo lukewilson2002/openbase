@@ -285,7 +285,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "list_members",
             "List members",
-            "List the members of a workspace (everyone with access to its bases) or the people added directly to one base, with their roles. Needs the manage permission.",
+            "List the members of a workspace with their role and the bases each can open (all_bases, or the base_ids they were given), or, for a base, the workspace members who can open it. People get access only by being workspace members. Needs the manage permission.",
             object(
                 json!({ "scope": scope.clone(), "id": string("Workspace id or base id.") }),
                 &["scope", "id"],
@@ -297,16 +297,18 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "set_member_role",
-            "Change a member's role",
-            "Change a member's role on a workspace or on a single base. Needs the manage permission and the owner role.",
+            "Change a member's role or bases",
+            "Change a workspace member's role and/or the bases they can open: all_bases true gives every base (including later ones), base_ids limits them to those bases. One role applies to every base they can open; owners always have all bases. Only scope 'workspace' is accepted (there are no per-base roles). Needs the manage permission and the owner role.",
             object(
                 json!({
                     "scope": scope.clone(),
-                    "id": string("Workspace id or base id."),
+                    "id": string("Workspace id."),
                     "user_id": string("User id of the member (from list_members)."),
-                    "role": { "type": "string", "enum": role_names.clone(), "description": "New role." },
+                    "role": { "type": "string", "enum": role_names.clone(), "description": "New role (leave out to keep it)." },
+                    "all_bases": { "type": "boolean", "description": "true: every base of the workspace, including bases made later." },
+                    "base_ids": { "type": "array", "items": { "type": "string" }, "description": "Limit the member to these bases of the workspace (at least one)." },
                 }),
-                &["scope", "id", "user_id", "role"],
+                &["scope", "id", "user_id"],
             ),
             Level::Manage,
             false,
@@ -316,13 +318,15 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_invite",
             "Invite someone",
-            "Create an invite link for a workspace (owner role needed) or a single base (creator role needed). Give the link to the person; with an email, the invite is only valid for that address (and emailed if the server can send mail). Needs the manage permission.",
+            "Create an invite link to join a workspace. Scope 'workspace' (owner role needed): any role, every base by default or only base_ids. Scope 'base' (creator role on that base needed): only that base by default, or base_ids you can open yourself; never all bases and never above your own role. Give the link to the person; with an email, the invite is only valid for that address (and emailed if the server can send mail). Needs the manage permission.",
             object(
                 json!({
                     "scope": scope,
                     "id": string("Workspace id or base id."),
                     "role": { "type": "string", "enum": role_names, "description": "Role the invitee gets (not above your own)." },
                     "email": string("Optional: restrict the invite to this email address."),
+                    "all_bases": { "type": "boolean", "description": "true: every base of the workspace, including bases made later (workspace owners only)." },
+                    "base_ids": { "type": "array", "items": { "type": "string" }, "description": "Bases of the workspace the invitee can open." },
                 }),
                 &["scope", "id", "role"],
             ),
@@ -1052,17 +1056,41 @@ struct MemberRoleArgs {
     scope: Scope,
     id: String,
     user_id: String,
-    role: String,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    all_bases: Option<bool>,
+    #[serde(default)]
+    base_ids: Option<Vec<String>>,
 }
 
 async fn set_member_role(ctx: &McpCtx, a: MemberRoleArgs) -> ToolResult {
+    if matches!(a.scope, Scope::Base) {
+        return ToolResult::error(
+            "There are no per-base roles: a member has one role in the workspace. Use scope \
+             'workspace' with the workspace id, and all_bases or base_ids to choose which bases \
+             they can open.",
+        );
+    }
+    let mut body = Map::new();
+    if let Some(role) = a.role {
+        body.insert("role".into(), json!(role));
+    }
+    if let Some(all) = a.all_bases {
+        body.insert("all_bases".into(), json!(all));
+    }
+    if let Some(ids) = a.base_ids {
+        body.insert("base_ids".into(), json!(ids));
+    }
+    if body.is_empty() {
+        return ToolResult::error("Give a new role, all_bases or base_ids.");
+    }
     let path = format!(
-        "/api/{}/{}/members/{}",
-        a.scope.collection(),
+        "/api/workspaces/{}/members/{}",
         encode_segment(&a.id),
         encode_segment(&a.user_id)
     );
-    match call_api(ctx, "PATCH", &path, None, Some(json!({ "role": a.role }))).await {
+    match call_api(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {
         Ok(res) if res.ok() => ToolResult::ok(json!({ "ok": true })),
         Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
@@ -1077,6 +1105,10 @@ struct InviteArgs {
     role: String,
     #[serde(default)]
     email: Option<String>,
+    #[serde(default)]
+    all_bases: Option<bool>,
+    #[serde(default)]
+    base_ids: Option<Vec<String>>,
 }
 
 async fn create_invite(ctx: &McpCtx, a: InviteArgs) -> ToolResult {
@@ -1088,6 +1120,12 @@ async fn create_invite(ctx: &McpCtx, a: InviteArgs) -> ToolResult {
     let mut body = json!({ "role": a.role });
     if let Some(email) = a.email.filter(|e| !e.trim().is_empty()) {
         body["email"] = json!(email);
+    }
+    if let Some(all) = a.all_bases {
+        body["all_bases"] = json!(all);
+    }
+    if let Some(ids) = a.base_ids {
+        body["base_ids"] = json!(ids);
     }
     match call_api(ctx, "POST", &path, None, Some(body)).await {
         Ok(res) if res.ok() => ToolResult::ok(res.body.unwrap_or(Value::Null)),

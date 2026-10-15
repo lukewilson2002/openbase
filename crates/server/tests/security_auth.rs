@@ -326,8 +326,14 @@ async fn creators_cannot_accept_their_own_invites() {
         )
         .await;
     res.assert_status(403);
-    // No standalone base grant that would outlive removal from the workspace.
-    assert_eq!(app.query_i64("SELECT count(*) FROM base_members", &[]), 0);
+    // Their membership is unchanged: still a creator with every base.
+    assert_eq!(
+        app.query_i64(
+            "SELECT count(*) FROM workspace_member_bases WHERE user_id = ?1",
+            &[creator.user_id.as_deref().unwrap()]
+        ),
+        0
+    );
     // Someone else can still use it.
     let other = app.user("other@example.com", "Other");
     app.post(
@@ -452,7 +458,6 @@ const MUTATING_ROUTES: &[(&str, &str)] = &[
     ("PATCH", "/api/bases/appX"),
     ("DELETE", "/api/bases/appX"),
     ("POST", "/api/bases/appX/duplicate"),
-    ("PATCH", "/api/bases/appX/members/usrX"),
     ("DELETE", "/api/bases/appX/members/usrX"),
     ("POST", "/api/records/recX/comments"),
     ("PATCH", "/api/comments/cmtX"),

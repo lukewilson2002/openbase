@@ -81,10 +81,11 @@ pub struct UserRow {
     pub totp_enabled: bool,
     pub created_at: i64,
     pub last_login_at: Option<i64>,
+    pub intro_seen: bool,
 }
 
 const COLUMNS: &str = "id, email, name, password_hash, is_admin, is_active, timezone, \
-                       totp_secret, totp_enabled, created_at, last_login_at";
+                       totp_secret, totp_enabled, created_at, last_login_at, intro_seen";
 
 impl UserRow {
     fn from_row(r: &Row) -> rusqlite::Result<UserRow> {
@@ -100,6 +101,7 @@ impl UserRow {
             totp_enabled: r.get(8)?,
             created_at: r.get(9)?,
             last_login_at: r.get(10)?,
+            intro_seen: r.get(11)?,
         })
     }
 
@@ -111,6 +113,7 @@ impl UserRow {
             is_admin: self.is_admin,
             timezone: self.timezone.clone(),
             totp_enabled: self.totp_enabled,
+            intro_seen: self.intro_seen,
         }
     }
 
@@ -215,6 +218,15 @@ pub fn update_profile(
             params![tz, now, id],
         )?;
     }
+    Ok(())
+}
+
+/// Record whether the user has seen the introduction (false shows it again).
+pub fn set_intro_seen(conn: &Connection, id: &str, seen: bool) -> AppResult<()> {
+    conn.execute(
+        "UPDATE users SET intro_seen = ?1, updated_at = ?2 WHERE id = ?3",
+        params![seen, now_ms(), id],
+    )?;
     Ok(())
 }
 

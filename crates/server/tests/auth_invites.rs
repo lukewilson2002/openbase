@@ -1,5 +1,6 @@
-//! Workspace and base invites: create, list, revoke, preview, accept, and
-//! signing up with an invite.
+//! Invites (always to a workspace, for all its bases or a picked list, made
+//! by owners or, from a base, by its creators): create, list, revoke,
+//! preview, accept, and signing up with an invite.
 
 mod common;
 
@@ -32,6 +33,8 @@ async fn workspace_owner_creates_and_lists_invites() {
     assert_eq!(info["base_id"], serde_json::Value::Null);
     assert_eq!(info["email"], "New@Example.com");
     assert_eq!(info["role"], "editor");
+    assert_eq!(info["all_bases"], true);
+    assert_eq!(info["base_ids"], json!([]));
     let ttl = info["expires_at"].as_i64().unwrap() - info["created_at"].as_i64().unwrap();
     assert_eq!(ttl, 7 * 24 * 3600 * 1000);
 
@@ -86,7 +89,7 @@ async fn workspace_invites_need_owner_role() {
 async fn base_invites_need_creator_and_cannot_exceed_own_role() {
     let app = TestApp::new();
     let owner = app.user("owner@example.com", "O");
-    let (_ws, base) = app.workspace_with_base(&owner, "Acme");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
     let creator = app.user("creator@example.com", "C");
     app.grant_base_role(&creator, &base, "creator");
     let editor = app.user("editor@example.com", "E");
@@ -105,13 +108,17 @@ async fn base_invites_need_creator_and_cannot_exceed_own_role() {
             .unwrap()
             .contains("above your own")
     );
+    // A base invite is a workspace invite limited to that base.
     let res = app.post(&creator, &path, json!({"role": "creator"})).await;
     res.assert_status(201);
-    assert_eq!(res.body["info"]["base_id"], base.as_str());
-    // Workspace owner can grant owner on the base.
-    app.post(&owner, &path, json!({"role": "owner"}))
-        .await
-        .assert_status(201);
+    assert_eq!(res.body["info"]["workspace_id"], ws.as_str());
+    assert!(res.body["info"]["base_id"].is_null());
+    assert_eq!(res.body["info"]["all_bases"], false);
+    assert_eq!(res.body["info"]["base_ids"], json!([base]));
+    // The workspace owner can invite an owner from a base: owners get every base.
+    let res = app.post(&owner, &path, json!({"role": "owner"})).await;
+    res.assert_status(201);
+    assert_eq!(res.body["info"]["all_bases"], true);
     assert_eq!(
         app.get(&creator, &path)
             .await
@@ -120,6 +127,217 @@ async fn base_invites_need_creator_and_cannot_exceed_own_role() {
             .unwrap()
             .len(),
         2
+    );
+    // Both show in the workspace's own listing.
+    assert_eq!(
+        app.get(&owner, &format!("/api/workspaces/{ws}/invites"))
+            .await
+            .body
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn creator_base_invites_cannot_reach_beyond_their_bases() {
+    let app = TestApp::new();
+    let owner = app.user("owner@example.com", "O");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
+    let mine = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/bases"),
+            json!({"name": "Mine too"}),
+        )
+        .await
+        .body["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let hidden = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/bases"),
+            json!({"name": "Hidden"}),
+        )
+        .await
+        .body["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, foreign) = app.workspace_with_base(&owner, "Elsewhere");
+    let creator = app.user("creator@example.com", "C");
+    app.grant_base_role(&creator, &base, "creator");
+    app.grant_base_role(&creator, &mine, "creator");
+    let path = format!("/api/bases/{base}/invites");
+
+    // A base they cannot open: 404, as for any base they cannot see.
+    app.post(
+        &creator,
+        &path,
+        json!({"role": "viewer", "base_ids": [base, hidden]}),
+    )
+    .await
+    .assert_status(404);
+    // A base of another workspace.
+    app.post(
+        &creator,
+        &path,
+        json!({"role": "viewer", "base_ids": [foreign]}),
+    )
+    .await
+    .assert_status(400);
+    // Every base: only owners.
+    let res = app
+        .post(
+            &creator,
+            &path,
+            json!({"role": "viewer", "all_bases": true}),
+        )
+        .await;
+    res.assert_status(403);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("owners")
+    );
+    // Above their role.
+    app.post(
+        &creator,
+        &path,
+        json!({"role": "owner", "base_ids": [base]}),
+    )
+    .await
+    .assert_status(403);
+    // Bases they can open are fine.
+    let res = app
+        .post(
+            &creator,
+            &path,
+            json!({"role": "editor", "base_ids": [base, mine]}),
+        )
+        .await;
+    res.assert_status(201);
+    assert_eq!(res.body["info"]["base_ids"], json!([base, mine]));
+    // The invite shows on both bases' listings, not on the hidden one.
+    for (b, n) in [(&base, 1), (&mine, 1)] {
+        let list = app.get(&creator, &format!("/api/bases/{b}/invites")).await;
+        list.assert_status(200);
+        assert_eq!(list.body.as_array().unwrap().len(), n, "{b}");
+    }
+    let list = app
+        .get(&owner, &format!("/api/bases/{hidden}/invites"))
+        .await;
+    assert_eq!(list.body, json!([]));
+    // Workspace owners pick bases on the workspace endpoint, but only that workspace's.
+    let wpath = format!("/api/workspaces/{ws}/invites");
+    let res = app
+        .post(
+            &owner,
+            &wpath,
+            json!({"role": "editor", "base_ids": [hidden]}),
+        )
+        .await;
+    res.assert_status(201);
+    assert_eq!(res.body["info"]["all_bases"], false);
+    assert_eq!(res.body["info"]["base_ids"], json!([hidden]));
+    app.post(
+        &owner,
+        &wpath,
+        json!({"role": "editor", "base_ids": [foreign]}),
+    )
+    .await
+    .assert_status(400);
+    app.post(
+        &owner,
+        &wpath,
+        json!({"role": "editor", "all_bases": false}),
+    )
+    .await
+    .assert_status(400);
+    // An owner invite always gives every base.
+    let res = app
+        .post(
+            &owner,
+            &wpath,
+            json!({"role": "owner", "base_ids": [hidden]}),
+        )
+        .await;
+    res.assert_status(201);
+    assert_eq!(res.body["info"]["all_bases"], true);
+}
+
+#[tokio::test]
+async fn accepting_an_invite_merges_base_access() {
+    let app = TestApp::new();
+    let owner = app.user("owner@example.com", "O");
+    let (ws, base) = app.workspace_with_base(&owner, "Acme");
+    let second = app
+        .post(
+            &owner,
+            &format!("/api/workspaces/{ws}/bases"),
+            json!({"name": "Second"}),
+        )
+        .await
+        .body["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let member = app.user("m@example.com", "M");
+    app.grant_base_role(&member, &base, "editor");
+    let accept = |token: String| {
+        let (app, member) = (&app, &member);
+        async move {
+            app.post(
+                member,
+                &format!("/api/invites/by-token/{token}/accept"),
+                json!({}),
+            )
+            .await
+            .assert_status(200);
+        }
+    };
+    let invite = |body: serde_json::Value| {
+        let (app, owner, ws) = (&app, &owner, ws.clone());
+        async move {
+            let res = app
+                .post(owner, &format!("/api/workspaces/{ws}/invites"), body)
+                .await;
+            res.assert_status(201);
+            token_of(res.body["url"].as_str().unwrap())
+        }
+    };
+    let members = || async {
+        app.get(&owner, &format!("/api/workspaces/{ws}/members"))
+            .await
+            .body
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["email"] == "m@example.com")
+            .cloned()
+            .unwrap()
+    };
+    // A lower role for another base: the role stays, the bases add up.
+    accept(invite(json!({"role": "viewer", "base_ids": [second]})).await).await;
+    let m = members().await;
+    assert_eq!(m["role"], "editor");
+    assert_eq!(m["all_bases"], false);
+    assert_eq!(m["base_ids"], json!([base, second]));
+    // An all-bases invite at a higher role: both win.
+    accept(invite(json!({"role": "creator"})).await).await;
+    let m = members().await;
+    assert_eq!(m["role"], "creator");
+    assert_eq!(m["all_bases"], true);
+    // A later limited invite does not narrow them.
+    accept(invite(json!({"role": "viewer", "base_ids": [base]})).await).await;
+    let m = members().await;
+    assert_eq!(
+        (m["role"].as_str(), &m["all_bases"]),
+        (Some("creator"), &json!(true))
     );
 }
 
@@ -140,12 +358,13 @@ async fn preview_is_public_and_hides_invalid_invites() {
         .get(&app.anon(), &format!("/api/invites/by-token/{token}"))
         .await;
     res.assert_status(200);
+    // A base invite joins the workspace, so the workspace is what is shown.
     assert_eq!(
         res.body,
         json!({
-            "target_name": "Acme base",
+            "target_name": "Acme",
             "target_icon": null,
-            "target_kind": "base",
+            "target_kind": "workspace",
             "role": "commenter",
             "email": "z@example.com",
             "invited_by": "Olivia",
@@ -172,10 +391,7 @@ async fn preview_is_public_and_hides_invalid_invites() {
     app.state
         .db
         .write_sync(|tx| {
-            Ok(tx.execute(
-                "UPDATE invites SET expires_at = 0 WHERE base_id IS NOT NULL",
-                [],
-            )?)
+            Ok(tx.execute("UPDATE invites SET expires_at = 0 WHERE all_bases = 0", [])?)
         })
         .unwrap();
     app.get(&app.anon(), &format!("/api/invites/by-token/{token}"))
@@ -228,7 +444,7 @@ async fn logged_in_user_accepts_invite_and_keeps_higher_role() {
     .await
     .assert_status(404);
 
-    // A base invite grants a base role.
+    // A base invite makes them a member limited to that base.
     let res = app
         .post(
             &owner,

@@ -75,8 +75,14 @@ fn grant(app: &TestApp, base: &str, user: &Client, role: &str) {
         .db
         .write_sync(|tx| {
             tx.execute(
-                "INSERT INTO base_members (base_id, user_id, role, created_at) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+                 SELECT workspace_id, ?2, ?3, 0, ?4 FROM bases WHERE id = ?1",
                 rusqlite::params![base, uid, role, now_ms()],
+            )?;
+            tx.execute(
+                "INSERT INTO workspace_member_bases (workspace_id, user_id, base_id)
+                 SELECT workspace_id, ?2, id FROM bases WHERE id = ?1",
+                rusqlite::params![base, uid],
             )?;
             Ok(())
         })

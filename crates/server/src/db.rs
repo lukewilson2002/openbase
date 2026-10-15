@@ -19,6 +19,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0002_icons.sql"),
     include_str!("../migrations/0003_oauth.sql"),
     include_str!("../migrations/0004_passkeys.sql"),
+    include_str!("../migrations/0005_workspace_base_access.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -338,7 +339,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 4);
+        assert_eq!(schema_version(), 5);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -461,7 +462,7 @@ mod tests {
         let files = snapshots(&dir.path().join("backups"));
         assert_eq!(files.len(), 1, "{files:?}");
         assert!(files[0].starts_with("pre-migration-v3-"));
-        assert_eq!(file_schema_version(&path).unwrap(), 4);
+        assert_eq!(file_schema_version(&path).unwrap(), schema_version());
         // The snapshot is the v3 database, without the new tables.
         let snap = Connection::open(dir.path().join("backups").join(&files[0])).unwrap();
         let has = |c: &Connection, t: &str| -> i64 {
@@ -517,6 +518,137 @@ mod tests {
         assert_eq!(count("SELECT count(*) FROM passkeys"), 0);
         assert_eq!(count("SELECT count(*) FROM passkey_user_handles"), 0);
         // Migrating again is a no-op.
+        migrate(&conn).unwrap();
+    }
+
+    #[test]
+    fn v4_base_members_and_base_invites_become_workspace_base_access() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrate_with(&conn, &MIGRATIONS[..4], None).unwrap();
+        conn.execute_batch(
+            "INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES
+                 ('owner', 'o@example.com', 'O', '!', 1, 1),
+                 ('guest', 'g@example.com', 'G', '!', 1, 1),
+                 ('double', 'd@example.com', 'D', '!', 1, 1),
+                 ('bowner', 'b@example.com', 'B', '!', 1, 1);
+             INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'One', 1), ('w2', 'Two', 1);
+             INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES
+                 ('w1', 'owner', 'owner', 1), ('w2', 'owner', 'owner', 1),
+                 ('w1', 'double', 'viewer', 1);
+             INSERT INTO bases (id, workspace_id, name, created_at) VALUES
+                 ('b1', 'w1', 'CRM', 1), ('b2', 'w1', 'Ops', 1), ('b3', 'w2', 'Other', 1),
+                 ('b4', 'w1', 'Unshared', 1);
+             -- base-only member of two bases of w1, plus a double member
+             INSERT INTO base_members (base_id, user_id, role, created_at) VALUES
+                 ('b1', 'guest', 'viewer', 5), ('b2', 'guest', 'editor', 3),
+                 ('b1', 'double', 'creator', 1),
+                 ('b3', 'bowner', 'owner', 1);
+             INSERT INTO invites (id, token_hash, workspace_id, base_id, role, created_at, expires_at, accepted_at)
+                 VALUES ('i1', 'h1', NULL, 'b1', 'editor', 1, 9999999999999, NULL),
+                        ('i2', 'h2', NULL, 'b3', 'owner', 1, 9999999999999, NULL),
+                        ('i3', 'h3', NULL, 'b2', 'viewer', 1, 9999999999999, 2),
+                        ('i4', 'h4', 'w1', NULL, 'viewer', 1, 9999999999999, NULL);",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        assert_eq!(schema_version(), 5);
+
+        let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
+            let (role, all): (String, bool) = conn
+                .query_row(
+                    "SELECT role, all_bases FROM workspace_members WHERE workspace_id = ?1 AND user_id = ?2",
+                    [ws, user],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT base_id FROM workspace_member_bases
+                     WHERE workspace_id = ?1 AND user_id = ?2 ORDER BY base_id",
+                )
+                .unwrap();
+            let bases = stmt
+                .query_map([ws, user], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<Vec<String>, _>>()
+                .unwrap();
+            (role, all, bases)
+        };
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        // Base-only member: highest role, limited to the bases they had.
+        assert_eq!(
+            member("w1", "guest"),
+            ("editor".into(), false, s(&["b1", "b2"]))
+        );
+        // Already a workspace member: keeps the workspace role on all bases;
+        // the single-base raise to creator is dropped, not widened.
+        assert_eq!(member("w1", "double"), ("viewer".into(), true, s(&[])));
+        // A single-base owner becomes a limited creator, not a workspace owner.
+        assert_eq!(
+            member("w2", "bowner"),
+            ("creator".into(), false, s(&["b3"]))
+        );
+        assert_eq!(member("w1", "owner"), ("owner".into(), true, s(&[])));
+        let role = |u: &str, b: &str| crate::perm::base_role(&conn, u, b).unwrap();
+        use crate::perm::Role;
+        assert_eq!(role("guest", "b1"), Some(Role::Editor));
+        assert_eq!(role("guest", "b4"), None);
+        assert_eq!(role("double", "b1"), Some(Role::Viewer));
+        assert_eq!(role("double", "b4"), Some(Role::Viewer));
+        assert_eq!(role("bowner", "b3"), Some(Role::Creator));
+
+        // Base invites became workspace invites limited to their base.
+        let invite = |id: &str| -> (Option<String>, Option<String>, String, bool, Vec<String>) {
+            let row: (Option<String>, Option<String>, String, bool) = conn
+                .query_row(
+                    "SELECT workspace_id, base_id, role, all_bases FROM invites WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .unwrap();
+            let mut stmt = conn
+                .prepare("SELECT base_id FROM invite_bases WHERE invite_id = ?1")
+                .unwrap();
+            let bases = stmt
+                .query_map([id], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<Vec<String>, _>>()
+                .unwrap();
+            (row.0, row.1, row.2, row.3, bases)
+        };
+        let w = |x: &str| Some(x.to_string());
+        assert_eq!(
+            invite("i1"),
+            (w("w1"), None, "editor".into(), false, s(&["b1"]))
+        );
+        assert_eq!(
+            invite("i2"),
+            (w("w2"), None, "creator".into(), false, s(&["b3"]))
+        );
+        assert_eq!(
+            invite("i3"),
+            (w("w1"), None, "viewer".into(), false, s(&["b2"]))
+        );
+        assert_eq!(invite("i4"), (w("w1"), None, "viewer".into(), true, s(&[])));
+
+        let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert_eq!(
+            count("SELECT count(*) FROM sqlite_master WHERE name = 'base_members'"),
+            0
+        );
+        assert_eq!(count("SELECT count(*) FROM users WHERE intro_seen = 0"), 4);
+        assert_eq!(count("SELECT count(*) FROM pragma_foreign_key_check"), 0);
+        // Leaving a workspace takes the base list with it.
+        conn.execute(
+            "DELETE FROM workspace_members WHERE workspace_id = 'w1' AND user_id = 'guest'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            count("SELECT count(*) FROM workspace_member_bases WHERE user_id = 'guest'"),
+            0
+        );
         migrate(&conn).unwrap();
     }
 

@@ -1,8 +1,10 @@
 //! Authorization. Every data endpoint resolves the caller's effective role on
 //! a base through [`require_base`]; there is no other path to data.
 //!
-//! Effective role on a base = max(workspace role, base role). Instance admins
-//! get no implicit data access (they manage users, not content).
+//! Access comes only from workspace membership: a member's one workspace role
+//! applies to every base they can open, which is all bases of the workspace
+//! (`all_bases`) or the ones listed in `workspace_member_bases`. Instance
+//! admins get no implicit data access (they manage users, not content).
 //! Callers without any role get 404, never 403, so ids don't leak existence.
 
 use rusqlite::{Connection, OptionalExtension};
@@ -65,26 +67,52 @@ pub fn workspace_role(
     role.as_deref().map(Role::parse).transpose()
 }
 
-/// Effective role of `user_id` on `base_id`, or None if the user has no access
-/// or the base (or its workspace) is deleted.
+/// SQL condition "the workspace member row `m` can open the base row `b`".
+/// Every query that decides who can see a base uses this, so the API, the
+/// collaborator lists and notifications cannot disagree about access.
+pub const MEMBER_CAN_OPEN_BASE: &str = "(m.all_bases = 1 OR EXISTS (
+    SELECT 1 FROM workspace_member_bases mb
+    WHERE mb.workspace_id = m.workspace_id AND mb.user_id = m.user_id AND mb.base_id = b.id))";
+
+/// Role of `user_id` on `base_id`, or None if the user has no access or the
+/// base (or its workspace) is deleted.
 pub fn base_role(conn: &Connection, user_id: &str, base_id: &str) -> AppResult<Option<Role>> {
-    let row: Option<(Option<String>, Option<String>)> = conn
+    base_role_where(
+        conn,
+        user_id,
+        base_id,
+        "AND b.deleted_at IS NULL AND w.deleted_at IS NULL",
+    )
+}
+
+/// [`base_role`] even while the base or its workspace is in the trash (for
+/// restoring it).
+pub fn base_role_including_trashed(
+    conn: &Connection,
+    user_id: &str,
+    base_id: &str,
+) -> AppResult<Option<Role>> {
+    base_role_where(conn, user_id, base_id, "")
+}
+
+fn base_role_where(
+    conn: &Connection,
+    user_id: &str,
+    base_id: &str,
+    live: &str,
+) -> AppResult<Option<Role>> {
+    let role: Option<String> = conn
         .query_row(
-            "SELECT
-                (SELECT role FROM workspace_members WHERE workspace_id = b.workspace_id AND user_id = ?2),
-                (SELECT role FROM base_members WHERE base_id = b.id AND user_id = ?2)
-             FROM bases b JOIN workspaces w ON w.id = b.workspace_id
-             WHERE b.id = ?1 AND b.deleted_at IS NULL AND w.deleted_at IS NULL",
+            &format!(
+                "SELECT m.role FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+                 JOIN workspace_members m ON m.workspace_id = b.workspace_id AND m.user_id = ?2
+                 WHERE b.id = ?1 {live} AND {MEMBER_CAN_OPEN_BASE}"
+            ),
             [base_id, user_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| r.get(0),
         )
         .optional()?;
-    let Some((ws, base)) = row else {
-        return Ok(None);
-    };
-    let ws = ws.as_deref().map(Role::parse).transpose()?;
-    let base = base.as_deref().map(Role::parse).transpose()?;
-    Ok(ws.max(base))
+    role.as_deref().map(Role::parse).transpose()
 }
 
 /// Resolve and check the actor's role on a base. API tokens are additionally

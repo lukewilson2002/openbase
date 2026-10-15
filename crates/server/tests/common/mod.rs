@@ -223,7 +223,9 @@ impl TestApp {
             .unwrap()
     }
 
-    /// Give `user` a direct role on a base (base-level sharing).
+    /// Make `user` a member of the base's workspace with `role`, limited to
+    /// this base (plus any bases they were already limited to). Someone who
+    /// already has every base keeps that and only gets the new role.
     pub fn grant_base_role(&self, user: &Client, base_id: &str, role: &str) {
         let uid = user.user_id.clone().unwrap();
         let base_id = base_id.to_string();
@@ -232,9 +234,15 @@ impl TestApp {
             .db
             .write_sync(|tx| {
                 tx.execute(
-                    "INSERT INTO base_members (base_id, user_id, role, created_at) VALUES (?1, ?2, ?3, 0)
-                     ON CONFLICT(base_id, user_id) DO UPDATE SET role = excluded.role",
-                    rusqlite::params![base_id, uid, role],
+                    "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+                     SELECT workspace_id, ?2, ?3, 0, ?4 FROM bases WHERE id = ?1
+                     ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role",
+                    rusqlite::params![base_id, uid, role, openbase::db::now_ms()],
+                )?;
+                tx.execute(
+                    "INSERT OR IGNORE INTO workspace_member_bases (workspace_id, user_id, base_id)
+                     SELECT workspace_id, ?2, id FROM bases WHERE id = ?1",
+                    rusqlite::params![base_id, uid],
                 )?;
                 Ok(())
             })
@@ -250,9 +258,9 @@ impl TestApp {
             .db
             .write_sync(|tx| {
                 tx.execute(
-                    "INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?1, ?2, ?3, 0)
-                     ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role",
-                    rusqlite::params![ws, uid, role],
+                    "INSERT INTO workspace_members (workspace_id, user_id, role, created_at) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role, all_bases = 1",
+                    rusqlite::params![ws, uid, role, openbase::db::now_ms()],
                 )?;
                 Ok(())
             })

@@ -55,6 +55,38 @@ async fn me_returns_profile_and_patch_updates_it() {
 }
 
 #[tokio::test]
+async fn intro_seen_starts_false_and_round_trips() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "Ann");
+    assert_eq!(
+        app.get(&user, "/api/auth/me").await.body["intro_seen"],
+        false
+    );
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"intro_seen": true}))
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["intro_seen"], true);
+    assert_eq!(res.body["name"], "Ann", "other fields are untouched");
+    assert_eq!(
+        app.get(&user, "/api/auth/me").await.body["intro_seen"],
+        true
+    );
+    // Other updates leave it alone; false shows the intro again.
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"name": "Annie"}))
+        .await;
+    assert_eq!(res.body["intro_seen"], true);
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"intro_seen": false}))
+        .await;
+    assert_eq!(res.body["intro_seen"], false);
+    app.patch(&user, "/api/auth/me", json!({"intro_seen": "yes"}))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
 async fn password_change_requires_current_and_revokes_other_sessions() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");
