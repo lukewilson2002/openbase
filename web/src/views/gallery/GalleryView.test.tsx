@@ -87,8 +87,15 @@ describe("GalleryView", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("?record=r2");
   });
 
-  it("says so when there are no records", async () => {
+  it("says so when there are no records, with an Add for editors only", async () => {
     setup("editor", gallery(), []);
     expect(await screen.findByText("No records yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+  });
+
+  it("offers viewers no Add when there are no records", async () => {
+    setup("viewer", gallery(), []);
+    expect(await screen.findByText("No records yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { ChevronsDownUp } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { cardFields, itemsLabel } from "../common/cardFields";
+import { EmptyRecords } from "../common/EmptyRecords";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
@@ -52,26 +53,27 @@ function ListInner(props: ViewProps) {
         Could not load records: {records.error.message}
       </p>
     );
+  } else if (data && data.records.length === 0) {
+    // One roomy message instead of the outline: its own "No records" row plus a message under it
+    // read as the same thing said twice, squeezed against the card's edge.
+    body = <EmptyRecords searching={!!setup.debouncedSearch} onAdd={setup.canEdit ? () => void add({}) : undefined} />;
   } else if (data) {
     body = (
-      <>
-        <ListOutline
-          records={data.records}
-          groups={data.groups}
-          primary={primary}
-          fields={fields}
-          tableFields={table.fields}
-          format={setup.format}
-          emails={setup.emails}
-          colors={data.colors}
-          collapsed={collapsed}
-          canEdit={setup.canEdit}
-          onToggle={toggle}
-          onOpen={setup.openRecord}
-          onAdd={(defaults) => void add(defaults)}
-        />
-        {data.records.length === 0 && <p className="pt-10 text-center text-[0.8125rem] text-muted">{setup.debouncedSearch ? "No records match your search." : "No records yet."}</p>}
-      </>
+      <ListOutline
+        records={data.records}
+        groups={data.groups}
+        primary={primary}
+        fields={fields}
+        tableFields={table.fields}
+        format={setup.format}
+        emails={setup.emails}
+        colors={data.colors}
+        collapsed={collapsed}
+        canEdit={setup.canEdit}
+        onToggle={toggle}
+        onOpen={setup.openRecord}
+        onAdd={(defaults) => void add(defaults)}
+      />
     );
   }
 

@@ -95,4 +95,11 @@ describe("ListView", () => {
     // Previous/next follow the list order.
     expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled();
   });
+
+  it("shows one empty message, without the outline's own empty row, when there are no records", async () => {
+    setup("editor", outline, { records: [], groups: [] });
+    expect(await screen.findByText("No records yet.")).toBeInTheDocument();
+    expect(screen.queryByText("No records")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+  });
 });

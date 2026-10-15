@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { CardBody } from "../common/CardBody";
 import { cardFields, cardTitle, itemsLabel } from "../common/cardFields";
+import { EmptyRecords } from "../common/EmptyRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import { ViewFrame } from "../common/ViewFrame";
@@ -151,7 +152,12 @@ function GalleryInner(props: ViewProps) {
                 );
               })}
             </div>
-            {data.records.length === 0 && <p className="pt-10 text-center text-[0.8125rem] text-muted">{setup.debouncedSearch ? "No records match your search." : "No records yet."}</p>}
+            {data.records.length === 0 && (
+              // Cards sit straight on the page, so the empty state gets a card of its own to sit in.
+              <div className="rounded-xl border border-line bg-surface">
+                <EmptyRecords searching={!!setup.debouncedSearch} onAdd={setup.canEdit ? () => void addRecord() : undefined} />
+              </div>
+            )}
             <div ref={sentinel} className={cn("flex items-center justify-center", (data.hasMore || data.loadingMore) && "h-16")}>
               {data.loadingMore ? (
                 <Spinner className="size-4" label="Loading more" />
