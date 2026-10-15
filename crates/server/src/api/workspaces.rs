@@ -140,10 +140,52 @@ async fn list_members(
         .db
         .read(move |c| {
             perm::require_workspace(c, &actor, &id, Role::Viewer)?;
-            workspaces::members(c, &id)
+            let mut members = workspaces::members(c, &id)?;
+            hide_unopenable_bases(c, &actor, &id, &mut members)?;
+            Ok(members)
         })
         .await?;
     Ok(Json(out))
+}
+
+/// Trim each member's `base_ids` to the bases the caller can open, unless
+/// the caller owns the workspace (with a session or an unrestricted token).
+/// Otherwise a member limited to one base would learn the ids of bases they
+/// were never given, and which colleagues can open them.
+pub fn hide_unopenable_bases(
+    conn: &Connection,
+    actor: &Actor,
+    workspace_id: &str,
+    members: &mut [Member],
+) -> AppResult<()> {
+    let unrestricted = actor
+        .token_scope
+        .as_ref()
+        .is_none_or(|s| s.base_ids.is_none());
+    if unrestricted
+        && perm::workspace_role(conn, &actor.user_id, workspace_id)? == Some(Role::Owner)
+    {
+        return Ok(());
+    }
+    let mut openable = std::collections::HashMap::new();
+    for m in members.iter_mut() {
+        let mut kept = Vec::with_capacity(m.base_ids.len());
+        for b in m.base_ids.drain(..) {
+            let ok = match openable.get(&b) {
+                Some(ok) => *ok,
+                None => {
+                    let ok = perm::require_base(conn, actor, &b, Role::Viewer).is_ok();
+                    openable.insert(b.clone(), ok);
+                    ok
+                }
+            };
+            if ok {
+                kept.push(b);
+            }
+        }
+        m.base_ids = kept;
+    }
+    Ok(())
 }
 
 /// Change a member's role and/or which bases they can open. Everyone's
