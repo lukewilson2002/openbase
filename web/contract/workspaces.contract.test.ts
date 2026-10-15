@@ -110,6 +110,16 @@ describe("bases", () => {
     expect((await refreshBase(editor, w.baseId)).role).toBe("editor");
   });
 
+  it("creates a base without tables on request and lists only a limited member's bases", async () => {
+    const empty = parse("BaseSchema", await w.owner.run(() => api.bases.create(w.workspaceId, { name: "Empty base", empty: true })));
+    expect(empty.tables).toEqual([]);
+    expect(empty.workspace_name.length).toBeGreaterThan(0);
+    const ws = parseList("WorkspaceSummary", await editor.run(api.workspaces.list)).find((x) => x.id === w.workspaceId);
+    expect(ws).toMatchObject({ role: "editor" });
+    expect(ws?.bases.map((b) => b.id)).toEqual([w.baseId]);
+    expectError(await failure(editor.run(() => api.bases.get(empty.id))), 404, "not_found");
+  });
+
   it("renames and recolours a base and answers the updated schema", async () => {
     const updated = parse("BaseSchema", await w.owner.run(() => api.bases.update(w.baseId, { name: "Renamed base", color: "blue_dark" })));
     expect(w.owner.status).toBe(200);
@@ -122,16 +132,21 @@ describe("bases", () => {
     const collaborators = parseList("Collaborator", await w.owner.run(() => api.bases.collaborators(w.baseId)));
     expect(collaborators.map((c) => c.id)).toEqual(expect.arrayContaining([w.owner.id, editor.id]));
     const members = parseList("Member", await w.owner.run(() => api.bases.members(w.baseId)));
-    expect(members.find((m) => m.user_id === editor.id)?.role).toBe("editor");
-    // Collaborators are visible to every viewer of the base, members only to managers.
+    expect(members.find((m) => m.user_id === editor.id)).toMatchObject({ role: "editor", all_bases: false, base_ids: [w.baseId] });
+    expect(members.find((m) => m.user_id === w.owner.id)).toMatchObject({ role: "owner", all_bases: true });
+    // Everyone who can open the base sees its collaborators and who can open it.
     expect(parseList("Collaborator", await editor.run(() => api.bases.collaborators(w.baseId)))).not.toHaveLength(0);
-    expectError(await failure(editor.run(() => api.bases.members(w.baseId))), 403, "forbidden");
+    expect(parseList("Member", await editor.run(() => api.bases.members(w.baseId))).map((m) => m.user_id)).toContain(editor.id);
+    const schema = await refreshBase(editor, w.baseId);
+    expect(schema.people.map((p) => p.user_id)).toEqual(expect.arrayContaining([w.owner.id, editor.id]));
   });
 
-  it("changes and removes a base member", async () => {
-    expect(parse("OkResponse", await w.owner.run(() => api.bases.updateMember(w.baseId, editor.id, { role: "commenter" })))).toEqual({ ok: true });
+  it("changes a member's role on the workspace and removes them", async () => {
+    expect(parse("OkResponse", await w.owner.run(() => api.workspaces.updateMember(w.workspaceId, editor.id, { role: "commenter" })))).toEqual({ ok: true });
     expect((await refreshBase(editor, w.baseId)).role).toBe("commenter");
-    expect(parse("OkResponse", await w.owner.run(() => api.bases.removeMember(w.baseId, editor.id)))).toEqual({ ok: true });
+    // Their only base cannot be taken away on its own: they leave the workspace instead.
+    expectError(await failure(w.owner.run(() => api.bases.removeMember(w.baseId, editor.id))), 400, "bad_request");
+    expect(parse("OkResponse", await w.owner.run(() => api.workspaces.removeMember(w.workspaceId, editor.id)))).toEqual({ ok: true });
     expectError(await failure(editor.run(() => api.bases.get(w.baseId))), 404, "not_found");
   });
 

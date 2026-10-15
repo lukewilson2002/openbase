@@ -2,9 +2,8 @@
 import type { BaseSummary } from "./BaseSummary";
 
 /**
- * `GET /api/workspaces` item. Bases shared with the caller directly (base
- * membership without workspace membership) appear under their workspace
- * with `role: None` on the workspace.
+ * `GET /api/workspaces` item: a workspace the caller is a member of, with
+ * the bases they can open.
  */
 export type WorkspaceSummary = { id: string, name: string, 
 /**
@@ -12,6 +11,10 @@ export type WorkspaceSummary = { id: string, name: string,
  */
 icon?: string | null, 
 /**
- * Caller's workspace role; None when only individual bases are shared.
+ * Caller's workspace role.
  */
-role?: string | null, bases: Array<BaseSummary>, };
+role: string, bases: Array<BaseSummary>, member_count: number, 
+/**
+ * Unaccepted, unexpired invites to the workspace.
+ */
+pending_invite_count: number, };

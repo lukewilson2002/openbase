@@ -33,7 +33,18 @@ export function canManageSharing(kind: SharingScope["kind"], role: string | null
   return atLeast(role, kind === "workspace" ? "owner" : "creator");
 }
 
-function scopeOps(scope: SharingScope) {
+interface ScopeOps {
+  membersKey: readonly unknown[];
+  invitesKey: readonly unknown[];
+  members: () => Promise<Member[]>;
+  invites: () => Promise<InviteInfo[]>;
+  createInvite: (body: { role: string; email?: string | null }) => Promise<CreatedInvite>;
+  /** Null for a base: roles are set on the workspace (one role per member). */
+  updateMember: ((userId: string, role: string) => Promise<unknown>) | null;
+  removeMember: (userId: string) => Promise<unknown>;
+}
+
+function scopeOps(scope: SharingScope): ScopeOps {
   const { id } = scope;
   if (scope.kind === "workspace") {
     return {
@@ -52,7 +63,7 @@ function scopeOps(scope: SharingScope) {
     members: () => api.bases.members(id),
     invites: () => api.invites.forBase(id),
     createInvite: (body: { role: string; email?: string | null }) => api.invites.createForBase(id, body),
-    updateMember: (userId: string, role: string) => api.bases.updateMember(id, userId, { role }),
+    updateMember: null,
     removeMember: (userId: string) => api.bases.removeMember(id, userId),
   };
 }
@@ -77,7 +88,7 @@ export function SharingDialog({ open, onOpenChange, scope, myRole }: SharingDial
           Share <EntityLabel icon={scope.icon}>{scope.name}</EntityLabel>
         </span>
       }
-      description={scope.kind === "workspace" ? "People in a workspace can open every base in it." : "Base members add to the access they already have through the workspace."}
+      description={scope.kind === "workspace" ? "People in a workspace can open every base in it." : "These are the workspace members who can open this base; change roles on the workspace."}
     >
       <div className="flex flex-col gap-6">
         <MembersList scope={scope} myRole={myRole} canManage={manage} />
@@ -97,7 +108,9 @@ function MembersList({ scope, myRole, canManage }: { scope: SharingScope; myRole
   const roles = grantableRoles(myRole);
 
   const changeRole = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) => ops.updateMember(userId, role),
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      await ops.updateMember?.(userId, role);
+    },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ops.membersKey }),
     onError: (e) => toast.error(e, "Could not change role"),
   });
@@ -117,7 +130,7 @@ function MembersList({ scope, myRole, canManage }: { scope: SharingScope; myRole
         <ul className="divide-y divide-line rounded-md border border-line">
           {members.data.map((m) => {
             const isMe = m.user_id === me?.id;
-            const editable = canManage && roles.length > 0 && (!isRole(m.role) || roles.includes(m.role));
+            const editable = canManage && ops.updateMember !== null && roles.length > 0 && (!isRole(m.role) || roles.includes(m.role));
             return (
               <li key={m.user_id} className="flex flex-wrap items-center gap-3 px-3 py-2">
                 <Avatar name={m.name} email={m.email} />

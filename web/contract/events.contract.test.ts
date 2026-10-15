@@ -168,13 +168,13 @@ describe("access", () => {
     expect((await anon.jar.fetch(`${seeded.baseUrl}/api/bases/${w.baseId}/events`)).status).toBe(401);
   });
 
-  it("ends the stream when the reader is removed from the base", async () => {
+  it("ends the stream when the reader is removed from the workspace", async () => {
     const guest = await newUser(w.owner, "guest");
     await joinBase(w.owner, w.baseId, guest, "viewer");
     const res = await guest.jar.fetch(`${seeded.baseUrl}/api/bases/${w.baseId}/events`, { headers: { accept: "text/event-stream" } });
     expect(res.status).toBe(200);
     const frames = readFrames(res.body!);
-    await w.owner.run(() => api.bases.removeMember(w.baseId, guest.id));
+    await w.owner.run(() => api.workspaces.removeMember(w.workspaceId, guest.id));
     // The membership change is announced (base_changed), then access is re-checked and the stream ends.
     const outcome = await Promise.race([
       (async () => {

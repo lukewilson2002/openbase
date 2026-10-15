@@ -149,7 +149,7 @@ export const api = {
   invites: {
     preview: (token: string) =>
       http.get<InvitePreview>(`/api/invites/by-token/${enc(token)}`, { skipAuthRedirect: true }),
-    /** Returns the accepted invite (`workspace_id` or `base_id` says where to go next). */
+    /** Returns the accepted invite (`workspace_id` says where to go next). */
     accept: (token: string) => http.post<InviteInfo>(`/api/invites/by-token/${enc(token)}/accept`),
     remove: (id: string) => http.delete<void>(`/api/invites/${enc(id)}`),
     forWorkspace: (workspaceId: string) => http.get<InviteInfo[]>(`/api/workspaces/${enc(workspaceId)}/invites`),
@@ -207,8 +207,6 @@ export const api = {
     duplicate: (id: string, body: DuplicateBase) => http.post<BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
     collaborators: (id: string) => http.get<Collaborator[]>(`/api/bases/${enc(id)}/collaborators`),
     members: (id: string) => http.get<Member[]>(`/api/bases/${enc(id)}/members`),
-    updateMember: (id: string, userId: string, body: UpdateMember) =>
-      http.patch<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>
       http.delete<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`),
     /** SSE endpoint path (see events.ts). */

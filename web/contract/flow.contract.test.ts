@@ -387,10 +387,11 @@ describe("invitations", () => {
 
   it("accepts a base invite as a signed-in user and returns the invite", async () => {
     const created = parse("CreatedInvite", await asAdmin(() => api.invites.createForBase(baseId, { role: "commenter", email: secondEmail })));
-    expect(created.info).toMatchObject({ base_id: baseId, role: "commenter" });
+    // A base invite joins the workspace, limited to that base.
+    expect(created.info).toMatchObject({ workspace_id: workspaceId, base_id: null, all_bases: false, base_ids: [baseId], role: "commenter" });
     baseInviteToken = created.url.split("/invite/")[1]!;
     const accepted = parse("InviteInfo", await asSecond(() => api.invites.accept(baseInviteToken)));
-    expect(accepted.base_id).toBe(baseId);
+    expect(accepted.base_ids).toEqual([baseId]);
     expect(accepted.accepted_at).toBeGreaterThan(0);
   });
 

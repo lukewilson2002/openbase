@@ -74,7 +74,11 @@ export async function newUser(admin: Profile, label = "user"): Promise<Profile> 
   return new Profile(label).login(email, password);
 }
 
-/** Give `user` the `role` on a base by invitation (the only way to add someone to a base). */
+/**
+ * Make `user` a member of the base's workspace with `role`, limited to that base, by accepting
+ * a base invite (what the Share dialog does). Joining a second base of the same workspace adds
+ * it to their list.
+ */
 export async function joinBase(owner: Profile, baseId: string, user: Profile, role: string): Promise<void> {
   const invite = parse("CreatedInvite", await owner.run(() => api.invites.createForBase(baseId, { role, email: null })));
   const token = invite.url.split("/invite/")[1]!;

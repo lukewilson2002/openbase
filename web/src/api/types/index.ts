@@ -14,6 +14,7 @@ export type { Automation } from "./Automation";
 export type { AutomationRun } from "./AutomationRun";
 export type { BackupInfo } from "./BackupInfo";
 export type { BaseEvent } from "./BaseEvent";
+export type { BasePerson } from "./BasePerson";
 export type { BaseSchema } from "./BaseSchema";
 export type { BaseSummary } from "./BaseSummary";
 export type { ButtonOptions } from "./ButtonOptions";
