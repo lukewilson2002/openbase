@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InviteInfo, Member, WorkspaceSummary } from "@/api/types";
-import { USER, mockApi, renderApp, type Handler } from "@/test/utils";
+import { USER, apiError, mockApi, renderApp, type Handler } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -54,10 +54,9 @@ describe("members page", () => {
     const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
     expect(within(pending).getByText("Invited")).toBeInTheDocument();
     expect(within(pending).getByRole("button", { name: "Resend" })).toBeInTheDocument();
-    // An invite's terms can only be replaced, not edited: its access and role are plain text.
-    expect(within(pending).queryByRole("button", { name: /can open/ })).not.toBeInTheDocument();
-    expect(within(pending).getByText("Viewer")).toBeInTheDocument();
-    expect(within(pending).getByText("Budget only")).toBeInTheDocument();
+    // An invite's bases and role are changed like a member's.
+    expect(within(pending).getByRole("button", { name: "Bases Jordan can open: Budget only" })).toBeInTheDocument();
+    expect(within(pending).getByRole("combobox", { name: "Role for jordan@example.com" })).toHaveValue("viewer");
     expect(pending.querySelector("[data-pending]")).toHaveClass("border-dashed");
     expect(screen.getByText(/Want someone outside the workspace to see a few records\? Share a view instead\./)).toBeInTheDocument();
   });
@@ -185,6 +184,59 @@ describe("members page", () => {
     await user.click(within(pending).getByRole("button", { name: "Resend" }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(1));
     expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]!.body).toEqual({ email: "jordan@example.com", role: "viewer", all_bases: false, base_ids: ["app2"] });
+  });
+
+  it("changes which bases an invite gives, keeping its link", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/invites/inv1": { ...invite, base_ids: ["app1", "app2"] } });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
+    const toggle = within(pending).getByRole("button", { name: /Bases Jordan can open/ });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const editor = within(pending).getByRole("group", { name: "Bases Jordan can open" });
+    expect(within(editor).getByRole("checkbox", { name: "Budget" })).toBeChecked();
+    await user.click(within(editor).getByRole("checkbox", { name: "Chores" }));
+    await user.click(within(editor).getByRole("button", { name: "Save access" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/invites/inv1")[0]?.body).toEqual({ all_bases: false, base_ids: ["app1", "app2"] }));
+    await waitFor(() => expect(within(pending).queryByRole("group", { name: "Bases Jordan can open" })).not.toBeInTheDocument());
+    // Changed in place: nothing was created or revoked.
+    expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(0);
+    expect(api.callsTo("DELETE /api/invites/inv1")).toHaveLength(0);
+  });
+
+  it("will not save an invite to no base at all, and can give it every base", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/invites/inv1": { ...invite, all_bases: true, base_ids: [] } });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
+    await user.click(within(pending).getByRole("button", { name: /Bases Jordan can open/ }));
+    await user.click(within(pending).getByRole("checkbox", { name: "Budget" }));
+    expect(within(pending).getByText("Pick at least one base, or cancel the invite.")).toBeInTheDocument();
+    expect(within(pending).getByRole("button", { name: "Save access" })).toBeDisabled();
+    await user.click(within(pending).getByRole("checkbox", { name: "All bases, including new ones" }));
+    await user.click(within(pending).getByRole("button", { name: "Save access" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/invites/inv1")[0]?.body).toEqual({ all_bases: true }));
+  });
+
+  it("changes an invite's role, and says so when that fails", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/invites/inv1": { ...invite, role: "editor" } });
+    renderApp({ route: "/workspace/wsp1/members" });
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Role for jordan@example.com" }), "editor");
+    await waitFor(() => expect(api.callsTo("PATCH /api/invites/inv1")[0]?.body).toEqual({ role: "editor" }));
+
+    api.set("PATCH /api/invites/inv1", apiError(403, "forbidden", "you cannot invite someone with a role above your own"));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Role for jordan@example.com" }), "owner");
+    expect(await screen.findByText("you cannot invite someone with a role above your own")).toBeInTheDocument();
+  });
+
+  it("has no base picker on an owner invite, which always gives every base", async () => {
+    routes({ "GET /api/workspaces/wsp1/invites": [{ ...invite, role: "owner", all_bases: true, base_ids: [] }] });
+    renderApp({ route: "/workspace/wsp1/members" });
+    const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
+    expect(within(pending).queryByRole("button", { name: /can open/ })).not.toBeInTheDocument();
+    expect(within(pending).getByText("All bases")).toBeInTheDocument();
   });
 
   it("refreshes the bases' faces and the workspace list after a change", async () => {
