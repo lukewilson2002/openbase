@@ -312,6 +312,7 @@ function tableDto(id: string): Obj {
   };
 }
 
+let introSeen = true;
 let roleOverride: string | null = null;
 
 function baseDto(req: IncomingMessage): Obj {
@@ -583,7 +584,15 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   let g: RegExpExecArray | null;
 
   if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://openbase.example.com" }), true;
-  if (p === "/api/auth/me") return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false }), true;
+  if (p === "/api/auth/me") {
+    if (m === "PATCH" && typeof body.intro_seen === "boolean") introSeen = body.intro_seen;
+    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false, intro_seen: introSeen }), true;
+  }
+  // GET /api/__mock/intro/unseen brings the first-run intro back on the next page load.
+  if ((g = /^\/api\/__mock\/intro\/(seen|unseen)$/.exec(p))) {
+    introSeen = g[1] === "seen";
+    return send(res, 200, { intro_seen: introSeen }), true;
+  }
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, [{ id: "wsp1", name: "Acme", role: "owner", bases: [{ id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: "owner" }] }]), true;
   if ((g = /^\/api\/__mock\/role\/(\w+)$/.exec(p))) {
     roleOverride = g[1] === "reset" ? null : g[1]!;
