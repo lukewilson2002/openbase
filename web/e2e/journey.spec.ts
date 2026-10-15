@@ -20,9 +20,9 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 const MARKER_W = 56;
 const HEADER_H = 34;
 const ROW_H = 33;
+// A table made with "New empty table" has only its primary field, so the added fields follow "Name".
 const COLUMNS = [
   { key: "name", width: 220 },
-  { key: "notes", width: 260 },
   { key: "qty", width: 140 },
   { key: "status", width: 170 },
   { key: "due", width: 140 },
@@ -106,22 +106,27 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     // A new account meets the intro first; skipping it is remembered by the server.
     await expect(page.getByRole("dialog", { name: "A base holds one project" })).toBeVisible();
     await page.getByRole("button", { name: "Skip the intro" }).click();
-    await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
     expect(await api<{ needs_setup: boolean }>(page, "/api/setup")).toMatchObject({ needs_setup: false });
     await expect.poll(async () => api<{ intro_seen: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true, intro_seen: true });
   });
 
   await test.step("creates a workspace and a base", async () => {
-    await expect(page.getByText("No workspaces yet")).toBeVisible();
-    await page.getByRole("button", { name: "Create a workspace" }).click();
-    await page.getByRole("textbox", { name: "Name" }).fill("Journey workspace");
+    await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
-    await expect(page.getByRole("heading", { name: "Journey workspace" })).toBeVisible();
-    await page.getByRole("button", { name: "New base" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Journey workspace" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Make your first base" })).toBeVisible();
+    await page.getByRole("button", { name: "New base" }).first().click();
     await page.getByRole("textbox", { name: "Name" }).fill("Journey base");
     await page.getByRole("button", { name: "Create base" }).click();
-    await expect(page).toHaveURL(/\/base\/app[^/]+\/tbl[^/]+\/viw[^/]+$/);
+    // A new base starts without tables; its first one comes from the tab bar's "Add table".
+    await expect(page).toHaveURL(/\/base\/app[^/]+$/);
     baseId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
+    await page.getByRole("button", { name: "Add table" }).click();
+    await page.getByRole("menuitem", { name: "New empty table" }).click();
+    await page.getByRole("textbox", { name: "Name" }).fill("Table 1");
+    await page.getByRole("button", { name: "Create table" }).click();
+    await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     viewId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
     const workspaces = await api<{ name: string; bases: { id: string; name: string }[] }[]>(page, "/api/workspaces");
@@ -167,7 +172,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     });
 
     table = await loadTable();
-    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "single_line_text"], ["Notes", "long_text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
+    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "single_line_text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
     const double = table.fields.find((f) => f.name === "Double")!;
     expect(double.options).toMatchObject({ expression: "{Qty} * 2", result_type: "number" });
     const status = table.fields.find((f) => f.name === "Status")!;
@@ -281,7 +286,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   // Icons: picked from the full list for a table, shown in its tab and in the link field's target
-  // select, then for the base and the workspace (home page tiles).
+  // select, then for the base and the workspace (workspace page tiles).
   await test.step("gives the table an icon from the full list; the tab shows it and the server keeps it", async () => {
     await page.getByRole("button", { name: "Table options for Projects" }).click();
     await page.getByRole("menuitem", { name: /Change icon/ }).click();
@@ -324,7 +329,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect(link.options).toMatchObject({ linked_table_id: clients.id });
   });
 
-  await test.step("gives the base and the workspace icons; the home page shows them instead of the letters", async () => {
+  await test.step("gives the base and the workspace icons; the workspace page shows them instead of the letters", async () => {
     await page.getByRole("button", { name: "Change base icon" }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
     await expect(page.locator("header [data-entity-tile] svg[data-icon='store']")).toBeVisible();
@@ -336,7 +341,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
     await page.getByRole("button", { name: "Change icon of Journey workspace" }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Briefcase" }).click();
-    const section = page.getByRole("heading", { name: "Journey workspace" }).locator("xpath=ancestor::section");
+    // The workspace page's own header (the app's top bar is a header too, outside main).
+    const section = page.getByRole("main").locator("header");
     await expect(section.locator("[data-entity-tile] svg[data-icon='briefcase']").first()).toBeVisible();
     const workspaces = await api<{ name: string; icon: string | null; bases: { name: string; icon: string | null }[] }[]>(page, "/api/workspaces");
     const ws = workspaces.find((w) => w.name === "Journey workspace")!;

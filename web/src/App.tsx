@@ -8,6 +8,7 @@ import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { HomePage } from "@/pages/HomePage";
+import { WorkspacePage } from "@/pages/workspace/WorkspacePage";
 import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
@@ -17,6 +18,9 @@ import { PageSpinner } from "@/components/ui/spinner";
 const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) => ({ default: m.AccountPage })));
 // The page an app's "connect" request lands on (opened by the server's /oauth/authorize).
 const OAuthConsentPage = lazy(() => import("@/pages/oauth/OAuthConsentPage").then((m) => ({ default: m.OAuthConsentPage })));
+const MembersPage = lazy(() => import("@/pages/workspace/MembersPage").then((m) => ({ default: m.MembersPage })));
+const WorkspaceSettingsPage = lazy(() => import("@/pages/workspace/WorkspaceSettingsPage").then((m) => ({ default: m.WorkspaceSettingsPage })));
+const TrashPage = lazy(() => import("@/pages/workspace/TrashPage").then((m) => ({ default: m.TrashPage })));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
 // Pages a person meets once (first-run setup, sign-up, an invite, a password reset) stay out of the shell too.
 const SetupPage = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
@@ -24,6 +28,8 @@ const SignupPage = lazy(() => import("@/pages/SignupPage").then((m) => ({ defaul
 const InvitePage = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ForgotPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import("@/pages/PasswordResetPages").then((m) => ({ default: m.ResetPasswordPage })));
+// Dev-only harnesses for the mock API (`VITE_MOCK=1 npm run dev`); `import.meta.env.DEV` drops them from builds.
+const DevSharePage = import.meta.env.DEV ? lazy(() => import("@/dev/DevSharePage")) : null;
 // Public pages for people without an account: their own chunks, outside the app shell.
 const PublicFormPage = lazy(() => import("@/public/form/PublicFormPage"));
 const PublicSharePage = lazy(() => import("@/public/view/PublicSharePage"));
@@ -49,6 +55,11 @@ export function AppRoutes() {
           {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
           <Route element={<SignedInArea />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/workspace/:workspaceId" element={<WorkspacePage />} />
+            <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
+            <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
+            <Route path="/trash" element={<TrashPage />} />
+            {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}
             <Route path="/account" element={<AccountPage />} />
             <Route
               path="/admin"

@@ -317,7 +317,8 @@ let roleOverride: string | null = null;
 
 function baseDto(req: IncomingMessage): Obj {
   const cookie = /ob-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
-  return { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE), tableDto(T_PROJECTS)] };
+  const b = ws.bases.find((x) => x.id === BASE_ID) ?? { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null };
+  return { ...b, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE), tableDto(T_PROJECTS)], people: basePeople(b), workspace_name: ws.workspaces.find((w) => w.id === b.workspace_id)?.name ?? "Acme" };
 }
 
 function fieldsOf(table: string): Obj[] {
@@ -577,6 +578,195 @@ function applyValues(rec: Rec, patch: Obj, clientId: string | undefined, kind = 
   void clientId;
 }
 
+
+// ---- workspaces, members and invites ----------------------------------------------------------
+// `/api/__mock/workspaces/none` empties the list (the "Create your first workspace" page);
+// `/api/__mock/workspaces/reset` brings the fixtures back.
+
+function workspaceFixtures() {
+  const now = Date.now();
+  return {
+    workspaces: [
+      { id: "wsp1", name: "Acme", icon: "briefcase", role: "owner" },
+      { id: "wsp2", name: "Household", icon: "house", role: "owner" },
+    ] as Obj[],
+    bases: [
+      { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null },
+      { id: "app2", workspace_id: "wsp1", name: "Customer relationships", color: "blue", icon: "users" },
+      { id: "app3", workspace_id: "wsp1", name: "Content calendar", color: "purple_dark", icon: null },
+      { id: "app4", workspace_id: "wsp1", name: "Hiring", color: "orange", icon: null },
+      { id: "app5", workspace_id: "wsp2", name: "Chores", color: "teal", icon: null },
+    ] as Obj[],
+    members: {
+      wsp1: [
+        { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] },
+        { user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", role: "editor", all_bases: false, base_ids: [BASE_ID, "app2"] },
+        { user_id: "usr3", name: "Alan Turing", email: "alan@example.com", role: "viewer", all_bases: true, base_ids: [] },
+        { user_id: "usr4", name: "Katherine Johnson", email: "katherine@example.com", role: "creator", all_bases: false, base_ids: [BASE_ID] },
+      ],
+      wsp2: [{ user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }],
+    } as Record<string, Obj[]>,
+    invites: [
+      { id: "inv1", workspace_id: "wsp1", base_id: null, email: "jordan@example.com", role: "editor", created_at: now - 86_400_000, expires_at: now + 6 * 86_400_000, accepted_at: null, all_bases: false, base_ids: [BASE_ID, "app3"] },
+    ] as Obj[],
+    deleted: [{ kind: "workspace", id: "wspOld", name: "Old clients", icon: "archive", table_id: null, deleted_at: now - 3 * 86_400_000 }] as Obj[],
+  };
+}
+let ws = workspaceFixtures();
+const shares: Obj[] = [];
+
+function canOpen(m: Obj, baseId: string): boolean {
+  return m.role === "owner" || m.all_bases || m.base_ids.includes(baseId);
+}
+
+function basePeople(b: Obj): Obj[] {
+  const members = (ws.members[b.workspace_id] ?? []).filter((m) => canOpen(m, b.id)).map((m) => ({ user_id: m.user_id, name: m.name, email: m.email, pending: false, role: m.role }));
+  const invited = ws.invites
+    .filter((i) => i.workspace_id === b.workspace_id && !i.accepted_at && (i.role === "owner" || i.all_bases || i.base_ids.includes(b.id)))
+    .map((i) => ({ user_id: null, name: i.email ?? "", email: i.email ?? "", pending: true, role: i.role }));
+  return [...members, ...invited];
+}
+
+function baseSummary(b: Obj, role: string): Obj {
+  return { ...b, role, people: basePeople(b) };
+}
+
+function workspaceList(): Obj[] {
+  return ws.workspaces.map((w) => {
+    const me = (ws.members[w.id] ?? []).find((m) => m.user_id === ME);
+    return {
+      ...w,
+      role: me?.role ?? w.role,
+      bases: ws.bases.filter((b) => b.workspace_id === w.id && (!me || canOpen(me, b.id))).map((b) => baseSummary(b, me?.role ?? w.role)),
+      member_count: (ws.members[w.id] ?? []).length,
+      pending_invite_count: ws.invites.filter((i) => i.workspace_id === w.id && !i.accepted_at).length,
+    };
+  });
+}
+
+function createInvite(workspaceId: string, body: Obj, fromBase: string | null): Obj {
+  const all = body.role === "owner" || (body.all_bases ?? !fromBase);
+  const info = {
+    id: newId("inv"),
+    workspace_id: workspaceId,
+    base_id: null,
+    email: body.email || null,
+    role: body.role,
+    created_at: Date.now(),
+    expires_at: Date.now() + 7 * 86_400_000,
+    accepted_at: null,
+    all_bases: all,
+    base_ids: all ? [] : (body.base_ids ?? (fromBase ? [fromBase] : [])),
+  };
+  ws.invites.push(info);
+  return { url: `https://openbase.example.com/invite/${newId("tok")}${newId("x")}`, info };
+}
+
+function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse): boolean {
+  let g: RegExpExecArray | null;
+  if ((g = /^\/api\/__mock\/workspaces\/(none|reset)$/.exec(p))) {
+    ws = workspaceFixtures();
+    if (g[1] === "none") {
+      ws.workspaces = [];
+      ws.bases = ws.bases.filter((b) => b.id === BASE_ID);
+    }
+    return send(res, 200, { ok: true }), true;
+  }
+  if (p === "/api/workspaces" && m === "GET") return send(res, 200, workspaceList()), true;
+  if (p === "/api/workspaces" && m === "POST") {
+    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, role: "owner" };
+    ws.workspaces.push(w);
+    ws.members[w.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
+    return send(res, 201, workspaceList().find((x) => x.id === w.id)), true;
+  }
+  if ((g = /^\/api\/workspaces\/([^/]+)$/.exec(p))) {
+    const w = ws.workspaces.find((x) => x.id === g![1]);
+    if (!w) return err(res, 404, "not_found", "workspace not found"), true;
+    if (m === "PATCH") {
+      if (body.name !== undefined) w.name = body.name;
+      if (body.icon !== undefined) w.icon = body.icon;
+      return send(res, 200, workspaceList().find((x) => x.id === w.id)), true;
+    }
+    if (m === "DELETE") {
+      ws.workspaces.splice(ws.workspaces.indexOf(w), 1);
+      ws.deleted.push({ kind: "workspace", id: w.id, name: w.name, icon: w.icon, table_id: null, deleted_at: Date.now() });
+      return send(res, 200, { ok: true }), true;
+    }
+  }
+  if ((g = /^\/api\/workspaces\/([^/]+)\/members$/.exec(p)) && m === "GET") return send(res, 200, ws.members[g[1]!] ?? []), true;
+  if ((g = /^\/api\/workspaces\/([^/]+)\/members\/([^/]+)$/.exec(p))) {
+    const list = ws.members[g[1]!] ?? [];
+    const member = list.find((x) => x.user_id === g![2]);
+    if (!member) return err(res, 404, "not_found", "member not found"), true;
+    if (m === "PATCH") {
+      if (body.role) member.role = body.role;
+      if (body.base_ids) {
+        member.base_ids = body.base_ids;
+        member.all_bases = body.all_bases === true;
+      } else if (typeof body.all_bases === "boolean") member.all_bases = body.all_bases;
+      if (member.role === "owner") member.all_bases = true;
+      return send(res, 200, { ok: true }), true;
+    }
+    if (m === "DELETE") {
+      list.splice(list.indexOf(member), 1);
+      return send(res, 200, { ok: true }), true;
+    }
+  }
+  if ((g = /^\/api\/workspaces\/([^/]+)\/invites$/.exec(p))) {
+    if (m === "GET") return send(res, 200, ws.invites.filter((i) => i.workspace_id === g![1])), true;
+    if (m === "POST") return send(res, 201, createInvite(g[1]!, body, null)), true;
+  }
+  if ((g = /^\/api\/bases\/([^/]+)\/invites$/.exec(p)) && m === "POST") {
+    const b = ws.bases.find((x) => x.id === g![1]);
+    if (!b) return err(res, 404, "not_found", "base not found"), true;
+    if (body.all_bases) return err(res, 403, "forbidden", "Only owners can invite to every base"), true;
+    return send(res, 201, createInvite(b.workspace_id, body, b.id)), true;
+  }
+  if ((g = /^\/api\/invites\/([^/]+)$/.exec(p)) && m === "DELETE") {
+    ws.invites = ws.invites.filter((i) => i.id !== g![1]);
+    return send(res, 204), true;
+  }
+  if ((g = /^\/api\/workspaces\/([^/]+)\/bases$/.exec(p)) && m === "POST") {
+    const b = { id: newId("app"), workspace_id: g[1], name: body.name, color: body.color ?? "blue_dark", icon: body.icon ?? null };
+    ws.bases.push(b);
+    return send(res, 201, { ...baseSummary(b, "owner"), tables: [], workspace_name: ws.workspaces.find((w) => w.id === g![1])?.name ?? "" }), true;
+  }
+  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && g[1] !== BASE_ID && (m === "PATCH" || m === "DELETE")) {
+    const b = ws.bases.find((x) => x.id === g![1]);
+    if (!b) return err(res, 404, "not_found", "base not found"), true;
+    if (m === "DELETE") ws.bases.splice(ws.bases.indexOf(b), 1);
+    else Object.assign(b, Object.fromEntries(Object.entries(body).filter(([k]) => ["name", "color", "icon"].includes(k))));
+    return send(res, 200, { ok: true }), true;
+  }
+  if (p === "/api/trash/workspaces" && m === "GET") return send(res, 200, { items: ws.deleted }), true;
+  if (p === "/api/trash/restore" && m === "POST" && body.kind === "workspace") {
+    const item = ws.deleted.find((d) => d.id === body.id);
+    if (!item) return err(res, 404, "not_found", "nothing to restore"), true;
+    ws.deleted = ws.deleted.filter((d) => d !== item);
+    ws.workspaces.push({ id: item.id, name: item.name, icon: item.icon, role: "owner" });
+    ws.members[item.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
+    return send(res, 200, { ok: true, restored_field_ids: [] }), true;
+  }
+  if ((g = /^\/api\/views\/([^/]+)\/shares$/.exec(p))) {
+    if (m === "GET") return send(res, 200, shares.filter((x) => x.view_id === g![1])), true;
+    if (m === "POST") {
+      const token = newId("shr") + newId("t");
+      const kind = body.kind ?? "view";
+      const link = { id: newId("shl"), view_id: g[1], kind, token, path: `/${kind === "form" ? "f" : "s"}/${token}`, url: `https://openbase.example.com/${kind === "form" ? "f" : "s"}/${token}`, enabled: true, has_password: !!body.password, created_by: ME, created_at: Date.now() };
+      shares.push(link);
+      return send(res, 201, link), true;
+    }
+  }
+  if ((g = /^\/api\/shares\/([^/]+)$/.exec(p)) && m === "PATCH") {
+    const link = shares.find((x) => x.id === g![1]);
+    if (!link) return err(res, 404, "not_found", "share not found"), true;
+    if (body.enabled !== undefined) link.enabled = body.enabled;
+    if (body.password !== undefined) link.has_password = body.password !== null;
+    return send(res, 200, link), true;
+  }
+  return false;
+}
+
 function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): boolean {
   const m = req.method ?? "GET";
   const p = url.pathname;
@@ -593,7 +783,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     introSeen = g[1] === "seen";
     return send(res, 200, { intro_seen: introSeen }), true;
   }
-  if (p === "/api/workspaces" && m === "GET") return send(res, 200, [{ id: "wsp1", name: "Acme", role: "owner", bases: [{ id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null, role: "owner" }] }]), true;
+  if (workspaceRoutes(m, p, body, res)) return true;
   if ((g = /^\/api\/__mock\/role\/(\w+)$/.exec(p))) {
     roleOverride = g[1] === "reset" ? null : g[1]!;
     return send(res, 200, { role: roleOverride }), true;

@@ -1,25 +1,13 @@
-import { Link, useNavigate } from "react-router";
-import { LogOut, Monitor, Moon, Settings, ShieldCheck, Sun } from "lucide-react";
-import { useLogout, useMe } from "@/auth/useAuth";
-import { useTheme } from "@/theme/ThemeProvider";
-import type { ThemeMode } from "@/theme/theme";
+import { Link } from "react-router";
+import { LogOut, Settings, ShieldCheck } from "lucide-react";
+import { useMe } from "@/auth/useAuth";
+import { ThemeRadioItems, useLogOutAndLeave } from "./accountMenu";
 import { Avatar } from "./ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 export function UserMenu() {
   const { data: user } = useMe();
-  const { mode, setMode } = useTheme();
-  const logout = useLogout();
-  const navigate = useNavigate();
+  const logOut = useLogOutAndLeave();
   if (!user) return null;
 
   return (
@@ -49,23 +37,9 @@ export function UserMenu() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={mode} onValueChange={(v) => setMode(v as ThemeMode)}>
-          <DropdownMenuRadioItem value="system">
-            <Monitor aria-hidden className="size-4" /> System
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="light">
-            <Sun aria-hidden className="size-4" /> Light
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">
-            <Moon aria-hidden className="size-4" /> Dark
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
+        <ThemeRadioItems />
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            logout.mutate(undefined, { onSettled: () => navigate("/login", { replace: true }) });
-          }}
-        >
+        <DropdownMenuItem onSelect={logOut}>
           <LogOut aria-hidden className="size-4" /> Log out
         </DropdownMenuItem>
       </DropdownMenuContent>

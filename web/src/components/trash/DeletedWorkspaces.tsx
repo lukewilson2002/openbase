@@ -1,5 +1,5 @@
 /**
- * "Recently deleted workspaces" on the home page: the caller's own deleted workspaces (they must be
+ * "Recently deleted workspaces" on the Trash page: the caller's own deleted workspaces (they must be
  * an owner) with a Restore button each. `GET /api/trash/workspaces`, then `POST /api/trash/restore`.
  * A deleted workspace has no trash endpoint of its own any more, so this is the way back to it.
  * Renders nothing while loading, when the list is empty, or when it cannot be loaded.
@@ -42,7 +42,7 @@ export function DeletedWorkspaces() {
   if (items.length === 0) return null;
 
   return (
-    <section aria-labelledby="deleted-workspaces" className="mt-10">
+    <section aria-labelledby="deleted-workspaces">
       <h2 id="deleted-workspaces" className="text-[0.9375rem]">
         Recently deleted workspaces
       </h2>
