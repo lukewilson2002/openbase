@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0004_passkeys.sql"),
     include_str!("../migrations/0005_workspace_base_access.sql"),
     include_str!("../migrations/0006_workspace_color_deleted_by.sql"),
+    include_str!("../migrations/0007_invite_may_raise_roles.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -340,7 +341,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 6);
+        assert_eq!(schema_version(), 7);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -563,7 +564,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 6);
+        assert_eq!(schema_version(), 7);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -715,6 +716,42 @@ mod tests {
         assert_eq!(a, expected);
         assert_eq!(color("b1"), "green");
         assert_eq!(color("orphan"), "green");
+        migrate(&conn).unwrap();
+    }
+
+    #[test]
+    fn v6_invites_may_not_raise_existing_members_after_the_upgrade() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        migrate_with(&conn, &MIGRATIONS[..6], None).unwrap();
+        conn.execute_batch(
+            "INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
+                 VALUES ('owner', 'o@example.com', 'O', '!', 1, 1);
+             INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'One', 1);
+             INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+                 VALUES ('w1', 'owner', 'owner', 1);
+             INSERT INTO invites (id, token_hash, workspace_id, role, created_by, created_at, expires_at)
+                 VALUES ('i1', 'h1', 'w1', 'editor', 'owner', 1, 9999999999999);",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        assert_eq!(schema_version(), 7);
+        let flag = |id: &str| -> bool {
+            conn.query_row(
+                "SELECT may_raise_roles FROM invites WHERE id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert!(!flag("i1"), "who set its terms, and how, was not recorded");
+        conn.execute(
+            "INSERT INTO invites (id, token_hash, workspace_id, role, created_at, expires_at)
+             VALUES ('i2', 'h2', 'w1', 'viewer', 1, 9999999999999)",
+            [],
+        )
+        .unwrap();
+        assert!(!flag("i2"), "off unless set");
         migrate(&conn).unwrap();
     }
 

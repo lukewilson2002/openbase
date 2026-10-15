@@ -313,8 +313,12 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   valid only while their creator is active and holds the invited role as an Owner of
   the workspace or, for an invite limited to some bases, as a Creator who can still
   open each of them; they cannot be accepted by their creator. Removing, demoting or
-  narrowing someone therefore voids what they had pending. Creators can never invite
-  to every base or to a base they cannot open.
+  narrowing someone therefore voids what they had pending, and a voided invite is not
+  listed and cannot be changed (changing it would make the editor its inviter and
+  revive the link). Creators can never invite to every base or to a base they cannot
+  open. Accepting raises an existing member's workspace role only when its terms were
+  last set by an owner acting for the whole workspace, not through a token limited to
+  some bases (recorded on the invite when its terms are set).
 
 ## Passkeys
 

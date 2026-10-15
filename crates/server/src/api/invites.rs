@@ -146,6 +146,26 @@ fn require_manage_invite(conn: &Connection, actor: &Actor, invite: &InviteRow) -
     Ok(())
 }
 
+/// Whether the actor could list `base_id` on an invite at `role` if it were
+/// not in the trash: what [`authorize_create`] asks of live bases, and what
+/// the invite's validity will ask of its inviter once the base is restored.
+fn may_list_trashed(
+    conn: &Connection,
+    actor: &Actor,
+    base_id: &str,
+    role: Role,
+) -> AppResult<bool> {
+    let in_scope = actor
+        .token_scope
+        .as_ref()
+        .and_then(|s| s.base_ids.as_ref())
+        .is_none_or(|ids| ids.iter().any(|b| b == base_id));
+    let needed = Role::Creator.max(role);
+    Ok(in_scope
+        && perm::base_role_including_trashed(conn, &actor.user_id, base_id)?
+            .is_some_and(|r| r >= needed))
+}
+
 fn workspace_name(conn: &Connection, workspace_id: &str) -> AppResult<String> {
     Ok(conn
         .query_row(
@@ -189,8 +209,19 @@ async fn create_invite(
                 // invite back).
                 crate::email::spend_budget(&limiter, &config, &actor.user_id, 1)?;
             }
-            let (token, info) =
-                invites::create(tx, &actor.user_id, &ws, email.as_deref(), role, &access)?;
+            // From a base too, an owner acting for the whole workspace may
+            // raise existing members; an owner's token limited to some bases
+            // fails this check, so it cannot promote anyone on bases beyond them.
+            let may_raise = perm::require_workspace(tx, &actor, &ws, Role::Owner).is_ok();
+            let (token, info) = invites::create(
+                tx,
+                &actor.user_id,
+                &ws,
+                email.as_deref(),
+                role,
+                &access,
+                may_raise,
+            )?;
             audit::record_as(
                 tx,
                 &actor,
@@ -365,9 +396,16 @@ async fn update(
         .write(move |tx| {
             let invite = invites::get(tx, &id)?.ok_or_else(|| AppError::not_found("invite"))?;
             require_manage_invite(tx, &actor, &invite)?;
-            if invite.info.accepted_at.is_some() || invite.info.expires_at <= crate::db::now_ms() {
+            // A voided invite (say, from a member since removed) must stay
+            // dead: changing it would make the caller its inviter and revive
+            // the link its old inviter still holds.
+            if invite.info.accepted_at.is_some()
+                || invite.info.expires_at <= crate::db::now_ms()
+                || invites::voided(tx, &invite)?
+            {
                 return Err(AppError::conflict(
-                    "this invite was already used or has expired; invite them again instead",
+                    "this invite was already used, has expired or is no longer valid; \
+                     invite them again instead",
                 ));
             }
             let (terms, changes_access) = merged_terms(tx, &invite, &req)?;
@@ -402,8 +440,27 @@ async fn update(
             let keep_stored = !changes_access
                 && !invite.info.all_bases
                 && matches!(access, workspaces::BaseAccess::Only(_));
-            let access = (!keep_stored).then_some(access);
-            let info = invites::update_terms(tx, &id, &actor.user_id, role, access.as_ref())?;
+            // Anyone held to the base rules (a creator, an owner's base-limited
+            // token) clears the flag that lets accepting raise existing members.
+            let by_owner = matches!(origin, Origin::Workspace(_));
+            let access = match access {
+                // The caller becomes the inviter, and an invite listing a base
+                // its inviter cannot open is voided whole once that base is
+                // restored: keep only the trashed bases the caller could list.
+                workspaces::BaseAccess::Only(live) if keep_stored && !by_owner => {
+                    let mut ids = Vec::new();
+                    for b in &invite.info.base_ids {
+                        if live.contains(b) || may_list_trashed(tx, &actor, b, role)? {
+                            ids.push(b.clone());
+                        }
+                    }
+                    Some(workspaces::BaseAccess::Only(ids))
+                }
+                _ if keep_stored => None,
+                access => Some(access),
+            };
+            let info =
+                invites::update_terms(tx, &id, &actor.user_id, role, access.as_ref(), by_owner)?;
             audit::record_as(
                 tx,
                 &actor,

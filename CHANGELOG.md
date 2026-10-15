@@ -29,7 +29,11 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   on create and in listings). Owners invite from the workspace (every base by default); creators
   invite from a base they can open (that base by default, or other bases they can open; never
   every base, never above their own role). Accepting when already a member adds up the bases
-  and keeps the higher role; an invite from a creator never raises an existing member's role.
+  and keeps the higher role; only an invite whose terms a workspace owner last set without a
+  token limited to some bases (from the workspace or from a base) raises an existing member's
+  role, so one from a creator or from an owner's base-limited token only adds bases. Upgrading
+  (database schema 7) records this on each invite; invites pending at the upgrade only add
+  bases for existing members.
   A base-limited API token cannot create an invite to every base or at the owner role. The
   invite page always names the workspace. The MCP tools
   `set_member_role`, `create_invite`, `list_members`, `remove_member` and `list_invites` follow.
@@ -97,7 +101,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   oldest first, per person who created them.
 - **One trash for everything.** `GET /api/trash` lists everything you could restore from every
   workspace you belong to, newest first, optionally filtered by `workspace_id`, `base_id` and
-  `kind`; editors and viewers now find their own deleted personal views there. Trash items say
+  `kind`; editors and viewers now find their own deleted personal views there (not through a
+  read-only token, which cannot restore them). Trash items say
   where they were (`workspace_name`, `workspace_color`, `base_name`, `base_icon`, `base_color`,
   `table_name`), who deleted them (`deleted_by_id`, `deleted_by_name`) and when they are removed
   for good (`expires_at`); the existing trash listings carry the same fields. Who deleted
@@ -113,7 +118,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   to revoke the invite and to create one with the new terms (the same rules, including for
   base-limited API tokens); whoever changes it counts as its inviter from then on, so an invite
   changed by a creator never raises an existing member's role when accepted. Recorded in the audit
-  log as `invite_update`.
+  log as `invite_update`. An invite that is no longer valid because of who made it (they were
+  removed, demoted or lost a base) answers 409 like a used or expired one, and is left out of
+  `GET /api/workspaces/{id}/invites` and `GET /api/bases/{id}/invites`. A creator changing only
+  the role drops the trashed bases on the invite that they could not open.
 - Each base in `GET /api/workspaces` lists its live `tables` (`id`, `name`, `icon`) in sidebar
   order, so the workspace page no longer loads every base to name its tables.
 
