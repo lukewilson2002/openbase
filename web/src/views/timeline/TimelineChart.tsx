@@ -132,7 +132,7 @@ interface CreateState {
 
 const gridLine = "border-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
 const weekendBody = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
-const weekendHead = "bg-[color-mix(in_srgb,var(--line)_35%,var(--surface))]";
+const weekendHead = "bg-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
 
 export function TimelineChart(props: TimelineChartProps) {
   const { axis, scale, lanes, edges, nowMs, showLabels, canCreate, focus, loading } = props;

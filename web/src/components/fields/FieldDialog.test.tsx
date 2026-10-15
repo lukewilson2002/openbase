@@ -42,6 +42,16 @@ async function pick(label: string) {
 }
 
 describe("FieldDialog: create", () => {
+  it("starts as the asked-for type (\"Add a date field\" from a calendar)", async () => {
+    const { api, onSaved } = setup({ mode: "create", type: "date" });
+    // The type is chosen already, so the picker stays closed.
+    expect(screen.queryByRole("listbox", { name: "Field types" })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Field name"), "Due");
+    await userEvent.click(screen.getByRole("button", { name: "Create field" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(body(api)).toMatchObject({ name: "Due", type: "date" });
+  });
+
   it("creates a single line text field with empty options", async () => {
     const { api, onSaved, onOpenChange } = setup();
     await userEvent.type(screen.getByLabelText("Field name"), "Title");

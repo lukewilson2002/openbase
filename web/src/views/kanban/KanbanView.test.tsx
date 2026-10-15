@@ -81,6 +81,47 @@ describe("KanbanView", () => {
     expect(saved.config.kanban.stack_field_id).toBe("f_status");
   });
 
+  it("names the stack field in the toolbar, tinted, and keeps the stack and cover choices behind it", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    const tool = screen.getAllByRole("button", { name: "Stacked by Status" })[0]!;
+    expect(tool.className).toContain("bg-primary-soft");
+    await user.click(tool);
+    expect(await screen.findByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
+    expect(screen.getByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
+  });
+
+  it("hides empty stacks from the More menu", async () => {
+    const user = userEvent.setup();
+    const view = board();
+    const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    expect(await screen.findByRole("listitem", { name: "Stack: Done" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
+    const item = await screen.findByRole("menuitemcheckbox", { name: "Hide empty stacks" });
+    expect(item).toHaveAttribute("aria-checked", "false");
+    await user.click(item);
+    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { hide_empty_stacks: boolean } } }).config.kanban.hide_empty_stacks).toBe(true);
+  });
+
+  it("adds a stack as a new choice of the select, for people who manage fields", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("creator", board(), { "PATCH /api/fields/f_status": (c: { body: { options: { choices: { id: string; name: string; color: string }[] } } }) => ({ ...F.status, options: { choices: c.body.options.choices.map((ch, i) => ({ ...ch, id: ch.id || `s_new${i}` })) } }) });
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    await user.click(screen.getByRole("button", { name: "Add a stack" }));
+    await user.type(screen.getByRole("textbox", { name: "Name of the new stack" }), "Blocked{Enter}");
+    await waitFor(() => expect(api.callsTo("PATCH /api/fields/f_status")).toHaveLength(1));
+    const choices = (api.callsTo("PATCH /api/fields/f_status")[0]!.body as { options: { choices: { name: string }[] } }).options.choices;
+    expect(choices.at(-1)).toMatchObject({ name: "Blocked" });
+  });
+
+  it("offers no new stacks to editors, who cannot add choices", async () => {
+    setup("editor");
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    expect(screen.queryByRole("button", { name: "Add a stack" })).not.toBeInTheDocument();
+  });
+
   it("only offers fields that can stack, and tells viewers to ask an editor", async () => {
     setup("viewer", viewWithConfig("viw1", "kanban", {}));
     expect(await screen.findByText(/Ask someone who can edit this view/)).toBeInTheDocument();

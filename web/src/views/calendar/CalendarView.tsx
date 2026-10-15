@@ -62,6 +62,12 @@ const RANGES = [
 ] as const;
 type RangeType = (typeof RANGES)[number]["value"];
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const VIEW_OPTIONS = {
+  dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
+  // "Sun 11", like the timeline's day ticks (the locale's own order puts the number first).
+  timeGridWeek: { dayHeaderContent: (arg: { date: Date }) => `${WEEKDAYS_SHORT[arg.date.getUTCDay()]} ${arg.date.getUTCDate()}` },
+} as const;
 
 // FullCalendar's stylesheet is in by now; its data: icon font would only trip the CSP (see iconFont.ts).
 removeIconFont();
@@ -80,6 +86,8 @@ function EventChip({ arg }: { arg: EventContentArg }) {
 
 /** "Oct 1" on the first of the month, the bare day number elsewhere; today is a filled circle. */
 function DayNumber({ arg }: { arg: DayCellContentArg }) {
+  // The week layout's all-day row has no day numbers (its column headers carry the dates).
+  if (arg.view.type !== "dayGridMonth") return <>{arg.dayNumberText}</>;
   const d = arg.date.getUTCDate();
   const text = d === 1 && !arg.isOther ? `${MONTHS_SHORT[arg.date.getUTCMonth()]} 1` : arg.dayNumberText;
   return arg.isToday ? <span className="ob-cal-today">{d}</span> : <span>{text}</span>;
@@ -240,6 +248,7 @@ function CalendarInner(props: ViewProps) {
               nowIndicator
               height="100%"
               fixedWeekCount={false}
+              views={VIEW_OPTIONS}
               dayMaxEvents
               scrollTime="08:00:00"
               events={events}

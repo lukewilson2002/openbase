@@ -63,7 +63,7 @@ export function FormBuilder({ setup, onChange }: { setup: ViewSetup; onChange: (
             <strong className="font-semibold">Live preview</strong>
             <span className="text-muted">· Nothing you type here is saved.</span>
           </p>
-          <Switch className="ml-auto" checked={publicOnly} onCheckedChange={setPublicOnly} label="Show only what the public form asks" />
+          <Switch className="ml-auto" checked={publicOnly} onCheckedChange={setPublicOnly} label="Public form only" />
         </div>
         {summary.excluded.length > 0 && (
           <div className="mx-auto w-full max-w-[560px]">

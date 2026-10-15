@@ -74,7 +74,8 @@ export default function FormView(props: ViewProps) {
     <EditorEnvProvider value={setup.editorEnv}>
       <div className="flex h-full min-h-[24rem] flex-col">
         <div role="toolbar" aria-label="Form toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2.5 py-2 md:px-4 md:py-2.5">
-          <ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink-0 max-md:min-w-0 max-md:flex-1" />
+          {/* On a phone the picker has the first line to itself and the form's tools wrap under it. */}
+          <ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink-0 max-md:min-w-0 max-md:max-w-none max-md:basis-full" />
           {modes.length > 1 ? <SegmentedSwitch label="Form mode" size="md" value={mode} options={modes} onChange={setMode} className="md:mr-1.5" /> : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

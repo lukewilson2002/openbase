@@ -75,6 +75,14 @@ describe("KanbanBoard", () => {
     expect(within(screen.getByRole("listitem", { name: "Stack: Done" })).getByText("No cards")).toBeInTheDocument();
   });
 
+  it("collapses a stack from its menu, keeping its count", async () => {
+    const user = userEvent.setup();
+    const { props } = board();
+    await user.click(screen.getByRole("button", { name: "Options for Todo" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Collapse stack" }));
+    expect(props.onToggleCollapse).toHaveBeenCalledWith(expect.any(String));
+  });
+
   it("opens the record on click and on Enter", async () => {
     const user = userEvent.setup();
     const { props } = board();

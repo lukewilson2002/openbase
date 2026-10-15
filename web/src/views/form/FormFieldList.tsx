@@ -41,7 +41,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
       aria-label={`Form field ${field.name}`}
       className={cn("rounded-[10px] border border-line bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
     >
-      <div className="flex min-h-[46px] flex-wrap items-center gap-2.5 px-1.5">
+      <div className="flex min-h-[46px] items-center gap-2.5 px-1.5">
         <button
           type="button"
           aria-label={`Drag ${field.name} to reorder`}
@@ -58,14 +58,14 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
           aria-expanded={open}
           aria-label={`Edit ${field.name}`}
           onClick={() => setOpen((o) => !o)}
-          className="min-w-0 flex-1 basis-24 truncate rounded text-left text-[0.875rem] font-medium hover:underline"
+          className="min-w-0 flex-1 truncate rounded text-left text-[0.875rem] font-medium hover:underline"
           title="Change the label and help text"
         >
           {shownName}
         </button>
         {!status.public && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs" title={status.message}>
-            <Lock aria-hidden className="size-3" /> Not public
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs" title={status.message}>
+            <Lock aria-hidden className="size-3" /> <span className="max-sm:sr-only">Not public</span>
           </span>
         )}
         <Switch className="flex-row-reverse text-muted" checked={entry.required} disabled={readOnly} onCheckedChange={(required) => patch({ required })} label="Required" />

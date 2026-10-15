@@ -68,7 +68,7 @@ describe("the builder", () => {
     const preview = screen.getByRole("region", { name: "Form preview" });
     expect(within(preview).getAllByText("Signed-in editors only")).toHaveLength(2);
 
-    await user.click(screen.getByRole("switch", { name: "Show only what the public form asks" }));
+    await user.click(screen.getByRole("switch", { name: "Public form only" }));
     expect(within(preview).queryByText("Signed-in editors only")).not.toBeInTheDocument();
     expect(within(preview).queryByText("Owner")).not.toBeInTheDocument();
     expect(within(preview).getByText("Status")).toBeInTheDocument();
