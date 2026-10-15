@@ -18,8 +18,8 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (views/grid/cellModels.ts defaultWidth, GlideGrid.tsx): row marker, header, row height.
 const MARKER_W = 56;
-const HEADER_H = 34;
-const ROW_H = 33;
+const HEADER_H = 44;
+const ROW_H = 42;
 // A table made on the empty base's page has only its primary field, so the added fields follow "Name".
 const COLUMNS = [
   { key: "name", width: 220 },

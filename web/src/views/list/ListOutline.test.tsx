@@ -21,6 +21,7 @@ function outline(over: Partial<ListOutlineProps> = {}) {
     groups,
     primary: name,
     fields: [num],
+    tableFields: [name, status, num],
     format: DEFAULT_CTX,
     emails: new Map(),
     colors: { r1: "red" },
@@ -48,6 +49,20 @@ describe("ListOutline", () => {
     expect(within(row).getByText("3.00")).toBeInTheDocument();
     expect(row.querySelector("[data-row-color='red']")).not.toBeNull();
     expect(screen.getAllByRole("button", { name: /^(Write docs|Fix bug|Ship it|Idea)$/ })).toHaveLength(4);
+  });
+
+  it("marks a choice group with its colour's dot and shows select values as bare pills", () => {
+    outline({ fields: [status, num] });
+    expect(screen.getAllByRole("treeitem")[0]!.querySelector(".ob-dot")).not.toBeNull();
+    const row = screen.getByRole("button", { name: "Write docs" });
+    expect(within(row).queryByText(status.name)).not.toBeInTheDocument();
+    expect(within(row).getByText("number")).toBeInTheDocument();
+  });
+
+  it("puts the person's face on a person group", () => {
+    const owner = ALL_FIELDS.user!;
+    outline({ groups: [{ ...header(0, "usr1", "Ada Lovelace", 0, 4, ["usr1"]), field_id: owner.id }], tableFields: [name, owner] });
+    expect(screen.getByRole("treeitem").querySelector("[role=img]")).toHaveTextContent("AL");
   });
 
   it("nests up to three levels with their own counts", () => {

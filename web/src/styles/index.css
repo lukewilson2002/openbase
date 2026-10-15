@@ -375,6 +375,9 @@
 :root[data-theme="dark"] .ob-tint {
   color: var(--accent-ink);
 }
+.ob-dot {
+  background: var(--accent);
+}
 .ob-solid {
   background: var(--accent);
   color: #fff;

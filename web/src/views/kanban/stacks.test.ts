@@ -60,11 +60,15 @@ describe("buildStacks", () => {
     expect(buildStacks(status, [rec("x", { [status.id]: "chs1" })], { stackOrder: [], hideEmpty: true, people }).map((s) => s.label)).toEqual(["Todo"]);
   });
 
+  it("leaves out an empty Uncategorized stack, which nobody chose", () => {
+    const stacks = buildStacks(status, [rec("x", { [status.id]: "chs1" })], { stackOrder: [], hideEmpty: false, people });
+    expect(stacks.map((s) => s.label)).toEqual(["Todo", "In progress", "Done"]);
+  });
+
   it("stacks by user: every collaborator gets a stack, plus unknown holders", () => {
     const user = field("user", { multiple: false, notify: false }, { id: "fld_owner" });
     const stacks = buildStacks(user, [rec("a", { fld_owner: ["usr2"] }), rec("b", { fld_owner: ["ghost"] })], { stackOrder: [], hideEmpty: false, people });
     expect(stacks.map((s) => [s.key, s.label, s.records.length])).toEqual([
-      ["", "Uncategorized", 0],
       ["usr1", "Ada", 0],
       ["usr2", "Grace", 1],
       ["ghost", "ghost", 1],

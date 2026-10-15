@@ -3,10 +3,9 @@
  * three levels, from `QueryResponse.groups`), with compact rows and an add button per group.
  */
 import { useMemo } from "react";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronsDownUp } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { cardFields } from "../common/cardFields";
+import { cardFields, itemsLabel } from "../common/cardFields";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
@@ -38,16 +37,7 @@ function ListInner(props: ViewProps) {
   };
 
   const total = data?.total ?? 0;
-  const toolbarExtra = grouped ? (
-    <>
-      <Button size="sm" variant="ghost" onClick={() => replace([])}>
-        <ChevronsUpDown aria-hidden className="size-4" /> Expand all
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => replace(paths)}>
-        <ChevronsDownUp aria-hidden className="size-4" /> Collapse all
-      </Button>
-    </>
-  ) : undefined;
+  const allFolded = paths.length > 0 && paths.every((path) => collapsed.has(path));
 
   let body: React.ReactNode;
   if (records.loading) {
@@ -70,6 +60,7 @@ function ListInner(props: ViewProps) {
           groups={data.groups}
           primary={primary}
           fields={fields}
+          tableFields={table.fields}
           format={setup.format}
           emails={setup.emails}
           colors={data.colors}
@@ -88,23 +79,26 @@ function ListInner(props: ViewProps) {
     <ViewFrame
       setup={setup}
       recordIds={data?.records.map((r) => r.id)}
+      layout="hug"
       features={{ rowHeight: false }}
-      hideFieldsNoun="Row fields"
-      toolbarExtra={toolbarExtra}
+      moreToggles={
+        grouped
+          ? [{ id: "fold-all", label: "Fold all groups", icon: <ChevronsDownUp aria-hidden />, checked: allFolded, onToggle: (on) => replace(on ? paths : []) }]
+          : undefined
+      }
       onAdd={setup.canEdit ? () => void add({}) : undefined}
       footer={
         <>
           <span aria-live="polite">
-            {total.toLocaleString()} item{total === 1 ? "" : "s"}
+            {itemsLabel(total)}
             {setup.debouncedSearch ? " found" : ""}
           </span>
-          {!grouped && data && <span className="hidden sm:inline">Use Group in the toolbar to turn this list into an outline.</span>}
           {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {total.toLocaleString()} records. Filter the view to see the rest.</span>}
           {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
         </>
       }
     >
-      <div className="h-full overflow-y-auto">{body}</div>
+      <div className="min-h-0 overflow-y-auto max-md:flex-1">{body}</div>
     </ViewFrame>
   );
 }

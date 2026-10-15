@@ -59,6 +59,14 @@ export function accentClass(color: string | null | undefined, style: AccentStyle
   return `ob-hue-${accentHue(color)} ${style === "button" ? "ob-tint-button" : `ob-${style}`}`;
 }
 
+/**
+ * A small dot in a choice's colour (a stack, a group, a calendar chip): the hue's strong shade, which
+ * stays visible on white and on the dark surfaces where the light pill colours fade into the page.
+ */
+export function colorDotClass(color: string | null | undefined): string {
+  return `ob-hue-${accentHue(color)} ob-dot`;
+}
+
 /** A soft button in the base's colour (the views' "Add"): tint background, dark text, thin line. */
 export function baseAccentButtonClass(color: string | null | undefined): string {
   return accentClass(color, "button");

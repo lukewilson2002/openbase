@@ -110,7 +110,9 @@ export function buildStacks(field: Field, records: readonly TableRecord[], opts:
     uncategorized: key === UNCATEGORIZED,
     records: buckets.get(key) ?? [],
   }));
-  return opts.hideEmpty ? stacks.filter((s) => s.records.length > 0) : stacks;
+  // An empty Uncategorized stack is not a value anyone chose, only a column of nothing in front of
+  // the real stacks; it shows up again as soon as a card has no value.
+  return stacks.filter((s) => s.records.length > 0 || (!opts.hideEmpty && !s.uncategorized));
 }
 
 /** `stack_order` after moving a stack one place left or right among the shown stacks. */

@@ -1,17 +1,22 @@
 /**
- * The timeline chart: a scrolling time axis, swimlanes, bars (or milestone diamonds), a today
- * marker and dependency arrows, all plain DOM and one SVG layer. Bars move and resize by
- * dragging (whole days), empty lane space creates a record by dragging across days, and bars
- * also work from the keyboard (Enter opens, arrows move, Shift+arrows resize the end).
+ * The timeline chart: a scrolling time axis, a fixed left column (one row per record, or one per
+ * swimlane), bars (or milestone diamonds), a today marker and dependency arrows, all plain DOM and
+ * one SVG layer. Bars move and resize by dragging (whole days), empty lane space creates a record
+ * by dragging across days, and bars also work from the keyboard (Enter opens, arrows move,
+ * Shift+arrows resize the end).
  *
  * The chart is controlled: the host owns the axis window and writes dates. Scrolling near an
  * edge asks the host to extend the window, and the chart keeps the visible days steady when the
- * window or the scale changes.
+ * window or the scale changes. A bar that runs past the visible edge gets a square end and an
+ * arrow there, and its label stays in view while it is scrolled.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type Ref } from "react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
-import { paletteColor, swatchColor } from "@/lib/cells/palette";
+import { choiceClass, colorDotClass } from "@/lib/colors";
+import { swatchColor } from "@/lib/cells/palette";
 import {
   BAR_HEIGHT,
   LANE_PAD,
@@ -25,7 +30,11 @@ import {
   dragSpan,
   layoutLanes,
   majorTicks,
+  minorIsDay,
   minorTicks,
+  showsWeekends,
+  weekendStarts,
+  windowStart,
   xOfDay,
   xOfMs,
   type Axis,
@@ -34,14 +43,22 @@ import {
   type DragMode,
 } from "./geometry";
 import { spanLabel, type Lane } from "./lanes";
+import "./timeline.css";
 
-export const HEADER_HEIGHT = 52;
-export const LABEL_WIDTH = 168;
+const MAJOR_ROW = 30;
+const MINOR_ROW = 32;
+export const HEADER_HEIGHT = MAJOR_ROW + MINOR_ROW;
+/** The left column: wide enough for a record's name and who it is for; narrower on a phone. */
+export const LABEL_WIDTH = 216;
+const LABEL_WIDTH_PHONE = 132;
+const ADD_ROW = 40;
 const EDGE_PX = 240;
 
 export interface TimelineBar extends BarInput {
   /** Palette colour name from the view's row colours. */
   color?: string;
+  /** Text inside the bar when it is not the title (the dates, when the left column names the record). */
+  label?: string;
   canMove: boolean;
   canResize: boolean;
   /** Dependency violated at this bar's start. */
@@ -51,6 +68,16 @@ export interface TimelineBar extends BarInput {
 export interface ChartLane {
   lane: Lane;
   bars: TimelineBar[];
+  /** A second, quieter text in the left column (who a record is for). */
+  sublabel?: string;
+  /** The left column's name opens this record (rows that are one record each). */
+  recordId?: string;
+}
+
+/** Imperative controls for the host's own ‹ Today › buttons. */
+export interface TimelineChartHandle {
+  /** Scroll one screen earlier or later. */
+  page(dir: -1 | 1): void;
 }
 
 export interface TimelineChartProps {
@@ -62,10 +89,19 @@ export interface TimelineChartProps {
   nowMs: number;
   /** Lane names are shown in a left column. */
   showLabels: boolean;
+  /** Heading of the left column ("Chore", or the field the lanes group by). */
+  labelHeading?: string;
   canCreate: boolean;
-  /** Centre the chart on this day when `nonce` changes. */
-  focus: { day: number; nonce: number } | null;
+  /**
+   * Bring this day into view when `nonce` changes: centred, or (`start`) at the start of its period
+   * with a little of what came before, the way the view opens.
+   */
+  focus: { day: number; nonce: number; align?: "center" | "start" } | null;
   loading: boolean;
+  /** Height follows the rows (inside a card that grows with them) instead of filling the parent. */
+  fitContent?: boolean;
+  /** A "+ Add" row under the left column. */
+  onAddRow?: () => void;
   onOpen(recordId: string): void;
   onCommit(recordId: string, mode: DragMode, days: number): void;
   onCreate(laneKey: string, fromDay: number, toDay: number): void;
@@ -73,6 +109,9 @@ export interface TimelineChartProps {
   onZoom(dir: "in" | "out"): void;
   /** The day at the centre of the visible chart, reported after scrolling and layout changes. */
   onCenter(day: number): void;
+  /** The first and last day on screen (for a "Oct 5 – 18, 2026" title). */
+  onVisibleDays?(fromDay: number, lastDay: number): void;
+  ref?: Ref<TimelineChartHandle>;
 }
 
 interface DragState {
@@ -91,9 +130,14 @@ interface CreateState {
   moved: boolean;
 }
 
+const gridLine = "border-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
+const weekendBody = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
+const weekendHead = "bg-[color-mix(in_srgb,var(--line)_35%,var(--surface))]";
+
 export function TimelineChart(props: TimelineChartProps) {
   const { axis, scale, lanes, edges, nowMs, showLabels, canCreate, focus, loading } = props;
-  const labelW = showLabels ? LABEL_WIDTH : 0;
+  const wide = useMediaQuery("(min-width: 768px)");
+  const labelW = showLabels ? (wide ? LABEL_WIDTH : LABEL_WIDTH_PHONE) : 0;
   const scroller = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   // Pointer handlers read the gesture from refs (events can arrive faster than React re-renders);
@@ -102,6 +146,8 @@ export function TimelineChart(props: TimelineChartProps) {
   const creatingRef = useRef<CreateState | null>(null);
   const [drag, setDragState] = useState<DragState | null>(null);
   const [creating, setCreatingState] = useState<CreateState | null>(null);
+  // The visible part of the axis (chart x), for the square ends of bars that run past it.
+  const [view, setView] = useState({ left: 0, right: 0 });
   const setDrag = (d: DragState | null) => {
     dragRef.current = d;
     setDragState(d);
@@ -116,7 +162,17 @@ export function TimelineChart(props: TimelineChartProps) {
   const lanesHeight = placed.length ? placed[placed.length - 1]!.top + placed[placed.length - 1]!.height : 0;
   const major = useMemo(() => majorTicks(scale, axis), [scale, axis]);
   const minor = useMemo(() => minorTicks(scale, axis), [scale, axis]);
+  const weekends = useMemo(() => (showsWeekends(scale) ? weekendStarts(axis) : []), [scale, axis]);
   const totalBars = lanes.reduce((n, l) => n + l.bars.length, 0);
+  const addRow = props.onAddRow ? ADD_ROW : 0;
+
+  const visibleWidth = (el: HTMLDivElement) => Math.max(0, el.clientWidth - labelW);
+  const report = (el: HTMLDivElement) => {
+    const viewW = visibleWidth(el);
+    props.onCenter(centerDayOf(el.scrollLeft, viewW, axis));
+    props.onVisibleDays?.(dayAtX(el.scrollLeft, axis), dayAtX(el.scrollLeft + Math.max(1, viewW) - 1, axis));
+    setView((v) => (v.left === el.scrollLeft && v.right === el.scrollLeft + viewW ? v : { left: el.scrollLeft, right: el.scrollLeft + viewW }));
+  };
 
   // ---- keep the view steady when the window or scale changes, and honour focus requests -------
   const prev = useRef<{ axis: Axis; scrollLeft: number; width: number } | null>(null);
@@ -124,7 +180,7 @@ export function TimelineChart(props: TimelineChartProps) {
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const viewW = Math.max(0, el.clientWidth - labelW);
+    const viewW = visibleWidth(el);
     const before = prev.current;
     if (before && (before.axis.fromDay !== axis.fromDay || before.axis.pxPerDay !== axis.pxPerDay)) {
       if (before.axis.pxPerDay === axis.pxPerDay) el.scrollLeft = before.scrollLeft + (before.axis.fromDay - axis.fromDay) * axis.pxPerDay;
@@ -132,21 +188,41 @@ export function TimelineChart(props: TimelineChartProps) {
     }
     if (focus && lastFocus.current !== focus.nonce) {
       lastFocus.current = focus.nonce;
-      el.scrollLeft = xOfDay(focus.day, axis) - viewW / 2;
+      el.scrollLeft = focus.align === "start" ? xOfDay(windowStart(scale, focus.day, viewW / axis.pxPerDay), axis) : xOfDay(focus.day, axis) - viewW / 2;
     }
     prev.current = { axis, scrollLeft: el.scrollLeft, width: viewW };
-    props.onCenter(centerDayOf(el.scrollLeft, viewW, axis));
+    report(el);
+  });
+
+  // The visible width changes with the window and the sidebar, not only with scrolling.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => report(el));
+    ro.observe(el);
+    return () => ro.disconnect();
   });
 
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
-    const viewW = Math.max(0, el.clientWidth - labelW);
-    prev.current = { axis, scrollLeft: el.scrollLeft, width: viewW };
-    props.onCenter(centerDayOf(el.scrollLeft, viewW, axis));
+    prev.current = { axis, scrollLeft: el.scrollLeft, width: visibleWidth(el) };
+    report(el);
     if (el.scrollLeft < EDGE_PX) props.onNeedMore("start");
     else if (el.scrollWidth - el.clientWidth - el.scrollLeft < EDGE_PX) props.onNeedMore("end");
   };
+
+  useImperativeHandle(props.ref, () => ({
+    page: (dir) => {
+      const el = scroller.current;
+      if (!el) return;
+      // Whole days, so a page lands on a day boundary like the first screen did.
+      const days = Math.max(1, Math.floor(visibleWidth(el) / axis.pxPerDay));
+      const target = el.scrollLeft + dir * days * axis.pxPerDay;
+      if (typeof el.scrollTo === "function") el.scrollTo({ left: target, behavior: "smooth" });
+      else el.scrollLeft = target;
+    },
+  }));
 
   // Ctrl/Cmd + wheel zooms (a non-passive listener is needed to stop the browser zooming the page).
   const zoomRef = useRef(props.onZoom);
@@ -256,37 +332,83 @@ export function TimelineChart(props: TimelineChartProps) {
 
   const todayX = xOfMs(nowMs, axis);
   const todayVisible = todayX >= 0 && todayX <= width;
+  const todayDay = Math.floor(nowMs / 86_400_000);
+  const dayTicks = minorIsDay(scale);
+  const bodyHeight = lanesHeight + addRow;
 
   return (
-    <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-auto" data-testid="timeline-scroller">
-      <div className="relative" style={{ width: labelW + width, minHeight: HEADER_HEIGHT + Math.max(lanesHeight, 1) }}>
-        {/* Header: two tick rows, pinned to the top. */}
-        <div className="sticky top-0 z-30 flex border-b border-line bg-surface" style={{ height: HEADER_HEIGHT }}>
-          {showLabels && <div className="sticky left-0 z-40 shrink-0 border-r border-line bg-surface" style={{ width: LABEL_WIDTH }} />}
+    <div
+      ref={scroller}
+      onScroll={onScroll}
+      className={cn("relative overflow-auto", props.fitContent ? "min-h-0 shrink" : "h-full")}
+      data-testid="timeline-scroller"
+    >
+      <div className="relative" style={{ width: labelW + width, minHeight: HEADER_HEIGHT + Math.max(bodyHeight, 1) }}>
+        {/* Header: the coarse row over the fine row, pinned to the top. */}
+        <div className="sticky top-0 z-30 flex border-b border-line bg-[color-mix(in_srgb,var(--bg)_70%,var(--surface))]" style={{ height: HEADER_HEIGHT }}>
+          {showLabels && (
+            <div
+              className="sticky left-0 z-40 flex shrink-0 items-end border-r border-line bg-[color-mix(in_srgb,var(--bg)_70%,var(--surface))] px-3.5 pb-2 text-[0.875rem] font-semibold text-muted"
+              style={{ width: labelW }}
+            >
+              <span className="truncate">{props.labelHeading}</span>
+            </div>
+          )}
           <div className="relative overflow-clip" style={{ width }}>
             {major.map((t) => (
-              <div key={`M${t.startDay}`} className="absolute top-0 h-[26px] overflow-clip border-l border-line text-xs font-medium text-muted" style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay }}>
-                <span className="sticky inline-block whitespace-nowrap px-2 py-1" style={{ left: labelW }}>
+              <div
+                key={`M${t.startDay}`}
+                className="absolute top-0 overflow-clip border-l border-line text-xs font-semibold"
+                style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay, height: MAJOR_ROW }}
+              >
+                <span className="sticky inline-block whitespace-nowrap px-2.5 py-[7px]" style={{ left: labelW }}>
                   {t.label}
                 </span>
               </div>
             ))}
-            {minor.map((t) => (
-              <div key={`m${t.startDay}`} className="absolute top-[26px] h-[26px] overflow-hidden whitespace-nowrap border-l border-t border-line px-1.5 py-1 text-xs text-muted" style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay }}>
-                {t.label}
-              </div>
-            ))}
-            {todayVisible && (
-              <span className="absolute top-0 z-10 -translate-x-1/2 rounded-b bg-danger px-1.5 text-[0.6875rem] font-medium leading-4 text-danger-fg" style={{ left: todayX }}>
+            {weekends.map((d) =>
+              dayTicks ? <div key={`w${d}`} aria-hidden className={cn("absolute", weekendHead)} style={{ left: xOfDay(d, axis), width: 2 * axis.pxPerDay, top: MAJOR_ROW, height: MINOR_ROW }} /> : null,
+            )}
+            {minor.map((t) => {
+              const isToday = dayTicks && t.startDay === todayDay;
+              return (
+                <div
+                  key={`m${t.startDay}`}
+                  className={cn("absolute flex items-center overflow-hidden whitespace-nowrap border-l border-t text-xs text-muted", gridLine, dayTicks ? "justify-center" : "px-2")}
+                  style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay, top: MAJOR_ROW, height: MINOR_ROW }}
+                >
+                  {isToday ? (
+                    <span data-today className="rounded-full bg-primary px-[7px] py-0.5 font-bold text-primary-fg" title="Today">
+                      {t.label}
+                    </span>
+                  ) : (
+                    t.label
+                  )}
+                </div>
+              );
+            })}
+            {todayVisible && !dayTicks && (
+              <span data-today className="absolute z-10 -translate-x-1/2 rounded-full bg-primary px-[7px] py-0.5 text-xs font-bold text-primary-fg" style={{ left: todayX, top: MAJOR_ROW + 7 }}>
                 Today
               </span>
             )}
           </div>
         </div>
 
-        {/* Lane rows: backgrounds, labels and the target of create-by-dragging. */}
+        {/* Weekends and grid lines, under the rows so the row lines stay visible across weekends. */}
+        <div className="pointer-events-none absolute" style={{ left: labelW, top: HEADER_HEIGHT, width, height: lanesHeight }}>
+          {weekends.map((d) => (
+            <div key={`w${d}`} className={cn("absolute inset-y-0", weekendBody)} style={{ left: xOfDay(d, axis), width: 2 * axis.pxPerDay }} />
+          ))}
+          {minor.map((t) => (
+            <div key={t.startDay} className={cn("absolute inset-y-0 border-l", gridLine)} style={{ left: xOfDay(t.startDay, axis) }} />
+          ))}
+        </div>
+
+        {/* Lane rows: the left column and the target of create-by-dragging. */}
         {placed.map((p, i) => {
-          const lane = lanes[i]!.lane;
+          const cl = lanes[i]!;
+          const lane = cl.lane;
           return (
             <div
               key={p.key || "__none"}
@@ -295,30 +417,49 @@ export function TimelineChart(props: TimelineChartProps) {
               onPointerMove={moveCreate}
               onPointerUp={() => endCreate()}
               onPointerCancel={() => endCreate(true)}
-              className={cn("absolute left-0 border-b border-line", canCreate && "cursor-crosshair")}
+              className={cn("absolute left-0 border-b", gridLine, canCreate && "cursor-crosshair")}
               style={{ top: HEADER_HEIGHT + p.top, height: p.height, width: labelW + width }}
             >
-              {showLabels && (
-                <div className="pointer-events-none sticky left-0 z-20 flex h-full flex-col gap-0.5 border-r border-line bg-surface px-2 py-2" style={{ width: LABEL_WIDTH }}>
-                  <span className="flex items-center gap-1.5 text-[0.8125rem] font-medium">
-                    {lane.color && <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: swatchColor(lane.color) }} />}
-                    <span className="truncate" title={lane.label}>
+              {showLabels &&
+                (cl.recordId ? (
+                  <div className="sticky left-0 z-20 flex h-full items-center gap-2 border-r border-line bg-surface px-3.5" style={{ width: labelW }}>
+                    <button type="button" onClick={() => props.onOpen(cl.recordId!)} className="min-w-0 flex-1 truncate text-left text-[0.875rem] font-medium hover:underline" title={lane.label}>
                       {lane.label}
+                    </button>
+                    {cl.sublabel && <span className="max-w-[45%] shrink-0 truncate text-[0.8125rem] text-muted">{cl.sublabel}</span>}
+                  </div>
+                ) : (
+                  <div className="pointer-events-none sticky left-0 z-20 flex h-full flex-col justify-center gap-0.5 border-r border-line bg-surface px-3.5" style={{ width: labelW }}>
+                    <span className="flex items-center gap-2 text-[0.875rem] font-medium">
+                      {lane.color && <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: swatchColor(lane.color) }} />}
+                      <span className="truncate" title={lane.label}>
+                        {lane.label}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-xs text-muted">{lanes[i]!.bars.length} bar{lanes[i]!.bars.length === 1 ? "" : "s"}</span>
-                </div>
-              )}
+                    <span className="text-xs text-muted">
+                      {cl.bars.length} bar{cl.bars.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                ))}
             </div>
           );
         })}
 
-        {/* Grid lines, today line and arrows. */}
+        {props.onAddRow && (
+          <div className="absolute left-0 flex" style={{ top: HEADER_HEIGHT + lanesHeight, height: ADD_ROW, width: labelW + width }}>
+            <button
+              type="button"
+              onClick={props.onAddRow}
+              className="sticky left-0 z-20 flex h-full shrink-0 items-center gap-1.5 border-r border-line bg-surface px-3.5 text-left text-[0.875rem] text-muted hover:bg-hover hover:text-fg"
+              style={{ width: Math.max(labelW, 120) }}
+            >
+              <Plus aria-hidden className="size-[15px]" /> Add
+            </button>
+          </div>
+        )}
+
         <div className="pointer-events-none absolute z-[5]" style={{ left: labelW, top: HEADER_HEIGHT, width, height: lanesHeight }}>
-          {minor.map((t) => (
-            <div key={t.startDay} className="absolute inset-y-0 border-l border-line/60" style={{ left: xOfDay(t.startDay, axis) }} />
-          ))}
-          {todayVisible && <div className="absolute inset-y-0 w-px bg-danger" style={{ left: todayX }} />}
+          {todayVisible && <div className="absolute inset-y-0 -ml-px w-0.5 bg-primary opacity-55" style={{ left: todayX }} />}
           <svg className="absolute inset-0 overflow-visible" width={width} height={lanesHeight} aria-hidden>
             <defs>
               <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
@@ -348,8 +489,11 @@ export function TimelineChart(props: TimelineChartProps) {
             const r = live(bar.id);
             if (!r) return null;
             const dragging = drag?.id === bar.id && drag.moved;
-            const p = bar.color ? paletteColor(bar.color) : null;
             const label = `${bar.title}, ${spanLabel(bar.span)}`;
+            // Only a laid-out chart knows its visible edges; before that every bar is drawn whole.
+            const measured = view.right > view.left;
+            const offLeft = measured && !r.milestone && r.x < view.left - 1;
+            const offRight = measured && !r.milestone && r.x + r.width > view.right + 1;
             return (
               <div
                 key={bar.id}
@@ -370,22 +514,43 @@ export function TimelineChart(props: TimelineChartProps) {
                   "pointer-events-auto absolute flex touch-none select-none items-center outline-none focus-visible:outline-2 focus-visible:outline-ring",
                   bar.canMove ? "cursor-grab" : "cursor-pointer",
                   dragging && "z-20 cursor-grabbing shadow-pop",
-                  r.milestone ? "" : cn("rounded-md text-xs font-medium", !p && "bg-primary text-primary-fg", bar.violated && "ring-2 ring-danger"),
+                  !r.milestone &&
+                    cn(
+                      "ob-tl-bar rounded-[7px] border text-xs font-semibold transition-shadow hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)]",
+                      bar.color ? choiceClass(bar.color) : "ob-tl-bar-plain",
+                      offLeft && "rounded-l-none",
+                      offRight && "rounded-r-none",
+                      bar.violated && "ring-2 ring-danger",
+                    ),
                 )}
-                style={{ left: r.x, top: r.y, width: r.width, height: BAR_HEIGHT, ...(!r.milestone && p ? { background: p.bg, color: p.fg } : {}) }}
+                style={{ left: r.x, top: r.y, width: r.width, height: BAR_HEIGHT }}
               >
                 {r.milestone ? (
                   <>
-                    <span aria-hidden className={cn("size-3.5 shrink-0 rotate-45 rounded-[2px]", !p && "bg-primary", bar.violated && "ring-2 ring-danger")} style={{ marginLeft: (r.width - 14) / 2, ...(p ? { background: p.bg, outline: `1px solid ${p.fg}` } : {}) }} />
+                    <span
+                      aria-hidden
+                      className={cn("size-3.5 shrink-0 rotate-45 rounded-[2px] border", bar.color ? choiceClass(bar.color) : "ob-tl-bar-plain", bar.violated && "ring-2 ring-danger")}
+                      style={{ marginLeft: (r.width - 14) / 2 }}
+                    />
                     <span className="pointer-events-none absolute whitespace-nowrap text-xs font-medium" style={{ left: r.width + 4 }}>
-                      {bar.title}
+                      {bar.label ?? bar.title}
                     </span>
                   </>
                 ) : (
                   <>
-                    {bar.canResize && <span aria-hidden data-handle="start" className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize rounded-l-md hover:bg-black/20" />}
-                    <span className="pointer-events-none min-w-0 flex-1 truncate px-2">{bar.title}</span>
-                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize rounded-r-md hover:bg-black/20" />}
+                    {bar.canResize && <span aria-hidden data-handle="start" className="absolute inset-y-0 left-0 z-[1] w-1.5 cursor-ew-resize rounded-l-[7px] hover:bg-black/15" />}
+                    {/* Sticky, so the start of a bar scrolled past the left column still says what it is. */}
+                    <span className="pointer-events-none sticky flex min-w-0 items-center gap-1.5 overflow-hidden px-2.5" style={{ left: labelW }}>
+                      {offLeft && <ChevronLeft aria-hidden className="-ml-1 size-3.5 shrink-0" />}
+                      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", bar.color ? colorDotClass(bar.color) : "bg-primary")} />
+                      <span className="truncate">{bar.label ?? bar.title}</span>
+                    </span>
+                    {offRight && (
+                      <span className="pointer-events-none sticky right-0 ml-auto flex shrink-0 pr-1.5">
+                        <ChevronRight aria-hidden className="size-3.5" />
+                      </span>
+                    )}
+                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 right-0 z-[1] w-1.5 cursor-ew-resize rounded-r-[7px] hover:bg-black/15" />}
                   </>
                 )}
                 {dragging && drag && (
@@ -414,6 +579,5 @@ export function TimelineChart(props: TimelineChartProps) {
 function GhostBar({ creating, axis, top }: { creating: CreateState; axis: Axis; top: number }) {
   const a = Math.min(creating.fromDay, creating.toDay);
   const b = Math.max(creating.fromDay, creating.toDay) + 1;
-  return <div aria-hidden className="absolute rounded-md border-2 border-dashed border-primary bg-primary-soft" style={{ left: xOfDay(a, axis), top, width: (b - a) * axis.pxPerDay, height: BAR_HEIGHT }} />;
+  return <div aria-hidden className="absolute rounded-[7px] border-2 border-dashed border-primary bg-primary-soft" style={{ left: xOfDay(a, axis), top, width: (b - a) * axis.pxPerDay, height: BAR_HEIGHT }} />;
 }
-

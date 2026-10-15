@@ -148,10 +148,11 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   await test.step("builds it: title, a required field with a label, fewer fields", async () => {
     await page.getByLabel("Title").fill("Join the waitlist");
     await page.getByLabel("Description").fill("We write back within a day.");
-    await page.getByLabel("Success message").fill("You are on the list!");
+    await page.getByLabel("After submitting", { exact: true }).fill("You are on the list!");
     await page.getByLabel("Submit button").fill("Sign me up");
     const nameRow = page.getByRole("listitem", { name: "Form field Name" });
     await nameRow.getByRole("switch", { name: "Required" }).click();
+    await nameRow.getByRole("button", { name: "Edit Name" }).click();
     await page.getByLabel("Label for Name").fill("Your name");
     await page.getByLabel("Help text for Name").fill("As on your ID");
     for (const f of ["Notes", "Salary", "Status"]) await page.getByRole("button", { name: `Remove ${f} from the form` }).click();

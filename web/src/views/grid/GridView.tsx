@@ -27,7 +27,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { ViewBar } from "@/components/viewbar/ViewBar";
-import { viewBodyClass, viewFooterClass } from "@/views/common/ViewFrame";
+import { itemsLabel } from "@/views/common/cardFields";
+import { viewHugAreaClass, viewHugCardClass, viewHugFooterClass } from "@/views/common/ViewFrame";
 import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
@@ -41,7 +42,7 @@ import type { CellEdit, CellModel, EditorHostProps, GridAdapterProps, GridColumn
 import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
 import { BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
 import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
-import { GlideGrid } from "./glide/GlideGrid";
+import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
 import { buildRowMap, groupPathKeys } from "./rowMap";
 import { UndoStack, type CellChange } from "./undo";
 import { useGridData } from "./useGridData";
@@ -671,6 +672,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   };
 
   const colSpec = colMenu ? columns[colMenu.index] : undefined;
+  // The card ends where the rows end (header, rows, summary row and its border), with room for the
+  // "No records yet" line when there are none; past the page's height it scrolls inside.
+  const gridHeight = Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2, total === 0 ? 180 : 0);
 
   return (
     <EditorEnvProvider value={editorEnv}>
@@ -697,7 +701,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           timeZone={timeZone}
           onAdd={canEdit ? () => void addRecord() : undefined}
         />
-        <div className={viewBodyClass}>
+        <div className={viewHugAreaClass}>
+        <div className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
@@ -724,13 +729,14 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
             <p className="pointer-events-none absolute inset-x-0 top-14 text-center text-[0.8125rem] text-muted">{debouncedSearch ? "No records match your search." : "No records yet."}</p>
           )}
         </div>
-        <div className={viewFooterClass}>
+        <div className={viewHugFooterClass}>
           <span aria-live="polite">
-            {total.toLocaleString()} item{total === 1 ? "" : "s"}
+            {itemsLabel(total)}
             {debouncedSearch ? " found" : ""}
           </span>
           {grouped && <span className="hidden sm:inline">· grouped</span>}
           {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
+        </div>
         </div>
       </div>
 

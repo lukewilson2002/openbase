@@ -30,8 +30,8 @@ describe("ListView", () => {
     const items = screen.getAllByRole("treeitem").map((i) => [i.getAttribute("aria-level"), i.textContent]);
     expect(items).toEqual([
       ["1", "Todo2"],
-      ["2", "Ada Lovelace1"],
-      ["2", "Grace Hopper1"],
+      ["2", "ALAda Lovelace1"], // the face's initials, then the name
+      ["2", "GHGrace Hopper1"],
       ["1", "Doing1"],
     ]);
     expect(screen.getByRole("button", { name: "R1" })).toBeInTheDocument();
@@ -42,10 +42,13 @@ describe("ListView", () => {
     const user = userEvent.setup();
     setup();
     await screen.findByRole("tree");
-    await user.click(screen.getByRole("button", { name: /Collapse all/ }));
+    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Fold all groups" }));
     expect(screen.queryByRole("button", { name: "R1" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("treeitem")).toHaveLength(2); // only the top level is left visible
-    await user.click(screen.getByRole("button", { name: /Expand all/ }));
+    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
+    expect(await screen.findByRole("menuitemcheckbox", { name: "Fold all groups" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Fold all groups" }));
     expect(screen.getByRole("button", { name: "R1" })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1") ?? "[]")).toEqual([]);
   });
@@ -75,8 +78,7 @@ describe("ListView", () => {
     const created = rec("r9", {});
     const { api } = setup("editor", flat, { records, groups: [] }, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
     expect(await screen.findByRole("list", { name: "Records" })).toBeInTheDocument();
-    expect(screen.getByText(/Use Group in the toolbar/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Collapse all/ })).not.toBeInTheDocument();
+    expect(screen.getByText("3 items")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
   });

@@ -62,7 +62,9 @@ describe("KanbanView", () => {
     // Cards show the visible fields (the stack field itself is left out).
     expect(within(screen.getByRole("button", { name: "R1" })).getByText("5.00")).toBeInTheDocument();
     expect(asked[0]).toMatchObject({ offset: 0, timezone: "UTC" });
-    expect(screen.getByText("4 items")).toBeInTheDocument();
+    // Each stack counts its own cards; the board has no total under it.
+    expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getByText("2 items")).toBeInTheDocument();
+    expect(screen.queryByText("4 items")).not.toBeInTheDocument();
   });
 
   it("shows the setup prompt when no stack field is chosen and saves the choice", async () => {
@@ -71,7 +73,9 @@ describe("KanbanView", () => {
     const { api } = setup("editor", view, { "PATCH /api/views/viw1": (call: { body: { config: unknown } }) => ({ ...view, config: call.body.config }) });
     expect(await screen.findByText("Choose how to stack cards")).toBeInTheDocument();
     expect(api.callsTo("POST /api/views/viw1/query")).toHaveLength(0); // nothing to query yet
-    await user.selectOptions(screen.getByRole("combobox", { name: "Stack cards by" }), "Status");
+    // The likely field (the first single select) is chosen already.
+    expect(screen.getByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
+    await user.click(screen.getByRole("button", { name: "Make stacks" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
     const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { stack_field_id: string } } };
     expect(saved.config.kanban.stack_field_id).toBe("f_status");

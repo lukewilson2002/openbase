@@ -69,7 +69,7 @@ describe("KanbanBoard", () => {
     expect(stacksEl.map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Todo", "Stack: In progress", "Stack: Done"]);
     const todo = within(screen.getByRole("listitem", { name: "Stack: Todo" }));
     expect(todo.getAllByRole("button", { name: /Write docs|Fix bug/ })).toHaveLength(2);
-    expect(todo.getByLabelText("2 cards")).toBeInTheDocument();
+    expect(todo.getByText("2 items")).toBeInTheDocument();
     expect(document.querySelector("[data-record-id='r1'] [data-row-color='red']")).not.toBeNull();
     expect(screen.getAllByRole("button", { name: /^Add card to/ })).toHaveLength(3);
     expect(within(screen.getByRole("listitem", { name: "Stack: Done" })).getByText("No cards")).toBeInTheDocument();

@@ -188,7 +188,7 @@ export const ROW_HEIGHT_LABELS: Record<RowHeight, string> = {
 
 /** Pixel heights per row-height setting. */
 export const ROW_HEIGHT_PX: Record<RowHeight, number> = {
-  short: 33,
+  short: 42,
   medium: 56,
   tall: 88,
   extra_tall: 128,
