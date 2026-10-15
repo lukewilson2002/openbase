@@ -235,7 +235,7 @@ export function WorkspacesArt() {
                 <div className="text-[0.6875rem] font-medium text-muted">People</div>
                 <div className="mt-1 flex">
                   {w.people.map((p, pi) => (
-                    <Animated key={p.letter} motion="pop" delay={0.6 + wi * 0.18 + pi * 0.1} duration={0.4} className={cn(pi > 0 && "-ml-1.5")}>
+                    <Animated key={p.letter} motion="pop" delay={0.6 + wi * 0.18 + pi * 0.1} duration={0.4} className={cn("relative", pi > 0 && "-ml-1.5")} style={{ zIndex: w.people.length - pi }}>
                       <span className={cn("choice flex size-7 items-center justify-center rounded-full text-xs font-semibold ring-2 ring-[var(--surface)]", `choice-${p.color}`)}>{p.letter}</span>
                     </Animated>
                   ))}

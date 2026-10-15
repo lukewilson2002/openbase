@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Lock } from "lucide-react";
 import type { BasePerson } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
@@ -36,11 +37,12 @@ export function peopleSummary(people: readonly BasePerson[], meId: string | unde
 }
 
 /** The face of someone invited who has not joined yet: grey, with a dashed outline. */
-export function PendingFace({ email, size = "sm", className }: { email?: string | null; size?: "sm" | "md"; className?: string }) {
+export function PendingFace({ email, size = "sm", className, style }: { email?: string | null; size?: "sm" | "md"; className?: string; style?: CSSProperties }) {
   return (
     <span
       aria-hidden
       data-pending
+      style={style}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full border border-dashed border-faint bg-subtle font-semibold text-muted",
         size === "sm" ? "size-6 text-[0.625rem]" : "size-8 text-xs",
@@ -60,6 +62,8 @@ export interface BaseAvatarsProps {
   summary?: boolean;
   /** Extra classes for the summary text (e.g. to hide it on phones). */
   summaryClassName?: string;
+  /** `md` for the base's header on a desktop. */
+  size?: "sm" | "md";
   className?: string;
 }
 
@@ -68,7 +72,7 @@ export interface BaseAvatarsProps {
  * not joined yet is a grey face with a dashed outline. When nobody else can open it: a lock and
  * "Only you".
  */
-export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryClassName, className }: BaseAvatarsProps) {
+export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryClassName, size = "sm", className }: BaseAvatarsProps) {
   const { data: me } = useMe();
   const meId = me?.id;
 
@@ -88,18 +92,19 @@ export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryC
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
-      <span role="img" aria-label={label} title={label} className="flex shrink-0 -space-x-1">
+      <span role="img" aria-label={label} title={label} className={cn("flex shrink-0", size === "md" ? "-space-x-2" : "-space-x-1.5")}>
+        {/* Leftmost on top, each face tucked under the one before it: the first face (you) reads whole. */}
         {faces.map((p, i) =>
           p.pending ? (
-            <PendingFace key={`invite-${i}`} email={p.email || p.name} className="ring-2 ring-surface" />
+            <PendingFace key={`invite-${i}`} email={p.email || p.name} size={size} className="relative ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }} />
           ) : (
-            <span key={p.user_id ?? i} aria-hidden className="inline-flex rounded-full ring-2 ring-surface">
-              <Avatar name={p.name} email={p.email} size="sm" />
+            <span key={p.user_id ?? i} aria-hidden data-face className="relative inline-flex rounded-full ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }}>
+              <Avatar name={p.name} email={p.email} size={size} />
             </span>
           ),
         )}
         {rest > 0 && (
-          <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-subtle text-[0.625rem] font-semibold text-muted ring-2 ring-surface">
+          <span aria-hidden className={cn("relative z-0 inline-flex shrink-0 items-center justify-center rounded-full bg-subtle font-semibold text-muted ring-2 ring-surface", size === "md" ? "size-8 text-xs" : "size-6 text-[0.625rem]")}>
             +{rest}
           </span>
         )}

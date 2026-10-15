@@ -43,3 +43,23 @@ export function colorLabel(color: ChoiceColor): string {
   const name = hue.charAt(0).toUpperCase() + hue.slice(1);
   return dark ? `Dark ${hue}` : name;
 }
+
+/** The hue of a palette colour, which the accent classes are keyed by ("green_dark" -> "green"). */
+export function accentHue(color: string | null | undefined): string {
+  return (isChoiceColor(color) ? color : "gray").replace(/_dark$/, "");
+}
+
+export type AccentStyle = "tint" | "solid" | "button";
+
+/**
+ * Classes that paint something in a workspace's or base's colour (styles/index.css, "Accents"):
+ * `tint` for a base tile, `solid` for a workspace tile, `button` for a base-coloured button.
+ */
+export function accentClass(color: string | null | undefined, style: AccentStyle): string {
+  return `ob-hue-${accentHue(color)} ${style === "button" ? "ob-tint-button" : `ob-${style}`}`;
+}
+
+/** A soft button in the base's colour (the views' "Add"): tint background, dark text, thin line. */
+export function baseAccentButtonClass(color: string | null | undefined): string {
+  return accentClass(color, "button");
+}

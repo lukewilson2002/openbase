@@ -24,6 +24,8 @@
   --primary-hover: #1848b8;
   --primary-fg: #ffffff;
   --primary-soft: #e4ecff;
+  --primary-soft-line: #c9d8ff;
+  --primary-ink: #12358a;
   --danger: #c4261d;
   --danger-hover: #a51d16;
   --danger-fg: #ffffff;
@@ -51,6 +53,8 @@
   --primary-hover: #86a9ff;
   --primary-fg: #0b1220;
   --primary-soft: #1f2d52;
+  --primary-soft-line: #2f4475;
+  --primary-ink: #b9ccff;
   --danger: #ff7168;
   --danger-hover: #ff8c84;
   --danger-fg: #1f0907;
@@ -77,6 +81,8 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-fg: var(--primary-fg);
   --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-line: var(--primary-soft-line);
+  --color-primary-ink: var(--primary-ink);
   --color-danger: var(--danger);
   --color-danger-hover: var(--danger-hover);
   --color-danger-fg: var(--danger-fg);
@@ -306,4 +312,78 @@
 .choice-gray_dark {
   --c-bg: #585e6b;
   --c-fg: #ffffff;
+}
+
+/*
+ * Accents: one strong shade per hue of the palette above ("green" and "green_dark" share one), for
+ * the things that carry a workspace's or base's colour rather than a cell value. The strong shades
+ * keep >= 4.5:1 against white because a workspace tile prints its white initial on them; the tint,
+ * line and ink are mixed from the strong shade so a hue is defined once and follows the theme.
+ * Not named `accent-*`: tailwind-merge (in `cn`) takes those for accent-color utilities and keeps
+ * only the last one, which dropped the hue.
+ *   .ob-hue-<hue>    the strong shade, as --accent
+ *   .ob-tint         soft tile (a base's tile, its icon in the strong shade)
+ *   .ob-solid        strong tile with white text (a workspace's tile)
+ *   .ob-tint-button  soft button with a thin line and dark text (a base's "Add")
+ */
+.ob-hue-blue {
+  --accent: #1f5ae0;
+}
+.ob-hue-cyan {
+  --accent: #0e7490;
+}
+.ob-hue-teal {
+  --accent: #0f766e;
+}
+.ob-hue-green {
+  --accent: #157a39;
+}
+.ob-hue-yellow {
+  --accent: #8a5a00;
+}
+.ob-hue-orange {
+  --accent: #a85a0a;
+}
+.ob-hue-red {
+  --accent: #c4261d;
+}
+.ob-hue-pink {
+  --accent: #b0175a;
+}
+.ob-hue-purple {
+  --accent: #6b3fc4;
+}
+.ob-hue-gray {
+  --accent: #566070;
+}
+.ob-tint,
+.ob-tint-button {
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--accent) 32%, var(--surface));
+  --accent-ink: color-mix(in srgb, var(--accent) 85%, #000);
+}
+:root[data-theme="dark"] .ob-tint,
+:root[data-theme="dark"] .ob-tint-button {
+  --accent-soft: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--accent) 45%, var(--surface));
+  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff);
+}
+.ob-tint {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+:root[data-theme="dark"] .ob-tint {
+  color: var(--accent-ink);
+}
+.ob-solid {
+  background: var(--accent);
+  color: #fff;
+}
+.ob-tint-button {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent-line);
+}
+.ob-tint-button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
 }
