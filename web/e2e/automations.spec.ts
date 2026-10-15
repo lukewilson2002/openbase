@@ -100,10 +100,11 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   diagnostics.allow(/Failed to load resource: the server responded with a status of 400/);
   let automationId = "";
 
-  await test.step("opens Automations from the top bar and sees the empty state", async () => {
+  await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    await page.getByRole("link", { name: "Automations" }).click();
+    // Exact: the workspace (the menu's "Back to …" link) is named after this spec too.
+    await page.getByRole("link", { name: "Automations", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/automations$`));
     await expect(page.getByText("No automations yet")).toBeVisible();
     await expect(page.getByText("docs/automations.md").first()).toBeVisible();

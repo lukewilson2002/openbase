@@ -68,12 +68,29 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   const toolbar = page.getByRole("toolbar", { name: "View toolbar" });
   await expect(toolbar).toBeVisible();
   await expectFits(page, "base");
+  // The top bar keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
+  await expect(page.getByRole("banner").getByRole("button", { name: "Share" })).toBeVisible();
+  const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
+  expect(add.height).toBeGreaterThanOrEqual(52);
+  expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
+  expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
+
+  // The base's menu is the drawer; choosing a view closes it.
+  await page.getByRole("button", { name: "Show menu" }).tap();
+  const baseMenu = page.getByRole("dialog", { name: "Menu" });
+  await expect(baseMenu.getByRole("navigation", { name: "Tables" })).toBeVisible();
+  await expect(baseMenu.getByRole("link", { name: "Back to Mobile workspace" })).toBeVisible();
+  await expectFits(page, "base menu drawer");
+  await baseMenu.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Grid view" }).tap();
+  await expect(baseMenu).toBeHidden();
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();
   await expect(page.getByRole("searchbox", { name: "Search records" })).toBeFocused();
   await expectFits(page, "search");
   await page.keyboard.press("Escape");
 
+  // On a phone the tools start folded into one button.
+  await toolbar.getByRole("button", { name: "Tools" }).click();
   await toolbar.getByRole("button", { name: "Filter" }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Operator" })).toBeVisible();
