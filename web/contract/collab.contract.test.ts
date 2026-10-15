@@ -308,4 +308,28 @@ describe("trash across the base", () => {
     expectError(await failure(w.owner.run(() => api.trash.restore({ kind: "table", id: t.id }))), 409, "conflict");
     expectError(await failure(w.owner.run(() => api.trash.restore({ kind: "hologram", id: t.id }))), 400, "bad_request");
   });
+
+  it("lists everything in one trash, with where it was and who deleted it, filtered by base and kind", async () => {
+    const t = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Everywhere")));
+    await w.owner.run(() => api.tables.remove(t.id));
+    const all = parse("TrashListing", await w.owner.run(() => api.trash.all()));
+    const item = all.items.find((i) => i.id === t.id)!;
+    expect(item).toMatchObject({ kind: "table", name: "Everywhere", base_id: w.baseId, deleted_by_id: w.owner.id });
+    expect(item.workspace_name).toBeTruthy();
+    expect(item.expires_at).toBeGreaterThan(item.deleted_at);
+    const tables = parse("TrashListing", await w.owner.run(() => api.trash.all({ base_id: w.baseId, kind: "table" })));
+    expect(tables.items.every((i) => i.kind === "table" && i.base_id === w.baseId)).toBe(true);
+    expect(parse("TrashListing", await editor.run(() => api.trash.all())).items.map((i) => i.id)).not.toContain(t.id);
+    expectError(await failure(w.owner.run(() => api.trash.all({ kind: "hologram" as "table" }))), 400, "bad_request");
+    await w.owner.run(() => api.trash.restore({ kind: "table", id: t.id }));
+  });
+});
+
+describe("search everything", () => {
+  it("finds names and record text the caller can open, as a SearchResponse", async () => {
+    const found = parse("SearchResponse", await w.owner.run(() => api.search.everything("commented record")));
+    expect(found.results[0]).toMatchObject({ kind: "record", record_id: rec.id, table_id: table.id, base_id: w.baseId, name: "Commented record" });
+    expect(parse("SearchResponse", await outsider.run(() => api.search.everything("commented record"))).results).toEqual([]);
+    expectError(await failure(w.owner.run(() => api.search.everything("   "))), 400, "bad_request");
+  });
 });

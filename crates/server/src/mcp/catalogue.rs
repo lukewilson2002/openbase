@@ -117,6 +117,10 @@ pub const AREAS: &[(&str, &str)] = &[
         "records: query, get, create, update, delete, restore, move, history",
     ),
     ("comments", "record comments"),
+    (
+        "search",
+        "search names and record text across everything you can open",
+    ),
     ("trash", "trash listings and restore"),
     ("csv", "CSV import and export"),
     ("attachments", "file uploads and downloads"),
@@ -583,6 +587,17 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "Delete a comment.",
         NO_BODY,
         "204",
+    ),
+    // --------------------------------------------------------------------- search
+    e(
+        GET,
+        "/api/search",
+        "search",
+        "viewer",
+        Read,
+        "Search everything you can open: workspace, base, table and view names, and the text of records (primary field and text, email, URL and phone fields). Names come before records, text that starts with q before text that contains it. Large instances: records are read up to a budget per request, so very many or very large tables may not all be searched.",
+        "query: q (1-200 characters), limit? (default 20, max 50)",
+        "SearchResponse {results: [{kind: workspace|base|table|view|record, id, name, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, view_id, view_type, record_id, snippet}]}",
     ),
     // ---------------------------------------------------------------------- trash
     e(

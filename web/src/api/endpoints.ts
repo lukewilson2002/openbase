@@ -48,6 +48,7 @@ import type {
   RunsPage,
   PasswordResetConfirm,
   ResetLink,
+  SearchResponse,
   SessionInfo,
   UpdateEmailSettings,
   SetupStatus,
@@ -238,6 +239,16 @@ export const api = {
     remove: (id: string) => http.delete<OkResponse>(`/api/views/${enc(id)}`),
     duplicate: (id: string, body: { name?: string | null; personal?: boolean } = {}) =>
       http.post<View>(`/api/views/${enc(id)}/duplicate`, body),
+  },
+
+  search: {
+    /**
+     * Everything the caller can open whose name (or, for records, text) contains `q`: names
+     * first, text that starts with `q` before text that contains it. `q` is 1–200 characters
+     * (blank is a 400); `limit` defaults to 20, at most 50.
+     */
+    everything: (q: string, opts: { limit?: number; signal?: AbortSignal } = {}) =>
+      http.get<SearchResponse>("/api/search", { query: { q, limit: opts.limit }, signal: opts.signal }),
   },
 
   notifications: {

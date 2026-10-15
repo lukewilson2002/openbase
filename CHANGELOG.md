@@ -80,6 +80,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   `table_name`), who deleted them (`deleted_by_id`, `deleted_by_name`) and when they are removed
   for good (`expires_at`); the existing trash listings carry the same fields. Who deleted
   something is recorded from this version on, so older items show no one.
+- **Search everything.** `GET /api/search?q=` finds workspaces, bases, tables and views by name
+  and records by the text of their primary field and their text, email, URL and phone fields,
+  in everything you can open (`limit`, default 20, at most 50). Names come first, and text that
+  starts with what you typed before text that contains it; a record found by another field
+  carries a `snippet` of it. Record text is read up to a fixed budget per search (about one full
+  table), so on very large instances some tables may not be searched.
 
 ### Fixed
 

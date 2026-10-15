@@ -30,6 +30,7 @@ pub mod oauth;
 pub mod passkeys;
 pub mod records;
 pub mod schema;
+pub mod search;
 pub mod sharing;
 pub mod v1;
 pub mod workspaces;

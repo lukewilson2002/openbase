@@ -18,6 +18,7 @@ pub mod oauth;
 pub mod passkeys;
 pub mod records;
 pub mod schema_support;
+pub mod search;
 pub mod sharing;
 pub mod tables;
 pub mod tokens;
@@ -46,6 +47,7 @@ pub fn router() -> Router<AppState> {
         .merge(fields::router())
         .merge(views::router())
         .merge(trash::router())
+        .merge(search::router())
         .merge(records::router())
         .merge(comments::router())
         .merge(events::router())

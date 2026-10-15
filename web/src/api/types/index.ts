@@ -133,6 +133,8 @@ export type { RowColor } from "./RowColor";
 export type { RowHeight } from "./RowHeight";
 export type { RunStatus } from "./RunStatus";
 export type { RunsPage } from "./RunsPage";
+export type { SearchResponse } from "./SearchResponse";
+export type { SearchResult } from "./SearchResult";
 export type { SelectChoice } from "./SelectChoice";
 export type { SelectOptions } from "./SelectOptions";
 export type { SendTestEmail } from "./SendTestEmail";
