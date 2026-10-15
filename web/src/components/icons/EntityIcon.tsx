@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { Icon } from "lucide-react";
+import { Database, Icon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { accentClass } from "@/lib/colors";
 import { workspaceColor } from "@/lib/workspaceColor";
@@ -77,7 +77,8 @@ export function EntityTile({
   const s = TILE_SIZES[size];
   return (
     <span aria-hidden data-entity-tile className={cn("flex shrink-0 items-center justify-center font-bold", s.box, color ? accentClass(color, variant) : "bg-subtle text-muted", className)}>
-      <EntityIcon name={icon} fallbackLetter={entityLetter(name)} className={s.icon} />
+      {/* A base without an icon of its own shows the generic base icon: a letter there reads as a workspace. */}
+      {variant === "tint" && color && !icon ? <Database aria-hidden className={cn("shrink-0", s.icon)} /> : <EntityIcon name={icon} fallbackLetter={entityLetter(name)} className={s.icon} />}
     </span>
   );
 }

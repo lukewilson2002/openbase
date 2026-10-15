@@ -5,7 +5,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -20,25 +19,31 @@ import "./emptyBase.css";
 export function EmptyBase({ schema, onImport }: { schema: BaseSchema; onImport: () => void }) {
   const canCreate = basePermissions.manageTables(schema.role);
   return (
-    <div className="flex h-full overflow-y-auto">
-      <div className="m-auto flex w-full max-w-md flex-col items-center px-4 py-10 text-center">
+    <div className="flex h-full justify-center overflow-y-auto px-4 py-10 sm:px-6 sm:py-14">
+      <section aria-labelledby="empty-base-title" className="flex w-full max-w-[540px] flex-col items-center gap-[22px] text-center">
         <GridPicture />
         {canCreate ? (
           <>
-            <h2 className="mt-6 text-lg">Create your first table</h2>
-            <p className="mt-2 text-[0.8125rem] text-muted">A table is one list of things, like your chores or a shopping list. You add the fields you need as you go.</p>
+            <div>
+              <h2 id="empty-base-title" className="mb-2 text-[1.625rem] leading-tight tracking-[-0.015em]">
+                Create your first table
+              </h2>
+              <p className="text-base leading-relaxed text-muted">A table is one list of things, like your chores or a shopping list. You add the fields you need as you go.</p>
+            </div>
             <CreateTableForm schema={schema} />
-            <p className="mt-5 text-[0.8125rem] text-muted">
+            <p className="text-sm text-muted">
               Have a spreadsheet already?{" "}
-              <button type="button" onClick={onImport} className="font-medium text-primary underline-offset-2 hover:underline">
+              <button type="button" onClick={onImport} className="text-primary underline underline-offset-2 hover:text-primary-hover">
                 Import a CSV
               </button>
             </p>
           </>
         ) : (
-          <p className="mt-6 text-[0.8125rem] text-muted">This base has no tables yet. Ask someone who can create tables to add one.</p>
+          <p id="empty-base-title" className="text-sm text-muted">
+            This base has no tables yet. Ask someone who can create tables to add one.
+          </p>
         )}
-      </div>
+      </section>
     </div>
   );
 }
@@ -62,14 +67,22 @@ function CreateTableForm({ schema }: { schema: BaseSchema }) {
   };
 
   return (
-    <form onSubmit={submit} aria-label="Create your first table" className="mt-6 flex w-full flex-col gap-2 text-left">
-      <label htmlFor="first-table-name" className="text-[0.8125rem] font-medium">
+    <form onSubmit={submit} aria-label="Create your first table" className="flex w-full flex-col gap-2 text-left">
+      <label htmlFor="first-table-name" className="text-sm font-semibold">
         Table name
       </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input id="first-table-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Chores" maxLength={255} autoComplete="off" className="sm:flex-1" />
-        <Button type="submit" variant="primary" loading={create.isPending} disabled={!name.trim()}>
-          <Plus aria-hidden className="size-4" /> Create table
+      <div className="flex flex-wrap gap-2.5">
+        <Input
+          id="first-table-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="For example, Tasks"
+          maxLength={255}
+          autoComplete="off"
+          className="h-[46px] min-w-0 flex-[1_1_240px] rounded-[10px] px-3.5 text-base"
+        />
+        <Button type="submit" variant="primary" size="lg" className="h-[46px] rounded-[10px] px-5 font-semibold max-[420px]:w-full" loading={create.isPending} disabled={!name.trim()}>
+          Create table
         </Button>
       </div>
       {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
@@ -77,16 +90,21 @@ function CreateTableForm({ schema }: { schema: BaseSchema }) {
   );
 }
 
-/** Nine cells popping in one after another, the top row darker like a header; then a slow bob. */
+// The header row tinted blue, two plain rows, and a last column with a green and a yellow pill.
+const CELLS = ["head", "head", "head", "plain", "plain", "green", "plain", "plain", "yellow"] as const;
+const CELL_COLOR = {
+  head: "bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface))]",
+  plain: "bg-[color-mix(in_srgb,var(--line)_60%,var(--surface))]",
+  green: "bg-success-soft",
+  yellow: "bg-warning-soft",
+};
+
+/** A small table: nine cells popping in one after another, then a slow bob. */
 function GridPicture() {
   return (
-    <div aria-hidden className="ob-empty-bob grid grid-cols-3 gap-1.5 rounded-xl border border-line bg-surface p-2.5 shadow-pop">
-      {Array.from({ length: 9 }, (_, i) => (
-        <span
-          key={i}
-          className={cn("ob-empty-cell h-5 w-9 rounded", i < 3 ? "bg-primary" : "border border-primary/25 bg-primary-soft")}
-          style={{ animationDelay: `${120 + i * 70}ms` }}
-        />
+    <div aria-hidden className="ob-empty-bob grid w-[200px] grid-cols-3 gap-1.5 rounded-2xl border border-line bg-surface p-3.5 shadow-[0_10px_28px_rgb(15_20_30/0.08)]">
+      {CELLS.map((c, i) => (
+        <span key={i} className={cn("ob-empty-cell h-[18px] rounded-[5px]", CELL_COLOR[c])} style={{ animationDelay: `${120 + i * 70}ms` }} />
       ))}
     </div>
   );

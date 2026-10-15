@@ -24,6 +24,10 @@ describe("Button", () => {
     render(<Button>Go</Button>);
     expect(screen.getByRole("button")).toHaveAttribute("type", "button");
   });
+  it("has a soft variant: the primary colour on its soft background", () => {
+    render(<Button variant="soft">New base</Button>);
+    expect(screen.getByRole("button")).toHaveClass("bg-primary-soft", "text-primary");
+  });
 });
 
 describe("Field", () => {

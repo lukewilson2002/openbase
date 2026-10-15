@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShareLink, WorkspaceSummary } from "@/api/types";
-import { USER, makeSchema, makeWorkspace, mockApi, renderWithProviders, type Handler } from "@/test/utils";
+import { USER, makeSchema, makeView, makeWorkspace, mockApi, renderWithProviders, type Handler } from "@/test/utils";
 import { ShareDialog } from "./ShareDialog";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -108,6 +108,24 @@ describe("Share dialog: invite people", () => {
     expect(await within(dialog).findByText("Anyone with this link can join. Send it to the person you are inviting:")).toBeInTheDocument();
   });
 
+  it("shows each base with its tile in the list to pick from", async () => {
+    routes("creator");
+    fromBase("creator");
+    const dialog = await screen.findByRole("dialog");
+    const list = within(dialog).getByRole("group", { name: "Bases" });
+    await within(list).findByRole("checkbox", { name: "CRM" });
+    expect(list.querySelectorAll("[data-entity-tile]")).toHaveLength(2);
+  });
+
+  it("from the workspace, tells someone who is not an owner how else to share", async () => {
+    const api = routes("creator");
+    renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={makeWorkspace("creator")} />);
+    const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Only owners can invite people to the whole workspace. Open a base to invite people to it, or share a view.");
+    expect(within(dialog).queryByRole("button", { name: /Send invite/ })).not.toBeInTheDocument();
+    expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(0);
+  });
+
   it("only invites from a base for viewers and editors, who have no view tab", async () => {
     routes("editor");
     fromBase("editor");
@@ -182,6 +200,25 @@ describe("Share dialog: share a view", () => {
     await user.type(within(dialog).getByLabelText("Password"), "cdefgh");
     await user.click(within(dialog).getByRole("button", { name: /Create link/ }));
     await waitFor(() => expect(api.callsTo("POST /api/views/viw1/shares")[0]?.body).toEqual({ kind: "view", password: "abcdefgh" }));
+  });
+
+  it("from the workspace, offers the views of every base it may share, named after their base", async () => {
+    const user = userEvent.setup();
+    const tracker = makeSchema("creator");
+    // A table named like its base is not named again; personal views and bases below creator stay out.
+    const crm = makeSchema("creator", { id: "app2", name: "CRM", tables: [{ ...tracker.tables[1]!, id: "tbl9", base_id: "app2", name: "CRM", views: [makeView({ id: "viw9", name: "Pipeline" })] }] });
+    routes("creator", { "GET /api/bases/app1": tracker, "GET /api/bases/app2": crm, "GET /api/views/viw1/shares": [] });
+    const ws = makeWorkspace("creator", [
+      { ...bases[0]!, role: "creator" },
+      { ...bases[1]!, role: "creator" },
+      { id: "app3", workspace_id: "wsp1", name: "Payroll", color: "red", role: "viewer", people: [] },
+    ]);
+    renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={ws} />);
+    const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
+    await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
+    const select = await within(dialog).findByLabelText("View");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Project tracker › Tasks › All tasks", "Project tracker › Tasks › Board", "Project tracker › People › Everyone", "CRM › Pipeline"]);
+    expect(await within(dialog).findByRole("button", { name: /Create link/ })).toBeInTheDocument();
   });
 
   it("offers to switch a link back on", async () => {

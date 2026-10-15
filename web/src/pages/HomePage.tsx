@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutGrid, Lock } from "lucide-react";
+import { SquarePlus } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -15,8 +15,6 @@ import { Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { HomeShell, useCreateWorkspace } from "@/shell/HomeShell";
 import { readLastWorkspace } from "./workspace/lastWorkspace";
-
-const SUGGESTIONS = ["Personal", "Household", "Side business", "Team"];
 
 export function HomePage() {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
@@ -50,45 +48,40 @@ function FirstWorkspace() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-12 text-center sm:py-20">
-      <span aria-hidden className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-        <LayoutGrid className="size-7" />
-      </span>
-      <h1 className="mt-5 text-2xl">Create your first workspace</h1>
-      <p className="mt-2 text-[0.9375rem] text-muted">A workspace is a separate place with its own bases and its own people. Name it after what goes inside.</p>
-      <form onSubmit={submit} className="mt-8 w-full text-left">
-        <label htmlFor="first-workspace-name" className="text-[0.8125rem] font-medium">
-          Workspace name
-        </label>
-        <div className="mt-1 flex flex-col gap-2 min-[420px]:flex-row">
-          <Input id="first-workspace-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={255} autoFocus required className="h-10 min-w-0 flex-1" />
-          <Button type="submit" variant="primary" size="lg" loading={create.isPending} disabled={!name.trim()}>
-            Create workspace
-          </Button>
+    <div className="flex justify-center px-4 py-8 sm:px-6 sm:py-12">
+      <section aria-labelledby="first-workspace-title" className="flex w-full max-w-[520px] flex-col gap-[22px] sm:pt-10">
+        <span aria-hidden className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <SquarePlus className="size-7" strokeWidth={1.8} />
+        </span>
+        <div>
+          <h1 id="first-workspace-title" className="mb-2 text-[1.75rem] leading-tight tracking-[-0.015em]">
+            Create your first workspace
+          </h1>
+          <p className="text-base leading-relaxed text-muted">A workspace is a separate place with its own bases and its own people.</p>
         </div>
-        <div role="group" aria-label="Suggestions" className="mt-3 flex flex-wrap gap-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setName(s)}
-              aria-pressed={name === s}
-              className="h-8 rounded-full border border-line-strong bg-surface px-3 text-[0.8125rem] text-fg transition-colors hover:bg-hover aria-pressed:border-primary aria-pressed:bg-primary-soft pointer-coarse:h-10"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        {create.isError && (
-          <div className="mt-3">
-            <Notice tone="error">{errorMessage(create.error)}</Notice>
+        <form onSubmit={submit} className="flex flex-col gap-2">
+          <label htmlFor="first-workspace-name" className="text-sm font-semibold">
+            Workspace name
+          </label>
+          <div className="flex flex-wrap gap-2.5">
+            <Input
+              id="first-workspace-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="For example, Personal"
+              maxLength={255}
+              autoFocus
+              required
+              className="h-[46px] min-w-0 flex-[1_1_240px] rounded-[10px] px-3.5 text-base"
+            />
+            <Button type="submit" variant="primary" size="lg" className="h-[46px] rounded-[10px] px-5 font-semibold max-[420px]:w-full" loading={create.isPending} disabled={!name.trim()}>
+              Create workspace
+            </Button>
           </div>
-        )}
-      </form>
-      <p className="mt-8 text-[0.8125rem] text-muted">
-        <Lock aria-hidden className="-mt-0.5 mr-1.5 inline size-3.5" />
-        Only you can see it until you invite someone.
-      </p>
+          {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
+        </form>
+        <p className="text-sm text-muted">Workspaces are private until you invite someone.</p>
+      </section>
     </div>
   );
 }

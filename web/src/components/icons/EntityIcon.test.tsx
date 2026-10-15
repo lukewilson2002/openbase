@@ -91,13 +91,16 @@ describe("EntityIcon", () => {
 });
 
 describe("EntityTile", () => {
-  it("shows the icon when there is one and the initial otherwise, in the base colour", () => {
+  it("shows the icon when there is one and the generic base icon otherwise, in the base colour", () => {
     const { container, rerender } = render(<EntityTile name="Sales" icon="store" color="green_dark" size="lg" />);
     const tile = container.querySelector("[data-entity-tile]")!;
     expect(tile.querySelector("svg.lucide-store")).toBeInTheDocument();
     expect(tile).toHaveClass("ob-hue-green", "ob-tint");
     expect(tile).toHaveAttribute("aria-hidden", "true");
     rerender(<EntityTile name="Sales" color="green_dark" size="lg" />);
+    expect(container.querySelector("[data-entity-tile] svg.lucide-database")).toBeInTheDocument();
+    // Without a colour (an entity that is neither a base nor a workspace) the letter stays.
+    rerender(<EntityTile name="Sales" size="lg" />);
     expect(container.querySelector("[data-entity-tile]")).toHaveTextContent("S");
   });
 

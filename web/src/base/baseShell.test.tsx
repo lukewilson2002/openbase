@@ -493,7 +493,7 @@ describe("an empty base", () => {
     const create = screen.getByRole("button", { name: "Create table" });
     expect(create).toBeDisabled();
     const name = screen.getByRole("textbox", { name: "Table name" });
-    expect(name).toHaveAttribute("placeholder", "For example, Chores");
+    expect(name).toHaveAttribute("placeholder", "For example, Tasks");
     await user.type(name, "Chores");
     await user.click(create);
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
@@ -600,10 +600,12 @@ describe("icons", () => {
     expect(people.querySelector("svg")).toBeNull();
   });
 
-  it("keeps the initial in the top bar tile when the base has no icon", async () => {
+  it("shows the generic base icon in the top bar tile when the base has no icon", async () => {
     openBase("viewer");
     await screen.findByText("Grid view coming soon");
-    expect(screen.getByRole("heading", { level: 1 }).querySelector("[data-entity-tile]")).toHaveTextContent("P");
+    const tile = screen.getByRole("heading", { level: 1 }).querySelector("[data-entity-tile]");
+    expect(tile?.querySelector("svg.lucide-database")).toBeInTheDocument();
+    expect(tile).not.toHaveTextContent("P");
   });
 
   it("lets creators change the base icon from the base picker, and remove it", async () => {

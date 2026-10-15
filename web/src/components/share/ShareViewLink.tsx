@@ -20,28 +20,39 @@ import { useToast } from "@/components/ui/toast";
 import { publicLink, sharePasswordProblem } from "@/lib/shareLinks";
 import { shareKindOf } from "./shareView";
 
-export function ShareViewTab({ views, initialViewId }: { views: readonly View[]; initialViewId?: string | null }) {
+export function ShareViewTab({
+  views,
+  initialViewId,
+  label = (v) => v.name,
+  emptyText = "This table has no views that can be shared. Personal views stay private.",
+}: {
+  views: readonly View[];
+  initialViewId?: string | null;
+  /** How a view is named in the picker (from the workspace: "Chores › All chores"). */
+  label?: (view: View) => string;
+  emptyText?: string;
+}) {
   const shareable = views.filter((v) => !v.personal);
   const [viewId, setViewId] = useState(() => (shareable.some((v) => v.id === initialViewId) ? initialViewId! : (shareable[0]?.id ?? "")));
   const view = shareable.find((v) => v.id === viewId);
 
-  if (!view) return <p className="text-[0.8125rem] text-muted">This table has no views that can be shared. Personal views stay private.</p>;
+  if (!view) return <p className="text-sm text-muted">{emptyText}</p>;
   const kind = shareKindOf(view);
   return (
-    <div className="flex flex-col gap-4">
-      <Field label="View">
+    <div className="flex flex-col gap-[18px]">
+      <Field label="View" className="gap-1.5 [&>label]:text-sm [&>label]:font-semibold">
         {(ctl) => (
-          <Select {...ctl} value={viewId} onChange={(e) => setViewId(e.target.value)}>
+          <Select {...ctl} value={viewId} onChange={(e) => setViewId(e.target.value)} className="h-11 rounded-[10px] text-base">
             {shareable.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.name}
+                {label(v)}
               </option>
             ))}
           </Select>
         )}
       </Field>
-      <div className="flex gap-2.5 rounded-md border border-primary/25 bg-primary-soft px-3 py-2.5 text-[0.8125rem] text-fg">
-        <Eye aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
+      <div className="flex gap-2.5 rounded-[10px] bg-primary-soft px-3.5 py-3 text-sm leading-normal text-fg">
+        <Eye aria-hidden className="mt-0.5 size-[18px] shrink-0 text-primary" />
         <p>
           {kind === "form"
             ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the base."
