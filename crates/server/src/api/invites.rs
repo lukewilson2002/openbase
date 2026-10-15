@@ -85,12 +85,18 @@ fn authorize_create(
                 ));
             }
             if role == Role::Owner || req.all_bases == Some(true) {
+                // Every base is beyond this one: without this, an owner's
+                // token limited to this base could mint an invite to the
+                // whole workspace and accept it from another account.
+                actor.require_capability(Capability::ManageUnscoped)?;
                 return Ok((ws, max, BaseAccess::All));
             }
             let ids = req.base_ids.clone().unwrap_or_else(|| vec![b.clone()]);
             let ids = workspaces::validate_base_ids(conn, &ws, &ids)?;
             for id in &ids {
-                // A creator can only hand out bases they can open themselves.
+                // A creator can only hand out bases they can open themselves,
+                // and a token only bases in its scope (`require_base` 404s
+                // the others).
                 perm::require_base(conn, actor, id, Role::Creator)?;
             }
             Ok((ws, max, BaseAccess::Only(ids)))
