@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
-import "@/base/emptyBase.css";
 import type { ViewSetup } from "./useViewSetup";
 
 export type SetupPicture = "kanban" | "calendar" | "timeline";
@@ -159,7 +158,7 @@ export function ViewSetupState({ setup, picture, heading, body, emptyBody, picke
   );
 }
 
-const CARD = "ob-empty-bob w-[220px] rounded-2xl border border-line bg-surface p-3.5 shadow-[0_10px_28px_rgb(15_20_30/0.08)]";
+const CARD = "w-[220px] rounded-2xl border border-line bg-surface p-3.5 shadow-[0_10px_28px_rgb(15_20_30/0.08)]";
 const TINT = {
   blue: "bg-[color-mix(in_srgb,var(--primary)_24%,var(--surface))]",
   green: "bg-[color-mix(in_srgb,var(--success)_28%,var(--surface))]",
@@ -167,10 +166,10 @@ const TINT = {
   plain: "bg-[color-mix(in_srgb,var(--line)_60%,var(--surface))]",
 };
 
-/** A small picture of the view being set up; the pieces pop in like the empty base's grid. */
+/** A small, still picture of the view being set up. */
 function Picture({ kind }: { kind: SetupPicture }) {
   let n = 0;
-  const pop = (className: string, style?: CSSProperties) => <span key={n} className={cn("ob-empty-cell", className)} style={{ ...style, animationDelay: `${120 + n++ * 60}ms` }} />;
+  const piece = (className: string, style?: CSSProperties) => <span key={n++} className={className} style={style} />;
   if (kind === "kanban") {
     const stacks: [keyof typeof TINT, number][] = [
       ["blue", 3],
@@ -181,8 +180,8 @@ function Picture({ kind }: { kind: SetupPicture }) {
       <div aria-hidden className={cn(CARD, "flex items-start gap-1.5")}>
         {stacks.map(([tint, cards], i) => (
           <div key={i} className="flex flex-1 flex-col gap-[5px] rounded-lg bg-subtle p-1.5">
-            {pop(cn("h-2 w-[70%] rounded-full", TINT[tint]))}
-            {Array.from({ length: cards }, () => pop("h-4 rounded border border-line bg-surface"))}
+            {piece(cn("h-2 w-[70%] rounded-full", TINT[tint]))}
+            {Array.from({ length: cards }, () => piece("h-4 rounded border border-line bg-surface"))}
           </div>
         ))}
       </div>
@@ -192,7 +191,7 @@ function Picture({ kind }: { kind: SetupPicture }) {
     const marks: Record<number, keyof typeof TINT> = { 3: "yellow", 8: "blue", 10: "blue", 11: "green", 17: "green" };
     return (
       <div aria-hidden className={cn(CARD, "grid grid-cols-7 gap-1")}>
-        {Array.from({ length: 21 }, (_, i) => pop(cn("h-[18px] rounded", TINT[marks[i] ?? "plain"], i === 17 && "outline-2 -outline-offset-2 outline-primary")))}
+        {Array.from({ length: 21 }, (_, i) => piece(cn("h-[18px] rounded", TINT[marks[i] ?? "plain"], i === 17 && "outline-2 -outline-offset-2 outline-primary")))}
       </div>
     );
   }
@@ -207,7 +206,7 @@ function Picture({ kind }: { kind: SetupPicture }) {
     <div aria-hidden className={cn(CARD, "flex flex-col gap-1.5")}>
       {bars.map(([tint, left, width], i) => (
         <div key={i} className="relative h-3.5 rounded bg-subtle">
-          {pop(cn("absolute inset-y-0 rounded", TINT[tint]), { left: `${left}%`, width: `${width}%` })}
+          {piece(cn("absolute inset-y-0 rounded", TINT[tint]), { left: `${left}%`, width: `${width}%` })}
         </div>
       ))}
     </div>

@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { basePermissions } from "./permissions";
-import "./emptyBase.css";
 
 export function EmptyBase({ schema, onImport }: { schema: BaseSchema; onImport: () => void }) {
   const canCreate = basePermissions.manageTables(schema.role);
@@ -102,9 +101,9 @@ const CELL_COLOR = {
 /** A small table: nine cells popping in one after another, then a slow bob. */
 function GridPicture() {
   return (
-    <div aria-hidden className="ob-empty-bob grid w-[200px] grid-cols-3 gap-1.5 rounded-2xl border border-line bg-surface p-3.5 shadow-[0_10px_28px_rgb(15_20_30/0.08)]">
+    <div aria-hidden className="grid w-[200px] grid-cols-3 gap-1.5 rounded-2xl border border-line bg-surface p-3.5 shadow-[0_10px_28px_rgb(15_20_30/0.08)]">
       {CELLS.map((c, i) => (
-        <span key={i} className={cn("ob-empty-cell h-[18px] rounded-[5px]", CELL_COLOR[c])} style={{ animationDelay: `${120 + i * 70}ms` }} />
+        <span key={i} className={cn("h-[18px] rounded-[5px]", CELL_COLOR[c])} />
       ))}
     </div>
   );
