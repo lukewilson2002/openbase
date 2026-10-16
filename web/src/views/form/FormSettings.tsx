@@ -1,5 +1,6 @@
 /** Title, description, submit button, success message, redirect and "submit another" of a form. */
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/checkbox";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import type { FormConfig } from "@/api/types";
@@ -11,6 +12,8 @@ export interface FormSettingsProps {
   readOnly: boolean;
   onChange: (next: FormConfig) => void;
 }
+
+const inputClass = "h-10 rounded-[10px] px-3 text-[0.875rem]";
 
 /** The redirect keeps what is typed while it is invalid; only a valid (or empty) address reaches the saved form. */
 function RedirectField({ value, readOnly, onValid }: { value: string; readOnly: boolean; onValid: (url: string | null) => void }) {
@@ -30,6 +33,7 @@ function RedirectField({ value, readOnly, onValid }: { value: string; readOnly: 
           maxLength={MAX_REDIRECT_URL + 1}
           disabled={readOnly}
           onBlur={() => setTouched(true)}
+          className={inputClass}
           onChange={(e) => {
             setText(e.target.value);
             if (redirectUrlProblem(e.target.value) === null) onValid(e.target.value.trim() === "" ? null : e.target.value.trim());
@@ -42,27 +46,38 @@ function RedirectField({ value, readOnly, onValid }: { value: string; readOnly: 
 
 export function FormSettings({ form, title, readOnly, onChange }: FormSettingsProps) {
   const set = (patch: FormSettingsPatch) => onChange(updateFormSettings(form, patch));
+  // The rarely changed settings wait behind a disclosure, open from the start once one is in use.
+  const [more, setMore] = useState(!!form.redirect_url || form.show_submit_another);
   return (
-    <section aria-labelledby="form-settings-heading" className="flex flex-col gap-3">
-      <h3 id="form-settings-heading" className="text-[0.9375rem]">
+    <section aria-labelledby="form-settings-heading" className="flex flex-col gap-3.5">
+      <h3 id="form-settings-heading" className="text-[0.9375rem] font-bold">
         Form
       </h3>
-      <Field label="Title" hint="Shown at the top of the form.">
-        {(ctl) => <Input {...ctl} value={form.title} placeholder={title} maxLength={MAX_FORM_TITLE} disabled={readOnly} onChange={(e) => set({ title: e.target.value })} />}
+      <Field label="Title">
+        {(ctl) => <Input {...ctl} value={form.title} placeholder={title} maxLength={MAX_FORM_TITLE} disabled={readOnly} className={inputClass} onChange={(e) => set({ title: e.target.value })} />}
       </Field>
       <Field label="Description">
-        {(ctl) => <Textarea {...ctl} rows={3} value={form.description} placeholder="Tell people what this form is for" maxLength={MAX_FORM_TEXT} disabled={readOnly} onChange={(e) => set({ description: e.target.value })} />}
+        {(ctl) => (
+          <Textarea {...ctl} rows={2} value={form.description} placeholder="Tell people what this form is for" maxLength={MAX_FORM_TEXT} disabled={readOnly} className="min-h-[62px] rounded-[10px] px-3 py-2 text-[0.875rem] leading-snug" onChange={(e) => set({ description: e.target.value })} />
+        )}
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Submit button">
-          {(ctl) => <Input {...ctl} value={form.submit_label} placeholder={DEFAULT_SUBMIT_LABEL} maxLength={MAX_FORM_TITLE} disabled={readOnly} onChange={(e) => set({ submit_label: e.target.value })} />}
+          {(ctl) => <Input {...ctl} value={form.submit_label} placeholder={DEFAULT_SUBMIT_LABEL} maxLength={MAX_FORM_TITLE} disabled={readOnly} className={inputClass} onChange={(e) => set({ submit_label: e.target.value })} />}
         </Field>
-        <Field label="Success message">
-          {(ctl) => <Input {...ctl} value={form.success_message} placeholder={DEFAULT_SUCCESS_MESSAGE} maxLength={MAX_FORM_TEXT} disabled={readOnly} onChange={(e) => set({ success_message: e.target.value })} />}
+        <Field label="After submitting">
+          {(ctl) => <Input {...ctl} value={form.success_message} placeholder={DEFAULT_SUCCESS_MESSAGE} maxLength={MAX_FORM_TEXT} disabled={readOnly} className={inputClass} onChange={(e) => set({ success_message: e.target.value })} />}
         </Field>
       </div>
-      <RedirectField value={form.redirect_url ?? ""} readOnly={readOnly} onValid={(url) => set({ redirect_url: url })} />
-      <Switch checked={form.show_submit_another} disabled={readOnly} onCheckedChange={(on) => set({ show_submit_another: on })} label="Offer “Submit another response” after submitting" />
+      <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} className="-ml-1 flex items-center gap-1 self-start rounded-md px-1 py-0.5 text-[0.8125rem] font-medium text-muted hover:text-fg">
+        <ChevronRight aria-hidden className={`size-4 transition-transform ${more ? "rotate-90" : ""}`} /> More options
+      </button>
+      {more && (
+        <div className="flex flex-col gap-3 pl-5">
+          <RedirectField value={form.redirect_url ?? ""} readOnly={readOnly} onValid={(url) => set({ redirect_url: url })} />
+          <Switch checked={form.show_submit_another} disabled={readOnly} onCheckedChange={(on) => set({ show_submit_another: on })} label="Offer “Submit another response” after submitting" />
+        </div>
+      )}
     </section>
   );
 }

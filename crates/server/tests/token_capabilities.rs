@@ -32,6 +32,8 @@ const ROLES: [Role; 5] = [
 struct Ids {
     ws: String,
     base: String,
+    /// A second live base of `ws`, outside a token limited to `base`.
+    side: String,
     member: String,
     ws_invite: String,
     base_invite: String,
@@ -55,9 +57,19 @@ impl Fx {
         let app = TestApp::new();
         let owner = app.admin("owner@example.com", "Owner");
         let (ws, base) = app.workspace_with_base(&owner, "Acme");
+        // A member limited to two bases, so taking one away is allowed.
+        let side = app
+            .post(
+                &owner,
+                &format!("/api/workspaces/{ws}/bases"),
+                json!({"name": "Side"}),
+            )
+            .await;
+        side.assert_status(201);
+        let side = side.body["id"].as_str().unwrap().to_string();
         let member = app.user("member@example.com", "Member");
-        app.grant_workspace_role(&member, &ws, "editor");
-        app.grant_base_role(&member, &base, "viewer");
+        app.grant_base_role(&member, &base, "editor");
+        app.grant_base_role(&member, &side, "editor");
         let ws_invite = app
             .post(
                 &owner,
@@ -108,6 +120,7 @@ impl Fx {
             accept_token: invite_token(accept.body["url"].as_str().unwrap()),
             ws,
             base,
+            side,
             ws_deleted,
             base_deleted,
         };
@@ -293,6 +306,26 @@ const CASES: &[Case] = &[
         scoped: Scoped::Refused,
     },
     Case {
+        name: "update workspace invite",
+        method: "PATCH",
+        template: "/api/invites/{id}",
+        path: |i| format!("/api/invites/{}", i.ws_invite),
+        body: |_| Some(json!({"role": "commenter"})),
+        min: Min::Role(Role::Owner),
+        ok: 200,
+        scoped: Scoped::Refused,
+    },
+    Case {
+        name: "update base invite",
+        method: "PATCH",
+        template: "/api/invites/{id}",
+        path: |i| format!("/api/invites/{}", i.base_invite),
+        body: |_| Some(json!({"role": "commenter"})),
+        min: Min::Role(Role::Creator),
+        ok: 200,
+        scoped: Scoped::Allowed,
+    },
+    Case {
         name: "revoke workspace invite",
         method: "DELETE",
         template: "/api/invites/{id}",
@@ -338,17 +371,7 @@ const CASES: &[Case] = &[
         template: "/api/bases/{id}/members",
         path: |i| format!("/api/bases/{}/members", i.base),
         body: no_body,
-        min: Min::Role(Role::Owner),
-        ok: 200,
-        scoped: Scoped::Allowed,
-    },
-    Case {
-        name: "change base member role",
-        method: "PATCH",
-        template: "/api/bases/{id}/members/{user_id}",
-        path: |i| format!("/api/bases/{}/members/{}", i.base, i.member),
-        body: |_| Some(json!({"role": "commenter"})),
-        min: Min::Role(Role::Owner),
+        min: Min::Role(Role::Viewer),
         ok: 200,
         scoped: Scoped::Allowed,
     },
@@ -381,6 +404,37 @@ const CASES: &[Case] = &[
         min: Min::Role(Role::Creator),
         ok: 201,
         scoped: Scoped::Allowed,
+    },
+    // From a base, an invite to every base reaches beyond it, however it is asked for.
+    Case {
+        name: "create base invite as owner",
+        method: "POST",
+        template: "/api/bases/{id}/invites",
+        path: |i| format!("/api/bases/{}/invites", i.base),
+        body: |_| Some(json!({"role": "owner"})),
+        min: Min::Role(Role::Owner),
+        ok: 201,
+        scoped: Scoped::Refused,
+    },
+    Case {
+        name: "create base invite to all bases",
+        method: "POST",
+        template: "/api/bases/{id}/invites",
+        path: |i| format!("/api/bases/{}/invites", i.base),
+        body: |_| Some(json!({"role": "viewer", "all_bases": true})),
+        min: Min::Role(Role::Owner),
+        ok: 201,
+        scoped: Scoped::Refused,
+    },
+    Case {
+        name: "create base invite listing another base",
+        method: "POST",
+        template: "/api/bases/{id}/invites",
+        path: |i| format!("/api/bases/{}/invites", i.base),
+        body: |i| Some(json!({"role": "viewer", "base_ids": [i.base, i.side]})),
+        min: Min::Role(Role::Creator),
+        ok: 201,
+        scoped: Scoped::OutOfScope,
     },
     Case {
         name: "update own profile",
@@ -1379,8 +1433,11 @@ fn the_capability_tables_match_the_endpoint_catalogue() {
             Scoped::Allowed | Scoped::OutOfScope => Access::Manage,
             Scoped::Refused => Access::ManageUnscoped,
         };
-        // Revoking an invite is one catalogue entry for workspace and base invites.
-        if case.template != "/api/invites/{id}" {
+        // Changing or revoking an invite is one catalogue entry for workspace and base invites,
+        // and a base invite needs `manage` only, though one reaching every base needs it unscoped.
+        let one_entry = case.template == "/api/invites/{id}"
+            || (case.template == "/api/bases/{id}/invites" && case.method == "POST");
+        if !one_entry || case.scoped == Scoped::Allowed {
             assert_eq!(ep.access, expected, "{}", case.name);
         }
     }

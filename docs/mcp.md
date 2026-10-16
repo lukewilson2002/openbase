@@ -30,7 +30,8 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Quick start
 
-Open **Account → AI assistants** in OpenBase. It shows your MCP address (built from
+Open **Account → AI assistants** in OpenBase (**Connect an assistant** in the profile menu at
+the bottom of the sidebar). It shows your MCP address (built from
 `OPENBASE_PUBLIC_URL`) and short, collapsible steps for Claude (Claude Desktop and
 claude.ai first, then Claude Code), ChatGPT and other clients, each with copy buttons.
 The same steps, in short, pick one way in:
@@ -234,7 +235,7 @@ intersection of its owner's role on each base and the token's scope:
 |---|---|---|
 | **Read only** | read bases, schema, records, views, comments, history, trash listings, automations, notifications; export CSV | the read tools, `api_reference`, `api_request` (reads only) |
 | **Read and write** | additionally create and edit records, comments, bases, tables, fields, views, share links, automations, imports and uploads, and restore from the trash, as far as the owner's role allows | + the write tools |
-| **Write + manage** | additionally rename, delete, duplicate and restore workspaces and bases, change and remove members, create, list and revoke invites, and (if the owner is an instance administrator) use the admin pages | + the manage tools, and the `admin_*` tools for administrators |
+| **Write + manage** | additionally rename, delete, duplicate and restore workspaces and bases, change members' roles and bases and remove members, create, list and revoke invites, and (if the owner is an instance administrator) use the admin pages | + the manage tools, and the `admin_*` tools for administrators |
 
 Optionally limit a token to chosen **bases** (it cannot see or touch any other base,
 through any tool) and give it an **expiry**. A base-limited `manage` token manages only
@@ -328,22 +329,22 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_workspaces` | any | Workspaces (with icons) with your role and their bases |
+| `list_workspaces` | any | Workspaces (with icons) with your role, member and pending-invite counts, and the bases you can open (with who can open each) |
 | `create_workspace` | manage | New workspace, optionally with an `icon`; you become its owner |
 | `rename_workspace` | manage | Rename and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
-| `list_members` | manage | Members of a workspace or of one base, with roles |
-| `set_member_role` | manage | Change a member's role (a workspace always keeps an owner) |
-| `remove_member` | manage | Remove someone's access to a workspace or base |
-| `create_invite` | manage | Invite link for a workspace or base, optional email restriction; returns the link |
-| `list_invites` / `revoke_invite` | manage | Pending invites; revoke one |
+| `list_members` | manage | Members of a workspace with their role and bases (`all_bases` or `base_ids`), or the workspace members who can open one base |
+| `set_member_role` | manage | Change a workspace member's `role`, and/or their bases: `all_bases: true` or a `base_ids` list (owner role; owners always have every base; a workspace always keeps an owner). Scope `base` is refused: there are no per-base roles |
+| `remove_member` | manage | Remove someone from a workspace (they lose all its bases), or take one base off a limited member's list (not their last) |
+| `create_invite` | manage | Invite link to join a workspace, optional email restriction; returns the link. Scope `workspace` (owner): every base, or `base_ids`. Scope `base` (creator of that base): that base, or `base_ids` you can open; never `all_bases`, never above your role |
+| `list_invites` / `revoke_invite` | manage | A workspace's invites, or the pending ones that give a base; revoke one |
 | `list_collaborators` | any | People who can see a base (user ids for user fields and @mentions) |
 
 ### Bases, tables and fields
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_base` / `rename_base` | write | Create a base in a workspace; rename or restyle it (name, colour, `icon`) |
+| `create_base` / `rename_base` | write | Create a base in a workspace (it starts with the table "Table 1"; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
 | `duplicate_base` / `delete_base` | manage | Copy a base (records optional; the copy keeps the icons); delete to the trash (owner role) |
 | `create_table` / `rename_table` | write | Add a table; rename it or change its description or `icon` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |

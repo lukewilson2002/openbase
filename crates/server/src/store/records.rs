@@ -198,9 +198,15 @@ pub fn save_edit(
     Ok(())
 }
 
-pub fn set_deleted_at(conn: &Connection, id: &str, at: Option<i64>) -> AppResult<()> {
-    conn.prepare_cached("UPDATE records SET deleted_at = ?2 WHERE id = ?1")?
-        .execute(params![id, at])?;
+/// Trash (`at` set, recording `by`) or restore (`None`, clearing both) a record.
+pub fn set_deleted_at(
+    conn: &Connection,
+    id: &str,
+    at: Option<i64>,
+    by: Option<&str>,
+) -> AppResult<()> {
+    conn.prepare_cached("UPDATE records SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1")?
+        .execute(params![id, at, by])?;
     Ok(())
 }
 

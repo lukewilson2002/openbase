@@ -1,6 +1,7 @@
-//! Invites to a workspace or a single base. The link carries a secret token
-//! (`inv_` + 43 random chars); only its hash is stored. An invite is valid for
-//! 7 days, can be accepted once, and may be restricted to one email address.
+//! Invites to a workspace, giving access to all of its bases or a picked list
+//! of them. The link carries a secret token (`inv_` + 43 random chars); only
+//! its hash is stored. An invite is valid for 7 days, can be accepted once,
+//! and may be restricted to one email address.
 
 use ob_core::api::auth::{InviteInfo, InvitePreview};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -9,57 +10,86 @@ use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::{hash_token, new_id, new_token};
 use crate::perm::{self, Role};
+use crate::store::workspaces::{self, BaseAccess};
 
 /// Invites expire after 7 days.
 pub const INVITE_TTL_MS: i64 = 7 * 24 * 3600 * 1000;
 /// Most invites listed for one workspace or base.
 const LIST_LIMIT: i64 = 500;
 
-/// What an invite grants access to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InviteTarget {
-    Workspace(String),
-    Base(String),
-}
-
 /// A stored invite.
 #[derive(Debug, Clone)]
 pub struct InviteRow {
     pub info: InviteInfo,
     pub created_by: Option<String>,
+    /// Whether accepting may raise an existing member's role: set only when
+    /// an owner without a base-limited token set the terms (see [`accept`]).
+    pub may_raise_roles: bool,
 }
 
 impl InviteRow {
-    pub fn target(&self) -> AppResult<InviteTarget> {
-        match (&self.info.workspace_id, &self.info.base_id) {
-            (Some(ws), None) => Ok(InviteTarget::Workspace(ws.clone())),
-            (None, Some(b)) => Ok(InviteTarget::Base(b.clone())),
-            _ => Err(AppError::internal("invite has no single target")),
-        }
+    pub fn workspace_id(&self) -> AppResult<&str> {
+        self.info
+            .workspace_id
+            .as_deref()
+            .ok_or_else(|| AppError::internal("invite has no workspace"))
     }
 
     pub fn role(&self) -> AppResult<Role> {
         Role::parse(&self.info.role)
     }
+
+    pub fn access(&self) -> BaseAccess {
+        if self.info.all_bases {
+            BaseAccess::All
+        } else {
+            BaseAccess::Only(self.info.base_ids.clone())
+        }
+    }
 }
 
-const COLUMNS: &str =
-    "id, workspace_id, base_id, email, role, created_at, expires_at, accepted_at, created_by";
+const COLUMNS: &str = "id, workspace_id, email, role, created_at, expires_at, accepted_at, \
+                       created_by, all_bases, may_raise_roles";
 
 fn from_row(r: &Row) -> rusqlite::Result<InviteRow> {
     Ok(InviteRow {
         info: InviteInfo {
             id: r.get(0)?,
             workspace_id: r.get(1)?,
-            base_id: r.get(2)?,
-            email: r.get(3)?,
-            role: r.get(4)?,
-            created_at: r.get(5)?,
-            expires_at: r.get(6)?,
-            accepted_at: r.get(7)?,
+            base_id: None,
+            email: r.get(2)?,
+            role: r.get(3)?,
+            created_at: r.get(4)?,
+            expires_at: r.get(5)?,
+            accepted_at: r.get(6)?,
+            all_bases: r.get(8)?,
+            base_ids: Vec::new(),
         },
-        created_by: r.get(8)?,
+        created_by: r.get(7)?,
+        may_raise_roles: r.get(9)?,
     })
+}
+
+/// Fill in `base_ids` of limited invites (all of them, trashed bases included,
+/// so restoring a base restores what the invite gives).
+fn with_bases(conn: &Connection, mut rows: Vec<InviteRow>) -> AppResult<Vec<InviteRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT ib.base_id FROM invite_bases ib JOIN bases b ON b.id = ib.base_id
+         WHERE ib.invite_id = ?1 ORDER BY b.position, b.created_at, b.id",
+    )?;
+    for row in rows.iter_mut().filter(|r| !r.info.all_bases) {
+        let ids = stmt.query_map([&row.info.id], |r| r.get(0))?;
+        row.info.base_ids = ids.collect::<Result<_, _>>()?;
+    }
+    Ok(rows)
+}
+
+fn query(conn: &Connection, sql: &str, params: impl rusqlite::Params) -> AppResult<Vec<InviteRow>> {
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt
+        .query_map(params, from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
+    with_bases(conn, rows)
 }
 
 /// Link the invitee opens.
@@ -67,73 +97,180 @@ pub fn invite_url(public_url: &str, token: &str) -> String {
     format!("{}/invite/{token}", public_url.trim_end_matches('/'))
 }
 
-/// Create an invite. The caller has already checked permissions and
-/// normalized `email`. Returns the raw token and the stored invite.
+/// Create an invite to `workspace_id`. The caller has already checked
+/// permissions, normalized `email` and validated `access` (see
+/// [`workspaces::validate_access`]) and decided `may_raise_roles` (see
+/// [`InviteRow::may_raise_roles`]). Returns the raw token and the stored invite.
 pub fn create(
     conn: &Connection,
     created_by: &str,
-    target: &InviteTarget,
+    workspace_id: &str,
     email: Option<&str>,
     role: Role,
+    access: &BaseAccess,
+    may_raise_roles: bool,
 ) -> AppResult<(String, InviteInfo)> {
     let id = new_id(ob_core::ids::INVITE);
     let token = new_token("inv_");
     let now = now_ms();
-    let (ws, base) = match target {
-        InviteTarget::Workspace(w) => (Some(w.as_str()), None),
-        InviteTarget::Base(b) => (None, Some(b.as_str())),
-    };
+    let all_bases = matches!(access, BaseAccess::All);
     conn.execute(
-        "INSERT INTO invites (id, token_hash, workspace_id, base_id, email, role, created_by, created_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO invites (id, token_hash, workspace_id, email, role, created_by, created_at,
+                              expires_at, all_bases, may_raise_roles)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             id,
             hash_token(&token),
-            ws,
-            base,
+            workspace_id,
             email,
             role.as_str(),
             created_by,
             now,
-            now + INVITE_TTL_MS
+            now + INVITE_TTL_MS,
+            all_bases,
+            may_raise_roles,
         ],
     )?;
+    let mut base_ids = Vec::new();
+    if let BaseAccess::Only(ids) = access {
+        for b in ids {
+            conn.execute(
+                "INSERT OR IGNORE INTO invite_bases (invite_id, base_id) VALUES (?1, ?2)",
+                params![id, b],
+            )?;
+        }
+        base_ids = ids.clone();
+    }
     let info = InviteInfo {
         id,
-        workspace_id: ws.map(str::to_string),
-        base_id: base.map(str::to_string),
+        workspace_id: Some(workspace_id.to_string()),
+        base_id: None,
         email: email.map(str::to_string),
         role: role.as_str().to_string(),
         created_at: now,
         expires_at: now + INVITE_TTL_MS,
         accepted_at: None,
+        all_bases,
+        base_ids,
     };
     Ok((token, info))
 }
 
-/// Invites of a workspace or base, newest first (accepted and expired included).
-pub fn list(conn: &Connection, target: &InviteTarget) -> AppResult<Vec<InviteInfo>> {
-    let (col, id) = match target {
-        InviteTarget::Workspace(w) => ("workspace_id", w),
-        InviteTarget::Base(b) => ("base_id", b),
-    };
-    let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUMNS} FROM invites WHERE {col} = ?1 ORDER BY created_at DESC, id LIMIT ?2"
-    ))?;
-    let rows = stmt.query_map(params![id, LIST_LIMIT], from_row)?;
-    Ok(rows
-        .map(|r| r.map(|i| i.info))
-        .collect::<Result<Vec<_>, _>>()?)
+/// Invites of a workspace, newest first (accepted and expired included, but
+/// not pending ones that are [`voided`]).
+pub fn list_for_workspace(conn: &Connection, workspace_id: &str) -> AppResult<Vec<InviteInfo>> {
+    let rows = query(
+        conn,
+        &format!(
+            "SELECT {COLUMNS} FROM invites WHERE workspace_id = ?1
+             ORDER BY created_at DESC, id LIMIT ?2"
+        ),
+        params![workspace_id, LIST_LIMIT],
+    )?;
+    without_voided(conn, rows)
+}
+
+/// Drop pending invites that are [`voided`]. Listed, they read as waiting to
+/// be accepted, and changing one would make the editor its inviter and bring
+/// back a link its old inviter (say, a removed member) still holds.
+fn without_voided(conn: &Connection, rows: Vec<InviteRow>) -> AppResult<Vec<InviteInfo>> {
+    let now = now_ms();
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let pending = row.info.accepted_at.is_none() && row.info.expires_at > now;
+        if pending && voided(conn, &row)? {
+            continue;
+        }
+        out.push(row.info);
+    }
+    Ok(out)
+}
+
+/// Pending (unaccepted, unexpired) invites whose access includes `base_id`,
+/// newest first.
+pub fn list_for_base(conn: &Connection, base_id: &str) -> AppResult<Vec<InviteInfo>> {
+    let rows = query(
+        conn,
+        &format!(
+            "SELECT {COLUMNS} FROM invites i
+             WHERE i.accepted_at IS NULL AND i.expires_at > ?3
+               AND i.workspace_id = (SELECT workspace_id FROM bases WHERE id = ?1)
+               AND (i.all_bases = 1
+                    OR EXISTS (SELECT 1 FROM invite_bases ib
+                               WHERE ib.invite_id = i.id AND ib.base_id = ?1))
+             ORDER BY created_at DESC, id LIMIT ?2"
+        ),
+        params![base_id, LIST_LIMIT, now_ms()],
+    )?;
+    without_voided(conn, rows)
+}
+
+/// Invites of a workspace that can still be accepted (see
+/// [`find_valid_by_token`]), oldest first.
+pub fn pending_for_workspace(conn: &Connection, workspace_id: &str) -> AppResult<Vec<InviteRow>> {
+    let rows = query(
+        conn,
+        &format!(
+            "SELECT {COLUMNS} FROM invites
+             WHERE workspace_id = ?1 AND accepted_at IS NULL AND expires_at > ?2
+             ORDER BY created_at, id LIMIT ?3"
+        ),
+        params![workspace_id, now_ms(), LIST_LIMIT],
+    )?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        if still_valid(conn, &row)? {
+            out.push(row);
+        }
+    }
+    Ok(out)
 }
 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Option<InviteRow>> {
-    Ok(conn
-        .query_row(
-            &format!("SELECT {COLUMNS} FROM invites WHERE id = ?1"),
-            [id],
-            from_row,
-        )
-        .optional()?)
+    Ok(query(
+        conn,
+        &format!("SELECT {COLUMNS} FROM invites WHERE id = ?1"),
+        [id],
+    )?
+    .pop())
+}
+
+/// Change a pending invite's role and, when `access` is given, its bases;
+/// the token and expiry stay. `updated_by` becomes the invite's creator: its
+/// validity and how far accepting it may raise an existing member follow the
+/// standing of whoever set its terms (see [`creator_may_still_invite`] and
+/// [`accept`]), so a creator editing an owner's invite cannot borrow the
+/// owner's standing; `may_raise_roles` is decided afresh for the same reason.
+pub fn update_terms(
+    conn: &Connection,
+    id: &str,
+    updated_by: &str,
+    role: Role,
+    access: Option<&BaseAccess>,
+    may_raise_roles: bool,
+) -> AppResult<InviteInfo> {
+    conn.execute(
+        "UPDATE invites SET role = ?2, created_by = ?3, may_raise_roles = ?4 WHERE id = ?1",
+        params![id, role.as_str(), updated_by, may_raise_roles],
+    )?;
+    if let Some(access) = access {
+        conn.execute(
+            "UPDATE invites SET all_bases = ?2 WHERE id = ?1",
+            params![id, matches!(access, BaseAccess::All)],
+        )?;
+        conn.execute("DELETE FROM invite_bases WHERE invite_id = ?1", [id])?;
+        if let BaseAccess::Only(ids) = access {
+            for b in ids {
+                conn.execute(
+                    "INSERT OR IGNORE INTO invite_bases (invite_id, base_id) VALUES (?1, ?2)",
+                    params![id, b],
+                )?;
+            }
+        }
+    }
+    get(conn, id)?
+        .map(|r| r.info)
+        .ok_or_else(|| AppError::not_found("invite"))
 }
 
 pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
@@ -141,35 +278,44 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Name and icon of the invite's target, if it (and its workspace) is not deleted.
-fn live_target(
+/// Name, icon and colour of the invite's workspace, if it is not deleted.
+fn live_workspace(
     conn: &Connection,
-    target: &InviteTarget,
-) -> AppResult<Option<(String, Option<String>)>> {
-    Ok(match target {
-        InviteTarget::Workspace(w) => conn
-            .query_row(
-                "SELECT name, icon FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
-                [w],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?,
-        InviteTarget::Base(b) => conn
-            .query_row(
-                "SELECT b.name, b.icon FROM bases b JOIN workspaces w ON w.id = b.workspace_id
-                 WHERE b.id = ?1 AND b.deleted_at IS NULL AND w.deleted_at IS NULL",
-                [b],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?,
-    })
+    invite: &InviteRow,
+) -> AppResult<Option<(String, Option<String>, String)>> {
+    Ok(conn
+        .query_row(
+            "SELECT name, icon, color FROM workspaces WHERE id = ?1 AND deleted_at IS NULL",
+            [invite.workspace_id()?],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?)
 }
 
-/// Whether the invite's creator can still hand out its role: an active user
-/// who is currently an Owner of the workspace (or Creator of the base, the
-/// role needed to invite) and holds at least the invited role. An invite is
-/// only as good as its creator's standing, so removal, demotion or
-/// deactivation of the creator voids their pending invites.
+/// The listed bases of a limited invite that are not in the trash.
+fn live_listed_bases(conn: &Connection, invite: &InviteRow) -> AppResult<Vec<String>> {
+    let mut out = Vec::new();
+    for b in &invite.info.base_ids {
+        let live: bool = conn
+            .query_row(
+                "SELECT deleted_at IS NULL FROM bases WHERE id = ?1",
+                [b],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        if live {
+            out.push(b.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// Whether the invite's creator can still hand out what it gives: an active
+/// user who holds at least the invited role, and either owns the workspace
+/// or (for an invite limited to some bases) is a Creator who can still open
+/// each of them. An invite is only as good as its creator's standing, so
+/// removal, demotion, deactivation or losing a base voids pending invites.
 fn creator_may_still_invite(conn: &Connection, invite: &InviteRow) -> AppResult<bool> {
     let Some(creator) = &invite.created_by else {
         return Ok(false);
@@ -185,29 +331,53 @@ fn creator_may_still_invite(conn: &Connection, invite: &InviteRow) -> AppResult<
     if !active {
         return Ok(false);
     }
-    let (held, needed) = match invite.target()? {
-        InviteTarget::Workspace(w) => (perm::workspace_role(conn, creator, &w)?, Role::Owner),
-        InviteTarget::Base(b) => (perm::base_role(conn, creator, &b)?, Role::Creator),
-    };
-    let needed = needed.max(invite.role()?);
-    Ok(held.is_some_and(|h| h >= needed))
+    let ws_role = perm::workspace_role(conn, creator, invite.workspace_id()?)?;
+    if ws_role == Some(Role::Owner) {
+        return Ok(true);
+    }
+    if invite.info.all_bases {
+        return Ok(false);
+    }
+    let needed = Role::Creator.max(invite.role()?);
+    for b in live_listed_bases(conn, invite)? {
+        if !perm::base_role(conn, creator, &b)?.is_some_and(|r| r >= needed) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
-/// An invite that can still be accepted: unexpired, unaccepted, target alive,
-/// creator still entitled to invite.
+/// Whether the invite is dead for a reason other than its bases being in the
+/// trash: its workspace is deleted, or its creator may no longer invite. An
+/// invite whose bases are all trashed is not voided: restoring one brings it
+/// back, and an owner may point it at other bases.
+pub fn voided(conn: &Connection, invite: &InviteRow) -> AppResult<bool> {
+    Ok(live_workspace(conn, invite)?.is_none() || !creator_may_still_invite(conn, invite)?)
+}
+
+/// Not [`voided`], and at least one live base for a limited invite.
+fn still_valid(conn: &Connection, invite: &InviteRow) -> AppResult<bool> {
+    if voided(conn, invite)? {
+        return Ok(false);
+    }
+    Ok(invite.info.all_bases || !live_listed_bases(conn, invite)?.is_empty())
+}
+
+/// An invite that can still be accepted: unexpired, unaccepted, workspace
+/// (and for a limited invite, one of its bases) alive, creator still entitled
+/// to invite.
 pub fn find_valid_by_token(conn: &Connection, token: &str) -> AppResult<Option<InviteRow>> {
-    let row = conn
-        .query_row(
-            &format!(
-                "SELECT {COLUMNS} FROM invites
-                 WHERE token_hash = ?1 AND accepted_at IS NULL AND expires_at > ?2"
-            ),
-            params![hash_token(token), now_ms()],
-            from_row,
-        )
-        .optional()?;
+    let row = query(
+        conn,
+        &format!(
+            "SELECT {COLUMNS} FROM invites
+             WHERE token_hash = ?1 AND accepted_at IS NULL AND expires_at > ?2"
+        ),
+        params![hash_token(token), now_ms()],
+    )?
+    .pop();
     let Some(row) = row else { return Ok(None) };
-    if live_target(conn, &row.target()?)?.is_none() || !creator_may_still_invite(conn, &row)? {
+    if !still_valid(conn, &row)? {
         return Ok(None);
     }
     Ok(Some(row))
@@ -219,11 +389,11 @@ pub fn require_valid_by_token(conn: &Connection, token: &str) -> AppResult<Invit
         .ok_or_else(|| AppError::not_found("invite (it may have expired or already been used)"))
 }
 
-/// Public preview for the accept page.
+/// Public preview for the accept page. Every invite joins a workspace, so the
+/// target is always the workspace, even when it gives only some of its bases.
 pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview> {
-    let target = invite.target()?;
-    let (target_name, target_icon) =
-        live_target(conn, &target)?.ok_or_else(|| AppError::not_found("invite"))?;
+    let (target_name, target_icon, target_color) =
+        live_workspace(conn, invite)?.ok_or_else(|| AppError::not_found("invite"))?;
     let invited_by: Option<String> = match &invite.created_by {
         Some(uid) => conn
             .query_row("SELECT name FROM users WHERE id = ?1", [uid], |r| r.get(0))
@@ -233,48 +403,18 @@ pub fn preview(conn: &Connection, invite: &InviteRow) -> AppResult<InvitePreview
     Ok(InvitePreview {
         target_name,
         target_icon,
-        target_kind: match target {
-            InviteTarget::Workspace(_) => "workspace".into(),
-            InviteTarget::Base(_) => "base".into(),
-        },
+        target_color,
+        target_kind: "workspace".into(),
         role: invite.info.role.clone(),
         email: invite.info.email.clone(),
         invited_by,
     })
 }
 
-/// Give `user_id` `role` on the target, keeping their existing role if higher.
-pub fn grant_role(
-    conn: &Connection,
-    target: &InviteTarget,
-    user_id: &str,
-    role: Role,
-) -> AppResult<Role> {
-    let (table, col, id) = match target {
-        InviteTarget::Workspace(w) => ("workspace_members", "workspace_id", w),
-        InviteTarget::Base(b) => ("base_members", "base_id", b),
-    };
-    let existing: Option<String> = conn
-        .query_row(
-            &format!("SELECT role FROM {table} WHERE {col} = ?1 AND user_id = ?2"),
-            params![id, user_id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    let existing = existing.as_deref().map(Role::parse).transpose()?;
-    let effective = existing.map_or(role, |e| e.max(role));
-    conn.execute(
-        &format!(
-            "INSERT INTO {table} ({col}, user_id, role, created_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT({col}, user_id) DO UPDATE SET role = excluded.role"
-        ),
-        params![id, user_id, effective.as_str(), now_ms()],
-    )?;
-    Ok(effective)
-}
-
 /// Accept a valid invite for a user: enforce the email restriction, grant the
-/// role and mark the invite used. Returns the updated invite.
+/// role and base access (merged with any membership they already have; only
+/// an invite whose terms an owner set for the whole workspace can raise an
+/// existing member's role) and mark the invite used. Returns the updated invite.
 pub fn accept(
     conn: &Connection,
     invite: &InviteRow,
@@ -304,7 +444,27 @@ pub fn accept(
             "invite (it may have already been used)",
         ));
     }
-    grant_role(conn, &invite.target()?, user_id, invite.role()?)?;
+    let ws = invite.workspace_id()?;
+    let mut role = invite.role()?;
+    // A workspace role applies to every base the member can open, so letting
+    // a creator's invite raise an existing member would promote them on
+    // bases the creator has no say over (a viewer of B made creator of B by
+    // someone limited to A). Such an invite only adds its bases, at the
+    // member's current role; that role is below owner (owners have every
+    // base already), so it never exceeds what the creator could have given.
+    // An owner's API token limited to some bases is held to the same rule, so
+    // the flag recorded when the terms were set decides, not the creator's
+    // role; that role is still checked so an owner demoted since cannot raise.
+    if let Some(existing) = perm::workspace_role(conn, user_id, ws)? {
+        let by_owner = match &invite.created_by {
+            Some(c) => perm::workspace_role(conn, c, ws)? == Some(Role::Owner),
+            None => false,
+        };
+        if !(invite.may_raise_roles && by_owner) {
+            role = existing;
+        }
+    }
+    workspaces::grant(conn, ws, user_id, role, &invite.access())?;
     let mut info = invite.info.clone();
     info.accepted_at = Some(now);
     Ok(info)
@@ -338,14 +498,47 @@ mod tests {
         (c, u, "wsp1".into())
     }
 
+    fn only(ids: &[&str]) -> BaseAccess {
+        BaseAccess::Only(ids.iter().map(|s| s.to_string()).collect())
+    }
+
     #[test]
-    fn grant_keeps_the_higher_role() {
+    fn grant_keeps_the_higher_role_and_merges_bases() {
         let (c, _owner, ws) = db();
+        c.execute(
+            "INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('app2', 'wsp1', 'Ops', 0)",
+            [],
+        )
+        .unwrap();
         let u = users::create(&c, "b@example.com", "B", "!", false).unwrap();
-        let t = InviteTarget::Workspace(ws);
-        assert_eq!(grant_role(&c, &t, &u, Role::Editor).unwrap(), Role::Editor);
-        assert_eq!(grant_role(&c, &t, &u, Role::Viewer).unwrap(), Role::Editor);
-        assert_eq!(grant_role(&c, &t, &u, Role::Owner).unwrap(), Role::Owner);
+        let g = |role, access: &BaseAccess| workspaces::grant(&c, &ws, &u, role, access).unwrap();
+        assert_eq!(g(Role::Editor, &only(&["app1"])), Role::Editor);
+        assert_eq!(crate::perm::base_role(&c, &u, "app2").unwrap(), None);
+        assert_eq!(g(Role::Viewer, &only(&["app2"])), Role::Editor);
+        assert_eq!(
+            crate::perm::base_role(&c, &u, "app2").unwrap(),
+            Some(Role::Editor)
+        );
+        assert_eq!(g(Role::Viewer, &BaseAccess::All), Role::Editor);
+        let all: bool = c
+            .query_row(
+                "SELECT all_bases FROM workspace_members WHERE user_id = ?1",
+                [&u],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(all);
+        // Once all bases, a later limited grant does not narrow it.
+        g(Role::Viewer, &only(&["app1"]));
+        let listed: i64 = c
+            .query_row(
+                "SELECT count(*) FROM workspace_member_bases WHERE user_id = ?1",
+                [&u],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(listed, 0);
+        assert_eq!(g(Role::Owner, &only(&["app1"])), Role::Owner);
         assert_eq!(
             crate::perm::workspace_role(&c, &u, "wsp1").unwrap(),
             Some(Role::Owner)
@@ -354,15 +547,25 @@ mod tests {
 
     #[test]
     fn accept_flow_and_validity() {
-        let (c, owner, _) = db();
+        let (c, owner, ws) = db();
         let b = users::create(&c, "b@example.com", "B", "!", false).unwrap();
-        let target = InviteTarget::Base("app1".into());
-        let (token, info) =
-            create(&c, &owner, &target, Some("B@example.com"), Role::Editor).unwrap();
+        let (token, info) = create(
+            &c,
+            &owner,
+            &ws,
+            Some("B@example.com"),
+            Role::Editor,
+            &only(&["app1"]),
+            true,
+        )
+        .unwrap();
+        assert!(!info.all_bases);
+        assert_eq!(info.base_ids, vec!["app1".to_string()]);
         let row = find_valid_by_token(&c, &token).unwrap().unwrap();
+        assert_eq!(row.info.base_ids, vec!["app1".to_string()]);
         let p = preview(&c, &row).unwrap();
-        assert_eq!(p.target_name, "CRM");
-        assert_eq!(p.target_kind, "base");
+        assert_eq!(p.target_name, "Acme");
+        assert_eq!(p.target_kind, "workspace");
         assert_eq!(p.invited_by.as_deref(), Some("Owner"));
         // Wrong email is refused.
         let other = users::create(&c, "c@example.com", "C", "!", false).unwrap();
@@ -378,31 +581,132 @@ mod tests {
         );
         assert!(find_valid_by_token(&c, &token).unwrap().is_none());
         assert!(accept(&c, &row, &b, "b@example.com").is_err());
-        assert_eq!(list(&c, &target).unwrap()[0].id, info.id);
+        assert_eq!(list_for_workspace(&c, &ws).unwrap()[0].id, info.id);
     }
 
     #[test]
     fn expired_and_deleted_target_invites_are_invalid() {
         let (c, owner, ws) = db();
         let (token, info) =
-            create(&c, &owner, &InviteTarget::Workspace(ws), None, Role::Viewer).unwrap();
+            create(&c, &owner, &ws, None, Role::Viewer, &BaseAccess::All, true).unwrap();
         c.execute(
             "UPDATE invites SET expires_at = 0 WHERE id = ?1",
             [&info.id],
         )
         .unwrap();
         assert!(find_valid_by_token(&c, &token).unwrap().is_none());
-        let (token2, _) = create(
-            &c,
-            &owner,
-            &InviteTarget::Base("app1".into()),
-            None,
-            Role::Viewer,
-        )
-        .unwrap();
+        // A limited invite whose only base is in the trash cannot be used.
+        let (token2, _) =
+            create(&c, &owner, &ws, None, Role::Viewer, &only(&["app1"]), true).unwrap();
+        assert!(find_valid_by_token(&c, &token2).unwrap().is_some());
+        c.execute("UPDATE bases SET deleted_at = 1", []).unwrap();
+        assert!(find_valid_by_token(&c, &token2).unwrap().is_none());
+        c.execute("UPDATE bases SET deleted_at = NULL", []).unwrap();
         c.execute("UPDATE workspaces SET deleted_at = 1", [])
             .unwrap();
         assert!(find_valid_by_token(&c, &token2).unwrap().is_none());
         assert!(find_valid_by_token(&c, "inv_nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_creator_invite_adds_bases_to_an_existing_member_but_never_raises_their_role() {
+        let (c, owner, ws) = db();
+        c.execute(
+            "INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('app2', 'wsp1', 'Ops', 0)",
+            [],
+        )
+        .unwrap();
+        let creator = users::create(&c, "cr@example.com", "Cr", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &creator, Role::Creator, &only(&["app1"])).unwrap();
+        let limited = users::create(&c, "l@example.com", "L", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &limited, Role::Viewer, &only(&["app2"])).unwrap();
+        let everywhere = users::create(&c, "e@example.com", "E", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &everywhere, Role::Viewer, &BaseAccess::All).unwrap();
+        let invite_and_accept_flagged = |by: &str, user: &str, email: &str, role, may_raise| {
+            let (token, _) = create(&c, by, &ws, None, role, &only(&["app1"]), may_raise).unwrap();
+            let row = find_valid_by_token(&c, &token).unwrap().unwrap();
+            accept(&c, &row, user, email).unwrap();
+        };
+        let invite_and_accept = |by: &str, user: &str, email: &str, role| {
+            invite_and_accept_flagged(by, user, email, role, by == owner);
+        };
+        let role = |u: &str, b: &str| crate::perm::base_role(&c, u, b).unwrap();
+
+        invite_and_accept(&creator, &limited, "l@example.com", Role::Creator);
+        assert_eq!(role(&limited, "app1"), Some(Role::Viewer), "base added");
+        assert_eq!(role(&limited, "app2"), Some(Role::Viewer), "not raised");
+        invite_and_accept(&creator, &everywhere, "e@example.com", Role::Creator);
+        assert_eq!(role(&everywhere, "app2"), Some(Role::Viewer));
+        assert_eq!(
+            crate::perm::workspace_role(&c, &everywhere, &ws).unwrap(),
+            Some(Role::Viewer)
+        );
+        // A newcomer gets the invited role; an owner's invite still raises.
+        let new = users::create(&c, "n@example.com", "N", "!", false).unwrap();
+        invite_and_accept(&creator, &new, "n@example.com", Role::Editor);
+        assert_eq!(role(&new, "app1"), Some(Role::Editor));
+        // An owner's invite raises only when its terms were set for the whole
+        // workspace (not through a token limited to some bases).
+        invite_and_accept_flagged(&owner, &limited, "l@example.com", Role::Editor, false);
+        assert_eq!(role(&limited, "app2"), Some(Role::Viewer));
+        invite_and_accept(&owner, &limited, "l@example.com", Role::Editor);
+        assert_eq!(role(&limited, "app2"), Some(Role::Editor));
+        // A flagged invite from someone no longer an owner does not raise.
+        let (token, _) = create(
+            &c,
+            &creator,
+            &ws,
+            None,
+            Role::Creator,
+            &only(&["app1"]),
+            true,
+        )
+        .unwrap();
+        let row = find_valid_by_token(&c, &token).unwrap().unwrap();
+        accept(&c, &row, &everywhere, "e@example.com").unwrap();
+        assert_eq!(role(&everywhere, "app2"), Some(Role::Viewer));
+    }
+
+    #[test]
+    fn a_creator_invite_lapses_when_the_creator_loses_a_listed_base() {
+        let (c, owner, ws) = db();
+        let creator = users::create(&c, "cr@example.com", "Cr", "!", false).unwrap();
+        workspaces::grant(&c, &ws, &creator, Role::Creator, &only(&["app1"])).unwrap();
+        let (token, _) = create(
+            &c,
+            &creator,
+            &ws,
+            None,
+            Role::Editor,
+            &only(&["app1"]),
+            false,
+        )
+        .unwrap();
+        assert!(find_valid_by_token(&c, &token).unwrap().is_some());
+        // An all-bases invite needs an owner.
+        let (all, _) = create(
+            &c,
+            &creator,
+            &ws,
+            None,
+            Role::Editor,
+            &BaseAccess::All,
+            false,
+        )
+        .unwrap();
+        assert!(find_valid_by_token(&c, &all).unwrap().is_none());
+        // Moving the creator to another base voids the invite.
+        c.execute(
+            "INSERT INTO bases (id, workspace_id, name, created_at) VALUES ('app2', 'wsp1', 'Ops', 0)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "UPDATE workspace_member_bases SET base_id = 'app2' WHERE user_id = ?1",
+            [&creator],
+        )
+        .unwrap();
+        assert!(find_valid_by_token(&c, &token).unwrap().is_none());
+        let _ = owner;
     }
 }

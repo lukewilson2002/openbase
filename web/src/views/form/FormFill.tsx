@@ -72,7 +72,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
 
   if (done) {
     return (
-      <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-3 rounded-lg border border-line bg-surface p-8 text-center shadow-sm" role="status">
+      <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-3 rounded-[14px] border border-line bg-surface p-8 text-center shadow-[0_10px_28px_rgb(15_20_30/0.06)]" role="status">
         <CircleCheck aria-hidden className="size-8 text-success" />
         <h2 className="text-xl">{form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}</h2>
         <p className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted">
@@ -111,7 +111,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
             {failure && <Notice tone="error">{failure}</Notice>}
             {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
             <div>
-              <Button variant="primary" size="lg" loading={submitting} disabled={entries.length === 0} onClick={() => void submit()}>
+              <Button variant="primary" size="lg" className="h-11 rounded-[10px] px-[22px] font-[650]" loading={submitting} disabled={entries.length === 0} onClick={() => void submit()}>
                 {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
               </Button>
             </div>

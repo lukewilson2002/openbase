@@ -69,10 +69,18 @@ describe("KanbanBoard", () => {
     expect(stacksEl.map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Todo", "Stack: In progress", "Stack: Done"]);
     const todo = within(screen.getByRole("listitem", { name: "Stack: Todo" }));
     expect(todo.getAllByRole("button", { name: /Write docs|Fix bug/ })).toHaveLength(2);
-    expect(todo.getByLabelText("2 cards")).toBeInTheDocument();
+    expect(todo.getByText("2 items")).toBeInTheDocument();
     expect(document.querySelector("[data-record-id='r1'] [data-row-color='red']")).not.toBeNull();
     expect(screen.getAllByRole("button", { name: /^Add card to/ })).toHaveLength(3);
     expect(within(screen.getByRole("listitem", { name: "Stack: Done" })).getByText("No cards")).toBeInTheDocument();
+  });
+
+  it("collapses a stack from its menu, keeping its count", async () => {
+    const user = userEvent.setup();
+    const { props } = board();
+    await user.click(screen.getByRole("button", { name: "Options for Todo" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Collapse stack" }));
+    expect(props.onToggleCollapse).toHaveBeenCalledWith(expect.any(String));
   });
 
   it("opens the record on click and on Enter", async () => {

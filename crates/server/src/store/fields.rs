@@ -203,8 +203,15 @@ pub fn insert_inverse(
 
 // ------------------------------------------------------------------ update
 
-/// Apply a partial update. A different `kind` converts existing values.
-pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResult<FieldChange> {
+/// Apply a partial update. A different `kind` converts existing values; when
+/// that takes fields away (a link's inverse), they go to the trash as deleted
+/// by `user_id`.
+pub fn update(
+    tx: &Transaction,
+    field_id: &str,
+    patch: &UpdateField,
+    user_id: &str,
+) -> AppResult<FieldChange> {
     let rec = live_field(tx, field_id)?;
     let table = live_table(tx, &rec.field.table_id)?;
     let siblings = schema::table_fields(tx, &table.id)?;
@@ -254,7 +261,7 @@ pub fn update(tx: &Transaction, field_id: &str, patch: &UpdateField) -> AppResul
                 // Names found in the old values become choices of the new select field.
                 fields_engine::add_conversion_choices(tx, &table.id, &old, &mut field)?;
             }
-            let r = rewrite_for_new_kind(tx, &table, &old, &field, &plan)?;
+            let r = rewrite_for_new_kind(tx, &table, &old, &field, &plan, user_id)?;
             removed = r.removed;
             for t in &r.touched.0 {
                 touched.add(t);
@@ -361,11 +368,12 @@ fn rewrite_for_new_kind(
     old: &Field,
     new: &Field,
     plan: &LinkPlan,
+    user_id: &str,
 ) -> AppResult<Rewrite> {
     let mut removed = Vec::new();
     let mut touched = Touched::default();
     if *plan == LinkPlan::Drop || *plan == LinkPlan::Relink {
-        let tore = tear_down_pair(tx, table, old)?;
+        let tore = tear_down_pair(tx, table, old, user_id)?;
         removed = tore.removed;
         touched = tore.touched;
     }
@@ -386,7 +394,12 @@ fn rewrite_for_new_kind(
 
 /// A link field stops being a link (or relinks): its inverse and everything
 /// built on either side move to the trash.
-fn tear_down_pair(tx: &Transaction, table: &TableRow, old: &Field) -> AppResult<Rewrite> {
+fn tear_down_pair(
+    tx: &Transaction,
+    table: &TableRow,
+    old: &Field,
+    user_id: &str,
+) -> AppResult<Rewrite> {
     let all = schema::base_fields(tx, &table.base_id)?;
     let mut seeds: HashSet<String> = HashSet::from([old.id.clone()]);
     if let Some(l) = link_options(old) {
@@ -409,7 +422,7 @@ fn tear_down_pair(tx: &Transaction, table: &TableRow, old: &Field) -> AppResult<
             touched.add(t);
         }
     }
-    mark_deleted(tx, &ids, now_ms())?;
+    mark_deleted(tx, &ids, now_ms(), user_id)?;
     Ok(Rewrite {
         removed: ids,
         touched,
@@ -567,11 +580,12 @@ fn dependents_closure(
     }
 }
 
-fn mark_deleted(tx: &Transaction, ids: &[String], at: i64) -> AppResult<()> {
-    let mut stmt =
-        tx.prepare("UPDATE fields SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL")?;
+fn mark_deleted(tx: &Transaction, ids: &[String], at: i64, user_id: &str) -> AppResult<()> {
+    let mut stmt = tx.prepare(
+        "UPDATE fields SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+    )?;
     for id in ids {
-        stmt.execute(params![id, at])?;
+        stmt.execute(params![id, at, user_id])?;
     }
     Ok(())
 }
@@ -674,8 +688,9 @@ fn run_engine(
 // ------------------------------------------------------------------ delete
 
 /// Move a field to the trash. Its link partner and everything built on it go
-/// with it. The primary field cannot be deleted.
-pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
+/// with it, all recorded as deleted by `user_id`. The primary field cannot be
+/// deleted.
+pub fn delete(tx: &Transaction, field_id: &str, user_id: &str) -> AppResult<DeleteOutcome> {
     let field = live_field(tx, field_id)?.field;
     let table = live_table(tx, &field.table_id)?;
     if table.primary_field_id == field.id {
@@ -702,7 +717,7 @@ pub fn delete(tx: &Transaction, field_id: &str) -> AppResult<DeleteOutcome> {
             touched.add(t);
         }
     }
-    mark_deleted(tx, &ids, now_ms())?;
+    mark_deleted(tx, &ids, now_ms(), user_id)?;
 
     refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
     Ok(DeleteOutcome {
@@ -733,12 +748,13 @@ fn refresh_after_removal(
 }
 
 /// Trash the link fields of other tables that point at `table` (already
-/// trashed) and everything built on them, all stamped `at` so restoring the
-/// table can bring exactly them back.
+/// trashed) and everything built on them, all stamped `at` and `user_id` like
+/// the table, so restoring the table can bring exactly them back.
 pub fn cascade_delete_incoming_links(
     tx: &Transaction,
     table: &TableRow,
     at: i64,
+    user_id: &str,
 ) -> AppResult<Touched> {
     let all = schema::base_fields(tx, &table.base_id)?;
     let seeds: HashSet<String> = all
@@ -759,7 +775,7 @@ pub fn cascade_delete_incoming_links(
             touched.add(t);
         }
     }
-    mark_deleted(tx, &ids, at)?;
+    mark_deleted(tx, &ids, at, user_id)?;
     refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
     Ok(touched)
 }
@@ -942,7 +958,7 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
         };
         set.insert(schema::name_key(&name));
         tx.execute(
-            "UPDATE fields SET deleted_at = NULL, name = ?2 WHERE id = ?1",
+            "UPDATE fields SET deleted_at = NULL, deleted_by = NULL, name = ?2 WHERE id = ?1",
             params![f.id, name],
         )?;
         touched.add(&f.table_id);

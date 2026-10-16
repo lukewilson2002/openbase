@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/client";
-import { Avatar, initials } from "./avatar";
+import { accentHue } from "@/lib/colors";
+import { Avatar, avatarColor, initials } from "./avatar";
 import { Button } from "./button";
 import { ColorSwatchPicker } from "./color-swatch-picker";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -23,6 +24,10 @@ describe("Button", () => {
   it("defaults to type=button so it never submits a form by accident", () => {
     render(<Button>Go</Button>);
     expect(screen.getByRole("button")).toHaveAttribute("type", "button");
+  });
+  it("has a soft variant: the primary colour on its soft background", () => {
+    render(<Button variant="soft">New base</Button>);
+    expect(screen.getByRole("button")).toHaveClass("bg-primary-soft", "text-primary");
   });
 });
 
@@ -47,6 +52,26 @@ describe("Avatar", () => {
     expect(initials(null, null)).toBe("?");
     render(<Avatar name="Ada Lovelace" />);
     expect(screen.getByRole("img", { name: "Ada Lovelace" })).toHaveTextContent("AL");
+  });
+
+  it("is a solid circle in the person's own accent colour, the same wherever they appear", () => {
+    render(
+      <>
+        <Avatar name="Ada Lovelace" email="ada@example.com" size="sm" />
+        <Avatar name="Ada L." email="ada@example.com" size="lg" />
+        <Avatar name="Grace Hopper" email="grace@example.com" />
+      </>,
+    );
+    const [ada, again, grace] = screen.getAllByRole("img");
+    const hue = `ob-hue-${accentHue(avatarColor("ada@example.com"))}`;
+    for (const face of [ada!, again!]) {
+      expect(face).toHaveClass("ob-solid", hue);
+      expect(face.className).not.toMatch(/choice-/);
+    }
+    expect(grace).toHaveClass("ob-solid", `ob-hue-${accentHue(avatarColor("grace@example.com"))}`);
+    // Picked by the same hash as when faces were light tints, so nobody changes colour.
+    expect(avatarColor("ada@example.com")).toBe("gray");
+    expect(avatarColor("grace@example.com")).toBe("cyan");
   });
 });
 

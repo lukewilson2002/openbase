@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EntityIcon, EntityLabel, EntityTile, entityLetter } from "./EntityIcon";
+import { EntityIcon, EntityLabel, EntityTile, WorkspaceTile, entityLetter } from "./EntityIcon";
 import { peekFullIconSet, resetIconRegistryForTests } from "./registry";
 import { fakeIconSet, gatedImporter } from "./testSet";
 
@@ -91,17 +91,28 @@ describe("EntityIcon", () => {
 });
 
 describe("EntityTile", () => {
-  it("shows the icon when there is one and the initial otherwise, in the base colour", () => {
+  it("shows the icon when there is one and the generic base icon otherwise, in the base colour", () => {
     const { container, rerender } = render(<EntityTile name="Sales" icon="store" color="green_dark" size="lg" />);
     const tile = container.querySelector("[data-entity-tile]")!;
     expect(tile.querySelector("svg.lucide-store")).toBeInTheDocument();
-    expect(tile).toHaveClass("choice-green_dark");
+    expect(tile).toHaveClass("ob-hue-green", "ob-tint");
     expect(tile).toHaveAttribute("aria-hidden", "true");
     rerender(<EntityTile name="Sales" color="green_dark" size="lg" />);
+    expect(container.querySelector("[data-entity-tile] svg.lucide-database")).toBeInTheDocument();
+    // Without a colour (an entity that is neither a base nor a workspace) the letter stays.
+    rerender(<EntityTile name="Sales" size="lg" />);
     expect(container.querySelector("[data-entity-tile]")).toHaveTextContent("S");
   });
 
-  it("is neutral without a colour (workspaces)", () => {
+  it("is solid with a white initial for a workspace, in its colour or one picked from its name", () => {
+    const { container, rerender } = render(<WorkspaceTile ws={{ name: "Household", color: "green" }} />);
+    expect(container.querySelector("[data-entity-tile]")).toHaveClass("ob-hue-green", "ob-solid");
+    expect(container.querySelector("[data-entity-tile]")).toHaveTextContent("H");
+    rerender(<WorkspaceTile ws={{ name: "Household" }} />);
+    expect(container.querySelector("[data-entity-tile]")).toHaveClass("ob-solid");
+  });
+
+  it("is neutral without a colour", () => {
     const { container } = render(<EntityTile name="Acme" />);
     expect(container.querySelector("[data-entity-tile]")).toHaveClass("bg-subtle");
     expect(container.querySelector("[data-entity-tile]")).toHaveTextContent("A");

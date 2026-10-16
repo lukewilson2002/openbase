@@ -1,0 +1,17 @@
+/*
+ * Timeline bars: a select colour's soft fill (the `.choice-*` classes) with a hairline in its own
+ * text colour, or the primary tint when the view has no colours.
+ */
+.ob-tl-bar {
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+}
+/* On the dark page a full light fill glares across a long bar: the colour becomes a deep tint with its light shade as text. */
+:root[data-theme="dark"] .ob-tl-bar.choice {
+  background: color-mix(in srgb, var(--c-bg) 22%, var(--surface));
+  color: var(--c-bg);
+}
+.ob-tl-bar-plain {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}

@@ -31,17 +31,21 @@ pub fn sql<T>(app: &TestApp, f: impl FnOnce(&rusqlite::Transaction) -> rusqlite:
         .unwrap()
 }
 
+/// Make `user` a member of `ws` with `role` and every base.
 pub fn add_ws_member(app: &TestApp, ws: &str, user: &Client, role: Role) {
     let (ws, uid, role) = (ws.to_string(), user.user_id.clone().unwrap(), role.as_str());
     sql(app, |tx| {
         tx.execute(
-            "INSERT OR REPLACE INTO workspace_members (workspace_id, user_id, role, created_at)
-             VALUES (?1, ?2, ?3, 1)",
-            params![ws, uid, role],
+            "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+             VALUES (?1, ?2, ?3, 1, ?4)
+             ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role, all_bases = 1",
+            params![ws, uid, role, openbase::db::now_ms()],
         )
     });
 }
 
+/// Make `user` a member of the base's workspace with `role`, limited to this
+/// base (added to their list if they are already limited to others).
 pub fn add_base_member(app: &TestApp, base: &str, user: &Client, role: Role) {
     let (base, uid, role) = (
         base.to_string(),
@@ -50,9 +54,15 @@ pub fn add_base_member(app: &TestApp, base: &str, user: &Client, role: Role) {
     );
     sql(app, |tx| {
         tx.execute(
-            "INSERT OR REPLACE INTO base_members (base_id, user_id, role, created_at)
-             VALUES (?1, ?2, ?3, 1)",
-            params![base, uid, role],
+            "INSERT INTO workspace_members (workspace_id, user_id, role, all_bases, created_at)
+             SELECT workspace_id, ?2, ?3, 0, ?4 FROM bases WHERE id = ?1
+             ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role",
+            params![base, uid, role, openbase::db::now_ms()],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO workspace_member_bases (workspace_id, user_id, base_id)
+             SELECT workspace_id, ?2, id FROM bases WHERE id = ?1",
+            params![base, uid],
         )
     });
 }
@@ -144,7 +154,7 @@ impl Fixture {
         u
     }
 
-    /// A new user with `role` on the fixture's base only (base sharing).
+    /// A new user with `role` in the fixture's workspace, limited to its base.
     pub fn base_guest(&self, email: &str, role: Role) -> Client {
         let u = self.app.user(email, email);
         add_base_member(&self.app, &self.base_id, &u, role);

@@ -28,7 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/workspaces/{id}/members", get(list_members))
         .route(
             "/api/workspaces/{id}/members/{user_id}",
-            patch(set_member_role).delete(remove_member),
+            patch(update_member).delete(remove_member),
         )
 }
 
@@ -52,7 +52,7 @@ pub fn visible_workspaces(conn: &Connection, actor: &Actor) -> AppResult<Vec<Wor
             },
         );
         if !scope.write {
-            ws.role = ws.role.map(|_| Role::Viewer.as_str().to_string());
+            ws.role = Role::Viewer.as_str().to_string();
         }
         if scope.base_ids.is_some() && ws.bases.is_empty() {
             continue;
@@ -81,7 +81,7 @@ async fn create(
     actor.require_capability(Capability::ManageUnscoped)?;
     let out = state
         .db
-        .write(move |tx| workspaces::create(tx, &actor.user_id, &body.name, body.icon.as_deref()))
+        .write(move |tx| workspaces::create(tx, &actor.user_id, &body))
         .await?;
     Ok((StatusCode::CREATED, Json(out)))
 }
@@ -100,6 +100,9 @@ async fn rename(
                 workspaces::rename(tx, &id, name)?;
             }
             workspaces::set_icon(tx, &id, &body.icon)?;
+            if let Some(color) = &body.color {
+                workspaces::set_color(tx, &id, color)?;
+            }
             workspaces::list_for_user(tx, &actor.user_id)?
                 .into_iter()
                 .find(|w| w.id == id)
@@ -121,7 +124,7 @@ async fn remove(
         .write(move |tx| {
             perm::require_workspace(tx, &actor, &id, Role::Owner)?;
             let bases = workspaces::base_ids(tx, &id)?;
-            workspaces::soft_delete(tx, &id)?;
+            workspaces::soft_delete(tx, &id, &actor.user_id)?;
             Ok(bases)
         })
         .await?;
@@ -140,26 +143,80 @@ async fn list_members(
         .db
         .read(move |c| {
             perm::require_workspace(c, &actor, &id, Role::Viewer)?;
-            workspaces::members(c, &id)
+            let mut members = workspaces::members(c, &id)?;
+            hide_unopenable_bases(c, &actor, &id, &mut members)?;
+            Ok(members)
         })
         .await?;
     Ok(Json(out))
 }
 
-async fn set_member_role(
+/// Trim each member's `base_ids` to the bases the caller can open, unless
+/// the caller owns the workspace (with a session or an unrestricted token).
+/// Otherwise a member limited to one base would learn the ids of bases they
+/// were never given, and which colleagues can open them.
+pub fn hide_unopenable_bases(
+    conn: &Connection,
+    actor: &Actor,
+    workspace_id: &str,
+    members: &mut [Member],
+) -> AppResult<()> {
+    let unrestricted = actor
+        .token_scope
+        .as_ref()
+        .is_none_or(|s| s.base_ids.is_none());
+    if unrestricted
+        && perm::workspace_role(conn, &actor.user_id, workspace_id)? == Some(Role::Owner)
+    {
+        return Ok(());
+    }
+    let mut openable = std::collections::HashMap::new();
+    for m in members.iter_mut() {
+        let mut kept = Vec::with_capacity(m.base_ids.len());
+        for b in m.base_ids.drain(..) {
+            let ok = match openable.get(&b) {
+                Some(ok) => *ok,
+                None => {
+                    let ok = perm::require_base(conn, actor, &b, Role::Viewer).is_ok();
+                    openable.insert(b.clone(), ok);
+                    ok
+                }
+            };
+            if ok {
+                kept.push(b);
+            }
+        }
+        m.base_ids = kept;
+    }
+    Ok(())
+}
+
+/// Change a member's role and/or which bases they can open. Everyone's
+/// streams on the workspace's bases are told, so a member who lost a base has
+/// their stream closed by the access re-check.
+async fn update_member(
     State(state): State<AppState>,
     actor: Actor,
     headers: HeaderMap,
     Path((id, user_id)): Path<(String, String)>,
     ApiJson(body): ApiJson<UpdateMember>,
 ) -> AppResult<Json<serde_json::Value>> {
+    if body.role.is_none() && body.all_bases.is_none() && body.base_ids.is_none() {
+        return Err(AppError::bad_request(
+            "give a new role, all_bases or base_ids",
+        ));
+    }
     let who = actor.clone();
-    let role = Role::parse(&body.role)?;
+    let change = workspaces::MemberChange {
+        role: body.role.as_deref().map(Role::parse).transpose()?,
+        all_bases: body.all_bases,
+        base_ids: body.base_ids,
+    };
     let bases = state
         .db
         .write(move |tx| {
             perm::require_workspace(tx, &actor, &id, Role::Owner)?;
-            workspaces::set_member_role(tx, &id, &user_id, role)?;
+            workspaces::update_member(tx, &id, &user_id, change)?;
             workspaces::base_ids(tx, &id)
         })
         .await?;

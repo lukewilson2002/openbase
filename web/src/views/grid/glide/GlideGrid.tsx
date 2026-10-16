@@ -27,7 +27,7 @@ import {
 import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo } from "../adapter";
 import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
-import { headerIcons } from "./icons";
+import { ADD_ICON, headerIcons } from "./icons";
 import { mixColors, paletteColor } from "@/lib/cells/palette";
 import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
 import { createRenderer } from "./renderers";
@@ -48,6 +48,7 @@ const KEYBINDINGS = {
 const BLANK_MODEL: CellModel = { kind: "blank" };
 const ROW_MARKER_WIDTH = 56;
 const ADD_COLUMN_ID = "__add_field__";
+export const GRID_HEADER_HEIGHT = 44;
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
 const ROW_MARKERS = { kind: "both", width: ROW_MARKER_WIDTH, startIndex: MARKER_START_INDEX } as const;
 
@@ -139,8 +140,8 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
 
   const columns = useMemo<GridColumn[]>(() => {
     const cols: GridColumn[] = props.columns.map((c) => ({ id: c.id, title: c.title, width: c.width, icon: c.field.type, hasMenu: true }));
-    // A narrow "+" column after the last field adds a field when its header is clicked.
-    if (props.canAddField) cols.push({ id: ADD_COLUMN_ID, title: "+", width: 48 });
+    // An "Add field" column after the last field adds a field when its header is clicked.
+    if (props.canAddField) cols.push({ id: ADD_COLUMN_ID, title: "Add field", icon: ADD_ICON, width: 130 });
     return cols;
   }, [props.columns, props.canAddField]);
 
@@ -259,7 +260,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       rows={props.rowCount + (props.showSummary ? 1 : 0)}
       freezeTrailingRows={props.showSummary ? 1 : 0}
       rowHeight={props.rowHeight}
-      headerHeight={34}
+      headerHeight={GRID_HEADER_HEIGHT}
       freezeColumns={props.freezeColumns}
       getCellContent={getCellContent}
       customRenderers={customRenderers}
@@ -267,6 +268,9 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       theme={theme}
       headerIcons={headerIcons()}
       rowMarkers={ROW_MARKERS}
+      // Rows read as lines of a list, as in the rest of the app; the header still shows where columns
+      // meet, and that is where they resize.
+      verticalBorder={false}
       rowSelectionMode="multi"
       rangeSelect="rect"
       columnSelect="multi"

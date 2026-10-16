@@ -479,6 +479,9 @@ async fn update_me(
                 name.as_deref(),
                 timezone.as_ref().map(|t| t.as_deref()),
             )?;
+            if let Some(seen) = req.intro_seen {
+                users::set_intro_seen(tx, &actor.user_id, seen)?;
+            }
             users::require(tx, &actor.user_id)
         })
         .await?;

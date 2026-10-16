@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, newClientContext, test } from "./fixtures";
+import { expect, newClientContext, skipIntro, test } from "./fixtures";
 
 /**
  * Kanban, gallery, calendar, timeline and list views, plus the trash and the notification bell,
@@ -12,7 +12,7 @@ import { expect, newClientContext, test } from "./fixtures";
  * not, set OPENBASE_E2E_EMAIL and OPENBASE_E2E_PASSWORD to an existing account). Results are
  * asserted against the server (the records API), not against pixels.
  *
- * Notifications: mentions and assignments skip their author, so the bell test makes an automation
+ * Notifications: mentions and assignments skip their author, so the Inbox test makes an automation
  * ("record created" -> notify) tell the signed-in user about a record they create.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
@@ -43,9 +43,11 @@ async function call<T>(req: APIRequestContext, method: "post" | "patch" | "get" 
 
 async function signIn(page: Page): Promise<void> {
   const signup = await page.request.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Views", password: PASSWORD }, headers: CSRF });
-  if (signup.ok()) return;
-  const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  if (!signup.ok()) {
+    const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
+    expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  }
+  await skipIntro(page.request);
 }
 
 type TableDto = { id: string; fields: { id: string; name: string }[]; views: { id: string }[] };
@@ -131,7 +133,8 @@ test.describe("kanban", () => {
   test("stacks cards by status in choice order with counts", async ({ page }) => {
     await open(page, "kanban");
     const stacks = page.getByRole("listitem", { name: /^Stack:/ });
-    await expect(stacks).toHaveText([/Uncategorized/, /Todo/, /Doing/, /Done/]);
+    // Every card has a status, so the empty Uncategorized stack stays out of the way.
+    await expect(stacks).toHaveText([/Todo/, /Doing/, /Done/]);
     await expect(page.getByRole("listitem", { name: "Stack: Todo" }).getByRole("button", { name: /Alpha|Bravo/ })).toHaveCount(2);
   });
 
@@ -198,7 +201,7 @@ test.describe("calendar", () => {
   test("shows dated records on the month grid and lists undated ones as unscheduled", async ({ page }) => {
     await open(page, "calendar");
     await expect(page.locator(".fc-event", { hasText: "Alpha" }).first()).toBeVisible();
-    await page.getByRole("button", { name: /Unscheduled/ }).click();
+    // The unscheduled column is open on a desktop.
     await expect(page.getByRole("complementary", { name: "Unscheduled records" }).getByText("Echo")).toBeVisible();
   });
 
@@ -210,7 +213,7 @@ test.describe("calendar", () => {
 
   test("clicking an empty day creates a record dated that day and opens it", async ({ page }) => {
     await open(page, "calendar");
-    // The last cell of the six-week grid is weeks past every fixture record.
+    // The last cell of the month grid is weeks past every fixture record.
     const cell = page.locator(".fc-daygrid-day").last();
     const date = await cell.getAttribute("data-date");
     await cell.locator(".fc-daygrid-day-frame").click({ position: { x: 20, y: 40 } });
@@ -223,7 +226,6 @@ test.describe("calendar", () => {
 
   test("dragging an unscheduled record onto a day gives it that date", async ({ page }) => {
     await open(page, "calendar");
-    await page.getByRole("button", { name: /Unscheduled/ }).click();
     const item = page.getByRole("complementary", { name: "Unscheduled records" }).getByText("Echo");
     const day = page.locator(".fc-daygrid-day.fc-day-today");
     // Plain pointer moves: dragTo insists on a hit target at the cell's centre, which events may cover.
@@ -254,7 +256,7 @@ test.describe("timeline", () => {
   test("moves a bar a day with the keyboard and saves both dates", async ({ page }) => {
     const before = (await record(page, fx.records.charlie)).values;
     await open(page, "timeline");
-    await page.getByRole("button", { name: /^Charlie/ }).focus();
+    await page.getByRole("button", { name: /^Charlie, / }).focus();
     await page.keyboard.press("ArrowRight");
     const next = (iso: unknown) => new Date(Date.parse(String(iso)) + 86_400_000).toISOString().slice(0, 10);
     await expect.poll(async () => (await record(page, fx.records.charlie)).values[fx.fields.start]).toBe(next(before[fx.fields.start]));
@@ -263,20 +265,20 @@ test.describe("timeline", () => {
 
   test("switches the scale and keeps it after a reload", async ({ page }) => {
     await open(page, "timeline");
-    await page.getByRole("combobox", { name: "Timeline scale" }).selectOption("month");
+    await page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: "Month" }).click();
     await expect.poll(async () => (await call<{ tables: { views: { id: string; config: { timeline: { scale: string } } }[] }[] }>(page.request, "get", `/api/bases/${fx.baseId}`)).tables[0]!.views.find((v) => v.id === fx.views.timeline)!.config.timeline.scale).toBe("month");
     await page.reload();
-    await expect(page.getByRole("combobox", { name: "Timeline scale" })).toHaveValue("month");
+    await expect(page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("creates a record by dragging across empty lane space", async ({ page }) => {
     await open(page, "timeline");
     await expect(page.locator("[data-bar]").first()).toBeVisible();
     const lane = (await page.locator("[data-lane]").first().boundingBox())!;
-    // The chart opens scrolled to today, so the lane's own left edge is off screen: aim inside the
-    // visible chart, at its far left (weeks before any record) and below the bars.
+    // The chart opens scrolled to last week, so the lane's own left edge is off screen: aim inside the
+    // visible chart just right of the record names, and below the bars.
     const view = (await page.getByTestId("timeline-scroller").boundingBox())!;
-    const x = view.x + 100;
+    const x = view.x + 216 + 40;
     const y = lane.y + lane.height - 8;
     await page.mouse.move(x, y);
     await page.mouse.down();
@@ -296,12 +298,12 @@ test.describe("trash and notifications", () => {
     const del = await page.request.delete(`/api/tables/${fx.tableId}/records`, { data: { ids: [doomed] }, headers: CSRF });
     expect(del.ok()).toBeTruthy();
     await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.views.list}`);
-    await page.getByRole("button", { name: "Trash" }).click();
-    const dialog = page.getByRole("dialog", { name: "Trash" });
-    await expect(dialog.getByText(/30 days/)).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: /Records/ })).toBeVisible();
-    await dialog.getByRole("button", { name: "Restore Doomed" }).click();
-    await expect(dialog.getByText("Doomed")).toHaveCount(0);
+    await page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: "Trash" }).click();
+    await expect(page.getByText(/Things stay here for \d+ days/)).toBeVisible();
+    const list = page.getByRole("list", { name: "Deleted items" });
+    await expect(list.getByText("Doomed")).toBeVisible();
+    await list.getByRole("button", { name: "Restore Doomed" }).click();
+    await expect(list.getByText("Doomed")).toHaveCount(0);
     expect((await record(page, doomed)).values[fx.fields.name]).toBe("Doomed");
   });
 
@@ -323,10 +325,10 @@ test.describe("trash and notifications", () => {
     const unreadBefore = (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread;
 
     await open(page, "list");
-    const bell = page.getByRole("button", { name: /^Notifications, \d+ unread/ });
-    await expect(bell).toBeVisible();
-    await bell.click();
-    const popup = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Notifications" }) });
+    const inbox = page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: /^Inbox, \d+ unread/ });
+    await expect(inbox).toBeVisible();
+    await inbox.click();
+    const popup = page.getByRole("dialog", { name: "Inbox" });
     await expect(popup.getByText(`Created ${zulu}`)).toBeVisible();
 
     // Clicking it marks it read and goes to the base (an automation says which base, not which table).

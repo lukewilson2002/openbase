@@ -1137,6 +1137,17 @@ async fn manage_tools_manage_workspaces_members_and_invites() {
     )
     .await;
     assert_eq!(t.ok()["info"]["email"], "new@example.com");
+    assert_eq!(t.ok()["info"]["all_bases"], false);
+    assert_eq!(t.ok()["info"]["base_ids"], json!([r.base()]));
+    // Base access is part of the member change.
+    let t = tool(
+        app,
+        &r.manage,
+        "set_member_role",
+        json!({"scope": "workspace", "id": ws, "user_id": ed_id, "base_ids": []}),
+    )
+    .await;
+    assert!(t.err().contains("at least one base"), "{}", t.text);
     // Errors from the server arrive as tool errors with its message.
     let t = tool(
         app,

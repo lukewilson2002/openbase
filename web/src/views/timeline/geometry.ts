@@ -11,14 +11,18 @@ import { DAY_MS, type Span } from "../common/wallTime";
 export const SCALES: readonly TimelineScale[] = ["day", "week", "month", "quarter", "year"];
 export const SCALE_LABELS: Record<TimelineScale, string> = { day: "Day", week: "Week", month: "Month", quarter: "Quarter", year: "Year" };
 
-/** Horizontal pixels per day at each scale. */
-export const PX_PER_DAY: Record<TimelineScale, number> = { day: 48, week: 14, month: 4, quarter: 1.4, year: 0.5 };
+/**
+ * Horizontal pixels per day at each scale: roughly a week (day), two weeks (week), six weeks
+ * (month), a few months (quarter) and a year (year) across a desktop chart, so each scale's
+ * name says what one screen holds.
+ */
+export const PX_PER_DAY: Record<TimelineScale, number> = { day: 112, week: 56, month: 20, quarter: 7, year: 2.4 };
 
 /** Days shown on each side of the centre when a window is first built (and added per extension). */
-const HALF_SPAN_DAYS: Record<TimelineScale, number> = { day: 45, week: 200, month: 900, quarter: 2200, year: 5500 };
+const HALF_SPAN_DAYS: Record<TimelineScale, number> = { day: 45, week: 150, month: 400, quarter: 1100, year: 3000 };
 
-export const ROW_HEIGHT = 36;
-export const BAR_HEIGHT = 24;
+export const ROW_HEIGHT = 34;
+export const BAR_HEIGHT = 28;
 export const LANE_PAD = 6;
 export const MILESTONE_SIZE = 16;
 export const MIN_BAR_WIDTH = 8;
@@ -121,7 +125,7 @@ function labelOf(unit: Unit, start: number): string {
   const c = civil(start);
   switch (unit) {
     case "day":
-      return `${c.d} ${WEEKDAYS[c.dow]}`;
+      return `${WEEKDAYS[c.dow]} ${c.d}`;
     case "week":
       return `${MONTHS[c.m - 1]!.slice(0, 3)} ${c.d}`;
     case "month":
@@ -138,10 +142,12 @@ function labelOf(unit: Unit, start: number): string {
 function majorLabel(unit: Unit, start: number): string {
   const c = civil(start);
   switch (unit) {
+    case "week":
+      return `Week of ${MONTHS[c.m - 1]!.slice(0, 3)} ${c.d}`;
     case "month":
       return `${MONTHS[c.m - 1]} ${c.y}`;
-    case "year":
-      return String(c.y);
+    case "quarter":
+      return `Q${Math.floor((c.m - 1) / 3) + 1} ${c.y}`;
     default:
       return labelOf(unit, start);
   }
@@ -156,18 +162,53 @@ function periods(unit: Unit, fromDay: number, toDay: number, label: (unit: Unit,
   return out;
 }
 
-const MINOR_UNIT: Record<TimelineScale, Unit> = { day: "day", week: "week", month: "month", quarter: "quarter", year: "year" };
-const MAJOR_UNIT: Record<TimelineScale, Unit> = { day: "month", week: "month", month: "year", quarter: "year", year: "decade" };
+const MINOR_UNIT: Record<TimelineScale, Unit> = { day: "day", week: "day", month: "week", quarter: "month", year: "month" };
+const MAJOR_UNIT: Record<TimelineScale, Unit> = { day: "week", week: "week", month: "month", quarter: "quarter", year: "year" };
 
-/** The fine tick row (days, weeks, months, quarters, years) overlapping the window. */
+/** The fine tick row (days, weeks or months) overlapping the window. */
 export function minorTicks(scale: TimelineScale, a: Pick<Axis, "fromDay" | "toDay">): Tick[] {
   return periods(MINOR_UNIT[scale], a.fromDay, a.toDay, labelOf);
 }
 
-/** The coarse tick row above it (months, years, decades). */
+/** The coarse tick row above it ("Week of Oct 5", "October 2026", "Q4 2026", "2026"). */
 export function majorTicks(scale: TimelineScale, a: Pick<Axis, "fromDay" | "toDay">): Tick[] {
+  return periods(MAJOR_UNIT[scale], a.fromDay, a.toDay, majorLabel);
+}
+
+/** The fine ticks are single days, so each can be labelled and today's can carry the today pill. */
+export const minorIsDay = (scale: TimelineScale): boolean => MINOR_UNIT[scale] === "day";
+
+/** Weekends get a shade where a day is wide enough to see it. */
+export const showsWeekends = (scale: TimelineScale): boolean => PX_PER_DAY[scale] >= 14;
+
+/** First days (Saturdays) of the weekends overlapping the window. */
+export function weekendStarts(a: Pick<Axis, "fromDay" | "toDay">): number[] {
+  const out: number[] = [];
+  // Day 0 (1970-01-01) was a Thursday, so Saturdays are the days with (day - 2) % 7 === 0.
+  for (let d = a.fromDay - 1 - ((((a.fromDay - 1 - 2) % 7) + 7) % 7); d < a.toDay; d += 7) out.push(d);
+  return out;
+}
+
+/**
+ * The day a chart scrolled to `today` starts at: the beginning of the coarse period that holds the
+ * days just before today, so a screen shows a little of what has been done and what comes next
+ * (the week scale opens on last week's Monday). Falls back to the period holding today when that
+ * would leave today off the screen.
+ */
+export function windowStart(scale: TimelineScale, today: number, visibleDays: number): number {
   const unit = MAJOR_UNIT[scale];
-  return periods(unit, a.fromDay, a.toDay, unit === "month" || unit === "year" ? majorLabel : labelOf);
+  const start = periodStart(unit, Math.floor(today - visibleDays / 2));
+  return today < start + visibleDays - 1 ? start : periodStart(unit, today);
+}
+
+/** "Oct 5 – 18, 2026", "Sep 28 – Oct 11, 2026", "Dec 28, 2026 – Jan 10, 2027": the days a screen shows. */
+export function rangeTitle(fromDay: number, lastDay: number): string {
+  const a = civil(fromDay);
+  const b = civil(lastDay);
+  const mon = (m: number) => MONTHS[m - 1]!.slice(0, 3);
+  if (a.y !== b.y) return `${mon(a.m)} ${a.d}, ${a.y} – ${mon(b.m)} ${b.d}, ${b.y}`;
+  if (a.m !== b.m) return `${mon(a.m)} ${a.d} – ${mon(b.m)} ${b.d}, ${b.y}`;
+  return a.d === b.d ? `${mon(a.m)} ${a.d}, ${a.y}` : `${mon(a.m)} ${a.d} – ${b.d}, ${b.y}`;
 }
 
 // ---- bars --------------------------------------------------------------------------------------

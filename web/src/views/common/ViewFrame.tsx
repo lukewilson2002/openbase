@@ -6,8 +6,28 @@
 import { useMemo, useRef, type ComponentProps, type ReactNode } from "react";
 import { ExpandedRecord } from "@/components/record/ExpandedRecord";
 import { EditorEnvProvider } from "@/components/record/editors/env";
-import { ViewBar } from "@/components/viewbar/ViewBar";
+import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
+import { cn } from "@/lib/cn";
 import type { ViewSetup } from "./useViewSetup";
+
+/**
+ * A view's body: on a desktop a rounded card on the page's grey, under the toolbar; on a phone it
+ * runs edge to edge, where a margin would cost a column of the grid.
+ */
+export const viewBodyClass = "relative min-h-0 flex-1 border-t border-line bg-surface md:mx-4 md:mt-4 md:overflow-hidden md:rounded-xl md:border";
+/** The count line under a view ("4 items"): a bar on a phone, plain text under the card on a desktop. */
+export const viewFooterClass = "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted md:border-t-0 md:bg-transparent md:px-5";
+
+/**
+ * A card as tall as its content (a short list or grid ends where its rows end, with the count right
+ * under it), shrinking to the space left and scrolling inside once it is longer. On a phone it fills
+ * the screen like `viewBodyClass`, with the count as a bar at the bottom.
+ */
+export const viewHugAreaClass = "flex min-h-0 flex-1 flex-col md:p-4 md:pb-3";
+export const viewHugCardClass = "relative flex min-h-0 flex-col border-t border-line bg-surface max-md:flex-1 md:overflow-hidden md:rounded-xl md:border";
+export const viewHugFooterClass = cn(viewFooterClass, "md:min-h-0 md:px-1 md:pt-2.5");
+
+export type ViewLayout = "fill" | "hug" | "bare";
 
 export interface ViewFrameProps {
   setup: ViewSetup;
@@ -15,13 +35,24 @@ export interface ViewFrameProps {
   recordIds?: readonly string[];
   features?: ComponentProps<typeof ViewBar>["features"];
   hideFieldsNoun?: string;
-  /** View-specific toolbar controls. */
+  /** The view type's main setting, first in the toolbar (see ViewBar `setting`). */
+  toolbarSetting?: ReactNode;
+  /** View-specific toolbar controls after the tools. */
   toolbarExtra?: ReactNode;
+  moreToggles?: readonly MoreToggle[];
   footer?: ReactNode;
+  /**
+   * How the body sits on the page: `fill` is a card as tall as the page (calendar), `hug` a card as
+   * tall as its content (list, timeline), `bare` straight on the page's grey for views that draw
+   * their own cards (kanban stacks, gallery cards, the "choose a field" states).
+   */
+  layout?: ViewLayout;
+  /** The toolbar's "Add" (see ViewBar); omit when the view has no single obvious way to add a record. */
+  onAdd?: () => void;
   children: ReactNode;
 }
 
-export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarExtra, footer, children }: ViewFrameProps) {
+export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarSetting, toolbarExtra, moreToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +62,30 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
     if (i < 0) return { prev: null, next: null };
     return { prev: recordIds[i - 1] ?? null, next: recordIds[i + 1] ?? null };
   }, [setup.openRecordId, recordIds]);
+
+  let body: ReactNode;
+  if (layout === "hug") {
+    body = (
+      <div className={viewHugAreaClass}>
+        <div className={viewHugCardClass}>{children}</div>
+        {footer && <div className={viewHugFooterClass}>{footer}</div>}
+      </div>
+    );
+  } else if (layout === "bare") {
+    body = (
+      <div className="relative min-h-0 flex-1 overflow-auto">
+        {children}
+        {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-[0.8125rem] text-muted md:px-5">{footer}</div>}
+      </div>
+    );
+  } else {
+    body = (
+      <>
+        <div className={viewBodyClass}>{children}</div>
+        {footer ? <div className={viewFooterClass}>{footer}</div> : <div aria-hidden className="max-md:hidden md:h-4" />}
+      </>
+    );
+  }
 
   return (
     <EditorEnvProvider value={setup.editorEnv}>
@@ -53,14 +108,15 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           searchOpen={setup.searchOpen}
           onSearchOpenChange={setup.setSearchOpen}
           searchInputRef={searchInputRef}
-          canManageFields={false}
           timeZone={setup.timeZone}
-          features={{ shareView: true, ...features }}
+          features={features}
           hideFieldsNoun={hideFieldsNoun}
+          setting={toolbarSetting}
           extra={toolbarExtra}
+          moreToggles={moreToggles}
+          onAdd={onAdd}
         />
-        <div className="relative min-h-0 flex-1 border-t border-line bg-surface">{children}</div>
-        {footer && <div className="flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted">{footer}</div>}
+        {body}
       </div>
       {setup.openRecordId && (
         <ExpandedRecord

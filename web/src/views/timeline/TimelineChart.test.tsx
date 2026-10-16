@@ -69,12 +69,42 @@ describe("TimelineChart", () => {
   });
 
   it("shows the today marker inside the window and the scale's tick labels", () => {
-    chart();
-    expect(screen.getByText("Today")).toBeInTheDocument();
-    expect(screen.getByText("March 2026")).toBeInTheDocument(); // major tick
-    expect(screen.getByText("Mar 9")).toBeInTheDocument(); // week tick (Monday)
-    chart({ nowMs: ms(2027, 1, 1) });
-    expect(screen.getAllByText("Today")).toHaveLength(1); // the second chart has none
+    const { unmount } = chart();
+    // Day ticks: today's own tick becomes the pill.
+    expect(document.querySelector("[data-today]")).toHaveTextContent("Sun 15");
+    expect(screen.getByText("Week of Mar 9")).toBeInTheDocument(); // coarse row: weeks from Monday
+    expect(screen.getByText("Mon 9")).toBeInTheDocument(); // fine row: days
+    unmount();
+    // Coarser scales have no day ticks, so the pill sits on today's line and says so.
+    chart({ scale: "month" });
+    expect(document.querySelector("[data-today]")).toHaveTextContent("Today");
+    expect(screen.getByText("March 2026")).toBeInTheDocument();
+  });
+
+  it("leaves the today marker out when today is outside the window", () => {
+    chart({ nowMs: ms(2027, 1, 1), scale: "month" });
+    expect(document.querySelector("[data-today]")).toBeNull();
+  });
+
+  it("shades weekends where a day is wide enough to see them", () => {
+    const { container, unmount } = chart();
+    // March 2026 to May 2026 has 13 weekends (the axis starts on Sunday Mar 1, the tail of one).
+    expect(container.querySelectorAll("[class*='--bg)_55%']").length).toBe(14);
+    unmount();
+    const coarse = chart({ scale: "quarter" });
+    expect(coarse.container.querySelectorAll("[class*='--bg)_55%']").length).toBe(0);
+  });
+
+  it("names records in the left column and draws their bars with the given label", async () => {
+    const user = userEvent.setup();
+    const { props } = chart({ labelHeading: "Task" }, [
+      { lane: { key: "r1", label: "Design review", records: [] }, recordId: "r1", sublabel: "Ada", bars: [bar("r1", "Design review", span(ms(2026, 3, 10), ms(2026, 3, 14)), { label: "Mar 10 – Mar 13" })] },
+    ]);
+    expect(screen.getByText("Task")).toBeInTheDocument();
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Design review, / })).toHaveTextContent("Mar 10 – Mar 13");
+    await user.click(screen.getByRole("button", { name: "Design review" }));
+    expect(props.onOpen).toHaveBeenCalledWith("r1");
   });
 
   it("draws dependency arrows, red when violated", () => {

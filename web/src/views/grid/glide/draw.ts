@@ -4,6 +4,7 @@
  * keep when the grid library changes.
  */
 import { paletteColor, mixColors } from "@/lib/cells/palette";
+import { accentShade } from "@/lib/colors";
 
 export interface Rect {
   x: number;
@@ -161,11 +162,12 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     ctx.fill();
     let tx = x + 6;
     if (avatar) {
-      ctx.fillStyle = mixColors(bg, fg, 0.25);
+      // Solid face with white initials, the same as <Avatar> outside the grid.
+      ctx.fillStyle = accentShade(chip.color);
       ctx.beginPath();
       ctx.arc(x + 2 + avatar / 2, y + chipH / 2, avatar / 2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = fg;
+      ctx.fillStyle = "#ffffff";
       ctx.font = ctx.font.replace(/\d+(?:\.\d+)?px/, "9px");
       const initials = chip.text.split(/\s+/).map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase();
       ctx.textAlign = "center";

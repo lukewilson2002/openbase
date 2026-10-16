@@ -1,6 +1,7 @@
-//! `invites` API: invite links to a workspace (workspace Owner) or a base
-//! (base Creator, never above the inviter's own role), listing and revoking
-//! them, a public preview by token, and accepting as a signed-in user.
+//! `invites` API: invite links to a workspace, created by its owners (any
+//! role, any bases) or from a base by its creators (limited to bases they can
+//! open, never all bases, never above their own role); listing, changing and
+//! revoking them, a public preview by token, and accepting as a signed-in user.
 //! New users accept by signing up with `invite_token` (see `api::auth`).
 
 use std::time::Duration;
@@ -9,7 +10,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use ob_core::api::auth::{CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview};
+use ob_core::api::auth::{
+    CreateInviteRequest, CreatedInvite, InviteInfo, InvitePreview, UpdateInviteRequest,
+};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::json;
 
@@ -20,8 +23,9 @@ use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::audit::{self, actions};
-use crate::store::invites::{self, InviteTarget};
-use crate::store::users;
+use crate::store::invites::{self, InviteRow};
+use crate::store::workspaces::{self, BaseAccess};
+use crate::store::{bases, users};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -30,31 +34,145 @@ pub fn router() -> Router<AppState> {
             get(list_workspace).post(create_workspace),
         )
         .route("/api/bases/{id}/invites", get(list_base).post(create_base))
-        .route("/api/invites/{id}", delete(revoke))
+        .route("/api/invites/{id}", delete(revoke).patch(update))
         .route("/api/invites/by-token/{token}", get(preview))
         .route("/api/invites/by-token/{token}/accept", post(accept))
 }
 
-/// Check the actor may manage invites for `target`; returns the highest role
-/// they may grant.
-fn require_manage(conn: &Connection, actor: &Actor, target: &InviteTarget) -> AppResult<Role> {
-    match target {
-        // `require_workspace` asks for the `manage` permission itself.
-        InviteTarget::Workspace(w) => perm::require_workspace(conn, actor, w, Role::Owner),
-        InviteTarget::Base(b) => {
+/// Where an invite is being created from. Either way it is a workspace
+/// invite; the origin decides who may create it and the default bases.
+enum Origin {
+    Workspace(String),
+    Base(String),
+}
+
+/// Check the actor may create this invite and work out its workspace and
+/// base access. Returns the workspace id, the highest role the actor may
+/// grant and the access the invite gives.
+fn authorize_create(
+    conn: &Connection,
+    actor: &Actor,
+    origin: &Origin,
+    role: Role,
+    req: &CreateInviteRequest,
+) -> AppResult<(String, Role, BaseAccess)> {
+    match origin {
+        Origin::Workspace(w) => {
+            // `require_workspace` asks for the `manage` permission itself.
+            let max = perm::require_workspace(conn, actor, w, Role::Owner)?;
+            let access = if role == Role::Owner {
+                BaseAccess::All
+            } else {
+                match (req.all_bases, &req.base_ids) {
+                    (Some(true), _) | (None, None) => BaseAccess::All,
+                    (_, Some(ids)) => {
+                        BaseAccess::Only(workspaces::validate_base_ids(conn, w, ids)?)
+                    }
+                    (Some(false), None) => {
+                        return Err(AppError::bad_request(
+                            "pick the bases the invitee can open (base_ids), or give all bases",
+                        ));
+                    }
+                }
+            };
+            Ok((w.clone(), max, access))
+        }
+        Origin::Base(b) => {
             actor.require_capability(Capability::Manage)?;
-            perm::require_base(conn, actor, b, Role::Creator)
+            let max = perm::require_base(conn, actor, b, Role::Creator)?;
+            let ws = bases::live_base(conn, b)?.workspace_id;
+            if req.all_bases == Some(true) && max < Role::Owner {
+                return Err(AppError::forbidden(
+                    "only workspace owners can invite someone to every base",
+                ));
+            }
+            if role == Role::Owner || req.all_bases == Some(true) {
+                // Every base is beyond this one: without this, an owner's
+                // token limited to this base could mint an invite to the
+                // whole workspace and accept it from another account.
+                actor.require_capability(Capability::ManageUnscoped)?;
+                return Ok((ws, max, BaseAccess::All));
+            }
+            let ids = req.base_ids.clone().unwrap_or_else(|| vec![b.clone()]);
+            let ids = workspaces::validate_base_ids(conn, &ws, &ids)?;
+            for id in &ids {
+                // A creator can only hand out bases they can open themselves,
+                // and a token only bases in its scope (`require_base` 404s
+                // the others).
+                perm::require_base(conn, actor, id, Role::Creator)?;
+            }
+            Ok((ws, max, BaseAccess::Only(ids)))
         }
     }
 }
 
-fn target_name(conn: &Connection, target: &InviteTarget) -> AppResult<String> {
-    let (sql, id) = match target {
-        InviteTarget::Workspace(w) => ("SELECT name FROM workspaces WHERE id = ?1", w),
-        InviteTarget::Base(b) => ("SELECT name FROM bases WHERE id = ?1", b),
-    };
+/// Owners of the workspace manage all its invites; a creator manages the
+/// invites limited to bases they can open, at a role not above their own.
+/// Without any role in the workspace this is a 404, like a missing invite.
+fn require_manage_invite(conn: &Connection, actor: &Actor, invite: &InviteRow) -> AppResult<()> {
+    actor.require_capability(Capability::Manage)?;
+    let ws = invite.workspace_id()?;
+    if perm::workspace_role(conn, &actor.user_id, ws)?.is_none() {
+        return Err(AppError::not_found("invite"));
+    }
+    match perm::require_workspace(conn, actor, ws, Role::Owner) {
+        Ok(_) => return Ok(()),
+        // Only owners manage invites to every base; their error says why
+        // (the role, or a token limited to specific bases).
+        Err(e) if invite.info.all_bases => return Err(e),
+        Err(_) => {}
+    }
+    let mut max = Role::Owner;
+    let mut any_live = false;
+    for b in &invite.info.base_ids {
+        if bases::live_base(conn, b).is_err() {
+            continue;
+        }
+        any_live = true;
+        max = max.min(perm::require_base(conn, actor, b, Role::Creator)?);
+    }
+    // With every listed base in the trash nothing above was checked, so any
+    // member (even a viewer) would pass; restoring a base revives the invite.
+    if !any_live {
+        return Err(AppError::forbidden(
+            "only workspace owners can revoke this invite: all of its bases are in the trash",
+        ));
+    }
+    if invite.role()? > max {
+        return Err(AppError::forbidden(
+            "you cannot revoke an invite for a role above your own",
+        ));
+    }
+    Ok(())
+}
+
+/// Whether the actor could list `base_id` on an invite at `role` if it were
+/// not in the trash: what [`authorize_create`] asks of live bases, and what
+/// the invite's validity will ask of its inviter once the base is restored.
+fn may_list_trashed(
+    conn: &Connection,
+    actor: &Actor,
+    base_id: &str,
+    role: Role,
+) -> AppResult<bool> {
+    let in_scope = actor
+        .token_scope
+        .as_ref()
+        .and_then(|s| s.base_ids.as_ref())
+        .is_none_or(|ids| ids.iter().any(|b| b == base_id));
+    let needed = Role::Creator.max(role);
+    Ok(in_scope
+        && perm::base_role_including_trashed(conn, &actor.user_id, base_id)?
+            .is_some_and(|r| r >= needed))
+}
+
+fn workspace_name(conn: &Connection, workspace_id: &str) -> AppResult<String> {
     Ok(conn
-        .query_row(sql, [id], |r| r.get::<_, String>(0))
+        .query_row(
+            "SELECT name FROM workspaces WHERE id = ?1",
+            [workspace_id],
+            |r| r.get::<_, String>(0),
+        )
         .optional()?
         .unwrap_or_default())
 }
@@ -63,7 +181,7 @@ async fn create_invite(
     state: AppState,
     actor: Actor,
     client: ClientInfo,
-    target: InviteTarget,
+    origin: Origin,
     req: CreateInviteRequest,
 ) -> AppResult<(StatusCode, Json<CreatedInvite>)> {
     let role = Role::parse(req.role.trim())?;
@@ -77,7 +195,7 @@ async fn create_invite(
     let (token, info, name) = state
         .db
         .write(move |tx| {
-            let max_role = require_manage(tx, &actor, &target)?;
+            let (ws, max_role, access) = authorize_create(tx, &actor, &origin, role, &req)?;
             if role > max_role {
                 return Err(AppError::forbidden(
                     "you cannot invite someone with a role above your own",
@@ -91,8 +209,19 @@ async fn create_invite(
                 // invite back).
                 crate::email::spend_budget(&limiter, &config, &actor.user_id, 1)?;
             }
-            let (token, info) =
-                invites::create(tx, &actor.user_id, &target, email.as_deref(), role)?;
+            // From a base too, an owner acting for the whole workspace may
+            // raise existing members; an owner's token limited to some bases
+            // fails this check, so it cannot promote anyone on bases beyond them.
+            let may_raise = perm::require_workspace(tx, &actor, &ws, Role::Owner).is_ok();
+            let (token, info) = invites::create(
+                tx,
+                &actor.user_id,
+                &ws,
+                email.as_deref(),
+                role,
+                &access,
+                may_raise,
+            )?;
             audit::record_as(
                 tx,
                 &actor,
@@ -100,13 +229,14 @@ async fn create_invite(
                 Some(&info.id),
                 Some(json!({
                     "workspace_id": info.workspace_id,
-                    "base_id": info.base_id,
                     "email": info.email,
                     "role": info.role,
+                    "all_bases": info.all_bases,
+                    "base_ids": info.base_ids,
                 })),
                 Some(&client.ip),
             )?;
-            Ok((token, info, target_name(tx, &target)?))
+            Ok((token, info, workspace_name(tx, &ws)?))
         })
         .await?;
     let url = invites::invite_url(&state.config.public_url, &token);
@@ -133,7 +263,7 @@ async fn create_workspace(
     Path(id): Path<String>,
     ApiJson(req): ApiJson<CreateInviteRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedInvite>)> {
-    create_invite(state, actor, client, InviteTarget::Workspace(id), req).await
+    create_invite(state, actor, client, Origin::Workspace(id), req).await
 }
 
 async fn create_base(
@@ -143,22 +273,7 @@ async fn create_base(
     Path(id): Path<String>,
     ApiJson(req): ApiJson<CreateInviteRequest>,
 ) -> AppResult<(StatusCode, Json<CreatedInvite>)> {
-    create_invite(state, actor, client, InviteTarget::Base(id), req).await
-}
-
-async fn list_invites(
-    state: AppState,
-    actor: Actor,
-    target: InviteTarget,
-) -> AppResult<Json<Vec<InviteInfo>>> {
-    let list = state
-        .db
-        .read(move |c| {
-            require_manage(c, &actor, &target)?;
-            invites::list(c, &target)
-        })
-        .await?;
-    Ok(Json(list))
+    create_invite(state, actor, client, Origin::Base(id), req).await
 }
 
 async fn list_workspace(
@@ -166,15 +281,31 @@ async fn list_workspace(
     actor: Actor,
     Path(id): Path<String>,
 ) -> AppResult<Json<Vec<InviteInfo>>> {
-    list_invites(state, actor, InviteTarget::Workspace(id)).await
+    let list = state
+        .db
+        .read(move |c| {
+            perm::require_workspace(c, &actor, &id, Role::Owner)?;
+            invites::list_for_workspace(c, &id)
+        })
+        .await?;
+    Ok(Json(list))
 }
 
+/// Pending invites that would give access to this base.
 async fn list_base(
     State(state): State<AppState>,
     actor: Actor,
     Path(id): Path<String>,
 ) -> AppResult<Json<Vec<InviteInfo>>> {
-    list_invites(state, actor, InviteTarget::Base(id)).await
+    actor.require_capability(Capability::Manage)?;
+    let list = state
+        .db
+        .read(move |c| {
+            perm::require_base(c, &actor, &id, Role::Creator)?;
+            invites::list_for_base(c, &id)
+        })
+        .await?;
+    Ok(Json(list))
 }
 
 async fn revoke(
@@ -187,13 +318,7 @@ async fn revoke(
         .db
         .write(move |tx| {
             let invite = invites::get(tx, &id)?.ok_or_else(|| AppError::not_found("invite"))?;
-            // Without any role on the target this is a 404, like a missing invite.
-            let max_role = require_manage(tx, &actor, &invite.target()?)?;
-            if invite.role()? > max_role {
-                return Err(AppError::forbidden(
-                    "you cannot revoke an invite for a role above your own",
-                ));
-            }
+            require_manage_invite(tx, &actor, &invite)?;
             invites::delete(tx, &id)?;
             audit::record_as(
                 tx,
@@ -206,6 +331,153 @@ async fn revoke(
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The terms of a pending invite as a create request: what the update asks
+/// for, the rest carried over. A carried-over base list keeps only live bases
+/// (creating an invite refuses trashed ones). The flag says whether the
+/// update asked for different bases; when it did not, the stored list
+/// (trashed bases included, so restoring one restores the invite's reach)
+/// stays as it is.
+fn merged_terms(
+    conn: &Connection,
+    invite: &InviteRow,
+    req: &UpdateInviteRequest,
+) -> AppResult<(CreateInviteRequest, bool)> {
+    let changes_access = req.all_bases.is_some() || req.base_ids.is_some();
+    let (all_bases, base_ids) = match (req.all_bases, &req.base_ids) {
+        (Some(true), _) => (true, None),
+        (_, Some(ids)) => (false, Some(ids.clone())),
+        (Some(false), None) => {
+            return Err(AppError::bad_request(
+                "pick the bases the invitee can open (base_ids), or give all bases",
+            ));
+        }
+        (None, None) if invite.info.all_bases => (true, None),
+        (None, None) => {
+            let live = invite
+                .info
+                .base_ids
+                .iter()
+                .filter(|b| bases::live_base(conn, b).is_ok())
+                .cloned()
+                .collect();
+            (false, Some(live))
+        }
+    };
+    let role = req
+        .role
+        .as_deref()
+        .unwrap_or(&invite.info.role)
+        .trim()
+        .to_string();
+    let terms = CreateInviteRequest {
+        email: invite.info.email.clone(),
+        role,
+        all_bases: Some(all_bases),
+        base_ids,
+    };
+    Ok((terms, changes_access))
+}
+
+/// `PATCH /api/invites/{id}`: change the role and bases of a pending invite
+/// in place, so the link already sent (or shown) keeps working. The caller
+/// must be allowed to manage the invite as it is and to create one with the
+/// new terms, under the same rules as creating it.
+async fn update(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+    Path(id): Path<String>,
+    ApiJson(req): ApiJson<UpdateInviteRequest>,
+) -> AppResult<Json<InviteInfo>> {
+    let info = state
+        .db
+        .write(move |tx| {
+            let invite = invites::get(tx, &id)?.ok_or_else(|| AppError::not_found("invite"))?;
+            require_manage_invite(tx, &actor, &invite)?;
+            // A voided invite (say, from a member since removed) must stay
+            // dead: changing it would make the caller its inviter and revive
+            // the link its old inviter still holds.
+            if invite.info.accepted_at.is_some()
+                || invite.info.expires_at <= crate::db::now_ms()
+                || invites::voided(tx, &invite)?
+            {
+                return Err(AppError::conflict(
+                    "this invite was already used, has expired or is no longer valid; \
+                     invite them again instead",
+                ));
+            }
+            let (terms, changes_access) = merged_terms(tx, &invite, &req)?;
+            let role = Role::parse(&terms.role)?;
+            let ws = invite.workspace_id()?.to_string();
+            // An owner (without a base-limited token) may give anything, as
+            // from the workspace; anyone else is held to what they could
+            // create from one of the bases, and every base it would give is
+            // checked there.
+            let origin = if perm::require_workspace(tx, &actor, &ws, Role::Owner).is_ok() {
+                Origin::Workspace(ws)
+            } else {
+                let from = terms
+                    .base_ids
+                    .as_ref()
+                    .and_then(|ids| ids.first())
+                    .or_else(|| invite.info.base_ids.first())
+                    .cloned()
+                    .ok_or_else(|| {
+                        AppError::forbidden("only workspace owners can change this invite")
+                    })?;
+                Origin::Base(from)
+            };
+            let (_, max_role, access) = authorize_create(tx, &actor, &origin, role, &terms)?;
+            if role > max_role {
+                return Err(AppError::forbidden(
+                    "you cannot invite someone with a role above your own",
+                ));
+            }
+            // Only a limited invite whose bases were not asked about keeps its
+            // stored list; the owner role always widens it to every base.
+            let keep_stored = !changes_access
+                && !invite.info.all_bases
+                && matches!(access, workspaces::BaseAccess::Only(_));
+            // Anyone held to the base rules (a creator, an owner's base-limited
+            // token) clears the flag that lets accepting raise existing members.
+            let by_owner = matches!(origin, Origin::Workspace(_));
+            let access = match access {
+                // The caller becomes the inviter, and an invite listing a base
+                // its inviter cannot open is voided whole once that base is
+                // restored: keep only the trashed bases the caller could list.
+                workspaces::BaseAccess::Only(live) if keep_stored && !by_owner => {
+                    let mut ids = Vec::new();
+                    for b in &invite.info.base_ids {
+                        if live.contains(b) || may_list_trashed(tx, &actor, b, role)? {
+                            ids.push(b.clone());
+                        }
+                    }
+                    Some(workspaces::BaseAccess::Only(ids))
+                }
+                _ if keep_stored => None,
+                access => Some(access),
+            };
+            let info =
+                invites::update_terms(tx, &id, &actor.user_id, role, access.as_ref(), by_owner)?;
+            audit::record_as(
+                tx,
+                &actor,
+                actions::INVITE_UPDATE,
+                Some(&info.id),
+                Some(json!({
+                    "workspace_id": info.workspace_id,
+                    "role": info.role,
+                    "all_bases": info.all_bases,
+                    "base_ids": info.base_ids,
+                })),
+                Some(&client.ip),
+            )?;
+            Ok(info)
+        })
+        .await?;
+    Ok(Json(info))
 }
 
 async fn preview(

@@ -7,7 +7,7 @@ import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, 
 import { keys } from "@/api/keys";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
-import { USER, makeView, mockApi, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
+import { USER, makeView, mockApi, stubDesktop, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
 import type { ViewProps } from "../types";
 
 export const F = {
@@ -28,7 +28,7 @@ export function projectTable(views: View[]): Table {
 }
 
 export function projectSchema(role: string, views: View[]): BaseSchema {
-  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)] };
+  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)], people: [], workspace_name: "Acme", workspace_color: "green" };
 }
 
 export function viewWithConfig(id: string, type: ViewType, patch: Partial<View["config"]>, over: Partial<View> = {}): View {
@@ -77,6 +77,9 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
   });
   const table = opts.schema.tables[0]!;
   const view = table.views.find((v) => v.id === opts.viewId)!;
+  // jsdom matches no media query, so the toolbar would fold its tools into one menu as on a phone;
+  // these tests reach for Sort, Filter and the view settings directly.
+  stubDesktop();
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false, staleTime: 0, gcTime: 0 } });
   // The shell has loaded the user before any view renders; without this the time zone would change mid-test.

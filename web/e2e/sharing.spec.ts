@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { APIRequestContext, Browser, BrowserContext, Cookie, Page, TestInfo } from "@playwright/test";
-import { expect, newClientContext, test } from "./fixtures";
+import { expect, newClientContext, skipIntro, test } from "./fixtures";
 
 /**
  * Forms, share links and CSV against a live server, in Chrome:
@@ -60,6 +60,7 @@ async function seed(page: Page): Promise<Fixture> {
     const login = await req.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
     expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
   }
+  await skipIntro(req);
   const ws = await call<{ id: string }>(req, "post", "/api/workspaces", { name: `E2E sharing ${Date.now()}` });
   const base = await call<{ id: string; tables: TableDto[] }>(req, "post", `/api/workspaces/${ws.id}/bases`, { name: "Sharing E2E" });
   const t = base.tables[0] ?? (await call<TableDto>(req, "post", `/api/bases/${base.id}/tables`, { name: "Contacts" }));
@@ -129,9 +130,10 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   let formViewId = "";
   let link = "";
 
-  await test.step("creates a form view from the sidebar", async () => {
+  await test.step("creates a form view from the menu's Add view", async () => {
     await openView(page);
-    await page.getByRole("button", { name: "Form", exact: true }).click();
+    await page.getByRole("navigation", { name: "Tables" }).getByRole("button", { name: "Add view" }).click();
+    await page.getByRole("menuitem", { name: /^Form/ }).click();
     const dialog = page.getByRole("dialog", { name: "New form view" });
     await dialog.getByLabel("Name").fill("Contact form");
     await dialog.getByRole("button", { name: "Create view" }).click();
@@ -146,10 +148,11 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   await test.step("builds it: title, a required field with a label, fewer fields", async () => {
     await page.getByLabel("Title").fill("Join the waitlist");
     await page.getByLabel("Description").fill("We write back within a day.");
-    await page.getByLabel("Success message").fill("You are on the list!");
+    await page.getByLabel("After submitting", { exact: true }).fill("You are on the list!");
     await page.getByLabel("Submit button").fill("Sign me up");
     const nameRow = page.getByRole("listitem", { name: "Form field Name" });
     await nameRow.getByRole("switch", { name: "Required" }).click();
+    await nameRow.getByRole("button", { name: "Edit Name" }).click();
     await page.getByLabel("Label for Name").fill("Your name");
     await page.getByLabel("Help text for Name").fill("As on your ID");
     for (const f of ["Notes", "Salary", "Status"]) await page.getByRole("button", { name: `Remove ${f} from the form` }).click();
@@ -206,11 +209,11 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     expect(found.total).toBe(1);
     expect(found.records[0]!.values).toMatchObject({ [fx.fields.name]: "Zed Visitor", [fx.fields.qty]: 9 });
     await openView(page);
-    await expect(page.getByText("4 records")).toBeVisible();
+    await expect(page.getByText("4 items")).toBeVisible();
     // The grid is a canvas, so look for the record with the search box.
     await page.keyboard.press("Control+F");
     await page.getByRole("searchbox", { name: "Search records" }).fill("Zed");
-    await expect(page.getByText(/1 record found/)).toBeVisible();
+    await expect(page.getByText(/1 item found/)).toBeVisible();
   });
 });
 
@@ -225,17 +228,21 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     viewId = created.id;
     await call(page.request, "patch", `/api/views/${viewId}`, { config: { ...created.config, hidden_fields: [fx.fields.salary] } });
     await openView(page, viewId);
-    await page.getByRole("button", { name: "Share view" }).click();
-    const dialog = page.getByRole("dialog", { name: "Share Team sheet" });
+    // Sharing a view lives in the base's Share dialog, with the view on screen picked.
+    await page.getByRole("banner").getByRole("button", { name: "Share" }).click();
+    const dialog = page.getByRole("dialog", { name: /^Share / });
+    await dialog.getByRole("tab", { name: "Share a view" }).click();
+    await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);
     await expect(dialog.getByText(/The 1 hidden field never leaves the server/)).toBeVisible();
-    await dialog.getByRole("switch", { name: "Protect with a password" }).click();
+    await dialog.getByRole("checkbox", { name: "Require a password" }).click();
     await dialog.getByRole("textbox", { name: "Password" }).fill("open sesame");
     await dialog.getByRole("button", { name: "Create link" }).click();
     const address = dialog.getByRole("textbox", { name: "View link" });
     await expect(address).toHaveValue(/\/share\/[A-Za-z0-9_-]+$/);
     link = await address.inputValue();
     token = link.split("/").pop()!;
-    await expect(dialog.getByText("Password protected")).toBeVisible();
+    await expect(dialog.getByRole("checkbox", { name: "Require a password" })).toBeChecked();
+    await expect(dialog.getByText("Visitors type the password once per visit.")).toBeVisible();
     await page.keyboard.press("Escape");
   });
 
@@ -300,7 +307,8 @@ test("downloads a view as CSV: visible fields, the view's sort, BOM and quoting"
   const created = await call<{ id: string; config: Record<string, unknown> }>(page.request, "post", `/api/tables/${fx.tableId}/views`, { name: "Export me", type: "grid", config: null });
   await call(page.request, "patch", `/api/views/${created.id}`, { config: { ...created.config, hidden_fields: [fx.fields.salary], sorts: [{ field_id: fx.fields.qty, direction: "desc" }] } });
   await openView(page, created.id);
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download CSV" }).click()]);
+  await page.getByRole("button", { name: "More" }).click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download CSV" }).click()]);
   expect(download.suggestedFilename()).toBe("Export me.csv");
   const text = await readFile((await download.path())!, "utf8");
   expect(text.startsWith("﻿")).toBe(true);
@@ -351,7 +359,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
     await dialog.getByRole("button", { name: "Done" }).click();
     const delta = (await records(page.request, fx.viewId, "Delta")).records[0]!;
     expect(delta.values[fx.fields.qty]).toBe(12);
-    await expect(page.getByText(/\d+ records/)).toBeVisible();
+    await expect(page.getByText(/\d+ items/)).toBeVisible();
   });
 
   await test.step("a file with a bad row is refused as a whole, with the row numbers", async () => {
@@ -398,6 +406,7 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   const email = `viewer-${Date.now()}@example.com`;
   const signup = await g.request.post("/api/auth/signup", { data: { email, name: "Viewer Vera", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(g.request);
   const accept = await g.request.post(`/api/invites/by-token/${invite.url.split("/invite/")[1]}/accept`, { data: {}, headers: CSRF });
   expect(accept.ok(), await accept.text()).toBeTruthy();
 

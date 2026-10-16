@@ -48,26 +48,32 @@ function setup(Component: ComponentType<ViewProps>, view: ReturnType<typeof view
 
 const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
+/**
+ * The calendar's unscheduled column and the timeline's "without a date" count ask with a transient
+ * "start is empty" filter of their own; these tests are about the viewer's override, so they skip those.
+ */
+const viewerQueries = (asked: QueryRequest[]) => asked.filter((a) => !a.transient?.filter?.items.some((i) => "op" in i && i.op === "is_empty"));
+
 describe.each(CASES)("%s view without save rights", (_name, Component, view) => {
   it("sends a sort as a transient override, marks it Not saved and resets it", async () => {
     const u = user();
     const { asked, api } = setup(Component, view, "viewer");
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
-    expect(asked.every((a) => !a.transient)).toBe(true);
+    expect(viewerQueries(asked).every((a) => !a.transient)).toBe(true);
     expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
 
     await u.click(screen.getByRole("button", { name: /Sort/ }));
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
-    await waitFor(() => expect(asked.some((a) => a.transient?.sorts?.length === 1)).toBe(true));
-    expect(asked.find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: expect.any(String) as string, direction: "asc" }] });
+    await waitFor(() => expect(viewerQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
+    expect(viewerQueries(asked).find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: expect.any(String) as string, direction: "asc" }] });
     expect(await screen.findByText("Not saved")).toBeInTheDocument();
     // The override is never saved to the view.
     expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
 
-    const before = asked.length;
+    const before = viewerQueries(asked).length;
     await u.click(screen.getByRole("button", { name: "Reset" }));
-    await waitFor(() => expect(asked.length).toBeGreaterThan(before));
-    expect(asked[asked.length - 1]!.transient).toBeUndefined();
+    await waitFor(() => expect(viewerQueries(asked).length).toBeGreaterThan(before));
+    expect(viewerQueries(asked).at(-1)!.transient).toBeUndefined();
     expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
   });
 
@@ -78,7 +84,7 @@ describe.each(CASES)("%s view without save rights", (_name, Component, view) => 
     await u.click(screen.getByRole("button", { name: /Sort/ }));
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect(asked.every((a) => !a.transient)).toBe(true);
+    expect(viewerQueries(asked).every((a) => !a.transient)).toBe(true);
     expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
   });
 });

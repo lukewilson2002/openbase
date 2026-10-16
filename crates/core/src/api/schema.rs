@@ -52,9 +52,14 @@ pub struct BaseSchema {
     pub color: String,
     #[serde(default)]
     pub icon: Option<String>,
-    /// Caller's effective role.
+    /// Caller's role on the base (their workspace role).
     pub role: String,
     pub tables: Vec<Table>,
+    /// Who can open this base (members first, then pending invites).
+    pub people: Vec<crate::api::workspaces::BasePerson>,
+    pub workspace_name: String,
+    /// The workspace's colour (one of `ob_core::field::COLORS`).
+    pub workspace_color: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

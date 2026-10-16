@@ -82,7 +82,7 @@ async fn remove(
         .write(move |tx| {
             let base = perm::base_of_table(tx, &id)?;
             perm::require_base(tx, &actor, &base, Role::Creator)?;
-            Ok((base, tables::soft_delete(tx, &id)?))
+            Ok((base, tables::soft_delete(tx, &id, &actor.user_id)?))
         })
         .await?;
     publish_schema(&state, &headers, &who, &base, &touched);

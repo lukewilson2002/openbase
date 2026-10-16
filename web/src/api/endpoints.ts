@@ -48,6 +48,7 @@ import type {
   RunsPage,
   PasswordResetConfirm,
   ResetLink,
+  SearchResponse,
   SessionInfo,
   UpdateEmailSettings,
   SetupStatus,
@@ -61,6 +62,7 @@ import type {
   TwoFactorSetup,
   UpdateAutomation,
   UpdateBase,
+  UpdateInviteRequest,
   UpdateMeRequest,
   UpdateMember,
   UpdateTable,
@@ -73,6 +75,15 @@ import type {
 } from "./types";
 
 const enc = encodeURIComponent;
+
+export type TrashKind = "workspace" | "base" | "table" | "field" | "view" | "record";
+
+/** Query of `GET /api/trash` (`api.trash.all`). */
+export type TrashFilter = {
+  workspace_id?: string;
+  base_id?: string;
+  kind?: TrashKind;
+};
 
 /**
  * Response shapes are exactly what crates/server/src/api sends (see the live contract tests in
@@ -149,9 +160,11 @@ export const api = {
   invites: {
     preview: (token: string) =>
       http.get<InvitePreview>(`/api/invites/by-token/${enc(token)}`, { skipAuthRedirect: true }),
-    /** Returns the accepted invite (`workspace_id` or `base_id` says where to go next). */
+    /** Returns the accepted invite (`workspace_id` says where to go next). */
     accept: (token: string) => http.post<InviteInfo>(`/api/invites/by-token/${enc(token)}/accept`),
     remove: (id: string) => http.delete<void>(`/api/invites/${enc(id)}`),
+    /** Changes a pending invite's role and bases; the link already sent keeps working. */
+    update: (id: string, body: UpdateInviteRequest) => http.patch<InviteInfo>(`/api/invites/${enc(id)}`, body),
     forWorkspace: (workspaceId: string) => http.get<InviteInfo[]>(`/api/workspaces/${enc(workspaceId)}/invites`),
     createForWorkspace: (workspaceId: string, body: CreateInviteRequest) =>
       http.post<CreatedInvite>(`/api/workspaces/${enc(workspaceId)}/invites`, body),
@@ -207,8 +220,6 @@ export const api = {
     duplicate: (id: string, body: DuplicateBase) => http.post<BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
     collaborators: (id: string) => http.get<Collaborator[]>(`/api/bases/${enc(id)}/collaborators`),
     members: (id: string) => http.get<Member[]>(`/api/bases/${enc(id)}/members`),
-    updateMember: (id: string, userId: string, body: UpdateMember) =>
-      http.patch<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`, body),
     removeMember: (id: string, userId: string) =>
       http.delete<OkResponse>(`/api/bases/${enc(id)}/members/${enc(userId)}`),
     /** SSE endpoint path (see events.ts). */
@@ -233,6 +244,16 @@ export const api = {
       http.post<View>(`/api/views/${enc(id)}/duplicate`, body),
   },
 
+  search: {
+    /**
+     * Everything the caller can open whose name (or, for records, text) contains `q`: names
+     * first, text that starts with `q` before text that contains it. `q` is 1–200 characters
+     * (blank is a 400); `limit` defaults to 20, at most 50.
+     */
+    everything: (q: string, opts: { limit?: number; signal?: AbortSignal } = {}) =>
+      http.get<SearchResponse>("/api/search", { query: { q, limit: opts.limit }, signal: opts.signal }),
+  },
+
   notifications: {
     list: () => http.get<NotificationsResponse>("/api/notifications"),
     /** Without `ids` everything is marked read. */
@@ -240,6 +261,11 @@ export const api = {
   },
 
   trash: {
+    /**
+     * Everything the caller could restore, from every workspace they belong to, newest first.
+     * Each filter is optional; `kind` is one of workspace | base | table | field | view | record.
+     */
+    all: (filter: TrashFilter = {}) => http.get<TrashListing>("/api/trash", { query: filter }),
     /** Creators and above. */
     forBase: (baseId: string) => http.get<TrashListing>(`/api/bases/${enc(baseId)}/trash`),
     /** Workspace owners. */

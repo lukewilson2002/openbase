@@ -209,7 +209,9 @@ docker compose exec -e OPENBASE_ADMIN_PASSWORD openbase \
 unset OPENBASE_ADMIN_PASSWORD
 ```
 
-Then give the admin account a second factor under **Account → Security**: a
+Then give the admin account a second factor under **Account → Security** (the
+profile menu at the bottom of the sidebar has **Settings** for your account and
+**Administration** for the **Admin** pages): a
 passkey (Touch ID, Windows Hello, a phone or a security key; it also signs in
 without a password) or an authenticator app (TOTP).
 

@@ -75,7 +75,7 @@ use crate::engine::write::user_timezone;
 use crate::error::{AppError, AppResult};
 use crate::store::links::NameCache;
 use crate::store::records::{self, RecordRow};
-use crate::store::schema::{self, ViewRow};
+use crate::store::schema::{self, TableRow, ViewRow};
 use crate::store::versions::DataVersions;
 
 /// Page size when the request names none.
@@ -1152,6 +1152,108 @@ pub fn lookup_candidates(
         Ok(out.len() < limit)
     })?;
     Ok(out)
+}
+
+// ------------------------------------------------------- search everything
+
+/// A record [`search_table`] found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordHit {
+    pub id: String,
+    /// The text of the primary field.
+    pub name: String,
+    /// Whether `name` starts with the search text.
+    pub starts_with: bool,
+    /// When the primary field did not match: the text of the field that did.
+    pub matched_text: Option<String>,
+}
+
+/// Fields whose text the global search reads besides the primary field.
+fn is_text_like(kind: &FieldKind) -> bool {
+    matches!(
+        kind,
+        FieldKind::SingleLineText(_)
+            | FieldKind::LongText(_)
+            | FieldKind::Email(_)
+            | FieldKind::Url(_)
+            | FieldKind::Phone(_)
+    )
+}
+
+/// Live records of `table` whose primary field or text-like fields contain
+/// `needle` (from [`search_needle`]), compared like the grid search: display
+/// text, ignoring case. Primary fields that start with the needle come first,
+/// then other primary-field matches, then matches in other fields; at most
+/// `limit`, in manual order within each group. Reads at most `*rows_left`
+/// records and counts them off, so a search over many tables shares one
+/// budget; it stops early once `limit` records start with the needle, since
+/// nothing later could rank above them.
+pub fn search_table(
+    conn: &Connection,
+    table: &TableRow,
+    needle: &str,
+    limit: usize,
+    tz: Tz,
+    rows_left: &mut usize,
+) -> AppResult<Vec<RecordHit>> {
+    if limit == 0 || *rows_left == 0 || needle.is_empty() {
+        return Ok(Vec::new());
+    }
+    let fields = schema::table_fields(conn, &table.id)?;
+    let Some(primary) = fields
+        .iter()
+        .find(|f| f.id == table.primary_field_id)
+        .cloned()
+    else {
+        return Ok(Vec::new());
+    };
+    let others: Vec<Field> = fields
+        .into_iter()
+        .filter(|f| f.id != primary.id && is_text_like(&f.kind))
+        .collect();
+    let names = NameCache::new(conn, tz);
+    let needed = Needed::of(std::iter::once(&primary).chain(&others));
+    let (mut starts, mut contains, mut elsewhere) = (Vec::new(), Vec::new(), Vec::new());
+    scan_rows(conn, &table.id, &needed, &names, |row| {
+        *rows_left -= 1;
+        let name = display_text(&primary, row.get(&primary.id), &names, tz);
+        let lower = name.to_lowercase();
+        if lower.starts_with(needle) {
+            starts.push(RecordHit {
+                id: row.id,
+                name,
+                starts_with: true,
+                matched_text: None,
+            });
+        } else if lower.contains(needle) {
+            if contains.len() < limit {
+                contains.push(RecordHit {
+                    id: row.id,
+                    name,
+                    starts_with: false,
+                    matched_text: None,
+                });
+            }
+        } else if elsewhere.len() < limit {
+            let matched = others
+                .iter()
+                .map(|f| display_text(f, row.get(&f.id), &names, tz))
+                .find(|text| text.to_lowercase().contains(needle));
+            if let Some(text) = matched {
+                elsewhere.push(RecordHit {
+                    id: row.id,
+                    name,
+                    starts_with: false,
+                    matched_text: Some(text),
+                });
+            }
+        }
+        Ok(starts.len() < limit && *rows_left > 0)
+    })?;
+    starts.extend(contains);
+    starts.extend(elsewhere);
+    starts.truncate(limit);
+    Ok(starts)
 }
 
 #[cfg(test)]

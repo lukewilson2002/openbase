@@ -163,7 +163,7 @@ The suite must not depend on how fast the machine is (it passes on a laptop and 
 ```
 src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE), keys.ts, types/ (generated)
 src/auth/       current-user hooks and route guards
-src/base/       base shell: top bar, table tabs, view sidebar, permission rules
+src/base/       base screen in the app shell: top bar, menu (tables, views, actions), dialogs, empty base, permission rules
 src/components/ design-system primitives (ui/) and shared dialogs
 src/lib/webauthn.ts  the WebAuthn browser API <-> the server's JSON (base64url conversion, support checks, errors); `src/auth/usePasskeyLogin.ts` is the login page's passkey button and background autofill request
 src/pages/      setup, login, signup, invite, password reset, home, account/ (SecuritySection: password, PasskeysSection, two-factor), admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
@@ -279,7 +279,7 @@ Not in the UI because the server has no endpoint for it: duplicating an automati
 
 The app shell (`index-*.js` plus the chunks it needs on every page, see `vite build` output) is kept small by loading
 what most visits never use on demand: the grid, the other views, automations, account, admin, the public pages, and the
-dialogs behind a button (`ShareViewDialog`, `ImportCsvDialog`, `NewTableFromCsvDialog`, `TrashDialog`, `SharingDialog`) through
+dialogs behind a button (`ShareViewDialog`, `ImportCsvDialog`, `NewTableFromCsvDialog`, `TrashDialog`) through
 `React.lazy` wrappers (`Lazy*.tsx`, `TrashButton.tsx`) that render nothing while the chunk loads, plus the one-off account pages (setup,
 sign-up, invite, password reset). Components that decide *whether* to show such a dialog import its small pure helpers instead
 (`components/share/shareView.ts`). Measured on 2026-10-13 after `vite build` (gzip level 9 of the files `index.html` loads: entry, shared chunks

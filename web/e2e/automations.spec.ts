@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, test, typeToEdit } from "./fixtures";
+import { clickGrid, expect, newClientContext, skipIntro, test, typeToEdit } from "./fixtures";
 
 /**
  * The automations journey against a live server: build "when a record is created in Table 1,
@@ -22,8 +22,8 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 // Grid geometry (see grid.spec.ts): the Name column of a fresh table starts after the row marker.
 const MARKER_W = 56;
 const NAME_W = 220;
-const HEADER_H = 34;
-const ROW_H = 33;
+const HEADER_H = 44;
+const ROW_H = 42;
 
 interface Fixture {
   baseId: string;
@@ -44,9 +44,11 @@ async function call<T>(req: APIRequestContext, method: "post" | "get", path: str
 
 async function signIn(page: Page): Promise<void> {
   const signup = await page.request.post("/api/auth/signup", { data: { email: EMAIL, name: "E2E Automations", password: PASSWORD }, headers: CSRF });
-  if (signup.ok()) return;
-  const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
-  expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  if (!signup.ok()) {
+    const login = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD }, headers: CSRF });
+    expect(login.ok(), `login failed (${login.status()}): set OPENBASE_E2E_EMAIL/OPENBASE_E2E_PASSWORD`).toBeTruthy();
+  }
+  await skipIntro(page.request);
 }
 
 async function seed(page: Page): Promise<Fixture> {
@@ -98,10 +100,11 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   diagnostics.allow(/Failed to load resource: the server responded with a status of 400/);
   let automationId = "";
 
-  await test.step("opens Automations from the top bar and sees the empty state", async () => {
+  await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    await page.getByRole("link", { name: "Automations" }).click();
+    // Exact: the workspace (in the top bar's picker) is named after this spec too.
+    await page.getByRole("link", { name: "Automations", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/automations$`));
     await expect(page.getByText("No automations yet")).toBeVisible();
     await expect(page.getByText("docs/automations.md").first()).toBeVisible();
@@ -153,9 +156,9 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   await test.step("adds a record in the grid", async () => {
     await page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Table 1" }).click();
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    await expect(page.getByText("0 records")).toBeVisible();
+    await expect(page.getByText("0 items")).toBeVisible();
     await page.getByRole("button", { name: "Add record" }).click();
-    await expect(page.getByText("1 record")).toBeVisible();
+    await expect(page.getByText("1 item")).toBeVisible();
     // Name it, as a person would.
     const canvas = page.locator("canvas[data-testid='data-grid-canvas']").first();
     const box = (await canvas.boundingBox())!;

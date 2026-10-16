@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import { COLORS, choiceClass } from "@/lib/colors";
+import { accentClass, personColor } from "@/lib/colors";
 
 /** Up to two initials from a display name (falls back to the email local part). */
 export function initials(name: string | null | undefined, email?: string | null): string {
@@ -10,13 +10,8 @@ export function initials(name: string | null | undefined, email?: string | null)
   return (first + second).toUpperCase();
 }
 
-/** Stable light colour per identity, so the same person always looks the same. */
-function colorFor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const lights = COLORS.slice(0, 10);
-  return lights[h % lights.length] ?? "gray";
-}
+/** Stable colour per identity, so the same person always looks the same. */
+export const avatarColor = personColor;
 
 export interface AvatarProps {
   name?: string | null;
@@ -27,6 +22,10 @@ export interface AvatarProps {
 
 const sizes = { sm: "size-6 text-[0.625rem]", md: "size-8 text-xs", lg: "size-12 text-base" };
 
+/**
+ * A person's face: white initials on a solid circle of their colour, in the accent shades the
+ * workspace tiles use, which keep white text readable in both themes.
+ */
 export function Avatar({ name, email, size = "md", className }: AvatarProps) {
   const label = (name ?? "").trim() || email || "User";
   return (
@@ -34,7 +33,7 @@ export function Avatar({ name, email, size = "md", className }: AvatarProps) {
       role="img"
       aria-label={label}
       title={label}
-      className={cn("inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold", choiceClass(colorFor(email || label)), sizes[size], className)}
+      className={cn("inline-flex shrink-0 select-none items-center justify-center rounded-full font-bold", accentClass(avatarColor(email || label), "solid"), sizes[size], className)}
     >
       {initials(name, email)}
     </span>

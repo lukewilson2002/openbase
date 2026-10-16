@@ -2,6 +2,7 @@
  * Display formatting for cells (mirror of ob_core::cell::present): numbers, currency, percent,
  * durations, dates, selects, links, users, attachments and computed values.
  */
+import { personColor } from "@/lib/colors";
 import type { DateOptions, DurationFormat, Field, ResultType, ValueFormat } from "@/api/types";
 import { formatStoredDate } from "./dates";
 import {
@@ -22,6 +23,8 @@ export interface FormatCtx {
   timeZone: string;
   /** Resolve a user id to a display name. */
   userName: (id: string) => string | undefined;
+  /** Resolve a user id to an email, which seeds the person's face colour like everywhere else. */
+  userEmail?: (id: string) => string | undefined;
 }
 
 export const DEFAULT_CTX: FormatCtx = { timeZone: "UTC", userName: () => undefined };
@@ -230,7 +233,10 @@ export function chipItems(field: Field, stored: CellJson, ctx: FormatCtx): ChipI
     case "link":
       return linkRefs(stored).map((r) => ({ text: r.name, id: r.id }));
     case "user":
-      return stringItems(stored).map((id) => ({ text: ctx.userName(id) ?? id, id }));
+      return stringItems(stored).map((id) => {
+        const text = ctx.userName(id) ?? id;
+        return { text, id, color: personColor(ctx.userEmail?.(id) || text) };
+      });
     case "attachment":
       return attachmentRefs(stored).map((a) => ({ text: a.filename, id: a.id }));
     case "list": {

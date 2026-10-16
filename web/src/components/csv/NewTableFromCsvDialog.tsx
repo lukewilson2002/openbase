@@ -17,21 +17,38 @@ import { PREVIEW_ROWS } from "@/lib/csv/read";
 import { CsvFilePicker, type PickedCsv } from "./CsvFilePicker";
 import { ImportProblems } from "./ImportProblems";
 
-export interface NewTableFromCsvDialogProps {
+/** Into an existing base, or into a new one (the workspace page's "Import a spreadsheet"). */
+export type ImportTarget =
+  | { baseId: string; createBase?: undefined }
+  | {
+      baseId?: undefined;
+      /** Makes the base when the import starts, named like the table, and answers its id. */
+      createBase: (name: string) => Promise<string>;
+    };
+
+export type NewTableFromCsvDialogProps = ImportTarget & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  baseId: string;
-}
+};
 
-export function NewTableFromCsvDialog({ open, onOpenChange, baseId }: NewTableFromCsvDialogProps) {
+export function NewTableFromCsvDialog({ open, onOpenChange, ...target }: NewTableFromCsvDialogProps) {
+  const newBase = target.createBase !== undefined;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title="New table from CSV" description="OpenBase reads the file, picks a field type for each column and adds every row.">
-      {open && <Body baseId={baseId} onClose={() => onOpenChange(false)} />}
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="xl"
+      title={newBase ? "Import a spreadsheet" : "New table from CSV"}
+      description={newBase ? "OpenBase makes a new base named after the file, picks a field type for each column and adds every row." : "OpenBase reads the file, picks a field type for each column and adds every row."}
+    >
+      {open && <Body target={target} onClose={() => onOpenChange(false)} />}
     </Dialog>
   );
 }
 
-function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
+function Body({ target, onClose }: { target: ImportTarget; onClose: () => void }) {
+  // A failed import keeps the base it made, and a retry imports into that one rather than making another.
+  const [madeBase, setMadeBase] = useState<string | null>(null);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -63,6 +80,11 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
     setFailure(null);
     try {
       const trimmed = name.trim();
+      let baseId = target.baseId ?? madeBase;
+      if (!baseId) {
+        baseId = await target.createBase!(trimmed || suggested);
+        setMadeBase(baseId);
+      }
       // Left as suggested, the server picks the name itself (and makes it unique among the base's tables).
       const res = await csvApi.importNewTable(baseId, picked.file, { hasHeader, ...(trimmed && trimmed !== suggested ? { name: trimmed } : {}) });
       await qc.invalidateQueries({ queryKey: keys.base(baseId) });
@@ -80,7 +102,10 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
       <CsvFilePicker picked={picked} onPicked={onPicked} disabled={busy} />
       {picked && (
         <>
-          <Field label="Table name" hint="Leave it as it is to use the file name. A name that is taken gets a number.">
+          <Field
+            label={target.createBase ? "Name" : "Table name"}
+            hint={target.createBase ? "The new base and its table get this name." : "Leave it as it is to use the file name. A name that is taken gets a number."}
+          >
             {(ctl) => <Input {...ctl} value={name} maxLength={255} disabled={busy} onChange={(e) => setName(e.target.value)} />}
           </Field>
           <Checkbox checked={hasHeader} disabled={busy} onCheckedChange={setHasHeader} label="The first row holds the field names" />
@@ -124,7 +149,7 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
           Cancel
         </Button>
         <Button variant="primary" loading={busy} disabled={!picked || name.trim() === ""} onClick={() => void run()}>
-          Create table
+          {target.createBase ? "Import" : "Create table"}
         </Button>
       </div>
     </div>

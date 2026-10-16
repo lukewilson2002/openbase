@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COLORS, choiceClass, colorLabel, isChoiceColor } from "./colors";
+import { ACCENT_SHADES, COLORS, accentClass, accentHue, choiceClass, colorLabel, isChoiceColor } from "./colors";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
@@ -47,5 +47,33 @@ describe("choice colours", () => {
     expect(isChoiceColor("nope")).toBe(false);
     expect(colorLabel("blue")).toBe("Blue");
     expect(colorLabel("purple_dark")).toBe("Dark purple");
+  });
+});
+
+describe("accent shades", () => {
+  it("give every colour a shade that keeps a workspace tile's white initial readable", () => {
+    const css = read("../styles/index.css");
+    for (const color of COLORS) {
+      const hue = accentHue(color);
+      const shade = new RegExp(`\\.ob-hue-${hue}\\s*\\{\\s*--accent:\\s*(#[0-9a-f]{6})`, "i").exec(css)?.[1];
+      expect(shade, `.ob-hue-${hue}`).toBeDefined();
+      expect(contrast(shade!, "#ffffff"), `${color} on white`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("shares one shade between a colour and its dark variant, and falls back to gray", () => {
+    expect(accentHue("green_dark")).toBe("green");
+    expect(accentHue("chartreuse")).toBe("gray");
+    expect(accentClass("pink", "solid")).toBe("ob-hue-pink ob-solid");
+    expect(accentClass("pink", "button")).toBe("ob-hue-pink ob-tint-button");
+  });
+});
+
+describe("accent shades for the canvas", () => {
+  it("match the .ob-hue-* classes in styles/index.css", () => {
+    const css = read("../styles/index.css");
+    for (const [hue, hex] of Object.entries(ACCENT_SHADES)) {
+      expect(new RegExp(`\\.ob-hue-${hue}\\s*\\{\\s*--accent:\\s*${hex}`, "i").test(css), `.ob-hue-${hue} is ${hex}`).toBe(true);
+    }
   });
 });

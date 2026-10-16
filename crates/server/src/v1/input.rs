@@ -140,11 +140,14 @@ fn collaborators(conn: &Connection, base_id: &str, v: &Json) -> Result<Json, Str
             (None, Some(email)) => {
                 let found: Option<String> = conn
                     .query_row(
-                        "SELECT u.id FROM users u
-                         WHERE lower(u.email) = lower(?2) AND u.is_active = 1
-                           AND (u.id IN (SELECT user_id FROM workspace_members
-                                         WHERE workspace_id = (SELECT workspace_id FROM bases WHERE id = ?1))
-                                OR u.id IN (SELECT user_id FROM base_members WHERE base_id = ?1))",
+                        &format!(
+                            "SELECT u.id FROM users u
+                             JOIN workspace_members m ON m.user_id = u.id
+                             JOIN bases b ON b.workspace_id = m.workspace_id
+                             WHERE lower(u.email) = lower(?2) AND u.is_active = 1 AND b.id = ?1
+                               AND {}",
+                            crate::perm::MEMBER_CAN_OPEN_BASE
+                        ),
                         [base_id, email.trim()],
                         |r| r.get(0),
                     )

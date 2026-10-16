@@ -1,9 +1,10 @@
 //! Trash: listing, restoring and permanently purging soft-deleted items.
 //!
 //! Deleting a workspace, base, table, field, view or record only stamps
-//! `deleted_at`; the data stays until [`purge_expired`] removes it after the
-//! retention period. Cascades stamp the same value on everything trashed in
-//! one operation so restoring the root brings back exactly those items.
+//! `deleted_at` (and `deleted_by`, who did it); the data stays until
+//! [`purge_expired`] removes it after the retention period. Cascades stamp the
+//! same values on everything trashed in one operation so restoring the root
+//! brings back exactly those items. Restoring clears both.
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +28,149 @@ const PURGE_BATCH: i64 = 1000;
 
 // ----------------------------------------------------------------- listing
 
+/// How long a trashed item is kept before [`purge_expired`] removes it.
+pub fn retention_ms(trash_days: u32) -> i64 {
+    i64::from(trash_days) * 24 * 3600 * 1000
+}
+
+/// The kinds of item the trash holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Workspace,
+    Base,
+    Table,
+    Field,
+    View,
+    Record,
+}
+
+impl Kind {
+    pub fn parse(s: &str) -> AppResult<Kind> {
+        Ok(match s {
+            "workspace" => Kind::Workspace,
+            "base" => Kind::Base,
+            "table" => Kind::Table,
+            "field" => Kind::Field,
+            "view" => Kind::View,
+            "record" => Kind::Record,
+            other => {
+                return Err(AppError::bad_request(format!(
+                    "unknown trash item kind '{other}' (workspace, base, table, field, view or record)"
+                )));
+            }
+        })
+    }
+}
+
+/// What [`list_all`] is narrowed to; `None` means no restriction.
+#[derive(Debug, Clone, Default)]
+pub struct Filter {
+    pub workspace_id: Option<String>,
+    pub base_id: Option<String>,
+    pub kind: Option<Kind>,
+}
+
+impl Filter {
+    fn wants(&self, kind: Kind) -> bool {
+        self.kind.is_none_or(|k| k == kind)
+    }
+
+    fn wants_workspace(&self, id: &str) -> bool {
+        self.workspace_id.as_deref().is_none_or(|w| w == id)
+    }
+
+    fn wants_base(&self, id: &str) -> bool {
+        self.base_id.as_deref().is_none_or(|b| b == id)
+    }
+
+    fn wants_inside_bases(&self) -> bool {
+        [Kind::Table, Kind::Field, Kind::View, Kind::Record]
+            .into_iter()
+            .any(|k| self.wants(k))
+    }
+}
+
+/// The workspace (and base) a trashed item belongs to. Every item carries it,
+/// so one listing across workspaces can say where each thing came from and
+/// show the real tile of a trashed base or workspace.
+#[derive(Debug, Clone)]
+struct Place {
+    workspace_id: String,
+    workspace_name: String,
+    workspace_color: String,
+    base: Option<BasePlace>,
+}
+
+#[derive(Debug, Clone)]
+struct BasePlace {
+    id: String,
+    name: String,
+    icon: Option<String>,
+    color: String,
+}
+
+/// A trashed row before it is given its [`Place`].
+struct Found {
+    kind: &'static str,
+    id: String,
+    name: String,
+    icon: Option<String>,
+    table_id: Option<String>,
+    table_name: Option<String>,
+    deleted_at: i64,
+    deleted_by_id: Option<String>,
+    deleted_by_name: Option<String>,
+}
+
+impl Place {
+    fn item(&self, f: Found, retention_ms: i64) -> TrashItem {
+        let base = self.base.as_ref();
+        TrashItem {
+            kind: f.kind.into(),
+            id: f.id,
+            name: f.name,
+            icon: f.icon,
+            table_id: f.table_id,
+            deleted_at: f.deleted_at,
+            workspace_id: self.workspace_id.clone(),
+            workspace_name: self.workspace_name.clone(),
+            workspace_color: self.workspace_color.clone(),
+            base_id: base.map(|b| b.id.clone()),
+            base_name: base.map(|b| b.name.clone()),
+            base_icon: base.and_then(|b| b.icon.clone()),
+            base_color: base.map(|b| b.color.clone()),
+            table_name: f.table_name,
+            deleted_by_id: f.deleted_by_id,
+            deleted_by_name: f.deleted_by_name,
+            expires_at: f.deleted_at.saturating_add(retention_ms),
+        }
+    }
+}
+
+/// The place of a base (live or trashed) and its workspace.
+fn base_place(conn: &Connection, base_id: &str) -> AppResult<Place> {
+    conn.query_row(
+        "SELECT b.id, b.name, b.icon, b.color, w.id, w.name, w.color
+         FROM bases b JOIN workspaces w ON w.id = b.workspace_id WHERE b.id = ?1",
+        [base_id],
+        |r| {
+            Ok(Place {
+                base: Some(BasePlace {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    icon: r.get(2)?,
+                    color: r.get(3)?,
+                }),
+                workspace_id: r.get(4)?,
+                workspace_name: r.get(5)?,
+                workspace_color: r.get(6)?,
+            })
+        },
+    )
+    .optional()?
+    .ok_or_else(|| AppError::not_found("base"))
+}
+
 fn primary_text(v: SqlValue) -> String {
     match v {
         SqlValue::Text(s) => s,
@@ -36,80 +180,170 @@ fn primary_text(v: SqlValue) -> String {
     }
 }
 
-/// Everything in the trash of a base, newest first: tables, fields, views
-/// (only shared ones and the caller's own personal ones) and records.
-pub fn list_base(conn: &Connection, base_id: &str, user_id: &str) -> AppResult<TrashListing> {
-    let mut items: Vec<TrashItem> = Vec::new();
+/// What a caller may restore inside one live base (mirrors [`authorize`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InBase {
+    /// Creator and up: tables, fields, shared views, their own personal views
+    /// and records.
+    Everything,
+    /// Below creator: only their own personal views.
+    OwnViews,
+}
 
-    let mut stmt = conn.prepare(
-        "SELECT id, name, deleted_at, icon FROM tables
-         WHERE base_id = ?1 AND deleted_at IS NOT NULL",
-    )?;
-    for row in stmt.query_map([base_id], |r| {
-        Ok(TrashItem {
-            kind: "table".into(),
-            id: r.get(0)?,
-            name: r.get(1)?,
-            icon: r.get(3)?,
-            table_id: None,
-            deleted_at: r.get(2)?,
-        })
-    })? {
-        items.push(row?);
+/// The trash of one live base, unsorted: tables, fields, views (shared ones
+/// only with [`InBase::Everything`], and the caller's own personal ones) and
+/// the newest records.
+fn base_items(
+    conn: &Connection,
+    place: &Place,
+    user_id: &str,
+    scope: InBase,
+    filter: &Filter,
+    retention_ms: i64,
+) -> AppResult<Vec<TrashItem>> {
+    let base_id = place
+        .base
+        .as_ref()
+        .map(|b| b.id.as_str())
+        .ok_or_else(|| AppError::internal("base trash without a base"))?;
+    let everything = scope == InBase::Everything;
+    let mut found: Vec<Found> = Vec::new();
+
+    if everything && filter.wants(Kind::Table) {
+        let mut stmt = conn.prepare(
+            "SELECT t.id, t.name, t.icon, t.deleted_at, t.deleted_by, u.name
+             FROM tables t LEFT JOIN users u ON u.id = t.deleted_by
+             WHERE t.base_id = ?1 AND t.deleted_at IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([base_id], |r| {
+            Ok(Found {
+                kind: "table",
+                id: r.get(0)?,
+                name: r.get(1)?,
+                icon: r.get(2)?,
+                table_id: None,
+                table_name: None,
+                deleted_at: r.get(3)?,
+                deleted_by_id: r.get(4)?,
+                deleted_by_name: r.get(5)?,
+            })
+        })?;
+        for row in rows {
+            found.push(row?);
+        }
     }
 
-    items.extend(trashed_fields(conn, base_id)?);
-
-    let mut stmt = conn.prepare(
-        "SELECT v.id, v.name, v.table_id, v.deleted_at FROM views v
-         JOIN tables t ON t.id = v.table_id
-         WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND v.deleted_at IS NOT NULL
-           AND (v.personal_owner_id IS NULL OR v.personal_owner_id = ?2)",
-    )?;
-    for row in stmt.query_map(params![base_id, user_id], |r| {
-        Ok(TrashItem {
-            kind: "view".into(),
-            id: r.get(0)?,
-            name: r.get(1)?,
-            icon: None,
-            table_id: Some(r.get(2)?),
-            deleted_at: r.get(3)?,
-        })
-    })? {
-        items.push(row?);
+    if everything && filter.wants(Kind::Field) {
+        found.extend(trashed_fields(conn, base_id)?);
     }
 
-    let mut stmt = conn.prepare(
-        "SELECT r.id, r.table_id, r.deleted_at,
-                json_extract(r.data, '$.\"' || t.primary_field_id || '\"')
-         FROM records r JOIN tables t ON t.id = r.table_id
-         WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND r.deleted_at IS NOT NULL
-         ORDER BY r.deleted_at DESC, r.id LIMIT ?2",
-    )?;
-    for row in stmt.query_map(params![base_id, MAX_TRASHED_RECORDS_LISTED], |r| {
-        Ok(TrashItem {
-            kind: "record".into(),
-            id: r.get(0)?,
-            name: primary_text(r.get::<_, SqlValue>(3)?),
-            icon: None,
-            table_id: Some(r.get(1)?),
-            deleted_at: r.get(2)?,
-        })
-    })? {
-        items.push(row?);
+    if filter.wants(Kind::View) {
+        let mut stmt = conn.prepare(
+            "SELECT v.id, v.name, v.table_id, t.name, v.deleted_at, v.deleted_by, u.name
+             FROM views v JOIN tables t ON t.id = v.table_id
+             LEFT JOIN users u ON u.id = v.deleted_by
+             WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND v.deleted_at IS NOT NULL
+               AND ((?3 AND v.personal_owner_id IS NULL) OR v.personal_owner_id = ?2)",
+        )?;
+        let rows = stmt.query_map(params![base_id, user_id, everything], |r| {
+            Ok(Found {
+                kind: "view",
+                id: r.get(0)?,
+                name: r.get(1)?,
+                icon: None,
+                table_id: Some(r.get(2)?),
+                table_name: Some(r.get(3)?),
+                deleted_at: r.get(4)?,
+                deleted_by_id: r.get(5)?,
+                deleted_by_name: r.get(6)?,
+            })
+        })?;
+        for row in rows {
+            found.push(row?);
+        }
     }
 
+    if everything && filter.wants(Kind::Record) {
+        let mut stmt = conn.prepare(
+            "SELECT r.id, r.table_id, t.name, r.deleted_at,
+                    json_extract(r.data, '$.\"' || t.primary_field_id || '\"'),
+                    r.deleted_by, u.name
+             FROM records r JOIN tables t ON t.id = r.table_id
+             LEFT JOIN users u ON u.id = r.deleted_by
+             WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND r.deleted_at IS NOT NULL
+             ORDER BY r.deleted_at DESC, r.id LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![base_id, MAX_TRASHED_RECORDS_LISTED], |r| {
+            Ok(Found {
+                kind: "record",
+                id: r.get(0)?,
+                name: primary_text(r.get::<_, SqlValue>(4)?),
+                icon: None,
+                table_id: Some(r.get(1)?),
+                table_name: Some(r.get(2)?),
+                deleted_at: r.get(3)?,
+                deleted_by_id: r.get(5)?,
+                deleted_by_name: r.get(6)?,
+            })
+        })?;
+        for row in rows {
+            found.push(row?);
+        }
+    }
+
+    Ok(found
+        .into_iter()
+        .map(|f| place.item(f, retention_ms))
+        .collect())
+}
+
+/// Newest first; the kind and id break ties so the order is stable.
+fn newest_first(items: &mut [TrashItem]) {
     items.sort_by(|a, b| {
         b.deleted_at
             .cmp(&a.deleted_at)
             .then_with(|| a.kind.cmp(&b.kind))
             .then_with(|| a.id.cmp(&b.id))
     });
+}
+
+/// Keep only the newest [`MAX_TRASHED_RECORDS_LISTED`] records of a sorted
+/// listing (each base contributes at most that many, so the merge is exact).
+fn cap_records(items: &mut Vec<TrashItem>) {
+    let mut records = 0;
+    items.retain(|i| {
+        if i.kind != "record" {
+            return true;
+        }
+        records += 1;
+        records <= MAX_TRASHED_RECORDS_LISTED
+    });
+}
+
+/// Everything in the trash of a base, newest first: tables, fields, views
+/// (only shared ones and the caller's own personal ones) and records. The
+/// caller must be allowed to restore them (Creator).
+pub fn list_base(
+    conn: &Connection,
+    base_id: &str,
+    user_id: &str,
+    retention_ms: i64,
+) -> AppResult<TrashListing> {
+    let place = base_place(conn, base_id)?;
+    let mut items = base_items(
+        conn,
+        &place,
+        user_id,
+        InBase::Everything,
+        &Filter::default(),
+        retention_ms,
+    )?;
+    newest_first(&mut items);
     Ok(TrashListing { items })
 }
 
 /// Trashed fields of live tables. A link pair trashed together is listed once.
-fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<TrashItem>> {
+fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<Found>> {
     let all = schema::base_field_records_all(conn, base_id)?;
     let stamps: HashMap<&str, Option<i64>> = all
         .iter()
@@ -117,16 +351,29 @@ fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<TrashItem>>
         .collect();
     let by_id: HashMap<&str, &schema::FieldRecord> =
         all.iter().map(|r| (r.field.id.as_str(), r)).collect();
-    let live_tables: HashSet<String> = schema::live_tables(conn, base_id)?
+    let live_tables: HashMap<String, String> = schema::live_tables(conn, base_id)?
         .into_iter()
-        .map(|t| t.id)
+        .map(|t| (t.id, t.name))
         .collect();
+    let mut deleted_by: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT f.id, f.deleted_by, u.name FROM fields f JOIN tables t ON t.id = f.table_id
+             LEFT JOIN users u ON u.id = f.deleted_by
+             WHERE t.base_id = ?1 AND f.deleted_at IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([base_id], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?;
+        for row in rows {
+            let (id, by) = row?;
+            deleted_by.insert(id, by);
+        }
+    }
     let mut out = Vec::new();
     for r in &all {
         let Some(at) = r.deleted_at else { continue };
-        if !live_tables.contains(&r.field.table_id) {
+        let Some(table_name) = live_tables.get(&r.field.table_id) else {
             continue;
-        }
+        };
         if let FieldKind::Link(l) = &r.field.kind {
             // A pair trashed together is listed once. A link whose partner no
             // longer links back (the partner changed type) cannot be restored,
@@ -142,34 +389,63 @@ fn trashed_fields(conn: &Connection, base_id: &str) -> AppResult<Vec<TrashItem>>
                 continue;
             }
         }
-        out.push(TrashItem {
-            kind: "field".into(),
+        let (by_id, by_name) = deleted_by.remove(&r.field.id).unwrap_or_default();
+        out.push(Found {
+            kind: "field",
             id: r.field.id.clone(),
             name: r.field.name.clone(),
             icon: None,
             table_id: Some(r.field.table_id.clone()),
+            table_name: Some(table_name.clone()),
             deleted_at: at,
+            deleted_by_id: by_id,
+            deleted_by_name: by_name,
         });
     }
     Ok(out)
 }
 
-/// Trashed bases of a workspace, newest first.
-pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashListing> {
+/// Trashed bases of a workspace, newest first. The caller must be allowed to
+/// restore them (owner).
+pub fn list_workspace(
+    conn: &Connection,
+    workspace_id: &str,
+    retention_ms: i64,
+) -> AppResult<TrashListing> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, deleted_at, icon FROM bases
-         WHERE workspace_id = ?1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id",
+        "SELECT b.id, b.name, b.icon, b.color, b.deleted_at, b.deleted_by, u.name,
+                w.id, w.name, w.color
+         FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+         LEFT JOIN users u ON u.id = b.deleted_by
+         WHERE b.workspace_id = ?1 AND b.deleted_at IS NOT NULL
+         ORDER BY b.deleted_at DESC, b.id",
     )?;
     let items = stmt
         .query_map([workspace_id], |r| {
-            Ok(TrashItem {
-                kind: "base".into(),
+            let base = BasePlace {
                 id: r.get(0)?,
                 name: r.get(1)?,
-                icon: r.get(3)?,
+                icon: r.get(2)?,
+                color: r.get(3)?,
+            };
+            let found = Found {
+                kind: "base",
+                id: base.id.clone(),
+                name: base.name.clone(),
+                icon: base.icon.clone(),
                 table_id: None,
-                deleted_at: r.get(2)?,
-            })
+                table_name: None,
+                deleted_at: r.get(4)?,
+                deleted_by_id: r.get(5)?,
+                deleted_by_name: r.get(6)?,
+            };
+            let place = Place {
+                workspace_id: r.get(7)?,
+                workspace_name: r.get(8)?,
+                workspace_color: r.get(9)?,
+                base: Some(base),
+            };
+            Ok(place.item(found, retention_ms))
         })?
         .collect::<Result<_, _>>()?;
     Ok(TrashListing { items })
@@ -178,25 +454,148 @@ pub fn list_workspace(conn: &Connection, workspace_id: &str) -> AppResult<TrashL
 /// Workspaces in the trash that `user_id` owns, newest first. Once a workspace
 /// is deleted, `GET /api/workspaces/{id}/trash` answers 404 (the workspace no
 /// longer resolves), so this is how an owner finds one to restore.
-pub fn list_deleted_workspaces(conn: &Connection, user_id: &str) -> AppResult<TrashListing> {
+pub fn list_deleted_workspaces(
+    conn: &Connection,
+    user_id: &str,
+    retention_ms: i64,
+) -> AppResult<TrashListing> {
     let mut stmt = conn.prepare(
-        "SELECT w.id, w.name, w.deleted_at, w.icon FROM workspaces w
+        "SELECT w.id, w.name, w.color, w.icon, w.deleted_at, w.deleted_by, u.name
+         FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id
+         LEFT JOIN users u ON u.id = w.deleted_by
          WHERE w.deleted_at IS NOT NULL AND m.user_id = ?1 AND m.role = 'owner'
          ORDER BY w.deleted_at DESC, w.id",
     )?;
     let items = stmt
         .query_map([user_id], |r| {
-            Ok(TrashItem {
-                kind: "workspace".into(),
-                id: r.get(0)?,
-                name: r.get(1)?,
+            let place = Place {
+                workspace_id: r.get(0)?,
+                workspace_name: r.get(1)?,
+                workspace_color: r.get(2)?,
+                base: None,
+            };
+            let found = Found {
+                kind: "workspace",
+                id: place.workspace_id.clone(),
+                name: place.workspace_name.clone(),
                 icon: r.get(3)?,
                 table_id: None,
-                deleted_at: r.get(2)?,
-            })
+                table_name: None,
+                deleted_at: r.get(4)?,
+                deleted_by_id: r.get(5)?,
+                deleted_by_name: r.get(6)?,
+            };
+            Ok(place.item(found, retention_ms))
         })?
         .collect::<Result<_, _>>()?;
+    Ok(TrashListing { items })
+}
+
+/// Whether an API token's base limit (if any) lets it reach `base_id`.
+fn token_reaches_base(actor: &Actor, base_id: &str) -> bool {
+    actor
+        .token_scope
+        .as_ref()
+        .and_then(|s| s.base_ids.as_ref())
+        .is_none_or(|bases| bases.iter().any(|b| b == base_id))
+}
+
+/// `GET /api/trash`: everything the caller could restore, from every workspace
+/// they belong to, newest first. Each part applies the rule [`authorize`]
+/// applies to restoring it, so nothing is listed that restoring would refuse:
+///
+/// - deleted workspaces they own (the manage permission without a base limit);
+/// - trashed bases of live workspaces they own (the manage permission, and a
+///   base-limited token only sees its bases);
+/// - inside each live base they can open: everything with the creator role,
+///   and their own personal views at any role (nothing for a read-only token).
+///
+/// Items inside trashed bases or workspaces are not listed: they come back
+/// with the base or workspace, and cannot be restored on their own.
+pub fn list_all(
+    conn: &Connection,
+    actor: &Actor,
+    filter: &Filter,
+    retention_ms: i64,
+) -> AppResult<TrashListing> {
+    let mut items: Vec<TrashItem> = Vec::new();
+    if filter.base_id.is_none()
+        && filter.wants(Kind::Workspace)
+        && actor.require_capability(Capability::ManageUnscoped).is_ok()
+    {
+        items.extend(
+            list_deleted_workspaces(conn, &actor.user_id, retention_ms)?
+                .items
+                .into_iter()
+                .filter(|i| filter.wants_workspace(&i.id)),
+        );
+    }
+
+    let memberships: Vec<(String, String)> = {
+        let mut stmt = conn.prepare(
+            "SELECT w.id, m.role FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+             WHERE m.user_id = ?1 AND w.deleted_at IS NULL ORDER BY w.created_at, w.id",
+        )?;
+        let rows = stmt.query_map([&actor.user_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    let manages_bases = actor.require_capability(Capability::Manage).is_ok();
+    for (workspace_id, role) in memberships {
+        if !filter.wants_workspace(&workspace_id) {
+            continue;
+        }
+        if Role::parse(&role)? == Role::Owner && manages_bases && filter.wants(Kind::Base) {
+            items.extend(
+                list_workspace(conn, &workspace_id, retention_ms)?
+                    .items
+                    .into_iter()
+                    .filter(|i| filter.wants_base(&i.id) && token_reaches_base(actor, &i.id)),
+            );
+        }
+        // A read-only token may restore nothing (it acts as a viewer, whose
+        // own personal views would otherwise be listed but refused).
+        if !filter.wants_inside_bases() || actor.token_scope.as_ref().is_some_and(|s| !s.write) {
+            continue;
+        }
+        let bases: Vec<String> = {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT b.id FROM bases b
+                 JOIN workspace_members m ON m.workspace_id = b.workspace_id AND m.user_id = ?2
+                 WHERE b.workspace_id = ?1 AND b.deleted_at IS NULL AND {}
+                 ORDER BY b.position, b.created_at, b.id",
+                perm::MEMBER_CAN_OPEN_BASE
+            ))?;
+            let rows = stmt.query_map([&workspace_id, &actor.user_id], |r| r.get(0))?;
+            rows.collect::<Result<_, _>>()?
+        };
+        for base_id in bases.iter().filter(|b| filter.wants_base(b)) {
+            // The same check `authorize` makes for items in a base, including
+            // a token's base limit and a read-only token acting as viewer.
+            let Ok(role) = perm::require_base(conn, actor, base_id, Role::Viewer) else {
+                continue;
+            };
+            let scope = if role >= Role::Creator {
+                InBase::Everything
+            } else {
+                InBase::OwnViews
+            };
+            if scope == InBase::OwnViews && !filter.wants(Kind::View) {
+                continue;
+            }
+            let place = base_place(conn, base_id)?;
+            items.extend(base_items(
+                conn,
+                &place,
+                &actor.user_id,
+                scope,
+                filter,
+                retention_ms,
+            )?);
+        }
+    }
+    newest_first(&mut items);
+    cap_records(&mut items);
     Ok(TrashListing { items })
 }
 
@@ -235,25 +634,6 @@ fn workspace_role_any(
     role.as_deref().map(Role::parse).transpose()
 }
 
-/// Role of the user on a base even while the base is in the trash.
-fn base_role_any(conn: &Connection, user_id: &str, base_id: &str) -> AppResult<Option<Role>> {
-    let row: Option<(Option<String>, Option<String>)> = conn
-        .query_row(
-            "SELECT (SELECT role FROM workspace_members WHERE workspace_id = b.workspace_id AND user_id = ?2),
-                    (SELECT role FROM base_members WHERE base_id = b.id AND user_id = ?2)
-             FROM bases b WHERE b.id = ?1",
-            [base_id, user_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()?;
-    let Some((ws, base)) = row else {
-        return Ok(None);
-    };
-    let ws = ws.as_deref().map(Role::parse).transpose()?;
-    let base = base.as_deref().map(Role::parse).transpose()?;
-    Ok(ws.max(base))
-}
-
 /// Resolve `{kind, id}` to a [`Target`] and check the actor may restore it:
 /// Owner for workspaces and bases (session only), Creator for items inside a
 /// base, the owner for their own personal views.
@@ -286,7 +666,7 @@ pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppR
             {
                 return Err(AppError::not_found("base"));
             }
-            match base_role_any(conn, &actor.user_id, id)? {
+            match perm::base_role_including_trashed(conn, &actor.user_id, id)? {
                 None => Err(AppError::not_found("base")),
                 Some(r) if r < Role::Owner => Err(AppError::forbidden(
                     "this action requires the owner role on this base",
@@ -402,7 +782,8 @@ pub fn restore(tx: &Transaction, target: &Target, user_id: Option<&str>) -> AppR
 
 fn restore_workspace(tx: &Transaction, id: &str) -> AppResult<Restored> {
     let n = tx.execute(
-        "UPDATE workspaces SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+        "UPDATE workspaces SET deleted_at = NULL, deleted_by = NULL
+         WHERE id = ?1 AND deleted_at IS NOT NULL",
         [id],
     )?;
     if n == 0 {
@@ -428,7 +809,10 @@ fn restore_base(tx: &Transaction, id: &str) -> AppResult<Restored> {
     if !ws_live {
         return Err(AppError::conflict("restore the workspace first"));
     }
-    tx.execute("UPDATE bases SET deleted_at = NULL WHERE id = ?1", [id])?;
+    tx.execute(
+        "UPDATE bases SET deleted_at = NULL, deleted_by = NULL WHERE id = ?1",
+        [id],
+    )?;
     Ok(Restored {
         base_ids: vec![id.to_string()],
         base_changed: true,
@@ -463,7 +847,7 @@ fn restore_table(tx: &Transaction, id: &str) -> AppResult<Restored> {
         table.name.clone()
     };
     tx.execute(
-        "UPDATE tables SET deleted_at = NULL, name = ?2 WHERE id = ?1",
+        "UPDATE tables SET deleted_at = NULL, deleted_by = NULL, name = ?2 WHERE id = ?1",
         params![id, name],
     )?;
     let mut touched = Touched::of(id);
@@ -500,7 +884,10 @@ fn restore_view(tx: &Transaction, id: &str) -> AppResult<Restored> {
     if table.deleted_at.is_some() {
         return Err(AppError::conflict("restore the table first"));
     }
-    tx.execute("UPDATE views SET deleted_at = NULL WHERE id = ?1", [id])?;
+    tx.execute(
+        "UPDATE views SET deleted_at = NULL, deleted_by = NULL WHERE id = ?1",
+        [id],
+    )?;
     Ok(Restored {
         base_ids: vec![table.base_id],
         schema: Some(Touched::of(&table.id)),

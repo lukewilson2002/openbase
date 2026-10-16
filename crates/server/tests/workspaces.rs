@@ -1,5 +1,5 @@
-//! Workspaces: CRUD, membership, last-owner protection, base-level sharing in
-//! the workspace list, and the role matrix.
+//! Workspaces: CRUD, membership, base access (all bases or a picked list),
+//! last-owner protection, and the role matrix.
 
 mod common;
 mod schema_support;
@@ -62,52 +62,130 @@ async fn workspace_name_validation() {
 }
 
 #[tokio::test]
-async fn list_includes_bases_with_effective_role() {
+async fn list_includes_bases_with_the_member_role_people_and_counts() {
     let f = Fixture::new().await;
     let editor = f.member("ed@example.com", Role::Editor);
-    // direct base share raises the effective role to the max of both
-    add_base_member(&f.app, &f.base_id, &editor, Role::Creator);
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/workspaces/{}/invites", f.ws),
+            json!({ "role": "viewer", "email": "new@example.com" }),
+        )
+        .await
+        .assert_status(201);
     let list = f.app.get(&editor, "/api/workspaces").await;
     list.assert_status(200);
-    assert_eq!(list.body[0]["role"], "editor");
-    assert_eq!(list.body[0]["bases"][0]["id"], f.base_id.as_str());
-    assert_eq!(list.body[0]["bases"][0]["role"], "creator");
-    assert_eq!(list.body[0]["bases"][0]["name"], "CRM");
+    let ws = &list.body[0];
+    assert_eq!(ws["role"], "editor");
+    assert_eq!(ws["member_count"], 2);
+    assert_eq!(ws["pending_invite_count"], 1);
+    let base = &ws["bases"][0];
+    assert_eq!(base["id"], f.base_id.as_str());
+    assert_eq!(base["role"], "editor");
+    assert_eq!(base["name"], "CRM");
+    let people = base["people"].as_array().unwrap();
+    assert_eq!(people.len(), 3, "{people:?}");
+    assert_eq!(people[0]["email"], "owner@example.com");
+    assert_eq!(people[0]["pending"], false);
+    assert_eq!(people[1]["email"], "ed@example.com");
+    assert_eq!(people[1]["role"], "editor");
+    assert_eq!(people[2]["email"], "new@example.com");
+    assert_eq!(people[2]["name"], "new@example.com");
+    assert_eq!(people[2]["pending"], true);
+    assert!(people[2]["user_id"].is_null());
 }
 
 #[tokio::test]
-async fn base_sharing_shows_only_the_shared_base_with_null_workspace_role() {
+async fn base_summaries_list_live_tables_in_sidebar_order() {
+    let f = Fixture::new().await;
+    let mut ids = Vec::new();
+    for name in ["Deals", "Old"] {
+        let res = f
+            .app
+            .post(
+                &f.owner,
+                &format!("/api/bases/{}/tables", f.base_id),
+                json!({ "name": name }),
+            )
+            .await;
+        res.assert_status(201);
+        ids.push(res.body["id"].as_str().unwrap().to_string());
+    }
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/tables/{}", ids[0]),
+            json!({ "position": -1.0, "icon": "handshake" }),
+        )
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{}", ids[1]))
+        .await
+        .assert_status(200);
+
+    let list = f.app.get(&f.owner, "/api/workspaces").await;
+    list.assert_status(200);
+    let tables = list.body[0]["bases"][0]["tables"].as_array().unwrap();
+    let names: Vec<&str> = tables.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Deals", "Table 1"], "{tables:?}");
+    assert_eq!(tables[0]["id"], ids[0].as_str());
+    assert_eq!(tables[0]["icon"], "handshake");
+    assert_eq!(tables[1]["id"], f.table_id.as_str());
+}
+
+#[tokio::test]
+async fn a_limited_member_sees_only_their_bases() {
     let f = Fixture::new().await;
     let other = base(&f.app, &f.owner, &f.ws, "Secret").await;
+    let other_id = other["id"].as_str().unwrap();
     let guest = f.base_guest("guest@example.com", Role::Viewer);
 
     let list = f.app.get(&guest, "/api/workspaces").await;
     list.assert_status(200);
     let ws = &list.body[0];
     assert_eq!(ws["id"], f.ws.as_str());
-    assert!(ws["role"].is_null(), "no workspace role");
+    assert_eq!(ws["role"], "viewer");
     let bases = ws["bases"].as_array().unwrap();
-    assert_eq!(bases.len(), 1, "only the shared base is listed");
+    assert_eq!(bases.len(), 1, "only the listed base is shown");
     assert_eq!(bases[0]["id"], f.base_id.as_str());
     assert_eq!(bases[0]["role"], "viewer");
+    // The owner sees the limited member on the shared base only.
+    let owner_list = f.app.get(&f.owner, "/api/workspaces").await;
+    let people_of = |id: &str| -> Vec<String> {
+        owner_list.body[0]["bases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["id"] == id)
+            .unwrap()["people"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["email"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert!(people_of(&f.base_id).contains(&"guest@example.com".to_string()));
+    assert!(!people_of(other_id).contains(&"guest@example.com".to_string()));
 
-    // access follows the listing: shared base yes, the sibling base no
+    // access follows the listing: listed base yes, the sibling base no
     f.app
         .get(&guest, &format!("/api/bases/{}", f.base_id))
         .await
         .assert_status(200);
     f.app
-        .get(
-            &guest,
-            &format!("/api/bases/{}", other["id"].as_str().unwrap()),
-        )
+        .get(&guest, &format!("/api/bases/{other_id}"))
         .await
         .assert_status(404);
-    // and no workspace-level access
+    f.app
+        .get(&guest, &format!("/api/bases/{other_id}/members"))
+        .await
+        .assert_status(404);
+    // as a workspace member they may see who else is in it, but not add bases
     f.app
         .get(&guest, &format!("/api/workspaces/{}/members", f.ws))
         .await
-        .assert_status(404);
+        .assert_status(200);
     f.app
         .post(
             &guest,
@@ -115,9 +193,83 @@ async fn base_sharing_shows_only_the_shared_base_with_null_workspace_role() {
             json!({ "name": "nope" }),
         )
         .await
+        .assert_status(403);
+}
+
+#[tokio::test]
+async fn an_all_bases_member_sees_new_bases_and_a_limited_one_does_not() {
+    let f = Fixture::new().await;
+    let all = f.member("all@example.com", Role::Viewer);
+    let limited = f.base_guest("lim@example.com", Role::Viewer);
+    let new = base(&f.app, &f.owner, &f.ws, "Later").await;
+    let new_id = new["id"].as_str().unwrap();
+    let ids = |body: &serde_json::Value| -> Vec<String> {
+        body[0]["bases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let list = f.app.get(&all, "/api/workspaces").await;
+    assert!(ids(&list.body).contains(&new_id.to_string()));
+    f.app
+        .get(&all, &format!("/api/bases/{new_id}"))
+        .await
+        .assert_status(200);
+    let list = f.app.get(&limited, "/api/workspaces").await;
+    assert_eq!(ids(&list.body), vec![f.base_id.clone()]);
+    f.app
+        .get(&limited, &format!("/api/bases/{new_id}"))
+        .await
         .assert_status(404);
 }
 
+#[tokio::test]
+async fn a_limited_creator_can_open_the_base_they_create() {
+    let f = Fixture::new().await;
+    let creator = f.base_guest("cr@example.com", Role::Creator);
+    let r = f
+        .app
+        .post(
+            &creator,
+            &format!("/api/workspaces/{}/bases", f.ws),
+            json!({ "name": "Mine" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["role"], "creator");
+    let id = r.body["id"].as_str().unwrap();
+    f.app
+        .get(&creator, &format!("/api/bases/{id}"))
+        .await
+        .assert_status(200);
+    let members = f
+        .app
+        .get(&f.owner, &format!("/api/workspaces/{}/members", f.ws))
+        .await;
+    let me = members
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["email"] == "cr@example.com")
+        .unwrap()
+        .clone();
+    assert_eq!(me["all_bases"], false);
+    assert_eq!(me["base_ids"], json!([f.base_id, id]));
+    // a duplicate is theirs too
+    let r = f
+        .app
+        .post(&creator, &format!("/api/bases/{id}/duplicate"), json!({}))
+        .await;
+    r.assert_status(201);
+    let copy = r.body["id"].as_str().unwrap();
+    f.app
+        .get(&creator, &format!("/api/bases/{copy}"))
+        .await
+        .assert_status(200);
+}
 #[tokio::test]
 async fn deleted_workspace_and_bases_disappear_from_lists() {
     let f = Fixture::new().await;
@@ -142,6 +294,127 @@ async fn deleted_workspace_and_bases_disappear_from_lists() {
         .assert_status(200);
     let list = g.app.get(&g.owner, "/api/workspaces").await;
     assert_eq!(list.body[0]["bases"], json!([]));
+}
+
+#[tokio::test]
+async fn new_workspaces_get_a_colour_their_creator_is_not_using_yet() {
+    let app = new_app();
+    let alice = app.user("alice@example.com", "Alice");
+    let create = async |c: &common::Client, body: serde_json::Value| {
+        let r = app.post(c, "/api/workspaces", body).await;
+        r.assert_status(201);
+        r.body
+    };
+    let first = create(&alice, json!({ "name": "Household" })).await;
+    let second = create(&alice, json!({ "name": "Side business" })).await;
+    let third = create(&alice, json!({ "name": "Personal" })).await;
+    assert_eq!(
+        [&first["color"], &second["color"], &third["color"]],
+        ["green", "blue", "gray"]
+    );
+    // Someone else's workspaces do not count: Bob starts at the beginning.
+    let bob = app.user("bob@example.com", "Bob");
+    assert_eq!(
+        create(&bob, json!({ "name": "Bob's" })).await["color"],
+        "green"
+    );
+
+    // A colour that is freed up is handed out again before the next new one.
+    app.patch(
+        &alice,
+        &format!("/api/workspaces/{}", second["id"].as_str().unwrap()),
+        json!({ "color": "red_dark" }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(
+        create(&alice, json!({ "name": "Next" })).await["color"],
+        "blue"
+    );
+
+    // An explicit colour is kept, and must be one of the palette.
+    assert_eq!(
+        create(&alice, json!({ "name": "Picked", "color": "teal_dark" })).await["color"],
+        "teal_dark"
+    );
+    let r = app
+        .post(
+            &alice,
+            "/api/workspaces",
+            json!({ "name": "Bad", "color": "mauve" }),
+        )
+        .await;
+    r.assert_status(400);
+    assert_eq!(r.body["error"]["code"], "bad_request");
+
+    let list = app.get(&alice, "/api/workspaces").await;
+    let mut colors: Vec<&str> = list
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["color"].as_str().unwrap())
+        .collect();
+    colors.sort_unstable();
+    assert_eq!(colors, ["blue", "gray", "green", "red_dark", "teal_dark"]);
+}
+
+#[tokio::test]
+async fn workspace_colour_can_be_changed_by_owners_and_shows_on_bases_and_invites() {
+    let f = Fixture::new().await;
+    let path = format!("/api/workspaces/{}", f.ws);
+    let r = f
+        .app
+        .patch(&f.owner, &path, json!({ "color": "purple" }))
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["color"], "purple");
+    // Absent or null leaves it alone; an unknown colour is refused.
+    let r = f
+        .app
+        .patch(&f.owner, &path, json!({ "name": "Renamed", "color": null }))
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["color"], "purple");
+    f.app
+        .patch(&f.owner, &path, json!({ "color": "mauve" }))
+        .await
+        .assert_status(400);
+    let creator = f.member("cr@example.com", Role::Creator);
+    f.app
+        .patch(&creator, &path, json!({ "color": "red" }))
+        .await
+        .assert_status(403);
+
+    let schema = f
+        .app
+        .get(&f.owner, &format!("/api/bases/{}", f.base_id))
+        .await;
+    assert_eq!(schema.body["workspace_name"], "Renamed");
+    assert_eq!(schema.body["workspace_color"], "purple");
+
+    let invite = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/workspaces/{}/invites", f.ws),
+            json!({ "role": "viewer" }),
+        )
+        .await;
+    invite.assert_status(201);
+    let token = invite.body["url"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
+    let preview = f
+        .app
+        .get(&f.app.anon(), &format!("/api/invites/by-token/{token}"))
+        .await;
+    preview.assert_status(200);
+    assert_eq!(preview.body["target_color"], "purple");
 }
 
 #[tokio::test]
@@ -309,6 +582,14 @@ async fn set_role_validates_role_and_member() {
         .await
         .assert_status(400);
     f.app
+        .patch(
+            &f.owner,
+            &path(&ed_id),
+            json!({ "base_ids": ["appNOSUCH"] }),
+        )
+        .await
+        .assert_status(400);
+    f.app
         .patch(&f.owner, &path("usrNOSUCH"), json!({ "role": "viewer" }))
         .await
         .assert_status(404);
@@ -465,4 +746,198 @@ async fn member_changes_notify_bases_of_the_workspace() {
     let env = rx.try_recv().expect("BaseChanged event");
     assert_eq!(env.event, ob_core::api::events::BaseEvent::BaseChanged);
     assert_eq!(env.user_id.as_deref(), f.owner.user_id.as_deref());
+}
+
+fn member_of(body: &serde_json::Value, email: &str) -> serde_json::Value {
+    body.as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["email"] == email)
+        .cloned()
+        .unwrap_or_else(|| panic!("{email} not in {body}"))
+}
+
+#[tokio::test]
+async fn patch_member_changes_base_access_and_tells_the_bases() {
+    let f = Fixture::new().await;
+    let second = base(&f.app, &f.owner, &f.ws, "Ops").await;
+    let second_id = second["id"].as_str().unwrap().to_string();
+    let ed = f.member("ed@example.com", Role::Editor);
+    let path = format!(
+        "/api/workspaces/{}/members/{}",
+        f.ws,
+        ed.user_id.clone().unwrap()
+    );
+    let members_path = format!("/api/workspaces/{}/members", f.ws);
+    let m = member_of(
+        &f.app.get(&f.owner, &members_path).await.body,
+        "ed@example.com",
+    );
+    assert_eq!(m["all_bases"], true);
+    assert_eq!(m["base_ids"], json!([]));
+
+    let mut first_rx = f.app.state.events.subscribe(&f.base_id);
+    let mut second_rx = f.app.state.events.subscribe(&second_id);
+    f.app
+        .patch(&f.owner, &path, json!({ "base_ids": [second_id] }))
+        .await
+        .assert_status(200);
+    // Both bases are told: the one they lost (streams re-check access) and the other.
+    for rx in [&mut first_rx, &mut second_rx] {
+        let env = rx.try_recv().expect("BaseChanged event");
+        assert_eq!(env.event, ob_core::api::events::BaseEvent::BaseChanged);
+    }
+    let m = member_of(
+        &f.app.get(&f.owner, &members_path).await.body,
+        "ed@example.com",
+    );
+    assert_eq!(m["all_bases"], false);
+    assert_eq!(m["base_ids"], json!([second_id]));
+    assert_eq!(m["role"], "editor");
+    f.app
+        .get(&ed, &format!("/api/bases/{}", f.base_id))
+        .await
+        .assert_status(404);
+    f.app
+        .get(&ed, &format!("/api/bases/{second_id}"))
+        .await
+        .assert_status(200);
+
+    // A role change alone keeps the list.
+    f.app
+        .patch(&f.owner, &path, json!({ "role": "viewer" }))
+        .await
+        .assert_status(200);
+    let m = member_of(
+        &f.app.get(&f.owner, &members_path).await.body,
+        "ed@example.com",
+    );
+    assert_eq!(
+        (m["role"].as_str(), m["base_ids"].clone()),
+        (Some("viewer"), json!([second_id]))
+    );
+
+    // A limited member keeps at least one base.
+    for body in [
+        json!({ "base_ids": [] }),
+        json!({ "all_bases": false, "base_ids": [] }),
+    ] {
+        f.app.patch(&f.owner, &path, body).await.assert_status(400);
+    }
+    // Bases of another workspace are refused.
+    let (_, foreign) = f.app.workspace_with_base(&f.owner, "Elsewhere");
+    f.app
+        .patch(&f.owner, &path, json!({ "base_ids": [foreign] }))
+        .await
+        .assert_status(400);
+
+    // Back to every base.
+    f.app
+        .patch(&f.owner, &path, json!({ "all_bases": true }))
+        .await
+        .assert_status(200);
+    let m = member_of(
+        &f.app.get(&f.owner, &members_path).await.body,
+        "ed@example.com",
+    );
+    assert_eq!(m["all_bases"], true);
+    f.app
+        .get(&ed, &format!("/api/bases/{}", f.base_id))
+        .await
+        .assert_status(200);
+    // Switching an all-bases member to limited needs the list.
+    f.app
+        .patch(&f.owner, &path, json!({ "all_bases": false }))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
+async fn owners_always_have_every_base() {
+    let f = Fixture::new().await;
+    let second = f.member("second@example.com", Role::Owner);
+    let path = format!(
+        "/api/workspaces/{}/members/{}",
+        f.ws,
+        second.user_id.clone().unwrap()
+    );
+    for body in [
+        json!({ "base_ids": [f.base_id] }),
+        json!({ "all_bases": false, "base_ids": [f.base_id] }),
+        json!({ "role": "owner", "base_ids": [f.base_id] }),
+    ] {
+        f.app.patch(&f.owner, &path, body).await.assert_status(400);
+    }
+    // Making a limited member an owner gives them every base.
+    let limited = f.base_guest("lim@example.com", Role::Editor);
+    let other = base(&f.app, &f.owner, &f.ws, "Other").await;
+    f.app
+        .patch(
+            &f.owner,
+            &format!(
+                "/api/workspaces/{}/members/{}",
+                f.ws,
+                limited.user_id.clone().unwrap()
+            ),
+            json!({ "role": "owner" }),
+        )
+        .await
+        .assert_status(200);
+    let m = member_of(
+        &f.app
+            .get(&f.owner, &format!("/api/workspaces/{}/members", f.ws))
+            .await
+            .body,
+        "lim@example.com",
+    );
+    assert_eq!(
+        (m["role"].as_str(), &m["all_bases"]),
+        (Some("owner"), &json!(true))
+    );
+    f.app
+        .get(
+            &limited,
+            &format!("/api/bases/{}", other["id"].as_str().unwrap()),
+        )
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn member_lists_only_show_non_owners_the_bases_they_can_open() {
+    let f = Fixture::new().await;
+    let secret = base(&f.app, &f.owner, &f.ws, "Secret").await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    // `both` can open the shared base and the secret one; `guest` only the shared one.
+    let both = f.base_guest("both@example.com", Role::Editor);
+    add_base_member(&f.app, &secret, &both, Role::Editor);
+    let guest = f.base_guest("guest@example.com", Role::Viewer);
+    let creator = f.app.user("creator@example.com", "Creator");
+    add_ws_member(&f.app, &f.ws, &creator, Role::Creator);
+
+    let bases_of =
+        |body: &serde_json::Value| member_of(body, "both@example.com")["base_ids"].clone();
+    let ws_members = format!("/api/workspaces/{}/members", f.ws);
+    let base_members = format!("/api/bases/{}/members", f.base_id);
+    for path in [&ws_members, &base_members] {
+        let r = f.app.get(&guest, path).await;
+        r.assert_status(200);
+        assert_eq!(bases_of(&r.body), json!([f.base_id]), "{path}");
+        // An all-bases member who is not an owner can open both, so sees both.
+        let r = f.app.get(&creator, path).await;
+        assert_eq!(bases_of(&r.body), json!([f.base_id, secret]), "{path}");
+        let r = f.app.get(&f.owner, path).await;
+        assert_eq!(bases_of(&r.body), json!([f.base_id, secret]), "{path}");
+    }
+    // An owner's token limited to the shared base sees what that token can open.
+    let token = f
+        .app
+        .api_token(
+            &f.owner,
+            json!({"name": "lim", "write": true, "manage": true, "base_ids": [f.base_id]}),
+        )
+        .await;
+    let r = f.app.get(&token, &base_members).await;
+    r.assert_status(200);
+    assert_eq!(bases_of(&r.body), json!([f.base_id]));
 }

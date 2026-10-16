@@ -22,7 +22,7 @@ test("loads / from the embedded build without console errors or CSP violations",
   expect(res?.headers()["x-content-type-options"]).toBe("nosniff");
 
   // A fresh instance shows the first-run screen (an already configured one shows the login screen).
-  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome to your OpenBase|Log in/ })).toBeVisible();
   // The stylesheet and script of the app were loaded from the server's own origin.
   const origins = await page.evaluate(() => [...document.querySelectorAll("script[src], link[rel=stylesheet]")].map((n) => (n as HTMLScriptElement).src || (n as HTMLLinkElement).href));
   expect(origins.length).toBeGreaterThan(0);
@@ -33,7 +33,7 @@ test("loads / from the embedded build without console errors or CSP violations",
 
 test("the favicons, touch icon and web app manifest are linked, load and decode without CSP violations", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome to your OpenBase|Log in/ })).toBeVisible();
   // The OpenBase mark is on the page, drawn inline (no image request, nothing for the CSP to block).
   await expect(page.getByRole("img", { name: "OpenBase" })).toBeVisible();
 
@@ -101,7 +101,7 @@ test("serves client-side routes from the app shell and real 404s for missing ass
   expect(missing.status()).toBe(404);
   expect(missing.headers()["content-type"] ?? "").not.toContain("text/html");
   await page.goto("/no/such/page");
-  await expect(page.getByRole("heading", { name: /Set up OpenBase|Log in|Page not found/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome to your OpenBase|Log in|Page not found/ })).toBeVisible();
 });
 
 test("unknown API paths return the JSON error format", async ({ request }) => {

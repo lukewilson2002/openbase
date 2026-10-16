@@ -1,19 +1,20 @@
 /** Toolbar control for view-type specific settings (stack field, date fields, scale...). */
 import type { ReactNode } from "react";
-import { SlidersHorizontal } from "lucide-react";
 import type { Field } from "@/api/types";
-import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { Field as FormField, Select } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toolButtonClass } from "@/components/viewbar/ViewBar";
 
-export function ViewSettings({ label = "Settings", note, children }: { label?: string; note?: string; children: ReactNode }) {
+/**
+ * The view's own setting as a toolbar tool. Worded like the other tools and tinted once it is set
+ * ("Stacked by How often"), the way "Sorted by Who" is; in the phone's tools menu it sits under them.
+ */
+export function ViewSettings({ label = "Settings", active, note, children }: { label?: string; active?: boolean; note?: string; children: ReactNode }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-medium text-fg hover:bg-hover">
-          <SlidersHorizontal aria-hidden className="size-4" />
-          <span className="hidden sm:inline">{label}</span>
-          <span className="sr-only sm:hidden">{label}</span>
+        <button type="button" className={toolButtonClass(active)}>
+          {label}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex max-h-[min(34rem,80dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-y-auto p-3">
@@ -61,27 +62,5 @@ export function FieldSelect({
         </Select>
       )}
     </FormField>
-  );
-}
-
-/** Small field name with its type icon (for lists in pickers). */
-export function FieldLabel({ field }: { field: Field }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <FieldTypeIcon type={field.type} /> {field.name}
-    </span>
-  );
-}
-
-/** Shown in place of a view that needs a field choice first. */
-export function SetupPrompt({ title, description, children }: { title: string; description: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-line bg-surface p-5 shadow-pop">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="text-[0.8125rem] text-muted">{description}</p>
-        {children}
-      </div>
-    </div>
   );
 }

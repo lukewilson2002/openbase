@@ -1,14 +1,13 @@
-//! Bases: create, schema, update, delete, duplicate, sharing.
+//! Bases: create, schema, update, delete, duplicate, and the workspace
+//! members who can open a base.
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::{get, patch, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use ob_core::api::events::BaseEvent;
 use ob_core::api::schema::BaseSchema;
-use ob_core::api::workspaces::{
-    Collaborator, CreateBase, DuplicateBase, Member, UpdateBase, UpdateMember,
-};
+use ob_core::api::workspaces::{Collaborator, CreateBase, DuplicateBase, Member, UpdateBase};
 
 use crate::api::schema_support::{OptionalJson, ok, publish};
 use crate::auth::{Actor, Capability};
@@ -25,10 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/bases/{id}/duplicate", post(duplicate))
         .route("/api/bases/{id}/collaborators", get(collaborators))
         .route("/api/bases/{id}/members", get(list_members))
-        .route(
-            "/api/bases/{id}/members/{user_id}",
-            patch(set_member_role).delete(remove_member),
-        )
+        .route("/api/bases/{id}/members/{user_id}", delete(remove_member))
 }
 
 async fn create(
@@ -99,7 +95,7 @@ async fn remove(
         .db
         .write(move |tx| {
             perm::require_base(tx, &actor, &id, Role::Owner)?;
-            bases::soft_delete(tx, &id)
+            bases::soft_delete(tx, &id, &actor.user_id)
         })
         .await?;
     publish(&state, &headers, &who, &base_id, BaseEvent::BaseChanged);
@@ -163,6 +159,7 @@ async fn collaborators(
     Ok(Json(out))
 }
 
+/// Anyone who can open the base may see who else can.
 async fn list_members(
     State(state): State<AppState>,
     actor: Actor,
@@ -172,36 +169,24 @@ async fn list_members(
     let out = state
         .db
         .read(move |c| {
-            perm::require_base(c, &actor, &id, Role::Owner)?;
-            bases::members(c, &id)
+            perm::require_base(c, &actor, &id, Role::Viewer)?;
+            let base = bases::live_base(c, &id)?;
+            let mut members = bases::members(c, &base)?;
+            crate::api::workspaces::hide_unopenable_bases(
+                c,
+                &actor,
+                &base.workspace_id,
+                &mut members,
+            )?;
+            Ok(members)
         })
         .await?;
     Ok(Json(out))
 }
 
-async fn set_member_role(
-    State(state): State<AppState>,
-    actor: Actor,
-    headers: HeaderMap,
-    Path((id, user_id)): Path<(String, String)>,
-    ApiJson(body): ApiJson<UpdateMember>,
-) -> AppResult<Json<serde_json::Value>> {
-    actor.require_capability(Capability::Manage)?;
-    let role = Role::parse(&body.role)?;
-    let who = actor.clone();
-    let base_id = id.clone();
-    state
-        .db
-        .write(move |tx| {
-            perm::require_base(tx, &actor, &id, Role::Owner)?;
-            bases::set_member_role(tx, &id, &user_id, role)
-        })
-        .await?;
-    publish(&state, &headers, &who, &base_id, BaseEvent::BaseChanged);
-    Ok(ok())
-}
-
-/// Owners remove members; a member may also remove themself.
+/// Take this base off a member's list of bases: owners for anyone, a member
+/// for themself (leaving the base). Roles and all-bases access are changed
+/// on the workspace (`PATCH /api/workspaces/{id}/members/{user_id}`).
 async fn remove_member(
     State(state): State<AppState>,
     actor: Actor,
@@ -220,7 +205,8 @@ async fn remove_member(
                 Role::Owner
             };
             perm::require_base(tx, &actor, &id, min)?;
-            bases::remove_member(tx, &id, &user_id)
+            let base = bases::live_base(tx, &id)?;
+            bases::remove_member(tx, &base, &user_id)
         })
         .await?;
     publish(&state, &headers, &who, &base_id, BaseEvent::BaseChanged);

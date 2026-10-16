@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { recordKeys, recordsApi, schemaApi } from "@/api/records";
@@ -28,6 +27,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { ViewBar } from "@/components/viewbar/ViewBar";
+import { itemsLabel } from "@/views/common/cardFields";
+import { EmptyRecords } from "@/views/common/EmptyRecords";
+import { viewHugAreaClass, viewHugCardClass, viewHugFooterClass } from "@/views/common/ViewFrame";
 import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
@@ -41,7 +43,7 @@ import type { CellEdit, CellModel, EditorHostProps, GridAdapterProps, GridColumn
 import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
 import { BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
 import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
-import { GlideGrid } from "./glide/GlideGrid";
+import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
 import { buildRowMap, groupPathKeys } from "./rowMap";
 import { UndoStack, type CellChange } from "./undo";
 import { useGridData } from "./useGridData";
@@ -116,7 +118,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // ---- formatting and editing environment ------------------------------------------------------
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id) }), [timeZone, userNames]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id) }), [timeZone, userNames, emails]);
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null }),
     [schema.id, table.id, people, timeZone, canManageFields, format, me.data?.id],
@@ -490,7 +492,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       if (row >= 0) {
         gridRef.current?.scrollToRow(row);
         gridRef.current?.selectCell(0, row);
-        // The keyboard is still on the "Add record" button (or nowhere) that was used: hand it to the
+        // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
         // grid, or the new row looks selected while typing goes to the button, and a click on that
         // already selected cell would not move the focus either.
         if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
@@ -629,12 +631,13 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const dark = resolved === "dark";
   const total = data.total;
   const rowCountForGrid = rowMap.length;
+  const empty = !data.loading && total === 0 && !data.error;
   const gridProps: GridAdapterProps = {
     columns,
     rowCount: rowCountForGrid,
     rowHeight,
     freezeColumns,
-    showSummary: true,
+    showSummary: !empty,
     rowNumber,
     searchTerm: debouncedSearch,
     dark,
@@ -671,6 +674,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   };
 
   const colSpec = colMenu ? columns[colMenu.index] : undefined;
+  // The card ends where the rows end (header, rows, summary row and its border); past the page's
+  // height it scrolls inside. With no records it keeps only the header, so fields can still be added,
+  // and the empty message sits under it: the canvas would otherwise draw blank rows and an empty
+  // summary bar that look broken.
+  const gridHeight = empty ? undefined : Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2, total === 0 ? 180 : 0);
 
   return (
     <EditorEnvProvider value={editorEnv}>
@@ -693,11 +701,12 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchOpen={searchOpen}
           onSearchOpenChange={setSearchOpen}
           searchInputRef={searchInputRef}
-          onAddField={() => setFieldDialog({ mode: "create" })}
-          canManageFields={canManageFields}
+          onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
+          onAdd={canEdit ? () => void addRecord() : undefined}
         />
-        <div className="relative min-h-0 flex-1 border-t border-line bg-surface">
+        <div className={viewHugAreaClass}>
+        <div className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
@@ -713,27 +722,29 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
               </div>
             </div>
           ) : (
-            <GlideGrid ref={gridRef} {...gridProps} />
+            <div className={empty ? "shrink-0" : "min-h-0 flex-1"} style={empty ? { height: GRID_HEADER_HEIGHT + 1 } : undefined}>
+              <GlideGrid ref={gridRef} {...gridProps} />
+            </div>
           )}
           {data.loading && total === 0 && (
             <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center">
               <Spinner className="size-5" label="Loading records" />
             </div>
           )}
-          {!data.loading && total === 0 && !data.error && (
-            <p className="pointer-events-none absolute inset-x-0 top-14 text-center text-[0.8125rem] text-muted">{debouncedSearch ? "No records match your search." : "No records yet."}</p>
+          {empty && (
+            <div className="border-t border-line">
+              <EmptyRecords searching={!!debouncedSearch} onAdd={canEdit ? () => void addRecord() : undefined} />
+            </div>
           )}
         </div>
-        <div className="flex h-9 shrink-0 items-center gap-3 border-t border-line bg-subtle px-3 text-[0.8125rem] text-muted">
-          <Button size="sm" variant="ghost" disabled={!canEdit} onClick={() => void addRecord()}>
-            <Plus aria-hidden className="size-4" /> Add record
-          </Button>
+        <div className={viewHugFooterClass}>
           <span aria-live="polite">
-            {total.toLocaleString()} record{total === 1 ? "" : "s"}
+            {itemsLabel(total)}
             {debouncedSearch ? " found" : ""}
           </span>
           {grouped && <span className="hidden sm:inline">· grouped</span>}
           {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
+        </div>
         </div>
       </div>
 

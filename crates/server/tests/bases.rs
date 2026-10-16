@@ -1,5 +1,5 @@
-//! Bases: creation defaults, schema endpoint, update, delete, base-level
-//! members and collaborators, role matrix.
+//! Bases: creation defaults (starter table or empty), schema endpoint,
+//! update, delete, the members who can open a base, collaborators, role matrix.
 
 mod common;
 mod schema_support;
@@ -34,6 +34,35 @@ async fn new_base_has_starter_table_with_name_notes_and_grid_view() {
     assert_eq!(views[0]["type"], "grid");
     assert_eq!(views[0]["personal"], false);
     assert_eq!(views[0]["locked"], false);
+    assert_eq!(s["workspace_name"], "Acme");
+    assert_eq!(s["people"][0]["email"], "owner@example.com");
+    assert_eq!(s["people"][0]["role"], "owner");
+}
+
+#[tokio::test]
+async fn an_empty_base_has_no_tables_and_the_default_keeps_the_starter_table() {
+    let f = Fixture::new().await;
+    let url = format!("/api/workspaces/{}/bases", f.ws);
+    let r = f
+        .app
+        .post(&f.owner, &url, json!({ "name": "Blank", "empty": true }))
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["tables"], json!([]));
+    let id = r.body["id"].as_str().unwrap();
+    let s = f.app.get(&f.owner, &format!("/api/bases/{id}")).await;
+    assert_eq!(s.body["tables"], json!([]));
+    for body in [
+        json!({ "name": "Default" }),
+        json!({ "name": "Not empty", "empty": false }),
+        json!({ "name": "Null", "empty": null }),
+    ] {
+        let r = f.app.post(&f.owner, &url, body).await;
+        r.assert_status(201);
+        let tables = r.body["tables"].as_array().unwrap();
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0]["name"], "Table 1");
+    }
 }
 
 #[tokio::test]
@@ -348,56 +377,98 @@ async fn token_scopes_apply_to_base_endpoints() {
 }
 
 #[tokio::test]
-async fn base_members_list_and_manage_requires_owner() {
+async fn base_members_are_the_workspace_members_who_can_open_it() {
     let f = Fixture::new().await;
+    let other = base(&f.app, &f.owner, &f.ws, "Other").await;
+    let other_id = other["id"].as_str().unwrap().to_string();
     let guest = f.base_guest("guest@example.com", Role::Editor);
     let gid = guest.user_id.clone().unwrap();
+    let _elsewhere = {
+        let u = f.app.user("else@example.com", "Else");
+        add_base_member(&f.app, &other_id, &u, Role::Viewer);
+        u
+    };
     let list = f
         .app
-        .get(&f.owner, &format!("/api/bases/{}/members", f.base_id))
+        .get(&guest, &format!("/api/bases/{}/members", f.base_id))
         .await;
     list.assert_status(200);
     let members = list.body.as_array().unwrap();
-    assert_eq!(members.len(), 1, "workspace members are not base members");
-    assert_eq!(members[0]["user_id"], gid.as_str());
-    assert_eq!(members[0]["role"], "editor");
-    assert_eq!(members[0]["email"], "guest@example.com");
+    let emails: Vec<&str> = members
+        .iter()
+        .map(|m| m["email"].as_str().unwrap())
+        .collect();
+    assert_eq!(emails, ["owner@example.com", "guest@example.com"]);
+    assert_eq!(members[1]["user_id"], gid.as_str());
+    assert_eq!(members[1]["role"], "editor");
+    assert_eq!(members[1]["all_bases"], false);
+    assert_eq!(members[1]["base_ids"], json!([f.base_id]));
+    assert_eq!(members[0]["all_bases"], true);
 
+    // Per-base roles are gone: there is no PATCH on a base member.
     let path = format!("/api/bases/{}/members/{gid}", f.base_id);
-    f.app
-        .patch(&f.owner, &path, json!({ "role": "bogus" }))
-        .await
-        .assert_status(400);
-    f.app
-        .patch(&f.owner, &path, json!({ "role": "creator" }))
-        .await
-        .assert_status(200);
     let r = f
         .app
-        .get(&guest, &format!("/api/bases/{}", f.base_id))
+        .patch(&f.owner, &path, json!({ "role": "creator" }))
         .await;
-    assert_eq!(r.body["role"], "creator");
-    f.app
-        .patch(
-            &f.owner,
-            &format!("/api/bases/{}/members/usrNOPE", f.base_id),
-            json!({ "role": "viewer" }),
-        )
-        .await
-        .assert_status(404);
+    assert_eq!(r.status.as_u16(), 405, "{:?}", r.body);
+
+    // Removing the only base they have is refused (remove them from the workspace).
+    let r = f.app.delete(&f.owner, &path).await;
+    r.assert_status(400);
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("workspace")
+    );
+    // With a second base, this one can be taken away.
+    add_base_member(&f.app, &other_id, &guest, Role::Editor);
+    let mut rx = f.app.state.events.subscribe(&f.base_id);
     f.app.delete(&f.owner, &path).await.assert_status(200);
+    assert_eq!(
+        rx.try_recv().expect("BaseChanged").event,
+        ob_core::api::events::BaseEvent::BaseChanged
+    );
     f.app
         .get(&guest, &format!("/api/bases/{}", f.base_id))
         .await
         .assert_status(404);
+    f.app
+        .get(&guest, &format!("/api/bases/{other_id}"))
+        .await
+        .assert_status(200);
     f.app.delete(&f.owner, &path).await.assert_status(404);
+
+    // All-bases members are changed on the workspace members page.
+    let ed = f.member("ed@example.com", Role::Editor);
+    let r = f
+        .app
+        .delete(
+            &f.owner,
+            &format!(
+                "/api/bases/{}/members/{}",
+                f.base_id,
+                ed.user_id.clone().unwrap()
+            ),
+        )
+        .await;
+    r.assert_status(400);
+    assert!(
+        r.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("workspace members page")
+    );
 }
 
 #[tokio::test]
 async fn base_member_endpoints_role_matrix() {
     for role in ALL_ROLES {
         let f = Fixture::new().await;
+        let other = base(&f.app, &f.owner, &f.ws, "Other").await;
         let target = f.base_guest("target@example.com", Role::Viewer);
+        add_base_member(&f.app, other["id"].as_str().unwrap(), &target, Role::Viewer);
         let tid = target.user_id.clone().unwrap();
         let u = f.member("u@example.com", role);
         let ok = role == Role::Owner;
@@ -406,16 +477,7 @@ async fn base_member_endpoints_role_matrix() {
             .app
             .get(&u, &format!("/api/bases/{}/members", f.base_id))
             .await;
-        assert_eq!(list.status.as_u16(), expect(ok), "list {role:?}");
-        let r = f
-            .app
-            .patch(
-                &u,
-                &format!("/api/bases/{}/members/{tid}", f.base_id),
-                json!({ "role": "editor" }),
-            )
-            .await;
-        assert_eq!(r.status.as_u16(), expect(ok), "patch {role:?}");
+        assert_eq!(list.status.as_u16(), 200, "list {role:?}");
         let r = f
             .app
             .delete(&u, &format!("/api/bases/{}/members/{tid}", f.base_id))
@@ -425,12 +487,15 @@ async fn base_member_endpoints_role_matrix() {
 }
 
 #[tokio::test]
-async fn base_member_can_leave_a_shared_base() {
+async fn a_limited_member_can_leave_one_of_their_bases() {
     let f = Fixture::new().await;
+    let other = base(&f.app, &f.owner, &f.ws, "Other").await;
+    let other_id = other["id"].as_str().unwrap();
     let guest = f.base_guest("guest@example.com", Role::Viewer);
+    add_base_member(&f.app, other_id, &guest, Role::Viewer);
     let gid = guest.user_id.clone().unwrap();
-    let other = f.base_guest("other@example.com", Role::Viewer);
-    let oid = other.user_id.clone().unwrap();
+    let other_guest = f.base_guest("other@example.com", Role::Viewer);
+    let oid = other_guest.user_id.clone().unwrap();
     f.app
         .delete(&guest, &format!("/api/bases/{}/members/{oid}", f.base_id))
         .await
@@ -439,16 +504,26 @@ async fn base_member_can_leave_a_shared_base() {
         .delete(&guest, &format!("/api/bases/{}/members/{gid}", f.base_id))
         .await
         .assert_status(200);
-    assert_eq!(f.app.get(&guest, "/api/workspaces").await.body, json!([]));
+    let list = f.app.get(&guest, "/api/workspaces").await;
+    assert_eq!(list.body[0]["bases"].as_array().unwrap().len(), 1);
+    assert_eq!(list.body[0]["bases"][0]["id"], other_id);
 }
 
 #[tokio::test]
-async fn collaborators_are_active_workspace_and_base_members() {
+async fn collaborators_are_active_members_who_can_open_the_base() {
     let f = Fixture::new().await;
     let ed = f.member("ed@example.com", Role::Editor);
     let guest = f.base_guest("guest@example.com", Role::Viewer);
     let gone = f.member("gone@example.com", Role::Editor);
     let outsider = f.app.user("out@example.com", "Out");
+    let other = base(&f.app, &f.owner, &f.ws, "Other").await;
+    let elsewhere = f.app.user("else@example.com", "Else");
+    add_base_member(
+        &f.app,
+        other["id"].as_str().unwrap(),
+        &elsewhere,
+        Role::Editor,
+    );
     let gone_id = gone.user_id.clone().unwrap();
     sql(&f.app, |tx| {
         tx.execute("UPDATE users SET is_active = 0 WHERE id = ?1", [&gone_id])
@@ -477,6 +552,10 @@ async fn collaborators_are_active_workspace_and_base_members() {
             "inactive users are hidden"
         );
         assert!(!emails.contains(&"out@example.com"));
+        assert!(
+            !emails.contains(&"else@example.com"),
+            "members limited to other bases are not collaborators here"
+        );
         let r0 = &r.body[0];
         assert!(r0["id"].is_string() && r0["name"].is_string());
     }

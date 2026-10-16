@@ -104,8 +104,8 @@ describe("OAuth consent page", () => {
       {
         "GET /api/workspaces": [
           makeWorkspace("owner", [
-            { id: "app1", workspace_id: "wsp1", name: "CRM", color: "green_dark", icon: null, role: "owner" },
-            { id: "app2", workspace_id: "wsp1", name: "Notes", color: "green_dark", icon: null, role: "owner" },
+            { id: "app1", workspace_id: "wsp1", name: "CRM", color: "green_dark", icon: null, role: "owner", people: [], tables: [] },
+            { id: "app2", workspace_id: "wsp1", name: "Notes", color: "green_dark", icon: null, role: "owner", people: [], tables: [] },
           ]),
         ],
       },
@@ -271,7 +271,7 @@ describe("OAuth consent page", () => {
     it("only treats the authorization endpoint as a server page, never another address", async () => {
       mockApi({ "GET /api/setup": SETUP, "GET /api/auth/me": USER, "GET /api/workspaces": [] });
       renderApp({ route: `/login?next=${encodeURIComponent("https://evil.example/oauth/authorize?x=1")}` });
-      expect(await screen.findByRole("heading", { name: "Your workspaces" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
       expect(follow).not.toHaveBeenCalled();
     });
   });

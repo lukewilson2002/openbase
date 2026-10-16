@@ -37,7 +37,7 @@ describe("recordsToEvents", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({ id: "r1", title: "Single", start: "2026-03-05", allDay: true, startEditable: true, durationEditable: true });
     expect(events[0]!.end).toBeUndefined();
-    expect(events[1]).toMatchObject({ id: "r2", start: "2026-03-05", end: "2026-03-08", allDay: true, backgroundColor: "#cfdfff", textColor: "#14315f" });
+    expect(events[1]).toMatchObject({ id: "r2", start: "2026-03-05", end: "2026-03-08", allDay: true, extendedProps: { recordId: "r2", color: "blue" } });
     expect(events[1]!.extendedProps.recordId).toBe("r2");
   });
 

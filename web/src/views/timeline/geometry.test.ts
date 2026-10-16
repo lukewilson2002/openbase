@@ -15,7 +15,12 @@ import {
   layoutLanes,
   majorTicks,
   makeAxis,
+  minorIsDay,
   minorTicks,
+  rangeTitle,
+  showsWeekends,
+  weekendStarts,
+  windowStart,
   packRows,
   stepScale,
   xOfDay,
@@ -66,27 +71,55 @@ describe("axis", () => {
 });
 
 describe("ticks", () => {
-  it("day scale: a tick per day and a major tick per month", () => {
+  it("day and week scales: a tick per day under a tick per week, weeks starting on Monday", () => {
     const a = { fromDay: day(2026, 2, 27), toDay: day(2026, 3, 3) };
-    expect(minorTicks("day", a).map((t) => t.label)).toEqual(["27 Fri", "28 Sat", "1 Sun", "2 Mon"]);
-    const major = majorTicks("day", a);
-    expect(major.map((t) => t.label)).toEqual(["February 2026", "March 2026"]);
-    expect(major[0]).toMatchObject({ startDay: day(2026, 2, 1), endDay: day(2026, 3, 1) });
+    expect(minorTicks("day", a).map((t) => t.label)).toEqual(["Fri 27", "Sat 28", "Sun 1", "Mon 2"]);
+    expect(minorTicks("week", a).map((t) => t.label)).toEqual(["Fri 27", "Sat 28", "Sun 1", "Mon 2"]);
+    const major = majorTicks("week", a);
+    expect(major.map((t) => t.label)).toEqual(["Week of Feb 23", "Week of Mar 2"]);
+    expect(major[0]).toMatchObject({ startDay: day(2026, 2, 23), endDay: day(2026, 3, 2) });
+    expect(majorTicks("day", a).map((t) => t.label)).toEqual(["Week of Feb 23", "Week of Mar 2"]);
+    expect(minorIsDay("week")).toBe(true);
+    expect(minorIsDay("month")).toBe(false);
   });
 
-  it("week scale: weeks start on Monday", () => {
-    const ticks = minorTicks("week", { fromDay: day(2026, 3, 4), toDay: day(2026, 3, 20) }); // Wed 4th .. Fri 20th
+  it("month scale: weeks under months", () => {
+    const ticks = minorTicks("month", { fromDay: day(2026, 3, 4), toDay: day(2026, 3, 20) }); // Wed 4th .. Fri 20th
     expect(ticks.map((t) => t.label)).toEqual(["Mar 2", "Mar 9", "Mar 16"]);
     expect(ticks.every((t) => t.endDay - t.startDay === 7)).toBe(true);
+    expect(majorTicks("month", { fromDay: day(2026, 2, 20), toDay: day(2026, 3, 20) }).map((t) => t.label)).toEqual(["February 2026", "March 2026"]);
   });
 
-  it("month, quarter and year scales", () => {
+  it("quarter and year scales: months under quarters or years", () => {
     const a = { fromDay: day(2025, 11, 20), toDay: day(2026, 7, 2) };
-    expect(minorTicks("month", a).map((t) => t.label)).toEqual(["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]);
-    expect(majorTicks("month", a).map((t) => t.label)).toEqual(["2025", "2026"]);
-    expect(minorTicks("quarter", a).map((t) => t.label)).toEqual(["Q4", "Q1", "Q2", "Q3"]);
-    expect(minorTicks("year", { fromDay: day(2024, 6, 1), toDay: day(2027, 1, 1) }).map((t) => t.label)).toEqual(["2024", "2025", "2026"]);
-    expect(majorTicks("year", { fromDay: day(2019, 6, 1), toDay: day(2031, 1, 1) }).map((t) => t.label)).toEqual(["2010s", "2020s", "2030s"]);
+    expect(minorTicks("quarter", a).map((t) => t.label)).toEqual(["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]);
+    expect(majorTicks("quarter", a).map((t) => t.label)).toEqual(["Q4 2025", "Q1 2026", "Q2 2026", "Q3 2026"]);
+    expect(minorTicks("year", a).map((t) => t.label)).toEqual(["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]);
+    expect(majorTicks("year", a).map((t) => t.label)).toEqual(["2025", "2026"]);
+  });
+
+  it("finds the weekends in a window, including one that started the day before", () => {
+    // Sun Mar 1 .. Sun Mar 15: the weekend of Feb 28, Mar 7 and Mar 14.
+    expect(weekendStarts({ fromDay: day(2026, 3, 1), toDay: day(2026, 3, 16) })).toEqual([day(2026, 2, 28), day(2026, 3, 7), day(2026, 3, 14)]);
+    expect(showsWeekends("week")).toBe(true);
+    expect(showsWeekends("quarter")).toBe(false);
+  });
+
+  it("opens a window on the start of the period just before today, keeping today in view", () => {
+    // Thursday Oct 15 2026 on the week scale with two weeks on screen: last week's Monday.
+    expect(windowStart("week", day(2026, 10, 15), 14)).toBe(day(2026, 10, 5));
+    // A narrow screen (five days) would lose today that way, so it opens on this week's Monday.
+    expect(windowStart("week", day(2026, 10, 15), 5)).toBe(day(2026, 10, 12));
+    // Starting at September would leave mid-October off a 40-day screen.
+    expect(windowStart("month", day(2026, 10, 15), 40)).toBe(day(2026, 10, 1));
+    expect(windowStart("month", day(2026, 10, 15), 60)).toBe(day(2026, 9, 1));
+  });
+
+  it("titles a range of days compactly", () => {
+    expect(rangeTitle(day(2026, 10, 5), day(2026, 10, 18))).toBe("Oct 5 – 18, 2026");
+    expect(rangeTitle(day(2026, 9, 28), day(2026, 10, 11))).toBe("Sep 28 – Oct 11, 2026");
+    expect(rangeTitle(day(2026, 12, 28), day(2027, 1, 10))).toBe("Dec 28, 2026 – Jan 10, 2027");
+    expect(rangeTitle(day(2026, 10, 5), day(2026, 10, 5))).toBe("Oct 5, 2026");
   });
 });
 
@@ -215,8 +248,8 @@ describe("arrowPath", () => {
   });
 
   it("loops through the gap between rows when the successor starts too early", () => {
-    expect(arrowPath({ x: 100, y: 20 }, { x: 90, y: 56 })).toBe("M 100 20 H 108 V 38 H 82 V 56 H 90");
-    expect(arrowPath({ x: 100, y: 56 }, { x: 90, y: 20 })).toBe("M 100 56 H 108 V 38 H 82 V 20 H 90");
-    expect(arrowPath({ x: 100, y: 20 }, { x: 100, y: 20 })).toBe("M 100 20 H 108 V 38 H 92 V 20 H 100");
+    expect(arrowPath({ x: 100, y: 20 }, { x: 90, y: 56 }, 36)).toBe("M 100 20 H 108 V 38 H 82 V 56 H 90");
+    expect(arrowPath({ x: 100, y: 56 }, { x: 90, y: 20 }, 36)).toBe("M 100 56 H 108 V 38 H 82 V 20 H 90");
+    expect(arrowPath({ x: 100, y: 20 }, { x: 100, y: 20 }, 36)).toBe("M 100 20 H 108 V 38 H 92 V 20 H 100");
   });
 });

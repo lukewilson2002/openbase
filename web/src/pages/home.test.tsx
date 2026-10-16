@@ -1,297 +1,128 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WorkspaceSummary } from "@/api/types";
-import { ADMIN, USER, apiError, mockApi, renderApp } from "@/test/utils";
+import type { BasePerson, WorkspaceSummary } from "@/api/types";
+import { USER, apiError, makeSchema, mockApi, renderApp, stubDesktop, type Handler } from "@/test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
+
+const me: BasePerson = { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", pending: false, role: "owner" };
+const grace: BasePerson = { user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", pending: false, role: "editor" };
+const jordan: BasePerson = { user_id: null, name: "jordan@example.com", email: "jordan@example.com", pending: true, role: "viewer" };
 
 const workspaces: WorkspaceSummary[] = [
   {
     id: "wsp1",
     name: "Acme",
+    color: "green",
     role: "owner",
+    member_count: 2,
+    pending_invite_count: 1,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner" },
-      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner" },
+      {
+        id: "app1",
+        workspace_id: "wsp1",
+        name: "Project tracker",
+        color: "green_dark",
+        role: "owner",
+        people: [me, grace, jordan],
+        tables: [
+          { id: "tbl1", name: "Tasks", icon: null },
+          { id: "tbl2", name: "People", icon: "users" },
+        ],
+      },
+      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", people: [me], tables: [] },
     ],
   },
   {
     id: "wsp2",
     name: "Shared with me",
-    role: null,
-    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer" }],
-  },
-  {
-    id: "wsp3",
-    name: "Read only space",
+    color: "blue",
     role: "viewer",
-    bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", role: "viewer" }],
+    member_count: 3,
+    pending_invite_count: 0,
+    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", people: [me, grace], tables: [] }],
   },
 ];
 
-describe("home", () => {
-  it("lists workspaces with their bases as links", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces });
-    renderApp();
+function routes(extra: Record<string, Handler> = {}) {
+  return mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces, "GET /api/notifications": { notifications: [], unread: 0 }, ...extra });
+}
 
-    expect(await screen.findByRole("heading", { name: "Acme" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Shared with me" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Project tracker" })).toHaveAttribute("href", "/base/app1");
-    expect(screen.getByRole("link", { name: "CRM" })).toHaveAttribute("href", "/base/app2");
-    expect(screen.getByRole("link", { name: "Roadmap" })).toHaveAttribute("href", "/base/app3");
+describe("/", () => {
+  it("opens the workspace opened last", async () => {
+    localStorage.setItem("ob-last-workspace", "wsp2");
+    routes();
+    renderApp();
+    expect(await screen.findByRole("heading", { level: 1, name: "Shared with me" })).toBeInTheDocument();
   });
 
-  it("shows an empty state when there are no workspaces", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": [] });
+  it("falls back to the first workspace", async () => {
+    localStorage.setItem("ob-last-workspace", "wspGone");
+    routes();
     renderApp();
-    expect(await screen.findByText("No workspaces yet")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create a workspace/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
+    expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
 
-  it("hides actions the workspace role cannot perform", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces });
-    renderApp();
-    await screen.findByRole("heading", { name: "Acme" });
-
-    // Owner workspace: can add bases and open the workspace menu; the base menu is offered.
-    const acme = screen.getByRole("heading", { name: "Acme" }).closest("section")!;
-    expect(within(acme).getByRole("button", { name: /New base/ })).toBeInTheDocument();
-    expect(within(acme).getByRole("button", { name: "Workspace actions for Acme" })).toBeInTheDocument();
-    expect(within(acme).getByRole("button", { name: "Actions for CRM" })).toBeInTheDocument();
-
-    // Viewer workspace: nothing to create or manage, but members can be viewed.
-    const ro = screen.getByRole("heading", { name: "Read only space" }).closest("section")!;
-    expect(within(ro).queryByRole("button", { name: /New base/ })).not.toBeInTheDocument();
-    expect(within(ro).queryByRole("button", { name: "Actions for Wiki" })).not.toBeInTheDocument();
-    expect(within(ro).getByRole("button", { name: "Workspace actions for Read only space" })).toBeInTheDocument();
-
-    // Only individual bases shared: no workspace role at all, so no workspace menu.
-    const shared = screen.getByRole("heading", { name: "Shared with me" }).closest("section")!;
-    expect(within(shared).queryByRole("button", { name: /Workspace actions/ })).not.toBeInTheDocument();
-    expect(within(shared).queryByRole("button", { name: /New base/ })).not.toBeInTheDocument();
-  });
-
-  it("only offers rename and delete of a workspace to its owner", async () => {
-    const user = userEvent.setup();
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: "Workspace actions for Read only space" }));
-    expect(await screen.findByRole("menuitem", { name: "Members" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Delete workspace/ })).not.toBeInTheDocument();
-  });
-
-  it("offers deleted workspaces for restore and restores one", async () => {
-    const user = userEvent.setup();
-    let deleted = [{ kind: "workspace", id: "wspOld", name: "Old clients", table_id: null, deleted_at: Date.now() - 3 * 24 * 3600_000 }];
-    let list: WorkspaceSummary[] = [];
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": () => list,
-      "GET /api/trash/workspaces": () => ({ items: deleted }),
-      "POST /api/trash/restore": () => {
-        deleted = [];
-        list = [{ id: "wspOld", name: "Old clients", role: "owner", bases: [] }];
-        return { ok: true, restored_field_ids: [] };
-      },
-    });
-    renderApp();
-    const section = (await screen.findByRole("heading", { name: "Recently deleted workspaces" })).closest("section")!;
-    expect(within(section).getByText("Old clients")).toBeInTheDocument();
-    expect(within(section).getByText("Deleted 3 days ago")).toBeInTheDocument();
-
-    await user.click(within(section).getByRole("button", { name: "Restore Old clients" }));
-    await waitFor(() => expect(api.callsTo("POST /api/trash/restore")).toHaveLength(1));
-    expect(api.callsTo("POST /api/trash/restore")[0]!.body).toEqual({ kind: "workspace", id: "wspOld" });
-    // The workspace is back among the live ones and the section is gone.
-    expect(await screen.findByRole("heading", { name: "Old clients" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument());
-  });
-
-  it("shows no deleted-workspaces section when there are none or the list cannot be loaded", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces, "GET /api/trash/workspaces": { items: [] } });
-    const { unmount } = renderApp();
-    await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument();
-    unmount();
-
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": workspaces, "GET /api/trash/workspaces": apiError(500, "internal", "boom") });
-    renderApp();
-    await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.queryByRole("heading", { name: "Recently deleted workspaces" })).not.toBeInTheDocument();
-  });
-
-  it("lists deleted workspaces even when no workspace is left", async () => {
-    mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": [],
-      "GET /api/trash/workspaces": { items: [{ kind: "workspace", id: "wspOld", name: "Old clients", table_id: null, deleted_at: Date.now() - 60_000 }] },
-    });
-    renderApp();
-    expect(await screen.findByText("No workspaces yet")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Restore Old clients" })).toBeInTheDocument();
-  });
-
-  it("creates a workspace through the dialog", async () => {
+  it("offers to create the first workspace and opens it", async () => {
     const user = userEvent.setup();
     let list: WorkspaceSummary[] = [];
-    const api = mockApi({
-      "GET /api/auth/me": USER,
+    const api = routes({
       "GET /api/workspaces": () => list,
       "POST /api/workspaces": (call) => {
-        list = [{ id: "wsp9", name: (call.body as { name: string }).name, role: "owner", bases: [] }];
+        list = [{ id: "wsp9", name: (call.body as { name: string }).name, color: "green", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 }];
         return list[0];
       },
     });
     renderApp();
-    await user.click(await screen.findByRole("button", { name: /New workspace/ }));
-    await user.type(await screen.findByLabelText("Name"), "Side projects");
+    expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();
+    expect(screen.getByText("Workspaces are private until you invite someone.")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Suggestions" })).not.toBeInTheDocument();
+    const name = screen.getByRole("textbox", { name: "Workspace name" });
+    expect(name).toHaveAttribute("placeholder", "For example, Personal");
+    await user.type(name, "Studio");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
-    expect(await screen.findByRole("heading", { name: "Side projects" })).toBeInTheDocument();
-    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Side projects" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Studio" })).toBeInTheDocument();
+    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio" });
+    expect(screen.getByText("Make your first base")).toBeInTheDocument();
+    expect(screen.getByText("Only you")).toBeInTheDocument();
   });
 
-  it("creates a base with a colour and opens it", async () => {
-    const user = userEvent.setup();
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": workspaces,
-      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "New one", color: "pink", role: "owner" },
-    });
+  it("shows an error when the workspaces cannot be loaded", async () => {
+    routes({ "GET /api/workspaces": apiError(500, "internal", "Something broke") });
     renderApp();
-    const acme = (await screen.findByRole("heading", { name: "Acme" })).closest("section")!;
-    await user.click(within(acme).getByRole("button", { name: /New base/ }));
-    await user.type(await screen.findByLabelText("Name"), "New one");
-    await user.click(screen.getByRole("radio", { name: "Pink" }));
-    await user.click(screen.getByRole("button", { name: "Create base" }));
-
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "New one", color: "pink" });
-    await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
-  });
-
-  it("deletes a base after confirmation", async () => {
-    const user = userEvent.setup();
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": workspaces,
-      "DELETE /api/bases/app2": { status: 204 },
-    });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: "Actions for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Delete base/ }));
-    const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText(/Delete CRM/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Delete base" }));
-    await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
-    expect(api.callsTo("DELETE /api/bases/app2")[0]?.headers.get("X-OpenBase-CSRF")).toBe("1");
-  });
-
-  it("opens the members dialog with role changes and invite creation for an owner", async () => {
-    const user = userEvent.setup();
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": workspaces,
-      "GET /api/workspaces/wsp1/members": [
-        { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", role: "owner" },
-        { user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", role: "editor" },
-      ],
-      "GET /api/workspaces/wsp1/invites": [],
-      "PATCH /api/workspaces/wsp1/members/usr2": { status: 204 },
-      "POST /api/workspaces/wsp1/invites": {
-        url: "https://og.example.com/invite/secrettoken",
-        info: { id: "inv1", workspace_id: "wsp1", base_id: null, email: null, role: "editor", created_at: 1, expires_at: 2, accepted_at: null },
-      },
-    });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: "Workspace actions for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Members and invites/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-
-    expect(await within(dialog).findByText("Grace Hopper")).toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText("Role for Grace Hopper"), "creator");
-    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")[0]?.body).toEqual({ role: "creator" });
-
-    await user.click(within(dialog).getByRole("button", { name: /Create invite link/ }));
-    const link = await within(dialog).findByLabelText("Invite link");
-    expect(link).toHaveValue("https://og.example.com/invite/secrettoken");
-    expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]?.body).toEqual({ role: "editor", email: null });
-  });
-
-  it("shows the Administration entry in the user menu only to administrators", async () => {
-    const user = userEvent.setup();
-    mockApi({ "GET /api/auth/me": ADMIN, "GET /api/workspaces": [] });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: "Account menu" }));
-    expect(await screen.findByRole("menuitem", { name: /Administration/ })).toBeInTheDocument();
-  });
-
-  it("hides the Administration entry from regular users", async () => {
-    const user = userEvent.setup();
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": [] });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: "Account menu" }));
-    expect(await screen.findByRole("menuitem", { name: /Account settings/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Administration/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("Something broke")).toBeInTheDocument();
   });
 });
 
-describe("home icons", () => {
-  const withIcons: WorkspaceSummary[] = [
-    {
-      id: "wsp1",
-      name: "Acme",
-      icon: "briefcase",
-      role: "owner",
-      bases: [
-        { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: "truck", role: "owner" },
-        { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", role: "owner" },
-      ],
-    },
-    { id: "wsp3", name: "Read only space", icon: "star", role: "viewer", bases: [{ id: "app4", workspace_id: "wsp3", name: "Wiki", color: "gray", icon: "folder", role: "viewer" }] },
-  ];
-  const tileOf = (el: HTMLElement) => el.querySelector("[data-entity-tile]")!;
-
-  it("replaces the letters with the workspace and base icons, and keeps the letter without an icon", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": withIcons });
-    renderApp();
-    const acme = (await screen.findByRole("heading", { name: "Acme" })).closest("section")!;
-    expect(tileOf(acme)).toContainElement(acme.querySelector("svg.lucide-briefcase"));
-    expect(tileOf(acme)).not.toHaveTextContent("A");
-    const tracker = screen.getByRole("link", { name: "Project tracker" }).closest("li")!;
-    expect(tileOf(tracker).querySelector("svg.lucide-truck")).toBeInTheDocument();
-    expect(tileOf(tracker)).not.toHaveTextContent("P");
-    const crm = screen.getByRole("link", { name: "CRM" }).closest("li")!;
-    expect(tileOf(crm)).toHaveTextContent("C");
-    expect(tileOf(crm).querySelector("svg")).toBeNull();
-  });
-
-  it("lets only the workspace owner change the workspace icon from its tile", async () => {
+describe("home menu", () => {
+  it("lists the workspaces, expands the open one, and creates a new one from the + button", async () => {
+    stubDesktop();
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": withIcons, "PATCH /api/workspaces/wsp1": { id: "wsp1", name: "Acme", role: "owner", bases: [] } });
-    renderApp();
-    const ro = (await screen.findByRole("heading", { name: "Read only space" })).closest("section")!;
-    expect(within(ro).queryByRole("button", { name: /Change icon/ })).not.toBeInTheDocument();
-    expect(ro.querySelector("svg.lucide-star")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Change icon of Acme" }));
-    await user.click(await screen.findByRole("button", { name: "Heart" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ icon: "heart" });
-  });
-
-  it("creates a workspace with an icon", async () => {
-    const user = userEvent.setup();
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": [],
-      "POST /api/workspaces": { id: "wsp9", name: "Studio", icon: "store", role: "owner", bases: [] },
+    let list = workspaces;
+    const api = routes({
+      "GET /api/workspaces": () => list,
+      "POST /api/workspaces": (call) => {
+        const ws: WorkspaceSummary = { id: "wsp9", name: (call.body as { name: string }).name, icon: "store", color: "blue", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 };
+        list = [...list, ws];
+        return ws;
+      },
     });
-    renderApp();
-    await user.click(await screen.findByRole("button", { name: /Create a workspace/ }));
+    renderApp({ route: "/workspace/wsp1" });
+    const menu = await screen.findByRole("navigation", { name: "Main menu" });
+    expect(await within(menu).findByRole("link", { name: "Shared with me" })).toHaveAttribute("href", "/workspace/wsp2");
+    expect(within(menu).getByRole("link", { name: "Bases" })).toHaveAttribute("aria-current", "page");
+    expect(within(menu).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    const acme = within(menu).getByRole("group", { name: "Acme" });
+    expect(within(acme).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
+    expect(within(acme).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
+    // The Trash of everything closes the menu; account settings are in the profile menu now.
+    expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
+    expect(within(menu).getAllByRole("link").some((l) => l.getAttribute("href") === "/account")).toBe(false);
+
+    await user.click(within(menu).getByRole("button", { name: "New workspace" }));
     const dialog = await screen.findByRole("dialog", { name: "New workspace" });
     await user.type(within(dialog).getByLabelText("Name"), "Studio");
     await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
@@ -299,35 +130,129 @@ describe("home icons", () => {
     await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
     expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", icon: "store" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Studio" })).toBeInTheDocument();
+  });
+});
+
+describe("workspace page", () => {
+  it("lists the bases with their tables, who can open every base, and who else can open each", async () => {
+    stubDesktop();
+    const api = routes();
+    renderApp({ route: "/workspace/wsp1" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Can open every base in Acme: you" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    const bases = screen.getByRole("list", { name: "Bases" });
+    expect(within(bases).getByRole("link", { name: "Project tracker" })).toHaveAttribute("href", "/base/app1");
+
+    const tracker = within(bases).getByRole("link", { name: "Project tracker" }).closest("li")!;
+    expect(await within(tracker).findByRole("list", { name: "Tables in Project tracker: Tasks, People" })).toBeInTheDocument();
+    // Only the people beyond those who can open every base, with the invited one dashed.
+    expect(within(tracker).getByRole("img", { name: "Also opens Project tracker: Grace Hopper and jordan@example.com (invited, not joined yet)" })).toBeInTheDocument();
+    expect(tracker.querySelector("[data-pending]")).toHaveClass("border-dashed");
+    const crm = within(bases).getByRole("link", { name: "CRM" }).closest("li")!;
+    expect(within(crm).queryByRole("img", { name: /Also opens/ })).not.toBeInTheDocument();
+    expect(crm.querySelector("svg.lucide-users")).toBeInTheDocument();
+    // A table's own icon on its chip; the names come with the workspace list, not from each base.
+    expect(within(tracker).getByText("People").parentElement!.querySelector("svg.lucide-users")).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.path.startsWith("/api/bases/"))).toEqual([]);
   });
 
-  it("creates a base with an icon", async () => {
+  it("shows a few tables of a base, then how many more", async () => {
+    stubDesktop();
+    const tables = ["Tasks", "People", "Sprints", "Bugs", "Ideas"].map((name, i) => ({ id: `tbl${i}`, name, icon: null }));
+    const [acme] = workspaces;
+    routes({ "GET /api/workspaces": [{ ...acme!, bases: [{ ...acme!.bases[0]!, tables }, acme!.bases[1]!] }] });
+    renderApp({ route: "/workspace/wsp1" });
+    const chips = await screen.findByRole("list", { name: /^Tables in Project tracker/ });
+    expect(within(chips).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Tasks", "People", "Sprints", "+2"]);
+  });
+
+  it("says Only you for a workspace nobody else is in, and leaves out the legend without invites", async () => {
+    routes({ "GET /api/workspaces": [{ ...workspaces[0]!, member_count: 1, pending_invite_count: 0, bases: [workspaces[0]!.bases[1]!] }] });
+    renderApp({ route: "/workspace/wsp1" });
+    expect(await screen.findByRole("link", { name: "Only you" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    expect(screen.queryByText(/A grey, dashed face/)).not.toBeInTheDocument();
+  });
+
+  it("gives a viewer nothing to create or manage", async () => {
+    routes();
+    renderApp({ route: "/workspace/wsp2" });
+    await screen.findByRole("heading", { level: 1, name: "Shared with me" });
+    expect(screen.getByRole("link", { name: "Roadmap" })).toBeInTheDocument();
+    for (const name of ["New base", "Import a spreadsheet", "Share", "Workspace actions for Shared with me", "Actions for Roadmap"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /Change icon of/ })).not.toBeInTheDocument();
+  });
+
+  it("puts New base and Import in the header on a desktop", async () => {
+    stubDesktop();
+    routes();
+    renderApp({ route: "/workspace/wsp1" });
+    await screen.findByRole("heading", { level: 1, name: "Acme" });
+    expect(screen.getByRole("button", { name: "New base" })).not.toHaveClass("fixed");
+    expect(screen.getByRole("button", { name: "Import a spreadsheet" })).not.toHaveClass("fixed");
+  });
+
+  it("floats Import and New base at the bottom corners on a phone", async () => {
+    routes();
+    renderApp({ route: "/workspace/wsp1" });
+    await screen.findByRole("heading", { level: 1, name: "Acme" });
+    expect(screen.getByRole("button", { name: "New base" })).toHaveClass("fixed", "right-[max(1rem,env(safe-area-inset-right))]");
+    expect(screen.getByRole("button", { name: "Import a spreadsheet" })).toHaveClass("fixed", "left-[max(1rem,env(safe-area-inset-left))]");
+  });
+
+  it("creates an empty base with a colour and an icon, and opens it", async () => {
     const user = userEvent.setup();
-    const api = mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": withIcons,
-      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "Fresh", color: "blue_dark", icon: "wallet", role: "owner" },
-    });
-    renderApp();
-    const acme = (await screen.findByRole("heading", { name: "Acme" })).closest("section")!;
-    await user.click(within(acme).getByRole("button", { name: /New base/ }));
+    const api = routes({ "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "Fresh", color: "pink", icon: "wallet", role: "owner", people: [], tables: [], workspace_name: "Acme" } });
+    renderApp({ route: "/workspace/wsp1" });
+    await user.click(await screen.findByRole("button", { name: "New base" }));
     const dialog = await screen.findByRole("dialog", { name: "New base" });
     await user.type(within(dialog).getByLabelText("Name"), "Fresh");
+    await user.click(within(dialog).getByRole("radio", { name: "Pink" }));
     await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
     await user.click(await screen.findByRole("button", { name: "Wallet" }));
     await user.click(within(dialog).getByRole("button", { name: "Create base" }));
+
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Fresh", color: "blue_dark", icon: "wallet" });
+    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Fresh", color: "pink", icon: "wallet", empty: true });
+    await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
   });
 
-  it("edits a base: the icon is only sent when it changed", async () => {
+  it("imports a spreadsheet into a new base named after the file", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": withIcons, "PATCH /api/bases/app1": { status: 204 } });
-    renderApp();
+    const api = routes({
+      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "contacts", color: "blue_dark", role: "owner", people: [], tables: [], workspace_name: "Acme" },
+      "POST /api/bases/app9/import": { table_id: "tbl9", created: 2, fields: [{ id: "f1", name: "Name", type: "single_line_text" }] },
+    });
+    renderApp({ route: "/workspace/wsp1" });
+    await user.click(await screen.findByRole("button", { name: "Import a spreadsheet" }));
+    const dialog = await screen.findByRole("dialog", { name: "Import a spreadsheet" });
+    await user.upload(await within(dialog).findByLabelText("CSV file"), new File(["Name\nAda\nGrace\n"], "contacts.csv", { type: "text/csv" }));
+    expect(await within(dialog).findByLabelText("Name")).toHaveValue("contacts");
+    await user.click(within(dialog).getByRole("button", { name: "Import" }));
+
+    await waitFor(() => expect(api.callsTo("POST /api/bases/app9/import")).toHaveLength(1));
+    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "contacts", empty: true });
+    await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
+  });
+
+  it("offers an empty workspace its first base", async () => {
+    stubDesktop();
+    routes({ "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }] });
+    renderApp({ route: "/workspace/wsp1" });
+    expect(await screen.findByRole("heading", { name: "Make your first base" })).toBeInTheDocument();
+    expect(screen.getByText("A base holds one project. Start empty, or bring in a spreadsheet you already have.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New base" })).toHaveLength(2);
+  });
+
+  it("keeps the base menu: rename sends the icon only when it changed", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/bases/app1": { status: 204 } });
+    renderApp({ route: "/workspace/wsp1" });
     await user.click(await screen.findByRole("button", { name: "Actions for Project tracker" }));
     await user.click(await screen.findByRole("menuitem", { name: /Rename or recolour/ }));
     const dialog = await screen.findByRole("dialog", { name: "Edit base" });
-    expect(within(dialog).getByRole("button", { name: "Change icon" })).toBeInTheDocument();
     const name = within(dialog).getByLabelText("Name");
     await user.clear(name);
     await user.type(name, "Tracker");
@@ -336,28 +261,74 @@ describe("home icons", () => {
     expect(api.callsTo("PATCH /api/bases/app1")[0]?.body).toEqual({ name: "Tracker", color: "green_dark" });
   });
 
-  it("changes a base icon from the card menu, and offers viewers nothing", async () => {
+  it("changes a base icon, duplicates and deletes a base from its menu", async () => {
     const user = userEvent.setup();
-    const api = mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": withIcons, "PATCH /api/bases/app2": { status: 204 } });
-    renderApp();
-    await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.queryByRole("button", { name: "Actions for Wiki" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Actions for CRM" }));
+    const api = routes({
+      "PATCH /api/bases/app2": { status: 204 },
+      "POST /api/bases/app2/duplicate": { id: "app8" },
+      "DELETE /api/bases/app2": { status: 204 },
+    });
+    renderApp({ route: "/workspace/wsp1" });
+    await user.click(await screen.findByRole("button", { name: "Actions for CRM" }));
     await user.click(await screen.findByRole("menuitem", { name: /Change icon/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Base icon" });
-    await user.click(await within(dialog).findByRole("button", { name: "Users" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app2")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/bases/app2")[0]?.body).toEqual({ icon: "users" });
+    await user.click(await within(await screen.findByRole("dialog", { name: "Base icon" })).findByRole("button", { name: "Heart" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app2")[0]?.body).toEqual({ icon: "heart" }));
+
+    await user.click(screen.getByRole("button", { name: "Actions for CRM" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Duplicate" }));
+    await waitFor(() => expect(api.callsTo("POST /api/bases/app2/duplicate")[0]?.body).toEqual({ name: "CRM copy", include_records: true }));
+
+    await user.click(screen.getByRole("button", { name: "Actions for CRM" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Delete base/ }));
+    const confirm = await screen.findByRole("alertdialog");
+    await user.click(within(confirm).getByRole("button", { name: "Delete base" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
   });
 
-  it("shows the icon of a deleted workspace in the recently deleted list", async () => {
-    mockApi({
-      "GET /api/auth/me": USER,
-      "GET /api/workspaces": [],
-      "GET /api/trash/workspaces": { items: [{ kind: "workspace", id: "wspOld", name: "Old clients", icon: "users", table_id: null, deleted_at: Date.now() - 60_000 }] },
-    });
-    renderApp();
-    const section = (await screen.findByRole("heading", { name: "Recently deleted workspaces" })).closest("section")!;
-    expect(section.querySelector("svg.lucide-users")).toBeInTheDocument();
+  it("lets the owner change the workspace icon from its tile, rename it and delete it", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/workspaces/wsp1": { ...workspaces[0]! }, "DELETE /api/workspaces/wsp1": { ok: true } });
+    renderApp({ route: "/workspace/wsp1" });
+    await user.click(await screen.findByRole("button", { name: "Change icon of Acme" }));
+    await user.click(await screen.findByRole("button", { name: "Heart" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ icon: "heart" }));
+
+    await user.click(screen.getByRole("button", { name: "Workspace actions for Acme" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Rename/ }));
+    const rename = await screen.findByRole("dialog", { name: "Rename workspace" });
+    await user.clear(within(rename).getByLabelText("Name"));
+    await user.type(within(rename).getByLabelText("Name"), "Acme Inc");
+    await user.click(within(rename).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[1]?.body).toEqual({ name: "Acme Inc" }));
+
+    await user.click(screen.getByRole("button", { name: "Workspace actions for Acme" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Delete workspace/ }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete workspace" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/workspaces/wsp1")).toHaveLength(1));
+  });
+
+  it("says when the workspace does not exist and forgets it as the last one", async () => {
+    localStorage.setItem("ob-last-workspace", "wspGone");
+    routes();
+    renderApp({ route: "/workspace/wspGone" });
+    expect(await screen.findByText("Workspace not found")).toBeInTheDocument();
+    expect(localStorage.getItem("ob-last-workspace")).toBeNull();
+  });
+
+  it("opens the Share dialog for the whole workspace, with the views of every base", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "GET /api/bases/app1": makeSchema("owner"), "GET /api/bases/app2": makeSchema("owner", { id: "app2", name: "CRM", tables: [] }) });
+    renderApp({ route: "/workspace/wsp1" });
+    await user.click(await screen.findByRole("button", { name: "Share" }));
+    const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
+    expect(within(dialog).getByRole("radio", { name: "All bases in Acme" })).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeInTheDocument();
+    // The bases' schemas (for their views) load only once "Share a view" is opened.
+    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
+
+    await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
+    const select = await within(dialog).findByLabelText("View");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Project tracker › Tasks › All tasks", "Project tracker › Tasks › Board", "Project tracker › People › Everyone"]);
   });
 });

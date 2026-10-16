@@ -529,12 +529,13 @@ impl<'a> Writer<'a> {
 
     fn collaborators(&mut self) -> AppResult<&HashSet<String>> {
         if self.collaborators.is_none() {
-            let mut stmt = self.conn().prepare(
-                "SELECT u.id FROM users u WHERE u.is_active = 1
-                   AND (u.id IN (SELECT user_id FROM workspace_members
-                                 WHERE workspace_id = (SELECT workspace_id FROM bases WHERE id = ?1))
-                        OR u.id IN (SELECT user_id FROM base_members WHERE base_id = ?1))",
-            )?;
+            let mut stmt = self.conn().prepare(&format!(
+                "SELECT u.id FROM users u
+                 JOIN workspace_members m ON m.user_id = u.id
+                 JOIN bases b ON b.workspace_id = m.workspace_id
+                 WHERE u.is_active = 1 AND b.id = ?1 AND {}",
+                crate::perm::MEMBER_CAN_OPEN_BASE
+            ))?;
             let set: HashSet<String> = stmt
                 .query_map([&self.table_base()], |r| r.get(0))?
                 .collect::<Result<_, _>>()?;
@@ -1159,7 +1160,7 @@ pub fn delete_records(
     }
     let at = ctx.now_ms();
     for row in rows {
-        records::set_deleted_at(w.conn(), &row.id, Some(at))?;
+        records::set_deleted_at(w.conn(), &row.id, Some(at), ctx.actor_str())?;
         history::record(
             w.conn(),
             &row.id,
@@ -1215,7 +1216,7 @@ pub fn restore_records(
     }
     let at = ctx.now_ms();
     for row in rows {
-        records::set_deleted_at(w.conn(), &row.id, None)?;
+        records::set_deleted_at(w.conn(), &row.id, None, None)?;
         history::record(
             w.conn(),
             &row.id,

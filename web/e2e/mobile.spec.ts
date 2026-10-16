@@ -1,11 +1,11 @@
 import type { Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { devices } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, skipIntro, test } from "./fixtures";
 
 /**
  * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome). The
- * home page, a base and its record panel must fit the screen without horizontal scrolling (a page
+ * workspace page, its menu drawer, a base and its record panel must fit the screen without horizontal scrolling (a page
  * wider than the screen makes the phone zoom it out), and every focusable text field must be at least
  * 16px, or iOS Safari zooms the page in when it is tapped. The icon picker opens as a bottom sheet
  * inside the screen and closes on a tap outside. Signs up its own users. Runs only with
@@ -36,10 +36,11 @@ async function expectFits(page: Page, where: string): Promise<void> {
   expect(m.small, `${where}: text fields under 16px make iOS zoom in`).toEqual([]);
 }
 
-test("the home page, a base, its toolbar and the record panel fit a phone", async ({ page }) => {
+test("the workspace page, the menu, a base, its toolbar and the record panel fit a phone", async ({ page }) => {
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
   const ws = await (await page.request.post("/api/workspaces", { data: { name: "Mobile workspace" }, headers: CSRF })).json();
   const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "A base with a fairly long name" }, headers: CSRF })).json();
   const table = base.tables[0] as { id: string };
@@ -47,20 +48,50 @@ test("the home page, a base, its toolbar and the record panel fit a phone", asyn
   const recordId = created.records[0].id as string;
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Your workspaces" })).toBeVisible();
-  await expectFits(page, "home");
+  await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}$`));
+  await expect(page.getByRole("list", { name: "Bases" }).getByRole("link", { name: "A base with a fairly long name" })).toBeVisible();
+  await expectFits(page, "workspace");
+  // The floating "New base" stays clear of the last card once the page is scrolled to the end.
+  const fab = (await page.getByRole("button", { name: "New base" }).boundingBox())!;
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const card = (await page.getByRole("list", { name: "Bases" }).getByRole("listitem").last().boundingBox())!;
+  expect(card.y + card.height, "last card above the floating buttons").toBeLessThanOrEqual(fab.y);
+
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
+  const drawer = page.getByRole("dialog", { name: "Menu" });
+  await expect(drawer.getByRole("link", { name: "Mobile workspace" })).toBeVisible();
+  await expectFits(page, "menu drawer");
+  await drawer.getByRole("button", { name: "Close menu" }).tap();
+  await expect(drawer).toBeHidden();
 
   await page.goto(`/base/${base.id}/${table.id}`);
   const toolbar = page.getByRole("toolbar", { name: "View toolbar" });
   await expect(toolbar).toBeVisible();
   await expectFits(page, "base");
+  // The top bar keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
+  await expect(page.getByRole("banner").getByRole("button", { name: "Share" })).toBeVisible();
+  const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
+  expect(add.height).toBeGreaterThanOrEqual(48);
+  expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
+  expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
+
+  // The base's menu is the drawer; choosing a view closes it.
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
+  const baseMenu = page.getByRole("dialog", { name: "Menu" });
+  await expect(baseMenu.getByRole("navigation", { name: "Tables" })).toBeVisible();
+  await expect(baseMenu.getByRole("button", { name: "Workspace: Mobile workspace. Switch workspace" })).toBeVisible();
+  await expectFits(page, "base menu drawer");
+  await baseMenu.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Grid view" }).tap();
+  await expect(baseMenu).toBeHidden();
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();
   await expect(page.getByRole("searchbox", { name: "Search records" })).toBeFocused();
   await expectFits(page, "search");
   await page.keyboard.press("Escape");
 
-  await toolbar.getByRole("button", { name: "Filter" }).click();
+  // On a phone the tools are one menu behind a sliders button.
+  await toolbar.getByRole("button", { name: /^Tools/ }).click();
+  await page.getByRole("menu", { name: "View tools" }).getByRole("menuitem", { name: "Filter" }).click();
   await page.getByRole("button", { name: "Add condition", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Operator" })).toBeVisible();
   await expectFits(page, "filter");
@@ -76,9 +107,13 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   const email = `e2e-mobile-icon-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
 
   await page.goto("/");
-  await page.getByRole("button", { name: "New workspace" }).first().tap();
+  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
+  await expectFits(page, "first workspace");
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
+  await page.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "New workspace" }).tap();
   const create = page.getByRole("dialog", { name: "New workspace" });
   await create.getByRole("textbox", { name: "Name" }).fill("Kitchen");
   await create.getByRole("button", { name: "Choose icon" }).tap();
