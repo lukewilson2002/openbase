@@ -26,11 +26,29 @@ export interface CellValueProps {
   markdown?: boolean;
 }
 
+/** Height of one row of chips (a person chip: a 16 px face and 2 px above and below). */
+const CHIP_ROW_PX = 20;
+
 export function CellValue({ field, value, format, emails, className, markdown = true }: CellValueProps) {
   const shape = displayShapeOf(field);
   const text = displayText(field, value, format);
   const empty = <span className="text-faint">—</span>;
   const wrap = (children: React.ReactNode) => <div className={cn("min-w-0 text-[0.8125rem]", className)}>{children}</div>;
+  // Chips are taller than a line of text, so a line clamp or `truncate` on their box cuts the tops
+  // and bottoms off the pills and faces (WebKit clamps a flex row by text lines, not by its height).
+  // They get the same limit counted in whole chip rows instead.
+  const chipRow = (children: React.ReactNode) => {
+    const lines = Number(/\bline-clamp-(\d)\b/.exec(className ?? "")?.[1] ?? 0);
+    const oneLine = /\btruncate\b/.test(className ?? "");
+    const rest = (className ?? "").replace(/\b(line-clamp-\d|truncate)\b/g, "");
+    return (
+      <div className={cn("min-w-0 text-[0.8125rem]", rest)}>
+        <span className={cn("flex gap-1", oneLine ? "flex-nowrap overflow-hidden" : "flex-wrap", lines > 0 && "overflow-hidden")} style={lines > 0 ? { maxHeight: `${lines * CHIP_ROW_PX + (lines - 1) * 4}px` } : undefined}>
+          {children}
+        </span>
+      </div>
+    );
+  };
 
   if (isFormulaError(value)) return wrap(<span className="text-danger">{value.error}</span>);
 
@@ -52,19 +70,19 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     case "select":
     case "multi_select": {
       const chips = chipItems(field, value, format);
-      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c) => <Pill key={c.id} choice={{ name: c.text, color: c.color ?? "gray" }} />)}</span> : empty);
+      return chips.length ? chipRow(chips.map((c) => <Pill key={c.id} choice={{ name: c.text, color: c.color ?? "gray" }} />)) : wrap(empty);
     }
     case "link": {
       const chips = chipItems(field, value, format);
-      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c) => <LinkChip key={c.id ?? c.text} name={c.text} />)}</span> : empty);
+      return chips.length ? chipRow(chips.map((c) => <LinkChip key={c.id ?? c.text} name={c.text} />)) : wrap(empty);
     }
     case "user": {
       const chips = chipItems(field, value, format);
-      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c) => <UserChip key={c.id ?? c.text} name={c.text} email={c.id ? emails?.get(c.id) : undefined} color={c.color} />)}</span> : empty);
+      return chips.length ? chipRow(chips.map((c) => <UserChip key={c.id ?? c.text} name={c.text} email={c.id ? emails?.get(c.id) : undefined} color={c.color} />)) : wrap(empty);
     }
     case "list": {
       const chips = chipItems(field, value, format);
-      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c, i) => <span key={`${c.text}-${i}`} className="rounded-full bg-hover px-2 py-0.5 text-xs">{c.text}</span>)}</span> : empty);
+      return chips.length ? chipRow(chips.map((c, i) => <span key={`${c.text}-${i}`} className="shrink-0 rounded-full bg-hover px-2 py-0.5 text-xs">{c.text}</span>)) : wrap(empty);
     }
     case "attachment": {
       const files = attachmentRefs(value);
