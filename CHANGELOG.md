@@ -20,6 +20,20 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   its markdown. Shared boards show it too, unless the view hides the field. The setting is
   `kanban.description_field_id` in the view config (REST API and MCP, which takes the field name).
 
+### Changed
+
+- **The view toolbar makes room for itself.** When the window is too narrow for every tool, Filter,
+  Sort, Group, Hide fields, Color and Row height move into More, from the right end first, and come
+  back as the window widens. Add field and Download CSV always live in More.
+- The pictures on an empty base and on a view's "choose a field" screen no longer move.
+
+### Fixed
+
+- The grid grows to fit its rows when a horizontal scrollbar shows (macOS set to always show
+  scrollbars, Windows, Linux) instead of scrolling while the page still has room.
+- Person chips and select pills are no longer cut off at the top and bottom on kanban and gallery
+  cards and in lists.
+
 ## [0.3.0] - 2026-10-16
 
 ### Added
