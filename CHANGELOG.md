@@ -11,6 +11,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-16
+
 ### Added
 
 - **Select choices get meaningful default colours.** A choice created without a colour (when
@@ -241,7 +243,8 @@ stopped at the end-to-end test gate and published nothing. It contains everythin
   and SBOM attestations, and Linux binaries with checksums). It contains everything listed
   under 0.1.0 below. Not recommended for production use yet.
 
-[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/lukewilson2002/openbase/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lukewilson2002/openbase/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lukewilson2002/openbase/compare/v0.1.0-rc.2...v0.1.0
 [0.1.0-rc.2]: https://github.com/lukewilson2002/openbase/compare/v0.1.0-rc.1...v0.1.0-rc.2
