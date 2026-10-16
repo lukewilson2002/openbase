@@ -34,6 +34,7 @@ import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, set
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
+import { personColors } from "@/lib/colors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
@@ -118,7 +119,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // ---- formatting and editing environment ------------------------------------------------------
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id) }), [timeZone, userNames, emails]);
+  const colors = useMemo(() => personColors(people), [people]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null }),
     [schema.id, table.id, people, timeZone, canManageFields, format, me.data?.id],

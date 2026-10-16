@@ -79,6 +79,44 @@ export function personColor(seed: string): ChoiceColor {
   return COLORS[h % 10] ?? "gray";
 }
 
+/** A person who can be given a colour: collaborators of a base, comment authors. */
+export interface PersonSeed {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+}
+
+/**
+ * One colour per person across a set of people (the collaborators of a base), so two assignees
+ * never look alike while the set fits in the palette. Each person starts at the colour their email
+ * hashes to (`personColor`, the same one faces get outside a base) and moves to the next free
+ * colour on a clash; people are placed in id order, so the result does not depend on how the list
+ * arrived. The ten light colours go first, then their strong twins, then colours repeat.
+ */
+export function personColors(people: readonly PersonSeed[]): Map<string, ChoiceColor> {
+  const out = new Map<string, ChoiceColor>();
+  const taken = new Set<ChoiceColor>();
+  const sorted = [...people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const p of sorted) {
+    if (out.has(p.id)) continue;
+    const preferred = personColor(p.email || (p.name ?? "").trim() || p.id);
+    const start = COLORS.indexOf(preferred);
+    let pick: ChoiceColor = preferred;
+    search: for (const band of [0, 10]) {
+      for (let i = 0; i < 10; i++) {
+        const c = COLORS[band + ((start + i) % 10)]!;
+        if (!taken.has(c)) {
+          pick = c;
+          break search;
+        }
+      }
+    }
+    taken.add(pick);
+    out.set(p.id, pick);
+  }
+  return out;
+}
+
 /**
  * The `.ob-hue-*` shades as hex, for the grid, which draws on a canvas and cannot use the CSS
  * classes. colors.test.ts checks these against styles/index.css so the two cannot drift apart.

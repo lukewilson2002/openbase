@@ -60,7 +60,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     }
     case "user": {
       const chips = chipItems(field, value, format);
-      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c) => <UserChip key={c.id ?? c.text} name={c.text} email={c.id ? emails?.get(c.id) : undefined} />)}</span> : empty);
+      return wrap(chips.length ? <span className="flex flex-wrap gap-1">{chips.map((c) => <UserChip key={c.id ?? c.text} name={c.text} email={c.id ? emails?.get(c.id) : undefined} color={c.color} />)}</span> : empty);
     }
     case "list": {
       const chips = chipItems(field, value, format);
