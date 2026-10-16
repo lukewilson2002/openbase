@@ -742,6 +742,7 @@ async fn tools_listed_depend_on_the_token() {
         "get_base_schema",
         "list_records",
         "search_records",
+        "aggregate_records",
         "get_record",
         "list_comments",
         "api_reference",

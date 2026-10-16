@@ -11,6 +11,7 @@
 //!
 //! Read endpoints (Viewer), backed by `engine::query`:
 //! `POST /api/views/{id}/query`,
+//! `POST /api/tables/{id}/aggregate` (group-by: count, sum, avg, min, max per group),
 //! `GET /api/views/{id}/aggregations?timezone=&search=&transient=`,
 //! `GET /api/tables/{id}/records/{rid}`,
 //! `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=` (link picker) and
@@ -21,8 +22,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ob_core::api::records::{
-    AggregationsResponse, CreateRecords, HistoryEntry, LinkCandidates, MoveRecords, QueryRequest,
-    QueryResponse, Record, RecordIds, RecordsResponse, TransientConfig, UpdateRecords,
+    AggregateRequest, AggregateResponse, AggregationsResponse, CreateRecords, HistoryEntry,
+    LinkCandidates, MoveRecords, QueryRequest, QueryResponse, Record, RecordIds, RecordsResponse,
+    TransientConfig, UpdateRecords,
 };
 use serde::Deserialize;
 
@@ -50,6 +52,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/tables/{id}/records/move", post(move_records))
         .route("/api/tables/{id}/records/lookup", get(lookup))
         .route("/api/tables/{id}/records/{rid}", get(get_one))
+        .route("/api/tables/{id}/aggregate", post(aggregate))
         .route("/api/views/{id}/query", post(query_view))
         .route("/api/views/{id}/aggregations", get(aggregations))
         .route("/api/records/{id}/history", get(record_history))
@@ -260,6 +263,30 @@ fn parse_transient(raw: Option<&str>) -> AppResult<Option<TransientConfig>> {
     serde_json::from_str(raw)
         .map(Some)
         .map_err(|e| AppError::bad_request(format!("invalid transient parameter: {e}")))
+}
+
+/// `POST /api/tables/{id}/aggregate`: group a table's records (optionally narrowed by a view
+/// and/or a formula) and compute count, sum, avg, min and max per group. Viewer role.
+async fn aggregate(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(table_id): Path<String>,
+    ApiJson(body): ApiJson<AggregateRequest>,
+) -> AppResult<Json<AggregateResponse>> {
+    let cache = state.query_cache.clone();
+    let versions = state.events.versions().clone();
+    let response = state
+        .db
+        .read(move |conn| {
+            let base = perm::base_of_table(conn, &table_id)?;
+            perm::require_base(conn, &actor, &base, Role::Viewer)?;
+            crate::v1::aggregate::aggregate_in(
+                conn, &cache, &versions, &actor, &base, &table_id, body,
+            )
+            .map_err(crate::v1::aggregate::app_error)
+        })
+        .await?;
+    Ok(Json(response))
 }
 
 /// `GET /api/views/{id}/aggregations?timezone=&search=&transient=`.

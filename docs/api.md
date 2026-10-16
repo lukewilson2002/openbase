@@ -451,3 +451,66 @@ length). Unattached public-form uploads are deleted after 2 hours.
 - `POST /api/bases/{id}/import` (Creator): multipart `file`, optional `name`,
   `has_header`; creates a new table with inferred field types and imports every
   row, again atomically.
+
+---
+
+## 5. Aggregation (group-by)
+
+`POST /api/tables/{id}/aggregate` (Viewer; read-only tokens may call it, MCP: the
+`aggregate_records` tool) counts, sums, averages and takes the minimum or maximum of
+a table's records per group, computed on the server in one pass instead of paging every
+record to the client. Request (all optional):
+
+```json
+{
+  "group_by": ["Status", "Owner"],
+  "aggregates": [
+    {"function": "count"},
+    {"function": "sum", "field": "Amount"},
+    {"function": "avg", "field": "Amount", "alias": "mean_amount"},
+    {"function": "max", "field": "Due"}
+  ],
+  "view": "Open work",
+  "filter_by_formula": "{Region}='EU'",
+  "sort": [{"by": "sum_Amount", "direction": "desc"}],
+  "limit": 1000,
+  "timezone": "Europe/Berlin"
+}
+```
+
+Response:
+
+```json
+{
+  "group_by": ["Status", "Owner"],
+  "groups": [
+    {"group": {"Status": "Done", "Owner": ["Ada"]}, "aggregates": {"count": 3, "sum_Amount": 42.5, "mean_amount": 14.17, "max_Due": "2026-03-20"}}
+  ],
+  "total_groups": 1, "truncated": false, "record_count": 3
+}
+```
+
+- **Selecting records** works as in listing: `view` (name or id; its filter applies, personal
+  views of others are not found) and/or `filter_by_formula` (an Airtable formula, the same
+  5-second evaluation budget); with neither, every record is included. The caller needs the
+  Viewer role on the base, exactly as for listing.
+- **`group_by`**: up to 3 fields, by name or id; none gives one row with the totals (also for an
+  empty table: count 0, sum 0, others `null`). Groups are the same as the grid's grouping:
+  a multiple select, link or user field groups by the exact combination of its values, dates by
+  calendar day in `timezone` (default the caller's), and empty cells form one group. Buttons
+  cannot be grouped. Groups come ordered by their values (blanks first) unless `sort` says
+  otherwise (`by` is an aggregate alias or a group-by field); `limit` (default 1000, at most
+  10,000) cuts the list and `truncated` / `total_groups` report it.
+- **Group values** are names, never ids: text, number and checkbox values as they are, a single
+  select as its choice name, links, users and multiple selects as arrays of names, dates as
+  `YYYY-MM-DD`, and `null` for the empty group.
+- **`aggregates`** (default one `count`, at most 20): `count` without `field` counts records, with
+  a `field` it counts records where the field is filled (a checkbox: checked); `sum` and `avg`
+  need a number-like field (number, currency, percent, duration, rating, autonumber, count, or a
+  formula, rollup or lookup returning a number); `min` and `max` take number or date fields (dates
+  come back as `YYYY-MM-DD` or an ISO instant). Empty cells are skipped: `sum` of nothing is 0,
+  `avg`, `min` and `max` of nothing are `null`. Values are keyed by `alias`, default `count` or
+  `<function>_<Field name>`; aliases must be unique.
+- **Errors** are 400 (MCP: a tool error) naming the problem and what would work: an unknown field,
+  `sum` of a text field, a group by a button, `sum` without a field, two aggregates with the same
+  alias, an invalid formula, an unknown view.

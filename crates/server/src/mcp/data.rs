@@ -20,12 +20,17 @@ use super::tools::{Level, ToolDef, ToolResult};
 use crate::error::AppError;
 use crate::perm::{self, Role};
 use crate::store::{bases, schema};
+use crate::v1::aggregate;
 use crate::v1::error::V1Error;
 use crate::v1::records::{self, ListQuery, MAX_BATCH};
+use ob_core::api::records::{AggregateRequest, AggregateSort, AggregateSpec};
 
 /// `max_records` of the listing tools.
 const DEFAULT_RECORDS: usize = 50;
 const MAX_RECORDS: usize = 200;
+/// `limit` of `aggregate_records`: default and maximum number of groups.
+const DEFAULT_GROUPS_RETURNED: usize = 200;
+const MAX_GROUPS_RETURNED: usize = 1000;
 /// Names listed in a "valid names" hint.
 const MAX_HINT_NAMES: usize = 40;
 
@@ -102,6 +107,54 @@ pub fn definitions() -> Vec<ToolDef> {
                     "max_records": integer("How many records to return (default 50, max 200).", 1, MAX_RECORDS as u64),
                 }),
                 &["base_id", "table", "query"],
+            ),
+            Level::Read,
+            true,
+            false,
+            true,
+        ),
+        tool(
+            "aggregate_records",
+            "Aggregate records (group by)",
+            "Counts, sums, averages, minimums and maximums computed on the server, optionally per group, without reading the records. Give `group_by` field names (e.g. [\"Status\"]; none = one row of totals) and `aggregates` ([{\"function\": \"sum\", \"field\": \"Amount\"}]; functions: count, sum, avg, min, max; sum and avg need a number field, min and max a number or date field; count with no field counts records, with a field it counts the records where that field is filled; default is one count). Narrow the records like list_records: `view` and/or `filter_by_formula`. Returns {group_by, groups: [{group: {Field: value}, aggregates: {alias: value}}], total_groups, truncated, record_count}. Group values are names, never ids: a select's choice name, linked records / people / multiple selects as arrays of names, dates as YYYY-MM-DD, null for the empty group; a multiple select, link or people field groups by its exact combination of values. Aggregates are named `count` or `<function>_<Field>` unless you give an `alias`.",
+            object(
+                json!({
+                    "base_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "group_by": string_list("Field names to group by (at most 3). Leave out for one row of totals."),
+                    "aggregates": {
+                        "type": "array",
+                        "description": "What to compute per group (default: one count).",
+                        "maxItems": 20,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "function": { "type": "string", "enum": ["count", "sum", "avg", "min", "max"], "description": "count, sum, avg, min or max." },
+                                "field": string("Field name. Optional for count only."),
+                                "alias": string("Name of the value in the result (default `count` or `<function>_<Field>`).")
+                            },
+                            "required": ["function"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "view": string("Optional view name or id; only records its filter keeps are included."),
+                    "filter_by_formula": string("Optional Airtable formula; only records where it is true are included, e.g. {Status}='Done'."),
+                    "sort": {
+                        "type": "array",
+                        "description": "Optional order of the groups, most important first (default: by the group_by values).",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "by": string("An aggregate alias or a group_by field name."),
+                                "direction": { "type": "string", "enum": ["asc", "desc"], "description": "Default asc." }
+                            },
+                            "required": ["by"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "limit": integer("Most groups to return (default 200, max 1000); `truncated` says whether more exist.", 1, MAX_GROUPS_RETURNED as u64),
+                }),
+                &["base_id", "table"],
             ),
             Level::Read,
             true,
@@ -364,6 +417,7 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
         "get_base_schema" => with_args!(BaseArg, get_base_schema),
         "list_records" => with_args!(ListArgs, list_records),
         "search_records" => with_args!(SearchArgs, search_records),
+        "aggregate_records" => with_args!(AggregateArgs, aggregate_records),
         "get_record" => with_args!(GetArgs, get_record),
         "create_records" => with_args!(CreateArgs, create_records),
         "update_records" => with_args!(UpdateArgs, update_records),
@@ -731,6 +785,74 @@ async fn search_records(ctx: &McpCtx, a: SearchArgs) -> ToolResult {
         ..Default::default()
     };
     records_result(ctx, &a.base_id, &a.table, query, note).await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AggregateArgs {
+    base_id: String,
+    table: String,
+    #[serde(default)]
+    view: Option<String>,
+    #[serde(default)]
+    filter_by_formula: Option<String>,
+    #[serde(default)]
+    group_by: Option<Vec<String>>,
+    #[serde(default)]
+    aggregates: Option<Vec<AggregateSpec>>,
+    #[serde(default)]
+    sort: Option<Vec<AggregateSort>>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+async fn aggregate_records(ctx: &McpCtx, a: AggregateArgs) -> ToolResult {
+    let (limit, note) = match a.limit {
+        None => (DEFAULT_GROUPS_RETURNED, None),
+        Some(0) => (
+            1,
+            Some("limit must be at least 1; returned 1 group at most.".to_string()),
+        ),
+        Some(n) if n > MAX_GROUPS_RETURNED => (
+            MAX_GROUPS_RETURNED,
+            Some(format!(
+                "limit is capped at {MAX_GROUPS_RETURNED}; narrow the records or group by fewer fields."
+            )),
+        ),
+        Some(n) => (n, None),
+    };
+    let req = AggregateRequest {
+        view: a.view,
+        filter_by_formula: a.filter_by_formula,
+        group_by: a.group_by.unwrap_or_default(),
+        aggregates: a.aggregates.unwrap_or_default(),
+        sort: a.sort.unwrap_or_default(),
+        limit: Some(limit),
+        timezone: None,
+    };
+    match aggregate::aggregate_for(
+        &ctx.state,
+        ctx.actor.clone(),
+        a.base_id.clone(),
+        a.table.clone(),
+        req,
+    )
+    .await
+    {
+        Ok(out) => {
+            let mut v = serde_json::to_value(&out).unwrap_or(Value::Null);
+            if out.truncated {
+                v["hint"] = json!(
+                    "More groups exist than were returned: raise `limit`, sort by what matters, or narrow with `view` / `filter_by_formula`."
+                );
+            }
+            if let Some(n) = note {
+                v["note"] = json!(n);
+            }
+            ToolResult::ok(v)
+        }
+        Err(e) => v1_failure(ctx, e, &a.base_id, Some(&a.table)).await,
+    }
 }
 
 #[derive(Deserialize)]

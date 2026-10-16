@@ -58,7 +58,7 @@ const FORMULA_CHUNK: usize = 500;
 
 /// The table `table_ref` (an id, else an exact name) of base `base_id`,
 /// after checking the caller's role on the base.
-fn resolve_table(
+pub(crate) fn resolve_table(
     conn: &Connection,
     actor: &Actor,
     base_id: &str,
@@ -247,7 +247,7 @@ fn dir_code(d: Direction) -> u8 {
 }
 
 /// A stand-in view for listings without `view`: every record in manual order.
-fn all_records_view(table: &TableRow) -> ViewRow {
+pub(crate) fn all_records_view(table: &TableRow) -> ViewRow {
     ViewRow {
         view: View {
             id: format!("v1:{}", table.id),
@@ -264,7 +264,7 @@ fn all_records_view(table: &TableRow) -> ViewRow {
     }
 }
 
-fn find_view(
+pub(crate) fn find_view(
     conn: &Connection,
     actor: &Actor,
     table: &TableRow,
@@ -322,12 +322,12 @@ impl EvalContext for RowCtx<'_> {
 /// How long one list request may spend evaluating its `filterByFormula`
 /// (the read connection is held for that long). Generous: a sane formula over
 /// a 100,000-record table takes a second or two.
-const FORMULA_TIME_BUDGET: Duration = Duration::from_secs(5);
+pub(crate) const FORMULA_TIME_BUDGET: Duration = Duration::from_secs(5);
 
 /// The ids among `ids` (order kept) for which `formula_text` is truthy.
 /// `{Field Name}` references resolve against the table's field names. Fails
 /// with 422 if the evaluation takes longer than `budget`.
-fn filter_by_formula(
+pub(crate) fn filter_by_formula(
     conn: &Connection,
     table: &TableRow,
     fields: &[Field],

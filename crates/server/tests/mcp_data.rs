@@ -747,6 +747,10 @@ async fn write_tools_enforce_roles_and_token_scope() {
             json!({"base_id": r.base(), "table": "Table 1", "query": "a"}),
         ),
         (
+            "aggregate_records",
+            json!({"base_id": r.base(), "table": "Table 1", "group_by": ["Name"]}),
+        ),
+        (
             "get_record",
             json!({"base_id": r.base(), "table": "Table 1", "record_id": r.p.ids[0]}),
         ),
@@ -761,6 +765,161 @@ async fn write_tools_enforce_roles_and_token_scope() {
         );
     }
     assert_eq!(f.query(json!({})).await["total"], 5, "nothing was written");
+}
+
+// ------------------------------------------------------------------- aggregate_records
+
+/// `aggregate_records` as the read-only token, on "Table 1" unless `args` say otherwise.
+async fn aggregate(r: &Rig, args: Value) -> Tool {
+    let mut a = json!({"base_id": r.base(), "table": "Table 1"});
+    for (k, v) in args.as_object().unwrap() {
+        a[k] = v.clone();
+    }
+    tool(r.app(), &r.read, "aggregate_records", a).await
+}
+
+#[tokio::test]
+async fn aggregate_records_groups_with_names_and_computes_on_the_server() {
+    let r = rig().await;
+    // Totals with no arguments but the table: one count.
+    let t = aggregate(&r, json!({})).await;
+    assert_eq!(t.ok()["groups"][0]["aggregates"], json!({"count": 5}));
+    assert_eq!(t.ok()["record_count"], 5);
+
+    // Counts and sums per select choice, by name.
+    let t = aggregate(
+        &r,
+        json!({
+            "group_by": ["Status"],
+            "aggregates": [{"function": "count"}, {"function": "sum", "field": "Age"}],
+            "sort": [{"by": "sum_Age", "direction": "desc"}],
+        }),
+    )
+    .await;
+    let v = t.ok();
+    let rows: Vec<(Value, Value, Value)> = v["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| {
+            (
+                g["group"]["Status"].clone(),
+                g["aggregates"]["count"].clone(),
+                g["aggregates"]["sum_Age"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (json!("Todo"), json!(2), json!(60)),
+            (json!("Done"), json!(1), json!(41)),
+            (json!("Doing"), json!(1), json!(25)),
+            (json!(null), json!(1), json!(0)),
+        ]
+    );
+    assert_eq!(v["total_groups"], 4);
+    assert_eq!(v["truncated"], false);
+    assert!(v.get("hint").is_none() && v.get("note").is_none());
+    assert!(
+        t.text.starts_with('{') && !t.text.contains('\n'),
+        "compact JSON text"
+    );
+
+    // The filters of list_records, a view and a formula, and field ids work as names.
+    let age = r.p.age.clone();
+    r.p.f
+        .new_view(
+            &r.p.f.table_id,
+            "Senior",
+            json!({"filter": and(vec![cond(&age, "gt", json!(26))])}),
+        )
+        .await;
+    let t = aggregate(
+        &r,
+        json!({
+            "view": "Senior",
+            "filter_by_formula": "{Status}='Todo'",
+            "group_by": ["Tags"],
+            "aggregates": [{"function": "avg", "field": age, "alias": "mean"}],
+        }),
+    )
+    .await;
+    let g = &t.ok()["groups"];
+    assert_eq!(g.as_array().unwrap().len(), 2, "{}", t.text);
+    assert_eq!(g[0]["group"]["Tags"], json!(["a"]));
+    assert_eq!(g[0]["aggregates"]["mean"], 30);
+    assert_eq!(t.ok()["record_count"], 2);
+
+    // Dates: min and max of a date field per checkbox group.
+    let t = aggregate(
+        &r,
+        json!({
+            "group_by": ["Done"],
+            "aggregates": [{"function": "min", "field": "Due"}, {"function": "max", "field": "Due"}],
+        }),
+    )
+    .await;
+    let unchecked = &t.ok()["groups"][0];
+    assert_eq!(unchecked["group"]["Done"], false);
+    assert_eq!(unchecked["aggregates"]["min_Due"], "2026-03-01");
+    assert_eq!(unchecked["aggregates"]["max_Due"], "2026-03-10");
+}
+
+#[tokio::test]
+async fn aggregate_records_limits_groups_and_hints_when_cut() {
+    let r = rig().await;
+    let t = aggregate(&r, json!({"group_by": ["Name"], "limit": 2})).await;
+    let v = t.ok();
+    assert_eq!(v["groups"].as_array().unwrap().len(), 2);
+    assert_eq!(v["total_groups"], 5);
+    assert_eq!(v["truncated"], true);
+    assert!(v["hint"].as_str().unwrap().contains("limit"), "{v}");
+    let t = aggregate(&r, json!({"group_by": ["Name"], "limit": 5000})).await;
+    assert!(
+        t.ok()["note"].as_str().unwrap().contains("1000"),
+        "{}",
+        t.text
+    );
+    assert_eq!(t.ok()["truncated"], false);
+}
+
+#[tokio::test]
+async fn aggregate_records_errors_name_the_problem_and_the_valid_fields() {
+    let r = rig().await;
+    let t = aggregate(
+        &r,
+        json!({"aggregates": [{"function": "sum", "field": "Name"}]}),
+    )
+    .await;
+    let m = t.err();
+    assert!(
+        m.contains("Cannot sum \"Name\"")
+            && m.contains("single_line_text")
+            && m.contains("\"Age\""),
+        "{m}"
+    );
+    let t = aggregate(&r, json!({"aggregates": [{"function": "sum"}]})).await;
+    assert!(t.err().contains("needs a `field`"), "{}", t.text);
+    let t = aggregate(&r, json!({"group_by": ["Nope"]})).await;
+    let m = t.err();
+    assert!(
+        m.contains("Nope") && m.contains("Fields of 'Table 1'"),
+        "{m}"
+    );
+    let t = aggregate(
+        &r,
+        json!({"aggregates": [{"function": "median", "field": "Age"}]}),
+    )
+    .await;
+    assert!(t.err().contains("Invalid arguments"), "{}", t.text);
+    let t = aggregate(&r, json!({"view": "Missing view"})).await;
+    let m = t.err();
+    assert!(m.contains("Missing view") && m.contains("Views:"), "{m}");
+    let t = aggregate(&r, json!({"filter_by_formula": "{Age} ="})).await;
+    assert!(t.err().contains("INVALID_FILTER_BY_FORMULA"), "{}", t.text);
+    let t = aggregate(&r, json!({"table": "No such table"})).await;
+    assert!(t.err().contains("Tables in this base"), "{}", t.text);
 }
 
 // ------------------------------------------------------------------- comments

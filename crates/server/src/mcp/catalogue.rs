@@ -458,6 +458,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors}",
     ),
     e(
+        POST,
+        "/api/tables/{id}/aggregate",
+        "records",
+        "viewer",
+        Read,
+        "Group a table's records and compute aggregates per group in the database (no paging through records): count, sum, avg, min, max. Narrow with a view and/or an Airtable formula. A POST that only reads.",
+        "{group_by?: [field name or id] (at most 3), aggregates?: [{function: count|sum|avg|min|max, field? (name or id; not for plain count), alias?}] (default one count), view?, filter_by_formula?, sort?: [{by: alias or group_by field, direction?: asc|desc}], limit? (default 1000, max 10000), timezone?}",
+        "{group_by: [name], groups: [{group: {field name: value (select/link/user as names, dates as YYYY-MM-DD, empty = null)}, aggregates: {alias: value}}], total_groups, truncated, record_count}",
+    ),
+    e(
         GET,
         "/api/views/{id}/aggregations",
         "records",

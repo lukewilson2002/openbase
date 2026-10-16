@@ -143,6 +143,40 @@ async fn api_reference_lists_areas_then_endpoints_in_detail() {
 }
 
 #[tokio::test]
+async fn the_aggregate_endpoint_is_catalogued_as_a_read_and_works_for_read_only_tokens() {
+    let r = rig().await;
+    let t = tool(
+        r.app(),
+        &r.read,
+        "api_reference",
+        json!({"area": "records"}),
+    )
+    .await;
+    let list = t.ok()["endpoints"].as_array().unwrap().clone();
+    let e = list
+        .iter()
+        .find(|e| e["path"] == "/api/tables/{id}/aggregate")
+        .unwrap();
+    assert_eq!(e["method"], "POST");
+    assert_eq!(e["min_role"], "viewer");
+    assert_eq!(e["token_capability"], "read");
+    // A read-only token may call it through api_request, and gets the same answer as REST.
+    let (t, res) = api(
+        r.app(),
+        &r.read,
+        "POST",
+        &format!("/api/tables/{}/aggregate", r.table()),
+        Value::Null,
+        json!({"group_by": ["Status"], "aggregates": [{"function": "sum", "field": "Age"}]}),
+    )
+    .await;
+    t.ok();
+    assert_eq!(res["status"], 200, "{res}");
+    assert_eq!(res["body"]["record_count"], 5);
+    assert_eq!(res["body"]["groups"].as_array().unwrap().len(), 4);
+}
+
+#[tokio::test]
 async fn every_catalogued_endpoint_is_served_by_the_router() {
     // A fake id never creates, changes or deletes anything; what matters is that the method and
     // path pair exists (the router answers 405 for a registered path with another method).
