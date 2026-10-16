@@ -347,6 +347,91 @@ async fn field_types_help_documents_every_type() {
 }
 
 #[tokio::test]
+async fn select_choices_take_colors_or_get_meaningful_defaults() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    r.table("T").await;
+    // Explicit {name, color} choices are kept; plain names get a colour from their meaning.
+    let f = r
+        .field(
+            "T",
+            "Priority",
+            "single_select",
+            json!({"choices": ["Critical", "High", "Medium", "Low",
+                               {"name": "Someday", "color": "purple"}, "Billing"]}),
+        )
+        .await;
+    let colors: Vec<&str> = f["options"]["choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["color"].as_str().unwrap())
+        .collect();
+    // "Billing" is not a known word: it cycles by position (index 5).
+    assert_eq!(
+        colors,
+        ["red", "orange", "yellow", "green", "purple", "orange"]
+    );
+
+    let status = r
+        .field(
+            "T",
+            "Status",
+            "single_select",
+            json!({"choices": ["Open", "In Progress", "Done"]}),
+        )
+        .await;
+    let names_colors: Vec<(&str, &str)> = status["options"]["choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| (c["name"].as_str().unwrap(), c["color"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        names_colors,
+        [
+            ("Open", "blue"),
+            ("In Progress", "yellow"),
+            ("Done", "green")
+        ]
+    );
+
+    // A choice created by typecast on a record gets the same treatment.
+    r.records("T", json!([{"fields": {"Priority": "Urgent"}}]))
+        .await;
+    let schema = r.schema().await;
+    let t = schema["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "T")
+        .unwrap();
+    let pri = t["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "Priority")
+        .unwrap();
+    let urgent = pri["options"]["choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "Urgent")
+        .unwrap();
+    assert_eq!(urgent["color"], "red");
+
+    // field_types tells a model about both.
+    let d = a
+        .call("field_types", json!({"type": "single_select"}))
+        .await;
+    let opts = d["options"].as_str().unwrap();
+    assert!(
+        opts.contains("{name, color?}") && opts.contains("Critical"),
+        "{opts}"
+    );
+}
+
+#[tokio::test]
 async fn field_creation_errors_say_what_to_fix() {
     let r = Rig::new().await;
     let a = &r.agent;

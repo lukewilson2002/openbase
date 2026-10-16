@@ -67,7 +67,7 @@ use chrono_tz::Tz;
 use ob_core::api::events::BaseEvent;
 use ob_core::api::records::{MoveRecords, NewRecord, RecordPatch};
 use ob_core::cell::{CellCtx, missing_choices, normalize};
-use ob_core::field::{COLORS, Field, FieldKind, SelectChoice};
+use ob_core::field::{Field, FieldKind, SelectChoice, default_choice_color};
 use ob_core::ids;
 use ob_core::limits;
 use rusqlite::{Connection, Transaction};
@@ -510,7 +510,7 @@ impl<'a> Writer<'a> {
             }
             for name in names {
                 let name = schema::validate_name(&name, "choice")?;
-                let color = COLORS[choices.len() % COLORS.len()].to_string();
+                let color = default_choice_color(&name, choices.len()).to_string();
                 choices.push(SelectChoice {
                     id: new_id(ids::CHOICE),
                     name,

@@ -38,7 +38,7 @@ pub fn definitions() -> Vec<ToolDef> {
         "description": "Field type. Call field_types for each type's options and value shape.",
     });
     let options = free_object(
-        "Type options, e.g. {\"choices\": [\"Todo\", \"Done\"]} for selects, {\"precision\": 2} for numbers, {\"linked_table\": \"Customers\"} for links, {\"expression\": \"{Price} * {Qty}\"} for formulas, {\"link_field\": \"Orders\", \"target_field\": \"Total\", \"expression\": \"SUM(values)\"} for rollups. Tables and fields may be given by name. See field_types.",
+        "Type options, e.g. {\"choices\": [\"Todo\", {\"name\": \"Done\", \"color\": \"green\"}]} for selects (choices are names or {name, color}; names like Critical/High/Low/Done get a fitting colour when none is given), {\"precision\": 2} for numbers, {\"linked_table\": \"Customers\"} for links, {\"expression\": \"{Price} * {Qty}\"} for formulas, {\"link_field\": \"Orders\", \"target_field\": \"Total\", \"expression\": \"SUM(values)\"} for rollups. Tables and fields may be given by name. See field_types.",
     );
     vec![
         ToolDef::new(
@@ -1023,7 +1023,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "single_select",
             "Single select",
             false,
-            "{choices: [\"Todo\", {name: \"Done\", color: \"green\"}]} choices are names or {name, color?}; colours: blue cyan teal green yellow orange red pink purple gray (+ _dark)",
+            "{choices: [\"Todo\", {name: \"Done\", color: \"green\"}]} choices are names or {name, color?}; colours: blue cyan teal green yellow orange red pink purple gray (+ _dark). Pass color to set it at creation. Without one, common severity/status names get a matching colour (Critical/Urgent red, High orange, Medium/In Progress yellow, Low/Done green, Open/Todo blue, Cancelled gray) and any other name cycles through the palette",
             "choice name; with typecast a missing choice is created",
             json!({"choices": ["Todo", "Doing", {"name": "Done", "color": "green"}]}),
         ),

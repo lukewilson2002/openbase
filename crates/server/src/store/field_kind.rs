@@ -11,8 +11,8 @@ use std::collections::HashSet;
 
 use ob_core::api::schema::{CreateField, UpdateField};
 use ob_core::field::{
-    COLORS, DateOptions, Field, FieldKind, LastModifiedOptions, LinkOptions, SelectOptions,
-    ValueFormat,
+    DateOptions, Field, FieldKind, LastModifiedOptions, LinkOptions, SelectOptions, ValueFormat,
+    default_choice_color,
 };
 use ob_core::limits;
 use ob_core::value::ResultType;
@@ -192,7 +192,7 @@ fn normalize_choices(o: &mut SelectOptions) -> AppResult<()> {
             )));
         }
         if c.color.is_empty() {
-            c.color = COLORS[i % COLORS.len()].to_string();
+            c.color = default_choice_color(&c.name, i).to_string();
         } else {
             schema::validate_color(&c.color)?;
         }
@@ -421,15 +421,17 @@ mod tests {
     #[test]
     fn choices_get_ids_colours_and_reject_duplicates() {
         let mut o: SelectOptions = serde_json::from_value(json!({"choices": [
-            {"id": "", "name": " Todo ", "color": ""},
-            {"id": "keep_me", "name": "Done", "color": "green"}
+            {"id": "", "name": " Billing ", "color": ""},
+            {"id": "keep_me", "name": "Done", "color": "green"},
+            {"id": "", "name": "Critical", "color": ""}
         ]}))
         .unwrap();
         normalize_choices(&mut o).unwrap();
         assert!(o.choices[0].id.starts_with("sel"));
-        assert_eq!(o.choices[0].name, "Todo");
-        assert_eq!(o.choices[0].color, COLORS[0]);
+        assert_eq!(o.choices[0].name, "Billing");
+        assert_eq!(o.choices[0].color, ob_core::field::COLORS[0]);
         assert_eq!(o.choices[1].id, "keep_me");
+        assert_eq!(o.choices[2].color, "red");
 
         let mut dup: SelectOptions = serde_json::from_value(json!({"choices": [
             {"id": "", "name": "A", "color": "blue"}, {"id": "", "name": "a", "color": "red"}

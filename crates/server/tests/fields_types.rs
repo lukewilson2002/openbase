@@ -364,3 +364,24 @@ async fn date_option_changes_keep_values() {
     assert_eq!(r.body["options"]["timezone"], "Asia/Tokyo");
     assert_eq!(f.record_data(&rec), json!({ &did: "2026-10-12" }));
 }
+
+#[tokio::test]
+async fn rest_select_choices_keep_given_colors_and_default_by_name() {
+    let f = Fixture::new().await;
+    let field = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Severity", "type": "single_select",
+                    "options": { "choices": [
+                        { "name": "Critical" }, { "name": "Low" },
+                        { "name": "Custom", "color": "pink" }, { "name": "Other" } ] } }),
+        )
+        .await;
+    let colors: Vec<&str> = field["options"]["choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["color"].as_str().unwrap())
+        .collect();
+    assert_eq!(colors, ["red", "green", "pink", "green"]);
+}
