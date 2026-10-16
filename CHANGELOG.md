@@ -11,6 +11,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
 ### Changed
 
 - **One access model.** People get access only by being a member of a workspace. Each member
@@ -193,7 +195,8 @@ stopped at the end-to-end test gate and published nothing. It contains everythin
   and SBOM attestations, and Linux binaries with checksums). It contains everything listed
   under 0.1.0 below. Not recommended for production use yet.
 
-[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lukewilson2002/openbase/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lukewilson2002/openbase/compare/v0.1.0-rc.2...v0.1.0
 [0.1.0-rc.2]: https://github.com/lukewilson2002/openbase/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/lukewilson2002/openbase/releases/tag/v0.1.0-rc.1
