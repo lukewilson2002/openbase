@@ -404,7 +404,7 @@ So an "Upcoming" view with `is_on_or_after {mode: "today"}` keeps today's
 events all evening in US Central time. Date-only fields are compared as calendar
 dates; date-times are turned into a day in the field's own time zone if it has
 one, otherwise the viewer's. `exact_date` is the day as written. Details:
-[docs/api.md, section 5](api.md#5-relative-date-filters-and-time-zones).
+[docs/api.md, section 6](api.md#6-relative-date-filters-and-time-zones).
 
 ### Trash, history, notifications
 

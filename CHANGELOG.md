@@ -28,6 +28,24 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   are names, not ids (select choices, linked records, people), dates are `YYYY-MM-DD`, the empty
   group is `null`; invalid combinations such as a sum of a text field are clear errors. See
   [docs/api.md](docs/api.md) section 5.
+- **`create_table` takes a list of fields** (MCP tool and `POST /api/bases/{id}/tables`):
+  `fields` has the shape of `create_field` and sets a table up in one call. It is all or
+  nothing: every field is checked and, if one is invalid, no table is created and the error
+  names it. A lookup, rollup or count may use a link field listed earlier in the same list.
+- **`include_empty` for reads.** `list_records`, `search_records`, `get_record` and `query_view` (and `includeEmpty=true` on the REST list and single-record endpoints) return fields with no value as `null`, so a client can infer columns from the records. Default unchanged: empty fields are left out, as in Airtable.
+
+### Changed
+
+- **Every new table starts the same way:** with just its primary field "Name" and a grid view.
+  The first table of a base created without `empty` used to get a "Notes" long-text field as
+  well; it no longer does, so a script no longer has to check which fields a new table has
+  (add what you need with `fields` on `create_table` or with `create_field`). The web app
+  already created bases empty, so it is not affected. Existing tables keep their fields.
+- **Relative date filters are documented as viewer-time-zone.** `today`, `tomorrow`, `past_week`
+  and the other relative modes are calendar days in the viewer's time zone (the request's
+  `timezone`, else the profile's, else UTC), so an evening in US Central time still shows
+  today's events. The MCP `create_view` / `update_view` descriptions and `docs/api.md`
+  (section 6) now say so, and the MCP `query_view` tool takes an optional `timezone`.
 
 ### Fixed
 
@@ -42,17 +60,6 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 ## [0.2.0] - 2026-10-16
 
 ### Changed
-
-- **Every new table starts the same way:** with just its primary field "Name" and a grid view.
-  The first table of a base created without `empty` used to get a "Notes" long-text field as
-  well; it no longer does, so a script no longer has to check which fields a new table has
-  (add what you need with `fields` on `create_table` or with `create_field`). The web app
-  already created bases empty, so it is not affected. Existing tables keep their fields.
-- **Relative date filters are documented as viewer-time-zone.** `today`, `tomorrow`, `past_week`
-  and the other relative modes are calendar days in the viewer's time zone (the request's
-  `timezone`, else the profile's, else UTC), so an evening in US Central time still shows
-  today's events. The MCP `create_view` / `update_view` descriptions and `docs/api.md`
-  (section 5) now say so, and the MCP `query_view` tool takes an optional `timezone`.
 
 - **One access model.** People get access only by being a member of a workspace. Each member
   has one role there and either every base of the workspace (including bases created later) or
@@ -93,11 +100,6 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
-- **`create_table` takes a list of fields** (MCP tool and `POST /api/bases/{id}/tables`):
-  `fields` has the shape of `create_field` and sets a table up in one call. It is all or
-  nothing: every field is checked and, if one is invalid, no table is created and the error
-  names it. A lookup, rollup or count may use a link field listed earlier in the same list.
-- **`include_empty` for reads.** `list_records`, `search_records`, `get_record` and `query_view` (and `includeEmpty=true` on the REST list and single-record endpoints) return fields with no value as `null`, so a client can infer columns from the records. Default unchanged: empty fields are left out, as in Airtable.
 - **A first-run intro** to bases, tables, workspaces and the assistant, shown once per account;
   replay it from the profile menu. The setup page is friendlier and no longer asks you to
   confirm the password.
