@@ -15,6 +15,7 @@
 //! paths below `/api/v1` get the same format from the SPA fallback in
 //! [`crate::web`].
 
+pub mod aggregate;
 pub mod auth;
 pub mod cursor;
 pub mod error;

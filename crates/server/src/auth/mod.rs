@@ -471,7 +471,7 @@ pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
 
 /// POST routes that only read, so read-only tokens may call them (matched
 /// route patterns).
-const READ_ONLY_POSTS: &[&str] = &["/api/views/{id}/query"];
+const READ_ONLY_POSTS: &[&str] = &["/api/views/{id}/query", "/api/tables/{id}/aggregate"];
 
 /// A read-only API token acts as a Viewer and may only read: refuse every
 /// state-changing request here, in the one place all authenticated routes

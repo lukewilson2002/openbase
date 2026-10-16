@@ -234,7 +234,7 @@ fn kind_of_result(rt: &ResultType) -> Kind {
 /// Whether a cell counts as empty for `is_empty` / summary counts:
 /// unchecked checkboxes, absent values, blank text and empty arrays.
 /// Formula errors and `false` formula results are not empty.
-pub(crate) fn is_cell_empty(field: &Field, stored: Option<&Json>) -> bool {
+pub fn is_cell_empty(field: &Field, stored: Option<&Json>) -> bool {
     if let FieldKind::Checkbox(_) = field.kind {
         return !matches!(stored, Some(Json::Bool(true)));
     }

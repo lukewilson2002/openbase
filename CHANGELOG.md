@@ -145,6 +145,14 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   the role drops the trashed bases on the invite that they could not open.
 - Each base in `GET /api/workspaces` lists its live `tables` (`id`, `name`, `icon`) in sidebar
   order, so the workspace page no longer loads every base to name its tables.
+- **Aggregate records (group-by).** `POST /api/tables/{id}/aggregate` and the MCP tool
+  `aggregate_records` count, sum, average and take the minimum or maximum of a table's records,
+  optionally grouped by up to 3 fields, computed on the server in one pass instead of paging every
+  record to the client. Records can be narrowed with a `view` and/or a `filter_by_formula`, like
+  listing them, and the same permissions apply (Viewer; read-only tokens may call it). Group values
+  are names, not ids (select choices, linked records, people), dates are `YYYY-MM-DD`, the empty
+  group is `null`; invalid combinations such as a sum of a text field are clear errors. See
+  [docs/api.md](docs/api.md) section 5.
 
 ### Fixed
 

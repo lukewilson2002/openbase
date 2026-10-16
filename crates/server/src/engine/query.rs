@@ -288,13 +288,13 @@ struct RangeSpec {
 
 /// Which cells a row must carry: system fields are synthesized and link
 /// arrays reduced to live records.
-struct Needed {
+pub(super) struct Needed {
     system: Vec<Field>,
     links: HashSet<String>,
 }
 
 impl Needed {
-    fn of<'a>(fields: impl IntoIterator<Item = &'a Field>) -> Needed {
+    pub(super) fn of<'a>(fields: impl IntoIterator<Item = &'a Field>) -> Needed {
         let mut seen = HashSet::new();
         let mut system = Vec::new();
         let mut links = HashSet::new();
@@ -588,7 +588,12 @@ impl Plan {
 // ------------------------------------------------------------------- scan
 
 /// Turn a stored record into the row the query functions see.
-fn eval_row(conn: &Connection, needed: &Needed, row: RecordRow, names: &NameCache) -> OwnedRow {
+pub(super) fn eval_row(
+    conn: &Connection,
+    needed: &Needed,
+    row: RecordRow,
+    names: &NameCache,
+) -> OwnedRow {
     let system: Vec<(String, Json)> = needed
         .system
         .iter()
@@ -617,7 +622,7 @@ fn eval_row(conn: &Connection, needed: &Needed, row: RecordRow, names: &NameCach
 
 /// Stream the live records of a table in manual order, presenting each as an
 /// [`OwnedRow`]. `visit` returns `false` to stop early.
-fn scan_rows(
+pub(super) fn scan_rows(
     conn: &Connection,
     table_id: &str,
     needed: &Needed,

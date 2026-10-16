@@ -319,6 +319,7 @@ are names or ids.
 | `get_base_schema` | any | The base's icon, and its tables (with icons), fields (id, name, type, options) and views |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues |
 | `search_records` | any | Case-insensitive text search over all fields |
+| `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
 | `get_record` | any | One record |
 | `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices |
 | `update_records` | write | 1-10 records; only the given fields change; `null` clears |
@@ -601,7 +602,7 @@ More in [security.md](security.md).
 
 Fixed in code: 8 MB request body (so base64 uploads up to about 6 MB; URL uploads are
 limited only by the upload limit), 10 records per write call, 200 records per
-`list_records` / `query_view` call, 100,000 bytes per tool result, about 80 KB of CSV
+`list_records` / `query_view` call, 1,000 groups per `aggregate_records` call, 100,000 bytes per tool result, about 80 KB of CSV
 per `export_csv`, 120 s per `api_request`, 30 s per URL download.
 
 ## Protocol

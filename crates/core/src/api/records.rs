@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
-use crate::view::{Filter, Sort};
+use crate::view::{Direction, Filter, Sort};
 
 /// A record as returned by the API.
 ///
@@ -357,4 +357,107 @@ pub struct MarkRead {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
     pub ids: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Aggregation (group-by)
+
+/// The functions of an [`AggregateSpec`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(rename_all = "snake_case")]
+pub enum AggregateFunction {
+    /// Records in the group; with a `field`, records where that field is not empty
+    /// (a checkbox counts the checked ones).
+    Count,
+    /// Sum of a numeric field (0 when the group has no numbers).
+    Sum,
+    /// Mean of a numeric field (null when the group has no numbers).
+    Avg,
+    /// Smallest number or earliest date (null when the group has none).
+    Min,
+    /// Largest number or latest date (null when the group has none).
+    Max,
+}
+
+/// One value to compute per group.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct AggregateSpec {
+    pub function: AggregateFunction,
+    /// Field name or id. Optional for `count` only.
+    #[serde(default)]
+    pub field: Option<String>,
+    /// Key of the value in each group's `aggregates` (default `count`, or
+    /// `<function>_<field name>`, e.g. `sum_Amount`).
+    #[serde(default)]
+    pub alias: Option<String>,
+}
+
+/// Ordering of the groups: by an aggregate's alias or by a group-by field.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct AggregateSort {
+    /// An aggregate alias, or a field of `group_by` (by name or id).
+    pub by: String,
+    #[serde(default)]
+    pub direction: Direction,
+}
+
+/// `POST /api/tables/{id}/aggregate`: group the table's records (optionally narrowed by a view
+/// and/or a formula, like listing records) and compute aggregates per group, in the database
+/// process instead of in the client.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(deny_unknown_fields)]
+pub struct AggregateRequest {
+    /// Only records of this view (name or id): its filter applies, as for listing.
+    #[serde(default)]
+    pub view: Option<String>,
+    /// Only records for which this Airtable formula is true, e.g. `{Status}='Done'`.
+    #[serde(default)]
+    pub filter_by_formula: Option<String>,
+    /// Fields (names or ids) to group by, at most 3; none gives one row with the totals.
+    #[serde(default)]
+    pub group_by: Vec<String>,
+    /// What to compute; default one `count`.
+    #[serde(default)]
+    pub aggregates: Vec<AggregateSpec>,
+    /// Order of the groups; default by the group-by values (blanks first).
+    #[serde(default)]
+    pub sort: Vec<AggregateSort>,
+    /// Most groups returned (default 1000, at most 10000).
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// IANA zone for date groups and relative dates (default: the caller's).
+    #[serde(default)]
+    pub timezone: Option<String>,
+}
+
+/// One group of an [`AggregateResponse`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct AggregateGroup {
+    /// Group-by field name -> the group's value: text, number or boolean as is; a select as
+    /// its choice name; links and users as their names; dates as `YYYY-MM-DD` (calendar day);
+    /// a multiple select, link or user field as the array of names; `null` for the empty group.
+    pub group: BTreeMap<String, Json>,
+    /// Aggregate alias -> value.
+    pub aggregates: BTreeMap<String, Json>,
+}
+
+/// Answer of `POST /api/tables/{id}/aggregate`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct AggregateResponse {
+    /// The group-by field names, in request order.
+    pub group_by: Vec<String>,
+    pub groups: Vec<AggregateGroup>,
+    /// Groups before `limit` cut the list.
+    pub total_groups: usize,
+    pub truncated: bool,
+    /// Records that matched (all groups together).
+    pub record_count: usize,
 }
