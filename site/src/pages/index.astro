@@ -2,8 +2,18 @@
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 import LIcon from "../components/LIcon.astro";
 import markSvg from "../assets/brand/mark.svg?raw";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const REPO = "https://github.com/lukewilson2002/openbase";
+
+/**
+ * A screenshot's URL with a hash of its bytes. Regenerated screenshots keep their file names and
+ * /screenshots/* is cached for a day, so without this, visitors (and Cloudflare) would keep showing the
+ * old app for up to a day after a redesign; a new hash is a new URL, so they fetch the new image.
+ */
+const shot = (file: string) => `/screenshots/${file}?v=${createHash("sha256").update(readFileSync(path.join(process.cwd(), "public/screenshots", file))).digest("hex").slice(0, 10)}`;
 const TITLE = "OpenBase: a self-hosted Airtable alternative";
 const DESCRIPTION =
   "Your own Airtable. One small server, no subscriptions. OpenBase is a free, open source, self-hosted Airtable alternative with grid, kanban, calendar and timeline views, automations, an Airtable-compatible API and a built-in MCP server for AI assistants.";
@@ -126,8 +136,8 @@ const jsonLd = {
       </div>
       <p class="status">Version 0.1.0. Not yet used in production by anyone but its authors.</p>
       <figure class="hero-shot">
-        <img class="only-light" src="/screenshots/grid-light.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" fetchpriority="high" />
-        <img class="only-dark" src="/screenshots/grid-dark.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" loading="lazy" />
+        <img class="only-light" src={shot("grid-light.webp")} width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" fetchpriority="high" />
+        <img class="only-dark" src={shot("grid-dark.webp")} width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" loading="lazy" />
       </figure>
     </section>
 
@@ -169,16 +179,16 @@ const jsonLd = {
               <figure>
                 {s.themed ? (
                   <>
-                    <a class="only-light" href={`/screenshots/${s.key}-light.webp`}>
-                      <img src={`/screenshots/${s.key}-light.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                    <a class="only-light" href={shot(`${s.key}-light.webp`)}>
+                      <img src={shot(`${s.key}-light.webp`)} width={w} height={h} alt={s.alt} loading="lazy" />
                     </a>
-                    <a class="only-dark" href={`/screenshots/${s.key}-dark.webp`}>
-                      <img src={`/screenshots/${s.key}-dark.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                    <a class="only-dark" href={shot(`${s.key}-dark.webp`)}>
+                      <img src={shot(`${s.key}-dark.webp`)} width={w} height={h} alt={s.alt} loading="lazy" />
                     </a>
                   </>
                 ) : (
-                  <a href={`/screenshots/${s.key}-light.webp`}>
-                    <img src={`/screenshots/${s.key}-light.webp`} width={w} height={h} alt={s.alt} loading="lazy" />
+                  <a href={shot(`${s.key}-light.webp`)}>
+                    <img src={shot(`${s.key}-light.webp`)} width={w} height={h} alt={s.alt} loading="lazy" />
                   </a>
                 )}
                 <figcaption>{s.title}</figcaption>

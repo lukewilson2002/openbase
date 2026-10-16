@@ -576,7 +576,7 @@ async function seed(api, password) {
     email, baseId: b, ws, tables: { products, customers, orders, prod },
     view: (tableId, name) => tableOf(tableId).views.find((v) => v.name === name) ?? null,
     views: async (tableId) => (await api.get(`/api/bases/${b}`)).tables.find((t) => t.id === tableId).views,
-    formToken: share.token, formPath: share.path, readyAutomationId: ready.id, firstAutomationId: auto[0].id,
+    formToken: share.token, readyAutomationId: ready.id, firstAutomationId: auto[0].id,
     timelineId: timeline.id,
   };
 }
@@ -606,7 +606,6 @@ function shots(ctx) {
     { name: "timeline", themes: ["light"], url: () => viewUrl(tables.prod.id, "Production timeline"), viewport: { width: 1560, height: 700 }, settle: 900, after: async (page) => { await page.getByRole("button", { name: "Today" }).click(); await page.waitForTimeout(500); } },
     { name: "gallery", themes: ["light"], url: () => viewUrl(tables.products.id, "Menu"), settle: 1200 },
     { name: "form-builder", themes: ["light"], url: () => viewUrl(tables.customers.id, "Wholesale enquiry"), settle: 700 },
-    { name: "form-public", themes: ["light"], url: async () => ctx.formPath, signedOut: true, viewport: { width: 760, height: 760 }, settle: 700 },
     { name: "automations", themes: ["light"], url: async () => `/base/${baseId}/automations/${ctx.readyAutomationId}`, settle: 900 },
     { name: "assistants", themes: ["light", "dark"], url: async () => "/account?tab=assistants", settle: 600 },
     // Pages around the bases are short lists; a lower window leaves less empty space below them.
