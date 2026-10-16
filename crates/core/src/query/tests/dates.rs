@@ -330,6 +330,126 @@ fn viewer_zone_decides_today() {
     );
 }
 
+/// The motivating case: an "Upcoming" view, `Date is_on_or_after today`, read
+/// in the evening in US Central time, when UTC has already rolled over.
+#[test]
+fn central_evening_still_shows_today() {
+    // Summer (CDT, UTC-5): Oct 12 20:30 in Chicago is Oct 13 01:30 UTC.
+    let summer = qctx_in("America/Chicago", at(2026, 10, 13, 1, 30));
+    // Winter (CST, UTC-6): Jan 12 18:30 in Chicago is Jan 13 00:30 UTC.
+    let winter = qctx_in("America/Chicago", at(2026, 1, 13, 0, 30));
+    for (c, today, tomorrow, yesterday) in [
+        (&summer, "2026-10-12", "2026-10-13", "2026-10-11"),
+        (&winter, "2026-01-12", "2026-01-13", "2026-01-11"),
+    ] {
+        // Date-only cells compare as calendar days in the viewer's zone.
+        assert!(dm(c, "fldDate", IsOnOrAfter, mode("today"), json!(today)));
+        assert!(dm(c, "fldDate", Is, mode("today"), json!(today)));
+        assert!(dm(
+            c,
+            "fldDate",
+            IsOnOrAfter,
+            mode("today"),
+            json!(tomorrow)
+        ));
+        assert!(!dm(
+            c,
+            "fldDate",
+            IsOnOrAfter,
+            mode("today"),
+            json!(yesterday)
+        ));
+        assert!(!dm(c, "fldDate", Is, mode("today"), json!(tomorrow)));
+        assert!(dm(c, "fldDate", IsWithin, mode("next_week"), json!(today)));
+        assert!(dm(c, "fldDate", IsWithin, mode("past_week"), json!(today)));
+        assert!(dm(
+            c,
+            "fldDate",
+            IsWithin,
+            mode("this_calendar_month"),
+            json!(today)
+        ));
+        assert!(dm(c, "fldDate", Is, mode("tomorrow"), json!(tomorrow)));
+        assert!(dm(c, "fldDate", Is, mode("yesterday"), json!(yesterday)));
+    }
+    // Date-times: an event at 19:00 Chicago (after UTC midnight) is today.
+    let evening_event = json!("2026-10-13T00:00:00.000Z");
+    assert!(dm(
+        &summer,
+        "fldDt",
+        IsOnOrAfter,
+        mode("today"),
+        evening_event.clone()
+    ));
+    assert!(dm(&summer, "fldDt", Is, mode("today"), evening_event));
+    // The same instant is "tomorrow" for a viewer reading in UTC, which is
+    // why the zone has to be the viewer's and not the server's.
+    let utc_viewer = qctx_in("UTC", at(2026, 10, 13, 1, 30));
+    assert!(dm(
+        &utc_viewer,
+        "fldDate",
+        Is,
+        mode("today"),
+        json!("2026-10-13")
+    ));
+    assert!(!dm(
+        &utc_viewer,
+        "fldDate",
+        Is,
+        mode("today"),
+        json!("2026-10-12")
+    ));
+}
+
+/// Central DST edges: the day rolls over at local midnight even on the
+/// 23- and 25-hour days.
+#[test]
+fn central_dst_edges() {
+    // Spring forward 2026-03-08 02:00 CST -> 03:00 CDT (a 23-hour day).
+    let late = qctx_in("America/Chicago", at(2026, 3, 9, 4, 59)); // Mar 8 23:59 CDT
+    assert!(dm(&late, "fldDate", Is, mode("today"), json!("2026-03-08")));
+    let after = qctx_in("America/Chicago", at(2026, 3, 9, 5, 0)); // Mar 9 00:00 CDT
+    assert!(dm(
+        &after,
+        "fldDate",
+        Is,
+        mode("today"),
+        json!("2026-03-09")
+    ));
+    assert!(dm(
+        &after,
+        "fldDate",
+        Is,
+        mode("yesterday"),
+        json!("2026-03-08")
+    ));
+    // Fall back 2026-11-01 02:00 CDT -> 01:00 CST (a 25-hour day).
+    let before = qctx_in("America/Chicago", at(2026, 11, 1, 5, 30)); // Nov 1 00:30 CDT
+    assert!(dm(
+        &before,
+        "fldDate",
+        Is,
+        mode("today"),
+        json!("2026-11-01")
+    ));
+    let repeated = qctx_in("America/Chicago", at(2026, 11, 1, 7, 30)); // Nov 1 01:30 CST
+    assert!(dm(
+        &repeated,
+        "fldDate",
+        Is,
+        mode("today"),
+        json!("2026-11-01")
+    ));
+    let last = qctx_in("America/Chicago", at(2026, 11, 2, 5, 59)); // Nov 1 23:59 CST
+    assert!(dm(&last, "fldDate", Is, mode("today"), json!("2026-11-01")));
+    let next = qctx_in("America/Chicago", at(2026, 11, 2, 6, 0)); // Nov 2 00:00 CST
+    assert!(dm(&next, "fldDate", Is, mode("today"), json!("2026-11-02")));
+    // 23:30 CDT on Oct 31 (04:30 UTC Nov 1) is Oct 31, not Nov 1.
+    let t = json!("2026-11-01T04:30:00.000Z");
+    assert!(!dm(&before, "fldDt", Is, mode("today"), t.clone()));
+    assert!(dm(&before, "fldDt", Is, mode("yesterday"), t));
+}
+
 #[test]
 fn field_zone_decides_cell_day() {
     // 16:00 UTC Oct 11 is 01:00 Oct 12 in Tokyo.
