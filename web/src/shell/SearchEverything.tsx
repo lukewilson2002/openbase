@@ -82,10 +82,14 @@ function useSearch(query: string) {
 }
 
 function ResultIcon({ r }: { r: SearchResult }) {
+  // Results carry a workspace's colour but not its icon; the sidebar's cached list has it, so the
+  // tile here matches the one in the sidebar instead of falling back to a letter.
+  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, enabled: r.kind === "workspace" });
+  const wsIcon = workspaces.data?.find((w) => w.id === r.workspace_id)?.icon;
   const tile = "flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-subtle text-muted [&>svg]:size-4";
   switch (r.kind) {
     case "workspace":
-      return <WorkspaceTile ws={{ name: r.workspace_name || r.name, color: r.workspace_color }} size="md" className="size-7 rounded-[7px] text-[0.8125rem]" />;
+      return <WorkspaceTile ws={{ name: r.workspace_name || r.name, color: r.workspace_color, icon: wsIcon }} size="md" className="size-7 rounded-[7px] text-[0.8125rem]" />;
     case "base":
       return <EntityTile name={r.name} icon={r.base_icon} color={r.base_color ?? "gray"} size="md" className="size-7 rounded-[7px]" />;
     case "table":
