@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
+import { personColors } from "@/lib/colors";
 import { formatDateTime } from "@/lib/format";
 import { insertMention, openMention, parseComment } from "./mentions";
 
@@ -53,6 +54,7 @@ function MentionTextarea({ value, onChange, collaborators, label, onSubmit, plac
     const q = open.query.toLowerCase();
     return collaborators.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().startsWith(q)).slice(0, 6);
   }, [open, collaborators]);
+  const colors = useMemo(() => personColors(collaborators), [collaborators]);
 
   // The caret is restored after React has applied the new text (never before, or typing races it).
   const pendingCaret = useRef<number | null>(null);
@@ -128,7 +130,7 @@ function MentionTextarea({ value, onChange, collaborators, label, onSubmit, plac
           {matches.map((c, i) => (
             <li key={c.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(c)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[0.8125rem]", i === active && "bg-hover")}>
-                <Avatar name={c.name} email={c.email} size="sm" />
+                <Avatar name={c.name} email={c.email} color={colors.get(c.id)} size="sm" />
                 <span className="min-w-0">
                   <span className="block truncate">{c.name}</span>
                   <span className="block truncate text-xs text-muted">{c.email}</span>
@@ -170,6 +172,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
 
   const comments = (list.data ?? []).slice().sort((a, b) => a.created_at - b.created_at);
   const emailOf = new Map(collaborators.map((c) => [c.id, c.email] as const));
+  const colorOf = useMemo(() => personColors(collaborators), [collaborators]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -187,7 +190,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
             const isEditing = editing?.id === c.id;
             return (
               <li key={c.id} className="flex gap-2" aria-label={`Comment by ${c.user_name ?? "a former user"}`}>
-                <Avatar name={c.user_name} email={c.user_id ? emailOf.get(c.user_id) : undefined} size="sm" />
+                <Avatar name={c.user_name} email={c.user_id ? emailOf.get(c.user_id) : undefined} color={c.user_id ? colorOf.get(c.user_id) : undefined} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="truncate text-[0.8125rem] font-medium">{c.user_name ?? "Former user"}</span>

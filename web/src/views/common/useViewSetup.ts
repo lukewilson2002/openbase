@@ -15,6 +15,7 @@ import { useDebounced } from "@/components/record/editors/useDebounced";
 import { queryRelevantKey } from "@/components/viewbar/config";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
+import { personColors } from "@/lib/colors";
 import type { FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
 import type { ViewProps } from "../types";
@@ -62,7 +63,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const people = useMemo(() => collaborators.data ?? [], [collaborators.data]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id) }), [timeZone, userNames, emails]);
+  const colors = useMemo(() => personColors(people), [people]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
   const currentUserId = me.data?.id ?? null;
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions, format, currentUserId }),

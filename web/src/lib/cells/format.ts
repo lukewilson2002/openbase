@@ -25,6 +25,8 @@ export interface FormatCtx {
   userName: (id: string) => string | undefined;
   /** Resolve a user id to an email, which seeds the person's face colour like everywhere else. */
   userEmail?: (id: string) => string | undefined;
+  /** A person's own colour among the base's collaborators (`personColors`), distinct per person. */
+  userColor?: (id: string) => string | undefined;
 }
 
 export const DEFAULT_CTX: FormatCtx = { timeZone: "UTC", userName: () => undefined };
@@ -235,7 +237,7 @@ export function chipItems(field: Field, stored: CellJson, ctx: FormatCtx): ChipI
     case "user":
       return stringItems(stored).map((id) => {
         const text = ctx.userName(id) ?? id;
-        return { text, id, color: personColor(ctx.userEmail?.(id) || text) };
+        return { text, id, color: ctx.userColor?.(id) ?? personColor(ctx.userEmail?.(id) || text) };
       });
     case "attachment":
       return attachmentRefs(stored).map((a) => ({ text: a.filename, id: a.id }));

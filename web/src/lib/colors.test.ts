@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ACCENT_SHADES, COLORS, accentClass, accentHue, choiceClass, colorLabel, isChoiceColor } from "./colors";
+import { ACCENT_SHADES, COLORS, accentClass, accentHue, choiceClass, colorLabel, isChoiceColor, personColor, personColors } from "./colors";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 
@@ -75,5 +75,34 @@ describe("accent shades for the canvas", () => {
     for (const [hue, hex] of Object.entries(ACCENT_SHADES)) {
       expect(new RegExp(`\\.ob-hue-${hue}\\s*\\{\\s*--accent:\\s*${hex}`, "i").test(css), `.ob-hue-${hue} is ${hex}`).toBe(true);
     }
+  });
+});
+
+describe("person colours", () => {
+  const person = (n: number) => ({ id: `usr${n}`, name: `Person ${n}`, email: `p${n}@example.com` });
+
+  it("gives every collaborator a different colour while the palette lasts, whatever the hashes say", () => {
+    for (let size = 2; size <= 20; size++) {
+      const people = Array.from({ length: size }, (_, i) => person(i));
+      const colors = [...personColors(people).values()];
+      expect(new Set(colors).size, `${size} people`).toBe(size);
+    }
+  });
+
+  it("is stable: the same people get the same colours in any order, and a lone person keeps their hashed colour", () => {
+    const people = Array.from({ length: 6 }, (_, i) => person(i));
+    const forward = personColors(people);
+    const backward = personColors([...people].reverse());
+    expect([...forward].sort()).toEqual([...backward].sort());
+    const solo = person(3);
+    expect(personColors([solo]).get(solo.id)).toBe(personColor(solo.email));
+  });
+
+  it("uses the light colours first and only then their strong twins", () => {
+    const light = new Set(COLORS.slice(0, 10));
+    const ten = personColors(Array.from({ length: 10 }, (_, i) => person(i)));
+    expect([...ten.values()].every((c) => light.has(c))).toBe(true);
+    const eleven = personColors(Array.from({ length: 11 }, (_, i) => person(i)));
+    expect([...eleven.values()].filter((c) => !light.has(c))).toHaveLength(1);
   });
 });

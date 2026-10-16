@@ -104,6 +104,8 @@ describe("displayText for every field type", () => {
 
 describe("chips and edit text", () => {
   it("carries choice colours and ids", () => {
+    const people: FormatCtx = { ...ctx, userColor: (id) => ({ usr1: "teal", usr2: "orange" })[id] };
+    expect(chipItems(ALL_FIELDS.user, ["usr1", "usr2"], people).map((c) => c.color)).toEqual(["teal", "orange"]);
     expect(chipItems(ALL_FIELDS.single_select, "chs3", ctx)).toEqual([{ text: "Done", color: "green", id: "chs3" }]);
     expect(chipItems(ALL_FIELDS.multiple_select, CHOICES.map((c) => c.id), ctx)).toHaveLength(3);
   });

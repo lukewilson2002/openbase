@@ -2,9 +2,10 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import type { Field } from "@/api/types";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar, avatarColor } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { choiceClass } from "@/lib/colors";
 import { stringItems } from "@/lib/cells/kinds";
 import { EditorShell } from "./EditorShell";
 import { useEditorEnv, type FieldEditorCallbacks } from "./env";
@@ -17,10 +18,12 @@ export interface UserEditorProps extends FieldEditorCallbacks {
   initialText?: string;
 }
 
-export function UserChip({ name, email }: { name: string; email?: string }) {
+/** A person as a chip: their face and name on a tint of their own colour, so assignees are told apart at a glance. */
+export function UserChip({ name, email, color }: { name: string; email?: string; color?: string }) {
+  const own = color ?? avatarColor(email || name);
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-hover py-0.5 pl-0.5 pr-2 text-xs">
-      <Avatar name={name} email={email} size="sm" className="size-4 text-[0.5rem]" />
+    <span data-person-color={own} className={cn("inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs", choiceClass(own))}>
+      <Avatar name={name} email={email} color={own} size="sm" className="size-4 text-[0.5rem]" />
       <span className="truncate">{name}</span>
     </span>
   );
@@ -83,7 +86,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
         selected.length > 0 ? (
           selected.map((id) => {
             const u = env.collaborators.find((c) => c.id === id);
-            return <UserChip key={id} name={u?.name ?? id} email={u?.email} />;
+            return <UserChip key={id} name={u?.name ?? id} email={u?.email} color={env.format.userColor?.(id)} />;
           })
         ) : (
           <span className="text-faint">Assign…</span>
@@ -119,7 +122,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
                 return (
                   <li key={u.id} id={`${listId}-${i}`} role="option" aria-selected={on}>
                     <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => toggle(u.id)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1.5 text-left", i === active && "bg-hover")}>
-                      <Avatar name={u.name} email={u.email} size="sm" />
+                      <Avatar name={u.name} email={u.email} color={env.format.userColor?.(u.id)} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{u.name}</span>
                         <span className="block truncate text-xs text-muted">{u.email}</span>

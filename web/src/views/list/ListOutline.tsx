@@ -131,7 +131,7 @@ function GroupMark({ header, p }: { header: GroupHeader; p: ListOutlineProps }) 
   if (shape === "user")
     return (
       <span aria-hidden className="contents">
-        <Avatar name={header.label} email={p.emails.get(header.key)} size="sm" className="size-[22px] text-[0.6875rem]" />
+        <Avatar name={header.label} email={p.emails.get(header.key)} color={p.format.userColor?.(header.key)} size="sm" className="size-[22px] text-[0.6875rem]" />
       </span>
     );
   if (shape === "select" || shape === "multi_select") {

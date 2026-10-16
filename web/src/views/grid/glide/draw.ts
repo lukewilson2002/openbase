@@ -154,9 +154,11 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     if (x >= right) break;
     w = Math.min(w, right - x);
     const y = startY + line * (chipH + gap);
-    const pal = chip.kind === "select" ? paletteColor(chip.color) : chip.kind === "link" ? paletteColor("blue") : paletteColor("gray");
-    const bg = dark && chip.kind !== "select" ? mixColors("#1a1e26", pal.bg, 0.55) : pal.bg;
-    const fg = dark && chip.kind !== "select" ? "#e8ebf1" : pal.fg;
+    // Choices and people carry their own colour, the same pill in both themes; links are blue, the rest grey.
+    const own = chip.kind === "select" || chip.kind === "user";
+    const pal = own ? paletteColor(chip.color) : chip.kind === "link" ? paletteColor("blue") : paletteColor("gray");
+    const bg = dark && !own ? mixColors("#1a1e26", pal.bg, 0.55) : pal.bg;
+    const fg = dark && !own ? "#e8ebf1" : pal.fg;
     ctx.fillStyle = bg;
     roundRectPath(ctx, x, y, w, chipH, chip.kind === "link" ? 4 : chipH / 2);
     ctx.fill();

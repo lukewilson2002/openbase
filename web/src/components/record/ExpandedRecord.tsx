@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/toast";
 import { resolveFieldOrder } from "@/components/viewbar/config";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
+import { personColors } from "@/lib/colors";
 import { copyToClipboard } from "@/lib/format";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { isComputed } from "@/lib/cells/kinds";
@@ -57,7 +58,9 @@ export interface ExpandedRecordProps {
 function useFormat(timeZone: string, collaborators: readonly Collaborator[]): FormatCtx {
   return useMemo(() => {
     const names = new Map(collaborators.map((c) => [c.id, c.name] as const));
-    return { timeZone, userName: (id: string) => names.get(id) };
+    const emails = new Map(collaborators.map((c) => [c.id, c.email] as const));
+    const colors = personColors(collaborators);
+    return { timeZone, userName: (id: string) => names.get(id), userEmail: (id: string) => emails.get(id), userColor: (id: string) => colors.get(id) };
   }, [timeZone, collaborators]);
 }
 
