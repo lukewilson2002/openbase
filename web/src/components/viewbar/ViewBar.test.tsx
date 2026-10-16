@@ -70,8 +70,7 @@ describe("ViewBar for people who cannot save the view", () => {
 
   it("keeps colours read-only (the override does not cover them)", async () => {
     renderBar();
-    await userEvent.click(screen.getByRole("button", { name: "More" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Color" }));
+    await userEvent.click(screen.getByRole("button", { name: "Color" }));
     expect(screen.getByRole("group", { name: "Color records" })).toBeDisabled();
   });
 
@@ -101,15 +100,11 @@ describe("ViewBar for people who can save the view", () => {
     expect(screen.getByText("Locked")).toBeInTheDocument();
   });
 
-  it("sets the row height from More", async () => {
+  it("sets the row height from the toolbar", async () => {
     const props = renderBar({ canConfigure: true, role: "creator", schema: makeSchema("creator") });
-    await userEvent.click(screen.getByRole("button", { name: "More" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Row height" }));
+    await userEvent.click(screen.getByRole("button", { name: "Row height" }));
     await userEvent.click(screen.getByRole("radio", { name: "Tall" }));
     expect(props.update).toHaveBeenCalledTimes(1);
-    // Back to the list of tools without closing.
-    await userEvent.click(screen.getByRole("button", { name: "Back to the tools" }));
-    expect(screen.getByRole("menuitem", { name: "Download CSV" })).toBeInTheDocument();
   });
 });
 
@@ -158,17 +153,16 @@ describe("ViewBar export and sharing", () => {
     const onAddField = vi.fn();
     renderBar({ onAddField });
     await userEvent.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Add field", "Color", "Row height", "Download CSV"]);
+    // With room for every tool, More holds only what always lives there.
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Add field", "Download CSV"]);
     await userEvent.click(screen.getByRole("menuitem", { name: "Add field" }));
     expect(onAddField).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu", { name: "More view tools" })).not.toBeInTheDocument();
   });
 
-  it("can leave the CSV out (form views)", async () => {
+  it("can leave the CSV out (form views), and then has no More while every tool fits", () => {
     renderBar({ features: { csv: false } });
-    await userEvent.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("menuitem", { name: "Color" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Download CSV" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
   });
 
   it("has no Share view of its own: sharing a view is in the base's Share dialog and the view's menu", () => {
@@ -292,5 +286,25 @@ describe("ViewBar: a view type's own setting and switches", () => {
     renderBar({ moreToggles: [{ id: "crop", label: "Crop cover images", icon: null, checked: false, disabled: true, onToggle: vi.fn() }] });
     await userEvent.click(screen.getByRole("button", { name: /^More/ }));
     expect(await screen.findByRole("menuitemcheckbox", { name: "Crop cover images" })).toBeDisabled();
+  });
+});
+
+describe("ViewBar on a narrow window", () => {
+  it("moves the tools that do not fit into More, from the right end first, and keeps CSV there", async () => {
+    // Every measured tool and More are 100 px; the row has room for two tools and More.
+    const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(100);
+    const room = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(350);
+    try {
+      renderBar({ onAddField: vi.fn() });
+      const bar = screen.getByRole("toolbar", { name: "View toolbar" });
+      expect(within(bar).getByRole("button", { name: "Filter" })).toBeInTheDocument();
+      expect(within(bar).getByRole("button", { name: "Sort" })).toBeInTheDocument();
+      expect(within(bar).queryByRole("button", { name: "Group" })).not.toBeInTheDocument();
+      await userEvent.click(within(bar).getByRole("button", { name: "More" }));
+      expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Group", "Hide fields", "Color", "Row height", "Add field", "Download CSV"]);
+    } finally {
+      width.mockRestore();
+      room.mockRestore();
+    }
   });
 });

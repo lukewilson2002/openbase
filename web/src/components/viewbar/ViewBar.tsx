@@ -1,8 +1,9 @@
 /**
- * The view toolbar, one row: the table and view picker, then Filter, Sort, Group and Hide fields
- * (each tinted and naming what it does once in use, "Sorted by Who"), the view type's own settings,
- * and More (colour, row height, CSV download); search and the base-coloured Add at the end. On a
- * phone the tools fold into one menu behind a sliders button and Add floats at the bottom corner.
+ * The view toolbar, one row: the table and view picker, then Filter, Sort, Group, Hide fields, Color
+ * and Row height (each tinted and naming what it does once in use, "Sorted by Who"), the view type's
+ * own settings, and More; search and the base-coloured Add at the end. Tools that do not fit move
+ * into More from the right end first; Add field and Download CSV always live there. On a phone the
+ * tools fold into one menu behind a sliders button and Add floats at the bottom corner.
  *
  * Every change is a pure mutation of the view config (see ./config.ts) applied through `update`,
  * which persists the full config with PATCH /api/views/{id}. People who cannot save the view
@@ -12,7 +13,7 @@
  *
  * Sharing a view lives in the base's Share dialog ("Share a view") and in each view's menu.
  */
-import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
 import type { BaseSchema, Collaborator, Filter, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
 import { useExportCsv } from "@/components/csv/ExportCsvButton";
@@ -29,6 +30,7 @@ import { cn } from "@/lib/cn";
 import { baseAccentButtonClass } from "@/lib/colors";
 import { countConditions, isFilterable } from "@/lib/cells/filters";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
+import { visibleToolCount } from "./toolbarFit";
 import { FilterBuilder } from "./FilterBuilder";
 import { SortListEditor } from "./SortListEditor";
 import { ViewSwitcher } from "./ViewSwitcher";
@@ -409,18 +411,28 @@ export function ViewBar(props: ViewBarProps) {
     </fieldset>
   );
 
-  const more: ToolEntry[] = [
-    ...(props.onAddField ? [{ kind: "action", id: "add-field", label: "Add field", icon: <Plus aria-hidden />, onSelect: props.onAddField } as const, { kind: "separator", id: "sep-field" } as const] : []),
-    ...(features.color ? [{ kind: "panel", id: "color", label: "Color", icon: <PaintBucket aria-hidden />, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> } as const] : []),
-    ...(features.rowHeight ? [{ kind: "panel", id: "row-height", label: "Row height", icon: <Rows3 aria-hidden />, panel: rowHeightPanel } as const] : []),
-    ...(props.moreToggles ?? []).map((t) => ({ kind: "toggle", id: t.id, label: t.label, icon: t.icon, checked: t.checked, disabled: t.disabled, onSelect: () => t.onToggle(!t.checked) }) as const),
-    ...(features.csv
-      ? [
-          ...(features.color || features.rowHeight || (props.moreToggles?.length ?? 0) > 0 ? [{ kind: "separator", id: "sep-csv" } as const] : []),
-          { kind: "action", id: "csv", label: csv.busy ? "Preparing…" : "Download CSV", icon: <Download aria-hidden />, busy: csv.busy, onSelect: () => void csv.run() } as const,
-        ]
-      : []),
+  // The tools in their row order. Each shows on the toolbar while there is room and moves into
+  // More, from the right end first, when there is not (see toolbarFit.ts).
+  const toolDefs: ToolDef[] = [
+    { id: "filter", label: filterWhat ? `Filtered by ${filterWhat}` : "Filter", menuLabel: "Filter", icon: <FilterIcon aria-hidden />, value: filterWhat, active: filterCount > 0, note: queryNote, wide: true, panel: filterPanel },
+    { id: "sort", label: sortWhat ? `Sorted by ${sortWhat}` : "Sort", menuLabel: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, note: queryNote, wide: true, panel: sortPanel },
+    ...(features.group ? [{ id: "group", label: groupWhat ? `Grouped by ${groupWhat}` : "Group", menuLabel: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, note: queryNote, wide: true, panel: groupPanel }] : []),
+    { id: "hide", label: hiddenLabel, menuLabel: hideNoun, icon: <EyeOff aria-hidden />, value: hiddenCount > 0 ? `${hiddenCount} hidden` : undefined, active: hiddenCount > 0, panel: <HideFields table={table} config={config} update={update} /> },
+    ...(features.color ? [{ id: "color", label: "Color", menuLabel: "Color", icon: <PaintBucket aria-hidden />, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> }] : []),
+    ...(features.rowHeight ? [{ id: "row-height", label: "Row height", menuLabel: "Row height", icon: <Rows3 aria-hidden />, panel: rowHeightPanel }] : []),
   ];
+  const toolEntry = (t: ToolDef): ToolEntry => ({ kind: "panel", id: t.id, label: t.menuLabel, icon: t.icon, value: t.value, active: t.active, note: t.note, wide: t.wide, panel: t.panel });
+  // Always in More, however wide the window: the view type's switches, Add field and Download CSV.
+  const toggles: ToolEntry[] = (props.moreToggles ?? []).map((t) => ({ kind: "toggle", id: t.id, label: t.label, icon: t.icon, checked: t.checked, disabled: t.disabled, onSelect: () => t.onToggle(!t.checked) }) as const);
+  const actions: ToolEntry[] = [
+    ...(props.onAddField ? [{ kind: "action", id: "add-field", label: "Add field", icon: <Plus aria-hidden />, onSelect: props.onAddField } as const] : []),
+    ...(features.csv ? [{ kind: "action", id: "csv", label: csv.busy ? "Preparing…" : "Download CSV", icon: <Download aria-hidden />, busy: csv.busy, onSelect: () => void csv.run() } as const] : []),
+  ];
+  /** More's menu: the tools that did not fit, then the items that always live there. */
+  const moreEntries = (overflow: ToolDef[]): ToolEntry[] => {
+    const groups = [overflow.map(toolEntry), toggles, actions].filter((g) => g.length > 0);
+    return groups.flatMap((g, i) => (i === 0 ? g : [{ kind: "separator", id: `sep-${i}` } as const, ...g]));
+  };
   const activeTools = [filterCount > 0, config.sorts.length > 0, features.group && config.groups.length > 0, hiddenCount > 0, features.color && rowColorActive].filter(Boolean).length;
 
   const locked = view.locked && (
@@ -466,13 +478,7 @@ export function ViewBar(props: ViewBarProps) {
   );
 
   if (!desktop) {
-    const tools: ToolEntry[] = [
-      { kind: "panel", id: "filter", label: "Filter", icon: <FilterIcon aria-hidden />, value: filterWhat, active: filterCount > 0, note: queryNote, panel: filterPanel },
-      { kind: "panel", id: "sort", label: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, note: queryNote, panel: sortPanel },
-      ...(features.group ? [{ kind: "panel", id: "group", label: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, note: queryNote, panel: groupPanel } as const] : []),
-      { kind: "panel", id: "hide", label: hideNoun, icon: <EyeOff aria-hidden />, value: hiddenCount > 0 ? `${hiddenCount} hidden` : undefined, active: hiddenCount > 0, panel: <HideFields table={table} config={config} update={update} /> },
-      ...(more.length > 0 ? [{ kind: "separator", id: "sep-more" } as const, ...more] : []),
-    ];
+    const tools = moreEntries(toolDefs);
     return (
       <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-1.5 bg-surface px-2.5 py-2">
         {!showSearch && <ViewSwitcher schema={schema} table={table} view={view} className="flex-1" />}
@@ -520,32 +526,136 @@ export function ViewBar(props: ViewBarProps) {
   }
 
   return (
-    <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-4 py-2.5">
-      <ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink-0" />
+    <DesktopBar
+      toolDefs={toolDefs}
+      moreEntries={moreEntries}
+      moreActive={toolDefs.some((t) => t.id === "color" && t.active)}
+      switcher={<ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink" />}
+      locked={locked}
+      notSaved={notSaved}
+      setting={props.setting}
+      extra={props.extra}
+      end={
+        <>
+          {searchBox}
+          {props.onAdd && (
+            <button
+              type="button"
+              aria-label="Add record"
+              onClick={props.onAdd}
+              className={cn("inline-flex h-[38px] items-center gap-1.5 rounded-[10px] pl-3.5 pr-4 text-[0.875rem] font-semibold transition-colors", baseAccentButtonClass(schema.color))}
+            >
+              <Plus aria-hidden className="size-4" /> Add
+            </button>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+/** A tool that can sit on the toolbar or, when the row is full, in More. */
+interface ToolDef {
+  id: string;
+  /** On the toolbar: names what it does once in use ("Sorted by Who"). */
+  label: string;
+  /** In More, where the value shows beside the name instead. */
+  menuLabel: string;
+  icon: ReactNode;
+  value?: string;
+  active?: boolean;
+  note?: string;
+  wide?: boolean;
+  panel: ReactNode;
+}
+
+const TOOL_GAP = 2;
+
+/**
+ * The desktop row. The tools that fit show as buttons; the rest go into More, from the right end
+ * first, and come back as the window widens. An invisible copy of every tool and of More is
+ * measured so the choice does not depend on what is showing at the moment.
+ */
+function DesktopBar({
+  toolDefs,
+  moreEntries,
+  moreActive,
+  switcher,
+  locked,
+  notSaved,
+  setting,
+  extra,
+  end,
+}: {
+  toolDefs: ToolDef[];
+  moreEntries: (overflow: ToolDef[]) => ToolEntry[];
+  moreActive: boolean;
+  switcher: ReactNode;
+  locked: ReactNode;
+  notSaved: ReactNode;
+  setting?: ReactNode;
+  extra?: ReactNode;
+  end: ReactNode;
+}) {
+  const areaRef = useRef<HTMLDivElement>(null);
+  const settingRef = useRef<HTMLSpanElement>(null);
+  const extraRef = useRef<HTMLSpanElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(toolDefs.length);
+  // The least the tools' row may shrink to: the view's setting and extras plus More. Below that the
+  // view picker gives way instead (it truncates), so More never slides under search and Add.
+  const [floor, setFloor] = useState(0);
+  const alwaysMore = moreEntries([]).length > 0;
+  const labels = toolDefs.map((t) => t.label).join("\u0000");
+
+  useLayoutEffect(() => {
+    const area = areaRef.current;
+    const measure = measureRef.current;
+    if (!area || !measure) return;
+    const fit = () => {
+      const widths = Array.from(measure.children, (el) => (el as HTMLElement).offsetWidth);
+      const more = widths.pop() ?? 0;
+      const fixedParts = [settingRef.current?.offsetWidth ?? 0, extraRef.current?.offsetWidth ?? 0].filter((w) => w > 0);
+      const fixed = fixedParts.reduce((a, b) => a + b, 0) + Math.max(0, fixedParts.length - 1) * TOOL_GAP;
+      setVisible(visibleToolCount({ available: area.clientWidth, tools: widths, fixed, more, moreAlways: alwaysMore, gap: TOOL_GAP }));
+      setFloor(fixed + (widths.length > 0 || alwaysMore ? more + (fixed > 0 ? TOOL_GAP : 0) : 0));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    for (const el of [area, measure, settingRef.current, extraRef.current]) if (el) ro.observe(el);
+    return () => ro.disconnect();
+  }, [labels, alwaysMore]);
+
+  const shown = toolDefs.slice(0, visible);
+  const overflow = toolDefs.slice(visible);
+  const entries = moreEntries(overflow);
+
+  return (
+    <div role="toolbar" aria-label="View toolbar" className="relative flex items-center gap-1.5 border-b border-line bg-surface px-4 py-2.5">
+      {switcher}
       {locked}
-      <div className="flex flex-wrap items-center gap-0.5">
-        {props.setting}
-        <ToolButton label={filterWhat ? `Filtered by ${filterWhat}` : "Filter"} active={filterCount > 0} note={queryNote} wide>
-          {filterPanel}
-        </ToolButton>
-        <ToolButton label={sortWhat ? `Sorted by ${sortWhat}` : "Sort"} active={config.sorts.length > 0} note={queryNote} wide>
-          {sortPanel}
-        </ToolButton>
-        {features.group && (
-          <ToolButton label={groupWhat ? `Grouped by ${groupWhat}` : "Group"} active={config.groups.length > 0} note={queryNote} wide>
-            {groupPanel}
-          </ToolButton>
+      <div ref={areaRef} className="flex min-w-0 flex-1 items-center gap-0.5" style={floor > 0 ? { minWidth: floor } : undefined}>
+        {setting && (
+          <span ref={settingRef} className="inline-flex shrink-0">
+            {setting}
+          </span>
         )}
-        <ToolButton label={hiddenLabel} active={hiddenCount > 0}>
-          <HideFields table={table} config={config} update={update} />
-        </ToolButton>
-        {props.extra}
-        {more.length > 0 && (
+        {shown.map((t) => (
+          <ToolButton key={t.id} label={t.label} active={t.active} note={t.note} wide={t.wide}>
+            {t.panel}
+          </ToolButton>
+        ))}
+        {extra && (
+          <span ref={extraRef} className="inline-flex shrink-0">
+            {extra}
+          </span>
+        )}
+        {entries.length > 0 && (
           <ToolMenu
             label="More view tools"
-            entries={more}
+            entries={entries}
             trigger={
-              <button type="button" className={cn(toolClass, "gap-1 pr-2", (features.color && rowColorActive) && toolActiveClass)}>
+              <button type="button" className={cn(toolClass, "shrink-0 gap-1 pr-2", (moreActive || overflow.some((t) => t.active)) && toolActiveClass)}>
                 More <ChevronDown aria-hidden className="size-3.5" />
               </button>
             }
@@ -553,19 +663,19 @@ export function ViewBar(props: ViewBarProps) {
         )}
       </div>
       {notSaved}
-      <div className="ml-auto flex items-center gap-1.5">
-        {searchBox}
-        {props.onAdd && (
-          <button
-            type="button"
-            aria-label="Add record"
-            onClick={props.onAdd}
-            className={cn("inline-flex h-[38px] items-center gap-1.5 rounded-[10px] pl-3.5 pr-4 text-[0.875rem] font-semibold transition-colors", baseAccentButtonClass(schema.color))}
-          >
-            <Plus aria-hidden className="size-4" /> Add
-          </button>
-        )}
+      <div className="flex shrink-0 items-center gap-1.5">{end}</div>
+      {/* Out of sight and out of the accessibility tree: only here to be measured. */}
+      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex whitespace-nowrap">
+        {toolDefs.map((t) => (
+          <span key={t.id} className={toolClass}>
+            {t.label}
+          </span>
+        ))}
+        <span className={cn(toolClass, "gap-1 pr-2")}>
+          More <ChevronDown className="size-3.5" />
+        </span>
       </div>
     </div>
   );
 }
+
