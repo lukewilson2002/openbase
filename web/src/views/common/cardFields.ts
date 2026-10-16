@@ -4,9 +4,10 @@
  */
 import { attachmentsApi } from "@/api/records";
 import type { Field, TableRecord, ViewConfig } from "@/api/types";
+import { markdownToText } from "@/components/record/Markdown";
 import { resolveFieldOrder } from "@/components/viewbar/config";
 import { displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
-import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
+import { attachmentRefs, displayShapeOf, resultTypeOf, unwrapResult } from "@/lib/cells/kinds";
 
 /** Text of a count line: "1 item", "8 items". */
 export function itemsLabel(n: number): string {
@@ -54,4 +55,22 @@ export function coverUrl(coverField: Field | undefined, record: TableRecord): st
 export function cardTitle(primary: Field | undefined, record: TableRecord, format: FormatCtx): string {
   if (!primary) return "Untitled";
   return displayText(primary, record.values[primary.id], format).trim() || "Untitled";
+}
+
+/** Fields that can be a card's description: text, long text, and formulas, rollups or lookups giving text. */
+export function isDescriptionField(field: Field): boolean {
+  if (field.type === "single_line_text" || field.type === "long_text") return true;
+  const rt = resultTypeOf(field);
+  return rt !== null && unwrapResult(rt).item === "text";
+}
+
+/**
+ * A card's description as one run of plain text (the card clamps it): rich long text loses its
+ * markdown, and line breaks and runs of spaces collapse so three lines hold as many words as they can.
+ */
+export function descriptionText(field: Field | undefined, value: TableRecord["values"][string] | undefined, format: FormatCtx): string {
+  if (!field) return "";
+  if (value === null || value === undefined || isFormulaError(value)) return "";
+  const text = field.type === "long_text" && field.options.rich && typeof value === "string" ? markdownToText(value) : displayText(field, value, format);
+  return text.replace(/\s+/g, " ").trim();
 }

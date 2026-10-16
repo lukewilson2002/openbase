@@ -11,6 +11,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Kanban cards can show a description.** The board's "Stacked by" settings have a new
+  "Description" choice: a text field (single line or long text, or a formula, rollup or lookup that
+  gives text) shown under each card's title as plain text, up to three lines before an ellipsis.
+  That field no longer repeats as a label/value row on the card. Rich long text is shown without
+  its markdown. Shared boards show it too, unless the view hides the field. The setting is
+  `kanban.description_field_id` in the view config (REST API and MCP, which takes the field name).
+
 ## [0.3.0] - 2026-10-16
 
 ### Added

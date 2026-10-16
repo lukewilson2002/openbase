@@ -130,6 +130,8 @@ pub struct PublicViewConfig {
     #[serde(default)]
     pub kanban_cover_field_id: Option<String>,
     #[serde(default)]
+    pub kanban_description_field_id: Option<String>,
+    #[serde(default)]
     pub kanban_hide_empty_stacks: bool,
     #[serde(default)]
     pub gallery_cover_field_id: Option<String>,

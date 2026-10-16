@@ -11,7 +11,7 @@ import type { Field, ViewConfig } from "@/api/types";
 import { createChoice } from "@/components/fields/choices";
 import { useToast } from "@/components/ui/toast";
 import { Spinner } from "@/components/ui/spinner";
-import { cardFields } from "../common/cardFields";
+import { cardFields, isDescriptionField } from "../common/cardFields";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
@@ -45,6 +45,10 @@ function KanbanInner(props: ViewProps) {
   const stackField: Field | undefined = stackFields.find((f) => f.id === kanban.stack_field_id);
   const attachmentFields = useMemo(() => table.fields.filter((f) => f.type === "attachment"), [table.fields]);
   const coverField = attachmentFields.find((f) => f.id === kanban.cover_field_id);
+  // The primary field is already the card's title. A field that stopped being text (converted)
+  // simply goes back to being a row; the saved setting is kept like the cover's.
+  const descriptionFields = useMemo(() => table.fields.filter((f) => f.id !== table.primary_field_id && isDescriptionField(f)), [table.fields, table.primary_field_id]);
+  const descriptionField = descriptionFields.find((f) => f.id === kanban.description_field_id);
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const [collapsed, toggleCollapse] = usePersistedSet(`ob-kanban-collapsed:${view.id}`);
 
@@ -63,8 +67,12 @@ function KanbanInner(props: ViewProps) {
     () => (stackField && data ? buildStacks(stackField, data.records, { stackOrder: kanban.stack_order, hideEmpty: kanban.hide_empty_stacks, people: setup.people }) : []),
     [stackField, data, kanban.stack_order, kanban.hide_empty_stacks, setup.people],
   );
-  // The stack a card sits in already says its stack value, and the cover is drawn as the image.
-  const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? "", stackField?.id ?? ""])), [table, config, coverField?.id, stackField?.id]);
+  // The stack a card sits in already says its stack value, the cover is drawn as the image and
+  // the description sits under the title, so none of them repeats as a row.
+  const fields = useMemo(
+    () => cardFields(table, config, new Set([coverField?.id ?? "", stackField?.id ?? "", descriptionField?.id ?? ""])),
+    [table, config, coverField?.id, stackField?.id, descriptionField?.id],
+  );
   const recordIds = useMemo(() => stacks.flatMap((s) => s.records.map((r) => r.id)), [stacks]);
   const hasSorts = cfg.queryConfig.sorts.length > 0;
 
@@ -104,6 +112,15 @@ function KanbanInner(props: ViewProps) {
     <ViewSettings label={stackField ? `Stacked by ${stackField.name}` : "Stack by"} active={!!stackField} note={note}>
       <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseStack} hint="A single select, single user or checkbox field." />
       <FieldSelect label="Cover image" fields={attachmentFields} value={coverField?.id ?? ""} noneLabel="No cover" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setKanban(c, { cover_field_id: id }))} />
+      <FieldSelect
+        label="Description"
+        fields={descriptionFields}
+        value={descriptionField?.id ?? ""}
+        noneLabel="No description"
+        disabled={!cfg.canConfigure}
+        onChange={(id) => cfg.update((c) => setKanban(c, { description_field_id: id }))}
+        hint="A text field shown under each card's title, up to three lines."
+      />
     </ViewSettings>
   );
 
@@ -145,6 +162,7 @@ function KanbanInner(props: ViewProps) {
         primary={primary}
         fields={fields}
         coverField={coverField}
+        descriptionField={descriptionField}
         format={setup.format}
         emails={setup.emails}
         colors={data?.colors ?? {}}

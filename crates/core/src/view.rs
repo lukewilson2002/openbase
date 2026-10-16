@@ -220,6 +220,9 @@ pub struct KanbanConfig {
     /// Single select, user (single) or checkbox field to stack by.
     pub stack_field_id: Option<FieldId>,
     pub cover_field_id: Option<FieldId>,
+    /// Text field shown under the card title as a clamped preview; it is left
+    /// out of the card's label/value rows.
+    pub description_field_id: Option<FieldId>,
     pub hide_empty_stacks: bool,
     /// Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
     pub stack_order: Vec<String>,

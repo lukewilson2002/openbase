@@ -715,6 +715,39 @@ async fn public_groups_and_colors_only_use_visible_fields() {
 }
 
 #[tokio::test]
+async fn public_kanban_description_only_names_a_visible_field() {
+    let p = people().await;
+    let t = p.f.table_id.clone();
+    let notes = p.f.notes_id.clone();
+    let info = async |hidden: Value| {
+        let view =
+            p.f.view_of(
+                &t,
+                "Board",
+                "kanban",
+                json!({
+                    "hidden_fields": hidden,
+                    "kanban": { "stack_field_id": p.status, "description_field_id": notes },
+                }),
+            )
+            .await;
+        let token = p.f.share(&view, "view", None).await["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let r = pub_get(&p.f.app, &format!("/api/public/shares/{token}")).await;
+        r.assert_status(200);
+        r.body
+    };
+    let shown = info(json!([])).await;
+    assert_eq!(shown["config"]["kanban_description_field_id"], notes);
+    // Hidden in the view: the public page learns nothing about it.
+    let hidden = info(json!([notes])).await;
+    assert!(hidden["config"]["kanban_description_field_id"].is_null());
+    assert!(!hidden.to_string().contains(notes.as_str()), "{hidden}");
+}
+
+#[tokio::test]
 async fn public_links_show_names_and_nothing_else_about_the_linked_record() {
     let p = people().await;
     let f = &p.f;

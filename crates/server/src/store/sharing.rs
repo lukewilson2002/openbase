@@ -352,6 +352,7 @@ pub fn public_config(config: &ViewConfig, visible: &HashSet<&str>) -> PublicView
         frozen_columns: config.frozen_columns,
         kanban_stack_field_id: keep(&config.kanban.stack_field_id),
         kanban_cover_field_id: keep(&config.kanban.cover_field_id),
+        kanban_description_field_id: keep(&config.kanban.description_field_id),
         kanban_hide_empty_stacks: config.kanban.hide_empty_stacks,
         gallery_cover_field_id: keep(&config.gallery.cover_field_id),
         calendar_date_field_id: keep(&config.calendar.date_field_id),

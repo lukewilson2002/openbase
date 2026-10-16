@@ -227,6 +227,9 @@ async fn config_must_only_reference_fields_of_the_table() {
         json!({ "field_widths": { "fldNOPE": 100 } }),
         json!({ "summaries": { "fldNOPE": "sum" } }),
         json!({ "kanban": { "stack_field_id": "fldNOPE" } }),
+        json!({ "kanban": { "cover_field_id": "fldNOPE" } }),
+        json!({ "kanban": { "description_field_id": "fldNOPE" } }),
+        json!({ "kanban": { "description_field_id": foreign } }),
         json!({ "calendar": { "date_field_id": "fldNOPE" } }),
         json!({ "timeline": { "dependency_field_id": "fldNOPE" } }),
         json!({ "gallery": { "cover_field_id": "fldNOPE" } }),
@@ -739,6 +742,79 @@ async fn configs_that_still_mention_deleted_fields_can_be_saved_again() {
             &f.owner,
             &views_url(&f),
             json!({ "name": "W", "type": "grid", "config": { "hidden_fields": [doomed_id] } }),
+        )
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
+async fn kanban_description_field_survives_its_field_being_deleted_or_converted() {
+    let f = Fixture::new().await;
+    let details = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Details", "type": "long_text", "options": {} }),
+        )
+        .await;
+    let details_id = sid(&details["id"]).to_string();
+    let v = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Board", "type": "kanban", "config": {
+                "kanban": { "description_field_id": f.notes_id } } }),
+        )
+        .await;
+    v.assert_status(201);
+    assert_eq!(
+        v.body["config"]["kanban"]["description_field_id"],
+        f.notes_id
+    );
+    let path = view_path(sid(&v.body["id"]));
+    // Converting the field to another type leaves the setting in place (the
+    // board only shows text-like fields there); the config still saves.
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/fields/{}", f.notes_id),
+            json!({ "type": "number", "options": {} }),
+        )
+        .await
+        .assert_status(200);
+    let mut config = v.body["config"].clone();
+    config["kanban"]["hide_empty_stacks"] = json!(true);
+    f.app
+        .patch(&f.owner, &path, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+    // Deleted: the stale reference is forgiven like the cover's ...
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{}", f.notes_id))
+        .await
+        .assert_status(200);
+    config["kanban"]["hide_empty_stacks"] = json!(false);
+    f.app
+        .patch(&f.owner, &path, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+    // ... and switching to another field or clearing it works as usual.
+    for next in [json!(details_id), Value::Null] {
+        config["kanban"]["description_field_id"] = next.clone();
+        let r = f
+            .app
+            .patch(&f.owner, &path, json!({ "config": config.clone() }))
+            .await;
+        r.assert_status(200);
+        assert_eq!(r.body["config"]["kanban"]["description_field_id"], next);
+    }
+    // A fresh view cannot start out on the deleted field.
+    f.app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "W", "type": "kanban", "config": {
+                "kanban": { "description_field_id": f.notes_id } } }),
         )
         .await
         .assert_status(400);

@@ -135,7 +135,7 @@ function emptyConfig(): Obj {
     row_color: null,
     summaries: {},
     wrap_headers: false,
-    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [] },
+    kanban: { stack_field_id: null, cover_field_id: null, description_field_id: null, hide_empty_stacks: false, stack_order: [] },
     calendar: { date_field_id: null, end_field_id: null },
     gallery: { cover_field_id: null, cover_crop: false },
     timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },

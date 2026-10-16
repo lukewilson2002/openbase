@@ -33,6 +33,19 @@ export function renderMarkdown(source: string): string {
   });
 }
 
+// Block ends and line breaks become spaces so "# Plan" + "Buy milk" reads "Plan Buy milk", not "PlanBuy milk".
+const BLOCK_END = /<(?:br|hr|\/(?:p|h[1-6]|li|td|th|tr|blockquote|pre|div))\b[^>]*>/gi;
+
+/**
+ * The words of a markdown text without its markup, for previews. It goes through the same sanitizer
+ * as rendered markdown and is parsed with DOMParser, whose documents never run scripts or fetch
+ * images, so entities decode and inline HTML drops away without touching the page.
+ */
+export function markdownToText(source: string): string {
+  const html = renderMarkdown(source).replace(BLOCK_END, "$& ");
+  return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+}
+
 export function Markdown({ source, className }: { source: string; className?: string }) {
   const html = useMemo(() => renderMarkdown(source), [source]);
   return (
