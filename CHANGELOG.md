@@ -91,6 +91,7 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   `fields` has the shape of `create_field` and sets a table up in one call. It is all or
   nothing: every field is checked and, if one is invalid, no table is created and the error
   names it. A lookup, rollup or count may use a link field listed earlier in the same list.
+- **`include_empty` for reads.** `list_records`, `search_records`, `get_record` and `query_view` (and `includeEmpty=true` on the REST list and single-record endpoints) return fields with no value as `null`, so a client can infer columns from the records. Default unchanged: empty fields are left out, as in Airtable.
 - **A first-run intro** to bases, tables, workspaces and the assistant, shown once per account;
   replay it from the profile menu. The setup page is friendlier and no longer asks you to
   confirm the password.

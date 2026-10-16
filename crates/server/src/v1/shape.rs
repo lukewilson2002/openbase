@@ -17,7 +17,7 @@
 //! | formula, lookup, rollup        | the materialized value                                   |
 //! | button                         | `{label, url}`                                           |
 //!
-//! Empty cells are omitted.
+//! Empty cells are omitted, unless `include_empty` asks for them as `null`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -45,6 +45,9 @@ pub struct RenderOpts<'a> {
     /// Render linked records as `{id, name}` (the linked record's primary text) instead of
     /// bare ids. Airtable's shape is ids only; the MCP tools ask for names too.
     pub link_names: bool,
+    /// Return a field with no value as `null` instead of leaving it out, so a client can infer
+    /// the columns from the records. Airtable omits empty fields; this is opt-in.
+    pub include_empty: bool,
 }
 
 struct Cx<'a> {
@@ -98,13 +101,12 @@ pub fn render(
                 if opts.only.is_some_and(|o| !o.contains(&f.id)) {
                     continue;
                 }
-                let Some(v) = rec.values.get(&f.id) else {
+                let rendered = rec.values.get(&f.id).and_then(|v| cell(&mut cx, f, v));
+                let Some(j) = rendered.or(opts.include_empty.then_some(Json::Null)) else {
                     continue;
                 };
-                if let Some(j) = cell(&mut cx, f, v) {
-                    let key = if opts.by_id { &f.id } else { &f.name };
-                    out.insert(key.clone(), j);
-                }
+                let key = if opts.by_id { &f.id } else { &f.name };
+                out.insert(key.clone(), j);
             }
             V1Record {
                 id: rec.id,

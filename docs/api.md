@@ -263,6 +263,7 @@ its exact name (ids win). Response: `{"records": [{"id", "createdTime",
 | `sort[i][field]`, `sort[i][direction]` | sort levels (`asc` default, or `desc`), field by name or id; at most 10 levels. Replaces the view's sort. |
 | `filterByFormula` | keep records for which the formula is truthy (see below). Evaluation is cut off after 5 seconds per request (422 `INVALID_FILTER_BY_FORMULA`); a single record whose formula exceeds the evaluation budget counts as not matching. |
 | `returnFieldsByFieldId` | key `fields` by field id instead of name. |
+| `includeEmpty` | OpenBase extension (not in Airtable). `true` returns fields with no value as `null` instead of omitting them, so a client can infer the columns from the records (also for a table with no values yet). Only the fields selected by `fields[]` are included. Default `false` (Airtable-compatible omission); anything but a boolean is a 422. |
 | `cellFormat` | only `json` (the default). `string` is a 422. |
 | `timeZone`, `userLocale` | accepted. `timeZone` (validated IANA name) sets the zone for relative date filters of the `view` and for the formula; `userLocale` is accepted and ignored (English only). |
 | other parameters | ignored (`recordMetadata[]`, …). |
@@ -290,12 +291,13 @@ problem in the message. A formula that evaluates to an error for a record
 excludes that record. Formulas are limited to 10,000 characters.
 
 `GET /api/v1/{baseId}/{table}/{recordId}` returns one record without an
-envelope (`returnFieldsByFieldId` is supported); records of trashed records or
+envelope (`returnFieldsByFieldId` and `includeEmpty` are supported); records of trashed records or
 other tables are 404.
 
 ### 2.5 Value shapes
 
-Records are rendered the way Airtable renders them. **Empty cells are omitted**,
+Records are rendered the way Airtable renders them. **Empty cells are omitted**
+(unless `includeEmpty=true` is passed on a read, which returns them as `null`),
 checkboxes are `true` or absent.
 
 | Field | Value |

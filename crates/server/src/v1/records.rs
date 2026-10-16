@@ -97,6 +97,7 @@ struct ListParams {
     /// the MCP `search_records` tool).
     search: Option<String>,
     link_names: bool,
+    include_empty: bool,
     time_zone: Option<Tz>,
     by_id: bool,
 }
@@ -133,10 +134,12 @@ fn sort_key(key: &str) -> Option<(usize, &str)> {
 }
 
 /// Parameters every read accepts: `cellFormat` (only `json`), `timeZone`,
-/// `userLocale`, `returnFieldsByFieldId`.
-fn read_common(pairs: &[(String, String)]) -> V1Result<(Option<Tz>, bool)> {
+/// `userLocale`, `returnFieldsByFieldId`, and `includeEmpty` (an extension: fields with no value
+/// come back as `null` instead of being omitted).
+fn read_common(pairs: &[(String, String)]) -> V1Result<(Option<Tz>, bool, bool)> {
     let mut tz = None;
     let mut by_id = false;
+    let mut include_empty = false;
     for (k, v) in pairs {
         match k.as_str() {
             "cellFormat" if v != "json" => {
@@ -150,18 +153,20 @@ fn read_common(pairs: &[(String, String)]) -> V1Result<(Option<Tz>, bool)> {
                 })?);
             }
             "returnFieldsByFieldId" => by_id = parse_bool(k, v)?,
+            "includeEmpty" => include_empty = parse_bool(k, v)?,
             _ => {}
         }
     }
-    Ok((tz, by_id))
+    Ok((tz, by_id, include_empty))
 }
 
 impl ListParams {
     fn parse(pairs: &[(String, String)]) -> V1Result<ListParams> {
-        let (time_zone, by_id) = read_common(pairs)?;
+        let (time_zone, by_id, include_empty) = read_common(pairs)?;
         let mut p = ListParams {
             time_zone,
             by_id,
+            include_empty,
             ..Default::default()
         };
         let mut sorts: BTreeMap<usize, (Option<String>, Direction)> = BTreeMap::new();
@@ -507,6 +512,7 @@ fn list_in(
         only: only.as_ref(),
         public_url: &env.public_url,
         link_names: p.link_names,
+        include_empty: p.include_empty,
     };
     Ok(V1Records {
         records: render(conn, &fields, records, &opts),
@@ -524,6 +530,8 @@ pub struct ListQuery {
     pub search: Option<String>,
     /// Render linked records as `{id, name}` instead of ids.
     pub link_names: bool,
+    /// Return fields with no value as `null` instead of omitting them.
+    pub include_empty: bool,
     /// Records per page; `max_records` caps the whole listing.
     pub page_size: usize,
     pub max_records: Option<usize>,
@@ -549,6 +557,7 @@ pub async fn list_for(
         filter_by_formula: q.filter_by_formula.filter(|f| !f.trim().is_empty()),
         search: q.search.filter(|f| !f.trim().is_empty()),
         link_names: q.link_names,
+        include_empty: q.include_empty,
         time_zone: None,
         by_id: false,
     };
@@ -592,9 +601,18 @@ pub async fn get_for(
     base_id: String,
     table_ref: String,
     record_id: String,
+    include_empty: bool,
 ) -> V1Result<V1Record> {
     get_record(
-        state, actor, base_id, table_ref, record_id, None, false, true,
+        state,
+        actor,
+        base_id,
+        table_ref,
+        record_id,
+        None,
+        false,
+        true,
+        include_empty,
     )
     .await
 }
@@ -609,6 +627,7 @@ async fn get_record(
     tz: Option<Tz>,
     by_id: bool,
     link_names: bool,
+    include_empty: bool,
 ) -> V1Result<V1Record> {
     let public_url = state.config.public_url.clone();
     state
@@ -622,6 +641,7 @@ async fn get_record(
                 only: None,
                 public_url: &public_url,
                 link_names,
+                include_empty,
             };
             render(conn, &fields, found, &opts)
                 .pop()
@@ -636,9 +656,17 @@ pub async fn get_one(
     Path((base_id, table_ref, record_id)): Path<(String, String, String)>,
     V1Pairs(pairs): V1Pairs,
 ) -> V1Result<AxumJson<V1Record>> {
-    let (tz, by_id) = read_common(&pairs)?;
+    let (tz, by_id, include_empty) = read_common(&pairs)?;
     let record = get_record(
-        &state, actor, base_id, table_ref, record_id, tz, by_id, false,
+        &state,
+        actor,
+        base_id,
+        table_ref,
+        record_id,
+        tz,
+        by_id,
+        false,
+        include_empty,
     )
     .await?;
     Ok(AxumJson(record))
@@ -727,6 +755,7 @@ fn render_after(
         only: None,
         public_url,
         link_names,
+        include_empty: false,
     };
     Ok(render(tx, &fields, records, &opts))
 }
