@@ -25,9 +25,19 @@ const features = [
     text: "Start from a new record, a change, a form, a schedule or a webhook. Create or update records, send email, call an HTTP endpoint or notify people. Every run is logged and retried.",
   },
   {
+    icon: "search",
+    title: "Search everything",
+    text: "Press Ctrl+K or ⌘K to find any workspace, base, table, view or record you can open, by name or by the text in its fields.",
+  },
+  {
     icon: "users",
     title: "Real-time collaboration",
-    text: "Edits appear in other open tabs within moments. If two people change the same cell, the last write wins and the record history keeps both versions.",
+    text: "Edits appear in other open tabs within moments. If two people change the same cell, the last write wins and the record history keeps both versions. Mentions and automation notices land in your Inbox.",
+  },
+  {
+    icon: "user-plus",
+    title: "Workspaces and members",
+    text: "Invite people to a workspace with one of five roles, from owner to viewer, and let them open every base or only the ones you pick. The Members page shows who can open what.",
   },
   {
     icon: "share-2",
@@ -46,27 +56,38 @@ const features = [
   },
   {
     icon: "key-round",
-    title: "Passkeys, 2FA and roles",
-    text: "Passkey sign-in, TOTP two-factor authentication, five roles from owner to viewer, per-base sharing, and sessions and tokens you can revoke.",
+    title: "Passkeys, 2FA and sessions",
+    text: "Passkey sign-in, TOTP two-factor authentication, and sessions, API tokens and connected apps you can see and revoke.",
   },
   {
     icon: "database-backup",
     title: "Backups you can restore",
-    text: "A daily automatic backup with retention, a backup and restore command, a snapshot before every schema upgrade, and a trash that keeps deleted items for 30 days.",
+    text: "A daily automatic backup with retention, a backup and restore command, a snapshot before every schema upgrade, and one Trash page that keeps everything you delete for 30 days.",
+  },
+  {
+    icon: "sparkles",
+    title: "Easy to start",
+    text: "A short intro on your first sign-in, a sidebar with your workspaces, bases, tables and views, and new bases that start by asking for their first table, or a spreadsheet to import.",
   },
 ];
 
+// In pairs of equal height, since the grid shows two per row on wide screens.
 const shots = [
-  { key: "grid", title: "Grid with grouping and colours", alt: "OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar", themed: true },
-  { key: "kanban", title: "Kanban by status", alt: "OpenBase kanban view with order cards in New, Baking, Ready and Delivered columns", themed: true },
-  { key: "calendar", title: "Calendar by due date", alt: "OpenBase calendar view showing orders on their due dates", themed: false },
-  { key: "timeline", title: "Timeline with dependencies", alt: "OpenBase timeline view of a production plan with swimlanes and dependency arrows", themed: false },
+  { key: "grid", title: "Grid with grouping and colours", alt: "OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar", themed: true },
+  { key: "kanban", title: "Kanban by status", alt: "OpenBase kanban view with order cards in New, Baking, Ready and Delivered stacks, each ending with Add and its count", themed: true },
+  { key: "workspace", title: "Workspace home", alt: "OpenBase workspace page with a card for each base, its tables and the faces of people limited to it", themed: true },
+  { key: "search", title: "Search everything", alt: "OpenBase search box open with results for “bake”: a workspace, a base, a view and records", themed: false },
+  { key: "calendar", title: "Calendar by due date", alt: "OpenBase calendar view showing a month of orders on their due dates, with Month, Week and List switches", themed: false },
+  { key: "timeline", title: "Timeline with dependencies", alt: "OpenBase timeline view of a production plan with swimlanes, a today line and dependency arrows", themed: false },
   { key: "gallery", title: "Gallery with photos", alt: "OpenBase gallery view of bakery products with photos, prices and allergens", themed: false },
-  { key: "form-builder", title: "Form builder with live preview", alt: "OpenBase form builder with a live preview of a wholesale enquiry form", themed: false },
+  { key: "form-builder", title: "Form builder with live preview", alt: "OpenBase form builder with the form settings beside a live preview of a wholesale enquiry form", themed: false },
+  { key: "members", title: "Members and their bases", alt: "OpenBase Members page: each person's bases and role in one row, and a pending invite", themed: false },
+  { key: "trash", title: "One Trash for everything", alt: "OpenBase Trash page listing a deleted base, table, record, field and view, who deleted each and the days left to restore it", themed: false },
   { key: "automations", title: "Automations editor", alt: "OpenBase automation editor: a trigger, conditions and a list of actions", themed: false },
   { key: "assistants", title: "AI assistants page", alt: "OpenBase account page with the MCP address and steps to connect Claude, ChatGPT and other assistants", themed: true },
 ];
-const dims = (key: string) => (key === "timeline" ? [2400, 954] : [2400, 1477]);
+const PAGE_SHOTS = new Set(["workspace", "search", "members", "trash"]);
+const dims = (key: string) => (key === "timeline" ? [2400, 1077] : PAGE_SHOTS.has(key) ? [2400, 1231] : [2400, 1477]);
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -105,8 +126,8 @@ const jsonLd = {
       </div>
       <p class="status">Version 0.1.0. Not yet used in production by anyone but its authors.</p>
       <figure class="hero-shot">
-        <img class="only-light" src="/screenshots/grid-light.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar" fetchpriority="high" />
-        <img class="only-dark" src="/screenshots/grid-dark.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders, grouped by status with coloured rows and a summary bar" loading="lazy" />
+        <img class="only-light" src="/screenshots/grid-light.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" fetchpriority="high" />
+        <img class="only-dark" src="/screenshots/grid-dark.webp" width="2400" height="1477" alt="OpenBase grid view of bakery orders in a card, grouped by status with coloured rows and a summary bar, with the tables and views in the sidebar" loading="lazy" />
       </figure>
     </section>
 

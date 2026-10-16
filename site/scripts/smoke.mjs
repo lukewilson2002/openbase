@@ -5,6 +5,7 @@
 // desktop and phone width, in light and dark, and fails on: console errors or warnings, uncaught
 // exceptions, failed requests, Content-Security-Policy violations, requests to other origins,
 // horizontal page scroll, and a broken search (Pagefind runs as WebAssembly under the CSP).
+// OPENBASE_SHOTS_CHROMIUM=/path/to/chrome uses another Chrome or Chromium instead.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -38,7 +39,9 @@ const pages = [];
 pages.push("/this-page-does-not-exist/");
 
 const failures = [];
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+// Same override as the screenshot script, for machines without Google Chrome.
+const chromiumPath = process.env.OPENBASE_SHOTS_CHROMIUM;
+const browser = await chromium.launch(chromiumPath ? { executablePath: chromiumPath, headless: true } : { channel: "chrome", headless: true });
 try {
   for (const [label, viewport] of [["desktop", { width: 1280, height: 800 }], ["phone", { width: 375, height: 800 }]]) {
     for (const scheme of ["light", "dark"]) {

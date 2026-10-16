@@ -10,7 +10,9 @@
 //   4. writes optimized WebP files (2x pixel density) and deletes the temporary data dir.
 //
 // Environment:
-//   OPENBASE_BIN  path to the openbase binary (default: <repo>/target/release/openbase)
+//   OPENBASE_BIN              path to the openbase binary (default: <repo>/target/release/openbase)
+//   OPENBASE_SHOTS_CHROMIUM   a Chrome or Chromium executable to use instead of the installed Google
+//                             Chrome, for machines without it (for example Playwright's own Chromium)
 // Flags:
 //   --only a,b    take only the named shots (see SHOTS below)
 //   --seed-only   seed, print the URL and wait until Ctrl-C (to poke at the demo by hand)
@@ -32,11 +34,13 @@ const siteDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const repoDir = path.resolve(siteDir, "..");
 const outDir = path.join(siteDir, "public/screenshots");
 const BIN = process.env.OPENBASE_BIN || path.join(repoDir, "target/release/openbase");
+const CHROMIUM = process.env.OPENBASE_SHOTS_CHROMIUM;
 const args = process.argv.slice(2);
 const only = (args.find((a) => a.startsWith("--only="))?.slice(7) ?? (args.includes("--only") ? args[args.indexOf("--only") + 1] : "")).split(",").filter(Boolean);
 const seedOnly = args.includes("--seed-only");
 
 const VIEWPORT = { width: 1560, height: 960 };
+const PAGE_VIEWPORT = { width: 1560, height: 800 };
 // Images are shown at most ~1200 CSS pixels wide on the site, so 2400 px keeps them sharp at 2x.
 const MAX_WIDTH = 2400;
 const WEBP_BUDGET = 300 * 1024;
@@ -178,10 +182,11 @@ async function pictureFile(kind, hue) {
 async function seed(api, password) {
   const email = "maya@larkspur.example";
   const me = await api.post("/api/auth/signup", { email, name: "Maya Chen", password });
-  const ws = await api.post("/api/workspaces", { name: "Larkspur Bakery", icon: "wheat" });
-  const base = await api.post(`/api/workspaces/${ws.id}/bases`, { name: "Bakery", color: "orange", icon: "croissant" });
+  // The first-run intro would cover every screenshot.
+  await api.patch("/api/auth/me", { intro_seen: true });
+  const ws = await api.post("/api/workspaces", { name: "Larkspur Bakery", icon: "wheat", color: "teal" });
+  const base = await api.post(`/api/workspaces/${ws.id}/bases`, { name: "Bakery", color: "orange", icon: "croissant", empty: true });
   const b = base.id;
-  const first = base.tables[0];
 
   const mkField = async (table, f) => {
     const res = await api.post(`/api/tables/${table}/fields`, f);
@@ -189,8 +194,7 @@ async function seed(api, password) {
   };
 
   // ---------- Products
-  const products = first;
-  await api.patch(`/api/tables/${products.id}`, { name: "Products", icon: "wheat" });
+  const products = await api.post(`/api/bases/${b}/tables`, { name: "Products", icon: "wheat" });
   for (const f of products.fields) if (f.name === "Notes") await api.del(`/api/fields/${f.id}`);
   const select = (names) => ({ choices: names.map(([name, color], i) => ({ id: `c${i + 1}`, name, color })) });
   const pf = {};
@@ -346,18 +350,19 @@ async function seed(api, password) {
   });
   pr.dep = await mkField(prod.id, { name: "Depends on", type: "link", inverse_name: "Blocks", options: { linked_table_id: prod.id, inverse_field_id: "", single: false } });
   // [task, station, startOffset, endOffset, [depends on indexes]]; dependants start after their predecessors end.
-  const t0 = m + ((today.getDay() + 6) % 7); // today
+  // Monday of this week to Wednesday of the next: the ten days the day scale shows after "Today".
+  const t0 = m;
   const plan = [
     ["Feed starter, autolyse", "Prep", t0, t0 + 1, []],
     ["Mix and bulk ferment", "Prep", t0 + 2, t0 + 3, [0]],
-    ["Shape sourdough", "Prep", t0 + 4, t0 + 5, [1]],
-    ["Bake sourdough", "Ovens", t0 + 6, t0 + 7, [2]],
+    ["Shape sourdough", "Prep", t0 + 4, t0 + 4, [1]],
+    ["Bake sourdough", "Ovens", t0 + 5, t0 + 5, [2]],
     ["Laminate croissant dough", "Prep", t0 + 1, t0 + 3, []],
     ["Bake croissants", "Ovens", t0 + 4, t0 + 5, [4]],
-    ["Pack café orders", "Packing", t0 + 8, t0 + 9, [3, 5]],
-    ["Deliver wholesale", "Delivery", t0 + 10, t0 + 11, [6]],
-    ["Bake carrot cakes", "Ovens", t0 + 6, t0 + 8, []],
-    ["Decorate and box cakes", "Packing", t0 + 9, t0 + 11, [8]],
+    ["Pack café orders", "Packing", t0 + 6, t0 + 7, [3, 5]],
+    ["Deliver wholesale", "Delivery", t0 + 8, t0 + 8, [6]],
+    ["Bake carrot cakes", "Ovens", t0 + 6, t0 + 7, []],
+    ["Decorate and box cakes", "Packing", t0 + 8, t0 + 8, [8]],
   ];
   const planIds = [];
   for (const [task, station, s, e] of plan) {
@@ -390,7 +395,8 @@ async function seed(api, password) {
     hidden_fields: [o.start.id, o.delivery.id, o.paid.id, o.unit.id],
     row_color: { mode: "by_select", field_id: o.status.id },
     summaries: { [o.total.id]: "sum", [o.qty.id]: "sum" },
-    field_widths: { [orders.primary_field_id]: 260, [o.customer.id]: 190, [o.product.id]: 190 },
+    // Narrow enough that the Due dates ("October 16, 2026") are not cut off at the right edge.
+    field_widths: { [orders.primary_field_id]: 250, [o.customer.id]: 180, [o.product.id]: 180, [o.qty.id]: 90, [o.total.id]: 140, [o.status.id]: 120, [o.due.id]: 170 },
   };
   await api.patch(`/api/views/${ordersGrid.id}`, { name: "All orders", config: oGridCfg });
   await view(orders.id, "By status", "kanban", {
@@ -407,7 +413,9 @@ async function seed(api, password) {
   // Products gallery
   const prodGrid = tableOf(products.id).views[0];
   await api.patch(`/api/views/${prodGrid.id}`, { name: "All products" });
-  await view(products.id, "Menu", "gallery", { gallery: { cover_field_id: pf.photo.id, cover_crop: true }, hidden_fields: [pf.vegan.id] });
+  // The inverse "Orders" link would make every card a long list of order numbers.
+  const productOrders = tableOf(products.id).fields.find((f) => f.type === "link");
+  await view(products.id, "Menu", "gallery", { gallery: { cover_field_id: pf.photo.id, cover_crop: true }, hidden_fields: [pf.vegan.id, productOrders.id] });
 
   // Customers: sorted grid + a public sign-up form
   const custGrid = tableOf(customers.id).views[0];
@@ -450,7 +458,8 @@ async function seed(api, password) {
       enabled: true,
       trigger: { type: "record_created", table_id: orders.id },
       actions: [
-        { type: "notify", user_ids: [me.id], message: "New order {{trigger.record.fields.Order}}: {{trigger.record.fields.Qty}} x {{trigger.record.fields.Product}}, due {{trigger.record.fields.Due}}" },
+        // Not {{...Product}}: a link field renders as the linked record's id in notifications.
+        { type: "notify", user_ids: [me.id], message: "New order {{trigger.record.fields.Order}}: {{trigger.record.fields.Qty}} items, due {{trigger.record.fields.Due}}" },
       ],
     }),
   );
@@ -488,6 +497,81 @@ async function seed(api, password) {
   void ordersNow;
   void timelineOrders;
 
+  // ---------- The rest of the workspace, so its home page has more than one base card
+  const extraBase = async (wsId, name, color, icon, tables) => {
+    const nb = await api.post(`/api/workspaces/${wsId}/bases`, { name, color, icon, empty: true });
+    for (const [tname, ticon, rows] of tables) {
+      const t = await api.post(`/api/bases/${nb.id}/tables`, { name: tname, icon: ticon });
+      if (rows.length) await api.post(`/api/tables/${t.id}/records`, { records: rows.map((r) => ({ values: { [t.primary_field_id]: r } })) });
+    }
+    return nb;
+  };
+  const rota = await extraBase(ws.id, "Staff rota", "blue", "calendar-clock", [
+    ["Shifts", "clock", ["Opening bake, 4 am", "Counter, morning", "Counter, afternoon", "Close and clean"]],
+    ["Time off", "plane", ["Sam, Nov 3-7", "Priya, Dec 22-26"]],
+  ]);
+  const suppliers = await extraBase(ws.id, "Suppliers", "green", "truck", [
+    ["Suppliers", "truck", ["Hollow Creek Mill", "Brightwater Dairy", "Meadow Lane Eggs", "Northside Packaging"]],
+    ["Deliveries", "package", ["Flour, 20 sacks", "Butter, 40 lb", "Eggs, 30 dozen", "Cake boxes, 200"]],
+    ["Invoices", "receipt", ["HCM-2291", "BWD-0815", "MLE-1130"]],
+  ]);
+  const recipes = await extraBase(ws.id, "Recipes", "purple", "book-open", [
+    ["Recipes", "book-open", ["Country sourdough", "Laminated croissant dough", "Cardamom bun filling", "Cream cheese frosting"]],
+    ["Ingredients", "carrot", ["Bread flour", "Rye flour", "European butter", "Cardamom", "Cream cheese"]],
+  ]);
+  const catering = await extraBase(ws.id, "Catering", "red", "cake-slice", [
+    ["Events", "party-popper", ["Marlow wedding, 120 guests", "Pine & Pearl staff party", "Library fundraiser brunch"]],
+    ["Quotes", "file-text", ["Q-0412 Marlow wedding", "Q-0415 Library brunch"]],
+  ]);
+  await extraBase(ws.id, "Newsletter", "yellow", "megaphone", [
+    ["Issues", "mail", ["October: stollen is back", "November: holiday pre-orders"]],
+    ["Subscribers", "users", ["nora.whitfield@mail.example", "dev.patel@mail.example"]],
+  ]);
+  void suppliers;
+
+  // A second workspace, so the sidebar shows the workspace tree.
+  const home = await api.post("/api/workspaces", { name: "Home", icon: "house", color: "purple" });
+  await extraBase(home.id, "Garden", "green", "sprout", [["Beds", "flower-2", ["Tomatoes", "Herbs", "Squash"]]]);
+
+  // ---------- People: two teammates who accepted an invite, and one pending
+  const inviteToken = (created) => created.url.split("/invite/")[1];
+  const join = async (name, email, invite) => {
+    const them = new Api(api.base);
+    const user = await them.post("/api/auth/signup", { email, name, password, invite_token: inviteToken(invite) });
+    await them.patch("/api/auth/me", { intro_seen: true });
+    return { api: them, user };
+  };
+  const sam = await join("Sam Okafor", "sam@larkspur.example", await api.post(`/api/workspaces/${ws.id}/invites`, { email: "sam@larkspur.example", role: "creator", all_bases: true }));
+  const priya = await join(
+    "Priya Nair", "priya@larkspur.example",
+    await api.post(`/api/workspaces/${ws.id}/invites`, { email: "priya@larkspur.example", role: "editor", all_bases: false, base_ids: [b, recipes.id, catering.id] }),
+  );
+  await api.post(`/api/workspaces/${ws.id}/invites`, { email: "leo@larkspur.example", role: "viewer", all_bases: false, base_ids: [rota.id] });
+
+  // ---------- Inbox: two @mentions and an automation notice for Maya
+  const mention = `@[Maya Chen](${me.id})`;
+  const orderRows2 = (await api.post(`/api/views/${tableOf(orders.id).views[0].id}/query`, { limit: 100 })).records ?? [];
+  const recordNamed = (rows, prefix) => rows.find((r) => JSON.stringify(r).includes(prefix));
+  const pinePearl = recordNamed(orderRows2, "#1052 Pine");
+  if (pinePearl) await sam.api.post(`/api/records/${pinePearl.id}/comments`, { body: `${mention} Pine & Pearl asked to pick these up at 7 instead of 9. Can we bake them first?` });
+  await priya.api.post(`/api/records/${productIds["Winter stollen"]}/comments`, { body: `${mention} The marzipan arrived, so the first stollen batch can go out next week.` });
+  // Created by Sam after the automations exist, so "New order: tell the bakers" runs and notifies Maya.
+  await sam.api.post(`/api/tables/${orders.id}/records`, {
+    records: [{ values: { [orders.primary_field_id]: "#1060 Greenhouse Café", [o.customer.id]: [custIds["Greenhouse Café"]], [o.product.id]: [productIds["Butter croissant"]], [o.qty.id]: 24, [o.status.id]: choice(o.status, "New"), [o.delivery.id]: choice(o.delivery, "Delivery"), [o.start.id]: day(m + 10), [o.due.id]: day(m + 11), [o.paid.id]: false } }],
+  });
+
+  // ---------- Trash: one of each kind, deleted by different people
+  const oldView = await api.post(`/api/tables/${products.id}/views`, { name: "Summer price list", type: "grid", config: structuredCloneConfig(tableOf(products.id).views[0].config) });
+  await api.del(`/api/views/${oldView.id}`);
+  const sku = await mkField(products.id, { name: "Old SKU", type: "single_line_text", options: {} });
+  await sam.api.del(`/api/fields/${sku.id}`);
+  const lead = await api.post(`/api/tables/${customers.id}/records`, { records: [{ values: { [customers.primary_field_id]: "Corner Bistro" } }] });
+  await sam.api.del(`/api/tables/${customers.id}/records`, { ids: [lead.records[0].id] });
+  const specials = await api.post(`/api/bases/${recipes.id}/tables`, { name: "Holiday specials 2025", icon: "gift" });
+  await api.del(`/api/tables/${specials.id}`);
+  const market = await extraBase(ws.id, "Farmers market 2025", "pink", "store", [["Market days", "calendar", ["Saturday, June 7"]]]);
+  await api.del(`/api/bases/${market.id}`);
+
   return {
     email, baseId: b, ws, tables: { products, customers, orders, prod },
     view: (tableId, name) => tableOf(tableId).views.find((v) => v.name === name) ?? null,
@@ -514,20 +598,38 @@ function shots(ctx) {
   return [
     { name: "grid", themes: ["light", "dark"], url: () => viewUrl(tables.orders.id, "All orders"), ready: "canvas" , settle: 900 },
     { name: "kanban", themes: ["light", "dark"], url: () => viewUrl(tables.orders.id, "By status"), settle: 700 },
-    { name: "calendar", themes: ["light"], url: () => viewUrl(tables.orders.id, "Calendar"), settle: 900 },
-    { name: "timeline", themes: ["light"], url: () => viewUrl(tables.prod.id, "Production timeline"), viewport: { width: 1560, height: 620 }, settle: 900, after: async (page) => { await page.getByRole("button", { name: "Today" }).click(); await page.waitForTimeout(500); } },
+    {
+      name: "calendar", themes: ["light"], url: () => viewUrl(tables.orders.id, "Calendar"), settle: 900,
+      // Every order has a due date, so the Unscheduled column would only say so; fold it to give the month room.
+      after: async (page) => { await page.getByRole("button", { name: "Hide unscheduled records" }).click(); await page.waitForTimeout(400); },
+    },
+    { name: "timeline", themes: ["light"], url: () => viewUrl(tables.prod.id, "Production timeline"), viewport: { width: 1560, height: 700 }, settle: 900, after: async (page) => { await page.getByRole("button", { name: "Today" }).click(); await page.waitForTimeout(500); } },
     { name: "gallery", themes: ["light"], url: () => viewUrl(tables.products.id, "Menu"), settle: 1200 },
     { name: "form-builder", themes: ["light"], url: () => viewUrl(tables.customers.id, "Wholesale enquiry"), settle: 700 },
     { name: "form-public", themes: ["light"], url: async () => ctx.formPath, signedOut: true, viewport: { width: 760, height: 760 }, settle: 700 },
     { name: "automations", themes: ["light"], url: async () => `/base/${baseId}/automations/${ctx.readyAutomationId}`, settle: 900 },
     { name: "assistants", themes: ["light", "dark"], url: async () => "/account?tab=assistants", settle: 600 },
+    // Pages around the bases are short lists; a lower window leaves less empty space below them.
+    { name: "workspace", themes: ["light", "dark"], url: async () => `/workspace/${ctx.ws.id}`, viewport: PAGE_VIEWPORT, settle: 900 },
+    { name: "members", themes: ["light"], url: async () => `/workspace/${ctx.ws.id}/members`, viewport: PAGE_VIEWPORT, settle: 900 },
+    { name: "trash", themes: ["light"], url: async () => "/trash", viewport: PAGE_VIEWPORT, settle: 900 },
+    {
+      name: "search", themes: ["light"], url: async () => `/workspace/${ctx.ws.id}`, viewport: PAGE_VIEWPORT, settle: 700,
+      after: async (page) => {
+        await page.getByRole("combobox", { name: "Search everything" }).click();
+        // Matches a base, a view and records, so the results show several groups.
+        await page.keyboard.type("bake", { delay: 40 });
+        await page.getByRole("option").first().waitFor();
+        await page.waitForTimeout(700);
+      },
+    },
   ];
 }
 
 async function takeShots(server, ctx) {
   fs.mkdirSync(outDir, { recursive: true });
   if (!only.length) for (const f of fs.readdirSync(outDir)) if (f.endsWith(".webp")) fs.rmSync(path.join(outDir, f));
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch(CHROMIUM ? { executablePath: CHROMIUM, headless: true } : { channel: "chrome", headless: true });
   const written = [];
   try {
     for (const shot of shots(ctx)) {

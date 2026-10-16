@@ -52,16 +52,25 @@ Node 24 (`.node-version`). `npm run check-links -- --external` also requests eve
 
 `public/screenshots/*.webp` are real screenshots of the app. `npm run screenshots` regenerates them:
 it starts an **existing** release binary on a free localhost port (8080 when free) with a temporary data
-directory, creates the first admin, seeds a made-up bakery through the REST API (customers, orders with
-linked records and a formula, products with generated photos, a production plan, a public form,
-automations), drives the installed Google Chrome with Playwright (`channel: "chrome"`; no browser is
-downloaded), writes 2x WebP files under 300 KB each, then stops the server and deletes the data directory.
+directory, creates the first admin (with the first-run intro marked as seen), seeds a made-up bakery
+through the REST API (a workspace of several bases; customers, orders with linked records and a formula,
+products with generated photos, a production plan, a public form, automations; two teammates who joined
+by invite and one pending invite; a few @mentions and an automation notice in the Inbox; one deleted item
+of each kind in the Trash), drives the installed Google Chrome with Playwright (`channel: "chrome"`; no
+browser is downloaded), writes 2x WebP files under 300 KB each, then stops the server and deletes the
+data directory.
 
 ```sh
 OPENBASE_BIN=../target/release/openbase npm run screenshots    # default: <repo>/target/release/openbase
 npm run screenshots -- --only grid,kanban                      # only some shots
 npm run screenshots -- --seed-only                             # seed, print the URL and login, wait for Ctrl-C
+OPENBASE_SHOTS_CHROMIUM=/path/to/chrome npm run screenshots    # another Chrome or Chromium, where Google Chrome is not installed
 ```
+
+The landing page references the files by name (`<shot>-light.webp`, and `<shot>-dark.webp` for the themed
+ones) and hard-codes their sizes in `dims()` in `src/pages/index.astro`: update it when a shot's window size
+changes. The assistants shot shows the server's address, which is `http://localhost:8080/mcp` only when
+port 8080 is free.
 
 Build the binary the usual way first (`cargo build --release -p openbase` after `cd web && npm ci && npm run build`).
 Dates in the demo are relative to today, so regenerated calendar and timeline images show the current month.
