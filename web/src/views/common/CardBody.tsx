@@ -1,16 +1,20 @@
-/** Cover image, title and field list shared by kanban and gallery cards. */
+/** Cover image, title, description and field list shared by kanban and gallery cards. */
+import { useMemo } from "react";
 import type { Field, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { swatchColor } from "@/lib/cells/palette";
-import { cardTitle, coverUrl, fieldsToShow } from "./cardFields";
+import { cardTitle, coverUrl, descriptionText, fieldsToShow } from "./cardFields";
 
 export interface CardBodyProps {
   record: TableRecord;
   primary: Field | undefined;
+  /** Fields shown as label/value rows; leave the description field out of them. */
   fields: readonly Field[];
   coverField?: Field;
+  /** Text field drawn under the title as a clamped preview. */
+  descriptionField?: Field;
   /** How the cover fills its box: crop to fill or fit inside. */
   coverFit?: "cover" | "contain";
   coverHeight?: number;
@@ -26,10 +30,13 @@ export interface CardBodyProps {
   limit?: number;
 }
 
-export function CardBody({ record, primary, fields, coverField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit }: CardBodyProps) {
+export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit }: CardBodyProps) {
   const cover = coverUrl(coverField, record);
   const shown = fieldsToShow(fields, record, format, limit);
   const title = cardTitle(primary, record, format);
+  const descValue = descriptionField ? record.values[descriptionField.id] : undefined;
+  // Rich text goes through the markdown parser; a board re-renders every card while one is dragged.
+  const description = useMemo(() => descriptionText(descriptionField, descValue, format), [descriptionField, descValue, format]);
   return (
     <>
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
@@ -41,6 +48,11 @@ export function CardBody({ record, primary, fields, coverField, coverFit = "cove
       {layout === "rows" ? (
         <div className="px-3.5 py-3">
           <h3 className="line-clamp-2 break-words text-[0.875rem] font-semibold">{title}</h3>
+          {description && (
+            <p data-card-description className="mt-1 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+              {description}
+            </p>
+          )}
           {shown.length > 0 && (
             <dl className="mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[0.8125rem]">
               {shown.map((f) => (
@@ -57,6 +69,11 @@ export function CardBody({ record, primary, fields, coverField, coverFit = "cove
       ) : (
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
           <h3 className="line-clamp-2 break-words text-[0.9375rem] font-[650]">{title}</h3>
+          {description && (
+            <p data-card-description className="-mt-1 line-clamp-3 break-words text-[0.875rem] leading-[1.45] text-muted">
+              {description}
+            </p>
+          )}
           {shown.map((f) => (
             <div key={f.id} className="min-w-0">
               <p className="mb-[3px] truncate text-xs text-faint">{f.name}</p>

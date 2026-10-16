@@ -308,6 +308,7 @@ const CONFIG_KEYS: &[&str] = &[
 const KANBAN_KEYS: &[&str] = &[
     "stack_field_id",
     "cover_field_id",
+    "description_field_id",
     "hide_empty_stacks",
     "stack_order",
 ];
@@ -653,7 +654,7 @@ impl Xlate<'_> {
             (Some(raw), Mode::ToNames) => self.table.fields.iter().find(|f| &f.id == raw).cloned(),
             (None, _) => None,
         };
-        for key in ["stack_field_id", "cover_field_id"] {
+        for key in ["stack_field_id", "cover_field_id", "description_field_id"] {
             if let Some(v) = o.get_mut(key) {
                 self.field_value(v, &format!("kanban.{key}"))?;
             }

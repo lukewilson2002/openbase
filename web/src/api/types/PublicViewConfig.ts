@@ -8,4 +8,4 @@ export type PublicViewConfig = { field_widths: { [key in string]: number }, froz
 /**
  * Stack field of a kanban view.
  */
-kanban_stack_field_id?: string | null, kanban_cover_field_id?: string | null, kanban_hide_empty_stacks: boolean, gallery_cover_field_id?: string | null, calendar_date_field_id?: string | null, calendar_end_field_id?: string | null, timeline_start_field_id?: string | null, timeline_end_field_id?: string | null, timeline_group_field_id?: string | null, };
+kanban_stack_field_id?: string | null, kanban_cover_field_id?: string | null, kanban_description_field_id?: string | null, kanban_hide_empty_stacks: boolean, gallery_cover_field_id?: string | null, calendar_date_field_id?: string | null, calendar_end_field_id?: string | null, timeline_start_field_id?: string | null, timeline_end_field_id?: string | null, timeline_group_field_id?: string | null, };

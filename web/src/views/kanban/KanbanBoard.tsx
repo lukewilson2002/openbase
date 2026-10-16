@@ -46,9 +46,10 @@ type Items = Record<string, string[]>;
 export interface KanbanBoardProps {
   stacks: readonly Stack[];
   primary: Field | undefined;
-  /** Fields shown on cards (already minus title, cover and hidden fields). */
+  /** Fields shown on cards (already minus title, cover, description and hidden fields). */
   fields: readonly Field[];
   coverField?: Field;
+  descriptionField?: Field;
   format: FormatCtx;
   emails: ReadonlyMap<string, string>;
   colors: Readonly<Record<string, string>>;
@@ -196,7 +197,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       <DragOverlay>
         {activeRecord ? (
           <div data-drag-overlay className="relative cursor-grabbing overflow-hidden rounded-[10px] border border-primary bg-surface shadow-pop">
-            <CardBody record={activeRecord} primary={props.primary} fields={props.fields} coverField={props.coverField} format={props.format} emails={props.emails} color={props.colors[activeRecord.id]} />
+            <CardBody record={activeRecord} primary={props.primary} fields={props.fields} coverField={props.coverField} descriptionField={props.descriptionField} format={props.format} emails={props.emails} color={props.colors[activeRecord.id]} />
           </div>
         ) : null}
       </DragOverlay>
@@ -401,7 +402,7 @@ function KanbanCard({ record, ...p }: { record: TableRecord } & KanbanBoardProps
         isDragging && "opacity-40",
       )}
     >
-      <CardBody record={record} primary={p.primary} fields={p.fields} coverField={p.coverField} format={p.format} emails={p.emails} color={p.colors[record.id]} />
+      <CardBody record={record} primary={p.primary} fields={p.fields} coverField={p.coverField} descriptionField={p.descriptionField} format={p.format} emails={p.emails} color={p.colors[record.id]} />
     </div>
   );
 }

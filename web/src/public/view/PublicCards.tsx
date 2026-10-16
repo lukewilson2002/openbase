@@ -1,7 +1,7 @@
 /** Read-only cards of a shared gallery and board: cover image, title and the first few filled fields. */
 import { useMemo, useState } from "react";
 import type { Field, TableRecord } from "@/api/types";
-import { cardTitle, fieldsToShow } from "@/views/common/cardFields";
+import { cardTitle, descriptionText, fieldsToShow, isDescriptionField } from "@/views/common/cardFields";
 import { buildStacks, stackKind } from "@/views/kanban/stacks";
 import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
@@ -12,9 +12,11 @@ import { useShare } from "./ShareContext";
 
 export interface CardFields {
   title: Field | undefined;
-  /** Fields shown under the title (already without the title, cover and stack fields). */
+  /** Fields shown under the title (already without the title, cover, description and stack fields). */
   rest: readonly Field[];
   cover?: Field;
+  /** Text drawn under the title as a clamped preview (boards). */
+  description?: Field;
 }
 
 function Cover({ record, field, fit, height }: { record: TableRecord; field: Field; fit: "cover" | "contain"; height: number }) {
@@ -32,12 +34,19 @@ function Cover({ record, field, fit, height }: { record: TableRecord; field: Fie
 export function PublicCard({ record, fields, color, coverFit = "cover", coverHeight = 120 }: { record: TableRecord; fields: CardFields; color?: string; coverFit?: "cover" | "contain"; coverHeight?: number }) {
   const { format } = useShare();
   const shown = fieldsToShow(fields.rest, record, format);
+  const descValue = fields.description ? record.values[fields.description.id] : undefined;
+  const description = useMemo(() => descriptionText(fields.description, descValue, format), [fields.description, descValue, format]);
   return (
     <article data-record-id={record.id} aria-label={cardTitle(fields.title, record, format)} className="relative overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm">
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
       {fields.cover && <Cover record={record} field={fields.cover} fit={coverFit} height={coverHeight} />}
       <div className="flex flex-col gap-1.5 p-2.5">
         <h3 className="line-clamp-2 break-words text-[0.8125rem] font-semibold">{cardTitle(fields.title, record, format)}</h3>
+        {description && (
+          <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+            {description}
+          </p>
+        )}
         {shown.map((f) => (
           <div key={f.id} className="min-w-0">
             <p className="truncate text-[0.6875rem] uppercase tracking-wide text-faint">{f.name}</p>
@@ -49,11 +58,16 @@ export function PublicCard({ record, fields, color, coverFit = "cover", coverHei
   );
 }
 
-/** Which fields a card shows: everything visible except the title, the cover and (on boards) the stack field. */
-export function cardFieldsFor(list: readonly Field[], title: Field | undefined, coverId: string | null | undefined, exclude: ReadonlySet<string> = new Set()): CardFields {
+/**
+ * Which fields a card shows: everything visible except the title, the cover, the description and
+ * (on boards) the stack field. `list` holds only the shared fields, so a description the view hides
+ * (which the server never names) cannot appear.
+ */
+export function cardFieldsFor(list: readonly Field[], title: Field | undefined, coverId: string | null | undefined, exclude: ReadonlySet<string> = new Set(), descriptionId?: string | null): CardFields {
   const cover = list.find((f) => f.id === coverId && f.type === "attachment");
-  const rest = list.filter((f) => f.id !== title?.id && f.id !== cover?.id && !exclude.has(f.id) && displayShapeOf(f) !== "button");
-  return { title, rest, cover };
+  const description = list.find((f) => f.id === descriptionId && f.id !== title?.id && isDescriptionField(f));
+  const rest = list.filter((f) => f.id !== title?.id && f.id !== cover?.id && f.id !== description?.id && !exclude.has(f.id) && displayShapeOf(f) !== "button");
+  return { title, rest, cover, description };
 }
 
 const GALLERY_STEP = 60;

@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
+import { field } from "@/test/fields";
 import { apiError } from "@/test/utils";
 import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import { installBoardLayout, type BoardLayout } from "./boardLayout";
@@ -90,6 +91,70 @@ describe("KanbanView", () => {
     await user.click(tool);
     expect(await screen.findByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
     expect(screen.getByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
+  });
+
+  describe("description", () => {
+    const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
+    const brief = field("long_text", { rich: true }, { id: "f_brief", name: "Brief" });
+    const label = field("formula", { expression: "{Name}", result_type: "text" }, { id: "f_label", name: "Label" });
+    const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });
+    const long = "First line of the notes.\n\n   Second   paragraph with more words than fit on three lines of a narrow card.";
+
+    function setupNotes(view: ReturnType<typeof board>, values: Record<string, unknown> = {}) {
+      const schema = projectSchema("editor", [view]);
+      schema.tables[0]!.fields = [...schema.tables[0]!.fields, notes, brief, label, total];
+      const server = { records: [rec("r1", { [F.status.id]: "s1", [F.effort.id]: 5, [notes.id]: long, ...values }), rec("r2", { [F.status.id]: "s1", [notes.id]: "  " })] };
+      return renderView(KanbanView, {
+        schema,
+        viewId: "viw1",
+        routes: { "POST /api/views/viw1/query": queryHandler(server), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never,
+      });
+    }
+
+    it("offers text fields but not the title, starts empty and saves the choice", async () => {
+      const user = userEvent.setup();
+      const { api } = setupNotes(board());
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.click(screen.getAllByRole("button", { name: "Stacked by Status" })[0]!);
+      const select = await screen.findByRole("combobox", { name: "Description" });
+      // Nothing is picked for the view, even though the table has exactly one plain long text.
+      expect(select).toHaveValue("");
+      const options = within(select).getAllByRole("option").map((o) => o.textContent);
+      expect(options).toEqual(["No description", "Notes", "Brief", "Label"]);
+      await user.selectOptions(select, "f_notes");
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { description_field_id: string; cover_field_id: string | null } } };
+      expect(saved.config.kanban).toMatchObject({ description_field_id: "f_notes", stack_field_id: F.status.id });
+    });
+
+    it("draws the description under the title, clamped, and leaves its row out", async () => {
+      setupNotes(board({ description_field_id: notes.id }));
+      const card = await screen.findByRole("button", { name: "R1" });
+      const text = card.querySelector("[data-card-description]")!;
+      expect(text.textContent).toBe("First line of the notes. Second paragraph with more words than fit on three lines of a narrow card.");
+      expect(text.className).toContain("line-clamp-3");
+      expect(text.previousElementSibling?.tagName).toBe("H3");
+      expect(within(card).queryByText("Notes")).not.toBeInTheDocument();
+      expect(within(card).getByText("5.00")).toBeInTheDocument();
+      // A blank description draws nothing at all.
+      expect(screen.getByRole("button", { name: "R2" }).querySelector("[data-card-description]")).toBeNull();
+    });
+
+    it("shows rich text without its markup", async () => {
+      setupNotes(board({ description_field_id: brief.id }), { [brief.id]: "## Plan\n\nBuy **milk** & [eggs](https://x.test)\n- one\n- two" });
+      const card = await screen.findByRole("button", { name: "R1" });
+      expect(card.querySelector("[data-card-description]")!.textContent).toBe("Plan Buy milk & eggs one two");
+      expect(card.querySelector("[data-card-description] a, [data-card-description] strong")).toBeNull();
+      // Notes is not the description here, so it stays a row.
+      expect(within(card).getByText("Notes")).toBeInTheDocument();
+    });
+
+    it("ignores a description field that is no longer text", async () => {
+      setupNotes(board({ description_field_id: total.id }), { [total.id]: 3 });
+      const card = await screen.findByRole("button", { name: "R1" });
+      expect(card.querySelector("[data-card-description]")).toBeNull();
+      expect(within(card).getByText("Total")).toBeInTheDocument();
+    });
   });
 
   it("hides empty stacks from the More menu", async () => {

@@ -376,10 +376,14 @@ fn condition_key(c: &Condition) -> Option<String> {
 
 /// The single-field slots of a config with the label the validator reports
 /// them under.
-pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 9] {
+pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10] {
     [
         ("kanban stack field", config.kanban.stack_field_id.as_ref()),
         ("kanban cover field", config.kanban.cover_field_id.as_ref()),
+        (
+            "kanban description field",
+            config.kanban.description_field_id.as_ref(),
+        ),
         (
             "calendar date field",
             config.calendar.date_field_id.as_ref(),
