@@ -23,7 +23,7 @@ use futures::future::BoxFuture;
 use lettre::message::Mailbox;
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
-use lettre::transport::smtp::client::{Tls, TlsParameters};
+use lettre::transport::smtp::client::{Certificate, Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use ob_core::api::email::source;
 
@@ -248,6 +248,12 @@ pub fn smtp_factory() -> MailerFactory {
     Arc::new(|s| Ok(Arc::new(SmtpMailer::new(s)?) as Arc<dyn Mailer>))
 }
 
+/// Like [`smtp_factory`], but also trusting the given DER-encoded root certificates (for a mail
+/// server behind a private CA, and for tests that run a TLS server with a throwaway certificate).
+pub fn smtp_factory_with_roots(roots: Vec<Vec<u8>>) -> MailerFactory {
+    Arc::new(move |s| Ok(Arc::new(SmtpMailer::new_with_roots(s, &roots)?) as Arc<dyn Mailer>))
+}
+
 struct Current {
     resolved: Resolved,
     mailer: Arc<dyn Mailer>,
@@ -408,18 +414,54 @@ pub fn send_in_background(mailer: Arc<dyn Mailer>, to: String, subject: String, 
 pub struct SmtpMailer {
     transport: AsyncSmtpTransport<Tokio1Executor>,
     from: Mailbox,
+    host: String,
+    port: u16,
+    security: SmtpSecurity,
+}
+
+/// How long one delivery may take in all (connect, TLS, sign-in, hand-over). The transport's own
+/// timeout does not cover a server that accepts the connection and then says nothing, which is
+/// exactly what a mismatch between port and connection security looks like: a client waiting
+/// for a greeting on an implicit-TLS port (465) waits for ever. Shorter than the admin test
+/// endpoint's own limit, so that one gets this explanation rather than a bare time-out.
+const SEND_TIMEOUT: Duration = Duration::from_secs(25);
+
+/// Ports where providers (Resend, and most others) expect implicit TLS from the first byte.
+pub const IMPLICIT_TLS_PORTS: &[u16] = &[465, 2465];
+/// Ports where providers expect a plain greeting and an upgrade with STARTTLS.
+pub const STARTTLS_PORTS: &[u16] = &[25, 587, 2587];
+
+/// A sentence naming the likely fix when `port` and `security` do not go together (STARTTLS on
+/// 465 never gets a greeting; implicit TLS on 587 fails the handshake), or `None`.
+pub fn security_hint(port: u16, security: SmtpSecurity) -> Option<String> {
+    match security {
+        SmtpSecurity::StartTls if IMPLICIT_TLS_PORTS.contains(&port) => Some(format!(
+            "Port {port} expects implicit TLS from the first byte: set Connection security to \
+             TLS (or use port 587 with STARTTLS)."
+        )),
+        SmtpSecurity::Tls if STARTTLS_PORTS.contains(&port) => Some(format!(
+            "Port {port} expects a plain connection upgraded with STARTTLS: set Connection \
+             security to STARTTLS (or use port 465 with TLS)."
+        )),
+        _ => None,
+    }
 }
 
 impl SmtpMailer {
     /// Build the transport from the effective settings. Does not connect.
     pub fn new(settings: &SmtpSettings) -> AppResult<SmtpMailer> {
+        Self::new_with_roots(settings, &[])
+    }
+
+    /// [`new`](Self::new), also trusting `roots` (DER-encoded certificates) for TLS.
+    pub fn new_with_roots(settings: &SmtpSettings, roots: &[Vec<u8>]) -> AppResult<SmtpMailer> {
         let host = settings.host.as_str();
         let from: Mailbox = settings.from.parse().map_err(|e| {
             AppError::bad_request(format!("invalid sender address '{}': {e}", settings.from))
         })?;
         let tls = match settings.security {
-            SmtpSecurity::StartTls => Tls::Required(tls_params(host)?),
-            SmtpSecurity::Tls => Tls::Wrapper(tls_params(host)?),
+            SmtpSecurity::StartTls => Tls::Required(tls_params(host, roots)?),
+            SmtpSecurity::Tls => Tls::Wrapper(tls_params(host, roots)?),
             SmtpSecurity::None => Tls::None,
         };
         let mut builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
@@ -432,12 +474,23 @@ impl SmtpMailer {
         Ok(SmtpMailer {
             transport: builder.build(),
             from,
+            host: settings.host.clone(),
+            port: settings.port,
+            security: settings.security,
         })
     }
 }
 
-fn tls_params(host: &str) -> AppResult<TlsParameters> {
-    TlsParameters::new(host.to_string()).map_err(|e| AppError::bad_request(format!("{e}")))
+fn tls_params(host: &str, roots: &[Vec<u8>]) -> AppResult<TlsParameters> {
+    let mut builder = TlsParameters::builder(host.to_string());
+    for der in roots {
+        let cert = Certificate::from_der(der.clone())
+            .map_err(|e| AppError::bad_request(format!("invalid root certificate: {e}")))?;
+        builder = builder.add_root_certificate(cert);
+    }
+    builder
+        .build()
+        .map_err(|e| AppError::bad_request(format!("{e}")))
 }
 
 /// An error and its causes on one line ("Connection error: Connection refused (os error 61)"),
@@ -454,6 +507,23 @@ pub fn error_chain(e: &(dyn std::error::Error + 'static)) -> String {
         source = cause.source();
     }
     out
+}
+
+impl SmtpMailer {
+    /// The failure with where it happened and, when port and security look mismatched, the fix.
+    fn explain(&self, detail: String) -> String {
+        let mut out = format!(
+            "{detail} (mail server {}:{}, connection security {})",
+            self.host,
+            self.port,
+            self.security.as_str()
+        );
+        if let Some(hint) = security_hint(self.port, self.security) {
+            out.push_str(". ");
+            out.push_str(&hint);
+        }
+        out
+    }
 }
 
 impl Mailer for SmtpMailer {
@@ -474,11 +544,17 @@ impl Mailer for SmtpMailer {
                 .header(ContentType::TEXT_PLAIN)
                 .body(body.to_string())
                 .map_err(AppError::internal)?;
-            self.transport
-                .send(message)
-                .await
-                .map_err(|e| AppError::internal(error_chain(&e)))?;
-            Ok(())
+            let detail =
+                match tokio::time::timeout(SEND_TIMEOUT, self.transport.send(message)).await {
+                    Ok(Ok(_)) => return Ok(()),
+                    Ok(Err(e)) => error_chain(&e),
+                    Err(_) => format!(
+                        "the mail server did not answer within {} seconds (no greeting, TLS \
+                     handshake or reply)",
+                        SEND_TIMEOUT.as_secs()
+                    ),
+                };
+            Err(AppError::internal(self.explain(detail)))
         })
     }
 }
@@ -588,6 +664,25 @@ mod tests {
         let mut bad = settings(SmtpSecurity::None);
         bad.from = "not an address".into();
         assert!(SmtpMailer::new(&bad).is_err());
+    }
+
+    #[test]
+    fn mismatched_port_and_security_get_a_hint() {
+        let tls_on_587 = security_hint(587, SmtpSecurity::Tls).unwrap();
+        assert!(tls_on_587.contains("STARTTLS"), "{tls_on_587}");
+        for port in [465, 2465] {
+            let h = security_hint(port, SmtpSecurity::StartTls).unwrap();
+            assert!(h.contains("implicit TLS") && h.contains("TLS"), "{h}");
+        }
+        for port in [25, 587, 2587] {
+            assert!(security_hint(port, SmtpSecurity::Tls).is_some());
+            assert!(security_hint(port, SmtpSecurity::StartTls).is_none());
+        }
+        for port in [465, 2465] {
+            assert!(security_hint(port, SmtpSecurity::Tls).is_none());
+        }
+        assert!(security_hint(2525, SmtpSecurity::StartTls).is_none());
+        assert!(security_hint(465, SmtpSecurity::None).is_none());
     }
 
     #[test]

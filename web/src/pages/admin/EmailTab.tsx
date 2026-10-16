@@ -29,6 +29,19 @@ const SECURITY_LABELS: Record<string, string> = {
   none: "None (a relay on this machine or network only)",
 };
 
+/** Ports where mail providers (Resend, and most others) expect TLS from the first byte. */
+const IMPLICIT_TLS_PORTS = [465, 2465];
+/** Ports where they expect a plain greeting and an upgrade with STARTTLS. */
+const STARTTLS_PORTS = [25, 587, 2587];
+
+/** The likeliest fix when port and security do not go together: STARTTLS on 465 never gets a greeting, TLS on 587 fails the handshake. */
+export function securityHint(portText: string, security: string): string | null {
+  const port = Number(portText);
+  if (security === "starttls" && IMPLICIT_TLS_PORTS.includes(port)) return `Port ${port} expects TLS from the first byte: set Connection security to TLS, or use port 587 with STARTTLS.`;
+  if (security === "tls" && STARTTLS_PORTS.includes(port)) return `Port ${port} expects STARTTLS: set Connection security to STARTTLS, or use port 465 with TLS.`;
+  return null;
+}
+
 interface FormState {
   host: string;
   port: string;
@@ -63,6 +76,28 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
 
   const locked = (f: FieldName) => settings.sources[f] === "environment";
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+  // Port and security go together (465 is TLS, 587 is STARTTLS), and getting them apart is the
+  // commonest reason a test email never gets anywhere: changing one moves the other when it
+  // sits on a standard value.
+  const changePort = (port: string) => {
+    const n = Number(port);
+    const next: Partial<FormState> = { port };
+    if (!locked("security") && port.trim() !== "") {
+      if (IMPLICIT_TLS_PORTS.includes(n) && form.security === "starttls") next.security = "tls";
+      else if (STARTTLS_PORTS.includes(n) && form.security === "tls") next.security = "starttls";
+    }
+    set(next);
+  };
+  const changeSecurity = (security: string) => {
+    const n = Number(form.port);
+    const next: Partial<FormState> = { security };
+    if (!locked("port")) {
+      if (security === "tls" && STARTTLS_PORTS.includes(n)) next.port = n === 2587 ? "2465" : "465";
+      else if (security === "starttls" && IMPLICIT_TLS_PORTS.includes(n)) next.port = n === 2465 ? "2587" : "587";
+    }
+    set(next);
+  };
+  const hint = securityHint(form.port, form.security);
 
   /** Only what changed, and nothing the environment fixes. */
   const buildPatch = (): UpdateEmailSettings => {
@@ -108,12 +143,12 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
                 {(ctl) => <Input {...ctl} value={form.host} onChange={(e) => set({ host: e.target.value })} disabled={locked("host")} autoComplete="off" spellCheck={false} placeholder="smtp.example.com" />}
               </Field>
               <Field label="Port" error={portInvalid ? "1 to 65535" : undefined} hint={locked("port") ? <Locked field="port" /> : undefined}>
-                {(ctl) => <Input {...ctl} inputMode="numeric" value={form.port} onChange={(e) => set({ port: e.target.value })} disabled={locked("port")} />}
+                {(ctl) => <Input {...ctl} inputMode="numeric" value={form.port} onChange={(e) => changePort(e.target.value)} disabled={locked("port")} />}
               </Field>
             </div>
             <Field label="Connection security" hint={locked("security") ? <Locked field="security" /> : undefined}>
               {(ctl) => (
-                <Select {...ctl} value={form.security} onChange={(e) => set({ security: e.target.value })} disabled={locked("security")}>
+                <Select {...ctl} value={form.security} onChange={(e) => changeSecurity(e.target.value)} disabled={locked("security")}>
                   {Object.entries(SECURITY_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -122,6 +157,7 @@ function EmailPanel({ settings }: { settings: EmailSettings }) {
                 </Select>
               )}
             </Field>
+            {hint && <Notice tone="warning">{hint}</Notice>}
             {form.security === "none" && (form.username.trim() !== "" || settings.password_set) && <Notice tone="warning">With security set to None, the username and password are sent unencrypted. Use this only for a relay on the same machine or a private network.</Notice>}
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Username" hint={locked("username") ? <Locked field="username" /> : "Leave empty if the server needs no sign-in."}>

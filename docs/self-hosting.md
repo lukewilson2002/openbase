@@ -238,7 +238,12 @@ changes**. It takes effect immediately. Press **Send test email** (to your
 own address, or another one you type) to check it: if delivery fails, the
 page shows the real error from the mail server or the connection ("Connection
 refused", "authentication failed", ...), so you can fix it before an invitation
-goes missing. The settings are stored in the database, so they are in your
+goes missing. Port and security go together: `tls` (implicit TLS) on 465 or
+2465, `starttls` on 587, 2587 or 25. A mismatch (for example `starttls` on
+465) never gets a greeting from the server, so nothing is sent and the mail
+provider shows no activity; the page switches one to match the other and the
+test email's error names the fix. For Resend use host `smtp.resend.com`,
+username `resend` and your API key as the password. The settings are stored in the database, so they are in your
 backups (the password included: protect backups as you protect the database).
 The password is write-only: the page shows "Saved" with **Replace** and
 **Remove**, and leaving the field empty keeps the saved one.
