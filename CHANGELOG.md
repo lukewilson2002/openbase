@@ -20,6 +20,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   names still cycle through the palette. Choices given as `{name, color}` keep their colour (the
   `create_field` MCP tool, `field_types` and the REST API all accept it).
 
+### Fixed
+
+- **Send test email with providers like Resend.** Choosing STARTTLS for an implicit-TLS port
+  (465, 2465) or TLS for a STARTTLS port (587, 2587, 25) used to leave the test hanging until
+  it timed out with a generic message, with nothing reaching the mail provider. Admin > Email
+  now keeps port and connection security together, warns about a mismatch, and every failed
+  delivery says which server and mode it tried, the real error and, for a mismatch, the fix.
+  A server that never answers is reported after 25 seconds. New tests run the real SMTP
+  transport against a fake STARTTLS / implicit-TLS server with `AUTH PLAIN`/`LOGIN`.
+
 ## [0.2.0] - 2026-10-16
 
 ### Changed
@@ -138,13 +148,6 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Fixed
 
-- **Send test email with providers like Resend.** Choosing STARTTLS for an implicit-TLS port
-  (465, 2465) or TLS for a STARTTLS port (587, 2587, 25) used to leave the test hanging until
-  it timed out with a generic message, with nothing reaching the mail provider. Admin > Email
-  now keeps port and connection security together, warns about a mismatch, and every failed
-  delivery says which server and mode it tried, the real error and, for a mismatch, the fix.
-  A server that never answers is reported after 25 seconds. New tests run the real SMTP
-  transport against a fake STARTTLS / implicit-TLS server with `AUTH PLAIN`/`LOGIN`.
 - Phones: tapping a text field no longer zooms the page in on iOS (form fields are 16px on touch
   screens and narrow windows), and the base's top bar no longer makes the page wider than a small
   phone. Buttons, menu items and the view list are larger on touch screens, the view options button
