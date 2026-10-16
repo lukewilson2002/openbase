@@ -320,8 +320,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "tables",
         "creator",
         Write,
-        "Create a table (with a primary text field and a default grid view), optionally with a Lucide icon name.",
-        "{name, icon?}",
+        "Create a table with just a primary text field \"Name\" and a default grid view (like a new base's first table), optionally with a Lucide icon name and `fields`: the field definitions to create after Name, each as for POST /api/tables/{id}/fields (options may be left out). All or nothing: if one is invalid no table is created and the error names it (fields[2] 'Status').",
+        "{name, icon?, fields?: [{name, type, options?, description?, inverse_name?}]}",
         "201 Table",
     ),
     e(

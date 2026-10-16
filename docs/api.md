@@ -68,6 +68,17 @@ some bases who creates or duplicates a base gets it added to their list.
   of the invited and existing role and adds up the bases.
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` for a base without
   tables; by default it starts with "Table 1".
+- Every new table, a base's "Table 1" or one added with `POST /api/bases/{id}/tables`,
+  starts with just its primary field "Name" and a grid view; nothing else is added.
+  `POST /api/bases/{id}/tables` takes an optional `fields` array to create the rest in
+  the same call: each entry has the shape of `POST /api/tables/{id}/fields` (`name`,
+  `type`, `options`, `description`, `inverse_name`; `options` may be left out for the
+  type's defaults), created in order after "Name". It is all or nothing: if any entry is
+  invalid the answer is 400 (or 409 for a name clash), the message begins with the
+  entry (`fields[2] 'Status': ...`) and no table is created. A lookup, rollup or count
+  may give a link field listed earlier (or "Name") as `options.link_field_id` by name;
+  everything else refers to ids as in `POST /api/tables/{id}/fields`. The answer is the
+  table with all its fields.
 
 ### Token permissions
 

@@ -67,7 +67,7 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     assert_eq!(q.body["total"], 1);
     assert_eq!(
         page.body["fields"].as_array().unwrap().len(),
-        2,
+        1,
         "the hidden field is not published: {}",
         page.body
     );

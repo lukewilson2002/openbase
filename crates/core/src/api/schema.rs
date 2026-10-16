@@ -68,6 +68,14 @@ pub struct CreateTable {
     pub name: String,
     #[serde(default)]
     pub icon: Option<String>,
+    /// Fields to create after the primary field "Name", each in the shape of
+    /// `POST /api/tables/{id}/fields` (`name`, `type`, `options`, `description`,
+    /// `inverse_name`; `options` may be left out for the type's defaults), in order. All or nothing: if any field is invalid the
+    /// table is not created. A table always starts with only its primary field,
+    /// so nothing is added beyond what is listed. A lookup, rollup or count may
+    /// name a link field listed earlier in `fields` as its `link_field_id`.
+    #[serde(default)]
+    pub fields: Option<Vec<Json>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

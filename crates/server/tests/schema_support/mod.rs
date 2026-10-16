@@ -109,7 +109,8 @@ pub async fn base(app: &TestApp, c: &Client, ws: &str, name: &str) -> Value {
     r.body.clone()
 }
 
-/// A workspace with an owner and one base (starter table "Table 1").
+/// A workspace with an owner and one base (starter table "Table 1": Name, plus a long-text
+/// "Notes" this fixture adds).
 pub struct Fixture {
     pub app: TestApp,
     pub owner: Client,
@@ -135,11 +136,20 @@ impl Fixture {
         let ws = workspace(&app, &owner, "Acme").await;
         let b = base(&app, &owner, &ws, "CRM").await;
         let t = &b["tables"][0];
+        // A new table has only its primary field; most tests want a second text field.
+        let notes = app
+            .post(
+                &owner,
+                &format!("/api/tables/{}/fields", t["id"].as_str().unwrap()),
+                json!({ "name": "Notes", "type": "long_text", "options": {} }),
+            )
+            .await;
+        notes.assert_status(201);
         Fixture {
             base_id: b["id"].as_str().unwrap().into(),
             table_id: t["id"].as_str().unwrap().into(),
             primary_id: t["primary_field_id"].as_str().unwrap().into(),
-            notes_id: t["fields"][1]["id"].as_str().unwrap().into(),
+            notes_id: notes.body["id"].as_str().unwrap().into(),
             view_id: t["views"][0]["id"].as_str().unwrap().into(),
             app,
             owner,

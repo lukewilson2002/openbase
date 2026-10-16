@@ -97,12 +97,26 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a base, optionally with an icon. It starts with a primary text field and a grid view; add fields with create_field. Needs the creator role.",
+            "Add a table to a base, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new base (create_base): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the base, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
                     "name": string("Table name."),
                     "icon": icon_schema("table"),
+                    "fields": {
+                        "type": "array",
+                        "description": "Fields to create after the primary field 'Name', in order. Each one is exactly the arguments of create_field without base_id and table. 'Name' is taken by the primary field, so give the other fields other names. The whole call fails, creating nothing, if any field is invalid.",
+                        "items": object(
+                            json!({
+                                "name": string("Field name (unique within the table; 'Name' is the primary field)."),
+                                "type": ftype.clone(),
+                                "options": options.clone(),
+                                "description": string("Optional field description."),
+                                "inverse_name": string("For link fields: the name of the field created in the linked table (default: this table's name)."),
+                            }),
+                            &["name", "type"],
+                        ),
+                    },
                 }),
                 &["base_id", "name"],
             ),
@@ -541,11 +555,70 @@ async fn delete_base(ctx: &McpCtx, a: BaseArg) -> ToolResult {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct NewField {
+    name: String,
+    #[serde(rename = "type")]
+    field_type: String,
+    #[serde(default)]
+    options: Option<Value>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    inverse_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateTable {
     base_id: String,
     name: String,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
+    #[serde(default)]
+    fields: Option<Vec<NewField>>,
+}
+
+/// The REST body of one entry of `fields`: names in `options` become ids. `table` is the new
+/// table as far as it is known (its primary field and the fields before this one), with each
+/// field's name as its id: a reference to such a field is a name that the endpoint maps to the
+/// real id once the field exists.
+fn new_field_body(
+    schema: &ob_core::api::schema::BaseSchema,
+    table: &Table,
+    f: NewField,
+) -> Result<Value, String> {
+    check_type(&f.field_type).map_err(|e| e.text)?;
+    let mut options = f.options.unwrap_or_else(|| json!({}));
+    field_options_to_ids(schema, table, &f.field_type, &mut options, None)?;
+    let mut body = Map::new();
+    body.insert("name".into(), json!(f.name));
+    body.insert("type".into(), json!(f.field_type));
+    body.insert("options".into(), options);
+    insert_some(&mut body, "description", f.description);
+    insert_some(&mut body, "inverse_name", f.inverse_name);
+    Ok(Value::Object(body))
+}
+
+/// A stand-in for a field already defined in the same `create_table` call, so later fields can
+/// refer to it by name. Only a link field's kind matters (a lookup checks that its link field
+/// is one); the others are placeholders.
+fn placeholder_field(body: &Value) -> Field {
+    let name = body["name"].as_str().unwrap_or_default().to_string();
+    let kind = serde_json::from_value::<ob_core::field::FieldKind>(
+        json!({ "type": body["type"], "options": body["options"] }),
+    )
+    .ok()
+    .filter(|k| matches!(k, ob_core::field::FieldKind::Link(_)))
+    .unwrap_or_else(|| {
+        ob_core::field::FieldKind::SingleLineText(ob_core::field::TextOptions::default())
+    });
+    Field {
+        id: name.clone(),
+        table_id: String::new(),
+        name,
+        description: None,
+        kind,
+    }
 }
 
 async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
@@ -555,6 +628,42 @@ async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if let Some(list) = a.fields.filter(|l| !l.is_empty()) {
+        let schema = match load_schema(ctx, &a.base_id).await {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let mut new_table = Table {
+            id: String::new(),
+            base_id: a.base_id.clone(),
+            name: a.name.clone(),
+            icon: None,
+            description: None,
+            primary_field_id: "Name".into(),
+            fields: Vec::new(),
+            views: Vec::new(),
+        };
+        new_table.fields.push(Field {
+            id: "Name".into(),
+            table_id: String::new(),
+            name: "Name".into(),
+            description: None,
+            kind: ob_core::field::FieldKind::SingleLineText(ob_core::field::TextOptions::default()),
+        });
+        let mut defs = Vec::new();
+        for (i, f) in list.into_iter().enumerate() {
+            let label = format!("fields[{i}] '{}'", f.name);
+            let def = match new_field_body(&schema, &new_table, f) {
+                Ok(d) => d,
+                Err(e) => {
+                    return ToolResult::error(format!("{label}: {e} Nothing was created."));
+                }
+            };
+            new_table.fields.push(placeholder_field(&def));
+            defs.push(def);
+        }
+        body.insert("fields".into(), Value::Array(defs));
+    }
     match fetch(
         ctx,
         "POST",

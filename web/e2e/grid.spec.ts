@@ -26,7 +26,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 const MARKER_W = 56;
 const HEADER_H = 44;
 const ROW_H = 42;
-// A new table starts with Name and Notes; the fixture adds Qty, Status and Done after them.
+// The fixture builds Name, Notes, Qty, Status and Done, in that order.
 const WIDTHS = { name: 220, notes: 260, qty: 140, status: 170, done: 110 };
 
 interface Fixture {
@@ -64,6 +64,8 @@ async function seed(page: Page): Promise<Fixture> {
   const base = await post<{ id: string; tables: TableDto[] }>(req, `/api/workspaces/${ws.id}/bases`, { name: "Grid E2E" });
   const table = base.tables[0] ?? (await post<TableDto>(req, `/api/bases/${base.id}/tables`, { name: "Tasks" }));
   const nameField = table.fields[0]!.id;
+  // A new table has only its primary field; the grid tests expect a Notes column after Name.
+  await post(req, `/api/tables/${table.id}/fields`, { name: "Notes", type: "long_text", options: {} });
   const qty = await post<{ id: string }>(req, `/api/tables/${table.id}/fields`, { name: "Qty", type: "number", options: { precision: 0, allow_negative: true } });
   const status = await post<{ id: string; options: { choices: { id: string; name: string }[] } }>(req, `/api/tables/${table.id}/fields`, {
     name: "Status",

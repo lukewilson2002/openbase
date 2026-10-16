@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use ob_core::api::schema::{BaseSchema, Table};
 use ob_core::api::workspaces::{Collaborator, CreateBase, DuplicateBase, Member, UpdateBase};
-use ob_core::field::{Field, FieldKind, LongTextOptions};
+use ob_core::field::Field;
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
 use crate::db::now_ms;
@@ -78,8 +78,8 @@ pub fn live_bases_in(conn: &Connection, workspace_id: &str) -> AppResult<Vec<Bas
 }
 
 /// Create a base in `workspace_id`, by default with a starter table "Table 1"
-/// (primary field "Name", a long-text field "Notes" and a grid view "Grid
-/// view"); with `empty: true`, without tables. A creator limited to some
+/// (just the primary field "Name" and a grid view "Grid view", like every table
+/// created later); with `empty: true`, without tables. A creator limited to some
 /// bases gets the new base on their list.
 pub fn create(
     tx: &Transaction,
@@ -111,15 +111,7 @@ pub fn create(
     if input.empty == Some(true) {
         return live_base(tx, &id);
     }
-    let table = tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
-    let notes = Field {
-        id: new_id(ob_core::ids::FIELD),
-        table_id: table.id.clone(),
-        name: "Notes".into(),
-        description: None,
-        kind: FieldKind::LongText(LongTextOptions::default()),
-    };
-    schema::insert_field(tx, &notes, 2.0, now_ms())?;
+    tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
     live_base(tx, &id)
 }
 

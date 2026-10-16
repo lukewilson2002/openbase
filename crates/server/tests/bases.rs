@@ -9,8 +9,16 @@ use schema_support::*;
 use serde_json::json;
 
 #[tokio::test]
-async fn new_base_has_starter_table_with_name_notes_and_grid_view() {
+async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view() {
     let f = Fixture::new().await;
+    // Fixture::new adds a "Notes" field to Table 1 for most tests; start a bare base here.
+    let url = format!("/api/workspaces/{}/bases", f.ws);
+    let r = f.app.post(&f.owner, &url, json!({ "name": "Bare" })).await;
+    r.assert_status(201);
+    let fields = r.body["tables"][0]["fields"].as_array().unwrap();
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0]["name"], "Name");
+    assert_eq!(fields[0]["id"], r.body["tables"][0]["primary_field_id"]);
     let s = f.schema().await;
     assert_eq!(s["name"], "CRM");
     assert_eq!(s["color"], "blue");
@@ -22,12 +30,10 @@ async fn new_base_has_starter_table_with_name_notes_and_grid_view() {
     assert_eq!(t["name"], "Table 1");
     assert_eq!(t["base_id"], f.base_id.as_str());
     let fields = t["fields"].as_array().unwrap();
-    assert_eq!(fields.len(), 2);
+    assert_eq!(fields.len(), 2, "Name, plus the Notes the fixture added");
     assert_eq!(fields[0]["name"], "Name");
     assert_eq!(fields[0]["type"], "single_line_text");
     assert_eq!(fields[0]["id"], t["primary_field_id"]);
-    assert_eq!(fields[1]["name"], "Notes");
-    assert_eq!(fields[1]["type"], "long_text");
     let views = t["views"].as_array().unwrap();
     assert_eq!(views.len(), 1);
     assert_eq!(views[0]["name"], "Grid view");
@@ -566,4 +572,43 @@ async fn collaborators_are_active_members_who_can_open_the_base() {
         )
         .await
         .assert_status(404);
+}
+
+/// A table starts with only its primary field, whether it is a base's first table or added
+/// later, with or without `fields` (which adds exactly what it lists).
+#[tokio::test]
+async fn every_new_table_starts_with_just_the_primary_field() {
+    let f = Fixture::new().await;
+    let url = format!("/api/workspaces/{}/bases", f.ws);
+    let base = f.app.post(&f.owner, &url, json!({ "name": "Bare" })).await;
+    base.assert_status(201);
+    let first = Fixture::field_names(&base.body["tables"][0]);
+    let tables_url = format!("/api/bases/{}/tables", base.body["id"].as_str().unwrap());
+    let later = f
+        .app
+        .post(&f.owner, &tables_url, json!({ "name": "Later" }))
+        .await;
+    later.assert_status(201);
+    assert_eq!(first, ["Name"]);
+    assert_eq!(Fixture::field_names(&later.body), first);
+    let with_fields = f
+        .app
+        .post(
+            &f.owner,
+            &tables_url,
+            json!({ "name": "Listed", "fields": [{ "name": "Qty", "type": "number" }] }),
+        )
+        .await;
+    with_fields.assert_status(201);
+    assert_eq!(Fixture::field_names(&with_fields.body), ["Name", "Qty"]);
+    let empty_list = f
+        .app
+        .post(
+            &f.owner,
+            &tables_url,
+            json!({ "name": "None", "fields": [] }),
+        )
+        .await;
+    empty_list.assert_status(201);
+    assert_eq!(Fixture::field_names(&empty_list.body), ["Name"]);
 }
