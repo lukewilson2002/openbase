@@ -317,9 +317,9 @@ are names or ids.
 |---|---|---|
 | `list_bases` | any | Workspaces and bases the token can reach, with your role on each and their icons |
 | `get_base_schema` | any | The base's icon, and its tables (with icons), fields (id, name, type, options) and views |
-| `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues |
-| `search_records` | any | Case-insensitive text search over all fields |
-| `get_record` | any | One record |
+| `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
+| `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
+| `get_record` | any | One record; takes `include_empty` like `list_records` |
 | `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices |
 | `update_records` | write | 1-10 records; only the given fields change; `null` clears |
 | `delete_records` | write | 1-10 records, to the trash |
@@ -384,7 +384,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration |
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
-| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging |
+| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null` |
 
 A view configuration is the REST API's `ViewConfig`; wherever it wants a field id you
 may write the field name, filter and sort entries may use `field` instead of

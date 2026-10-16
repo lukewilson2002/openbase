@@ -59,7 +59,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "list_records",
             "List records",
-            "List records of a table as {id, createdTime, fields} keyed by field NAME (linked records appear as {id, name}). Optionally use a saved view's filter/sort, an Airtable filterByFormula such as {Status}='Done', field selection and sorting. Returns up to max_records (default 50, max 200); if `offset` is returned there are more: call again with it.",
+            "List records of a table as {id, createdTime, fields} keyed by field NAME (linked records appear as {id, name}). Fields with no value are left out of `fields` (as in Airtable) unless include_empty is true, which returns them as null. Optionally use a saved view's filter/sort, an Airtable filterByFormula such as {Status}='Done', field selection and sorting. Returns up to max_records (default 50, max 200); if `offset` is returned there are more: call again with it.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -82,6 +82,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     },
                     "max_records": integer("How many records to return (default 50, max 200).", 1, MAX_RECORDS as u64),
                     "offset": string("The `offset` of a previous result, to get the next records."),
+                    "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
                 &["base_id", "table"],
             ),
@@ -93,13 +94,14 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "search_records",
             "Search records",
-            "Find records whose any field contains the text (case-insensitive). Same result shape as list_records.",
+            "Find records whose any field contains the text (case-insensitive). Same result shape as list_records (include_empty works the same).",
             object(
                 json!({
                     "base_id": string(BASE_ID),
                     "table": string(TABLE),
                     "query": string("Text to look for (at most 500 characters)."),
                     "max_records": integer("How many records to return (default 50, max 200).", 1, MAX_RECORDS as u64),
+                    "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
                 &["base_id", "table", "query"],
             ),
@@ -111,12 +113,13 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "get_record",
             "Get a record",
-            "Get one record by id as {id, createdTime, fields} keyed by field name.",
+            "Get one record by id as {id, createdTime, fields} keyed by field name. Empty fields are left out unless include_empty is true (then they are null).",
             object(
                 json!({
                     "base_id": string(BASE_ID),
                     "table": string(TABLE),
                     "record_id": string("Record id, e.g. recXXXXXXXXXXXXXX."),
+                    "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
                 &["base_id", "table", "record_id"],
             ),
@@ -625,6 +628,8 @@ struct ListArgs {
     max_records: Option<usize>,
     #[serde(default)]
     offset: Option<String>,
+    #[serde(default)]
+    include_empty: bool,
 }
 
 fn clamp_records(requested: Option<usize>) -> (usize, Option<String>) {
@@ -698,6 +703,7 @@ async fn list_records(ctx: &McpCtx, a: ListArgs) -> ToolResult {
         filter_by_formula: a.filter_by_formula,
         search: None,
         link_names: true,
+        include_empty: a.include_empty,
         page_size: n,
         // `max_records` of the tool is the page size; `offset` continues past it.
         max_records: None,
@@ -714,6 +720,8 @@ struct SearchArgs {
     query: String,
     #[serde(default)]
     max_records: Option<usize>,
+    #[serde(default)]
+    include_empty: bool,
 }
 
 async fn search_records(ctx: &McpCtx, a: SearchArgs) -> ToolResult {
@@ -727,6 +735,7 @@ async fn search_records(ctx: &McpCtx, a: SearchArgs) -> ToolResult {
     let query = ListQuery {
         search: Some(a.query),
         link_names: true,
+        include_empty: a.include_empty,
         page_size: n,
         ..Default::default()
     };
@@ -739,6 +748,8 @@ struct GetArgs {
     base_id: String,
     table: String,
     record_id: String,
+    #[serde(default)]
+    include_empty: bool,
 }
 
 async fn get_record(ctx: &McpCtx, a: GetArgs) -> ToolResult {
@@ -748,6 +759,7 @@ async fn get_record(ctx: &McpCtx, a: GetArgs) -> ToolResult {
         a.base_id.clone(),
         a.table.clone(),
         a.record_id.clone(),
+        a.include_empty,
     )
     .await
     {

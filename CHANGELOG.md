@@ -52,6 +52,7 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **`include_empty` for reads.** `list_records`, `search_records`, `get_record` and `query_view` (and `includeEmpty=true` on the REST list and single-record endpoints) return fields with no value as `null`, so a client can infer columns from the records. Default unchanged: empty fields are left out, as in Airtable.
 - **A first-run intro** to bases, tables, workspaces and the assistant, shown once per account;
   replay it from the profile menu. The setup page is friendlier and no longer asks you to
   confirm the password.

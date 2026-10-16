@@ -257,6 +257,140 @@ async fn list_records_selects_fields_sorts_filters_and_uses_views() {
 }
 
 #[tokio::test]
+async fn include_empty_returns_unset_fields_as_null_in_every_read_tool() {
+    let r = rig().await;
+    let base = r.base();
+    // dave (the fourth record) only has a name.
+    let dave_id = r.p.ids[3].clone();
+
+    // Default: Airtable-style omission.
+    let t = tool(
+        r.app(),
+        &r.read,
+        "list_records",
+        json!({"base_id": base, "table": "Table 1"}),
+    )
+    .await;
+    assert_eq!(t.ok()["records"][3]["fields"], json!({"Name": "dave"}));
+    let t = tool(
+        r.app(),
+        &r.read,
+        "list_records",
+        json!({"base_id": base, "table": "Table 1", "include_empty": false}),
+    )
+    .await;
+    assert_eq!(t.ok()["records"][3]["fields"], json!({"Name": "dave"}));
+
+    // Opt in: every field of the table is present, unset ones as null.
+    let t = tool(
+        r.app(),
+        &r.read,
+        "list_records",
+        json!({"base_id": base, "table": "Table 1", "include_empty": true}),
+    )
+    .await;
+    let v = t.ok();
+    let dave = v["records"][3]["fields"].as_object().unwrap();
+    assert_eq!(dave["Name"], "dave");
+    for name in ["Age", "Status", "Tags", "Due", "Done"] {
+        assert_eq!(dave[name], Value::Null, "{name} is null: {dave:?}");
+    }
+    // Set values are untouched, and every record has the same keys (so columns can be inferred).
+    assert_eq!(v["records"][0]["fields"]["Age"], 30);
+    let keys = |rec: &Value| {
+        let mut k: Vec<String> = rec["fields"].as_object().unwrap().keys().cloned().collect();
+        k.sort();
+        k
+    };
+    for rec in v["records"].as_array().unwrap() {
+        assert_eq!(keys(rec), keys(&v["records"][0]));
+    }
+
+    // The `fields` selection decides which fields are included.
+    let t = tool(
+        r.app(),
+        &r.read,
+        "list_records",
+        json!({"base_id": base, "table": "Table 1", "fields": ["Name", "Age"], "include_empty": true}),
+    )
+    .await;
+    assert_eq!(
+        t.ok()["records"][3]["fields"],
+        json!({"Name": "dave", "Age": null})
+    );
+
+    // search_records takes the flag too.
+    let t = tool(
+        r.app(),
+        &r.read,
+        "search_records",
+        json!({"base_id": base, "table": "Table 1", "query": "dave", "include_empty": true}),
+    )
+    .await;
+    let found = &t.ok()["records"][0]["fields"];
+    assert_eq!(found["Name"], "dave");
+    assert_eq!(found["Age"], Value::Null);
+    let t = tool(
+        r.app(),
+        &r.read,
+        "search_records",
+        json!({"base_id": base, "table": "Table 1", "query": "dave"}),
+    )
+    .await;
+    assert_eq!(t.ok()["records"][0]["fields"], json!({"Name": "dave"}));
+
+    let t = tool(
+        r.app(),
+        &r.read,
+        "get_record",
+        json!({"base_id": base, "table": "Table 1", "record_id": dave_id, "include_empty": true}),
+    )
+    .await;
+    assert_eq!(t.ok()["fields"]["Status"], Value::Null);
+    let t = tool(
+        r.app(),
+        &r.read,
+        "get_record",
+        json!({"base_id": base, "table": "Table 1", "record_id": dave_id}),
+    )
+    .await;
+    assert_eq!(t.ok()["fields"], json!({"Name": "dave"}));
+
+    // query_view: visible fields only, null for unset ones.
+    r.p.f.new_view(&r.p.f.table_id, "Everyone", json!({})).await;
+    let t = tool(
+        r.app(),
+        &r.read,
+        "query_view",
+        json!({"base_id": base, "view": "Everyone", "include_empty": true}),
+    )
+    .await;
+    let rows = t.ok()["records"].as_array().unwrap().clone();
+    let dave_row = rows.iter().find(|x| x["fields"]["Name"] == "dave").unwrap();
+    assert_eq!(dave_row["fields"]["Age"], Value::Null);
+    let t = tool(
+        r.app(),
+        &r.read,
+        "query_view",
+        json!({"base_id": base, "view": "Everyone"}),
+    )
+    .await;
+    let rows = t.ok()["records"].as_array().unwrap().clone();
+    let dave_row = rows.iter().find(|x| x["fields"]["Name"] == "dave").unwrap();
+    assert_eq!(dave_row["fields"], json!({"Name": "dave"}));
+
+    // A non-boolean flag is rejected by the tool schema.
+    let t = tool(
+        r.app(),
+        &r.read,
+        "list_records",
+        json!({"base_id": base, "table": "Table 1", "include_empty": "yes"}),
+    )
+    .await;
+    assert!(t.err().contains("expected a boolean"), "{}", t.text);
+}
+
+#[tokio::test]
 async fn list_records_pages_with_max_records_and_offset() {
     let r = rig().await;
     let mut seen = Vec::new();

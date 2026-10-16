@@ -655,6 +655,70 @@ async fn fields_selects_columns_by_name_or_id() {
 }
 
 #[tokio::test]
+async fn include_empty_returns_unset_fields_as_null() {
+    let v = v1_people().await;
+    // Default: unset fields are omitted, as in Airtable.
+    let r = v.list(&[]).await;
+    assert_eq!(r.body["records"][3]["fields"], json!({ "Name": "dave" }));
+    let r = v.list(&[("includeEmpty", "false")]).await;
+    assert_eq!(r.body["records"][3]["fields"], json!({ "Name": "dave" }));
+
+    // Opt in: every field is present, null when unset; set values are unchanged.
+    let r = v.list(&[("includeEmpty", "true")]).await;
+    r.assert_status(200);
+    let records = r.body["records"].as_array().unwrap();
+    let dave = records[3]["fields"].as_object().unwrap();
+    assert_eq!(dave["Name"], "dave");
+    for name in ["Age", "Status", "Tags", "Due"] {
+        assert_eq!(dave[name], Value::Null, "{name}: {dave:?}");
+    }
+    assert_eq!(records[0]["fields"]["Age"], 30);
+    let width = records[0]["fields"].as_object().unwrap().len();
+    assert!(
+        records
+            .iter()
+            .all(|x| x["fields"].as_object().unwrap().len() == width)
+    );
+
+    // `fields[]` limits which fields are included, by name or id, and `returnFieldsByFieldId` keys
+    // the nulls by id too.
+    let r = v
+        .list(&[
+            ("includeEmpty", "true"),
+            ("fields[]", "Name"),
+            ("fields[]", &v.p.age),
+        ])
+        .await;
+    assert_eq!(
+        r.body["records"][3]["fields"],
+        json!({ "Name": "dave", "Age": null })
+    );
+    let r = v
+        .list(&[
+            ("includeEmpty", "true"),
+            ("fields[]", &v.p.age),
+            ("returnFieldsByFieldId", "true"),
+        ])
+        .await;
+    assert_eq!(
+        r.body["records"][3]["fields"],
+        json!({ v.p.age.as_str(): null })
+    );
+
+    // A single record takes the flag too.
+    let one = v.get(&format!("/{}?includeEmpty=true", v.p.ids[3])).await;
+    one.assert_status(200);
+    assert_eq!(one.body["fields"]["Name"], "dave");
+    assert_eq!(one.body["fields"]["Status"], Value::Null);
+    let one = v.get(&format!("/{}", v.p.ids[3])).await;
+    assert_eq!(one.body["fields"], json!({ "Name": "dave" }));
+
+    // Anything but a boolean is a 422.
+    let r = v.list(&[("includeEmpty", "maybe")]).await;
+    assert_v1_error(&r, 422, "INVALID_REQUEST_UNKNOWN");
+}
+
+#[tokio::test]
 async fn return_fields_by_field_id_keys_cells_by_id() {
     let v = v1_people().await;
     let r = v.list(&[("returnFieldsByFieldId", "true")]).await;

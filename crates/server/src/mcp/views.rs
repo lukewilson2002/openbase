@@ -102,6 +102,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "search": string("Optional text; only rows containing it in a visible field are returned."),
                     "max_records": integer("Rows to return (default 50, max 200).", 1, MAX_ROWS as u64),
                     "offset": integer("Index of the first row to return (default 0).", 0, 10_000_000),
+                    "include_empty": boolean("Return visible fields with no value as null (default false: they are left out of a record's `fields`). `columns` always lists every visible field."),
                 }),
                 &["base_id", "view"],
             ),
@@ -303,6 +304,8 @@ struct QueryView {
     max_records: Option<usize>,
     #[serde(default)]
     offset: Option<usize>,
+    #[serde(default)]
+    include_empty: bool,
 }
 
 /// Field ids shown by the view, in display order: `field_order` first, the rest in table order,
@@ -383,6 +386,8 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
             for f in &columns {
                 if let Some(v) = r["values"].get(&f.id) {
                     fields.insert(f.name.clone(), value_for_model(f, v, &people));
+                } else if a.include_empty {
+                    fields.insert(f.name.clone(), Value::Null);
                 }
             }
             json!({ "id": r["id"], "fields": fields })
