@@ -571,6 +571,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // Files pasted while a cell is selected become attachments.
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const hScrollbar = useHorizontalScrollbarHeight(cardRef);
   const attach = useCallback(
     async (files: File[], at: GridPoint) => {
       const spec = columnsRef.current[at.col];
@@ -680,7 +682,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // height it scrolls inside. With no records it keeps only the header, so fields can still be added,
   // and the empty message sits under it: the canvas would otherwise draw blank rows and an empty
   // summary bar that look broken.
-  const gridHeight = empty ? undefined : Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2, total === 0 ? 180 : 0);
+  const gridHeight = empty ? undefined : Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2 + hScrollbar, total === 0 ? 180 : 0);
 
   return (
     <EditorEnvProvider value={editorEnv}>
@@ -708,7 +710,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           onAdd={canEdit ? () => void addRecord() : undefined}
         />
         <div className={viewHugAreaClass}>
-        <div className={viewHugCardClass} style={{ height: gridHeight }}>
+        <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-2 text-center text-[0.8125rem] text-muted">
               <p>Could not load records: {data.error.message}</p>
@@ -851,4 +853,32 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       )}
     </EditorEnvProvider>
   );
+}
+
+/**
+ * Height of the grid's horizontal scrollbar while the columns are wider than the card (0 with
+ * overlay scrollbars, about 15 px where scrollbars always show). The card is sized to fit its rows,
+ * and without this the scrollbar took the last row's room, so the grid scrolled vertically while
+ * the page still had space to grow.
+ */
+function useHorizontalScrollbarHeight(cardRef: React.RefObject<HTMLDivElement | null>): number {
+  const [height, setHeight] = useState(0);
+  const watched = useRef<{ el: HTMLElement; ro: ResizeObserver } | null>(null);
+  // Glide's scroller is created inside the grid and is replaced when the grid remounts (an error or
+  // an empty table in between), so look for it after each render and follow the new one.
+  useEffect(() => {
+    const el = cardRef.current?.querySelector<HTMLElement>(".dvn-scroller") ?? null;
+    if (el === (watched.current?.el ?? null)) return;
+    watched.current?.ro.disconnect();
+    watched.current = null;
+    if (!el) return setHeight(0);
+    const measure = () => setHeight(Math.max(0, el.offsetHeight - el.clientHeight));
+    measure();
+    // The scrollbar appearing or going away changes the scroller's content box, which this sees.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    watched.current = { el, ro };
+  });
+  useEffect(() => () => watched.current?.ro.disconnect(), []);
+  return height;
 }
