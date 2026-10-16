@@ -174,6 +174,43 @@ describe("admin email tab", () => {
     expect(screen.getByText(/sent unencrypted/)).toBeInTheDocument();
   });
 
+  it("keeps port and connection security together and warns when they do not match", async () => {
+    const user = userEvent.setup();
+    const api = open(OFF, { "PATCH /api/admin/email": ON });
+    renderApp({ route: "/admin?tab=email" });
+    const port = await screen.findByLabelText("Port");
+    const security = screen.getByLabelText("Connection security");
+    // typing the implicit-TLS port switches STARTTLS to TLS
+    await user.clear(port);
+    await user.type(port, "465");
+    expect(security).toHaveValue("tls");
+    // and picking STARTTLS on that port moves it to 587
+    await user.selectOptions(security, "starttls");
+    expect(port).toHaveValue("587");
+    await user.selectOptions(security, "tls");
+    expect(port).toHaveValue("465");
+    // Resend's alternative ports follow the same rule
+    await user.clear(port);
+    await user.type(port, "2587");
+    expect(security).toHaveValue("starttls");
+    await user.selectOptions(security, "tls");
+    expect(port).toHaveValue("2465");
+    expect(screen.queryByText(/expects/)).not.toBeInTheDocument();
+    // a nonstandard port is left alone
+    await user.clear(port);
+    await user.type(port, "2525");
+    await user.selectOptions(security, "starttls");
+    expect(port).toHaveValue("2525");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/admin/email")).toHaveLength(1));
+  });
+
+  it("warns about a mismatch it cannot repair because the environment fixes the port", async () => {
+    open({ ...ON, port: 465, security: "starttls", sources: { ...ON.sources, port: "environment" } });
+    renderApp({ route: "/admin?tab=email" });
+    expect(await screen.findByText(/Port 465 expects TLS from the first byte/)).toBeInTheDocument();
+  });
+
   it("shows the server's refusal when saving fails", async () => {
     const user = userEvent.setup();
     open(OFF, { "PATCH /api/admin/email": apiError(400, "bad_request", "invalid sender address 'x': missing @") });
