@@ -287,11 +287,10 @@ A typical run, as tool calls:
 create_workspace {name: "Acme"}                              -> workspace id
 create_base {workspace_id, name: "CRM"}                      -> base id, with a first table
 rename_table {base_id, table: "Table 1", name: "Customers"}
-create_table {base_id, name: "Orders"}
-create_field {base_id, table: "Orders", name: "Customer", type: "link",
-              options: {linked_table: "Customers"}, inverse_name: "Orders"}
-create_field {..., table: "Orders", name: "Total", type: "formula",
-              options: {expression: "{Qty} * {Unit price}"}}
+create_table {base_id, name: "Orders", fields: [             -> the whole table in one call
+  {name: "Customer", type: "link", options: {linked_table: "Customers"}, inverse_name: "Orders"},
+  {name: "Qty", type: "number"},
+  {name: "Total", type: "formula", options: {expression: "{Qty} * {Unit price}"}}]}
 create_field {..., table: "Customers", name: "Lifetime value", type: "rollup",
               options: {link_field: "Orders", target_field: "Total", expression: "SUM(values)"}}
 create_records {base_id, table: "Customers", records: [{fields: {Name: "Ada"}}]}
@@ -344,9 +343,9 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_base` / `rename_base` | write | Create a base in a workspace (it starts with the table "Table 1"; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
+| `create_base` / `rename_base` | write | Create a base in a workspace (it starts with the table "Table 1", which has just the primary field "Name" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
 | `duplicate_base` / `delete_base` | manage | Copy a base (records optional; the copy keeps the icons); delete to the trash (owner role) |
-| `create_table` / `rename_table` | write | Add a table; rename it or change its description or `icon` |
+| `create_table` / `rename_table` | write | Add a table, optionally with its `icon` and a `fields` list (each entry is the arguments of `create_field` without `base_id` and `table`), so a table is set up in one call; rename it or change its description or `icon`. A new table always starts with just the primary text field "Name" and a grid view (the same as the first table of a new base): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the base; to link a table to itself, create it first and add the field with `create_field` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
 | `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |

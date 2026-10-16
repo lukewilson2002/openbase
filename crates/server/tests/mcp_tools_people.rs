@@ -286,7 +286,7 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
     assert!(e.contains("manage") && e.contains("administrator"), "{e}");
     // ...and nothing happened.
     let schema = r.schema().await;
-    assert_eq!(schema["tables"][0]["fields"].as_array().unwrap().len(), 3);
+    assert_eq!(schema["tables"][0]["fields"].as_array().unwrap().len(), 2);
 
     // -- role: a token only ever acts as its user
     let (_, viewer) = r

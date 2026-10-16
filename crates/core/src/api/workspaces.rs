@@ -111,7 +111,7 @@ pub struct CreateBase {
     #[serde(default)]
     pub icon: Option<String>,
     /// `true` creates the base without tables; by default it starts with
-    /// "Table 1" (fields Name and Notes, a grid view).
+    /// "Table 1" (only the primary field Name, a grid view, like every new table).
     #[serde(default)]
     pub empty: Option<bool>,
 }
