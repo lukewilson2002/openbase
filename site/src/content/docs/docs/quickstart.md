@@ -58,7 +58,8 @@ If `docker compose ps` does not show `healthy` after a few minutes, read the log
 
 Open `https://base.example.com`. **The first account you create becomes the administrator**, so
 do this before you share the address. Afterwards new people need an invite unless you set
-`OPENBASE_OPEN_SIGNUP=true`.
+`OPENBASE_OPEN_SIGNUP=true`. A short intro shows you around (replay it any time from your profile
+menu), then OpenBase asks you to name your first workspace.
 
 Prefer the command line? Create the administrator without opening the site:
 
@@ -68,6 +69,9 @@ docker compose exec -e OPENBASE_ADMIN_PASSWORD openbase openbase create-admin --
 ```
 
 ## 5. Secure it and back it up
+
+Everything below is in your profile menu at the bottom of the sidebar: **Settings** opens your
+**Account** settings, and **Administration** (administrators only) opens the **Admin** pages.
 
 1. **Add a passkey or turn on two-factor authentication** under **Account → Security**.
 2. **Check the daily backup.** OpenBase writes one every night at 03:00 server time and keeps seven.
@@ -79,7 +83,7 @@ docker compose exec -e OPENBASE_ADMIN_PASSWORD openbase openbase create-admin --
 
 ## 6. Let an AI assistant do the work
 
-OpenBase is also an MCP server. Open **Account → AI assistants**: it shows your server address
+OpenBase is also an MCP server. Choose **Connect an assistant** in the profile menu (**Account → AI assistants**): it shows your server address
 (`https://base.example.com/mcp`) with short steps for each client.
 
 - **Claude or ChatGPT.** Add that address as a custom connector, sign in to OpenBase in the window that

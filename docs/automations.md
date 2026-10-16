@@ -121,7 +121,7 @@ are recorded in the run history (`trigger_data.test = true`).
 
 ## In the web app
 
-Creators open **Automations** in the base's top bar (`/base/<id>/automations`). Each automation has an editor
+Creators open **Automations** in the base's sidebar, below its tables (`/base/<id>/automations`). Each automation has an editor
 (trigger, actions, optional per-action conditions, an "Insert data" menu for the `{{...}}` placeholders), a **Test** panel (a dry run
 by default; running for real asks for confirmation) and a **Runs** tab with the step log of every run. A webhook's URL is shown once,
 when the automation is created or its token is rotated.

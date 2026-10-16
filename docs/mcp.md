@@ -30,7 +30,8 @@ Contents: [Quick start](#quick-start) · [Set up your client](#set-up-your-clien
 
 ## Quick start
 
-Open **Account → AI assistants** in OpenBase. It shows your MCP address (built from
+Open **Account → AI assistants** in OpenBase (**Connect an assistant** in the profile menu at
+the bottom of the sidebar). It shows your MCP address (built from
 `OPENBASE_PUBLIC_URL`) and short, collapsible steps for Claude (Claude Desktop and
 claude.ai first, then Claude Code), ChatGPT and other clients, each with copy buttons.
 The same steps, in short, pick one way in:
