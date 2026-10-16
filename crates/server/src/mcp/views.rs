@@ -22,7 +22,7 @@ const VIEW_TYPES: &[&str] = &[
 const DEFAULT_ROWS: usize = 50;
 const MAX_ROWS: usize = 200;
 
-const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|exact_date, date}|{mode: past_week|next_month|past_number_of_days, days}). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
+const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|one_week_ago|one_week_from_now|one_month_ago|one_month_from_now|exact_date, date}|{mode: number_of_days_ago|number_of_days_from_now|past_number_of_days|next_number_of_days, days}|{mode: past_week|past_month|past_year|next_week|next_month|next_year|this_calendar_month|this_calendar_year} (the last two groups are for is_within). Relative modes (today, tomorrow, past_week, ...) are calendar days in the VIEWER's time zone, not the server's or UTC: the app sends the browser's zone, query_view uses its timezone argument, else the token owner's profile time zone, else UTC. Date-only fields are compared as calendar dates; date-times in the field's own time zone if it has one, else the viewer's. exact_date is the calendar day as written). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
 
 pub fn definitions() -> Vec<ToolDef> {
     let view_types = enumeration(VIEW_TYPES, "View type.");
@@ -43,7 +43,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_view",
             "Create a view",
-            "Create a view of any type (grid, form, gallery, kanban, calendar, timeline, list) with an optional configuration. Shared views need the creator role; personal views (personal=true) only the viewer role and are visible to you alone.",
+            "Create a view of any type (grid, form, gallery, kanban, calendar, timeline, list) with an optional configuration. Shared views need the creator role; personal views (personal=true) only the viewer role and are visible to you alone. Relative date filters such as {mode: today} follow the VIEWER's time zone (each person's profile or browser zone in the app, the `timezone` argument of query_view), not the server's or UTC; see `config`.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -60,7 +60,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_view",
             "Update a view",
-            "Rename a view, lock it, or change its configuration. Parts of `config` you give replace the same parts of the saved config (kanban, calendar, gallery, timeline and form settings merge key by key); parts you omit stay; a null value resets a part. Shared views need the creator role.",
+            "Rename a view, lock it, or change its configuration. Parts of `config` you give replace the same parts of the saved config (kanban, calendar, gallery, timeline and form settings merge key by key); parts you omit stay; a null value resets a part. Shared views need the creator role. Relative date filters such as {mode: today} follow the VIEWER's time zone, not the server's or UTC; see `config`.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -102,6 +102,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "search": string("Optional text; only rows containing it in a visible field are returned."),
                     "max_records": integer("Rows to return (default 50, max 200).", 1, MAX_ROWS as u64),
                     "offset": integer("Index of the first row to return (default 0).", 0, 10_000_000),
+                    "timezone": string("IANA time zone (for example America/Chicago) that decides what \"today\" means for relative date filters (today, tomorrow, past_week, ...). Default: the time zone on your profile (set it with api_request PATCH /api/auth/me {timezone}), else UTC."),
                 }),
                 &["base_id", "view"],
             ),
@@ -303,6 +304,8 @@ struct QueryView {
     max_records: Option<usize>,
     #[serde(default)]
     offset: Option<usize>,
+    #[serde(default)]
+    timezone: Option<String>,
 }
 
 /// Field ids shown by the view, in display order: `field_order` first, the rest in table order,
@@ -344,6 +347,9 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
     let mut body = json!({ "offset": offset, "limit": limit });
     if let Some(s) = a.search.filter(|s| !s.trim().is_empty()) {
         body["search"] = json!(s);
+    }
+    if let Some(tz) = a.timezone.filter(|t| !t.trim().is_empty()) {
+        body["timezone"] = json!(tz);
     }
     let path = format!("/api/views/{}/query", encode_segment(&view.id));
     let res = match fetch(ctx, "POST", &path, None, Some(body)).await {

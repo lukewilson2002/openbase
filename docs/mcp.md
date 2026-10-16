@@ -384,13 +384,27 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration |
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
-| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging |
+| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging. Optional `timezone` (IANA name) decides what "today" means for relative date filters |
 
 A view configuration is the REST API's `ViewConfig`; wherever it wants a field id you
 may write the field name, filter and sort entries may use `field` instead of
 `field_id`, and select filters and kanban stack orders take choice names. Unknown keys
 are rejected with the list of valid ones. `update_view` replaces only the parts you
 send (settings objects merge key by key; `null` resets a part).
+
+**Relative date filters and time zones.** In a filter, a date value like
+`{mode: "today"}` (also `tomorrow`, `yesterday`, `one_week_ago`,
+`number_of_days_from_now` with `days`, and for `is_within` `past_week`,
+`next_month`, `this_calendar_month`, ...) means the calendar day in the
+**viewer's time zone**, not the server's and not UTC. In the web app the viewer is
+the person with the view open (their profile zone, or the browser's). For
+`query_view` it is the `timezone` argument, else the time zone on the token
+owner's profile (`api_request PATCH /api/auth/me {timezone}` sets it), else UTC.
+So an "Upcoming" view with `is_on_or_after {mode: "today"}` keeps today's
+events all evening in US Central time. Date-only fields are compared as calendar
+dates; date-times are turned into a day in the field's own time zone if it has
+one, otherwise the viewer's. `exact_date` is the day as written. Details:
+[docs/api.md, section 5](api.md#5-relative-date-filters-and-time-zones).
 
 ### Trash, history, notifications
 

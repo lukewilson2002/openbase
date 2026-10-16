@@ -451,3 +451,54 @@ length). Unattached public-form uploads are deleted after 2 hours.
 - `POST /api/bases/{id}/import` (Creator): multipart `file`, optional `name`,
   `has_header`; creates a new table with inferred field types and imports every
   row, again atomically.
+
+---
+
+## 5. Relative date filters and time zones
+
+A date filter (`is`, `is_before`, `is_after`, `is_on_or_before`,
+`is_on_or_after`, `is_within`) takes a `DateOperand`. The relative modes
+(`today`, `tomorrow`, `yesterday`, `one_week_ago`, `one_week_from_now`,
+`one_month_ago`, `one_month_from_now`, `number_of_days_ago`,
+`number_of_days_from_now`, and for `is_within` `past_week` / `past_month` /
+`past_year` / `next_week` / `next_month` / `next_year`,
+`past_number_of_days`, `next_number_of_days`, `this_calendar_month`,
+`this_calendar_year`) are **calendar days in the viewer's time zone**, never the
+server's and not UTC unless that is the viewer's zone. In US Central time
+"today" therefore keeps meaning the same day until local midnight, even though
+UTC rolls over at 6 or 7 pm.
+
+The zone is chosen per request, in this order:
+
+1. the request's `timezone` (`POST /api/views/{id}/query`,
+   `GET /api/views/{id}/aggregations`, the CSV export, the public share query,
+   and `timeZone` on the Airtable-compatible listing). The web app sends the
+   profile's zone, or the browser's when the profile has none.
+2. the signed-in user's profile time zone (`PATCH /api/auth/me`, `timezone`),
+3. UTC (anonymous share viewers that send no `timezone`, and profiles with no zone).
+
+Automations have no request: their `record_matches` trigger and conditions use
+the profile zone of the automation's creator (UTC without one).
+
+How cells are compared:
+
+- **Date-only fields** have no time, so the stored calendar date is compared with
+  the resolved day. Nothing shifts with the zone.
+- **Date-time fields** (and created / last modified time) are first turned into a
+  calendar day: in the field's own `timezone` when it has one, otherwise in the
+  viewer's zone.
+- `exact_date` is the calendar day as written; it does not depend on the zone.
+- Rolling ranges (`past_week` = 7 days back to today, `next_month` = today to
+  30 days ahead, ...) include today. DST changes do not matter because the
+  arithmetic is on calendar dates.
+
+Formula fields are different: a formula field's stored value is shared by every
+viewer, so there is no viewer zone to use. `TODAY()` and `NOW()` in a formula
+field are evaluated when a record is written (in the writer's profile zone) and
+refreshed every 5 minutes in the background (in UTC), so a `TODAY()` formula can
+be a day ahead of a US viewer in the evening. To compare with "today" in a view,
+use a date filter (above) instead of a formula field. The Airtable-compatible
+`filterByFormula` runs per request and takes its zone from `timeZone`.
+
+Cached view results are keyed by zone and, for views with relative dates, by the
+viewer's current day, so they never serve yesterday's "today".

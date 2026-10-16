@@ -2,6 +2,8 @@
 
 /**
  * Date filter operand. Relative modes are resolved against `now` and the
- * viewer's timezone at query time.
+ * viewer's timezone at query time: "today" is the calendar day in that zone
+ * (the request's `timezone`, else the user's profile zone, else UTC), not the
+ * server's or UTC's. `exact_date` is the day as written.
  */
 export type DateOperand = { "mode": "today" } | { "mode": "tomorrow" } | { "mode": "yesterday" } | { "mode": "one_week_ago" } | { "mode": "one_week_from_now" } | { "mode": "one_month_ago" } | { "mode": "one_month_from_now" } | { "mode": "number_of_days_ago", days: number, } | { "mode": "number_of_days_from_now", days: number, } | { "mode": "exact_date", date: string, } | { "mode": "past_week" } | { "mode": "past_month" } | { "mode": "past_year" } | { "mode": "next_week" } | { "mode": "next_month" } | { "mode": "next_year" } | { "mode": "past_number_of_days", days: number, } | { "mode": "next_number_of_days", days: number, } | { "mode": "this_calendar_month" } | { "mode": "this_calendar_year" };

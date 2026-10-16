@@ -1165,3 +1165,51 @@ async fn query_view_shows_people_and_choice_names() {
             .contains("not found")
     );
 }
+
+fn day_in(tz: &str) -> String {
+    chrono::Utc::now()
+        .with_timezone(&tz.parse::<chrono_tz::Tz>().unwrap())
+        .date_naive()
+        .to_string()
+}
+
+#[tokio::test]
+async fn query_view_resolves_relative_dates_in_the_timezone_argument() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Events").await;
+    r.field("Events", "On", "date", json!({})).await;
+    // UTC+14 and UTC-11: their calendar days always differ.
+    let (east, west) = ("Pacific/Kiritimati", "Pacific/Pago_Pago");
+    r.records(
+        "Events",
+        json!([
+            {"fields": {"Name": "east", "On": day_in(east)}},
+            {"fields": {"Name": "west", "On": day_in(west)}},
+        ]),
+    )
+    .await;
+    a.call(
+        "create_view",
+        json!({"base_id": b, "table": "Events", "name": "Today", "type": "grid",
+               "config": {"filter": {"items": [{"field_id": "On", "op": "is", "value": {"mode": "today"}}]}}}),
+    )
+    .await;
+    let names = |q: &serde_json::Value| -> Vec<String> {
+        q["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rec| rec["fields"]["Name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let q = |tz: &str| json!({"base_id": b, "view": "Today", "timezone": tz});
+    assert_eq!(names(&a.call("query_view", q(east)).await), ["east"]);
+    assert_eq!(names(&a.call("query_view", q(west)).await), ["west"]);
+    assert!(
+        a.fails("query_view", q("Mars/Base"))
+            .await
+            .contains("unknown timezone")
+    );
+}

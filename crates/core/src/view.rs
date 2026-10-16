@@ -111,7 +111,9 @@ pub enum FilterOp {
 }
 
 /// Date filter operand. Relative modes are resolved against `now` and the
-/// viewer's timezone at query time.
+/// viewer's timezone at query time: "today" is the calendar day in that zone
+/// (the request's `timezone`, else the user's profile zone, else UTC), not the
+/// server's or UTC's. `exact_date` is the day as written.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "mode", rename_all = "snake_case")]

@@ -13,6 +13,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Changed
 
+- **Relative date filters are documented as viewer-time-zone.** `today`, `tomorrow`, `past_week`
+  and the other relative modes are calendar days in the viewer's time zone (the request's
+  `timezone`, else the profile's, else UTC), so an evening in US Central time still shows
+  today's events. The MCP `create_view` / `update_view` descriptions and `docs/api.md`
+  (section 5) now say so, and the MCP `query_view` tool takes an optional `timezone`.
+
 - **One access model.** People get access only by being a member of a workspace. Each member
   has one role there and either every base of the workspace (including bases created later) or
   a picked list of bases; owners always have every base. Per-base roles and base-only members
