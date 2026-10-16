@@ -2344,7 +2344,7 @@ dependencies = [
 
 [[package]]
 name = "ob-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2394,7 +2394,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "openbase"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ammonia",
  "anyhow",
