@@ -11,6 +11,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Select choices get meaningful default colours.** A choice created without a colour (when
+  creating a select field, converting a field or typecasting a record value) is coloured from its
+  name when it is a common severity or status word: Critical and Urgent red, High orange,
+  Medium and In Progress yellow, Low and Done green, Open and To do blue, Cancelled gray. Other
+  names still cycle through the palette. Choices given as `{name, color}` keep their colour (the
+  `create_field` MCP tool, `field_types` and the REST API all accept it).
+
 ## [0.2.0] - 2026-10-16
 
 ### Changed

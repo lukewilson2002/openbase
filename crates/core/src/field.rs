@@ -454,6 +454,37 @@ pub const COLORS: [&str; 20] = [
     "gray_dark",
 ];
 
+/// The colour a new select choice gets when none was given. Common severity, priority and
+/// status words get a colour that matches their meaning (Critical red, High orange, Medium
+/// yellow, Low green, Done green, ...); any other name falls back to the palette cycle at
+/// `index` (the choice's position in the field), so choices still look distinct.
+pub fn default_choice_color(name: &str, index: usize) -> &'static str {
+    let key = name
+        .split(|c: char| c.is_whitespace() || c == '_' || c == '-')
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    match key.as_str() {
+        "critical" | "urgent" | "blocker" | "highest" | "p0" | "sev0" | "sev1" | "severe"
+        | "blocked" | "failed" | "failure" | "error" | "rejected" | "broken" | "emergency" => "red",
+        "high" | "major" | "p1" | "sev2" | "important" | "overdue" | "at risk" | "warning" => {
+            "orange"
+        }
+        "medium" | "med" | "moderate" | "normal" | "p2" | "sev3" | "in progress" | "doing"
+        | "started" | "in review" | "review" | "pending" | "waiting" | "on hold"
+        | "in development" => "yellow",
+        "low" | "minor" | "lowest" | "trivial" | "p3" | "p4" | "sev4" | "done" | "complete"
+        | "completed" | "resolved" | "closed" | "shipped" | "approved" | "fixed" | "passed"
+        | "success" | "active" | "released" | "live" | "paid" => "green",
+        "open" | "new" | "planned" | "scheduled" | "ready" | "to do" | "todo" | "backlog"
+        | "not started" | "draft" | "idea" | "proposed" => "blue",
+        "cancelled" | "canceled" | "wont do" | "won't do" | "archived" | "duplicate"
+        | "obsolete" | "inactive" | "n/a" | "none" | "unknown" => "gray",
+        _ => COLORS[index % COLORS.len()],
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
@@ -647,5 +678,26 @@ mod tests {
                 assert_eq!(j["type"], tag);
             }
         }
+    }
+
+    #[test]
+    fn default_choice_colors_follow_meaning() {
+        assert_eq!(default_choice_color("Critical", 0), "red");
+        assert_eq!(default_choice_color(" urgent ", 3), "red");
+        assert_eq!(default_choice_color("High", 1), "orange");
+        assert_eq!(default_choice_color("MEDIUM", 2), "yellow");
+        assert_eq!(default_choice_color("Low", 3), "green");
+        assert_eq!(default_choice_color("In Progress", 0), "yellow");
+        assert_eq!(default_choice_color("in_progress", 0), "yellow");
+        assert_eq!(default_choice_color("Done", 5), "green");
+        assert_eq!(default_choice_color("Open", 5), "blue");
+        assert_eq!(default_choice_color("Won't do", 0), "gray");
+    }
+
+    #[test]
+    fn unknown_choice_names_cycle_the_palette() {
+        assert_eq!(default_choice_color("Billing", 0), COLORS[0]);
+        assert_eq!(default_choice_color("Shipping", 2), COLORS[2]);
+        assert_eq!(default_choice_color("Other", 21), COLORS[1]);
     }
 }

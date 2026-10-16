@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use chrono_tz::Tz;
 use ob_core::cell::{CellCtx, choices_needed_for_conversion, convert};
-use ob_core::field::{COLORS, Field, FieldKind, SelectChoice};
+use ob_core::field::{Field, FieldKind, SelectChoice, default_choice_color};
 use ob_core::formula::{self, FormulaError, TypeEnv};
 use ob_core::ids;
 use ob_core::limits;
@@ -250,7 +250,7 @@ pub fn add_conversion_choices(
         if choices.len() >= limits::MAX_CHOICES_PER_FIELD {
             break;
         }
-        let color = COLORS[choices.len() % COLORS.len()].to_string();
+        let color = default_choice_color(&name, choices.len()).to_string();
         choices.push(SelectChoice {
             id: new_id(ids::CHOICE),
             name,

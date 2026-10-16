@@ -218,7 +218,7 @@ Field `type` names and options:
 | `duration` | duration | `{durationFormat}` (`h:mm`, `h:mm:ss`, `h:mm:ss.S`, …) |
 | `rating` | rating | `{icon, max, color}` |
 | `checkbox` | checkbox | `{icon, color}` |
-| `singleSelect`, `multipleSelects` | single / multiple select | `{choices: [{id, name, color}]}` |
+| `singleSelect`, `multipleSelects` | single / multiple select | `{choices: [{id, name, color}]}`; `id` and `color` are optional when creating (a missing colour is chosen from the name: Critical red, High orange, Medium yellow, Low and Done green, and so on; other names cycle through the palette) |
 | `date`, `dateTime` | date, date with time | `{dateFormat: {name, format}}`, plus `timeFormat` and `timeZone` for `dateTime` (`client` when the field shows each viewer's zone) |
 | `multipleAttachments` | attachment | `{isReversed: false}` |
 | `multipleRecordLinks` | link to another table | `{linkedTableId, isReversed: false, prefersSingleRecordLink, inverseLinkFieldId, viewIdForRecordSelection?}` |
