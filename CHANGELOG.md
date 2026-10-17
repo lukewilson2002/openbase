@@ -13,6 +13,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Fixed
 
+- **Swiping scrolls kanban boards and timelines instead of dragging what it crosses.** On a touch
+  screen a card or bar is dragged after pressing and holding it for a moment (a quarter of a
+  second); a finger that moves sooner scrolls. Swiping across empty timeline lanes no longer starts
+  drawing a new record either. A quick tap still opens the record; a mouse drags as before.
 - Tapping blank space in a grid view always clears the selection. On a phone it would sometimes
   select the first row's primary cell instead, toggling on and off over a few taps (the grid
   selects its first cell when it takes the keyboard focus, and the tap's focus was mistaken for

@@ -14,6 +14,7 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useSt
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useHoldToDrag } from "@/lib/holdToDrag";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cn } from "@/lib/cn";
 import { choiceClass, colorDotClass } from "@/lib/colors";
@@ -266,17 +267,28 @@ export function TimelineChart(props: TimelineChartProps) {
     return { ...base, x: r.x, width: r.width };
   };
 
+  // A finger holds a bar (or a lane) for a moment before it drags; a swipe scrolls the chart.
+  const barGate = useHoldToDrag();
+  const laneGate = useHoldToDrag();
+  const capture = (el: Element, pointerId: number) => {
+    try {
+      el.setPointerCapture(pointerId);
+    } catch {
+      /* the pointer is already gone */
+    }
+  };
+
   const startBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const handle = (e.target as HTMLElement).dataset.handle as "start" | "end" | undefined;
-    const mode: DragMode = handle ?? "move";
-    if (mode === "move" ? !bar.canMove : !bar.canResize) {
-      setDrag({ id: bar.id, mode: "move", startX: e.clientX, days: 0, moved: false });
-      e.currentTarget.setPointerCapture(e.pointerId);
-      return;
-    }
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ id: bar.id, mode, startX: e.clientX, days: 0, moved: false });
+    const allowed = (handle ?? "move") === "move" ? bar.canMove : bar.canResize;
+    // A bar that cannot change still takes the press, so that releasing it opens the record.
+    const mode: DragMode = allowed ? (handle ?? "move") : "move";
+    const { currentTarget: el, pointerId, clientX: startX } = e;
+    barGate.press(e, () => {
+      capture(el, pointerId);
+      setDrag({ id: bar.id, mode, startX, days: 0, moved: false });
+    });
   };
   const moveBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
@@ -314,9 +326,12 @@ export function TimelineChart(props: TimelineChartProps) {
   const dayUnder = (clientX: number) => dayAtX(clientX - (layer.current?.getBoundingClientRect().left ?? 0), axis);
   const startCreate = (laneKey: string, e: PointerEvent<HTMLDivElement>) => {
     if (!canCreate || e.button !== 0 || e.target !== e.currentTarget) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const day = dayUnder(e.clientX);
-    setCreating({ laneKey, fromDay: day, toDay: day, startX: e.clientX, moved: false });
+    const { currentTarget: el, pointerId, clientX: startX } = e;
+    const day = dayUnder(startX);
+    laneGate.press(e, () => {
+      capture(el, pointerId);
+      setCreating({ laneKey, fromDay: day, toDay: day, startX, moved: false });
+    });
   };
   const moveCreate = (e: PointerEvent<HTMLDivElement>) => {
     const c = creatingRef.current;
@@ -421,9 +436,9 @@ export function TimelineChart(props: TimelineChartProps) {
               key={p.key || "__none"}
               data-lane={p.key}
               onPointerDown={(e) => startCreate(lane.key, e)}
-              onPointerMove={moveCreate}
-              onPointerUp={() => endCreate()}
-              onPointerCancel={() => endCreate(true)}
+              onPointerMove={(e) => laneGate.move(e) && moveCreate(e)}
+              onPointerUp={(e) => laneGate.release(e) === "drag" && endCreate()}
+              onPointerCancel={(e) => laneGate.release(e, true) === "drag" && endCreate(true)}
               className={cn("absolute left-0 border-b", gridLine, canCreate && "cursor-crosshair")}
               style={{ top: HEADER_HEIGHT + p.top, height: p.height, width: labelW + width }}
             >
@@ -515,12 +530,16 @@ export function TimelineChart(props: TimelineChartProps) {
                 data-violated={bar.violated || undefined}
                 title={withDescription ? undefined : label}
                 onPointerDown={(e) => startBar(bar, e)}
-                onPointerMove={(e) => moveBar(bar, e)}
-                onPointerUp={() => endBar(bar)}
-                onPointerCancel={() => endBar(bar, true)}
+                onPointerMove={(e) => barGate.move(e) && moveBar(bar, e)}
+                onPointerUp={(e) => {
+                  const r = barGate.release(e);
+                  if (r === "tap") props.onOpen(bar.id);
+                  else if (r === "drag") endBar(bar);
+                }}
+                onPointerCancel={(e) => barGate.release(e, true) === "drag" && endBar(bar, true)}
                 onKeyDown={(e) => barKey(bar, e)}
                 className={cn(
-                  "pointer-events-auto absolute flex touch-none select-none items-center outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                  "pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus-visible:outline-2 focus-visible:outline-ring",
                   bar.canMove ? "cursor-grab" : "cursor-pointer",
                   dragging && "z-20 cursor-grabbing shadow-pop",
                   !r.milestone &&

@@ -12,7 +12,8 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useDroppable,
   useSensor,
@@ -31,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import type { FormatCtx } from "@/lib/cells/format";
 import { colorDotClass } from "@/lib/colors";
 import { CardBody } from "../common/CardBody";
@@ -116,8 +118,11 @@ export function KanbanBoard(props: KanbanBoardProps) {
     } as unknown as typeof droppableContainers;
     return sortableKeyboardCoordinates(event, { ...args, context: { ...args.context, droppableContainers: others } });
   }, []);
+  // A mouse drags once it moves a little. A finger has to press and hold a card first: moving
+  // straight away is a swipe that scrolls the board (or a stack), not a drag of the cards it crosses.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: TOUCH_HOLD_MS, tolerance: TOUCH_HOLD_TOLERANCE_PX } }),
     useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates, keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] } }),
   );
 
@@ -398,7 +403,8 @@ function KanbanCard({ record, ...p }: { record: TableRecord } & KanbanBoardProps
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "relative shrink-0 overflow-hidden rounded-[10px] border border-line bg-surface text-left shadow-[0_1px_2px_rgb(15_20_30/0.04)] outline-none transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
-        p.canEdit ? "cursor-grab touch-manipulation" : "cursor-pointer",
+        // Press and hold starts a drag on touch screens: no text selection or iOS callout on the way.
+        p.canEdit ? "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none]" : "cursor-pointer",
         isDragging && "opacity-40",
       )}
     >
