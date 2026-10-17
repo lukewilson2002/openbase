@@ -15,8 +15,8 @@ import { cn } from "@/lib/cn";
 import { useSidebarPrefs } from "./sidebarPrefs";
 import { DockedSidebar, SidebarDrawer } from "./Sidebar";
 
-/** Tailwind's `md`: from here up the menu is docked beside the page. */
-export const DESKTOP_QUERY = "(min-width: 768px)";
+/** Tailwind's `md` (raised to 1024px in styles/index.css): from here up the desktop layout, with the menu docked beside the page. */
+export const DESKTOP_QUERY = "(min-width: 1024px)";
 
 /** Closes the phone drawer; a no-op on a desktop, where the menu is docked. */
 const CloseMenuContext = createContext<() => void>(() => {});
@@ -156,7 +156,7 @@ function DockedInbox() {
         sideOffset={20}
         alignOffset={-4}
         aria-labelledby={headingId}
-        className="flex max-h-[min(36rem,calc(100dvh-5rem))] w-[22.5rem] flex-col overflow-hidden rounded-[14px] p-0"
+        className="flex max-h-[min(36rem,var(--ob-avail))] w-[22.5rem] flex-col overflow-hidden rounded-[14px] p-0"
       >
         <InboxPanel headingId={headingId} onOpened={() => setOpen(false)} />
       </PopoverContent>

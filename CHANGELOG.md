@@ -11,6 +11,42 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **MCP agents keep a table's views up to date.** The server instructions and the table, field and
+  view tools now ask agents to set up the views a table's purpose calls for (a calendar for dated
+  records, a kanban by status, a form for intake, grids sorted or filtered for common questions),
+  named for what they show, and to read data through a fitting view with `query_view`.
+  `create_table` and `import_csv` (new table) return a `views_note` saying so; `create_field`
+  returns one naming the views the new field may concern, including the forms that do not ask for
+  it yet. `delete_field` and type changes in `update_field` return `views_to_check`: every view
+  whose filter, sorts, grouping, row colours, form or a setting such as a calendar's date field or
+  a kanban's stack field used the field, and where.
+
+### Changed
+
+- The MCP server instructions were tightened to stay under 2048 characters, the length Claude
+  Code shows.
+- **Menus and popovers fit the screen.** Every menu, submenu and popover is at most as tall as the
+  room between its trigger and the edge of the screen (clear of the iPhone home indicator) and
+  scrolls past that. On a phone the table and view picker runs to the bottom of the screen, and an
+  unfolded "Add view" scrolls inside it instead of being cut off.
+- **The compact layout runs up to 1024px wide.** Phones in landscape and tablets in portrait keep
+  the phone layout (views edge to edge, the menu in a drawer) instead of switching to the desktop
+  one with its margins and docked menu at 768px.
+- **The whole menu above the profile scrolls.** Members, Automations and Trash are no longer fixed
+  at the bottom of the sidebar: a long menu pushes them down and you scroll to reach them (a short
+  one still keeps them at the bottom). A shadow at the top or bottom edge shows there is more to
+  scroll that way.
+- MCP `create_view` and `update_view` accept `description_field_id` inside `kanban` (where 0.4.0
+  had it), `gallery`, `calendar` or `timeline` and move it to the top of the config, where it
+  belongs; the config help says so.
+
+### Fixed
+
+- On a phone, a grid view that opens with its primary column already unpinned no longer leaves the
+  pin button floating in place while the column scrolls away; the button moves with its column.
+
 ## [0.5.0] - 2026-10-17
 
 ### Added

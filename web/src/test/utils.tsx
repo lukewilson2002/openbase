@@ -4,6 +4,7 @@ import { render, screen, type RenderResult } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { AppRoutes } from "@/App";
+import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { setUnauthorizedHandler } from "@/api/client";
 import { Providers, createQueryClient } from "@/providers";
 import type { AdminUser, BaseSchema, User, View, WorkspaceSummary } from "@/api/types";
@@ -202,7 +203,7 @@ export function stubDesktop(): void {
   vi.spyOn(window, "matchMedia").mockImplementation(
     (query: string) =>
       ({
-        matches: query.includes("min-width: 768px"),
+        matches: query === DESKTOP_QUERY,
         media: query,
         onchange: null,
         addEventListener: () => {},

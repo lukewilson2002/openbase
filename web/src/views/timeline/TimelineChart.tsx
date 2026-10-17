@@ -14,6 +14,7 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useSt
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cn } from "@/lib/cn";
 import { choiceClass, colorDotClass } from "@/lib/colors";
 import { DescriptionHover, hasDescription, type DescriptionSource } from "../common/description";
@@ -139,7 +140,7 @@ const weekendHead = "bg-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
 
 export function TimelineChart(props: TimelineChartProps) {
   const { axis, scale, lanes, edges, nowMs, showLabels, canCreate, focus, loading } = props;
-  const wide = useMediaQuery("(min-width: 768px)");
+  const wide = useMediaQuery(DESKTOP_QUERY);
   const labelW = showLabels ? (wide ? LABEL_WIDTH : LABEL_WIDTH_PHONE) : 0;
   const scroller = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);

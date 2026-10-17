@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 /*
+ * The compact (phone) layout runs up to 1024px: phones in landscape and tablets in portrait keep it,
+ * and md: (the desktop layout) starts where lg: does. Keep in step with DESKTOP_QUERY in
+ * src/shell/AppShell.tsx.
+ */
+@theme {
+  --breakpoint-md: 64rem;
+}
+
+/*
  * OpenBase design tokens.
  * Semantic colour variables are defined per theme on <html data-theme="...">
  * (set before first paint by public/theme-init.js and kept in sync by
@@ -36,6 +45,8 @@
   --ring: #1f5ae0;
   --overlay: rgb(15 20 30 / 0.45);
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 4px 14px rgb(15 20 30 / 0.08);
+  /* The edge of a scrolling list where there is more to scroll (the menu). */
+  --scroll-shade: rgb(15 20 30 / 0.1);
 }
 
 :root[data-theme="dark"] {
@@ -65,6 +76,7 @@
   --ring: #7aa1ff;
   --overlay: rgb(0 0 0 / 0.6);
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.45);
+  --scroll-shade: rgb(0 0 0 / 0.55);
 }
 
 @theme inline {

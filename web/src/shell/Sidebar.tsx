@@ -2,21 +2,49 @@ import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type Ref
 import { NavLink } from "react-router";
 import { ChevronLeft, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
+import { useScrollEdges } from "@/hooks/useScrollEdges";
 import { cn } from "@/lib/cn";
 import { ProfileMenu } from "./ProfileMenu";
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampWidth } from "./sidebarPrefs";
 
 const KEY_STEP = 16;
 
-/** The menu's column: the Inbox row, the page's own content (scrolling), the footer, the profile. */
+/** A soft shadow along one edge of the menu's scrolling part, where there is more to scroll. */
+function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) {
+  return (
+    <div
+      aria-hidden
+      data-scroll-shade={edge}
+      data-show={show || undefined}
+      className={cn(
+        "pointer-events-none absolute inset-x-0 z-10 h-5 from-[var(--scroll-shade)] to-transparent opacity-0 transition-opacity duration-150 data-[show]:opacity-100",
+        edge === "top" ? "top-0 bg-gradient-to-b" : "bottom-0 bg-gradient-to-t",
+      )}
+    />
+  );
+}
+
+/**
+ * The menu's column: the Inbox row, the page's own content and the footer links (Members,
+ * Automations, Trash) scroll together, so a long menu pushes the footer down instead of squeezing
+ * the content between fixed rows; the footer still sits at the bottom of a short one. Only the
+ * profile stays put. A shadow at either end shows there is more to scroll that way.
+ */
 function SidebarBody({ inbox, children, footer }: { inbox?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+  const [scrollRef, edges] = useScrollEdges<HTMLDivElement>();
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-3">
-        {inbox && <div className="mb-1.5">{inbox}</div>}
-        {children}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <ScrollShade edge="top" show={edges.above} />
+        <div ref={scrollRef} data-sidebar-scroll className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <div className="flex-1 px-3 pb-3 pt-3">
+            {inbox && <div className="mb-1.5">{inbox}</div>}
+            {children}
+          </div>
+          {footer && <div className="flex flex-col gap-0.5 px-3 pb-2">{footer}</div>}
+        </div>
+        <ScrollShade edge="bottom" show={edges.below} />
       </div>
-      {footer && <div className="flex flex-col gap-0.5 px-3 pb-2">{footer}</div>}
       <div className="mx-3 border-t border-line py-2">
         <ProfileMenu />
       </div>
