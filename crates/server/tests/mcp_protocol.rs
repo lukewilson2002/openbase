@@ -76,6 +76,17 @@ async fn initialize_negotiates_the_protocol_version() {
             r["instructions"].as_str().unwrap().contains("list_bases"),
             "server instructions guide the model"
         );
+        let instructions = r["instructions"].as_str().unwrap();
+        assert!(
+            instructions.contains("query_view"),
+            "they ask for views kept up to date"
+        );
+        // Claude Code shows the first 2048 characters of a server's instructions.
+        assert!(
+            instructions.len() <= 2048,
+            "instructions are {} characters, over 2048",
+            instructions.len()
+        );
         assert!(
             res.headers.get("mcp-session-id").is_none(),
             "no sessions are minted"

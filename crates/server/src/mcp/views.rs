@@ -6,6 +6,7 @@
 //! a field name works too, and select filters take choice names ([`super::resolve::Xlate`]).
 
 use ob_core::api::schema::{Table, View};
+use ob_core::view::{Filter, FilterItem, RowColor, ViewType};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -15,6 +16,7 @@ use super::resolve::{
 };
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
+use crate::store::fields_engine::config_slots;
 
 const VIEW_TYPES: &[&str] = &[
     "grid", "form", "gallery", "kanban", "calendar", "timeline", "list",
@@ -22,7 +24,7 @@ const VIEW_TYPES: &[&str] = &[
 const DEFAULT_ROWS: usize = 50;
 const MAX_ROWS: usize = 200;
 
-const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|one_week_ago|one_week_from_now|one_month_ago|one_month_from_now|exact_date, date}|{mode: number_of_days_ago|number_of_days_from_now|past_number_of_days|next_number_of_days, days}|{mode: past_week|past_month|past_year|next_week|next_month|next_year|this_calendar_month|this_calendar_year} (the last two groups are for is_within). Relative modes (today, tomorrow, past_week, ...) are calendar days in the VIEWER's time zone, not the server's or UTC: the app sends the browser's zone, query_view uses its timezone argument, else the token owner's profile time zone, else UTC. Date-only fields are compared as calendar dates; date-times in the field's own time zone if it has one, else the viewer's. exact_date is the calendar day as written). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. description_field_id: a text field read as each record's description under its title (kanban, gallery and list show an excerpt; calendar and timeline show it on hover). kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
+const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|one_week_ago|one_week_from_now|one_month_ago|one_month_from_now|exact_date, date}|{mode: number_of_days_ago|number_of_days_from_now|past_number_of_days|next_number_of_days, days}|{mode: past_week|past_month|past_year|next_week|next_month|next_year|this_calendar_month|this_calendar_year} (the last two groups are for is_within). Relative modes (today, tomorrow, past_week, ...) are calendar days in the VIEWER's time zone, not the server's or UTC: the app sends the browser's zone, query_view uses its timezone argument, else the token owner's profile time zone, else UTC. Date-only fields are compared as calendar dates; date-times in the field's own time zone if it has one, else the viewer's. exact_date is the calendar day as written). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. description_field_id (at the top of the config, for every view type, not inside kanban or the other sections): a text field read as each record's description under its title (kanban, gallery and list show an excerpt; calendar and timeline show it on hover). kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
 
 pub fn definitions() -> Vec<ToolDef> {
     let view_types = enumeration(VIEW_TYPES, "View type.");
@@ -43,7 +45,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_view",
             "Create a view",
-            "Create a view of any type (grid, form, gallery, kanban, calendar, timeline, list) with an optional configuration. Shared views need the creator role; personal views (personal=true) only the viewer role and are visible to you alone. Relative date filters such as {mode: today} follow the VIEWER's time zone (each person's profile or browser zone in the app, the `timezone` argument of query_view), not the server's or UTC; see `config`.",
+            "Create a view of any type (grid, form, gallery, kanban, calendar, timeline, list) with an optional configuration. Make the views a table's purpose and its users call for, not one of every type: a calendar or timeline for dated records, a kanban stacked by a status, a gallery for pictures, a form for collecting entries, grids or lists filtered and sorted for recurring questions (e.g. 'Contacts by company', 'Overdue invoices'). Name a view for what it shows. Shared views need the creator role; personal views (personal=true) only the viewer role and are visible to you alone. Relative date filters such as {mode: today} follow the VIEWER's time zone (each person's profile or browser zone in the app, the `timezone` argument of query_view), not the server's or UTC; see `config`.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -93,7 +95,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "query_view",
             "Query a view",
-            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset.",
+            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. When a view fits the question (get_base_schema lists them), read it instead of building the same filter in list_records. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -437,4 +439,113 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
         out["hint"] = json!("More rows exist: call again with next_offset as offset.");
     }
     ToolResult::ok(out)
+}
+
+// ------------------------------------------------------------------- view upkeep
+
+/// What a new table's result tells the model about views: only the default grid exists, and the
+/// views the table's purpose calls for are the model's to set up.
+pub const NEW_TABLE_VIEWS: &str = "The table has one view, 'Grid view'. Now set up the views its purpose calls for with create_view, and only those: a calendar or timeline for dated records, a kanban stacked by a status, a gallery for pictures, a form for collecting entries, grids or lists filtered and sorted for the questions people ask (contacts by company, open tasks by due date). Name each for what it shows. People open them in the app, you can point them to one by name, and query_view reads one with its filter and sort applied.";
+
+/// Types whose values the server computes; forms cannot ask for them.
+const COMPUTED_TYPES: &[&str] = &[
+    "formula",
+    "lookup",
+    "rollup",
+    "count",
+    "created_time",
+    "last_modified_time",
+    "created_by",
+    "last_modified_by",
+    "autonumber",
+    "button",
+];
+
+/// What a new field of `field_type` in `table` (as it was before the field) may mean for the
+/// table's views.
+pub fn new_field_views_note(table: &Table, field_type: &str) -> String {
+    let mut note = String::from(
+        "Check whether this table's views should show, filter, sort or group by the new field",
+    );
+    note.push_str(match field_type {
+        "date" | "created_time" | "last_modified_time" => {
+            ", and whether its dates call for a calendar or timeline view or an upcoming/overdue filter."
+        }
+        "single_select" | "user" | "checkbox" => {
+            ", and whether it calls for a kanban view stacked by it or a grid grouped by it."
+        }
+        "attachment" => ", and whether its pictures call for a gallery view with it as the cover.",
+        _ => ".",
+    });
+    let forms: Vec<&str> = table
+        .views
+        .iter()
+        .filter(|v| v.view_type == ViewType::Form)
+        .map(|v| v.name.as_str())
+        .collect();
+    if !forms.is_empty() && !COMPUTED_TYPES.contains(&field_type) {
+        note.push_str(&format!(
+            " Forms list their questions: add it to config.form.fields of the forms that should ask for it ({}).",
+            forms
+                .iter()
+                .map(|n| format!("'{n}'"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    note
+}
+
+/// The views of `table` whose filter, sorts, grouping, row colours, form or a setting (calendar
+/// date field, kanban stack field, ...) name one of `field_ids`, with where each names them:
+/// what to fix after those fields are deleted or change type. Column order, widths, hidden
+/// fields and summaries are left out: they need no attention.
+pub fn views_using(table: &Table, field_ids: &[String]) -> Vec<Value> {
+    fn in_filter(f: &Filter, ids: &[String]) -> bool {
+        f.items.iter().any(|item| match item {
+            FilterItem::Condition(c) => ids.contains(&c.field_id),
+            FilterItem::Group(g) => in_filter(g, ids),
+        })
+    }
+    let names = |list: &[ob_core::view::Sort]| list.iter().any(|s| field_ids.contains(&s.field_id));
+    table
+        .views
+        .iter()
+        .filter_map(|v| {
+            let c = &v.config;
+            let mut uses: Vec<&str> = Vec::new();
+            if c.filter.as_ref().is_some_and(|f| in_filter(f, field_ids)) {
+                uses.push("filter");
+            }
+            if names(&c.sorts) {
+                uses.push("sort");
+            }
+            if names(&c.groups) {
+                uses.push("group");
+            }
+            let colors = match &c.row_color {
+                Some(RowColor::BySelect { field_id }) => field_ids.contains(field_id),
+                Some(RowColor::ByConditions { rules }) => {
+                    rules.iter().any(|r| in_filter(&r.filter, field_ids))
+                }
+                None => false,
+            };
+            if colors {
+                uses.push("row color");
+            }
+            if c.form
+                .fields
+                .iter()
+                .any(|f| field_ids.contains(&f.field_id))
+            {
+                uses.push("form");
+            }
+            for (slot, id) in config_slots(c) {
+                if id.is_some_and(|id| field_ids.contains(id)) {
+                    uses.push(slot);
+                }
+            }
+            (!uses.is_empty()).then(|| json!({ "view": v.name, "type": v.view_type, "uses": uses }))
+        })
+        .collect()
 }

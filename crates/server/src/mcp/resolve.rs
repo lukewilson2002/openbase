@@ -530,6 +530,7 @@ impl Xlate<'_> {
         let Some(obj) = cfg.as_object_mut() else {
             return Err("config must be an object".into());
         };
+        hoist_description(obj)?;
         check_keys(obj, CONFIG_KEYS, "the view config")?;
         if let Some(f) = obj.get_mut("filter")
             && !f.is_null()
@@ -922,6 +923,31 @@ fn select_choices(o: &mut Map<String, Value>, existing: Option<&Field>) -> Resul
             c.insert("id".into(), json!(prev.id));
             if c.get("color").is_none_or(Value::is_null) {
                 c.insert("color".into(), json!(prev.color));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The description field is a setting of the whole view (0.5.0 moved it out of `kanban`), but the
+/// app shows it among each view type's settings and older tool lists put it under `kanban`, so a
+/// model may well send it inside a view type's section. Move it to the top of the config.
+fn hoist_description(obj: &mut Map<String, Value>) -> Result<(), String> {
+    for section in ["kanban", "gallery", "calendar", "timeline"] {
+        let Some(inner) = obj.get_mut(section).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        let Some(v) = inner.remove("description_field_id") else {
+            continue;
+        };
+        match obj.get("description_field_id") {
+            Some(top) if *top != v => {
+                return Err(format!(
+                    "description_field_id is given twice, at the top of the config and in {section}, with different fields. It is a setting of the whole view: give it once, at the top."
+                ));
+            }
+            _ => {
+                obj.insert("description_field_id".into(), v);
             }
         }
     }

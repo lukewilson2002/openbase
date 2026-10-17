@@ -16,6 +16,7 @@ use super::McpCtx;
 use super::resolve::{field_options_to_ids, find_field, find_table, load_schema, type_name};
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
+use super::views::{NEW_TABLE_VIEWS, new_field_views_note, views_using};
 
 /// The snake_case names of the 28 field types (leaked once: they live for the whole process).
 fn type_names() -> &'static [&'static str] {
@@ -97,7 +98,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a base, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new base (create_base): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the base, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Needs the creator role.",
+            "Add a table to a base, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new base (create_base): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the base, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -168,7 +169,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_field",
             "Create a field",
-            "Add a field (column) to a table. All 28 types are supported; call field_types for the options and value shape of each. Link fields also create the inverse field in the other table (name it with inverse_name). Computed fields (formula, lookup, rollup, count, ...) are filled in automatically. Needs the creator role.",
+            "Add a field (column) to a table. All 28 types are supported; call field_types for the options and value shape of each. Link fields also create the inverse field in the other table (name it with inverse_name). Computed fields (formula, lookup, rollup, count, ...) are filled in automatically. The result's views_note says what to check in the table's views (forms do not ask for a new field until you add it). Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -186,7 +187,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_field",
             "Update a field",
-            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true. Needs the creator role.",
+            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -205,7 +206,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_field",
             "Delete a field",
-            "Delete a field and the fields that depend on it (lookups, rollups, the inverse of a link). They move to the trash and can be restored with restore_from_trash (kind 'field'). Needs the creator role.",
+            "Delete a field and the fields that depend on it (lookups, rollups, the inverse of a link). They move to the trash and can be restored with restore_from_trash (kind 'field'). The result lists the views that used them (views_to_check: a calendar's date field, a kanban's stack field, a filter, a form question, ...) so you can fix or delete those views. Needs the creator role.",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -673,7 +674,10 @@ async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
     )
     .await
     {
-        Ok(v) => ToolResult::ok(with_note(json!({ "table": table_out(&v) }), note)),
+        Ok(v) => ToolResult::ok(with_note(
+            json!({ "table": table_out(&v), "views_note": NEW_TABLE_VIEWS }),
+            note,
+        )),
         Err(e) => e,
     }
 }
@@ -845,7 +849,10 @@ async fn create_field(ctx: &McpCtx, a: CreateField) -> ToolResult {
     )
     .await
     {
-        Ok(field) => ToolResult::ok(json!({ "field": field_out(&field) })),
+        Ok(field) => ToolResult::ok(json!({
+            "field": field_out(&field),
+            "views_note": new_field_views_note(table, &a.field_type),
+        })),
         Err(e) => e,
     }
 }
@@ -948,12 +955,20 @@ async fn update_field(ctx: &McpCtx, a: UpdateField) -> ToolResult {
                     "to": new_type,
                     "note": "Existing values were converted; values that did not fit were cleared (conversions are not recorded in the record history).",
                 });
+                let using = views_using(table, std::slice::from_ref(&field.id));
+                if !using.is_empty() {
+                    out["views_to_check"] = json!(using);
+                    out["views_note"] = json!(VIEWS_TO_CHECK);
+                }
             }
             ToolResult::ok(out)
         }
         Err(e) => e,
     }
 }
+
+/// Beside `views_to_check` in the results of delete_field and of type changes.
+const VIEWS_TO_CHECK: &str = "These views used the field (`uses` says where). Fix each with update_view: a calendar, timeline or kanban needs another field of the right type for that setting, a form another question, a filter or sort another field; if the view no longer serves a purpose, delete_view.";
 
 async fn delete_field(ctx: &McpCtx, a: FieldArg) -> ToolResult {
     let schema = match load_schema(ctx, &a.base_id).await {
@@ -970,13 +985,35 @@ async fn delete_field(ctx: &McpCtx, a: FieldArg) -> ToolResult {
     };
     let path = format!("/api/fields/{}", encode_segment(&field.id));
     match fetch(ctx, "DELETE", &path, None, None).await {
-        Ok(v) => ToolResult::ok(json!({
-            "deleted_field_ids": v.get("deleted_field_ids").cloned().unwrap_or(json!([field.id])),
-            "note": format!(
-                "Moved to the trash with their values: restore_from_trash (kind 'field', id '{}') brings them back within {} days.",
-                field.id, ctx.state.config.trash_days
-            ),
-        })),
+        Ok(v) => {
+            let deleted = v
+                .get("deleted_field_ids")
+                .cloned()
+                .unwrap_or(json!([field.id]));
+            let ids: Vec<String> = serde_json::from_value(deleted.clone()).unwrap_or_default();
+            let using: Vec<Value> = schema
+                .tables
+                .iter()
+                .flat_map(|t| {
+                    views_using(t, &ids).into_iter().map(move |mut u| {
+                        u["table"] = json!(t.name);
+                        u
+                    })
+                })
+                .collect();
+            let mut out = json!({
+                "deleted_field_ids": deleted,
+                "note": format!(
+                    "Moved to the trash with their values: restore_from_trash (kind 'field', id '{}') brings them back within {} days.",
+                    field.id, ctx.state.config.trash_days
+                ),
+            });
+            if !using.is_empty() {
+                out["views_to_check"] = json!(using);
+                out["views_note"] = json!(VIEWS_TO_CHECK);
+            }
+            ToolResult::ok(out)
+        }
         Err(e) => e,
     }
 }

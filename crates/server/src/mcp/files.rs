@@ -55,7 +55,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "import_csv",
             "Import CSV",
-            "Import CSV text into an existing table (rows become records; columns are matched to fields by header name, or by `mapping`) or, with new_table_name, create a new table from the CSV (fields and their types are inferred; the first column becomes the primary field). All or nothing: if any row is rejected nothing is written and the problem rows are listed. Values are read leniently like pasted text. Limits: 20 MB, 100,000 rows. Needs the editor role (creator for a new table).",
+            "Import CSV text into an existing table (rows become records; columns are matched to fields by header name, or by `mapping`) or, with new_table_name, create a new table from the CSV (fields and their types are inferred; the first column becomes the primary field; it starts with one grid view, so set up the others its purpose calls for). All or nothing: if any row is rejected nothing is written and the problem rows are listed. Values are read leniently like pasted text. Limits: 20 MB, 100,000 rows. Needs the editor role (creator for a new table).",
             object(
                 json!({
                     "base_id": string(BASE_ID),
@@ -480,6 +480,7 @@ async fn import_csv(ctx: &McpCtx, a: ImportArgs) -> ToolResult {
         && !fields.is_empty()
     {
         out["note"] = json!("A new table was created; get_base_schema shows it.");
+        out["views_note"] = json!(super::views::NEW_TABLE_VIEWS);
     }
     ToolResult::ok(out)
 }
