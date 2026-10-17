@@ -155,7 +155,7 @@ const views: Obj[] = [
     table_id: T_PROJECTS,
     name: "Board",
     type: "kanban",
-    config: { ...emptyConfig(), hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [] }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
+    config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [] }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
     personal: false,
     locked: false,
   },
@@ -163,7 +163,7 @@ const views: Obj[] = [
   { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
   { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), description_field_id: "fld_j_summary", calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw15", table_id: T_PROJECTS, name: "Review calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_review", end_field_id: null } }, personal: false, locked: false },
-  { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
+  { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), description_field_id: "fld_j_summary", timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), description_field_id: "fld_j_summary", groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
   { id: "viw18", table_id: T_PROJECTS, name: "Unconfigured board", type: "kanban", config: emptyConfig(), personal: false, locked: false },
 ];
