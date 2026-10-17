@@ -168,14 +168,20 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   const pin = props.primaryPin;
   const followScroll = pin !== null && !pin.pinned;
   useEffect(() => {
-    setScrollLeft(0);
-    if (!followScroll) return;
-    const scroller = wrapRef.current?.querySelector<HTMLElement>(".dvn-scroller");
-    if (!scroller) return;
-    const onScroll = () => setScrollLeft(scroller.scrollLeft);
-    onScroll();
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller.removeEventListener("scroll", onScroll);
+    const wrap = wrapRef.current;
+    if (!followScroll || !wrap) {
+      setScrollLeft(0);
+      return;
+    }
+    // Glide may not have rendered its scroller yet (a view that opens unpinned), so listen on the
+    // wrapper in the capture phase (scroll events do not bubble) instead of on the scroller itself.
+    const isScroller = (el: EventTarget | null): el is HTMLElement => el instanceof HTMLElement && el.classList.contains("dvn-scroller");
+    const onScroll = (e: Event) => {
+      if (isScroller(e.target)) setScrollLeft(e.target.scrollLeft);
+    };
+    setScrollLeft(wrap.querySelector<HTMLElement>(".dvn-scroller")?.scrollLeft ?? 0);
+    wrap.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => wrap.removeEventListener("scroll", onScroll, { capture: true });
   }, [followScroll]);
 
   // With the pin button showing, the primary field's title stops short of it (the menu button
