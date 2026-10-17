@@ -22,12 +22,15 @@ import {
   type Item,
   type ProvideEditorCallbackResult,
   type ProvideEditorComponent,
+  type DrawHeaderCallback,
   type Rectangle,
 } from "@glideapps/glide-data-grid";
+import { Pin } from "lucide-react";
 import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo } from "../adapter";
 import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
 import { ADD_ICON, headerIcons } from "./icons";
+import { cn } from "@/lib/cn";
 import { mixColors, paletteColor } from "@/lib/cells/palette";
 import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
 import { createRenderer } from "./renderers";
@@ -51,6 +54,11 @@ const ADD_COLUMN_ID = "__add_field__";
 export const GRID_HEADER_HEIGHT = 44;
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
 const ROW_MARKERS = { kind: "both", width: ROW_MARKER_WIDTH, startIndex: MARKER_START_INDEX } as const;
+/** Glide's header menu button, at the right end of a header (its `menuButtonSize`). */
+const HEADER_MENU_WIDTH = 30;
+/** The primary field's pin button, just left of the header menu button. */
+const PIN_BUTTON_SIZE = 32;
+const PIN_BUTTON_GAP = 4;
 
 /** Glide draws overlay editors into #portal; the app shell has none, so create it once. */
 function ensurePortal(): void {
@@ -153,6 +161,45 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     [props.version, props.columns, props.rowCount, paint],
   );
 
+  // The pin button sits over the primary field's header. Pinned, that header never moves; unpinned it
+  // scrolls with the rest, so follow Glide's scroller to keep the button on it.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const pin = props.primaryPin;
+  const followScroll = pin !== null && !pin.pinned;
+  useEffect(() => {
+    setScrollLeft(0);
+    if (!followScroll) return;
+    const scroller = wrapRef.current?.querySelector<HTMLElement>(".dvn-scroller");
+    if (!scroller) return;
+    const onScroll = () => setScrollLeft(scroller.scrollLeft);
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [followScroll]);
+
+  // With the pin button showing, the primary field's title stops short of it (the menu button
+  // still draws in its own place at the right end).
+  const showPin = pin !== null;
+  const drawHeader = useCallback<DrawHeaderCallback>(
+    (args, drawContent) => {
+      if (!showPin || args.columnIndex !== 0) {
+        drawContent();
+        return;
+      }
+      const { ctx, rect } = args;
+      const titleEnd = rect.width - HEADER_MENU_WIDTH - PIN_BUTTON_SIZE - PIN_BUTTON_GAP;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rect.x, rect.y, Math.max(0, titleEnd), rect.height);
+      ctx.rect(rect.x + rect.width - HEADER_MENU_WIDTH, rect.y, HEADER_MENU_WIDTH, rect.height);
+      ctx.clip();
+      drawContent();
+      ctx.restore();
+    },
+    [showPin],
+  );
+
   const onVisibleRegionChanged = useCallback((range: Rectangle) => pr.current.onVisibleRowsChange(range.y, range.y + range.height - 1), []);
 
   const onCellsEdited = useCallback((items: readonly EditListItem[]) => {
@@ -250,7 +297,11 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   }, []);
 
 
+  const primary = props.columns[0];
+  const pinLeft = primary ? primary.width - HEADER_MENU_WIDTH - PIN_BUTTON_SIZE - (pin?.pinned ? 0 : scrollLeft) : 0;
+
   return (
+    <div ref={wrapRef} className="relative h-full w-full">
     <DataEditor
       ref={gridRef}
       className="ob-glide"
@@ -267,6 +318,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       provideEditor={provideEditor}
       theme={theme}
       headerIcons={headerIcons()}
+      drawHeader={drawHeader}
       rowMarkers={ROW_MARKERS}
       // Rows read as lines of a list, as in the rest of the app; the header still shows where columns
       // meet, and that is where they resize.
@@ -322,5 +374,25 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       maxColumnWidth={800}
       minColumnWidth={60}
     />
+    {pin && primary && (
+      // Clipped to the columns, so an unpinned primary field's button slides out under the row numbers.
+      <div className="pointer-events-none absolute top-0 right-0 overflow-hidden" style={{ left: ROW_MARKER_WIDTH, height: GRID_HEADER_HEIGHT }}>
+        <button
+          type="button"
+          onClick={pin.onToggle}
+          aria-pressed={pin.pinned}
+          aria-label={pin.pinned ? `Unpin the ${primary.title} column` : `Pin the ${primary.title} column so it stays on screen`}
+          title={pin.pinned ? `Unpin the ${primary.title} column` : `Pin the ${primary.title} column`}
+          className={cn(
+            "pointer-events-auto absolute flex items-center justify-center rounded-lg hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring",
+            pin.pinned ? "text-primary" : "text-muted",
+          )}
+          style={{ left: pinLeft, top: (GRID_HEADER_HEIGHT - PIN_BUTTON_SIZE) / 2, width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}
+        >
+          <Pin aria-hidden className="size-4" fill={pin.pinned ? "currentColor" : "none"} />
+        </button>
+      </div>
+    )}
+    </div>
   );
 });

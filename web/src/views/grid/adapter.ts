@@ -111,6 +111,11 @@ export interface GridAdapterProps {
   rowHeight: number;
   /** Columns kept in place when scrolling horizontally (including the primary field). */
   freezeColumns: number;
+  /**
+   * The pin button in the primary field's header (phones), or null for none. `pinned` is whether
+   * the primary field stays in place; the host turns that into `freezeColumns`.
+   */
+  primaryPin: { pinned: boolean; onToggle(): void } | null;
   /** Show a pinned summary row after the data (the host supplies its cells through `getCell`). */
   showSummary: boolean;
   /**

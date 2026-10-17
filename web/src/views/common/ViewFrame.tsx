@@ -15,8 +15,13 @@ import type { ViewSetup } from "./useViewSetup";
  * runs edge to edge, where a margin would cost a column of the grid.
  */
 export const viewBodyClass = "relative min-h-0 flex-1 border-t border-line bg-surface md:mx-4 md:mt-4 md:overflow-hidden md:rounded-xl md:border";
-/** The count line under a view ("4 items"): a bar on a phone, plain text under the card on a desktop. */
-export const viewFooterClass = "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted md:border-t-0 md:bg-transparent md:px-5";
+/**
+ * The count line under a view ("4 items"): a bar on a phone, plain text under the card on a desktop.
+ * On a phone the bar is the bottom of the screen: it stays above the home indicator and clear of the
+ * rounded corners, and its right end is left to the floating "Add" button.
+ */
+export const viewFooterClass =
+  "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))] max-md:pl-5 max-md:pr-36 md:border-t-0 md:bg-transparent md:px-5";
 
 /**
  * A card as tall as its content (a short list or grid ends where its rows end, with the count right
@@ -75,14 +80,14 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
     body = (
       <div className="relative min-h-0 flex-1 overflow-auto">
         {children}
-        {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-[0.8125rem] text-muted md:px-5">{footer}</div>}
+        {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-[0.8125rem] text-muted md:px-5 max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>
     );
   } else {
     body = (
       <>
         <div className={viewBodyClass}>{children}</div>
-        {footer ? <div className={viewFooterClass}>{footer}</div> : <div aria-hidden className="max-md:hidden md:h-4" />}
+        {footer ? <div className={viewFooterClass}>{footer}</div> : <div aria-hidden className="h-[env(safe-area-inset-bottom)] shrink-0 md:h-4" />}
       </>
     );
   }

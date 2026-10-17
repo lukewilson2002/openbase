@@ -83,8 +83,8 @@ export function AppShell({ sidebar, sidebarFooter, topBar, brand, drawerHeader, 
 
   return (
     <CloseMenuContext.Provider value={closeMenu}>
-      <div className={cn(fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-dvh", className)}>
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-1 border-b border-line bg-surface px-1.5 md:gap-3 md:px-3">
+      <div className={cn(fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-dvh pb-[env(safe-area-inset-bottom)]", className)}>
+        <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-1 border-b border-line bg-surface px-1.5 pt-[env(safe-area-inset-top)] md:gap-3 md:px-3">
           <button
             ref={toggleRef}
             type="button"

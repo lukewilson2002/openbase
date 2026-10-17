@@ -28,6 +28,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { ViewBar } from "@/components/viewbar/ViewBar";
 import { itemsLabel } from "@/views/common/cardFields";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { EmptyRecords } from "@/views/common/EmptyRecords";
 import { viewHugAreaClass, viewHugCardClass, viewHugFooterClass } from "@/views/common/ViewFrame";
 import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
@@ -42,6 +44,7 @@ import { linkNames, parseText, type ParseCtx } from "@/lib/cells/parse";
 import type { ViewProps } from "../types";
 import type { CellEdit, CellModel, EditorHostProps, GridAdapterProps, GridColumnSpec, GridHandle, GridPoint, GridRange, GridSelectionInfo, ScreenRect } from "./adapter";
 import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
+import { frozenColumnCount, usePrimaryPinned } from "./usePrimaryPinned";
 import { BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
 import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
 import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
@@ -79,7 +82,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const columns = useMemo<GridColumnSpec[]>(() => toColumnSpecs(order.visible, table.primary_field_id, config.field_widths, liveWidths), [order.visible, table.primary_field_id, config.field_widths, liveWidths]);
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
-  const freezeColumns = 1 + Math.min(config.frozen_columns, Math.max(0, columns.length - 1));
+  // On a phone the primary field can be unpinned from its header; on a desktop it always stays.
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const [primaryPinned, togglePrimaryPinned] = usePrimaryPinned(view.id);
+  const pinned = desktop || primaryPinned;
+  const freezeColumns = frozenColumnCount(pinned, config.frozen_columns, columns.length);
   const rowHeight = ROW_HEIGHT_PX[config.row_height];
 
   // ---- search ----------------------------------------------------------------------------------
@@ -641,6 +648,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     rowCount: rowCountForGrid,
     rowHeight,
     freezeColumns,
+    primaryPin: desktop || !columns[0]?.isPrimary ? null : { pinned, onToggle: togglePrimaryPinned },
     showSummary: !empty,
     rowNumber,
     searchTerm: debouncedSearch,
