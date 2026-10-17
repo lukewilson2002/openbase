@@ -9,6 +9,7 @@ import { Link } from "react-router";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { cn } from "@/lib/cn";
+import { menuAvailStyle } from "./dropdown-menu";
 
 export interface SplitMenuGroup {
   id: string;
@@ -98,7 +99,7 @@ function ActionItem({ action, inline = false }: { action: SplitMenuAction; inlin
         <ChevronRight aria-hidden className="size-3.5 shrink-0 opacity-60" />
       </M.SubTrigger>
       <M.Portal>
-        <M.SubContent sideOffset={4} collisionPadding={8} className="ob-pop-in z-50 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-line bg-surface p-1.5 shadow-pop">
+        <M.SubContent sideOffset={4} collisionPadding={8} style={menuAvailStyle} className="ob-pop-in z-50 max-h-[var(--ob-avail)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1.5 shadow-pop">
           {action.sub}
         </M.SubContent>
       </M.Portal>
@@ -170,8 +171,11 @@ export function SplitMenu({
           align="start"
           sideOffset={6}
           collisionPadding={8}
+          style={menuAvailStyle}
           className={cn(
-            "ob-pop-in z-50 grid max-h-[min(30rem,calc(100dvh-6rem))] w-[min(28.25rem,calc(100vw-1.25rem))] grid-cols-[minmax(0,11rem)_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface text-[0.875rem] shadow-pop sm:grid-cols-[12.25rem_minmax(0,1fr)]",
+            // On a phone the menu may run to the bottom of the screen (an unfolded "Add view" needs
+            // the room); the row may shrink below its content, so each column scrolls past that.
+            "ob-pop-in z-50 grid max-h-[min(30rem,var(--ob-avail))] max-md:max-h-[var(--ob-avail)] w-[min(28.25rem,calc(100vw-1.25rem))] grid-rows-[minmax(0,1fr)] grid-cols-[minmax(0,11rem)_minmax(0,1fr)] overflow-hidden rounded-xl border border-line bg-surface text-[0.875rem] shadow-pop sm:grid-cols-[12.25rem_minmax(0,1fr)]",
             className,
           )}
         >

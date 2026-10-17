@@ -1,21 +1,34 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, CSSProperties } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { cn } from "@/lib/cn";
+
+/**
+ * The height a menu has below or above its trigger, inside the screen's collision padding and clear
+ * of the home indicator. Menus are never taller and scroll past it, so on a phone a long menu runs
+ * to the bottom of the screen instead of off it. `--ob-avail` lets a menu that caps its own height
+ * keep this limit too: `max-h-[min(24rem,var(--ob-avail))]`.
+ */
+export const menuAvailStyle = {
+  "--ob-avail": "calc(var(--radix-dropdown-menu-content-available-height, 100dvh) - env(safe-area-inset-bottom))",
+} as CSSProperties;
+const availClass = "max-h-[var(--ob-avail)] overflow-y-auto overscroll-contain";
 
 export const DropdownMenu = M.Root;
 export const DropdownMenuTrigger = M.Trigger;
 export const DropdownMenuRadioGroup = M.RadioGroup;
 
-export function DropdownMenuContent({ className, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {
+export function DropdownMenuContent({ className, style, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {
   return (
     <M.Portal>
       <M.Content
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         align={align}
+        style={{ ...menuAvailStyle, ...style }}
         className={cn(
-          "ob-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop",
+          "ob-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-1 shadow-pop",
+          availClass,
           className,
         )}
         {...props}
@@ -58,13 +71,14 @@ export function DropdownMenuSubTrigger({ className, children, ...props }: Compon
   );
 }
 
-export function DropdownMenuSubContent({ className, sideOffset = 4, collisionPadding = 8, ...props }: ComponentProps<typeof M.SubContent>) {
+export function DropdownMenuSubContent({ className, style, sideOffset = 4, collisionPadding = 8, ...props }: ComponentProps<typeof M.SubContent>) {
   return (
     <M.Portal>
       <M.SubContent
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
-        className={cn("ob-pop-in z-50 min-w-40 max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop", className)}
+        style={{ ...menuAvailStyle, ...style }}
+        className={cn("ob-pop-in z-50 min-w-40 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-1 shadow-pop", availClass, className)}
         {...props}
       />
     </M.Portal>

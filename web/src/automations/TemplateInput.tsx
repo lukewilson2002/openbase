@@ -71,7 +71,7 @@ export function TemplateInput({ value, onChange, ctx, label, multiline, rows = 4
             <Braces aria-hidden className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="max-h-80 w-80 overflow-y-auto p-1" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent align="end" className="max-h-[min(20rem,var(--ob-avail))] w-80 overflow-y-auto p-1" onCloseAutoFocus={(e) => e.preventDefault()}>
           <TokenMenu ctx={ctx} onPick={insert} />
         </PopoverContent>
       </Popover>

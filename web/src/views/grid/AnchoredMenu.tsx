@@ -24,7 +24,7 @@ export function AnchoredMenu({ anchor, onClose, children, label, align = "start"
       <DropdownMenuTrigger asChild>
         <span aria-hidden style={{ position: "fixed", left: anchor?.x ?? -9999, top: anchor?.y ?? -9999, width: Math.max(1, anchor?.width ?? 1), height: Math.max(1, anchor?.height ?? 1), pointerEvents: "none" }} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} aria-label={label} sideOffset={2} className="max-h-[min(28rem,80dvh)] overflow-y-auto" onCloseAutoFocus={(e) => e.preventDefault()}>
+      <DropdownMenuContent align={align} aria-label={label} sideOffset={2} className="max-h-[min(28rem,var(--ob-avail))] overflow-y-auto" onCloseAutoFocus={(e) => e.preventDefault()}>
         {children}
       </DropdownMenuContent>
     </DropdownMenu>

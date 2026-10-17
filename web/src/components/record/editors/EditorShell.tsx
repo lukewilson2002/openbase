@@ -39,7 +39,7 @@ export function EditorShell({ variant, target, trigger, triggerLabel, onCancel, 
       sideOffset={variant === "cell" ? 2 : 4}
       collisionPadding={8}
       style={{ width }}
-      className={cn("click-outside-ignore flex max-h-[min(24rem,70dvh)] flex-col p-0", className)}
+      className={cn("click-outside-ignore flex max-h-[min(24rem,var(--ob-avail))] flex-col p-0", className)}
       onEscapeKeyDown={(e) => {
         if (variant === "cell") {
           e.preventDefault();

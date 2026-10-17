@@ -143,7 +143,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange }:
               <Plus aria-hidden className="size-[15px]" /> {addable.length === 0 ? "All fields are in the form" : "Add a field"}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="max-h-80 w-60 overflow-y-auto">
+          <DropdownMenuContent align="start" className="max-h-[min(20rem,var(--ob-avail))] w-60 overflow-y-auto">
             {addable.map((f) => (
               <DropdownMenuItem key={f.id} onSelect={() => onChange(addFormField(form, table, f.id))}>
                 <FieldTypeIcon type={f.type} /> {f.name}

@@ -124,7 +124,7 @@ function ToolButton({ label, active, children, note, wide }: { label: string; ac
           {label}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className={cn("max-h-[min(34rem,80dvh)] overflow-y-auto p-3", wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]")}>
+      <PopoverContent align="start" className={cn("max-h-[min(34rem,var(--ob-avail))] overflow-y-auto p-3", wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]")}>
         {note && <p className="mb-2 rounded bg-warning-soft px-2 py-1 text-xs">{note}</p>}
         {children}
       </PopoverContent>
@@ -174,7 +174,7 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
           e.preventDefault();
           listRef.current?.querySelector<HTMLElement>("[role=menuitem],[role=menuitemcheckbox]")?.focus();
         }}
-        className={cn("max-h-[min(34rem,80dvh)] overflow-y-auto rounded-xl p-1.5", panel ? (panel.wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]") : "w-[min(15.5rem,calc(100vw-1.5rem))]")}
+        className={cn("max-h-[min(34rem,var(--ob-avail))] overflow-y-auto rounded-xl p-1.5", panel ? (panel.wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]") : "w-[min(15.5rem,calc(100vw-1.5rem))]")}
       >
         {panel ? (
           <div className="flex flex-col gap-2 p-1.5">

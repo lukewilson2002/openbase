@@ -204,7 +204,7 @@ function WorkspaceFilter({ workspaces, value, onChange }: { workspaces: Workspac
   return (
     <DropdownMenu>
       <FilterButton label="Workspace" active={!!value} value={current?.name ?? (value ? "This workspace" : "All workspaces")} />
-      <DropdownMenuContent align="start" className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto">
+      <DropdownMenuContent align="start" className="max-h-[min(24rem,var(--ob-avail))] overflow-y-auto">
         <DropdownMenuRadioGroup value={value ?? ""} onValueChange={(v) => onChange(v || null)}>
           <DropdownMenuRadioItem value="">All workspaces</DropdownMenuRadioItem>
           {workspaces.map((w) => (
@@ -239,7 +239,7 @@ function BaseFilter({
   return (
     <DropdownMenu>
       <FilterButton label="Base" active={!!value} value={current?.name ?? (value ? (fallbackName ?? "This base") : "All bases")} />
-      <DropdownMenuContent align="start" className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto">
+      <DropdownMenuContent align="start" className="max-h-[min(24rem,var(--ob-avail))] overflow-y-auto">
         <DropdownMenuRadioGroup
           value={value ?? ""}
           onValueChange={(v) => onChange(v || null, all.find((b) => b.id === v)?.workspace_id ?? null)}

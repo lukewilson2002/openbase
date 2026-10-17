@@ -17,7 +17,7 @@ export function ViewSettings({ label = "Settings", active, note, children }: { l
           {label}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="flex max-h-[min(34rem,80dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-y-auto p-3">
+      <PopoverContent align="start" className="flex max-h-[min(34rem,var(--ob-avail))] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-y-auto p-3">
         {note && <p className="rounded bg-warning-soft px-2 py-1 text-xs">{note}</p>}
         {children}
       </PopoverContent>
