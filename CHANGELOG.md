@@ -11,6 +11,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Fixed
+
+- Tapping blank space in a grid view always clears the selection. On a phone it would sometimes
+  select the first row's primary cell instead, toggling on and off over a few taps (the grid
+  selects its first cell when it takes the keyboard focus, and the tap's focus was mistaken for
+  that).
+
 ## [0.5.1] - 2026-10-17
 
 ### Added

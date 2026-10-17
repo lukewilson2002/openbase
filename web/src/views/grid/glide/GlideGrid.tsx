@@ -34,6 +34,7 @@ import { cn } from "@/lib/cn";
 import { mixColors, paletteColor } from "@/lib/cells/palette";
 import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
 import { createRenderer } from "./renderers";
+import { isFocusSelectAfterPress, type Press } from "./focusSelect";
 import { DARK_THEME, LIGHT_THEME } from "./theme";
 
 installMarkerNumbering();
@@ -291,7 +292,25 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     [],
   );
 
+  // Where the pointer last pressed over the grid, to tell Glide's select-on-focus from a real tap.
+  const lastPress = useRef<Press | null>(null);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const note = (e: PointerEvent) => {
+      lastPress.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+    };
+    wrap.addEventListener("pointerdown", note, { capture: true, passive: true });
+    wrap.addEventListener("pointerup", note, { capture: true, passive: true });
+    return () => {
+      wrap.removeEventListener("pointerdown", note, { capture: true });
+      wrap.removeEventListener("pointerup", note, { capture: true });
+    };
+  }, []);
+
   const onGridSelectionChange = useCallback((sel: GridSelection) => {
+    // A tap on blank space leaves nothing selected, whatever Glide does when it takes the focus.
+    if (isFocusSelectAfterPress(selectionRef.current, sel, lastPress.current, performance.now(), (c, r) => gridRef.current?.getBounds(c, r))) return;
     setSelection(sel);
     pr.current.onSelectionChange(toInfo(sel));
   }, []);
