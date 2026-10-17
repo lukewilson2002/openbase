@@ -4,9 +4,9 @@
  * item is picked. One Radix menu underneath, so arrows, typeahead, Escape and focus return work as in
  * every other menu, and the arrow keys walk the groups and then the items.
  */
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { cn } from "@/lib/cn";
 
@@ -35,7 +35,26 @@ export interface SplitMenuAction {
   sub?: ReactNode;
 }
 
-function ActionItem({ action }: { action: SplitMenuAction }) {
+/** Width of an action's submenu (`w-72`) plus its offset and the screen margin. */
+const SUB_ROOM_PX = 288 + 4 + 8;
+
+/**
+ * An action under a column. With a submenu it opens beside the menu where there is room for it;
+ * where there is not (a phone, or a menu near the screen's right edge), Radix would flip it to the
+ * other side and off the screen, so its items unfold in place under the action instead.
+ */
+function ActionItem({ action, inline = false }: { action: SplitMenuAction; inline?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const unfolded = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Scroll only this column (scrollIntoView would also scroll the menu box itself, hiding the
+    // other column), bringing the action to its top so its choices show under it.
+    const el = unfolded.current;
+    const column = el?.closest<HTMLElement>("[data-split-column]");
+    const item = el?.previousElementSibling;
+    if (!el || !column || !item) return;
+    column.scrollTop += item.getBoundingClientRect().top - column.getBoundingClientRect().top - 6;
+  }, [expanded]);
   const content = (
     <>
       {action.icon && <span className="flex shrink-0 items-center [&>svg]:size-4">{action.icon}</span>}
@@ -47,6 +66,29 @@ function ActionItem({ action }: { action: SplitMenuAction }) {
       <M.Item onSelect={action.onSelect} className={cn(row, "text-muted")}>
         {content}
       </M.Item>
+    );
+  }
+  if (inline) {
+    return (
+      <>
+        <M.Item
+          aria-expanded={expanded}
+          onSelect={(e) => {
+            // Unfolding is not picking: the menu stays open.
+            e.preventDefault();
+            setExpanded((x) => !x);
+          }}
+          className={cn(row, "text-muted", expanded && "bg-hover")}
+        >
+          {content}
+          <ChevronDown aria-hidden className={cn("size-3.5 shrink-0 opacity-60 transition-transform", expanded && "rotate-180")} />
+        </M.Item>
+        {expanded && (
+          <div ref={unfolded} data-unfolded-sub className="flex flex-col gap-px">
+            {action.sub}
+          </div>
+        )}
+      </>
     );
   }
   return (
@@ -103,6 +145,12 @@ export function SplitMenu({
   const items = group ? itemsFor(group.id) : [];
   const top = group && itemsTop ? itemsTop(group) : null;
   const action = group && itemAction ? itemAction(group) : null;
+  // Whether submenus fit beside the menu, measured when it opens (the trigger can sit anywhere).
+  const [inlineSubs, setInlineSubs] = useState(false);
+  const measure = useCallback((el: HTMLDivElement | null) => {
+    // A frame later, once Radix has placed it next to its trigger.
+    if (el) requestAnimationFrame(() => setInlineSubs(el.getBoundingClientRect().right + SUB_ROOM_PX > window.innerWidth));
+  }, []);
 
   return (
     <M.Root
@@ -115,6 +163,7 @@ export function SplitMenu({
       <M.Trigger asChild>{trigger}</M.Trigger>
       <M.Portal>
         <M.Content
+          ref={measure}
           aria-label={label}
           // Radix names a menu after its trigger; this one has a name of its own.
           aria-labelledby={undefined}
@@ -126,7 +175,7 @@ export function SplitMenu({
             className,
           )}
         >
-          <M.Group aria-label={groupsHeading} className="flex min-h-0 flex-col gap-px overflow-y-auto border-r border-line bg-bg p-1.5">
+          <M.Group data-split-column aria-label={groupsHeading} className="flex min-h-0 flex-col gap-px overflow-y-auto border-r border-line bg-bg p-1.5">
             <M.Label className="px-2.5 pb-1 pt-2 text-[0.8125rem] font-semibold text-muted">{groupsHeading}</M.Label>
             {groups.map((g) => {
               const on = g.id === group?.id;
@@ -154,11 +203,11 @@ export function SplitMenu({
               <>
                 <div className="min-h-1.5 flex-1" />
                 <M.Separator className="mx-1 mb-1 h-px bg-line" />
-                <ActionItem action={groupAction} />
+                <ActionItem action={groupAction} inline={inlineSubs} />
               </>
             )}
           </M.Group>
-          <M.Group aria-label={group ? itemsHeading(group) : undefined} className="flex min-h-0 flex-col gap-px overflow-y-auto p-1.5">
+          <M.Group data-split-column aria-label={group ? itemsHeading(group) : undefined} className="flex min-h-0 flex-col gap-px overflow-y-auto p-1.5">
             {group && <M.Label className="truncate px-2.5 pb-1 pt-2 text-[0.8125rem] font-semibold text-muted">{itemsHeading(group)}</M.Label>}
             {top && (
               <>
@@ -185,7 +234,7 @@ export function SplitMenu({
               <>
                 <div className="min-h-1.5 flex-1" />
                 <M.Separator className="mx-1 mb-1 h-px bg-line" />
-                <ActionItem action={action} />
+                <ActionItem key={group?.id} action={action} inline={inlineSubs} />
               </>
             )}
           </M.Group>

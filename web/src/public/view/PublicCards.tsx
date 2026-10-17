@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import type { Field, TableRecord } from "@/api/types";
 import { cardTitle, descriptionText, fieldsToShow, isDescriptionField } from "@/views/common/cardFields";
+import { DescriptionHover } from "@/views/common/description";
 import { buildStacks, stackKind } from "@/views/kanban/stacks";
 import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
@@ -43,9 +44,11 @@ export function PublicCard({ record, fields, color, coverFit = "cover", coverHei
       <div className="flex flex-col gap-1.5 p-2.5">
         <h3 className="line-clamp-2 break-words text-[0.8125rem] font-semibold">{cardTitle(fields.title, record, format)}</h3>
         {description && (
-          <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
-            {description}
-          </p>
+          <DescriptionHover field={fields.description} record={record} title={cardTitle(fields.title, record, format)} format={format}>
+            <p data-card-description className="-mt-0.5 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+              {description}
+            </p>
+          </DescriptionHover>
         )}
         {shown.map((f) => (
           <div key={f.id} className="min-w-0">

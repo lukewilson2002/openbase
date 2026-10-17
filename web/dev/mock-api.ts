@@ -120,6 +120,7 @@ const projectFields: Obj[] = [
   field("fld_j_deps", "Depends on", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_blocks", single: false }, T_PROJECTS),
   field("fld_j_blocks", "Blocks", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_deps", single: false }, T_PROJECTS),
   field("fld_j_done", "Shipped", "checkbox", { icon: "check", color: "green" }, T_PROJECTS),
+  field("fld_j_summary", "Summary", "long_text", { rich: false }, T_PROJECTS),
 ];
 
 function emptyConfig(): Obj {
@@ -135,7 +136,8 @@ function emptyConfig(): Obj {
     row_color: null,
     summaries: {},
     wrap_headers: false,
-    kanban: { stack_field_id: null, cover_field_id: null, description_field_id: null, hide_empty_stacks: false, stack_order: [] },
+    description_field_id: null,
+    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [] },
     calendar: { date_field_id: null, end_field_id: null },
     gallery: { cover_field_id: null, cover_crop: false },
     timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },
@@ -158,11 +160,11 @@ const views: Obj[] = [
     locked: false,
   },
   { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [] }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
-  { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
-  { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
+  { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
+  { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), description_field_id: "fld_j_summary", calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw15", table_id: T_PROJECTS, name: "Review calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_review", end_field_id: null } }, personal: false, locked: false },
   { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
-  { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
+  { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), description_field_id: "fld_j_summary", groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
   { id: "viw18", table_id: T_PROJECTS, name: "Unconfigured board", type: "kanban", config: emptyConfig(), personal: false, locked: false },
 ];
 
@@ -250,6 +252,9 @@ function seedProjects(): void {
       fld_j_progress: Math.round(rnd() * 100) / 100,
     };
     if (rnd() > 0.25) v.fld_j_owner = [pick(USERS).id];
+    // Most have a few lines of notes: the views read them as each project's description.
+    if (i % 5 !== 2)
+      v.fld_j_summary = `${name} for the ${TEAMS.find((t) => t.id === v.fld_j_team)!.name} team.\nScope: ship the first cut, then measure what people actually use before widening it.\n- Owner signs off on the plan\n- Weekly check-in until it ships`;
     // A handful have no dates (unscheduled), a few are milestones (start only).
     let end: number | null = null;
     if (i % 9 !== 4) {

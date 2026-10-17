@@ -11,7 +11,8 @@ import type { Field, ViewConfig } from "@/api/types";
 import { createChoice } from "@/components/fields/choices";
 import { useToast } from "@/components/ui/toast";
 import { Spinner } from "@/components/ui/spinner";
-import { cardFields, isDescriptionField } from "../common/cardFields";
+import { cardFields } from "../common/cardFields";
+import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
@@ -45,10 +46,7 @@ function KanbanInner(props: ViewProps) {
   const stackField: Field | undefined = stackFields.find((f) => f.id === kanban.stack_field_id);
   const attachmentFields = useMemo(() => table.fields.filter((f) => f.type === "attachment"), [table.fields]);
   const coverField = attachmentFields.find((f) => f.id === kanban.cover_field_id);
-  // The primary field is already the card's title. A field that stopped being text (converted)
-  // simply goes back to being a row; the saved setting is kept like the cover's.
-  const descriptionFields = useMemo(() => table.fields.filter((f) => f.id !== table.primary_field_id && isDescriptionField(f)), [table.fields, table.primary_field_id]);
-  const descriptionField = descriptionFields.find((f) => f.id === kanban.description_field_id);
+  const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const [collapsed, toggleCollapse] = usePersistedSet(`ob-kanban-collapsed:${view.id}`);
 
@@ -112,15 +110,7 @@ function KanbanInner(props: ViewProps) {
     <ViewSettings label={stackField ? `Stacked by ${stackField.name}` : "Stack by"} active={!!stackField} note={note}>
       <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseStack} hint="A single select, single user or checkbox field." />
       <FieldSelect label="Cover image" fields={attachmentFields} value={coverField?.id ?? ""} noneLabel="No cover" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setKanban(c, { cover_field_id: id }))} />
-      <FieldSelect
-        label="Description"
-        fields={descriptionFields}
-        value={descriptionField?.id ?? ""}
-        noneLabel="No description"
-        disabled={!cfg.canConfigure}
-        onChange={(id) => cfg.update((c) => setKanban(c, { description_field_id: id }))}
-        hint="A text field shown under each card's title, up to three lines."
-      />
+      <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
     </ViewSettings>
   );
 

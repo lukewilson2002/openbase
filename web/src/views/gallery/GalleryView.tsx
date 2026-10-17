@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { CardBody } from "../common/CardBody";
 import { cardFields, cardTitle, itemsLabel } from "../common/cardFields";
+import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { EmptyRecords } from "../common/EmptyRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect, ViewSettings } from "../common/ViewSettings";
@@ -32,7 +33,9 @@ function GalleryInner(props: ViewProps) {
   const coverField = attachmentFields.find((f) => f.id === config.gallery.cover_field_id);
   const crop = config.gallery.cover_crop;
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
-  const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? ""])), [table, config, coverField?.id]);
+  const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
+  // The description sits under the title, so it does not repeat as a field.
+  const fields = useMemo(() => cardFields(table, config, new Set([coverField?.id ?? "", descriptionField?.id ?? ""])), [table, config, coverField?.id, descriptionField?.id]);
 
   const data = useGalleryData({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
 
@@ -64,6 +67,7 @@ function GalleryInner(props: ViewProps) {
         onChange={(id) => cfg.update((c) => setGallery(c, { cover_field_id: id }))}
         hint={attachmentFields.length === 0 ? "Add an attachment field to show pictures on the cards." : "Cards show the first image of this field, when they have one."}
       />
+      <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
     </ViewSettings>
   );
 
@@ -139,6 +143,7 @@ function GalleryInner(props: ViewProps) {
                         primary={primary}
                         fields={fields}
                         coverField={coverField}
+                        descriptionField={descriptionField}
                         coverFit={crop ? "cover" : "contain"}
                         coverHeight={132}
                         layout="stacked"

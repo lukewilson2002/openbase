@@ -900,7 +900,7 @@ async fn views_of_every_type_accept_names_in_their_config() {
         ),
         (
             "kanban",
-            json!({"kanban": {"stack_field_id": "Status", "description_field_id": "Notes", "stack_order": ["Doing", "Todo", "Done"], "hide_empty_stacks": true}}),
+            json!({"description_field_id": "Notes", "kanban": {"stack_field_id": "Status", "stack_order": ["Doing", "Todo", "Done"], "hide_empty_stacks": true}}),
         ),
         (
             "calendar",
@@ -958,10 +958,7 @@ async fn views_of_every_type_accept_names_in_their_config() {
         json!(["Doing", "Todo", "Done"]),
         "choice names in, choice names out"
     );
-    assert_eq!(
-        kanban["view"]["config"]["kanban"]["description_field_id"],
-        "Notes"
-    );
+    assert_eq!(kanban["view"]["config"]["description_field_id"], "Notes");
     let schema = r.schema().await;
     let tasks = &schema["tables"][0];
     let views = tasks["views"].as_array().unwrap();
@@ -999,10 +996,7 @@ async fn views_of_every_type_accept_names_in_their_config() {
         .find(|f| f["name"] == "Notes")
         .unwrap()["id"]
         .clone();
-    assert_eq!(
-        raw_view["config"]["kanban"]["description_field_id"],
-        notes_id
-    );
+    assert_eq!(raw_view["config"]["description_field_id"], notes_id);
     assert!(
         raw_view["config"]["kanban"]["stack_order"][0]
             .as_str()

@@ -4,12 +4,7 @@ export type KanbanConfig = {
 /**
  * Single select, user (single) or checkbox field to stack by.
  */
-stack_field_id?: string | null, cover_field_id?: string | null, 
-/**
- * Text field shown under the card title as a clamped preview; it is left
- * out of the card's label/value rows.
- */
-description_field_id?: string | null, hide_empty_stacks: boolean, 
+stack_field_id?: string | null, cover_field_id?: string | null, hide_empty_stacks: boolean, 
 /**
  * Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
  */

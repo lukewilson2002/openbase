@@ -2,7 +2,8 @@
  * The list view's body: a collapsible outline. Group headers are grey bars that fold their group
  * (with the person's face for a person field, the choice's dot for a select) and say how many
  * records they hold; each group ends with an "Add" that pre-fills the group's values. Records are
- * compact rows: the title, then select values as pills and other values as "Label value".
+ * compact rows: the title (with the view's description under it, when it has one), then select
+ * values as pills and other values as "Label value".
  */
 import { useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
@@ -14,7 +15,8 @@ import { colorDotClass } from "@/lib/colors";
 import type { FormatCtx } from "@/lib/cells/format";
 import { displayShapeOf, selectChoicesOf } from "@/lib/cells/kinds";
 import { swatchColor } from "@/lib/cells/palette";
-import { cardTitle, fieldsToShow } from "../common/cardFields";
+import { cardTitle, descriptionText, fieldsToShow } from "../common/cardFields";
+import { DescriptionHover } from "../common/description";
 import { buildOutline, flattenOutline, groupDefaults, type GroupNode } from "./outline";
 
 /** Rows rendered per group before "Show more" (a group can hold thousands). */
@@ -30,7 +32,10 @@ export interface ListOutlineProps {
   records: readonly TableRecord[];
   groups: readonly GroupHeader[];
   primary: Field | undefined;
+  /** Fields shown beside the title (already without the description field). */
   fields: readonly Field[];
+  /** Text field read under each title as a clamped excerpt (the whole of it on hover). */
+  descriptionField?: Field;
   /** Every field of the table, to tell what a group header groups by (a person, a choice...). */
   tableFields: readonly Field[];
   format: FormatCtx;
@@ -53,13 +58,15 @@ const isPill = (f: Field) => {
 function Row({ record, indent, p }: { record: TableRecord; indent: number; p: ListOutlineProps }) {
   const shown = fieldsToShow(p.fields, record, p.format, ROW_FIELDS);
   const color = p.colors[record.id];
+  const title = cardTitle(p.primary, record, p.format);
+  const description = descriptionText(p.descriptionField, p.descriptionField ? record.values[p.descriptionField.id] : undefined, p.format);
   const open = () => p.onOpen(record.id);
   return (
     <div
       role="button"
       tabIndex={0}
       data-record-id={record.id}
-      aria-label={cardTitle(p.primary, record, p.format)}
+      aria-label={title}
       onClick={(e) => {
         if (!(e.target as HTMLElement).closest("a")) open();
       }}
@@ -73,12 +80,21 @@ function Row({ record, indent, p }: { record: TableRecord; indent: number; p: Li
       className="relative flex min-h-11 cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2 pr-4 outline-none hover:bg-[color-mix(in_srgb,var(--bg)_70%,var(--surface))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
     >
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: swatchColor(color) }} />}
-      <span className="w-full min-w-0 truncate text-[0.875rem] font-medium sm:w-[190px] sm:shrink-0">{cardTitle(p.primary, record, p.format)}</span>
+      <span className="w-full min-w-0 truncate text-[0.875rem] font-medium sm:w-[190px] sm:shrink-0">{title}</span>
+      {description && (
+        // Straight under the title on a phone (the title takes the whole line there); under the
+        // title and its fields on a wider screen, where they sit beside the title.
+        <DescriptionHover field={p.descriptionField} record={record} title={title} format={p.format}>
+          <p data-row-description className="order-1 w-full min-w-0 line-clamp-2 break-words text-[0.8125rem] leading-[1.45] text-muted sm:order-3">
+            {description}
+          </p>
+        </DescriptionHover>
+      )}
       {shown.map((f) =>
         isPill(f) ? (
-          <CellValue key={f.id} field={f} value={record.values[f.id] ?? null} format={p.format} emails={p.emails} className="min-w-0 text-[0.8125rem]" markdown={false} />
+          <CellValue key={f.id} field={f} value={record.values[f.id] ?? null} format={p.format} emails={p.emails} className="order-2 min-w-0 text-[0.8125rem]" markdown={false} />
         ) : (
-          <span key={f.id} className="flex min-w-0 max-w-72 items-center gap-1.5 text-[0.8125rem]">
+          <span key={f.id} className="order-2 flex min-w-0 max-w-72 items-center gap-1.5 text-[0.8125rem]">
             <span className="shrink-0 text-faint">{f.name}</span>
             <CellValue field={f} value={record.values[f.id] ?? null} format={p.format} emails={p.emails} className="truncate text-[0.8125rem]" markdown={false} />
           </span>

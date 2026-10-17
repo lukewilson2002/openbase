@@ -98,6 +98,8 @@ describe("KanbanView", () => {
     const brief = field("long_text", { rich: true }, { id: "f_brief", name: "Brief" });
     const label = field("formula", { expression: "{Name}", result_type: "text" }, { id: "f_label", name: "Label" });
     const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });
+    // The description is the view's, not the board's: it sits beside `kanban` in the config.
+    const described = (id: string) => viewWithConfig("viw1", "kanban", { description_field_id: id, kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [] } });
     const long = "First line of the notes.\n\n   Second   paragraph with more words than fit on three lines of a narrow card.";
 
     function setupNotes(view: ReturnType<typeof board>, values: Record<string, unknown> = {}) {
@@ -123,12 +125,13 @@ describe("KanbanView", () => {
       expect(options).toEqual(["No description", "Notes", "Brief", "Label"]);
       await user.selectOptions(select, "f_notes");
       await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { description_field_id: string; cover_field_id: string | null } } };
-      expect(saved.config.kanban).toMatchObject({ description_field_id: "f_notes", stack_field_id: F.status.id });
+      const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { description_field_id: string; kanban: { stack_field_id: string } } };
+      expect(saved.config.description_field_id).toBe("f_notes");
+      expect(saved.config.kanban).toMatchObject({ stack_field_id: F.status.id });
     });
 
     it("draws the description under the title, clamped, and leaves its row out", async () => {
-      setupNotes(board({ description_field_id: notes.id }));
+      setupNotes(described(notes.id));
       const card = await screen.findByRole("button", { name: "R1" });
       const text = card.querySelector("[data-card-description]")!;
       expect(text.textContent).toBe("First line of the notes. Second paragraph with more words than fit on three lines of a narrow card.");
@@ -141,7 +144,7 @@ describe("KanbanView", () => {
     });
 
     it("shows rich text without its markup", async () => {
-      setupNotes(board({ description_field_id: brief.id }), { [brief.id]: "## Plan\n\nBuy **milk** & [eggs](https://x.test)\n- one\n- two" });
+      setupNotes(described(brief.id), { [brief.id]: "## Plan\n\nBuy **milk** & [eggs](https://x.test)\n- one\n- two" });
       const card = await screen.findByRole("button", { name: "R1" });
       expect(card.querySelector("[data-card-description]")!.textContent).toBe("Plan Buy milk & eggs one two");
       expect(card.querySelector("[data-card-description] a, [data-card-description] strong")).toBeNull();
@@ -150,7 +153,7 @@ describe("KanbanView", () => {
     });
 
     it("ignores a description field that is no longer text", async () => {
-      setupNotes(board({ description_field_id: total.id }), { [total.id]: 3 });
+      setupNotes(described(total.id), { [total.id]: 3 });
       const card = await screen.findByRole("button", { name: "R1" });
       expect(card.querySelector("[data-card-description]")).toBeNull();
       expect(within(card).getByText("Total")).toBeInTheDocument();

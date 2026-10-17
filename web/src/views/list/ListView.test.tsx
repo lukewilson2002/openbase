@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
+import { field } from "@/test/fields";
 import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import ListView from "./ListView";
 
@@ -101,5 +102,47 @@ describe("ListView", () => {
     expect(await screen.findByText("No records yet.")).toBeInTheDocument();
     expect(screen.queryByText("No records")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+  });
+
+  describe("description", () => {
+    const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
+    const long = "Runs entirely on local models:\n- A system one model\n- A local LLM";
+
+    function setupNotes(config: Record<string, unknown>) {
+      const view = viewWithConfig("viw1", "list", config);
+      const schema = projectSchema("editor", [view]);
+      schema.tables[0]!.fields = [...schema.tables[0]!.fields, notes];
+      const server = { records: [rec("r1", { [F.status.id]: "s1", [notes.id]: long }), rec("r2", { [F.status.id]: "s1" })], groups: [] };
+      return renderView(ListView, {
+        schema,
+        viewId: "viw1",
+        routes: { "POST /api/views/viw1/query": queryHandler(server), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never,
+      });
+    }
+
+    it("is chosen in the toolbar and saved on the view", async () => {
+      const user = userEvent.setup();
+      const { api } = setupNotes({});
+      await screen.findByRole("button", { name: "R1" });
+      // Nothing is a description until the view picks one: Notes is an ordinary field.
+      expect(screen.getByRole("button", { name: "R1" }).querySelector("[data-row-description]")).toBeNull();
+      await user.click(screen.getAllByRole("button", { name: "Description" })[0]!);
+      const select = await screen.findByRole("combobox", { name: "Description" });
+      expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No description", "Notes"]);
+      await user.selectOptions(select, "f_notes");
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { description_field_id: string } }).config.description_field_id).toBe("f_notes");
+    });
+
+    it("reads an excerpt right under the title and leaves the field out of the row", async () => {
+      setupNotes({ description_field_id: notes.id });
+      const row = await screen.findByRole("button", { name: "R1" });
+      const text = row.querySelector("[data-row-description]")!;
+      expect(text.textContent).toBe("Runs entirely on local models: - A system one model - A local LLM");
+      expect(text.className).toContain("line-clamp-2");
+      expect(text.previousElementSibling?.textContent).toBe("R1");
+      expect(within(row).queryByText("Notes")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "R2" }).querySelector("[data-row-description]")).toBeNull();
+    });
   });
 });

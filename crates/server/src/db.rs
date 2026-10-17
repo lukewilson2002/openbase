@@ -22,6 +22,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_workspace_base_access.sql"),
     include_str!("../migrations/0006_workspace_color_deleted_by.sql"),
     include_str!("../migrations/0007_invite_may_raise_roles.sql"),
+    include_str!("../migrations/0008_view_description_field.sql"),
 ];
 
 pub fn schema_version() -> i64 {
@@ -341,7 +342,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 7);
+        assert_eq!(schema_version(), 8);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -564,7 +565,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 7);
+        assert_eq!(schema_version(), 8);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -735,7 +736,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 7);
+        assert_eq!(schema_version(), 8);
         let flag = |id: &str| -> bool {
             conn.query_row(
                 "SELECT may_raise_roles FROM invites WHERE id = ?1",
@@ -855,5 +856,36 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn kanban_description_moves_to_the_view() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        v1_database(&conn, None);
+        migrate_with(&conn, &MIGRATIONS[..7], None).unwrap();
+        conn.execute_batch(
+            r#"INSERT INTO views (id, table_id, name, type, config, created_at) VALUES
+                 ('v1', 't1', 'Board', 'kanban', '{"kanban":{"stack_field_id":"f2","description_field_id":"f3"}}', 1),
+                 ('v2', 't1', 'Bare', 'kanban', '{"kanban":{"stack_field_id":"f2","description_field_id":null}}', 1),
+                 ('v3', 't1', 'Grid', 'grid', '{}', 1);"#,
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let config = |id: &str| -> serde_json::Value {
+            let raw: String = conn
+                .query_row("SELECT config FROM views WHERE id = ?1", [id], |r| r.get(0))
+                .unwrap();
+            serde_json::from_str(&raw).unwrap()
+        };
+        assert_eq!(
+            config("v1"),
+            serde_json::json!({"kanban": {"stack_field_id": "f2"}, "description_field_id": "f3"})
+        );
+        assert_eq!(
+            config("v2"),
+            serde_json::json!({"kanban": {"stack_field_id": "f2"}})
+        );
+        assert_eq!(config("v3"), serde_json::json!({}));
     }
 }

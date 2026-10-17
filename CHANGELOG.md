@@ -11,6 +11,31 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Every view can read a description under each record's title.** Kanban, gallery, list, calendar
+  and timeline views have a "Description" choice in their settings (list views get a "Description"
+  tool of their own): any text field, chosen per view, so no table has to have one. Kanban and
+  gallery cards show an excerpt of up to three lines under the title, list rows two; pointing at it
+  shows the whole text (rich text as formatted markdown). Calendar events and timeline bars have
+  room for the title only, so pointing at them shows the description. On a phone, tapping opens the
+  record as before. The description field is not repeated among the card's or row's other fields.
+- **Phones can unpin the grid's primary column.** A pin button in the primary field's header lets
+  it scroll away sideways; it is pinned by default and remembered per view on each device.
+
+### Changed
+
+- **The description setting moved from kanban to the view.** `kanban.description_field_id` is now
+  `description_field_id` at the top of the view config (REST API and MCP), and shared views report
+  it as `description_field_id`. Existing boards keep their choice: the database migration moves it.
+- On a phone, a submenu that has no room beside its menu ("Add view" in the table and view picker)
+  unfolds its choices in place instead of opening off the left edge of the screen.
+
+### Fixed
+
+- On iPhones, the item count, the app header and the floating "Add" button keep clear of the
+  rounded corners, the notch and the home indicator (the page now asks for the screen's safe areas).
+
 ## [0.4.0] - 2026-10-16
 
 ### Added

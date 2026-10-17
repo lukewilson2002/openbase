@@ -380,10 +380,7 @@ pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10
     [
         ("kanban stack field", config.kanban.stack_field_id.as_ref()),
         ("kanban cover field", config.kanban.cover_field_id.as_ref()),
-        (
-            "kanban description field",
-            config.kanban.description_field_id.as_ref(),
-        ),
+        ("description field", config.description_field_id.as_ref()),
         (
             "calendar date field",
             config.calendar.date_field_id.as_ref(),

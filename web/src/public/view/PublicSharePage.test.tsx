@@ -25,7 +25,7 @@ const FIELDS: PublicField[] = [
   { id: "f_cover", name: "Cover", type: "attachment", options: {}, description: null },
 ];
 
-const config = { field_widths: {}, frozen_columns: 0, kanban_stack_field_id: null, kanban_cover_field_id: null, kanban_description_field_id: null, kanban_hide_empty_stacks: false, gallery_cover_field_id: null, calendar_date_field_id: null, calendar_end_field_id: null, timeline_start_field_id: null, timeline_end_field_id: null, timeline_group_field_id: null };
+const config = { field_widths: {}, frozen_columns: 0, kanban_stack_field_id: null, kanban_cover_field_id: null, description_field_id: null, kanban_hide_empty_stacks: false, gallery_cover_field_id: null, calendar_date_field_id: null, calendar_end_field_id: null, timeline_start_field_id: null, timeline_end_field_id: null, timeline_group_field_id: null };
 
 function view(type: PublicView["type"], patch: Partial<PublicView["config"]> = {}, fields = FIELDS): PublicView {
   return { kind: "view", name: "Team board", type, table_name: "Tasks", base_name: "Studio", fields, config: { ...config, ...patch } };
@@ -242,7 +242,7 @@ describe("shared views of other types", () => {
   it("shows a board's description under the card title instead of as a row", async () => {
     const notes: PublicField = { id: "f_notes", name: "Notes", type: "long_text", options: { rich: true }, description: null };
     const records = [record(1, { f_status: "s1", f_notes: "**Call** the\n\nsupplier   first" }), record(2, { f_status: "s1" })];
-    open(view("kanban", { kanban_stack_field_id: "f_status", kanban_description_field_id: "f_notes" }, [...FIELDS, notes]), { "POST /api/public/shares/tok_s/query": queryHandler(records) });
+    open(view("kanban", { kanban_stack_field_id: "f_status", description_field_id: "f_notes" }, [...FIELDS, notes]), { "POST /api/public/shares/tok_s/query": queryHandler(records) });
     const card = await screen.findByRole("article", { name: "Task 1" });
     const text = card.querySelector("[data-card-description]")!;
     expect(text.textContent).toBe("Call the supplier first");

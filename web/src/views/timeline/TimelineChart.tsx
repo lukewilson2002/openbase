@@ -16,6 +16,7 @@ import type { TimelineScale } from "@/api/types";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { choiceClass, colorDotClass } from "@/lib/colors";
+import { DescriptionHover, hasDescription, type DescriptionSource } from "../common/description";
 import { swatchColor } from "@/lib/cells/palette";
 import {
   BAR_HEIGHT,
@@ -103,6 +104,8 @@ export interface TimelineChartProps {
   /** A "+ Add" row under the left column. */
   onAddRow?: () => void;
   onOpen(recordId: string): void;
+  /** The record behind a bar and the view's description field, to read in full on hover. */
+  describe?(recordId: string): DescriptionSource | null;
   onCommit(recordId: string, mode: DragMode, days: number): void;
   onCreate(laneKey: string, fromDay: number, toDay: number): void;
   onNeedMore(side: "start" | "end"): void;
@@ -497,7 +500,9 @@ export function TimelineChart(props: TimelineChartProps) {
             const measured = view.right > view.left;
             const offLeft = measured && !r.milestone && r.x < view.left - 1;
             const offRight = measured && !r.milestone && r.x + r.width > view.right + 1;
-            return (
+            const described = props.describe?.(bar.id) ?? null;
+            const withDescription = !!described && hasDescription(described.field, described.record, described.format);
+            const el = (
               <div
                 key={bar.id}
                 role="button"
@@ -507,7 +512,7 @@ export function TimelineChart(props: TimelineChartProps) {
                 data-record-id={bar.id}
                 data-milestone={r.milestone || undefined}
                 data-violated={bar.violated || undefined}
-                title={label}
+                title={withDescription ? undefined : label}
                 onPointerDown={(e) => startBar(bar, e)}
                 onPointerMove={(e) => moveBar(bar, e)}
                 onPointerUp={() => endBar(bar)}
@@ -562,6 +567,14 @@ export function TimelineChart(props: TimelineChartProps) {
                   </span>
                 )}
               </div>
+            );
+            // A bar is one line: pointing at it reads the record's description (never mid-drag).
+            return withDescription && described ? (
+              <DescriptionHover key={bar.id} field={described.field} record={described.record} title={bar.title} format={described.format} suppress={!!drag}>
+                {el}
+              </DescriptionHover>
+            ) : (
+              el
             );
           })}
           {creating?.moved && (

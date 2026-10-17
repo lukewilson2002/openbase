@@ -220,9 +220,6 @@ pub struct KanbanConfig {
     /// Single select, user (single) or checkbox field to stack by.
     pub stack_field_id: Option<FieldId>,
     pub cover_field_id: Option<FieldId>,
-    /// Text field shown under the card title as a clamped preview; it is left
-    /// out of the card's label/value rows.
-    pub description_field_id: Option<FieldId>,
     pub hide_empty_stacks: bool,
     /// Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
     pub stack_order: Vec<String>,
@@ -318,6 +315,11 @@ pub struct ViewConfig {
     pub summaries: BTreeMap<FieldId, Aggregation>,
     /// Wrap long cell content (grid).
     pub wrap_headers: bool,
+    /// Text field read as each record's description, under its title: a
+    /// clamped excerpt on kanban, gallery and list cards (and left out of
+    /// their label/value fields), the full text on hover there and on
+    /// calendar events and timeline bars. Optional; any text field will do.
+    pub description_field_id: Option<FieldId>,
     pub kanban: KanbanConfig,
     pub calendar: CalendarConfig,
     pub gallery: GalleryConfig,

@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { cardTitle, fieldsToShow } from "../common/cardFields";
+import { DescriptionHover } from "../common/description";
 
 export interface UnscheduledListProps {
   open: boolean;
@@ -20,6 +21,8 @@ export interface UnscheduledListProps {
   primary: Field | undefined;
   /** Fields a record may show under its title (the first two that have a value are shown). */
   fields: readonly Field[];
+  /** The view's description field, read in full when pointing at a record's title. */
+  descriptionField?: Field;
   format: FormatCtx;
   emails: ReadonlyMap<string, string>;
   loading: boolean;
@@ -31,7 +34,7 @@ export interface UnscheduledListProps {
 
 const columnBg = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
 
-export function UnscheduledList({ open, onToggle, records, primary, fields, format, emails, loading, truncated, draggable, onOpen }: UnscheduledListProps) {
+export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, format, emails, loading, truncated, draggable, onOpen }: UnscheduledListProps) {
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     // The list is not mounted while loading or folded, so those re-run this once it is.
@@ -96,9 +99,11 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, form
               >
                 {draggable && <GripVertical aria-hidden className="mt-0.5 size-3.5 shrink-0 text-faint" />}
                 <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-                  <button type="button" onClick={() => onOpen(r.id)} className="max-w-full truncate text-left text-[0.8125rem] font-semibold hover:underline" title={title}>
-                    {title}
-                  </button>
+                  <DescriptionHover field={descriptionField} record={r} title={title} format={format} side="left">
+                    <button type="button" onClick={() => onOpen(r.id)} className="max-w-full truncate text-left text-[0.8125rem] font-semibold hover:underline" title={descriptionField ? undefined : title}>
+                      {title}
+                    </button>
+                  </DescriptionHover>
                   {shown.length > 0 && (
                     <span className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-muted">
                       {shown.map((f, i) => (

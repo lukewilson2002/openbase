@@ -211,6 +211,30 @@ describe("ViewBar table and view picker", () => {
     expect(onDialog).toHaveBeenLastCalledWith({ kind: "create-view", table: t, type: "calendar" });
   });
 
+  it("unfolds the view types in place where a submenu would run off the screen", async () => {
+    const user = userEvent.setup();
+    const onDialog = vi.fn();
+    const schema = makeSchema("creator");
+    const t = schema.tables[0]!;
+    // No room to the right of the menu for a submenu (jsdom places everything at x = 0, so the
+    // window has to be narrower than the submenu itself).
+    const wide = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 200, configurable: true });
+    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
+    await user.click(screen.getByRole("button", { name: /^Showing the Tasks table/ }));
+    const menu = await screen.findByRole("menu", { name: "Pick a table, then a view" });
+    // Measured once the menu is placed: an item that unfolds, not a submenu trigger.
+    await waitFor(() => expect(within(menu).getByRole("menuitem", { name: "Add view" })).not.toHaveAttribute("aria-haspopup"));
+    const add = within(menu).getByRole("menuitem", { name: "Add view" });
+    expect(add).toHaveAttribute("aria-expanded", "false");
+    await user.click(add);
+    // Same menu, still open: the types are listed under "Add view".
+    expect(add).toHaveAttribute("aria-expanded", "true");
+    await user.click(within(menu).getByRole("menuitem", { name: /^Calendar/ }));
+    expect(onDialog).toHaveBeenLastCalledWith({ kind: "create-view", table: t, type: "calendar" });
+    Object.defineProperty(window, "innerWidth", { value: wide, configurable: true });
+  });
+
   it("offers neither to people who cannot make tables or views", async () => {
     const user = userEvent.setup();
     renderBar({}, { onDialog: vi.fn() });

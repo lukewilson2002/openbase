@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { swatchColor } from "@/lib/cells/palette";
 import { cardTitle, coverUrl, descriptionText, fieldsToShow } from "./cardFields";
+import { DescriptionHover } from "./description";
 
 export interface CardBodyProps {
   record: TableRecord;
@@ -13,7 +14,7 @@ export interface CardBodyProps {
   /** Fields shown as label/value rows; leave the description field out of them. */
   fields: readonly Field[];
   coverField?: Field;
-  /** Text field drawn under the title as a clamped preview. */
+  /** Text field drawn under the title as a clamped preview (the whole of it on hover). */
   descriptionField?: Field;
   /** How the cover fills its box: crop to fill or fit inside. */
   coverFit?: "cover" | "contain";
@@ -49,9 +50,11 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
         <div className="px-3.5 py-3">
           <h3 className="line-clamp-2 break-words text-[0.875rem] font-semibold">{title}</h3>
           {description && (
-            <p data-card-description className="mt-1 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
-              {description}
-            </p>
+            <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
+              <p data-card-description className="mt-1 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+                {description}
+              </p>
+            </DescriptionHover>
           )}
           {shown.length > 0 && (
             <dl className="mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[0.8125rem]">
@@ -70,9 +73,11 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
           <h3 className="line-clamp-2 break-words text-[0.9375rem] font-[650]">{title}</h3>
           {description && (
-            <p data-card-description className="-mt-1 line-clamp-3 break-words text-[0.875rem] leading-[1.45] text-muted">
-              {description}
-            </p>
+            <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
+              <p data-card-description className="-mt-1 line-clamp-3 break-words text-[0.875rem] leading-[1.45] text-muted">
+                {description}
+              </p>
+            </DescriptionHover>
           )}
           {shown.map((f) => (
             <div key={f.id} className="min-w-0">

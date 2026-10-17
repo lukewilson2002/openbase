@@ -19,14 +19,16 @@ import interactionPlugin, { type DateClickArg, type DropArg } from "@fullcalenda
 import type { DatesSetArg, DayCellContentArg, EventClickArg, EventContentArg, EventDropArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { DateRange, Field, ViewConfig } from "@/api/types";
+import type { DateRange, Field, TableRecord, ViewConfig } from "@/api/types";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
+import type { FormatCtx } from "@/lib/cells/format";
 import { choiceClass, colorDotClass } from "@/lib/colors";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cardFields } from "../common/cardFields";
+import { DescriptionHover, DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { SegmentedSwitch } from "../common/SegmentedSwitch";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
@@ -72,15 +74,32 @@ const VIEW_OPTIONS = {
 // FullCalendar's stylesheet is in by now; its data: icon font would only trip the CSP (see iconFont.ts).
 removeIconFont();
 
-/** An event as a chip tinted with the record's colour (the primary tint when it has none). */
-function EventChip({ arg }: { arg: EventContentArg }) {
+/** Where an event chip finds its record's description (null: the view has none). */
+interface ChipDescription {
+  field: Field;
+  byId: ReadonlyMap<string, TableRecord>;
+  format: FormatCtx;
+}
+
+/**
+ * An event as a chip tinted with the record's colour (the primary tint when it has none). A chip
+ * has room for the title only; pointing at it shows the record's description.
+ */
+function EventChip({ arg, description }: { arg: EventContentArg; description: ChipDescription | null }) {
   const color = arg.event.extendedProps.color as string | undefined;
-  return (
+  const chip = (
     <span className={cn("ob-cal-chip", color ? choiceClass(color) : "ob-cal-chip-plain")}>
       <span aria-hidden className={cn("ob-cal-dot", color ? colorDotClass(color) : "bg-primary")} />
       {arg.timeText && !arg.event.allDay && <span className="shrink-0 font-medium opacity-80">{arg.timeText}</span>}
       <span className="ob-cal-title">{arg.event.title}</span>
     </span>
+  );
+  const record = description?.byId.get(String(arg.event.extendedProps.recordId));
+  if (!description || !record) return chip;
+  return (
+    <DescriptionHover field={description.field} record={record} title={arg.event.title} format={description.format}>
+      {chip}
+    </DescriptionHover>
   );
 }
 
@@ -132,7 +151,15 @@ function CalendarInner(props: ViewProps) {
     [fields, records.data, primary, setup.format, setup.canEdit],
   );
   const unscheduled = useMemo(() => (fields && all.data ? unscheduledRecords(all.data.records, fields, timeZone) : []), [fields, all.data, timeZone]);
-  const cardFieldList = useMemo(() => cardFields(table, config, new Set([fields?.start.field.id ?? "", fields?.end?.field.id ?? ""])), [table, config, fields]);
+  const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
+  const chipDescription = useMemo<ChipDescription | null>(
+    () => (descriptionField && records.data ? { field: descriptionField, byId: new Map(records.data.records.map((r) => [r.id, r])), format: setup.format } : null),
+    [descriptionField, records.data, setup.format],
+  );
+  const cardFieldList = useMemo(
+    () => cardFields(table, config, new Set([fields?.start.field.id ?? "", fields?.end?.field.id ?? "", descriptionField?.id ?? ""])),
+    [table, config, fields, descriptionField?.id],
+  );
 
   const startWritable = setup.canEdit && isWritableDate(fields?.start.field);
 
@@ -190,6 +217,13 @@ function CalendarInner(props: ViewProps) {
         disabled={!cfg.canConfigure || !fields}
         onChange={(id) => cfg.update((c) => setCalendar(c, { end_field_id: id }))}
         hint="Shows records as ranges and lets you resize them."
+      />
+      <DescriptionSelect
+        candidates={descriptionFields}
+        field={descriptionField}
+        disabled={!cfg.canConfigure}
+        onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
+        hint={descriptionFields.length === 0 ? "Add a text field to show a description with each event." : "A text field read in full when you point at an event."}
       />
     </ViewSettings>
   );
@@ -254,7 +288,7 @@ function CalendarInner(props: ViewProps) {
               events={events}
               eventBackgroundColor="transparent"
               eventBorderColor="transparent"
-              eventContent={(arg) => <EventChip arg={arg} />}
+              eventContent={(arg) => <EventChip arg={arg} description={chipDescription} />}
               dayCellContent={(arg) => <DayNumber arg={arg} />}
               editable={startWritable}
               droppable={startWritable}
@@ -278,6 +312,7 @@ function CalendarInner(props: ViewProps) {
           records={unscheduled}
           primary={primary}
           fields={cardFieldList}
+          descriptionField={descriptionField}
           format={setup.format}
           emails={setup.emails}
           loading={all.loading}

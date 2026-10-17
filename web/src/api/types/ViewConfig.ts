@@ -30,4 +30,11 @@ summaries: { [key in string]: Aggregation },
 /**
  * Wrap long cell content (grid).
  */
-wrap_headers: boolean, kanban: KanbanConfig, calendar: CalendarConfig, gallery: GalleryConfig, timeline: TimelineConfig, form: FormConfig, };
+wrap_headers: boolean, 
+/**
+ * Text field read as each record's description, under its title: a
+ * clamped excerpt on kanban, gallery and list cards (and left out of
+ * their label/value fields), the full text on hover there and on
+ * calendar events and timeline bars. Optional; any text field will do.
+ */
+description_field_id?: string | null, kanban: KanbanConfig, calendar: CalendarConfig, gallery: GalleryConfig, timeline: TimelineConfig, form: FormConfig, };

@@ -715,7 +715,7 @@ async fn public_groups_and_colors_only_use_visible_fields() {
 }
 
 #[tokio::test]
-async fn public_kanban_description_only_names_a_visible_field() {
+async fn public_description_only_names_a_visible_field() {
     let p = people().await;
     let t = p.f.table_id.clone();
     let notes = p.f.notes_id.clone();
@@ -727,7 +727,8 @@ async fn public_kanban_description_only_names_a_visible_field() {
                 "kanban",
                 json!({
                     "hidden_fields": hidden,
-                    "kanban": { "stack_field_id": p.status, "description_field_id": notes },
+                    "kanban": { "stack_field_id": p.status },
+                    "description_field_id": notes,
                 }),
             )
             .await;
@@ -740,10 +741,10 @@ async fn public_kanban_description_only_names_a_visible_field() {
         r.body
     };
     let shown = info(json!([])).await;
-    assert_eq!(shown["config"]["kanban_description_field_id"], notes);
+    assert_eq!(shown["config"]["description_field_id"], notes);
     // Hidden in the view: the public page learns nothing about it.
     let hidden = info(json!([notes])).await;
-    assert!(hidden["config"]["kanban_description_field_id"].is_null());
+    assert!(hidden["config"]["description_field_id"].is_null());
     assert!(!hidden.to_string().contains(notes.as_str()), "{hidden}");
 }
 

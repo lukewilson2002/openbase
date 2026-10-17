@@ -22,6 +22,7 @@ import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
 import { DAY_MS, isDateLike, isWritableDate, padRange, recordSpan, wallNow, wallYmd, type Span } from "../common/wallTime";
 import { cardFields, cardTitle, fieldsToShow, itemsLabel } from "../common/cardFields";
+import { DescriptionSelect, setDescriptionField, useDescriptionField, type DescriptionSource } from "../common/description";
 import type { ViewProps } from "../types";
 import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, rangeTitle, stepScale, type Axis, type DragMode } from "./geometry";
 import { NO_LANE, createWrites, dragWrites, groupIntoLanes, lanesFromGroups, spanLabel, type Lane } from "./lanes";
@@ -115,7 +116,20 @@ function TimelineInner(props: ViewProps) {
 
   // The left column names each record, so the bar can say its dates; the first other field that
   // has a value (who it is for) sits quietly beside the name.
-  const sideFields = useMemo(() => cardFields(table, config, new Set([fields?.start.field.id ?? "", fields?.end?.field.id ?? ""])), [table, config, fields]);
+  // The description is read on hover over the bar, so it is not the quiet text beside the name.
+  const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
+  const sideFields = useMemo(
+    () => cardFields(table, config, new Set([fields?.start.field.id ?? "", fields?.end?.field.id ?? "", descriptionField?.id ?? ""])),
+    [table, config, fields, descriptionField?.id],
+  );
+  const recordById = useMemo(() => new Map((data?.records ?? []).map((r) => [r.id, r])), [data]);
+  const describe = useCallback(
+    (recordId: string): DescriptionSource | null => {
+      const record = recordById.get(recordId);
+      return descriptionField && record ? { field: descriptionField, record, format: setup.format } : null;
+    },
+    [recordById, descriptionField, setup.format],
+  );
   const hasSorts = cfg.queryConfig.sorts.length > 0;
   const chartLanes = useMemo<ChartLane[]>(() => {
     const barOf = (r: (typeof laneModels)[number]["records"][number], span: Span, label?: string): TimelineBar => ({
@@ -227,6 +241,13 @@ function TimelineInner(props: ViewProps) {
         onChange={(id) => cfg.update((c) => setTimeline(c, { dependency_field_id: id }))}
         hint={selfLinks.length === 0 ? "Add a link field to this same table to draw dependency arrows (Gantt)." : "Arrows run from each linked predecessor's end to the record's start; red when they overlap."}
       />
+      <DescriptionSelect
+        candidates={descriptionFields}
+        field={descriptionField}
+        disabled={!cfg.canConfigure}
+        onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
+        hint={descriptionFields.length === 0 ? "Add a text field to show a description with each bar." : "A text field read in full when you point at a bar."}
+      />
     </ViewSettings>
   );
 
@@ -291,6 +312,7 @@ function TimelineInner(props: ViewProps) {
           fitContent
           onAddRow={addToday}
           onOpen={setup.openRecord}
+          describe={describe}
           onCommit={onCommit}
           onCreate={onCreate}
           onNeedMore={onNeedMore}

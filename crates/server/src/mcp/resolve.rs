@@ -299,6 +299,7 @@ const CONFIG_KEYS: &[&str] = &[
     "row_color",
     "summaries",
     "wrap_headers",
+    "description_field_id",
     "kanban",
     "calendar",
     "gallery",
@@ -308,7 +309,6 @@ const CONFIG_KEYS: &[&str] = &[
 const KANBAN_KEYS: &[&str] = &[
     "stack_field_id",
     "cover_field_id",
-    "description_field_id",
     "hide_empty_stacks",
     "stack_order",
 ];
@@ -554,6 +554,11 @@ impl Xlate<'_> {
         if let Some(v) = obj.get_mut("summaries") {
             self.field_keys(v, "summaries")?;
         }
+        if let Some(v) = obj.get_mut("description_field_id")
+            && !v.is_null()
+        {
+            self.field_value(v, "description_field_id")?;
+        }
         if let Some(rc) = obj.get_mut("row_color")
             && !rc.is_null()
         {
@@ -654,7 +659,7 @@ impl Xlate<'_> {
             (Some(raw), Mode::ToNames) => self.table.fields.iter().find(|f| &f.id == raw).cloned(),
             (None, _) => None,
         };
-        for key in ["stack_field_id", "cover_field_id", "description_field_id"] {
+        for key in ["stack_field_id", "cover_field_id"] {
             if let Some(v) = o.get_mut(key) {
                 self.field_value(v, &format!("kanban.{key}"))?;
             }

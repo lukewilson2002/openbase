@@ -6,11 +6,13 @@ import { useMemo } from "react";
 import { ChevronsDownUp } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { cardFields, itemsLabel } from "../common/cardFields";
+import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { EmptyRecords } from "../common/EmptyRecords";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { ViewFrame } from "../common/ViewFrame";
+import { ViewSettings } from "../common/ViewSettings";
 import type { ViewProps } from "../types";
 import { ListOutline } from "./ListOutline";
 import { allPaths, buildOutline } from "./outline";
@@ -23,8 +25,10 @@ function ListInner(props: ViewProps) {
   const setup = useViewSetup(props);
   const { table, view, config, cfg, writes } = setup;
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
-  // A group header already says the value of the field it groups by.
-  const fields = useMemo(() => cardFields(table, config, new Set(config.groups.map((g) => g.field_id))), [table, config]);
+  const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
+  // A group header already says the value of the field it groups by; the description sits under
+  // the title.
+  const fields = useMemo(() => cardFields(table, config, new Set([...config.groups.map((g) => g.field_id), descriptionField?.id ?? ""])), [table, config, descriptionField?.id]);
   const [collapsed, toggle, replace] = usePersistedSet(`ob-list-collapsed:${view.id}`);
 
   const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
@@ -64,6 +68,7 @@ function ListInner(props: ViewProps) {
         groups={data.groups}
         primary={primary}
         fields={fields}
+        descriptionField={descriptionField}
         tableFields={table.fields}
         format={setup.format}
         emails={setup.emails}
@@ -83,6 +88,11 @@ function ListInner(props: ViewProps) {
       recordIds={data?.records.map((r) => r.id)}
       layout="hug"
       features={{ rowHeight: false }}
+      toolbarSetting={
+        <ViewSettings label={descriptionField ? `Description: ${descriptionField.name}` : "Description"} active={!!descriptionField} note={cfg.canConfigure ? undefined : "You do not have permission to change this view."}>
+          <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
+        </ViewSettings>
+      }
       moreToggles={
         grouped
           ? [{ id: "fold-all", label: "Fold all groups", icon: <ChevronsDownUp aria-hidden />, checked: allFolded, onToggle: (on) => replace(on ? paths : []) }]

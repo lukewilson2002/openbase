@@ -99,8 +99,8 @@ export function SharedView({ token, password, view }: SharedViewProps) {
         </p>
       )}
       {mode === "table" && <TableBody view={view} fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} offset={offset} onOffset={setOffset} sort={sort} onSort={setSort} transient={transient} timeZone={timeZone} />}
-      {mode === "gallery" && <GalleryBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} coverId={cfg.gallery_cover_field_id} timeZone={timeZone} />}
-      {mode === "kanban" && stackField && <KanbanBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} stackFieldId={stackField.id} hideEmpty={cfg.kanban_hide_empty_stacks} coverId={cfg.kanban_cover_field_id} descriptionId={cfg.kanban_description_field_id} timeZone={timeZone} />}
+      {mode === "gallery" && <GalleryBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} coverId={cfg.gallery_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
+      {mode === "kanban" && stackField && <KanbanBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} stackFieldId={stackField.id} hideEmpty={cfg.kanban_hide_empty_stacks} coverId={cfg.kanban_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
       {mode === "calendar" && dates && (
         <>
           <Toolbar search={searchText} onSearch={setSearchText} summary={null} />
@@ -156,10 +156,10 @@ function TableBody(p: BodyProps & { view: PublicView; offset: number; onOffset: 
   );
 }
 
-function GalleryBody(p: BodyProps & { coverId: string | null | undefined }) {
+function GalleryBody(p: BodyProps & { coverId: string | null | undefined; descriptionId: string | null | undefined }) {
   const all = usePublicAll({ token: p.token, password: p.password, fields: p.fields, search: p.search, timeZone: p.timeZone });
   const data = all.data;
-  const card = useMemo(() => cardFieldsFor(p.fields.list, p.fields.title, p.coverId), [p.fields, p.coverId]);
+  const card = useMemo(() => cardFieldsFor(p.fields.list, p.fields.title, p.coverId, new Set(), p.descriptionId), [p.fields, p.coverId, p.descriptionId]);
   return (
     <>
       <Toolbar search={p.searchText} onSearch={p.onSearch} summary={data ? (data.total === 0 ? "No records." : count(data.total)) : "Loading…"}>
