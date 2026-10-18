@@ -53,11 +53,3 @@ export function useWorkspace(workspaceId: string | undefined): { ws: WorkspaceSu
     ),
   };
 }
-
-/** "3 members · 1 invite waiting", or "Only you". */
-export function membersLine(ws: Pick<WorkspaceSummary, "member_count" | "pending_invite_count">): string {
-  if (ws.member_count <= 1 && ws.pending_invite_count === 0) return "Only you";
-  const members = `${ws.member_count} member${ws.member_count === 1 ? "" : "s"}`;
-  if (ws.pending_invite_count === 0) return members;
-  return `${members} · ${ws.pending_invite_count} invite${ws.pending_invite_count === 1 ? "" : "s"} waiting`;
-}

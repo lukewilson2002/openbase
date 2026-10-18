@@ -1,8 +1,9 @@
 /**
- * The dialogs the base sidebar and top bar open: new, renamed, re-iconed and deleted tables and
- * views, CSV imports, and Share. They live here, beside the page rather than inside the sidebar,
- * because on a phone the sidebar is a drawer that unmounts when it closes, and a dialog inside it
- * would vanish with it.
+ * The dialogs the open project's tables and views open (from the menu's rows and the view toolbar):
+ * new, renamed, re-iconed and deleted tables and views, CSV imports, and Share. They live here,
+ * beside the page rather than inside the menu, because on a phone the menu is a drawer that
+ * unmounts when it closes, and a dialog inside it would vanish with it. The project's own dialogs
+ * (rename, icon, delete) are `NavDialogs`, which work from any page.
  */
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
@@ -31,14 +32,11 @@ export type BaseDialog =
   | { kind: "create-view"; table: Table; type: ViewType }
   | { kind: "rename-view"; view: View }
   | { kind: "delete-view"; table: Table; view: View }
-  | { kind: "share"; table: Table | null; view: View | null; tab: "invite" | "view" }
-  | { kind: "rename-base" }
-  | { kind: "base-icon" }
-  | { kind: "create-base"; workspaceId: string };
+  | { kind: "share"; table: Table | null; view: View | null; tab: "invite" | "view" };
 
 /**
- * Opens one of these dialogs from anywhere inside the base (the view toolbar's table and view
- * picker); null outside a base, where the callers leave those actions out.
+ * Opens one of these dialogs from anywhere inside the open project (the menu's table and view
+ * rows, the view toolbar's Add view); null outside a project, where the callers leave those actions out.
  */
 export const BaseDialogContext = createContext<((dialog: BaseDialog) => void) | null>(null);
 
@@ -101,23 +99,6 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
     onSuccess: async (_r, v) => {
       await refresh();
       if (v.id === activeViewId) navigate(`/base/${schema.id}/${v.tableId}`, { replace: true });
-    },
-  });
-
-  const refreshBase = () => {
-    void qc.invalidateQueries({ queryKey: keys.base(schema.id) });
-    void qc.invalidateQueries({ queryKey: keys.workspaces });
-  };
-  const updateBase = useMutation({
-    mutationFn: (body: { name?: string; icon?: string | null }) => api.bases.update(schema.id, body),
-    onSuccess: refreshBase,
-    onError: (e) => toast.error(e, "Could not change the base"),
-  });
-  const createBase = useMutation({
-    mutationFn: (v: { workspaceId: string; name: string; icon: string | null }) => api.bases.create(v.workspaceId, { name: v.name, ...(v.icon ? { icon: v.icon } : {}), empty: true }),
-    onSuccess: async (base) => {
-      void qc.invalidateQueries({ queryKey: keys.workspaces });
-      await navigate(`/base/${base.id}`);
     },
   });
 
@@ -186,24 +167,6 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
         confirmLabel="Delete view"
         destructive
         onConfirm={() => (dialog?.kind === "delete-view" ? removeView.mutateAsync({ id: dialog.view.id, tableId: dialog.table.id }) : undefined)}
-      />
-
-      <NameDialog
-        open={dialog?.kind === "rename-base"}
-        onOpenChange={onOpenChange}
-        title="Rename base"
-        label="Base name"
-        initialValue={schema.name}
-        onSubmit={(name) => (name !== schema.name ? updateBase.mutateAsync({ name }) : undefined)}
-      />
-      <IconPickerDialog open={dialog?.kind === "base-icon"} onOpenChange={onOpenChange} title="Base icon" value={schema.icon} onChange={(icon) => updateBase.mutate({ icon })} />
-      <NameDialog
-        open={dialog?.kind === "create-base"}
-        onOpenChange={onOpenChange}
-        title="New base"
-        submitLabel="Create base"
-        withIcon
-        onSubmit={(name, icon) => (dialog?.kind === "create-base" ? createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, icon }) : undefined)}
       />
 
       {dialog?.kind === "share" && (

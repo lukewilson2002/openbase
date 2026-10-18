@@ -134,7 +134,7 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
 
   await test.step("creates a form view from the menu's Add view", async () => {
     await openView(page);
-    await page.getByRole("navigation", { name: "Tables" }).getByRole("button", { name: "Add view" }).click();
+    await page.getByRole("list", { name: /^Tables in / }).getByRole("button", { name: "Add view" }).click();
     await page.getByRole("menuitem", { name: /^Form/ }).click();
     const dialog = page.getByRole("dialog", { name: "New form view" });
     await dialog.getByLabel("Name").fill("Contact form");

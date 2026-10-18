@@ -508,7 +508,7 @@ export function ViewBar(props: ViewBarProps) {
         />
         {searchBox}
         {props.onAdd && (
-          // Within thumb reach and clear of the toolbar, like the workspace page's "New base".
+          // Within thumb reach and clear of the toolbar.
           <button
             type="button"
             aria-label="Add record"

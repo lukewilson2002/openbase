@@ -111,19 +111,19 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect.poll(async () => api<{ intro_seen: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true, intro_seen: true });
   });
 
-  await test.step("creates a workspace and a base", async () => {
+  await test.step("creates a workspace and a project", async () => {
     await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Journey workspace" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Make your first base" })).toBeVisible();
-    await page.getByRole("button", { name: "New base" }).first().click();
-    await page.getByRole("textbox", { name: "Name" }).fill("Journey base");
-    await page.getByRole("button", { name: "Create base" }).click();
+    // A workspace has no page of its own: with no project yet, the empty page offers to make one.
+    await expect(page.getByRole("heading", { name: "No projects in Journey workspace yet" })).toBeVisible();
+    await page.getByRole("button", { name: "New project" }).first().click();
+    await page.getByRole("textbox", { name: "Project name" }).fill("Journey base");
+    await page.getByRole("button", { name: "Create project" }).click();
     // A new base starts without tables, and the page asks for the first one by name.
     await expect(page).toHaveURL(/\/base\/app[^/]+$/);
     baseId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
     await expect(page.getByRole("heading", { name: "Create your first table" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Tables" }).getByText("No tables yet.")).toBeVisible();
+    await expect(page.getByRole("list", { name: /^Tables in / }).getByText("No tables yet.")).toBeVisible();
     await page.getByRole("textbox", { name: "Table name" }).fill("Table 1");
     await page.getByRole("button", { name: "Create table" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
@@ -297,7 +297,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await dialog.getByRole("searchbox", { name: "Search icons" }).fill("tractor");
     await dialog.getByRole("group", { name: "Matching icons" }).getByRole("button", { name: "Tractor" }).click();
     await expect(dialog).toBeHidden();
-    const tab = page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Projects" });
+    const tab = page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Projects" });
     await expect(tab.locator("svg[data-icon='tractor']")).toBeVisible();
     expect((await loadTable()).icon).toBe("tractor");
     // It survives a reload (and is drawn from the lazily loaded set, not just the bundled 20).
@@ -309,7 +309,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     const created = await page.request.post(`/api/bases/${baseId}/tables`, { data: { name: "Clients", icon: "users" }, headers: CSRF });
     expect(created.ok(), await created.text()).toBeTruthy();
     const clients = (await created.json()) as { id: string };
-    await expect(page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Clients" }).locator("svg[data-icon='users']")).toBeVisible();
+    await expect(page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Clients" }).locator("svg[data-icon='users']")).toBeVisible();
 
     await page.getByRole("button", { name: "More" }).click();
     await page.getByRole("menuitem", { name: "Add field" }).click();
@@ -331,32 +331,29 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect(link.options).toMatchObject({ linked_table_id: clients.id });
   });
 
-  await test.step("gives the base and the workspace icons; the workspace page shows them instead of the letters", async () => {
-    await page.getByRole("heading", { level: 1 }).getByRole("button").click();
-    await page.getByRole("menuitem", { name: "Change icon" }).click();
+  await test.step("gives the project and the workspace icons from their menus; the menu and the top bar show them instead of the letters", async () => {
+    const menu = page.getByRole("navigation", { name: "Main menu" });
+    await menu.getByRole("button", { name: "Project options for Journey base" }).click();
+    await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
     await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
+    await expect(menu.getByRole("link", { name: "Journey base" }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
 
-    await page.getByRole("heading", { level: 1 }).getByRole("button").click();
-    await page.getByRole("menuitem", { name: "Workspace home" }).click();
-    const card = page.getByRole("link", { name: "Journey base" }).locator("xpath=ancestor::li");
-    await expect(card.locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
-    await expect(card.locator("[data-entity-tile]")).not.toContainText("J");
-
-    await page.getByRole("button", { name: "Change icon of Journey workspace" }).click();
+    await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();
+    await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Briefcase" }).click();
-    // The workspace page's own header (the app's top bar is a header too, outside main).
-    const section = page.getByRole("main").locator("header");
-    await expect(section.locator("[data-entity-tile] svg[data-icon='briefcase']").first()).toBeVisible();
+    const workspaceRow = menu.getByRole("button", { name: "Journey workspace", exact: true }).or(menu.getByRole("link", { name: "Journey workspace", exact: true }));
+    await expect(workspaceRow.locator("[data-entity-tile] svg[data-icon='briefcase']")).toBeVisible();
     const workspaces = await api<{ name: string; icon: string | null; bases: { name: string; icon: string | null }[] }[]>(page, "/api/workspaces");
     const ws = workspaces.find((w) => w.name === "Journey workspace")!;
     expect(ws.icon).toBe("briefcase");
     expect(ws.bases.find((b) => b.name === "Journey base")?.icon).toBe("store");
 
     // Removing the icon brings the letter back.
-    await page.getByRole("button", { name: "Change icon of Journey workspace" }).click();
+    await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();
+    await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("button", { name: "Remove icon" }).click();
-    await expect(section.locator("[data-entity-tile]").first()).toContainText("J");
+    await expect(workspaceRow.locator("[data-entity-tile]")).toContainText("J");
     expect((await api<{ name: string; icon: string | null }[]>(page, "/api/workspaces")).find((w) => w.name === "Journey workspace")?.icon ?? null).toBeNull();
   });
 });

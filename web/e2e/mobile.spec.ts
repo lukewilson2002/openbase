@@ -5,7 +5,7 @@ import { expect, skipIntro, test } from "./fixtures";
 
 /**
  * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome). The
- * workspace page, its menu drawer, a base and its record panel must fit the screen without horizontal scrolling (a page
+ * project (a base), its menu drawer and its record panel must fit the screen without horizontal scrolling (a page
  * wider than the screen makes the phone zoom it out), and every focusable text field must be at least
  * 16px, or iOS Safari zooms the page in when it is tapped. The icon picker opens as a bottom sheet
  * inside the screen and closes on a tap outside. Signs up its own users. Runs only with
@@ -36,7 +36,7 @@ async function expectFits(page: Page, where: string): Promise<void> {
   expect(m.small, `${where}: text fields under 16px make iOS zoom in`).toEqual([]);
 }
 
-test("the workspace page, the menu, a base, its toolbar and the record panel fit a phone", async ({ page }) => {
+test("the project, the menu, its toolbar and the record panel fit a phone", async ({ page }) => {
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -47,20 +47,18 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   const created = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: {} }] }, headers: CSRF })).json();
   const recordId = created.records[0].id as string;
 
+  // There is no workspace page: `/` opens the workspace's only project, at its first table and view.
   await page.goto("/");
-  await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}$`));
-  await expect(page.getByRole("list", { name: "Bases" }).getByRole("link", { name: "A base with a fairly long name" })).toBeVisible();
-  await expectFits(page, "workspace");
-  // The floating "New base" stays clear of the last card once the page is scrolled to the end.
-  const fab = (await page.getByRole("button", { name: "New base" }).boundingBox())!;
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const card = (await page.getByRole("list", { name: "Bases" }).getByRole("listitem").last().boundingBox())!;
-  expect(card.y + card.height, "last card above the floating buttons").toBeLessThanOrEqual(fab.y);
+  await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
+  await expectFits(page, "project");
 
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
-  await expect(drawer.getByRole("link", { name: "Mobile workspace" })).toBeVisible();
+  await expect(drawer.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("link", { name: "A base with a fairly long name" })).toBeVisible();
   await expectFits(page, "menu drawer");
+  // Folding a row is not navigating: the drawer stays open.
+  await drawer.getByRole("button", { name: "Collapse A base with a fairly long name" }).tap();
+  await expect(drawer).toBeVisible();
   await drawer.getByRole("button", { name: "Close menu" }).tap();
   await expect(drawer).toBeHidden();
 
@@ -78,10 +76,10 @@ test("the workspace page, the menu, a base, its toolbar and the record panel fit
   // The base's menu is the drawer; choosing a view closes it.
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const baseMenu = page.getByRole("dialog", { name: "Menu" });
-  await expect(baseMenu.getByRole("navigation", { name: "Tables" })).toBeVisible();
-  await expect(baseMenu.getByRole("button", { name: "Workspace: Mobile workspace. Switch workspace" })).toBeVisible();
+  await expect(baseMenu.getByRole("list", { name: /^Tables in / })).toBeVisible();
+  await expect(baseMenu.getByRole("button", { name: "Collapse Mobile workspace" })).toBeVisible();
   await expectFits(page, "base menu drawer");
-  await baseMenu.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Grid view" }).tap();
+  await baseMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Grid view" }).tap();
   await expect(baseMenu).toBeHidden();
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();

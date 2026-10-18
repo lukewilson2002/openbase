@@ -14,7 +14,7 @@ export function WorkspaceSettingsPage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
   return (
-    <HomeShell workspaceId={workspaceId} section="settings">
+    <HomeShell workspaceId={workspaceId}>
       {ws ? <Settings key={ws.id} ws={ws} /> : fallback}
     </HomeShell>
   );

@@ -8,7 +8,7 @@ import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { HomePage } from "@/pages/HomePage";
-import { WorkspacePage } from "@/pages/workspace/WorkspacePage";
+import { WorkspaceRedirect } from "@/pages/workspace/WorkspaceRedirect";
 import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
@@ -55,7 +55,7 @@ export function AppRoutes() {
           {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
           <Route element={<SignedInArea />}>
             <Route path="/" element={<HomePage />} />
-            <Route path="/workspace/:workspaceId" element={<WorkspacePage />} />
+            <Route path="/workspace/:workspaceId" element={<WorkspaceRedirect />} />
             <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
             <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
             <Route path="/trash" element={<TrashPage />} />

@@ -17,7 +17,7 @@ import { PREVIEW_ROWS } from "@/lib/csv/read";
 import { CsvFilePicker, type PickedCsv } from "./CsvFilePicker";
 import { ImportProblems } from "./ImportProblems";
 
-/** Into an existing base, or into a new one (the workspace page's "Import a spreadsheet"). */
+/** Into an existing base, or into a new one (a workspace's "Import a spreadsheet"). */
 export type ImportTarget =
   | { baseId: string; createBase?: undefined }
   | {

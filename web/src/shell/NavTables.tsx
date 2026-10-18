@@ -1,91 +1,86 @@
 /**
- * The base's menu (below the Inbox, which the shell adds): the tables, the open one expanded into
- * its views, each with a "…" menu for its actions; then Automations, Trash and Members above the
- * profile. The workspace is reached from the top bar's pickers. The dialogs these actions open live
- * in BaseDialogs, outside the menu.
+ * A project's tables in the menu, each expanding into its views, with the "…" menus for their
+ * actions. A tap on a table opens the view last used in it on this device; the chevron only shows
+ * the views. In the open project every action is there; the dialogs behind most of them
+ * (`BaseDialogs`) exist only inside the project's page, so in another project the menus keep what
+ * needs no dialog (duplicating, locking) and "Add table"/"Add view" are left out.
  */
-import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Copy, Ellipsis, FileUp, Lock, LockOpen, Pencil, Plus, Shapes, Share2, Table2, Trash2, User as UserIcon, Users, Zap } from "lucide-react";
+import { Copy, Ellipsis, FileUp, Lock, LockOpen, Pencil, Plus, Shapes, Share2, Table2, Trash2, User as UserIcon } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View } from "@/api/types";
+import type { BaseDialog } from "@/base/BaseDialogs";
+import { basePermissions } from "@/base/permissions";
 import { EntityIcon } from "@/components/icons/EntityIcon";
 import { canShareView } from "@/components/share/shareView";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
-import { useCloseMenu } from "@/shell/AppShell";
-import { SidebarHeading, SidebarLink } from "@/shell/Sidebar";
+import { lastViewOf } from "@/lib/lastPlace";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
-import type { BaseDialog } from "./BaseDialogs";
-import { basePermissions } from "./permissions";
+import { useCloseMenu } from "./AppShell";
+import { RowChevron, rowActionClass } from "./Sidebar";
+import { useOpenState } from "./useOpenState";
 
-export interface BaseSidebarProps {
+export interface NavTablesProps {
   schema: BaseSchema;
+  /** Only in the open project; see the file comment. */
   activeTableId: string | undefined;
   activeViewId: string | undefined;
-  onDialog: (dialog: BaseDialog) => void;
+  /** The open project's dialogs (`BaseDialogContext`); absent for any other project. */
+  onDialog: ((dialog: BaseDialog) => void) | null;
 }
 
-/** Hidden until the row is hovered or the button focused, with a mouse; always there for a finger. */
-const rowActionClass =
-  "absolute right-0.5 top-1/2 size-7 -translate-y-1/2 opacity-100 pointer-coarse:size-9 md:pointer-fine:opacity-0 md:pointer-fine:focus-visible:opacity-100 md:pointer-fine:group-hover/item:opacity-100 data-[state=open]:opacity-100";
+/** The address a table's row opens: the view last used in it (if it still exists), else `BaseShell` picks its first. */
+function tablePath(baseId: string, table: Table, currentViewId?: string): string {
+  const view = table.views.find((v) => v.id === (currentViewId ?? lastViewOf(table.id)));
+  return `/base/${baseId}/${table.id}${view ? `/${view.id}` : ""}`;
+}
 
-export function BaseSidebar({ schema, activeTableId, activeViewId, onDialog }: BaseSidebarProps) {
+export function NavTables({ schema, activeTableId, activeViewId, onDialog }: NavTablesProps) {
+  const [toggled, toggle] = useOpenState("ob-tables-open");
   const canManage = basePermissions.manageTables(schema.role);
-  // Tables opened or closed by hand; the open table is expanded unless closed here.
-  const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const isExpanded = (t: Table) => toggled[t.id] ?? t.id === activeTableId;
-
   return (
-    <div className="flex flex-col">
-      <nav aria-label="Tables" className="flex flex-col gap-0.5">
-        <SidebarHeading
-          action={
-            canManage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label="Add table" size="sm" noTooltip className="size-8 rounded-lg">
-                  <Plus aria-hidden className="size-4" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table" })}>
-                  <Table2 aria-hidden className="size-4" /> New empty table
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table-csv" })}>
-                  <FileUp aria-hidden className="size-4" /> New table from CSV…
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            )
-          }
-        >
-          Tables
-        </SidebarHeading>
-        {schema.tables.length === 0 ? (
-          <p className="px-3 py-1 text-xs text-muted">No tables yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {schema.tables.map((t) => (
-              <TableItem
-                key={t.id}
-                schema={schema}
-                table={t}
-                active={t.id === activeTableId}
-                activeViewId={activeViewId}
-                expanded={isExpanded(t)}
-                onToggle={() => setToggled((cur) => ({ ...cur, [t.id]: !isExpanded(t) }))}
-                onDialog={onDialog}
-              />
-            ))}
-          </ul>
-        )}
-      </nav>
-    </div>
+    <ul aria-label={`Tables in ${schema.name}`} className="flex flex-col gap-0.5">
+      {schema.tables.length === 0 && <li className="py-1 pl-[42px] text-xs text-muted">No tables yet.</li>}
+      {schema.tables.map((t) => (
+        <TableItem
+          key={t.id}
+          schema={schema}
+          table={t}
+          active={t.id === activeTableId}
+          activeViewId={activeViewId}
+          expanded={toggled[t.id] ?? t.id === activeTableId}
+          onToggle={(open) => toggle(t.id, open)}
+          onDialog={onDialog}
+        />
+      ))}
+      {onDialog && canManage && (
+        <li>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[38px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
+              >
+                <Plus aria-hidden className="size-3.5 shrink-0" /> Add table
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table" })}>
+                <Table2 aria-hidden className="size-4" /> New empty table
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table-csv" })}>
+                <FileUp aria-hidden className="size-4" /> New table from CSV…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </li>
+      )}
+    </ul>
   );
 }
 
@@ -103,15 +98,15 @@ function TableItem({
   active: boolean;
   activeViewId: string | undefined;
   expanded: boolean;
-  onToggle: () => void;
-  onDialog: (dialog: BaseDialog) => void;
+  onToggle: (open: boolean) => void;
+  onDialog: ((dialog: BaseDialog) => void) | null;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
   const closeMenu = useCloseMenu();
   const canManage = basePermissions.manageTables(schema.role);
-  const canImport = basePermissions.importRecords(schema.role);
+  const canImport = !!onDialog && basePermissions.importRecords(schema.role);
   const duplicate = useMutation({
     mutationFn: (id: string) => api.tables.duplicate(id),
     onSuccess: async (table) => {
@@ -125,18 +120,9 @@ function TableItem({
   return (
     <li className="flex flex-col gap-0.5">
       <div className="group/item relative flex items-center">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-controls={expanded ? viewsId : undefined}
-          aria-label={`${expanded ? "Hide" : "Show"} views of ${t.name}`}
-          className="inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg pointer-coarse:h-11"
-        >
-          <ChevronRight aria-hidden className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
-        </button>
+        <RowChevron expanded={expanded} label={`${expanded ? "Hide" : "Show"} views of ${t.name}`} controls={viewsId} onClick={() => onToggle(!expanded)} />
         <Link
-          to={`/base/${schema.id}/${t.id}`}
+          to={tablePath(schema.id, t, active ? activeViewId : undefined)}
           onClick={closeMenu}
           aria-current={active ? "page" : undefined}
           className={cn(
@@ -163,19 +149,27 @@ function TableItem({
               )}
               {canManage && (
                 <>
-                  <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-table", table: t })}>
-                    <Pencil aria-hidden className="size-4" /> Rename table
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onDialog({ kind: "table-icon", table: t })}>
-                    <Shapes aria-hidden className="size-4" /> Change icon…
-                  </DropdownMenuItem>
+                  {onDialog && (
+                    <>
+                      <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-table", table: t })}>
+                        <Pencil aria-hidden className="size-4" /> Rename table
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => onDialog({ kind: "table-icon", table: t })}>
+                        <Shapes aria-hidden className="size-4" /> Change icon…
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
                     <Copy aria-hidden className="size-4" /> Duplicate table
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => onDialog({ kind: "delete-table", table: t })}>
-                    <Trash2 aria-hidden className="size-4" /> Delete table
-                  </DropdownMenuItem>
+                  {onDialog && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => onDialog({ kind: "delete-table", table: t })}>
+                        <Trash2 aria-hidden className="size-4" /> Delete table
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </>
               )}
             </DropdownMenuContent>
@@ -187,10 +181,10 @@ function TableItem({
   );
 }
 
-function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; schema: BaseSchema; table: Table; activeViewId: string | undefined; onDialog: (dialog: BaseDialog) => void }) {
+function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; schema: BaseSchema; table: Table; activeViewId: string | undefined; onDialog: ((dialog: BaseDialog) => void) | null }) {
   const shared = table.views.filter((v) => !v.personal);
   const mine = table.views.filter((v) => v.personal);
-  const canCreate = basePermissions.createView(schema.role);
+  const canCreate = !!onDialog && basePermissions.createView(schema.role);
   const canCreateShared = basePermissions.createSharedView(schema.role);
   const item = (v: View) => <ViewItem key={v.id} schema={schema} table={table} view={v} active={v.id === activeViewId} onDialog={onDialog} />;
 
@@ -238,7 +232,7 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
   );
 }
 
-function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSchema; table: Table; view: View; active: boolean; onDialog: (dialog: BaseDialog) => void }) {
+function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSchema; table: Table; view: View; active: boolean; onDialog: ((dialog: BaseDialog) => void) | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -247,6 +241,7 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
   const Icon = VIEW_TYPE_META[v.type].icon;
   const canConfigure = basePermissions.configureView(role, v);
   const canLock = basePermissions.lockView(role, v);
+  const canShare = !!onDialog && canShareView(role, v);
   const refresh = () => qc.invalidateQueries({ queryKey: keys.base(schema.id) });
   const duplicate = useMutation({
     mutationFn: (id: string) => api.views.duplicate(id),
@@ -278,7 +273,7 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}
         {v.locked && <Lock aria-label="Locked view" role="img" className="size-3.5 shrink-0 text-muted" />}
       </Link>
-      {(canConfigure || canLock) && (
+      {(canConfigure || canShare || canLock) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton label={`Options for ${v.name}`} size="sm" noTooltip className={rowActionClass}>
@@ -288,15 +283,17 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
           <DropdownMenuContent align="start">
             {canConfigure && (
               <>
-                <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-view", view: v })}>
-                  <Pencil aria-hidden className="size-4" /> Rename view
-                </DropdownMenuItem>
+                {onDialog && (
+                  <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-view", view: v })}>
+                    <Pencil aria-hidden className="size-4" /> Rename view
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onSelect={() => duplicate.mutate(v.id)}>
                   <Copy aria-hidden className="size-4" /> Duplicate view
                 </DropdownMenuItem>
               </>
             )}
-            {canShareView(role, v) && (
+            {canShare && (
               <DropdownMenuItem onSelect={() => onDialog({ kind: "share", table, view: v, tab: "view" })}>
                 <Share2 aria-hidden className="size-4" /> Share view…
               </DropdownMenuItem>
@@ -307,7 +304,7 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
                 {v.locked ? "Unlock view" : "Lock view"}
               </DropdownMenuItem>
             )}
-            {canConfigure && (
+            {canConfigure && onDialog && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem danger disabled={table.views.length <= 1} onSelect={() => onDialog({ kind: "delete-view", table, view: v })}>
@@ -319,29 +316,5 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
         </DropdownMenu>
       )}
     </li>
-  );
-}
-
-/**
- * Pinned above the profile: the base's automations (creators), its trash (creators: the one Trash
- * page, filtered to this base) and the workspace's members.
- */
-export function BaseSidebarFooter({ schema, section }: { schema: BaseSchema; section?: "automations" }) {
-  return (
-    <>
-      {basePermissions.manageAutomations(schema.role) && (
-        <SidebarLink to={`/base/${schema.id}/automations`} end={false} muted active={section === "automations"} icon={<Zap />}>
-          Automations
-        </SidebarLink>
-      )}
-      {basePermissions.manageTables(schema.role) && (
-        <SidebarLink to={`/trash?base=${encodeURIComponent(schema.id)}`} muted active={false} icon={<Trash2 />}>
-          Trash
-        </SidebarLink>
-      )}
-      <SidebarLink to={`/workspace/${schema.workspace_id}/members`} muted active={false} icon={<Users />}>
-        Members
-      </SidebarLink>
-    </>
   );
 }

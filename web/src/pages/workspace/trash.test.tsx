@@ -84,7 +84,8 @@ function routes(extra: Record<string, Handler> = {}, items: () => TrashItem[] = 
 const list = () => screen.findByRole("list", { name: "Deleted items" });
 const row = async (name: string) => within(await list()).getByText(name).closest("li")!;
 const lastQuery = (api: ReturnType<typeof mockApi>) => api.callsTo("GET /api/trash").at(-1)!.query;
-const trashLink = async (workspace: string) => within(await screen.findByRole("group", { name: workspace })).getByRole("link", { name: "Trash" });
+/** The projects of a workspace in the menu: open for the workspace whose Trash is showing. */
+const projectsOf = (workspace: string) => screen.findByRole("list", { name: `Projects in ${workspace}` });
 
 describe("Trash page", () => {
   it("lists everything with where it was, who deleted it, when, and how long it stays", async () => {
@@ -116,7 +117,8 @@ describe("Trash page", () => {
     expect(screen.queryByText("Vacuum")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspace: Side business" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Base: All bases" })).toBeInTheDocument();
-    expect(await trashLink("Side business")).toHaveAttribute("aria-current", "page");
+    // The menu opens that workspace, as it does for any page of one.
+    expect(within(await projectsOf("Side business")).getByRole("link", { name: "Clients" })).toBeInTheDocument();
   });
 
   it("opens filtered to a base from the base's menu, showing the base's workspace", async () => {
@@ -145,8 +147,8 @@ describe("Trash page", () => {
     await user.click(await screen.findByRole("menuitemradio", { name: "Household" }));
     await waitFor(() => expect(lastQuery(api).get("workspace_id")).toBe("wsp1"));
     expect(lastQuery(api).get("kind")).toBe("record");
-    // The URL now says `?workspace=wsp1`: the menu marks that workspace's Trash.
-    expect(await trashLink("Household")).toHaveAttribute("aria-current", "page");
+    // The URL now says `?workspace=wsp1`: the menu opens that workspace.
+    expect(within(await projectsOf("Household")).getByRole("link", { name: "Chores" })).toBeInTheDocument();
 
     // The base list follows the workspace.
     await user.click(screen.getByRole("button", { name: "Base: All bases" }));

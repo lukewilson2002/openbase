@@ -37,7 +37,7 @@ export function MembersPage() {
   const { workspaceId } = useParams();
   const { ws, fallback } = useWorkspace(workspaceId);
   return (
-    <HomeShell workspaceId={workspaceId} section="members">
+    <HomeShell workspaceId={workspaceId}>
       {ws ? <Members key={ws.id} ws={ws} /> : fallback}
     </HomeShell>
   );

@@ -1,6 +1,8 @@
 /**
- * `/`: back to the workspace opened last (or the first one). Someone without any workspace, which
- * only happens before the first one is made, gets the page that makes it.
+ * `/`: back to where the person left off: the workspace opened last (or the first one), and in it
+ * the project opened last (or its first), at its last table and view. A workspace without projects
+ * shows its page. Someone without any workspace, which only happens before the first one is made,
+ * gets the page that makes it.
  */
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
@@ -13,6 +15,7 @@ import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
+import { projectPath, projectToOpen } from "@/lib/lastPlace";
 import { HomeShell, useCreateWorkspace } from "@/shell/HomeShell";
 import { readLastWorkspace } from "./workspace/lastWorkspace";
 
@@ -21,7 +24,8 @@ export function HomePage() {
   if (workspaces.isSuccess && workspaces.data.length > 0) {
     const last = readLastWorkspace();
     const target = workspaces.data.find((w) => w.id === last) ?? workspaces.data[0]!;
-    return <Navigate to={`/workspace/${target.id}`} replace />;
+    const project = projectToOpen(target);
+    return <Navigate to={project ? projectPath(project) : `/workspace/${target.id}`} replace />;
   }
   return (
     <HomeShell>
@@ -57,7 +61,7 @@ function FirstWorkspace() {
           <h1 id="first-workspace-title" className="mb-2 text-[1.75rem] leading-tight tracking-[-0.015em]">
             Create your first workspace
           </h1>
-          <p className="text-base leading-relaxed text-muted">A workspace is a separate place with its own bases and its own people.</p>
+          <p className="text-base leading-relaxed text-muted">A workspace is a separate place with its own projects and its own people.</p>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-2">
           <label htmlFor="first-workspace-name" className="text-sm font-semibold">
