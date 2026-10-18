@@ -55,6 +55,18 @@ function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecor
   return { api, props, unmount, client };
 }
 
+/** Starts editing a field: clicks its value and answers the editor's input or text area. */
+async function edit(field: string): Promise<HTMLInputElement & HTMLTextAreaElement> {
+  await userEvent.click(await screen.findByRole("button", { name: `Edit ${field}` }));
+  return (await screen.findByRole("textbox", { name: field })) as HTMLInputElement & HTMLTextAreaElement;
+}
+
+/** Starts editing the rich text field and waits for its editor. */
+async function editRich() {
+  await userEvent.click(await screen.findByRole("button", { name: "Edit Notes" }));
+  return screen.findByRole("toolbar", { name: "Formatting" });
+}
+
 afterEach(() => {
   Reflect.deleteProperty(navigator, "share");
   Reflect.deleteProperty(navigator, "clipboard");
@@ -70,7 +82,7 @@ describe("ExpandedRecord: save status", () => {
         return { records: [{ ...record, values: { ...record.values, fld_name: "Ship it" } }] };
       },
     });
-    const input = await screen.findByDisplayValue("Launch");
+    const input = await edit("Name");
     expect(screen.getByRole("status", { name: "Save status" })).toHaveTextContent("");
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it{Enter}");
@@ -82,13 +94,13 @@ describe("ExpandedRecord: save status", () => {
 
   it("is a polite live region", async () => {
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     expect(screen.getByRole("status", { name: "Save status" })).toHaveAttribute("aria-live", "polite");
   });
 
   it("says Couldn't save when a save fails, and the field keeps its message", async () => {
     setup({ [PATCH]: apiError(500, "internal", "disk full") });
-    const input = await screen.findByDisplayValue("Launch");
+    const input = await edit("Name");
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it{Enter}");
     const status = await screen.findByText("Couldn't save");
@@ -102,7 +114,7 @@ describe("ExpandedRecord: save status", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       setup();
-      const input = await screen.findByDisplayValue("Launch");
+      const input = await edit("Name");
       await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(input, "!{Enter}");
       expect(await screen.findByText("Saved")).toBeInTheDocument();
       await act(async () => {
@@ -118,7 +130,7 @@ describe("ExpandedRecord: save status", () => {
 describe("ExpandedRecord: long text saves while typing", () => {
   it("saves the plain text field once typing pauses, without rebuilding the text area under the caret", async () => {
     const { api } = setup();
-    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    const area = await edit("Plain notes");
     await userEvent.click(area);
     await userEvent.type(area, " draft");
     // Nothing yet: typing has not paused.
@@ -137,7 +149,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("saves on blur at once", async () => {
     const { api } = setup();
-    const area = await screen.findByRole("textbox", { name: "Plain notes" });
+    const area = await edit("Plain notes");
     await userEvent.type(area, "!");
     await userEvent.tab();
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
@@ -145,7 +157,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("saves what is waiting when the record closes", async () => {
     const { api, unmount } = setup();
-    const area = await screen.findByRole("textbox", { name: "Plain notes" });
+    const area = await edit("Plain notes");
     await userEvent.type(area, "!");
     expect(api.callsTo(PATCH)).toHaveLength(0);
     // The host closes the record before typing paused: the text is saved, not lost.
@@ -156,7 +168,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("opens the rich text editor lazily, saves its Markdown while typed, and keeps the editor mounted", async () => {
     const { api } = setup();
-    const toolbar = await screen.findByRole("toolbar", { name: "Formatting" });
+    const toolbar = await editRich();
     expect(toolbar).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Preview" })).not.toBeInTheDocument();
     const pm = document.querySelector(".ProseMirror") as HTMLElement & { editor: Editor };
@@ -174,7 +186,11 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("embeds a file inserted into the rich text: it goes up to the project of the record and is saved as an image line", async () => {
     const { api } = setup({ "POST /api/bases/app1/attachments": { id: "att5", filename: "plan.png", mime: "image/png", size: 3, width: 1, height: 1 } });
-    await screen.findByRole("toolbar", { name: "Formatting" });
+    await editRich();
+    // The editor starts with the caret at the end; the file goes in at the caret, so put it after the heading.
+    act(() => {
+      (document.querySelector(".ProseMirror") as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(1);
+    });
     await userEvent.upload(screen.getByLabelText("Media files"), new File(["png"], "plan.png", { type: "image/png" }));
     await waitFor(() => expect(document.querySelector(".ProseMirror figure.ob-media img")).toHaveAttribute("src", "/api/attachments/att5/plan.png"));
     expect(api.callsTo("POST /api/bases/app1/attachments")).toHaveLength(1);
@@ -185,8 +201,8 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("opens the rich text editor full screen from the corner button and closes it on Escape without closing the record", async () => {
     const { props } = setup();
-    await screen.findByRole("toolbar", { name: "Formatting" });
-    await userEvent.click(screen.getAllByRole("button", { name: "Open full screen" })[1]!);
+    await editRich();
+    await userEvent.click(screen.getByRole("button", { name: "Open full screen" }));
     const full = await screen.findByRole("dialog", { name: "Notes" });
     expect(within(full).getByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
     expect(within(full).getByRole("button", { name: "Done" })).toBeInTheDocument();
@@ -203,8 +219,8 @@ describe("ExpandedRecord: long text saves while typing", () => {
 
   it("opens the plain text field full screen from its corner button", async () => {
     const { api } = setup();
-    const buttons = await screen.findAllByRole("button", { name: "Open full screen" });
-    await userEvent.click(buttons[0]!);
+    await edit("Plain notes");
+    await userEvent.click(screen.getByRole("button", { name: "Open full screen" }));
     const full = await screen.findByRole("dialog", { name: "Plain notes" });
     const area = within(full).getByRole("textbox", { name: "Plain notes" });
     expect(area).toHaveValue("first");
@@ -240,7 +256,7 @@ describe("ExpandedRecord: long text while saves and refetches are in flight", ()
     // save, which the editor would take for someone else's edit while a newer save is on its way.
     const s = slowServer();
     const { api } = setup(s.routes);
-    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    const area = await edit("Plain notes");
     await userEvent.click(area);
     await userEvent.clear(area);
     await userEvent.type(area, "abc");
@@ -267,7 +283,7 @@ describe("ExpandedRecord: long text while saves and refetches are in flight", ()
     // before this save: it must not replace the text being typed.
     const s = slowServer();
     const { api, client } = setup(s.routes);
-    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    const area = await edit("Plain notes");
     await userEvent.click(area);
     await userEvent.type(area, " draft");
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
@@ -285,7 +301,7 @@ describe("ExpandedRecord: long text while saves and refetches are in flight", ()
   it("does not rebuild the text area from a refetch that lands while typed text waits to be saved", async () => {
     const s = slowServer();
     const { api, client } = setup(s.routes);
-    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    const area = await edit("Plain notes");
     await userEvent.click(area);
     await userEvent.type(area, "!");
     s.setServer({ fld_plain: "theirs" });
@@ -303,7 +319,7 @@ describe("ExpandedRecord: long text while saves and refetches are in flight", ()
   it("still rebuilds the text area for someone else's edit once nothing of ours is waiting", async () => {
     const s = slowServer();
     const { client } = setup(s.routes);
-    const area = await screen.findByRole("textbox", { name: "Plain notes" });
+    const area = await edit("Plain notes");
     s.setServer({ fld_plain: "theirs" });
     await act(async () => {
       await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
@@ -353,16 +369,16 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
         <Host />
       </Providers>,
     );
-    const input = await screen.findByDisplayValue("Launch");
+    const input = await edit("Name");
     await userEvent.type(input, "!");
     await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
     // The typing went to the record it was typed in, without waiting for the field to lose focus by itself.
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
     expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Launch!" } }] });
-    // The next record shows its own text in an editor of its own, and leaving it saves nothing.
-    const next = await screen.findByDisplayValue("Launch");
+    // The next record shows its own text, in an editor of its own once clicked, and leaving it saves nothing.
+    const next = await edit("Name");
+    expect(next).toHaveValue("Launch");
     expect(next).not.toBe(input);
-    next.focus();
     await userEvent.tab();
     await new Promise((r) => setTimeout(r, 100));
     expect(api.callsTo(PATCH)).toHaveLength(1);
@@ -372,7 +388,7 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
 describe("ExpandedRecord: Share", () => {
   it("has a Share button, not a link button", async () => {
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     expect(screen.getByRole("button", { name: "Share record" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copy link/i })).not.toBeInTheDocument();
   });
@@ -384,7 +400,7 @@ describe("ExpandedRecord: Share", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     window.history.replaceState(null, "", "/base/app1/tbl1/viw1?record=rec1");
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     await userEvent.click(screen.getByRole("button", { name: "Share record" }));
     expect(share).toHaveBeenCalledWith({ url: window.location.href, title: "Launch" });
     expect(share.mock.calls[0]![0].url).toContain("?record=rec1");
@@ -396,7 +412,7 @@ describe("ExpandedRecord: Share", () => {
     Object.defineProperty(navigator, "share", { value: vi.fn().mockRejectedValue(new DOMException("closed", "AbortError")), configurable: true });
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     await userEvent.click(screen.getByRole("button", { name: "Share record" }));
     await Promise.resolve();
     expect(writeText).not.toHaveBeenCalled();
@@ -408,7 +424,7 @@ describe("ExpandedRecord: Share", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     expect(navigator.share).toBeUndefined();
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     await userEvent.click(screen.getByRole("button", { name: "Share record" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
@@ -418,7 +434,7 @@ describe("ExpandedRecord: Share", () => {
 describe("ExpandedRecord: phone layout", () => {
   it("is full screen below sm: no inset, no radius, the dynamic viewport height, safe-area padding", async () => {
     setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     const cls = screen.getByRole("dialog").className.split(/\s+/);
     for (const c of ["fixed", "inset-0", "h-dvh", "pt-[env(safe-area-inset-top)]", "pb-[env(safe-area-inset-bottom)]", "pl-[env(safe-area-inset-left)]", "pr-[env(safe-area-inset-right)]"]) expect(cls).toContain(c);
     // The inset and rounded card are for sm and up only.

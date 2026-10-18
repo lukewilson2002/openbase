@@ -2,8 +2,9 @@
  * Expanded record: a modal (full screen on a phone) with every field of one record (hidden fields
  * in a collapsible section), editors shared with the grid, previous/next navigation, a shareable
  * URL (`?record=recXXX`, owned by the host view) behind a Share button, comments and revision
- * history in a side panel, and delete/duplicate actions. Fields save by themselves; the header
- * says whether that is going on ("Saving…", "Saved", "Couldn't save"). Reusable by every view type.
+ * history in a side panel, and delete/duplicate actions. Each field is shown rendered and becomes its
+ * editor when clicked (EditableValue). Fields save by themselves; the header says whether that is going
+ * on ("Saving…", "Saved", "Couldn't save"). Reusable by every view type.
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { hashKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +34,7 @@ import { CellValue } from "./CellValue";
 import { CommentsPanel } from "./CommentsPanel";
 import { HistoryPanel } from "./HistoryPanel";
 import { EditorEnvProvider, type EditValue, type EditorEnv } from "./editors/env";
-import { FieldEditor } from "./editors/FieldEditor";
+import { EditableValue } from "./EditableValue";
 
 export interface ExpandedRecordProps {
   schema: BaseSchema;
@@ -54,6 +55,8 @@ export interface ExpandedRecordProps {
   /** Hosts with an undo history route deletes and copies through it; otherwise the API is called directly. */
   onDeleteRecord?: (recordId: string) => Promise<boolean>;
   onDuplicateRecord?: (record: TableRecord) => Promise<TableRecord | undefined>;
+  /** The record was just added: its primary field starts being edited. */
+  justCreated?: boolean;
 }
 
 function useFormat(timeZone: string, collaborators: readonly Collaborator[]): FormatCtx {
@@ -64,6 +67,9 @@ function useFormat(timeZone: string, collaborators: readonly Collaborator[]): Fo
     return { timeZone, userName: (id: string) => names.get(id), userEmail: (id: string) => emails.get(id), userColor: (id: string) => colors.get(id) };
   }, [timeZone, collaborators]);
 }
+
+/** Nothing in a field: an empty list, no text, unchecked are all "no value", whichever way an editor says so. */
+const isBlank = (v: unknown) => v === null || v === undefined || v === "" || v === false || (Array.isArray(v) && v.length === 0);
 
 /** How long "Saved" stays in the header. */
 const SAVED_VISIBLE_MS = 3000;
@@ -122,6 +128,8 @@ function FieldRow({
   emails,
   lastSaved,
   unsent,
+  failed,
+  startEditing,
   onSave,
 }: {
   field: Field;
@@ -134,7 +142,12 @@ function FieldRow({
   lastSaved: RefObject<Map<string, unknown>>;
   /** Which long text fields have text of ours that is typed but not sent yet, or sent and not answered yet. */
   unsent: RefObject<Unsent>;
-  onSave: (field: Field, edit: EditValue) => void;
+  /** The value of this field that could not be saved, kept for the person to correct. */
+  failed?: { value: unknown };
+  /** The field starts being edited (the primary field of a record just added). */
+  startEditing: boolean;
+  /** Saves an edit; answers the value it saved, if it did. */
+  onSave: (field: Field, edit: EditValue) => { value: unknown } | undefined;
 }) {
   const value = record.values[field.id] ?? null;
   const computed = isComputed(field);
@@ -172,15 +185,18 @@ function FieldRow({
             {computed && <span className="sr-only"> (computed, read-only)</span>}
           </div>
         ) : (
-          <FieldEditor
-            key={editorKey}
+          <EditableValue
+            key={record.id}
             field={field}
             value={value}
-            variant="form"
-            labelledBy={labelId}
+            failed={failed}
+            labelId={labelId}
+            format={env.format}
+            emails={emails}
+            editorKey={editorKey}
+            startEditing={startEditing}
             onChange={field.type === "long_text" ? (edit) => unsent.current.typed(textKey, edit.text !== undefined && edit.text !== (typeof value === "string" ? value : "")) : undefined}
             onCommit={(edit) => onSave(field, edit)}
-            onCancel={() => {}}
           />
         )}
         {error && (
@@ -193,7 +209,7 @@ function FieldRow({
   );
 }
 
-export function ExpandedRecord({ schema, table, role, recordId, config, prevId, nextId, onNavigate, onClose, emails, timeZone, currentUserId, collaborators, onDeleteRecord, onDuplicateRecord }: ExpandedRecordProps) {
+export function ExpandedRecord({ schema, table, role, recordId, config, prevId, nextId, onNavigate, onClose, emails, timeZone, currentUserId, collaborators, onDeleteRecord, onDuplicateRecord, justCreated = false }: ExpandedRecordProps) {
   const qc = useQueryClient();
   const toast = useToast();
   const canEdit = atLeast(role, "editor");
@@ -203,6 +219,8 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const recordKey = recordKeys.record(table.id, recordId);
   const record = useQuery({ queryKey: recordKey, queryFn: () => recordsApi.get(table.id, recordId) });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // The values that could not be saved, by field id: they stay on screen, with the error, to be corrected.
+  const [failed, setFailed] = useState<Record<string, { value: unknown }>>({});
   // Saves of this record in flight, and whether the last one finished a moment ago ("Saved").
   const [pending, setPending] = useState(0);
   const [justSaved, setJustSaved] = useState(false);
@@ -218,7 +236,10 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const title = record.data && primary ? displayText(primary, record.data.values[primary.id], format) || "Untitled record" : "Record";
 
-  useEffect(() => setErrors({}), [recordId]);
+  useEffect(() => {
+    setErrors({});
+    setFailed({});
+  }, [recordId]);
 
   // Alt+Up / Alt+Down move through the records of the view.
   useEffect(() => {
@@ -265,18 +286,25 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       }
       return { prev, key };
     },
-    onError: (e, { recordId: id, field }, ctx) => {
+    onError: (e, { recordId: id, field, value }, ctx) => {
       if (ctx?.prev) {
         // The text the person typed stays in its editor (so it can be corrected and saved again): the
         // rolled-back value must not look like someone else's edit.
         lastSaved.current.set(`${id}:${field.id}`, ctx.prev.values[field.id] ?? null);
         qc.setQueryData(ctx.key, ctx.prev);
       }
-      if (id === currentId.current) setErrors((cur) => ({ ...cur, [field.id]: errorMessage(e) }));
+      if (id === currentId.current) {
+        setErrors((cur) => ({ ...cur, [field.id]: errorMessage(e) }));
+        setFailed((cur) => ({ ...cur, [field.id]: { value } }));
+      }
     },
     onSuccess: (res, { recordId: id, field }, ctx) => {
       if (id === currentId.current) {
         setErrors((cur) => {
+          const { [field.id]: _gone, ...rest } = cur;
+          return rest;
+        });
+        setFailed((cur) => {
           const { [field.id]: _gone, ...rest } = cur;
           return rest;
         });
@@ -309,7 +337,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   }, [justSaved, pending]);
   const saveState: SaveState = pending > 0 ? "saving" : Object.keys(errors).length > 0 ? "error" : justSaved ? "saved" : "idle";
 
-  const onSave = (field: Field, edit: EditValue) => {
+  const onSave = (field: Field, edit: EditValue): { value: unknown } | undefined => {
     const textKey = `${recordId}:${field.id}`;
     const before = record.data?.values[field.id] ?? null;
     let after: unknown = edit.json ?? null;
@@ -317,18 +345,24 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       const res = parseText(field, edit.text, { timeZone, users: collaborators });
       if (!res.ok) {
         setErrors((cur) => ({ ...cur, [field.id]: res.error }));
-        return;
+        return undefined;
       }
-      if (field.type === "link") return;
+      if (field.type === "link") return undefined;
       after = res.value;
     }
-    if (jsonEqual(before, after)) {
+    if (jsonEqual(before, after) || (isBlank(before) && isBlank(after))) {
       unsent.current.typed(textKey, false);
-      return;
+      // Back to what the record holds: nothing is left to correct.
+      setFailed((cur) => {
+        const { [field.id]: _gone, ...rest } = cur;
+        return field.id in cur ? rest : cur;
+      });
+      return undefined;
     }
     lastSaved.current.set(textKey, after);
     unsent.current.send(textKey);
     save.mutate({ recordId, field, value: after });
+    return { value: after };
   };
 
   const copyLink = async () => {
@@ -394,7 +428,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
-            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
+            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={justCreated && f.id === table.primary_field_id} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
           ))}
           {hidden.length > 0 && (
             <div className="border-t border-line pt-3">
@@ -405,7 +439,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               {showHidden && (
                 <div id="hidden-fields" className="mt-3 flex flex-col gap-4">
                   {hidden.map((f) => (
-                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
+                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={false} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
                   ))}
                 </div>
               )}
@@ -440,9 +474,10 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
             onOpenAutoFocus={(e) => {
               // Radix would focus the first button ("Previous record"), which pops its tooltip open and makes the
               // first Escape close the tooltip instead of the record. Focus the dialog itself; Tab still
-              // reaches the first control.
+              // reaches the first control. A field being edited from the start (a record just added) has the focus already.
               e.preventDefault();
-              (e.currentTarget as HTMLElement).focus();
+              const dialog = e.currentTarget as HTMLElement;
+              if (!dialog.contains(document.activeElement)) dialog.focus();
             }}
             // A phone (below sm) gets the whole screen: no margin, no radius, the dynamic viewport's height (so
             // the browser's collapsing toolbar does not cut it off), and padding that keeps clear of the notch and the home indicator.
@@ -450,6 +485,10 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               "ob-pop-in fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]",
               "sm:inset-6 sm:mx-auto sm:h-auto sm:max-w-5xl sm:rounded-lg sm:border sm:border-line sm:p-0 sm:shadow-pop",
             )}
+            onEscapeKeyDown={(e) => {
+              // Escape in a single-line editor cancels that edit (EditableValue); the record stays open for the next one.
+              if (e.target instanceof Element && e.target.closest("[data-escape-cancels]")) e.preventDefault();
+            }}
             onInteractOutside={(e) => {
               // Pop-over editors render outside the dialog; clicking them must not dismiss it.
               if ((e.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
