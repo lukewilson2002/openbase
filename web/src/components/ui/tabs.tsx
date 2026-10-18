@@ -7,7 +7,7 @@ export const Tabs = T.Root;
 export function TabsList({ className, ...props }: ComponentProps<typeof T.List>) {
   return (
     <T.List
-      className={cn("flex gap-1 overflow-x-auto border-b border-line [scrollbar-width:none]", className)}
+      className={cn("flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line [scrollbar-width:none]", className)}
       {...props}
     />
   );

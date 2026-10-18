@@ -109,7 +109,7 @@ export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
             headingRef.current?.focus();
           }}
           onKeyDown={onKeyDown}
-          className="ob-fade-in fixed inset-0 z-[60] flex flex-col overflow-y-auto overflow-x-hidden bg-bg"
+          className="ob-fade-in fixed inset-0 z-[60] flex flex-col overflow-y-auto overscroll-contain overflow-x-hidden bg-bg"
         >
           <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-2 sm:px-7 sm:py-3.5">
             <Logo className="h-8" />

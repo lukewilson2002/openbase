@@ -114,7 +114,7 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
             }}
             className={cn("flex flex-col", dragging && "bg-primary-soft")}
           >
-            <ul aria-label={`Files in ${field.name}`} className="max-h-60 min-h-12 overflow-y-auto p-2">
+            <ul aria-label={`Files in ${field.name}`} className="max-h-60 min-h-12 overflow-y-auto overscroll-contain p-2">
               {files.map((f) => (
                 <li key={f.id} className="flex items-center gap-2 py-1">
                   <AttachmentThumb file={f} />

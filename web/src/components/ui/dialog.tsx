@@ -52,7 +52,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
               <X aria-hidden className={roomy ? "size-[18px]" : "size-4"} />
             </D.Close>
           </div>
-          <div className={cn("min-h-0 flex-1 overflow-y-auto", roomy ? "px-4 pb-5 pt-4 sm:px-6 sm:pb-6" : "px-4 py-4")}>{children}</div>
+          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", roomy ? "px-4 pb-5 pt-4 sm:px-6 sm:pb-6" : "px-4 py-4")}>{children}</div>
           {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3">{footer}</div>}
         </D.Content>
       </D.Portal>

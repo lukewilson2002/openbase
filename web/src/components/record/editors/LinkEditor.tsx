@@ -130,7 +130,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
               />
               {results.isFetching && <Spinner className="absolute right-4 top-4 size-3.5" label="Searching" />}
             </div>
-            <ul id={listId} role="listbox" aria-multiselectable={!single} aria-label="Records" className="min-h-0 flex-1 overflow-y-auto p-1">
+            <ul id={listId} role="listbox" aria-multiselectable={!single} aria-label="Records" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
               {candidates.map((r, i) => (
                 <li key={r.id} id={`${listId}-${i}`} role="option" aria-selected={false}>
                   <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => pick(r)} className={cn("flex w-full items-center justify-between rounded px-2 py-1.5 text-left", i === active && "bg-hover")}>

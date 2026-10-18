@@ -70,7 +70,7 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
 
   return (
     <div
-      className={cn("relative flex flex-col text-[0.8125rem] leading-relaxed", fullScreen ? "min-h-0 flex-1 overflow-y-auto" : "rounded-md border border-line-strong bg-surface focus-within:border-ring")}
+      className={cn("relative flex flex-col text-[0.8125rem] leading-relaxed", fullScreen ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "rounded-md border border-line-strong bg-surface focus-within:border-ring")}
       onKeyDown={(e) => {
         // Ctrl/Cmd+K is "link" in every editor; the toolbar's button owns the popover.
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !e.shiftKey && !e.altKey) {
