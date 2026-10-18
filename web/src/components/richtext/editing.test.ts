@@ -24,6 +24,13 @@ function type(e: Editor, text: string) {
 
 const md = (e: Editor) => e.getMarkdown().trim();
 
+/** Presses a key as the browser would, and answers whether the editor took it (the browser's own action, such as moving the focus, would not happen). */
+function press(e: Editor, key: string, shiftKey = false): boolean {
+  const event = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
+  e.view.dom.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 describe("rich text editing", () => {
   it("turns Markdown typed as shortcuts into formatting", () => {
     const e = make();
@@ -125,5 +132,26 @@ describe("rich text editing", () => {
     e.commands.setContent("# two", { contentType: "markdown", emitUpdate: false });
     expect(updates).toBe(0);
     expect(md(e)).toBe("# two");
+  });
+
+  it("keeps Tab and Shift+Tab in a list inside the editor, even where the item cannot move", () => {
+    const e = make("- one\n- two");
+    // The first item has nothing to nest under: Tab does nothing, and the focus stays.
+    e.commands.setTextSelection(3);
+    expect(press(e, "Tab")).toBe(true);
+    expect(md(e)).toBe("- one\n- two");
+    // The second item nests under the first, and Shift+Tab brings it back.
+    e.commands.setTextSelection(e.state.doc.content.size - 2);
+    expect(press(e, "Tab")).toBe(true);
+    expect(md(e)).toBe("- one\n  - two");
+    expect(press(e, "Tab")).toBe(true);
+    expect(press(e, "Tab", true)).toBe(true);
+    expect(md(e)).toBe("- one\n- two");
+  });
+
+  it("leaves Tab to the browser outside lists, so the keyboard can still leave the editor", () => {
+    const e = make("Just text");
+    e.commands.setTextSelection(3);
+    expect(press(e, "Tab")).toBe(false);
   });
 });

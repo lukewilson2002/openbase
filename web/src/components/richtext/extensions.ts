@@ -81,6 +81,21 @@ const GentleEscaping = Extension.create({
   },
 });
 
+/**
+ * Tab and Shift+Tab in a list indent and outdent its item (the list items' own shortcuts). Where the
+ * item cannot move (the first item has nothing to nest under), the key still stays in the editor:
+ * the browser would otherwise move the focus away mid-sentence. Outside lists Tab is left alone, so
+ * the keyboard can still leave the editor. A lower priority runs after the list items' shortcuts.
+ */
+const ListTabStays = Extension.create({
+  name: "listTabStays",
+  priority: 50,
+  addKeyboardShortcuts() {
+    const inList = () => this.editor.isActive("listItem") || this.editor.isActive("taskItem");
+    return { Tab: inList, "Shift-Tab": inList };
+  },
+});
+
 export function richTextExtensions(placeholder?: string): AnyExtension[] {
   return [
     StarterKit.configure({
@@ -97,6 +112,7 @@ export function richTextExtensions(placeholder?: string): AnyExtension[] {
     Callout,
     TaskList,
     TaskItem.configure({ nested: true }),
+    ListTabStays,
     Table.extend({ renderMarkdown: (node, h) => renderTableToMarkdown(node, h).trim() }).configure({ resizable: false }),
     TableRow,
     TableHeader,
