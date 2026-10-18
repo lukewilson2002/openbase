@@ -35,11 +35,11 @@ pub fn definitions() -> Vec<ToolDef> {
             "Get a view's saved configuration (filter, sorts, grouping, hidden fields, settings) with field names instead of ids.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "view": string("View name or id."),
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                 }),
-                &["base_id", "view"],
+                &["project_id", "view"],
             ),
         ),
         ToolDef::new(
@@ -48,14 +48,14 @@ pub fn definitions() -> Vec<ToolDef> {
             "Create a view of any type (grid, form, gallery, kanban, calendar, timeline, list) with an optional configuration. Make the views a table's purpose and its users call for, not one of every type: a calendar or timeline for dated records, a kanban stacked by a status, a gallery for pictures, a form for collecting entries, grids or lists filtered and sorted for recurring questions (e.g. 'Contacts by company', 'Overdue invoices'). Name a view for what it shows. Shared views need the creator role; personal views (personal=true) only the viewer role and are visible to you alone. Relative date filters such as {mode: today} follow the VIEWER's time zone (each person's profile or browser zone in the app, the `timezone` argument of query_view), not the server's or UTC; see `config`.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("View name."),
                     "type": view_types,
                     "personal": boolean("Make it visible to you only (default false)."),
                     "config": free_object(CONFIG_HELP),
                 }),
-                &["base_id", "table", "name", "type"],
+                &["project_id", "table", "name", "type"],
             ),
         )
         .write(),
@@ -65,14 +65,14 @@ pub fn definitions() -> Vec<ToolDef> {
             "Rename a view, lock it, or change its configuration. Parts of `config` you give replace the same parts of the saved config (kanban, calendar, gallery, timeline and form settings merge key by key); parts you omit stay; a null value resets a part. Shared views need the creator role. Relative date filters such as {mode: today} follow the VIEWER's time zone, not the server's or UTC; see `config`.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "view": string("View name or id."),
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                     "name": string("New name."),
                     "locked": boolean("Lock the view so only creators can reconfigure it."),
                     "config": free_object("The parts to change, in the shape of create_view's `config` (field names accepted)."),
                 }),
-                &["base_id", "view"],
+                &["project_id", "view"],
             ),
         )
         .write()
@@ -83,11 +83,11 @@ pub fn definitions() -> Vec<ToolDef> {
             "Delete a view (it moves to the trash and can be restored with restore_from_trash, kind 'view'). Share links of the view stop working. Shared views need the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "view": string("View name or id."),
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                 }),
-                &["base_id", "view"],
+                &["project_id", "view"],
             ),
         )
         .write()
@@ -95,10 +95,10 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "query_view",
             "Query a view",
-            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. When a view fits the question (get_base_schema lists them), read it instead of building the same filter in list_records. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset.",
+            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. When a view fits the question (get_project_schema lists them), read it instead of building the same filter in list_records. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "view": string("View name or id."),
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                     "search": string("Optional text; only rows containing it in a visible field are returned."),
@@ -107,7 +107,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "include_empty": boolean("Return visible fields with no value as null (default false: they are left out of a record's `fields`). `columns` always lists every visible field."),
                     "timezone": string("IANA time zone (for example America/Chicago) that decides what \"today\" means for relative date filters (today, tomorrow, past_week, ...). Default: the time zone on your profile (set it with api_request PATCH /api/auth/me {timezone}), else UTC."),
                 }),
-                &["base_id", "view"],
+                &["project_id", "view"],
             ),
         ),
     ]
@@ -135,6 +135,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ViewArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]
@@ -164,6 +165,7 @@ async fn get_view(ctx: &McpCtx, a: ViewArg) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateView {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     name: String,
@@ -227,6 +229,7 @@ async fn create_view(ctx: &McpCtx, a: CreateView) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateView {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]
@@ -297,6 +300,7 @@ async fn delete_view(ctx: &McpCtx, a: ViewArg) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct QueryView {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]

@@ -9,8 +9,9 @@ use super::McpCtx;
 use super::api::{self, ApiCall, ApiResponse};
 use super::tools::{Level, ToolDef, ToolResult};
 
-pub const BASE_ID: &str = "Base id (from list_bases), e.g. appXXXXXXXXXXXXXX.";
-pub const TABLE: &str = "Table name or table id (from get_base_schema).";
+pub const BASE_ID: &str =
+    "Project id (from list_projects; called base in the REST API), e.g. appXXXXXXXXXXXXXX.";
+pub const TABLE: &str = "Table name or table id (from get_project_schema).";
 
 pub fn string(description: &str) -> Value {
     json!({ "type": "string", "description": description })
@@ -31,6 +32,13 @@ pub fn string_list(description: &str) -> Value {
 /// A free-form JSON object argument.
 pub fn free_object(description: &str) -> Value {
     json!({ "type": "object", "description": description })
+}
+
+/// Put `value` into a request body under `key` when it was given.
+pub fn insert_some(body: &mut Map<String, Value>, key: &str, value: Option<String>) {
+    if let Some(v) = value {
+        body.insert(key.into(), json!(v));
+    }
 }
 
 /// An `icon` argument: a Lucide name, or null to remove the icon.
@@ -150,7 +158,7 @@ fn token_context(ctx: &McpCtx) -> &'static str {
         Some(s) if !s.manage => {
             " (this API token has no 'manage' permission, which workspace, member, invite and admin actions need)"
         }
-        Some(s) if s.base_ids.is_some() => " (this API token is limited to specific bases)",
+        Some(s) if s.base_ids.is_some() => " (this API token is limited to specific projects)",
         Some(_) => "",
     }
 }

@@ -73,7 +73,10 @@ async fn initialize_negotiates_the_protocol_version() {
         assert!(r["capabilities"].get("resources").is_none());
         assert_eq!(r["serverInfo"]["name"], "openbase");
         assert!(
-            r["instructions"].as_str().unwrap().contains("list_bases"),
+            r["instructions"]
+                .as_str()
+                .unwrap()
+                .contains("list_projects"),
             "server instructions guide the model"
         );
         let instructions = r["instructions"].as_str().unwrap();
@@ -749,8 +752,8 @@ async fn tools_listed_depend_on_the_token() {
     let manage = tool_names(&w.app, &w.manage).await;
 
     let read_tools = [
-        "list_bases",
-        "get_base_schema",
+        "list_projects",
+        "get_project_schema",
         "list_records",
         "search_records",
         "aggregate_records",
@@ -772,14 +775,15 @@ async fn tools_listed_depend_on_the_token() {
         "get_automation",
         "list_automation_runs",
         "export_csv",
+        "list_inbox",
     ];
     let write_tools = [
         "create_records",
         "update_records",
         "delete_records",
         "add_comment",
-        "create_base",
-        "rename_base",
+        "create_project",
+        "rename_project",
         "create_table",
         "rename_table",
         "duplicate_table",
@@ -803,6 +807,10 @@ async fn tools_listed_depend_on_the_token() {
         "test_automation",
         "upload_attachment",
         "import_csv",
+        "add_to_inbox",
+        "update_inbox_item",
+        "file_inbox_item",
+        "delete_inbox_item",
     ];
     let manage_tools = [
         "create_workspace",
@@ -814,8 +822,8 @@ async fn tools_listed_depend_on_the_token() {
         "remove_member",
         "list_invites",
         "revoke_invite",
-        "duplicate_base",
-        "delete_base",
+        "duplicate_project",
+        "delete_project",
     ];
     let sorted = |v: &[String]| {
         let mut v = v.to_vec();

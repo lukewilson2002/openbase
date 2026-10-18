@@ -163,14 +163,14 @@ async fn get_base_schema_lists_tables_fields_and_views() {
     )
     .await;
     assert!(outside.err().contains("not found, or you have no access"));
-    assert!(outside.err().contains("list_bases"));
+    assert!(outside.err().contains("list_projects"));
     assert_eq!(
         outside.text.replace(&other, "X"),
         missing.text.replace("appNoSuchBase", "X")
     );
     // Missing or unknown arguments are explained.
     let t = tool(r.app(), &r.read, "get_base_schema", json!({})).await;
-    assert!(t.err().contains("missing field `base_id`"), "{}", t.text);
+    assert!(t.err().contains("missing field `project_id`"), "{}", t.text);
     let t = tool(
         r.app(),
         &r.read,
@@ -455,7 +455,7 @@ async fn list_records_errors_list_valid_names() {
     let t = call(json!({"table": "Nope"})).await;
     let msg = t.err();
     assert!(msg.contains("Table not found"), "{msg}");
-    assert!(msg.contains("Tables in this base: 'Table 1'"), "{msg}");
+    assert!(msg.contains("Tables in this project: 'Table 1'"), "{msg}");
 
     let t = call(json!({"table": "Table 1", "fields": ["Name", "Agee"]})).await;
     let msg = t.err();
@@ -551,7 +551,7 @@ async fn search_records_finds_text_in_any_field() {
         json!({"base_id": r.base(), "table": "Nope", "query": "a"}),
     )
     .await;
-    assert!(t.err().contains("Tables in this base"));
+    assert!(t.err().contains("Tables in this project"));
 }
 
 #[tokio::test]
@@ -692,7 +692,7 @@ async fn create_records_respects_typecast_and_validation() {
     // All or nothing: the failures created nothing.
     assert_eq!(r.p.f.query(json!({})).await["total"], before);
     let t = create(json!({"table": "Missing", "records": [{"fields": {"Name": "X"}}]})).await;
-    assert!(t.err().contains("Tables in this base"), "{}", t.text);
+    assert!(t.err().contains("Tables in this project"), "{}", t.text);
 }
 
 #[tokio::test]
@@ -1053,7 +1053,7 @@ async fn aggregate_records_errors_name_the_problem_and_the_valid_fields() {
     let t = aggregate(&r, json!({"filter_by_formula": "{Age} ="})).await;
     assert!(t.err().contains("INVALID_FILTER_BY_FORMULA"), "{}", t.text);
     let t = aggregate(&r, json!({"table": "No such table"})).await;
-    assert!(t.err().contains("Tables in this base"), "{}", t.text);
+    assert!(t.err().contains("Tables in this project"), "{}", t.text);
 }
 
 // ------------------------------------------------------------------- comments

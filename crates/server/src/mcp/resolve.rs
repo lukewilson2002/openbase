@@ -51,7 +51,7 @@ pub async fn load_schema(ctx: &McpCtx, base_id: &str) -> Result<BaseSchema, Tool
         .await;
     res.map_err(|e| match e {
         AppError::NotFound(_) => ToolResult::error(format!(
-            "Base '{base_id}' not found, or you have no access to it. Use list_bases to see valid base ids."
+            "Project '{base_id}' not found, or you have no access to it. Use list_projects to see valid project ids."
         )),
         other => ToolResult::error(other.to_string()),
     })
@@ -101,7 +101,7 @@ pub fn find_table<'a>(schema: &'a BaseSchema, key: &str) -> Result<&'a Table, To
                 schema.name
             ),
             None => format!(
-                "Table '{key}' not found in base '{}'. Tables: {tables}.",
+                "Table '{key}' not found in project '{}'. Tables: {tables}.",
                 schema.name
             ),
         })
@@ -868,7 +868,7 @@ pub fn field_options_to_ids(
                     .tables
                     .iter()
                     .find(|t| t.id == lo.linked_table_id)
-                    .ok_or_else(|| "the linked table is not in this base".to_string())?;
+                    .ok_or_else(|| "the linked table is not in this project".to_string())?;
                 let target = field_lookup(linked_table, &target_name)?;
                 o.insert("target_field_id".into(), json!(target.id));
             }

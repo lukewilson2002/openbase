@@ -80,7 +80,7 @@ async fn bases_and_tables_can_be_renamed_duplicated_deleted_and_restored() {
     let err = a
         .fails("list_records", json!({"base_id": b, "table": "Staff"}))
         .await;
-    assert!(err.contains("Tables in this base"), "{err}");
+    assert!(err.contains("Tables in this project"), "{err}");
     let trash = a.call("list_trash", json!({"base_id": b})).await;
     assert!(
         trash["items"]
