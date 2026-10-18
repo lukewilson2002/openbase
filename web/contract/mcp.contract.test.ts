@@ -79,7 +79,7 @@ describe("MCP endpoint", () => {
     const res = await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "contract", version: "1" } });
     expect(res.status).toBe(200);
     expect(res.body.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "openbase" }, capabilities: { tools: {} } });
-    expect(res.body.result.instructions).toContain("list_bases");
+    expect(res.body.result.instructions).toContain("list_projects");
     // The stateless revision needs no handshake at all.
     const discover = await rpc(
       token,
@@ -96,7 +96,7 @@ describe("MCP endpoint", () => {
     expect(res.status).toBe(200);
     const tools: { name: string; description: string; inputSchema: { type: string } }[] = res.body.result.tools;
     const names = tools.map((t) => t.name);
-    for (const expected of ["list_bases", "create_records", "create_table", "create_field", "create_view", "query_view", "create_workspace", "upload_attachment", "admin_stats", "list_icons", "admin_get_email_settings", "admin_update_email_settings", "admin_send_test_email"]) {
+    for (const expected of ["list_projects", "create_records", "create_table", "create_field", "create_view", "query_view", "create_workspace", "upload_attachment", "admin_stats", "list_icons", "admin_get_email_settings", "admin_update_email_settings", "admin_send_test_email"]) {
       expect(names).toContain(expected);
     }
     expect(new Set(names).size).toBe(names.length);
@@ -155,9 +155,9 @@ describe("MCP endpoint", () => {
     expect(await seen()).toEqual({ workspace: "briefcase", base: "store", table: "shopping-cart" });
 
     // the agent reads them back with its own tools
-    const listed = await call(token, "list_bases", {});
+    const listed = await call(token, "list_projects", {});
     expect(listed.workspaces.find((w: { id: string }) => w.id === ws.workspace.id).icon).toBe("briefcase");
-    const schema = await call(token, "get_base_schema", { base_id: baseId });
+    const schema = await call(token, "get_project_schema", { project_id: baseId });
     expect(schema.icon).toBe("store");
     expect(schema.tables.find((t: { name: string }) => t.name === "Orders").icon).toBe("shopping-cart");
 
