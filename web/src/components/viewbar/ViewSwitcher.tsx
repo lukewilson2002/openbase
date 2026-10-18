@@ -3,25 +3,32 @@
  * the top bar). The buttons carry the views' names while all of them fit; else each is just its
  * type's icon, views of one type share one button listing them, and what still does not fit goes
  * into a "…" menu. Personal and locked views wear small badges, and a trailing "+" adds a view for
- * those who may. Which table to open is the menu's job, not the toolbar's.
+ * those who may. A right-click (or a held press on a phone) on a view's button opens the view's menu:
+ * rename, duplicate, share, lock, delete, as on its row in the menu. Which table to open is the
+ * menu's job, not the toolbar's.
  */
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router";
 import { Check, ChevronDown, Ellipsis, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
+import { AnchoredMenu, type MenuAnchor } from "@/components/ui/anchored-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
+import { TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
+import { ViewMenuItems, hasViewActions } from "./ViewMenuItems";
 
 /** How many view buttons show before the rest go into "…": the toolbar shares its row with the tools. */
 const SHOWN_ON_DESKTOP = 8;
 const SHOWN_ON_PHONE = 4;
+/** How long a finger rests on a view button before its menu opens (as a long press elsewhere on a phone). */
+const LONG_PRESS_MS = 500;
 /** On a desktop the tools share the row: names show only while all of them fit in this much of it. */
 const DESKTOP_SHARE = 0.45;
 
@@ -94,6 +101,10 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const moreRef = useRef<HTMLDivElement>(null);
   const [fixedRefs] = useState(() => [moreRef]);
   const labelled = useLabelsFit(rootRef, measureRef, fixedRefs, desktop);
+  // A right-click or a held press on a view button: the view's own menu, as on its row in the menu.
+  const [menu, setMenu] = useState<{ view: View; anchor: MenuAnchor } | null>(null);
+  const hasMenu = (v: View) => hasViewActions(schema, v, openDialog);
+  const onMenu = (v: View, anchor: MenuAnchor) => setMenu({ view: v, anchor });
   // Names fit: one button per view. Else icons, one per view type, and what does not fit goes into "…".
   const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(table.views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
 
@@ -101,7 +112,7 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
     <div ref={rootRef} className={cn("relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
       <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5">
         {shown.map((g) => (
-          <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} />
+          <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
         ))}
       </nav>
       <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
@@ -144,6 +155,9 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
           </DropdownMenu>
         )}
       </div>
+      <AnchoredMenu anchor={menu?.anchor ?? null} onClose={() => setMenu(null)} label={menu ? `Options for ${menu.view.name}` : "View options"}>
+        {menu && <ViewMenuItems schema={schema} table={table} view={menu.view} onDialog={openDialog} />}
+      </AnchoredMenu>
       {/* The buttons with their names, out of sight: measured to decide whether the names fit. */}
       <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-0.5">
         {table.views.map((v) => {
@@ -165,14 +179,85 @@ function count(groups: readonly ViewGroup[]): number {
 }
 
 /** A view on its own is a link (with its name when names fit); several views of one type are one icon opening their names. */
-function GroupButton({ group, activeId, labelled, to, tableName }: { group: ViewGroup; activeId: string; labelled: boolean; to: (v: View) => string; tableName: string }) {
+/**
+ * Opens a view's menu like a context menu: a right-click (or the keyboard's menu key, Shift+F10) at the
+ * pointer, or under the button when there is no pointer; on a touch screen a press held without
+ * moving, after which the lift does not also follow the link.
+ */
+function useMenuGesture(onMenu: ((anchor: MenuAnchor) => void) | undefined) {
+  const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const opened = useRef(false);
+  const cancel = () => {
+    if (hold.current) clearTimeout(hold.current.timer);
+    hold.current = null;
+  };
+  useEffect(() => cancel, []);
+  if (!onMenu) return {};
+  return {
+    onContextMenu: (e: React.MouseEvent<HTMLElement>) => {
+      e.preventDefault();
+      cancel();
+      if (opened.current) return; // the long press already opened it (Android fires both)
+      const r = e.currentTarget.getBoundingClientRect();
+      onMenu(e.clientX || e.clientY ? { x: e.clientX, y: e.clientY, width: 1, height: 1 } : { x: r.left, y: r.top, width: r.width, height: r.height });
+    },
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      opened.current = false;
+      if (e.pointerType !== "touch") return;
+      const { clientX: x, clientY: y } = e;
+      hold.current = {
+        x,
+        y,
+        timer: setTimeout(() => {
+          hold.current = null;
+          opened.current = true;
+          onMenu({ x, y, width: 1, height: 1 });
+        }, LONG_PRESS_MS),
+      };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const h = hold.current;
+      if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > TOUCH_HOLD_TOLERANCE_PX) cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onClickCapture: (e: React.MouseEvent<HTMLElement>) => {
+      if (!opened.current) return;
+      opened.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+  };
+}
+
+function GroupButton({
+  group,
+  activeId,
+  labelled,
+  to,
+  tableName,
+  onMenu,
+  hasMenu,
+}: {
+  group: ViewGroup;
+  activeId: string;
+  labelled: boolean;
+  to: (v: View) => string;
+  tableName: string;
+  onMenu?: (view: View, anchor: MenuAnchor) => void;
+  hasMenu?: (view: View) => boolean;
+}) {
   const Icon = VIEW_TYPE_META[group.type]?.icon ?? Table2;
   const active = group.views.some((v) => v.id === activeId);
   const tone = active ? "bg-primary-soft text-primary-ink" : "text-muted hover:bg-hover hover:text-fg";
-  if (group.views.length === 1) {
-    const v = group.views[0]!;
+  const single = group.views.length === 1 ? group.views[0]! : null;
+  // Only a view with something to do takes the gesture; for the others the browser's own menu stays.
+  const gesture = useMenuGesture(single && onMenu && hasMenu?.(single) ? (anchor) => onMenu(single, anchor) : undefined);
+  if (single) {
+    const v = single;
     const link = (
-      <Link to={to(v)} aria-label={v.name} aria-current={active ? "page" : undefined} className={cn(buttonClass, labelled && labelledClass, "no-underline", tone)}>
+      // `-webkit-touch-callout: none`: a held press opens the view's menu, not iOS's link preview.
+      <Link {...gesture} to={to(v)} aria-label={v.name} aria-current={active ? "page" : undefined} className={cn(buttonClass, labelled && labelledClass, "no-underline select-none [-webkit-touch-callout:none]", tone)}>
         <Icon aria-hidden className="size-[1.125rem] shrink-0" />
         {labelled && <span aria-hidden>{v.name}</span>}
         <ViewBadges view={v} />

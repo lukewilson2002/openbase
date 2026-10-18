@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ViewConfig } from "@/api/types";
@@ -247,6 +247,50 @@ describe("ViewBar view switcher", () => {
     await user.click(screen.getByRole("button", { name: "Add view" }));
     await user.click(await screen.findByRole("menuitem", { name: /^Calendar/ }));
     expect(onDialog).toHaveBeenCalledWith({ kind: "create-view", table: t, type: "calendar" });
+  });
+
+  it("opens a view's menu on a right-click of its button, for those who may change it", async () => {
+    const user = userEvent.setup();
+    const onDialog = vi.fn();
+    const widths = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
+    const room = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
+    try {
+      const schema = makeSchema("creator");
+      const t = schema.tables[0]!;
+      const { unmount } = renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true, onDialog });
+      fireEvent.contextMenu(screen.getByRole("link", { name: "Board" }), { clientX: 40, clientY: 30 });
+      const menu = await screen.findByRole("menu", { name: "Options for Board" });
+      expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Rename view", "Duplicate view", "Share view…", "Lock view", "Delete view"]);
+      await user.click(within(menu).getByRole("menuitem", { name: /Rename view/ }));
+      expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[1] });
+      unmount();
+      // A viewer has nothing to do with a view: the browser's own menu stays.
+      const viewer = makeSchema("viewer");
+      renderBar({ schema: viewer, table: viewer.tables[0]!, view: viewer.tables[0]!.views[0]!, config: viewer.tables[0]!.views[0]!.config }, { phone: true, onDialog });
+      expect(fireEvent.contextMenu(screen.getByRole("link", { name: "Board" }))).toBe(true);
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    } finally {
+      widths.mockRestore();
+      room.mockRestore();
+    }
+  });
+
+  it("opens a view's menu on a held press, and the lift does not also open the view", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const schema = makeSchema("creator");
+      const t = schema.tables[0]!;
+      renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true, onDialog: vi.fn() });
+      const board = screen.getByRole("link", { name: "Board" });
+      fireEvent.pointerDown(board, { pointerType: "touch", clientX: 40, clientY: 30 });
+      await act(() => vi.advanceTimersByTimeAsync(600));
+      expect(await screen.findByRole("menu", { name: "Options for Board" })).toBeInTheDocument();
+      fireEvent.pointerUp(board, { pointerType: "touch" });
+      // The click after the lift is swallowed: still on the first view.
+      expect(fireEvent.click(board)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("tells editors they can make personal views only, and offers viewers no +", async () => {

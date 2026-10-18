@@ -7,7 +7,7 @@ import { AGGREGATION_LABELS, aggregationsFor } from "@/lib/cells/aggregations";
 import { isFilterable } from "@/lib/cells/filters";
 import { kindClassOf } from "@/lib/cells/kinds";
 import type { GridColumnSpec, ScreenRect } from "./adapter";
-import { AnchoredMenu } from "./AnchoredMenu";
+import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import type { ViewConfigApi } from "./useViewConfig";
 
 /** Labels for the two sort directions, by what the field holds. */
