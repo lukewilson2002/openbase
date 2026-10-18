@@ -11,8 +11,64 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **The Inbox: a place to write things down first.** The home page is now a capture box, like the
+  start page of an AI chat: write a note in rich text and attach files. It is kept as a draft
+  (only you see your drafts, listed below the box) until you choose **Save to…** a project and a
+  table. The box then turns into that table's form, with its primary field as the title and the
+  note going into a long text field you choose, and Save adds the record. Agents have the same
+  inbox through the new MCP tools `list_inbox`, `add_to_inbox`, `update_inbox_item`,
+  `file_inbox_item` and `delete_inbox_item`, and the REST routes under `/api/inbox` (see
+  [docs/api.md](docs/api.md)). A draft holds up to 20 files, and the files waiting in one person's
+  drafts can take up to 200 MB (`OPENBASE_MAX_INBOX_MB`). API tokens limited to some projects
+  cannot use the inbox.
+- **Rich text you can see while you write.** Long text fields with formatting turned on are edited
+  in a visual editor: headings 1 to 6, bold, italic, strikethrough, code, links, bulleted,
+  numbered (starting at any number) and task lists with indenting, quotes, callouts (note, tip,
+  important, warning, caution), code blocks, tables you edit in place and dividers, from a toolbar
+  or by typing Markdown shortcuts. What is stored is still plain Markdown (callouts use GitHub's
+  `> [!NOTE]` syntax), so agents, the API and CSV exports see the same text as before. The button
+  at the bottom right of the box opens the editor full screen; plain long text gets the same
+  button.
+- **See who is here.** The faces at the top of a project are the people viewing it right now; the
+  others who can open it are one grey "+N". Agents can ask through
+  `GET /api/bases/{id}/presence`, and every event stream starts with the current viewers.
+- **Colours for workspaces and projects.** Choose one when you create a workspace or a project,
+  and change it later from its "…" menu or the workspace settings. MCP `create_workspace` and
+  `rename_workspace` take a `color` too.
+- On a computer, click the icon beside the table's name in the top bar to change it. Tables
+  without an icon of their own show a sheet.
+
+### Changed
+
+- **Bases are now called projects**, everywhere you read them: the app, the intro, the docs and
+  the MCP tools (`list_projects`, `create_project`, `get_project_schema`, … with `project_id`).
+  The old MCP names and `base_id` keep working, so connected assistants need no change. The REST
+  API, the v1 API and ids are unchanged (`/api/bases`, `app…`).
+- **One menu for everything.** The sidebar shows the same tree on every page: your workspaces, the
+  projects in each, their tables and views. Expand and collapse any part (remembered on this
+  device), and reach what the workspace page, the pickers and the menu's footer used to hold from
+  each row's "…" menu. The workspace page and the workspace and table pickers in the top bar are
+  gone; the top bar names where you are (`Workspace / Project / Table`).
+- **Tables open where you left them.** Tapping a table opens the view you last used in it on this
+  device, and tapping a project opens its last table.
+- **Views as buttons.** The toolbar shows a button for each view of the table, with its name while
+  all of them fit; when they do not, each is its view type's icon, and views of the same type
+  share one button that lists them.
+- **An open record fills a phone's screen**, and shows "Saving…" and "Saved" as your changes are
+  saved. Long text is saved as you type, not only when you leave the field. Its link button is now
+  Share, which opens the phone's share sheet where there is one.
+- The old Inbox, with mentions and other alerts, is called **Notifications**, below the new Inbox.
+- Every item of the profile menu has an icon.
+- The toolbar's Add button looks like the other buttons instead of taking the project's colour.
+
 ### Fixed
 
+- **A swipe that starts on a button scrolls instead of opening its menu.** On a phone every menu
+  now opens on a tap (a finger that lifts where it touched down); a mouse and the keyboard open it
+  as before, and so do screen readers. In an open record on a phone, dragging the Comments and
+  History tabs no longer scrolls a panel inside the record on its own.
 - **Swiping scrolls kanban boards and timelines instead of dragging what it crosses.** On a touch
   screen a card or bar is dragged after pressing and holding it for a moment (a quarter of a
   second); a finger that moves sooner scrolls. Swiping across empty timeline lanes no longer starts
