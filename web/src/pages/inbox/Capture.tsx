@@ -108,7 +108,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
 
   /** Another draft (or a blank one) in the box. Its fields start empty; the table stays picked. */
   const open = async (item?: InboxItem) => {
-    await draft.open(item);
+    if (!(await draft.open(item))) return;
     form.clear();
     setFiled(null);
     setFileError(null);

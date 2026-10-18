@@ -180,6 +180,29 @@ describe("drafts", () => {
   });
 });
 
+describe("drafts: switching", () => {
+  it("does nothing when the draft that is already open is tapped, and keeps the text typed since it was last saved", async () => {
+    // The row holds the draft as the list had it when it last rendered: loading that into the box would put
+    // back text from before the typing, and the next keystroke would save it over the newer text.
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({
+      "GET /api/inbox": [item("inb2", "Old")],
+      "PATCH /api/inbox/inb2": (call) => item("inb2", String(body(call).body)),
+    });
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: /Old/ }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Note" })).toHaveTextContent("Old"));
+    await write(" newer");
+    await user.click(screen.getByRole("button", { name: /Old/ }));
+    expect(editorOf().getText()).toBe("Old newer");
+    act(() => void editorOf().commands.insertContent("!"));
+    const sent = () => api.callsTo("PATCH /api/inbox/inb2").map((c) => body(c).body);
+    await waitFor(() => expect(sent()).toContain("Old newer!"), SAVE_WAIT);
+    expect(sent()).not.toContain("Old");
+  });
+});
+
 describe("attaching files", () => {
   const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => user.upload(await screen.findByLabelText("Attach files"), file);
 

@@ -36,8 +36,11 @@ export interface Draft extends Doc {
   removeAttachment(id: string): void;
   /** Saves now. With `force` a blank draft is created too (filing a record needs one). Answers the draft's id. */
   save(force?: boolean): Promise<string | null>;
-  /** Saves the open draft, then opens `item`, or a blank one. */
-  open(item?: InboxItem): Promise<void>;
+  /**
+   * Saves the open draft, then opens `item`, or a blank one. Answers whether it did: it does not when
+   * `item` is the draft that is open already.
+   */
+  open(item?: InboxItem): Promise<boolean>;
   /** Deletes the open draft (if it exists on the server) and starts a blank one. */
   discard(): Promise<void>;
   /** The draft has gone (it was filed): a blank one replaces it without saving anything. */
@@ -159,10 +162,16 @@ export function useDraft(): Draft {
 
   const open = useCallback(
     async (item?: InboxItem) => {
+      // The row is the draft as the list last rendered it, which is older than the box.
+      if (item && item.id === ref.current.id) return false;
       await save();
-      load(item ? { id: item.id, body: item.body, attachments: item.attachments } : { id: null, body: "", attachments: [] });
+      // The freshest copy there is: the list may have moved on while the save ran.
+      const fresh = item && qc.getQueryData<InboxItem[]>(keys.inbox)?.find((i) => i.id === item.id);
+      const next = fresh ?? item;
+      load(next ? { id: next.id, body: next.body, attachments: next.attachments } : { id: null, body: "", attachments: [] });
+      return true;
     },
-    [load, save],
+    [load, qc, save],
   );
 
   const discard = useCallback(async () => {
