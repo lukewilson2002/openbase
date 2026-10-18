@@ -8,6 +8,7 @@ import { SquarePlus } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
+import { ColorField } from "@/components/ColorField";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,11 +37,12 @@ export function HomePage() {
 
 function FirstWorkspace() {
   const [name, setName] = useState("");
+  const [color, setColor] = useState<string | null>(null);
   const create = useCreateWorkspace();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
-    if (trimmed) create.mutate({ name: trimmed });
+    if (trimmed) create.mutate({ name: trimmed, color });
   };
 
   return (
@@ -74,6 +76,7 @@ function FirstWorkspace() {
               Create workspace
             </Button>
           </div>
+          <ColorField value={color} onChange={setColor} className="mt-2.5" />
           {create.isError && <Notice tone="error">{errorMessage(create.error)}</Notice>}
         </form>
         <p className="text-sm text-muted">Workspaces are private until you invite someone.</p>

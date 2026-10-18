@@ -124,6 +124,19 @@ describe("/", () => {
     expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio" });
   });
 
+  it("gives the first workspace the colour picked for it", async () => {
+    const user = userEvent.setup();
+    const api = routes({
+      "GET /api/workspaces": [],
+      "POST /api/workspaces": { id: "wsp9", name: "Studio", color: "red", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 },
+    });
+    renderApp();
+    await user.type(await screen.findByRole("textbox", { name: "Workspace name" }), "Studio");
+    await user.click(screen.getByRole("radio", { name: "Red" }));
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    await waitFor(() => expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", color: "red" }));
+  });
+
   it("shows an error when the workspaces cannot be loaded", async () => {
     routes({ "GET /api/workspaces": apiError(500, "internal", "Something broke") });
     renderApp();

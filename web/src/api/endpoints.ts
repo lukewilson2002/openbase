@@ -207,7 +207,7 @@ export const api = {
 
   workspaces: {
     list: () => http.get<WorkspaceSummary[]>("/api/workspaces"),
-    create: (name: string, icon?: string | null) => http.post<WorkspaceSummary>("/api/workspaces", icon ? { name, icon } : { name }),
+    create: (name: string, icon?: string | null, color?: string | null) => http.post<WorkspaceSummary>("/api/workspaces", { name, ...(icon ? { icon } : {}), ...(color ? { color } : {}) }),
     update: (id: string, body: UpdateWorkspace) => http.patch<WorkspaceSummary>(`/api/workspaces/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/workspaces/${enc(id)}`),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
