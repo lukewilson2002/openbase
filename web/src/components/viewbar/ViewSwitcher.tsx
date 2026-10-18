@@ -117,18 +117,19 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
       </nav>
       <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
         {hidden.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <ViewsDropdown
+            label={`More views of ${table.name}`}
+            views={hidden.flatMap((g) => g.views)}
+            activeId={view.id}
+            to={to}
+            onMenu={onMenu}
+            hasMenu={hasMenu}
+            trigger={
               <IconButton label={`${count(hidden)} more ${count(hidden) === 1 ? "view" : "views"}`} noTooltip className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
                 <Ellipsis aria-hidden className="size-[1.125rem]" />
               </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" aria-label={`More views of ${table.name}`} aria-labelledby={undefined} className="w-60">
-              {hidden.flatMap((g) => g.views).map((v) => (
-                <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === view.id} />
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            }
+          />
         )}
         {canCreateView && (
           <DropdownMenu>
@@ -268,8 +269,14 @@ function GroupButton({
   const typeLabel = VIEW_TYPE_META[group.type]?.label ?? group.type;
   const open = group.views.find((v) => v.id === activeId);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <ViewsDropdown
+      label={`${typeLabel} views of ${tableName}`}
+      views={group.views}
+      activeId={activeId}
+      to={to}
+      onMenu={onMenu}
+      hasMenu={hasMenu}
+      trigger={
         <button
           type="button"
           aria-label={`${group.views.length} ${typeLabel.toLowerCase()} views${open ? `, ${open.name} open` : ""}`}
@@ -279,21 +286,59 @@ function GroupButton({
           <Icon aria-hidden className="size-[1.125rem] shrink-0" />
           <ChevronDown aria-hidden className="size-3.5 shrink-0 opacity-70" />
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" aria-label={`${typeLabel} views of ${tableName}`} aria-labelledby={undefined} className="w-60">
-        {group.views.map((v) => (
-          <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} />
+      }
+    />
+  );
+}
+
+/**
+ * A dropdown of views (the views of one type sharing a button, or those that did not fit). A
+ * right-click or a held press on one of them closes it and opens that view's own menu in its place.
+ */
+function ViewsDropdown({
+  label,
+  views,
+  activeId,
+  to,
+  trigger,
+  onMenu,
+  hasMenu,
+}: {
+  label: string;
+  views: readonly View[];
+  activeId: string;
+  to: (v: View) => string;
+  trigger: React.ReactElement;
+  onMenu?: (view: View, anchor: MenuAnchor) => void;
+  hasMenu?: (view: View) => boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuFor = (v: View) =>
+    onMenu && hasMenu?.(v)
+      ? (anchor: MenuAnchor) => {
+          setOpen(false);
+          // After this dropdown has closed (and handed the focus back), or the new menu would close with it.
+          setTimeout(() => onMenu(v, anchor), 0);
+        }
+      : undefined;
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" aria-label={label} aria-labelledby={undefined} className="w-60">
+        {views.map((v) => (
+          <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} />
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function ViewMenuItem({ view: v, to, active }: { view: View; to: string; active: boolean }) {
+function ViewMenuItem({ view: v, to, active, onMenu }: { view: View; to: string; active: boolean; onMenu?: (anchor: MenuAnchor) => void }) {
   const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
+  const gesture = useMenuGesture(onMenu);
   return (
     <DropdownMenuItem asChild>
-      <Link to={to} aria-current={active ? "page" : undefined}>
+      <Link {...gesture} to={to} aria-current={active ? "page" : undefined} className="[-webkit-touch-callout:none]">
         <Icon aria-hidden className="size-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1 truncate">{v.name}</span>
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}

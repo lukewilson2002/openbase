@@ -275,6 +275,22 @@ describe("ViewBar view switcher", () => {
     }
   });
 
+  it("opens a view's menu on a right-click of it in a shared button's list, closing the list", async () => {
+    const user = userEvent.setup();
+    const onDialog = vi.fn();
+    const schema = makeSchema("creator");
+    const t = schema.tables[0]!;
+    // No room for names (jsdom measures nothing): All tasks and My tasks share the grid button.
+    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true, onDialog });
+    await user.click(screen.getByRole("button", { name: "2 grid views, All tasks open" }));
+    const list = await screen.findByRole("menu", { name: "Grid views of Tasks" });
+    fireEvent.contextMenu(within(list).getByRole("menuitem", { name: /My tasks/ }), { clientX: 60, clientY: 80 });
+    const menu = await screen.findByRole("menu", { name: "Options for My tasks" });
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Grid views of Tasks" })).not.toBeInTheDocument());
+    await user.click(within(menu).getByRole("menuitem", { name: /Rename view/ }));
+    expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[2] });
+  });
+
   it("opens a view's menu on a held press, and the lift does not also open the view", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
