@@ -154,7 +154,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   });
 
   await test.step("adds a record in the grid", async () => {
-    await page.getByRole("navigation", { name: "Tables" }).getByRole("link", { name: "Table 1" }).click();
+    await page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).click();
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
     await expect(page.getByText("0 items")).toBeVisible();
     await page.getByRole("button", { name: "Add record" }).click();
