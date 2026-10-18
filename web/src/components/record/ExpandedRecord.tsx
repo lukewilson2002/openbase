@@ -327,7 +327,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   ) : (
     // Below md the fields and the comments stack in one scrolling column: two scroll areas on a phone
     // left the fields about half the screen and the comments pane fighting it for every swipe.
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
@@ -359,7 +359,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
           <TabsContent value="comments" className="min-h-0 flex-1 pt-0">
             <CommentsPanel recordId={recordId} collaborators={collaborators} currentUserId={currentUserId} canComment={canComment} timeZone={timeZone} />
           </TabsContent>
-          <TabsContent value="history" className="min-h-0 flex-1 overflow-y-auto pt-0">
+          <TabsContent value="history" className="min-h-0 flex-1 pt-0 md:overflow-y-auto">
             <HistoryPanel tableId={table.id} recordId={recordId} fields={table.fields} format={format} />
           </TabsContent>
         </Tabs>

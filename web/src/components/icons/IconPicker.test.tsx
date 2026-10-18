@@ -336,7 +336,7 @@ describe("IconPicker on a touch screen", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose icon" })).not.toBeInTheDocument());
     expect(onOpenChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Kitchen", "truck");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Kitchen", "truck", null);
   });
 
   it("shows the menu's icon dialog as a sheet too", async () => {

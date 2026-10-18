@@ -13,7 +13,7 @@ import { keys } from "./keys";
 import type { EventEnvelope } from "./types";
 
 /** The `event:` names the server uses (BaseEvent kinds, snake_case). */
-export const EVENT_KINDS = ["records_changed", "schema_changed", "comments_changed", "base_changed"] as const;
+export const EVENT_KINDS = ["records_changed", "schema_changed", "comments_changed", "base_changed", "presence_changed"] as const;
 
 /** The subset of EventSource this helper needs (lets tests inject a fake). */
 export interface EventSourceLike {

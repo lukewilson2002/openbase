@@ -176,7 +176,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+      <div className="min-h-0 flex-1 md:overflow-y-auto" aria-live="polite">
         {list.isPending && (
           <div className="flex justify-center py-6">
             <Spinner label="Loading comments" />

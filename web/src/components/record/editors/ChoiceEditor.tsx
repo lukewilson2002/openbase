@@ -141,7 +141,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
           className="h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-[0.8125rem] outline-none focus:border-ring"
         />
       </div>
-      <ul id={listId} role="listbox" aria-multiselectable={multiple} aria-label={field.name} className="min-h-0 flex-1 overflow-y-auto p-1">
+      <ul id={listId} role="listbox" aria-multiselectable={multiple} aria-label={field.name} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
         {filtered.map((c, i) => {
           const on = selected.includes(c.id);
           return (

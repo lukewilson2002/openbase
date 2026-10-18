@@ -35,6 +35,8 @@ export const keys = {
   baseCollaborators: (id: string) => ["base", id, "collaborators"] as const,
   records: (tableId: string) => ["records", tableId] as const,
   comments: (recordId: string) => ["comments", recordId] as const,
+  /** Who has a base open right now (user ids), fed by the stream's presence frames (hooks/usePresence). */
+  presence: (baseId: string) => ["presence", baseId] as const,
   invitePreview: (token: string) => ["invite", token] as const,
   adminUsers: ["admin", "users"] as const,
   /** `before` is the audit-log cursor (an entry id), null for the newest page. */

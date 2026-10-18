@@ -1,6 +1,6 @@
 /**
  * The dialogs the menu's workspace and project rows open: a new workspace or project, a
- * spreadsheet import, rename, icon, delete, and inviting people. They live here, around the page
+ * spreadsheet import, rename, icon, colour, delete, and inviting people. They live here, around the page
  * rather than inside the menu, because on a phone the menu is a drawer that unmounts when it
  * closes, and a dialog inside it would vanish with it. Both shells (the home pages and a project)
  * wrap their frame in `NavDialogsProvider`; the menu and the empty workspace page open dialogs
@@ -13,6 +13,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
+import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
 import { NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
@@ -25,13 +26,14 @@ import { useCreateWorkspace } from "./useCreateWorkspace";
 
 export type NavDialog =
   | { kind: "create-workspace" }
-  /** Rename, change the icon of, or delete a workspace. */
+  /** Rename, change the icon or colour of, or delete a workspace. */
   | { kind: "workspace"; ws: WorkspaceSummary; dialog: NonNullable<WorkspaceDialog> }
   | { kind: "invite"; ws: WorkspaceSummary }
   | { kind: "create-project"; workspaceId: string }
   | { kind: "import-project"; workspaceId: string }
   | { kind: "rename-project"; base: BaseSummary }
   | { kind: "project-icon"; base: BaseSummary }
+  | { kind: "project-color"; base: BaseSummary }
   | { kind: "delete-project"; base: BaseSummary }
   | { kind: "share-project"; base: BaseSummary; workspaceName: string };
 
@@ -62,11 +64,12 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
   const refreshWorkspaces = () => qc.invalidateQueries({ queryKey: keys.workspaces });
 
   const createBase = useMutation({
-    mutationFn: (v: { workspaceId: string; name: string; icon?: string | null; empty: boolean }) => api.bases.create(v.workspaceId, { name: v.name, ...(v.icon ? { icon: v.icon } : {}), empty: v.empty }),
+    mutationFn: (v: { workspaceId: string; name: string; icon?: string | null; color?: string | null; empty: boolean }) =>
+      api.bases.create(v.workspaceId, { name: v.name, ...(v.icon ? { icon: v.icon } : {}), ...(v.color ? { color: v.color } : {}), empty: v.empty }),
     onSuccess: () => void refreshWorkspaces(),
   });
   const updateBase = useMutation({
-    mutationFn: (v: { id: string; name?: string; icon?: string | null }) => api.bases.update(v.id, { name: v.name, icon: v.icon }),
+    mutationFn: (v: { id: string; name?: string; icon?: string | null; color?: string }) => api.bases.update(v.id, { name: v.name, icon: v.icon, color: v.color }),
     onSuccess: (_base, v) => {
       void refreshWorkspaces();
       void qc.invalidateQueries({ queryKey: keys.base(v.id) });
@@ -93,7 +96,8 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         title="New workspace"
         submitLabel="Create workspace"
         withIcon
-        onSubmit={(name, icon) => createWorkspace.mutateAsync({ name, icon })}
+        withColor
+        onSubmit={(name, icon, color) => createWorkspace.mutateAsync({ name, icon, color })}
       />
       {dialog?.kind === "workspace" && <WorkspaceDialogs ws={dialog.ws} open={dialog.dialog} onClose={onClose} />}
       {dialog?.kind === "invite" && <ShareDialog open onOpenChange={onOpenChange} scope="workspace" workspace={dialog.ws} />}
@@ -105,9 +109,10 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         label="Project name"
         submitLabel="Create project"
         withIcon
-        onSubmit={async (name, icon) => {
+        withColor
+        onSubmit={async (name, icon, color) => {
           if (dialog?.kind !== "create-project") return;
-          const base = await createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, icon, empty: true });
+          const base = await createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, icon, color, empty: true });
           await navigate(`/base/${base.id}`);
         }}
       />
@@ -130,6 +135,13 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
         title="Project icon"
         value={dialog?.kind === "project-icon" ? dialog.base.icon : null}
         onChange={(icon) => dialog?.kind === "project-icon" && updateBase.mutate({ id: dialog.base.id, icon })}
+      />
+      <ColorDialog
+        open={dialog?.kind === "project-color"}
+        onOpenChange={onOpenChange}
+        title="Project color"
+        value={dialog?.kind === "project-color" ? dialog.base.color : null}
+        onChange={(color) => dialog?.kind === "project-color" && updateBase.mutate({ id: dialog.base.id, color })}
       />
       <ConfirmDialog
         open={dialog?.kind === "delete-project"}

@@ -11,29 +11,18 @@ function isMe(p: BasePerson, meId: string | undefined): boolean {
   return !p.pending && !!meId && p.user_id === meId;
 }
 
-/** "you, Alex, and jordan@example.com (invited, not joined yet)": the full list, for screen readers. */
-export function peopleLabel(people: readonly BasePerson[], meId: string | undefined): string {
-  const names = people.map((p) => {
+/** "you, Alex, and jordan@example.com (invited, not joined yet)": the names behind some faces, for tooltips and screen readers. */
+export function peopleLabel(people: readonly BasePerson[], meId: string | undefined, limit = 8): string {
+  const named = people.map((p) => {
     if (isMe(p, meId)) return "you";
     if (p.pending) return `${p.email || p.name || "someone with an invite link"} (invited, not joined yet)`;
     return p.name || p.email;
   });
-  if (names.length <= 1) return names.join("");
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-
-/** "You, Alex, jordan (invited)": short names, for the line beside the faces. */
-export function peopleSummary(people: readonly BasePerson[], meId: string | undefined, max = 3): string {
-  const short = people.map((p) => {
-    if (isMe(p, meId)) return "You";
-    if (p.pending) return `${(p.email || p.name).split("@")[0] || "Someone"} (invited)`;
-    return p.name.trim().split(/\s+/)[0] || p.email.split("@")[0] || "Someone";
-  });
-  // "You" first: the list is about who else is in here.
-  const mine = short.indexOf("You");
-  if (mine > 0) short.unshift(...short.splice(mine, 1));
-  return short.length > max ? `${short.slice(0, max).join(", ")} and ${short.length - max} more` : short.join(", ");
+  const shown = named.slice(0, limit);
+  if (named.length > limit) shown.push(`${named.length - limit} more`);
+  if (shown.length <= 1) return shown.join("");
+  if (shown.length === 2) return `${shown[0]} and ${shown[1]}`;
+  return `${shown.slice(0, -1).join(", ")}, and ${shown[shown.length - 1]}`;
 }
 
 /** The face of someone invited who has not joined yet: grey, with a dashed outline. */
@@ -55,24 +44,24 @@ export function PendingFace({ email, size = "sm", className, style }: { email?: 
 }
 
 export interface BaseAvatarsProps {
+  /** Everyone who can open the project, invites that are not accepted yet included. */
   people: readonly BasePerson[];
-  /** Faces drawn before the rest become "+N" (default 4). */
+  /** The ids of the people with the project open right now (`usePresence`); you are always counted in. */
+  viewers?: readonly string[];
+  /** Faces drawn for the people viewing (default 4); any further viewers stay in the "+N". */
   max?: number;
-  /** Show the short names beside the faces. */
-  summary?: boolean;
-  /** Extra classes for the summary text (e.g. to hide it on phones). */
-  summaryClassName?: string;
-  /** `md` for the base's header on a desktop. */
+  /** `md` for the project's header on a desktop. */
   size?: "sm" | "md";
   className?: string;
 }
 
 /**
- * Who can open a base, as overlapping faces (at most four, then "+N"). Someone invited who has
- * not joined yet is a grey face with a dashed outline. When nobody else can open it: a lock and
- * "Only you".
+ * Who is in the project, like the faces at the top of a shared document: one face for each person
+ * viewing it right now (you first, then the others in the order they arrived), then one grey "+N" for
+ * everyone else who can open it, invites that are not accepted yet included. When nobody else can open
+ * it: a lock and "Only you".
  */
-export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryClassName, size = "sm", className }: BaseAvatarsProps) {
+export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm", className }: BaseAvatarsProps) {
   const { data: me } = useMe();
   const meId = me?.id;
 
@@ -84,36 +73,38 @@ export function BaseAvatars({ people, max = MAX_FACES, summary = false, summaryC
     );
   }
 
-  // Me first, like the summary line.
-  const ordered = [...people].sort((a, b) => Number(isMe(b, meId)) - Number(isMe(a, meId)));
-  const faces = ordered.length > max ? ordered.slice(0, Math.max(1, max - 1)) : ordered;
-  const rest = ordered.length - faces.length;
-  const label = `Who can open this base: ${peopleLabel(ordered, meId)}`;
+  // I count even before the first presence frame has come in, so the faces never start empty.
+  const byId = new Map(people.filter((p) => !p.pending && p.user_id).map((p) => [p.user_id!, p] as const));
+  const watching = [...new Set([...(meId ? [meId] : []), ...viewers])].flatMap((id) => byId.get(id) ?? []);
+  const faces = watching.slice(0, max);
+  const rest = people.length - faces.length;
+  const away = people.filter((p) => !watching.includes(p));
+  const label =
+    `${watching.length} ${watching.length === 1 ? "person" : "people"} viewing now` +
+    (away.length > 0 ? `, ${away.length} more can open this project` : "") +
+    (watching.length > 0 ? `: ${peopleLabel(watching, meId)}` : "");
+  const chipSize = size === "md" ? "size-8 text-xs" : "size-6 text-[0.625rem]";
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
       <span role="img" aria-label={label} title={label} className={cn("flex shrink-0", size === "md" ? "-space-x-2" : "-space-x-1.5")}>
         {/* Leftmost on top, each face tucked under the one before it: the first face (you) reads whole. */}
-        {faces.map((p, i) =>
-          p.pending ? (
-            <PendingFace key={`invite-${i}`} email={p.email || p.name} size={size} className="relative ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }} />
-          ) : (
-            <span key={p.user_id ?? i} aria-hidden data-face className="relative inline-flex rounded-full ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }}>
-              <Avatar name={p.name} email={p.email} size={size} />
-            </span>
-          ),
-        )}
+        {faces.map((p, i) => (
+          <span key={p.user_id ?? i} aria-hidden data-face className="relative inline-flex rounded-full ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }}>
+            <Avatar name={p.name} email={p.email} size={size} />
+          </span>
+        ))}
         {rest > 0 && (
-          <span aria-hidden className={cn("relative z-0 inline-flex shrink-0 items-center justify-center rounded-full bg-subtle font-semibold text-muted ring-2 ring-surface", size === "md" ? "size-8 text-xs" : "size-6 text-[0.625rem]")}>
+          <span
+            aria-hidden
+            data-away
+            title={away.length > 0 ? `Can open this project, not viewing now: ${peopleLabel(away, meId)}` : undefined}
+            className={cn("relative z-0 inline-flex shrink-0 items-center justify-center rounded-full bg-subtle font-semibold text-muted ring-2 ring-surface", chipSize)}
+          >
             +{rest}
           </span>
         )}
       </span>
-      {summary && (
-        <span aria-hidden className={cn("min-w-0 truncate text-xs text-muted", summaryClassName)}>
-          {peopleSummary(ordered, meId)}
-        </span>
-      )}
     </span>
   );
 }

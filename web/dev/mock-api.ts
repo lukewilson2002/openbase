@@ -681,7 +681,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
   }
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, workspaceList()), true;
   if (p === "/api/workspaces" && m === "POST") {
-    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, role: "owner" };
+    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, ...(body.color ? { color: body.color } : {}), role: "owner" };
     ws.workspaces.push(w);
     ws.members[w.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
     return send(res, 201, workspaceList().find((x) => x.id === w.id)), true;
@@ -692,6 +692,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     if (m === "PATCH") {
       if (body.name !== undefined) w.name = body.name;
       if (body.icon !== undefined) w.icon = body.icon;
+      if (body.color) w.color = body.color;
       return send(res, 200, workspaceList().find((x) => x.id === w.id)), true;
     }
     if (m === "DELETE") {
@@ -746,7 +747,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     ws.bases.push(b);
     return send(res, 201, { ...baseSummary(b, "owner"), tables: [], workspace_name: ws.workspaces.find((w) => w.id === g![1])?.name ?? "" }), true;
   }
-  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && g[1] !== BASE_ID && (m === "PATCH" || m === "DELETE")) {
+  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && (g[1] !== BASE_ID || m === "PATCH") && (m === "PATCH" || m === "DELETE")) {
     const b = ws.bases.find((x) => x.id === g![1]);
     if (!b) return err(res, 404, "not_found", "base not found"), true;
     if (m === "DELETE") ws.bases.splice(ws.bases.indexOf(b), 1);
@@ -840,8 +841,21 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === `/api/bases/${BASE_ID}/events`) {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.write(": hello\n\n");
+    // Like the real server: the first frame says who is viewing (you included). Grace is in the
+    // project already; Alan drops in and out every few seconds so the top bar's faces move.
+    const presence = (viewers: string[]) =>
+      res.write(`event: presence_changed\ndata: ${JSON.stringify({ base_id: BASE_ID, client_id: null, user_id: null, event: { kind: "presence_changed", viewers } })}\n\n`);
+    presence([ME, "usr2"]);
+    let alanIn = false;
+    const timer = setInterval(() => {
+      alanIn = !alanIn;
+      presence(alanIn ? [ME, "usr2", "usr3"] : [ME, "usr2"]);
+    }, 6000);
     sseClients.add(res);
-    req.on("close", () => sseClients.delete(res));
+    req.on("close", () => {
+      clearInterval(timer);
+      sseClients.delete(res);
+    });
     return true;
   }
   if (p === `/api/bases/${BASE_ID}/attachments` && m === "POST") {

@@ -158,5 +158,6 @@ describe("queryKeysForEvent", () => {
     expect(queryKeysForEvent(envelope({ event: { kind: "schema_changed", table_id: "tbl1" } }))).toContainEqual(["base", "app1"]);
     expect(queryKeysForEvent(envelope({ event: { kind: "comments_changed", record_id: "rec9" } }))).toEqual([["comments", "rec9"]]);
     expect(queryKeysForEvent(envelope({ event: { kind: "base_changed" } }))).toContainEqual(["base", "app1"]);
+    expect(queryKeysForEvent(envelope({ event: { kind: "presence_changed", viewers: ["usr1"] } }))).toEqual([]);
   });
 });

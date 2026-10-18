@@ -185,7 +185,7 @@ function Results({
     ));
   }
   return (
-    <div id={listId} role="listbox" aria-label="Search results" aria-busy={res.isFetching || settling} className="max-h-[min(28rem,calc(100dvh-8rem))] overflow-y-auto py-1">
+    <div id={listId} role="listbox" aria-label="Search results" aria-busy={res.isFetching || settling} className="max-h-[min(28rem,calc(100dvh-8rem))] overflow-y-auto overscroll-contain py-1">
       {body}
     </div>
   );

@@ -3,26 +3,28 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { WorkspaceSummary } from "@/api/types";
+import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { IconPickerDialog } from "@/components/icons/IconPicker";
 import { iconPatch } from "@/components/icons/iconPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { workspaceColor } from "@/lib/workspaceColor";
 import { rememberWorkspace } from "./lastWorkspace";
 
-export type WorkspaceDialog = "rename" | "icon" | "delete" | null;
+export type WorkspaceDialog = "rename" | "icon" | "color" | "delete" | null;
 
 export function useUpdateWorkspace() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (v: { id: string; name?: string; icon?: string | null }) => api.workspaces.update(v.id, { name: v.name, icon: v.icon }),
+    mutationFn: (v: { id: string; name?: string; icon?: string | null; color?: string }) => api.workspaces.update(v.id, { name: v.name, icon: v.icon, color: v.color }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.workspaces }),
     onError: (e) => toast.error(e, "Could not update workspace"),
   });
 }
 
-/** Rename, change the icon of and delete a workspace (owners). Deleting leaves for the home page. */
+/** Rename, change the icon or colour of and delete a workspace (owners). Deleting leaves for the home page. */
 export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; open: WorkspaceDialog; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -50,6 +52,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
         onSubmit={(name, icon) => update.mutateAsync({ id: ws.id, name, ...iconPatch(ws.icon, icon) })}
       />
       <IconPickerDialog open={open === "icon"} onOpenChange={onOpenChange} title="Workspace icon" value={ws.icon} onChange={(icon) => update.mutate({ id: ws.id, icon })} />
+      <ColorDialog open={open === "color"} onOpenChange={onOpenChange} title="Workspace color" value={workspaceColor(ws)} onChange={(color) => update.mutate({ id: ws.id, color })} />
       <ConfirmDialog
         open={open === "delete"}
         onOpenChange={onOpenChange}

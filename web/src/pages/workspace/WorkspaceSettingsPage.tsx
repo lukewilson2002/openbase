@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router";
-import { Pencil, Shapes, Trash2 } from "lucide-react";
+import { Palette, Pencil, Shapes, Trash2 } from "lucide-react";
 import type { WorkspaceSummary } from "@/api/types";
-import { EntityTile } from "@/components/icons/EntityIcon";
+import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { atLeast } from "@/lib/roles";
@@ -65,6 +65,19 @@ function Settings({ ws }: { ws: WorkspaceSummary }) {
               action={
                 <Button onClick={() => setDialog("icon")}>
                   <Shapes aria-hidden className="size-4" /> Change icon…
+                </Button>
+              }
+            />
+            <Row
+              title="Color"
+              description={
+                <span className="mt-1 inline-flex">
+                  <WorkspaceTile ws={ws} size="sm" />
+                </span>
+              }
+              action={
+                <Button onClick={() => setDialog("color")}>
+                  <Palette aria-hidden className="size-4" /> Change color…
                 </Button>
               }
             />

@@ -220,6 +220,21 @@ describe("ExpandedRecord: history", () => {
     expect(within(entries[1]!).getByText("Launch")).toBeInTheDocument();
   });
 
+  it("scrolls as one column on a phone: the comments and history panels only scroll from md up", async () => {
+    setup();
+    const dialog = await screen.findByRole("dialog");
+    await screen.findByText("Thanks!");
+    // jsdom has no media queries: read the classes. An unprefixed overflow-y-auto outside the one
+    // column (and the lists in the fields' pop-overs) is a second scroll area under the finger.
+    const scrollers = [...dialog.querySelectorAll<HTMLElement>("[class*='overflow-y-auto']")].filter((el) => /(^|\s)overflow-y-auto(\s|$)/.test(el.className));
+    expect(scrollers).toHaveLength(1);
+    expect(scrollers[0]).toHaveClass("overscroll-contain");
+    const panel = dialog.querySelector("aside")!;
+    expect(panel.querySelector("[aria-live='polite']")).toHaveClass("md:overflow-y-auto");
+    await userEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(await screen.findByRole("list", { name: "Revision history" })).toHaveClass("md:overflow-y-auto");
+  });
+
   it("explains an empty history", async () => {
     setup({}, { "GET /api/records/rec1/history": [] });
     await userEvent.click(await screen.findByRole("tab", { name: "History" }));

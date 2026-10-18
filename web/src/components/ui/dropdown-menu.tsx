@@ -1,7 +1,8 @@
-import type { ComponentProps, CSSProperties } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ComponentProps, type CSSProperties } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { cn } from "@/lib/cn";
+import { useTapGuard } from "@/lib/tapGuard";
 
 /**
  * The height a menu has below or above its trigger, inside the screen's collision padding and clear
@@ -14,8 +15,66 @@ export const menuAvailStyle = {
 } as CSSProperties;
 const availClass = "max-h-[var(--ob-avail)] overflow-y-auto overscroll-contain";
 
-export const DropdownMenu = M.Root;
-export const DropdownMenuTrigger = M.Trigger;
+/** The menu's open state, so a trigger can open it on a tap (see `DropdownMenuTrigger`). */
+const OpenContext = createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
+
+/** Radix's root, with the open state held here (controlled or not) for the trigger's tap handling. */
+export function DropdownMenu({ open: openProp, defaultOpen = false, onOpenChange, ...props }: ComponentProps<typeof M.Root>) {
+  const [inner, setInner] = useState(defaultOpen);
+  const open = openProp ?? inner;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (openProp === undefined) setInner(next);
+      onOpenChange?.(next);
+    },
+    [openProp, onOpenChange],
+  );
+  const value = useMemo(() => ({ open, setOpen }), [open, setOpen]);
+  return (
+    <OpenContext value={value}>
+      <M.Root open={open} onOpenChange={setOpen} {...props} />
+    </OpenContext>
+  );
+}
+
+/**
+ * Opens on a mouse press, like Radix, and on Enter, Space and ArrowDown. A finger opens it on a tap
+ * instead: Radix opens on pointerdown for every pointer, which on a phone turned a swipe that started
+ * on a menu button into an open menu. See `lib/tapGuard`.
+ */
+export function DropdownMenuTrigger({ onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClick, ...props }: ComponentProps<typeof M.Trigger>) {
+  const menu = useContext(OpenContext);
+  const guard = useTapGuard(() => {
+    if (props.disabled || !menu) return;
+    menu.setOpen(!menu.open);
+  });
+  // Ours first: a touch's pointerdown is cancelled before Radix's handler sees it.
+  return (
+    <M.Trigger
+      {...props}
+      onPointerDown={(e) => {
+        onPointerDown?.(e);
+        guard.onPointerDown(e);
+      }}
+      onPointerMove={(e) => {
+        onPointerMove?.(e);
+        guard.onPointerMove(e);
+      }}
+      onPointerUp={(e) => {
+        onPointerUp?.(e);
+        guard.onPointerUp(e);
+      }}
+      onPointerCancel={(e) => {
+        onPointerCancel?.(e);
+        guard.onPointerCancel(e);
+      }}
+      onClick={(e) => {
+        onClick?.(e);
+        guard.onClick();
+      }}
+    />
+  );
+}
 export const DropdownMenuRadioGroup = M.RadioGroup;
 
 export function DropdownMenuContent({ className, style, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {

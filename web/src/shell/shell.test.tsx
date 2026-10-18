@@ -6,7 +6,7 @@ import type { BasePerson } from "@/api/types";
 import { IntroProvider } from "@/onboarding/IntroContext";
 import { ADMIN, USER, makeSchema, mockApi, renderWithProviders, stubDesktop } from "@/test/utils";
 import { AppShell } from "./AppShell";
-import { BaseAvatars, peopleSummary } from "./BaseAvatars";
+import { BaseAvatars } from "./BaseAvatars";
 import { HomeShell } from "./HomeShell";
 import { SidebarLink, SidebarSection } from "./Sidebar";
 import { SIDEBAR_KEY } from "./sidebarPrefs";
@@ -146,6 +146,8 @@ describe("ProfileMenu", () => {
     await user.click(trigger);
     const menu = await screen.findByRole("menu");
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Settings", "Connect an assistant", "Replay the intro", "Appearance: System", "Sign out"]);
+    // Every row leads with an icon, like the other menus.
+    for (const item of within(menu).getAllByRole("menuitem")) expect(item.querySelector("svg[aria-hidden='true']"), item.textContent ?? "").not.toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/account");
     expect(within(menu).getByRole("menuitem", { name: "Connect an assistant" })).toHaveAttribute("href", "/account?tab=assistants");
     // The theme is one row that opens its choices, by keyboard as by pointer.
@@ -186,38 +188,61 @@ describe("BaseAvatars", () => {
 
   it("says Only you when nobody else can open the base", async () => {
     routes();
-    renderWithProviders(<BaseAvatars people={[me]} summary />);
+    renderWithProviders(<BaseAvatars people={[me]} />);
     expect(await screen.findByText("Only you")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /Who can open/ })).not.toBeInTheDocument();
   });
 
-  it("names everyone, marks invites that are not accepted yet, and draws them dashed", async () => {
+  it("shows you alone, and everyone else who can open the project as one +N, until others arrive", async () => {
     routes();
-    const { container } = renderWithProviders(<BaseAvatars people={[alex, me, jordan]} summary />);
-    expect(await screen.findByRole("img", { name: "Who can open this base: you, Alex Kim, and jordan@example.com (invited, not joined yet)" })).toBeInTheDocument();
-    expect(screen.getByText("You, Alex, jordan (invited)")).toBeInTheDocument();
-    expect(container.querySelectorAll("[data-pending]")).toHaveLength(1);
-    expect(container.querySelector("[data-pending]")).toHaveClass("border-dashed");
+    const { container } = renderWithProviders(<BaseAvatars people={[alex, me, jordan]} />);
+    const group = await screen.findByRole("img", { name: "1 person viewing now, 2 more can open this project: you" });
+    expect(container.querySelectorAll("[data-face]")).toHaveLength(1);
+    // The invite that is not accepted yet counts in the +N, with a name in its tooltip.
+    expect(group).toHaveTextContent("+2");
+    expect(container.querySelector("[data-away]")).toHaveAttribute("title", "Can open this project, not viewing now: Alex Kim and jordan@example.com (invited, not joined yet)");
+    expect(container.querySelector("[data-away]")).toHaveClass("bg-subtle");
+    expect(container.querySelector("[data-pending]")).toBeNull();
   });
 
-  it("shows at most four circles: three faces, then +N", async () => {
+  it("draws a face for each person viewing, you first, and +N for those who are not", async () => {
+    routes();
+    const { container } = renderWithProviders(<BaseAvatars people={[alex, me, jordan]} viewers={["usr2", "usr1"]} />);
+    const group = await screen.findByRole("img", { name: "2 people viewing now, 1 more can open this project: you and Alex Kim" });
+    expect(Array.from(container.querySelectorAll("[data-face] [role=img]")).map((f) => f.getAttribute("title"))).toEqual(["Ada Lovelace", "Alex Kim"]);
+    expect(group).toHaveTextContent("+1");
+  });
+
+  it("has no +N when everyone who can open it is viewing", async () => {
+    routes();
+    renderWithProviders(<BaseAvatars people={[me, alex]} viewers={["usr1", "usr2"]} />);
+    const group = await screen.findByRole("img", { name: "2 people viewing now: you and Alex Kim" });
+    expect(group).not.toHaveTextContent("+");
+  });
+
+  it("ignores a viewer who is not among the people who can open it", async () => {
+    routes();
+    const { container } = renderWithProviders(<BaseAvatars people={[me, alex]} viewers={["usr9", "usr2"]} />);
+    await screen.findByRole("img", { name: "2 people viewing now: you and Alex Kim" });
+    expect(container.querySelectorAll("[data-face]")).toHaveLength(2);
+  });
+
+  it("draws at most max faces, and the rest of the viewers go in the +N", async () => {
     routes();
     const many = ["b", "c", "d", "e", "f"].map((x, i): BasePerson => ({ user_id: `u${i}`, name: `${x.toUpperCase()} Person`, email: `${x}@example.com`, pending: false, role: "viewer" }));
-    renderWithProviders(<BaseAvatars people={[me, ...many]} />);
-    const group = await screen.findByRole("img", { name: /^Who can open this base: you, B Person/ });
+    const { container } = renderWithProviders(<BaseAvatars people={[me, ...many]} viewers={many.map((p) => p.user_id!)} max={3} />);
+    const group = await screen.findByRole("img", { name: /^6 people viewing now: you, B Person/ });
+    expect(container.querySelectorAll("[data-face]")).toHaveLength(3);
     expect(group).toHaveTextContent("+3");
-    expect(peopleSummary([me, ...many], "usr1")).toBe("You, B, C and 3 more");
   });
 
   it("stacks the leftmost face on top, each next one tucked under it", async () => {
     routes();
-    const { container } = renderWithProviders(<BaseAvatars people={[me, alex, jordan]} />);
-    await screen.findByRole("img", { name: /^Who can open this base/ });
-    const faces = Array.from(container.querySelectorAll<HTMLElement>("[data-face], [data-pending]"));
-    expect(faces).toHaveLength(3);
-    const z = faces.map((f) => Number(f.style.zIndex));
-    expect(z[0]).toBeGreaterThan(z[1]!);
-    expect(z[1]).toBeGreaterThan(z[2]!);
+    const { container } = renderWithProviders(<BaseAvatars people={[me, alex]} viewers={["usr2"]} />);
+    await screen.findByRole("img", { name: /^2 people viewing now/ });
+    const faces = Array.from(container.querySelectorAll<HTMLElement>("[data-face]"));
+    expect(faces).toHaveLength(2);
+    expect(Number(faces[0]!.style.zIndex)).toBeGreaterThan(Number(faces[1]!.style.zIndex));
   });
 });
 
@@ -349,6 +374,7 @@ describe("HomeShell", () => {
       "Settings",
       "Rename",
       "Change icon…",
+      "Change color…",
       "Delete workspace",
     ]);
     expect(within(menu).getByRole("menuitem", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
@@ -367,6 +393,7 @@ describe("HomeShell", () => {
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual([
       "Rename project",
       "Change icon…",
+      "Change color…",
       "Duplicate project",
       "Share…",
       "Members",

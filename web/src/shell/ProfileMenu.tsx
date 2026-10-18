@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { ChevronsUpDown } from "lucide-react";
+import { Bot, ChevronsUpDown, LogOut, Palette, PlayCircle, Settings, Shield } from "lucide-react";
 import { useMe } from "@/auth/useAuth";
 import { ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
 import { Avatar } from "@/components/ui/avatar";
@@ -50,28 +50,36 @@ export function ProfileMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[max(var(--radix-dropdown-menu-trigger-width),14rem)] rounded-xl p-1.5">
         <DropdownMenuItem asChild className={item}>
-          <Link to="/account">Settings</Link>
+          <Link to="/account">
+            <Settings aria-hidden className="size-4" /> Settings
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild className={item}>
-          <Link to="/account?tab=assistants">Connect an assistant</Link>
+          <Link to="/account?tab=assistants">
+            <Bot aria-hidden className="size-4" /> Connect an assistant
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={openIntro} className={item}>
-          Replay the intro
+          <PlayCircle aria-hidden className="size-4" /> Replay the intro
         </DropdownMenuItem>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger className={item}>Appearance: {MODE_LABEL[mode]}</DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger className={item}>
+            <Palette aria-hidden className="size-4" /> Appearance: {MODE_LABEL[mode]}
+          </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <ThemeRadioItems />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {user.is_admin && (
           <DropdownMenuItem asChild className={item}>
-            <Link to="/admin">Administration</Link>
+            <Link to="/admin">
+              <Shield aria-hidden className="size-4" /> Administration
+            </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator className="mx-1 my-1.5" />
         <DropdownMenuItem danger onSelect={logOut} className={item}>
-          Sign out
+          <LogOut aria-hidden className="size-4" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

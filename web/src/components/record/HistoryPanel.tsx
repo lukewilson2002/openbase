@@ -84,7 +84,7 @@ export function HistoryPanel({ tableId, recordId, fields, format }: HistoryPanel
   const entries = (history.data ?? []).slice().sort((a, b) => b.created_at - a.created_at || b.id - a.id);
   if (entries.length === 0) return <p className="p-3 text-[0.8125rem] text-muted">No changes recorded yet.</p>;
   return (
-    <ul aria-label="Revision history" className="min-h-0 overflow-y-auto">
+    <ul aria-label="Revision history" className="min-h-0 md:overflow-y-auto">
       {entries.map((e) => (
         <Entry key={e.id} entry={e} fields={fields} format={format} />
       ))}

@@ -140,3 +140,49 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   await expect(sheet).toBeHidden();
   await expect(create.getByRole("button", { name: "Change icon" })).toBeVisible();
 });
+
+/** A one-finger swipe from (x, y) by dy, sent as real touch events (Playwright only has taps). */
+async function swipe(page: Page, x: number, y: number, dy: number): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: "touchStart" | "touchMove" | "touchEnd", at: number) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y: at }] });
+  await touch("touchStart", y);
+  const steps = 10;
+  for (let i = 1; i <= steps; i++) await touch("touchMove", y + (dy * i) / steps);
+  await touch("touchEnd", y + dy);
+  await cdp.detach();
+}
+
+test("a swipe that starts on a menu button scrolls the menu and opens nothing; a tap opens it", async ({ page }) => {
+  const email = `e2e-mobile-swipe-${randomBytes(4).toString("hex")}@example.com`;
+  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
+  expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
+  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Swipe workspace" }, headers: CSRF })).json();
+  // Enough projects that the drawer has to scroll.
+  for (let i = 1; i <= 24; i++) {
+    const res = await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: `Project ${String(i).padStart(2, "0")}`, empty: true }, headers: CSRF });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  }
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
+  const drawer = page.getByRole("dialog", { name: "Menu" });
+  const scroller = drawer.locator("[data-sidebar-scroll]");
+  await expect(scroller).toBeVisible();
+  expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight), "the menu has to scroll for this test").toBeGreaterThan(100);
+
+  // Start the swipe on a row's "…" button and drag up.
+  const more = drawer.getByRole("button", { name: "Project options for Project 05" });
+  await more.scrollIntoViewIfNeeded();
+  const box = (await more.boundingBox())!;
+  const before = await scroller.evaluate((el) => el.scrollTop);
+  await swipe(page, box.x + box.width / 2, box.y + box.height / 2, -240);
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop), "the swipe scrolled the menu").toBeGreaterThan(before);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // A tap on the same button opens its menu.
+  await more.scrollIntoViewIfNeeded();
+  await more.tap();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Rename project/ })).toBeVisible();
+});
