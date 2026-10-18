@@ -112,7 +112,9 @@ fn prefix(e: AppError, what: &str) -> AppError {
 fn base_table(conn: &Connection, base_id: &str, table_id: &str) -> AppResult<()> {
     match schema::table_any(conn, table_id)? {
         Some(t) if t.deleted_at.is_none() && t.base_id == base_id => Ok(()),
-        _ => Err(bad(format!("table {table_id} does not exist in this base"))),
+        _ => Err(bad(format!(
+            "table {table_id} does not exist in this project"
+        ))),
     }
 }
 
@@ -170,9 +172,9 @@ fn check_trigger(
         Trigger::FormSubmitted { view_id } => {
             let view = schema::view_any(conn, view_id)?
                 .filter(|v| v.deleted_at.is_none())
-                .ok_or_else(|| bad(format!("view {view_id} does not exist in this base")))?;
+                .ok_or_else(|| bad(format!("view {view_id} does not exist in this project")))?;
             base_table(conn, base_id, &view.view.table_id)
-                .map_err(|_| bad(format!("view {view_id} does not exist in this base")))?;
+                .map_err(|_| bad(format!("view {view_id} does not exist in this project")))?;
             if view.view.view_type != ViewType::Form {
                 return Err(bad("the view must be a form view"));
             }
@@ -348,7 +350,9 @@ fn check_step(
                     return Err(bad(format!("user {u} is listed twice")));
                 }
                 if perm::base_role(conn, u, base_id)?.is_none() {
-                    return Err(bad(format!("user {u} does not have access to this base")));
+                    return Err(bad(format!(
+                        "user {u} does not have access to this project"
+                    )));
                 }
             }
             if message.trim().is_empty() {

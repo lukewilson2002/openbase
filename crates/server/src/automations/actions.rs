@@ -749,7 +749,7 @@ fn prepare_values(
         Some(t) if t.deleted_at.is_none() && t.base_id == base_id => {}
         _ => {
             return Err(AppError::bad_request(
-                "the table no longer exists in this base",
+                "the table no longer exists in this project",
             ));
         }
     }

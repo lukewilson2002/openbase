@@ -399,8 +399,8 @@ async fn invalid_triggers_are_rejected() {
     let grid_view = env.f.view_id.clone();
 
     let cases: Vec<(&str, Value, &str)> = vec![
-        ("unknown table", json!({ "type": "record_created", "table_id": "tblNope" }), "does not exist in this base"),
-        ("table of another base", json!({ "type": "record_created", "table_id": foreign_table }), "does not exist in this base"),
+        ("unknown table", json!({ "type": "record_created", "table_id": "tblNope" }), "does not exist in this project"),
+        ("table of another base", json!({ "type": "record_created", "table_id": foreign_table }), "does not exist in this project"),
         ("unknown watched field", env.trigger_updated(&["fldNope"]), "does not exist"),
         ("computed watched field", env.trigger_updated(&[formula["id"].as_str().unwrap()]), "computed"),
         ("duplicate watched field", env.trigger_updated(&[&env.name, &env.name]), "twice"),
@@ -469,13 +469,13 @@ async fn invalid_actions_are_rejected_with_the_action_number() {
             "unknown table",
             created.clone(),
             vec![json!({ "type": "create_record", "table_id": "tblNope", "values": {} })],
-            "does not exist in this base",
+            "does not exist in this project",
         ),
         (
             "table of another base",
             created.clone(),
             vec![json!({ "type": "create_record", "table_id": foreign_table, "values": {} })],
-            "does not exist in this base",
+            "does not exist in this project",
         ),
         (
             "unknown field",
