@@ -60,6 +60,8 @@ enum CellPlan {
     Plain,
     Select,
     Attachment,
+    /// Long text: files it embeds are copied with an attachment copy.
+    LongText,
     Computed,
     /// Link to a table that is also being copied.
     InternalLink,
@@ -415,6 +417,7 @@ fn plan_for(
         },
         FieldKind::SingleSelect(_) | FieldKind::MultipleSelect(_) => CellPlan::Select,
         FieldKind::Attachment(_) => CellPlan::Attachment,
+        FieldKind::LongText(_) => CellPlan::LongText,
         _ if f.field_type().is_computed() => CellPlan::Computed,
         _ => CellPlan::Plain,
     }
@@ -609,6 +612,16 @@ fn transform_data(
                     Json::Array(kept.into_iter().map(|r| Json::String(r.into())).collect())
                 })
             }
+            CellPlan::LongText => match (attachment_copy, value.as_str()) {
+                (Some((base, user)), Some(text)) => Some(Json::String(copy_text_files(
+                    tx,
+                    text,
+                    base,
+                    user,
+                    attachment_cache,
+                )?)),
+                _ => Some(value.clone()),
+            },
             CellPlan::Attachment => match attachment_copy {
                 Some((base, user)) => copy_attachments(tx, value, base, user, attachment_cache)?,
                 None => Some(value.clone()),
@@ -655,23 +668,7 @@ fn copy_attachments(
         let Some(old_id) = item.get("id").and_then(Json::as_str) else {
             continue;
         };
-        let new_id = match cache.get(old_id) {
-            Some(cached) => cached.clone(),
-            None => {
-                let fresh = new_id(ob_core::ids::ATTACHMENT);
-                let n = tx.execute(
-                    "INSERT INTO attachments (id, sha256, filename, mime, size, width, height,
-                                              has_thumb, base_id, created_by, created_at)
-                     SELECT ?1, sha256, filename, mime, size, width, height, has_thumb, ?2, ?3,
-                            created_at
-                     FROM attachments WHERE id = ?4",
-                    params![fresh, dest_base, user_id, old_id],
-                )?;
-                let result = (n == 1).then_some(fresh);
-                cache.insert(old_id.to_string(), result.clone());
-                result
-            }
-        };
+        let new_id = copy_attachment(tx, old_id, dest_base, user_id, cache)?;
         if let (Some(id), Some(obj)) = (new_id, item.as_object()) {
             let mut o = obj.clone();
             o.insert("id".into(), Json::String(id));
@@ -679,6 +676,51 @@ fn copy_attachments(
         }
     }
     Ok((!out.is_empty()).then_some(Json::Array(out)))
+}
+
+/// Copy the attachment row `old_id` into `dest_base` (once per copy: `cache`), returning the
+/// new id, or `None` when the row is gone.
+fn copy_attachment(
+    tx: &Transaction,
+    old_id: &str,
+    dest_base: &str,
+    user_id: &str,
+    cache: &mut HashMap<String, Option<String>>,
+) -> AppResult<Option<String>> {
+    if let Some(cached) = cache.get(old_id) {
+        return Ok(cached.clone());
+    }
+    let fresh = new_id(ob_core::ids::ATTACHMENT);
+    let n = tx.execute(
+        "INSERT INTO attachments (id, sha256, filename, mime, size, width, height,
+                                  has_thumb, base_id, created_by, created_at)
+         SELECT ?1, sha256, filename, mime, size, width, height, has_thumb, ?2, ?3,
+                created_at
+         FROM attachments WHERE id = ?4",
+        params![fresh, dest_base, user_id, old_id],
+    )?;
+    let result = (n == 1).then_some(fresh);
+    cache.insert(old_id.to_string(), result.clone());
+    Ok(result)
+}
+
+/// Long text embeds files by address (`/api/attachments/<id>/...`): copying into another base
+/// copies those files too and re-points the text at the copies. References to files that
+/// are gone stay as they are.
+fn copy_text_files(
+    tx: &Transaction,
+    text: &str,
+    dest_base: &str,
+    user_id: &str,
+    cache: &mut HashMap<String, Option<String>>,
+) -> AppResult<String> {
+    let mut map = HashMap::new();
+    for old in crate::store::attachments::referenced_ids(text) {
+        if let Some(copy) = copy_attachment(tx, &old, dest_base, user_id, cache)? {
+            map.insert(old, copy);
+        }
+    }
+    Ok(crate::store::attachments::remap_refs(text, &map))
 }
 
 /// Write the new records into the inverse arrays of the linked (external)

@@ -5,7 +5,9 @@
 //! anyone else's draft, so existence never leaks. Files are uploaded without a
 //! base (`attachments.base_id` NULL, `created_by` = the owner) and only move
 //! into a base when the draft is filed into one of its tables; the draft keeps
-//! the same references an attachment cell stores.
+//! the same references an attachment cell stores. The text may also embed or
+//! link the user's unattached uploads by address (`/api/attachments/<id>/...`,
+//! see [`attachments::referenced_ids`]); filing moves those into the base too.
 
 use std::collections::HashSet;
 
@@ -114,28 +116,83 @@ fn check_body(body: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// The ids of the files in the user's drafts other than `except` (a file may be in one
-/// draft only: filing a draft hands its files to a base, which would leave a second draft
-/// pointing at a file it can no longer reach).
+/// The ids of the files in the user's drafts other than `except`, in their file lists and
+/// embedded or linked in their text (a file may be in one draft only: filing a draft hands
+/// its files to a base, which would leave a second draft pointing at a file it can no
+/// longer reach).
 fn files_of_other_drafts(
     conn: &Connection,
     user_id: &str,
     except: Option<&str>,
 ) -> AppResult<HashSet<String>> {
     let mut stmt = conn.prepare(
-        "SELECT attachments FROM inbox_items
-         WHERE user_id = ?1 AND id != ?2 AND attachments != '[]'",
+        "SELECT attachments, body FROM inbox_items
+         WHERE user_id = ?1 AND id != ?2
+           AND (attachments != '[]' OR instr(body, ?3) > 0)",
     )?;
     let rows = stmt
-        .query_map(params![user_id, except.unwrap_or_default()], |r| {
-            r.get::<_, String>(0)
-        })?
+        .query_map(
+            params![user_id, except.unwrap_or_default(), attachments::REF_PREFIX],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+        )?
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows
-        .iter()
-        .flat_map(|json| serde_json::from_str::<Vec<AttachmentRef>>(json).unwrap_or_default())
-        .map(|a| a.id)
-        .collect())
+    let mut out = HashSet::new();
+    for (json, body) in rows {
+        out.extend(
+            serde_json::from_str::<Vec<AttachmentRef>>(&json)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|a| a.id),
+        );
+        out.extend(attachments::referenced_ids(&body));
+    }
+    Ok(out)
+}
+
+/// A draft's text may only embed or link the user's own unattached uploads (the files
+/// `POST /api/inbox/attachments` gives), none of which is in another draft. References the
+/// draft's current text (`held`) already has are left alone, so a file filed away
+/// elsewhere cannot make an old draft impossible to edit.
+fn check_body_files(
+    conn: &Connection,
+    user_id: &str,
+    draft: Option<&str>,
+    body: &str,
+    held: Option<&str>,
+) -> AppResult<()> {
+    if !body.contains(attachments::REF_PREFIX) {
+        return Ok(());
+    }
+    let held: HashSet<String> = held
+        .map(attachments::referenced_ids)
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let ids: Vec<String> = attachments::referenced_ids(body)
+        .into_iter()
+        .filter(|id| !held.contains(id))
+        .collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let taken = files_of_other_drafts(conn, user_id, draft)?;
+    for id in ids {
+        let mine = attachments::get(conn, &id)?
+            .is_some_and(|r| r.base_id.is_none() && r.created_by.as_deref() == Some(user_id));
+        if !mine {
+            return Err(AppError::bad_request(format!(
+                "attachment {id} in the text is not one of your inbox uploads; upload it with \
+                 POST /api/inbox/attachments first"
+            )));
+        }
+        if taken.contains(&id) {
+            return Err(AppError::bad_request(format!(
+                "attachment {id} is already in another draft; a file can be in one draft at a \
+                 time (remove it there first, or upload it again)"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The references to store for the files `given`: each must be an upload of
@@ -199,6 +256,7 @@ pub fn create(
 ) -> AppResult<InboxItem> {
     let title = clean_title(title)?;
     check_body(body)?;
+    check_body_files(conn, user_id, None, body, None)?;
     let count: i64 = conn.query_row(
         "SELECT count(*) FROM inbox_items WHERE user_id = ?1",
         [user_id],
@@ -238,6 +296,7 @@ pub fn update(
     let body = match body {
         Some(b) => {
             check_body(b)?;
+            check_body_files(conn, user_id, Some(id), b, Some(&current.body))?;
             b.to_string()
         }
         None => current.body,
@@ -286,10 +345,28 @@ fn attachment_ids_in(fields: &[Field], given: &Map<String, Value>) -> HashSet<St
         .collect()
 }
 
+/// The files `given` references in long text fields of `fields`: any `/api/attachments/<id>/`
+/// address inside a long text value.
+fn text_refs_in(fields: &[Field], given: &Map<String, Value>) -> Vec<String> {
+    let index = FieldIndex::new(fields);
+    given
+        .iter()
+        .filter(|(key, _)| {
+            index
+                .resolve(key)
+                .is_some_and(|f| matches!(f.kind, FieldKind::LongText(_)))
+        })
+        .filter_map(|(_, v)| v.as_str())
+        .flat_map(attachments::referenced_ids)
+        .collect()
+}
+
 /// Hand the draft's files that the attachment fields of `given` use over to `base_id`, so a
 /// record of that base can hold them, and take them out of the user's other drafts (a file
-/// lives in one draft only, but a stale reference must never outlive the move). Returns how
-/// many files moved.
+/// lives in one draft only, but a stale reference must never outlive the move). Also moves
+/// every unattached upload of the user that long text values in `given`, or the `note`
+/// (the draft text about to become a comment), embed or link by address. Returns how many
+/// files moved.
 pub fn move_files_to_base(
     conn: &Connection,
     user_id: &str,
@@ -297,17 +374,29 @@ pub fn move_files_to_base(
     base_id: &str,
     fields: &[Field],
     given: &Map<String, Value>,
+    note: Option<&str>,
 ) -> AppResult<usize> {
     let wanted = attachment_ids_in(fields, given);
+    let mut ids: Vec<&str> = item
+        .attachments
+        .iter()
+        .filter(|a| wanted.contains(&a.id))
+        .map(|a| a.id.as_str())
+        .collect();
+    let referenced: Vec<String> = text_refs_in(fields, given)
+        .into_iter()
+        .chain(note.map(attachments::referenced_ids).unwrap_or_default())
+        .collect();
+    ids.extend(referenced.iter().map(String::as_str));
     let mut moved = HashSet::new();
-    for a in item.attachments.iter().filter(|a| wanted.contains(&a.id)) {
+    for id in ids {
         let n = conn.execute(
             "UPDATE attachments SET base_id = ?1
              WHERE id = ?2 AND base_id IS NULL AND created_by = ?3",
-            params![base_id, a.id, user_id],
+            params![base_id, id, user_id],
         )?;
         if n > 0 {
-            moved.insert(a.id.clone());
+            moved.insert(id.to_string());
         }
     }
     if !moved.is_empty() {

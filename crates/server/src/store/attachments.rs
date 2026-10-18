@@ -121,12 +121,80 @@ pub fn sniff_image(head: &[u8]) -> Option<&'static str> {
     }
 }
 
+/// Brands of an ISO base media (`ftyp`) file that are audio or video. Others (HEIC, AVIF, ...)
+/// are not media this server plays inline.
+const MP4_VIDEO_BRANDS: [&[u8; 4]; 17] = [
+    b"isom", b"iso2", b"iso3", b"iso4", b"iso5", b"iso6", b"mp41", b"mp42", b"mp71", b"avc1",
+    b"dash", b"msnv", b"M4V ", b"M4VH", b"M4VP", b"f4v ", b"mmp4",
+];
+const MP4_AUDIO_BRANDS: [&[u8; 4]; 4] = [b"M4A ", b"M4B ", b"F4A ", b"F4B "];
+
+/// Detect browser-playable video and audio by magic bytes (`head`: the first few hundred bytes
+/// of the file). Like [`sniff_image`], only the content counts, never the extension or the
+/// client's declared type. WebM is always `video/webm` (an audio-only WebM plays fine in an
+/// `<audio>` element under that type); Ogg is video only when it carries Theora.
+pub fn sniff_media(head: &[u8]) -> Option<&'static str> {
+    if head.len() >= 12 && &head[4..8] == b"ftyp" {
+        let brand = &head[8..12];
+        return if brand == b"qt  " {
+            Some("video/quicktime")
+        } else if MP4_AUDIO_BRANDS.iter().any(|b| b.as_slice() == brand) {
+            Some("audio/mp4")
+        } else if MP4_VIDEO_BRANDS.iter().any(|b| b.as_slice() == brand) {
+            Some("video/mp4")
+        } else {
+            None
+        };
+    }
+    if head.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        // EBML header; the doctype ("webm" or "matroska") is in its first bytes.
+        let window = &head[..head.len().min(64)];
+        return window
+            .windows(4)
+            .any(|w| w == b"webm")
+            .then_some("video/webm");
+    }
+    if head.starts_with(b"OggS") {
+        let has = |needle: &[u8]| head.windows(needle.len()).any(|w| w == needle);
+        return Some(if has(b"\x80theora") {
+            "video/ogg"
+        } else {
+            "audio/ogg"
+        });
+    }
+    if head.len() >= 12 && &head[..4] == b"RIFF" && &head[8..12] == b"WAVE" {
+        return Some("audio/wav");
+    }
+    if head.starts_with(b"fLaC") {
+        return Some("audio/flac");
+    }
+    if head.starts_with(b"ID3") {
+        return Some("audio/mpeg");
+    }
+    // A bare MPEG audio frame: 11 sync bits, a valid version, layer, bitrate and sample rate.
+    if head.len() >= 4 && head[0] == 0xFF && head[1] & 0xE0 == 0xE0 {
+        let version = (head[1] >> 3) & 3;
+        let layer = (head[1] >> 1) & 3;
+        let bitrate = head[2] >> 4;
+        let rate = (head[2] >> 2) & 3;
+        if version != 1 && bitrate != 0xF && rate != 3 {
+            // Layer 0 with valid sync is ADTS (raw AAC).
+            return Some(if layer == 0 {
+                "audio/aac"
+            } else {
+                "audio/mpeg"
+            });
+        }
+    }
+    None
+}
+
 /// The MIME type to record: the sniffed image type if any, else a guess from
 /// the extension (informational only, e.g. for file icons). A raster-image
 /// guess whose bytes did not match is demoted, so the stored type is never a
 /// lie that would make the file render inline.
 pub fn detect_mime(head: &[u8], filename: &str) -> String {
-    if let Some(m) = sniff_image(head) {
+    if let Some(m) = sniff_image(head).or_else(|| sniff_media(head)) {
         return m.to_string();
     }
     let guess = mime_guess::from_path(filename).first_or_octet_stream();
@@ -212,13 +280,92 @@ fn ids_in(text: &str, out: &mut HashSet<String>) {
     }
 }
 
+/// The prefix of the address an embedded or linked file has in long text.
+pub const REF_PREFIX: &str = "/api/attachments/";
+
+/// Spans `(start, end, id)` of every `/api/attachments/<id>/` reference in `text`: `start..end`
+/// is the id. Only this address form counts, never a bare id in prose.
+fn ref_spans(text: &str) -> Vec<(usize, usize, &str)> {
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    while let Some(pos) = text[from..].find(REF_PREFIX) {
+        let start = from + pos + REF_PREFIX.len();
+        from = start;
+        let end = start + ID_PREFIX.len() + ID_SUFFIX_LEN;
+        if text[start..].starts_with(ID_PREFIX)
+            && end < bytes.len()
+            && bytes[start + ID_PREFIX.len()..end]
+                .iter()
+                .all(u8::is_ascii_alphanumeric)
+            && bytes[end] == b'/'
+        {
+            out.push((start, end, &text[start..end]));
+        }
+    }
+    out
+}
+
+/// The distinct file ids referenced in `text` (`/api/attachments/<id>/...`), in order.
+pub fn referenced_ids(text: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    ref_spans(text)
+        .into_iter()
+        .filter(|(_, _, id)| seen.insert(*id))
+        .map(|(_, _, id)| id.to_string())
+        .collect()
+}
+
+/// `text` with every referenced file id replaced by its entry in `map` (ids not in the map
+/// stay).
+pub fn remap_refs(text: &str, map: &std::collections::HashMap<String, String>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (start, end, id) in ref_spans(text) {
+        if let Some(new) = map.get(id) {
+            out.push_str(&text[last..start]);
+            out.push_str(new);
+            last = end;
+        }
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// The first file referenced in `text` that is not a file of `base_id` (a foreign project's,
+/// somebody's inbox upload, or one that does not exist). References already present in `held`
+/// (the value being replaced) are left alone, so editing other text of an old value never
+/// fails.
+pub fn first_foreign_ref(
+    conn: &Connection,
+    base_id: &str,
+    text: &str,
+    held: Option<&str>,
+) -> AppResult<Option<String>> {
+    let held: HashSet<String> = held
+        .map(referenced_ids)
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    for id in referenced_ids(text) {
+        if held.contains(&id) {
+            continue;
+        }
+        let ok = get(conn, &id)?.is_some_and(|a| a.base_id.as_deref() == Some(base_id));
+        if !ok {
+            return Ok(Some(id));
+        }
+    }
+    Ok(None)
+}
+
 /// Delete attachment rows that nothing references: created before
 /// `cutoff_ms`, or (uploads without a user, i.e. from public forms) before
 /// `anonymous_cutoff_ms`. "Referenced" means mentioned in the data of any
-/// record (live or trashed) or in the retained record history: removing a
+/// record (live or trashed) or in the retained record history, in any field including long text: removing a
 /// file from a cell must stay undoable (client-side undo, copying from the
 /// history panel) for as long as that history exists. Returns the hashes of
-/// the deleted rows. Files of inbox drafts count as referenced too.
+/// the deleted rows. Files of inbox drafts (list and embedded in the text) count as referenced too.
 ///
 /// Equivalent to `NOT EXISTS (SELECT 1 FROM records WHERE instr(data, id))`
 /// but scans the records once instead of once per attachment; the history is
@@ -247,12 +394,18 @@ pub fn delete_unreferenced(
         let data: String = row.get(0)?;
         ids_in(&data, &mut referenced);
     }
-    // Files of unfiled inbox drafts are still wanted.
-    let mut stmt = conn.prepare("SELECT attachments FROM inbox_items WHERE attachments != '[]'")?;
-    let mut rows = stmt.query([])?;
+    // Files of unfiled inbox drafts are still wanted: those in the file list and those
+    // embedded or linked in the text.
+    let mut stmt = conn.prepare(
+        "SELECT attachments, body FROM inbox_items
+         WHERE attachments != '[]' OR instr(body, ?1) > 0",
+    )?;
+    let mut rows = stmt.query([REF_PREFIX])?;
     while let Some(row) = rows.next()? {
         let files: String = row.get(0)?;
         ids_in(&files, &mut referenced);
+        let body: String = row.get(1)?;
+        referenced.extend(referenced_ids(&body));
     }
     if candidates.iter().any(|(id, _)| !referenced.contains(id)) {
         let mut stmt =
@@ -346,6 +499,63 @@ mod tests {
         assert!(!is_inline("image/svg+xml"));
         assert!(!is_inline("text/html"));
         assert!(is_inline("image/png"));
+    }
+
+    #[test]
+    fn sniffs_video_and_audio_by_magic_only() {
+        let ftyp = |brand: &[u8; 4]| {
+            let mut v = vec![0, 0, 0, 0x14];
+            v.extend_from_slice(b"ftyp");
+            v.extend_from_slice(brand);
+            v.extend_from_slice(&[0; 8]);
+            v
+        };
+        assert_eq!(sniff_media(&ftyp(b"isom")), Some("video/mp4"));
+        assert_eq!(sniff_media(&ftyp(b"mp42")), Some("video/mp4"));
+        assert_eq!(sniff_media(&ftyp(b"M4A ")), Some("audio/mp4"));
+        assert_eq!(sniff_media(&ftyp(b"qt  ")), Some("video/quicktime"));
+        // Image brands share the box layout and are not media.
+        assert_eq!(sniff_media(&ftyp(b"avif")), None);
+        assert_eq!(sniff_media(&ftyp(b"heic")), None);
+        let mut webm = vec![0x1A, 0x45, 0xDF, 0xA3, 0x84, 0x42, 0x82, 0x84];
+        webm.extend_from_slice(b"webm");
+        assert_eq!(sniff_media(&webm), Some("video/webm"));
+        let mut mkv = vec![0x1A, 0x45, 0xDF, 0xA3, 0x84, 0x42, 0x82, 0x88];
+        mkv.extend_from_slice(b"matroska");
+        assert_eq!(sniff_media(&mkv), None);
+        assert_eq!(sniff_media(b"OggS\0\x02....\x01vorbis"), Some("audio/ogg"));
+        assert_eq!(sniff_media(b"OggS\0\x02....\x80theora"), Some("video/ogg"));
+        assert_eq!(sniff_media(b"RIFF\0\0\0\0WAVEfmt "), Some("audio/wav"));
+        assert_eq!(sniff_media(b"RIFF\0\0\0\0AVI LIST"), None);
+        assert_eq!(sniff_media(b"fLaC...."), Some("audio/flac"));
+        assert_eq!(sniff_media(b"ID3\x04rest"), Some("audio/mpeg"));
+        assert_eq!(sniff_media(&[0xFF, 0xFB, 0x90, 0x00]), Some("audio/mpeg"));
+        assert_eq!(sniff_media(&[0xFF, 0xF1, 0x50, 0x80]), Some("audio/aac"));
+        // JPEG, text, markup and short input are not media.
+        assert_eq!(sniff_media(&[0xFF, 0xD8, 0xFF, 0xE0]), None);
+        assert_eq!(sniff_media(b"<html>"), None);
+        assert_eq!(sniff_media(b"<svg xmlns="), None);
+        assert_eq!(sniff_media(b""), None);
+        assert_eq!(sniff_media(&[0xFF]), None);
+    }
+
+    #[test]
+    fn finds_file_references_by_address_only() {
+        let a = "attAAAAAAAAAAAAA1";
+        let b = "attBBBBBBBBBBBBB2";
+        let text = format!(
+            "![x](/api/attachments/{a}/a%20b.png \"cap\") see {b} and [f](/api/attachments/{b}/f.pdf) \
+             and again /api/attachments/{a}/thumb; not /api/attachments/att123/x, nor \
+             /api/attachments/{a}x/y, nor /api/attachments/{a}"
+        );
+        assert_eq!(referenced_ids(&text), [a, b]);
+        assert!(referenced_ids(&format!("just {a} in prose")).is_empty());
+        assert!(referenced_ids("").is_empty());
+        let map = [(a.to_string(), "attCCCCCCCCCCCCC3".to_string())].into();
+        let out = remap_refs(&text, &map);
+        assert!(!out.contains(&format!("{a}/")));
+        assert_eq!(referenced_ids(&out), ["attCCCCCCCCCCCCC3", b]);
+        assert!(out.contains(&format!("see {b} and")));
     }
 
     #[test]

@@ -9,9 +9,11 @@
 //! - `GET /api/attachments/{id}/thumb` serves the PNG thumbnail of an image.
 //!
 //! Downloads never let the browser interpret user content: only sniffed
-//! raster images are inline; everything else (HTML, SVG, PDF, ...) is an
-//! `application/octet-stream` attachment, always with `nosniff` and a
-//! sandboxing CSP.
+//! raster images, video and audio are inline (with their sniffed type);
+//! everything else (HTML, SVG, PDF, ...) is an `application/octet-stream`
+//! attachment, always with `nosniff` and a sandboxing CSP. A single
+//! `Range: bytes=...` is honoured (206, `Accept-Ranges: bytes`) so media can
+//! seek; the body is always streamed.
 //!
 //! [`save_upload`] / [`save_stream`] are public so public form uploads can
 //! reuse the same pipeline after their own checks.
@@ -23,7 +25,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Request, State};
-use axum::http::{HeaderMap, HeaderValue, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -34,7 +36,7 @@ use ob_core::field::{AttachmentRef, FieldKind};
 use serde::Deserialize;
 use serde_json::Value as Json2;
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Semaphore;
 
 use crate::auth::{Actor, ClientInfo, MaybeActor};
@@ -61,6 +63,11 @@ pub const THUMB_SIZE: u32 = 400;
 /// One image decode at a time: decoding is the most memory-hungry thing the
 /// server does, and the VPS budget is small.
 static DECODE_PERMITS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
+
+/// Leading bytes of an upload kept for type sniffing.
+const HEAD_BYTES: usize = 64;
+/// Bytes read from the start of a stored file to sniff video/audio when serving it.
+const SNIFF_BYTES: usize = 512;
 
 const CSP_SANDBOX: &str = "sandbox; default-src 'none'";
 const CACHE_CONTROL: &str = "private, max-age=86400";
@@ -200,15 +207,15 @@ where
         .map_err(AppError::internal)?;
     let mut hasher = Sha256::new();
     let mut size: u64 = 0;
-    let mut head: Vec<u8> = Vec::with_capacity(16);
+    let mut head: Vec<u8> = Vec::with_capacity(HEAD_BYTES);
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         size = size.saturating_add(chunk.len() as u64);
         if size > max {
             return Err(too_large(state));
         }
-        if head.len() < 16 {
-            let take = (16 - head.len()).min(chunk.len());
+        if head.len() < HEAD_BYTES {
+            let take = (HEAD_BYTES - head.len()).min(chunk.len());
             head.extend_from_slice(&chunk[..take]);
         }
         hasher.update(&chunk);
@@ -372,8 +379,8 @@ const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
 /// Views whose allowed-attachment sets are kept.
 const SHARE_SET_ENTRIES: usize = 64;
 
-/// What a shared view exposes: attachment ids in visible attachment fields
-/// of the live records the view's filter lets through. Keyed by view; valid
+/// What a shared view exposes: attachment ids in visible attachment fields, and
+/// referenced in visible long text, of the live records the view's filter lets through. Keyed by view; valid
 /// for one data version of the base, one view config and one day (relative
 /// date filters).
 type ShareSets = HashMap<String, (u64, u64, chrono::NaiveDate, Arc<HashSet<String>>)>;
@@ -414,8 +421,14 @@ fn exposed_attachment_ids(
         .filter(|f| matches!(f.kind, FieldKind::Attachment(_)))
         .map(|f| f.id.as_str())
         .collect();
+    // Files embedded or linked in visible long text are shown too.
+    let text_fields: Vec<&str> = visible
+        .iter()
+        .filter(|f| matches!(f.kind, FieldKind::LongText(_)))
+        .map(|f| f.id.as_str())
+        .collect();
     let mut out = HashSet::new();
-    if !attachment_fields.is_empty() {
+    if !attachment_fields.is_empty() || !text_fields.is_empty() {
         // Same query as the public records endpoint: the view's own filter,
         // no signed-in user.
         let req = QueryRequest::default();
@@ -442,6 +455,11 @@ fn exposed_attachment_ids(
                             .filter_map(|i| i.get("id").and_then(Json2::as_str))
                             .map(str::to_string),
                     );
+                }
+                for f in &text_fields {
+                    if let Some(Json2::String(text)) = row.data.get(*f) {
+                        out.extend(store::referenced_ids(text));
+                    }
                 }
             }
         }
@@ -556,17 +574,40 @@ async fn download(
 ) -> AppResult<Response> {
     let row = authorize(&state, actor, &client, q.share, &headers, id).await?;
     let path = store::blob_path(&state.config.attachments_dir(), &row.sha256)?;
-    let (content_type, disposition) = if store::is_inline(&row.mime) {
-        (row.mime.as_str(), "inline")
+    // Images are sniffed at upload; video and audio are sniffed again from the stored
+    // bytes, so a file uploaded before they were served inline needs no migration and the
+    // extension or the stored type never decides.
+    let media = if store::is_inline(&row.mime) {
+        None
     } else {
-        ("application/octet-stream", "attachment")
+        sniff_stored_media(&path).await
+    };
+    let (content_type, disposition) = match media {
+        Some(m) => (m, "inline"),
+        None if store::is_inline(&row.mime) => (row.mime.as_str(), "inline"),
+        None => ("application/octet-stream", "attachment"),
     };
     file_response(
         &path,
         content_type,
         &content_disposition(disposition, &row.filename),
+        headers.get(header::RANGE),
     )
     .await
+}
+
+/// Video or audio type of the stored file, from its first bytes.
+async fn sniff_stored_media(path: &Path) -> Option<&'static str> {
+    let mut file = tokio::fs::File::open(path).await.ok()?;
+    let mut head = vec![0u8; SNIFF_BYTES];
+    let mut n = 0;
+    while n < head.len() {
+        match file.read(&mut head[n..]).await {
+            Ok(0) | Err(_) => break,
+            Ok(m) => n += m,
+        }
+    }
+    store::sniff_media(&head[..n])
 }
 
 async fn thumbnail(
@@ -583,12 +624,82 @@ async fn thumbnail(
     }
     let path = store::thumb_path(&state.config.attachments_dir(), &row.sha256)?;
     let name = format!("{}.thumb.png", row.filename);
-    file_response(&path, "image/png", &content_disposition("inline", &name)).await
+    file_response(
+        &path,
+        "image/png",
+        &content_disposition("inline", &name),
+        headers.get(header::RANGE),
+    )
+    .await
 }
 
-/// Stream a file with the safe download headers.
-async fn file_response(path: &Path, content_type: &str, disposition: &str) -> AppResult<Response> {
-    let file = match tokio::fs::File::open(path).await {
+/// A parsed `Range` request against a file of a known length.
+#[derive(Debug, PartialEq, Eq)]
+enum ByteRange {
+    /// No usable range: serve the whole file (also for syntax we do not support).
+    Full,
+    /// First and last byte, both inclusive and inside the file.
+    Part(u64, u64),
+    /// Valid syntax but nothing of the file lies in it (416).
+    Unsatisfiable,
+}
+
+/// Interpret a `Range` header. Only one `bytes=` range is supported (`a-b`, `a-`, `-n`);
+/// anything else, including several ranges, is ignored and answered with the whole file as
+/// RFC 9110 allows.
+fn parse_range(value: Option<&HeaderValue>, len: u64) -> ByteRange {
+    let Some(spec) = value
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().strip_prefix("bytes="))
+    else {
+        return ByteRange::Full;
+    };
+    let spec = spec.trim();
+    let Some((first, last)) = spec.split_once('-') else {
+        return ByteRange::Full;
+    };
+    let number = |s: &str| {
+        (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse::<u64>())
+    };
+    match (number(first.trim()), number(last.trim())) {
+        // `-n`: the last n bytes.
+        (None, Some(Ok(n))) => {
+            if n == 0 || len == 0 {
+                ByteRange::Unsatisfiable
+            } else {
+                ByteRange::Part(len.saturating_sub(n), len - 1)
+            }
+        }
+        // `a-` and `a-b`.
+        (Some(Ok(a)), None) if last.trim().is_empty() => {
+            if a >= len {
+                ByteRange::Unsatisfiable
+            } else {
+                ByteRange::Part(a, len - 1)
+            }
+        }
+        (Some(Ok(a)), Some(Ok(b))) => {
+            if b < a {
+                ByteRange::Full
+            } else if a >= len {
+                ByteRange::Unsatisfiable
+            } else {
+                ByteRange::Part(a, b.min(len - 1))
+            }
+        }
+        // Overflowing numbers, `-` alone, several ranges (a comma fails the digit check).
+        _ => ByteRange::Full,
+    }
+}
+
+/// Stream a file with the safe download headers, or the part of it a `Range` header asks for.
+async fn file_response(
+    path: &Path,
+    content_type: &str,
+    disposition: &str,
+    range: Option<&HeaderValue>,
+) -> AppResult<Response> {
+    let mut file = match tokio::fs::File::open(path).await {
         Ok(f) => f,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             tracing::warn!(path = %path.display(), "attachment file missing on disk");
@@ -599,10 +710,36 @@ async fn file_response(path: &Path, content_type: &str, disposition: &str) -> Ap
     let len = file.metadata().await.map_err(AppError::internal)?.len();
     let header_value =
         |v: &str| HeaderValue::from_str(v).map_err(|e| AppError::internal(format!("header: {e}")));
-    let mut res = Response::new(file_body(file));
+    let (status, body, content_len, content_range) = match parse_range(range, len) {
+        ByteRange::Full => (StatusCode::OK, file_body(file), len, None),
+        ByteRange::Part(first, last) => {
+            file.seek(io::SeekFrom::Start(first))
+                .await
+                .map_err(AppError::internal)?;
+            let n = last - first + 1;
+            (
+                StatusCode::PARTIAL_CONTENT,
+                file_body_limited(file, n),
+                n,
+                Some(format!("bytes {first}-{last}/{len}")),
+            )
+        }
+        ByteRange::Unsatisfiable => (
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            Body::empty(),
+            0,
+            Some(format!("bytes */{len}")),
+        ),
+    };
+    let mut res = Response::new(body);
+    *res.status_mut() = status;
     let h = res.headers_mut();
     h.insert(header::CONTENT_TYPE, header_value(content_type)?);
-    h.insert(header::CONTENT_LENGTH, HeaderValue::from(len));
+    h.insert(header::CONTENT_LENGTH, HeaderValue::from(content_len));
+    h.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    if let Some(cr) = content_range {
+        h.insert(header::CONTENT_RANGE, header_value(&cr)?);
+    }
     h.insert(header::CONTENT_DISPOSITION, header_value(disposition)?);
     h.insert(
         header::X_CONTENT_TYPE_OPTIONS,
@@ -625,14 +762,26 @@ async fn file_response(path: &Path, content_type: &str, disposition: &str) -> Ap
 /// polls the body once more after the end, and a bare `unfold` panics when polled
 /// after it returned `None`, which used to cut off every compressed download.
 pub fn file_body(file: tokio::fs::File) -> Body {
-    let stream = futures::stream::unfold(Some(file), |state| async move {
-        let mut file = state?;
-        let mut buf = vec![0u8; 64 * 1024];
+    file_body_limited(file, u64::MAX)
+}
+
+/// Like [`file_body`], but at most `limit` bytes from the file's current position.
+fn file_body_limited(file: tokio::fs::File, limit: u64) -> Body {
+    let stream = futures::stream::unfold(Some((file, limit)), |state| async move {
+        let (mut file, left) = state?;
+        if left == 0 {
+            return None;
+        }
+        let want = usize::try_from(left).map_or(64 * 1024, |l| l.min(64 * 1024));
+        let mut buf = vec![0u8; want];
         match file.read(&mut buf).await {
             Ok(0) => None,
             Ok(n) => {
                 buf.truncate(n);
-                Some((Ok::<_, io::Error>(Bytes::from(buf)), Some(file)))
+                Some((
+                    Ok::<_, io::Error>(Bytes::from(buf)),
+                    Some((file, left - n as u64)),
+                ))
             }
             Err(e) => Some((Err(e), None)),
         }
@@ -674,6 +823,30 @@ fn rfc5987_encode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_single_byte_ranges() {
+        let r = |v: &str| parse_range(Some(&HeaderValue::from_str(v).unwrap()), 100);
+        assert_eq!(parse_range(None, 100), ByteRange::Full);
+        assert_eq!(r("bytes=0-9"), ByteRange::Part(0, 9));
+        assert_eq!(r("bytes=90-"), ByteRange::Part(90, 99));
+        assert_eq!(r("bytes=-5"), ByteRange::Part(95, 99));
+        assert_eq!(r("bytes=-500"), ByteRange::Part(0, 99));
+        assert_eq!(r("bytes=50-5000"), ByteRange::Part(50, 99));
+        assert_eq!(r(" bytes= 1 - 2 "), ByteRange::Part(1, 2));
+        assert_eq!(r("bytes=100-"), ByteRange::Unsatisfiable);
+        assert_eq!(r("bytes=100-200"), ByteRange::Unsatisfiable);
+        assert_eq!(r("bytes=-0"), ByteRange::Unsatisfiable);
+        assert_eq!(r("bytes=5-1"), ByteRange::Full);
+        assert_eq!(r("bytes=0-1,5-6"), ByteRange::Full);
+        assert_eq!(r("bytes=99999999999999999999-"), ByteRange::Full);
+        assert_eq!(r("lines=0-1"), ByteRange::Full);
+        assert_eq!(r("bytes=-"), ByteRange::Full);
+        assert_eq!(
+            parse_range(Some(&HeaderValue::from_static("bytes=0-")), 0),
+            ByteRange::Unsatisfiable
+        );
+    }
 
     #[test]
     fn content_disposition_is_ascii_and_exact() {

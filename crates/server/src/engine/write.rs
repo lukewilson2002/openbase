@@ -386,6 +386,14 @@ struct Writer<'a> {
     before: HashMap<(String, String), Map<String, Json>>,
 }
 
+/// The message for a long-text reference to a file that is not the project's.
+pub fn not_a_project_file(id: &str) -> String {
+    format!(
+        "attachment {id} is not a file of this project; upload the file to this project to \
+         embed or link it"
+    )
+}
+
 fn field_error(field: &Field, msg: impl std::fmt::Display) -> AppError {
     AppError::bad_request(format!("field \"{}\": {msg}", field.name))
 }
@@ -635,6 +643,22 @@ impl<'a> Writer<'a> {
                     refs.push(serde_json::to_value(row.to_ref())?);
                 }
                 Ok((!refs.is_empty()).then_some(Json::Array(refs)))
+            }
+            FieldKind::LongText(_) => {
+                // Files embedded or linked in the text (`/api/attachments/<id>/...`) must be
+                // files of this project, like the files of an attachment cell. A reference
+                // the cell already holds is left alone.
+                if let Some(text) = value.as_str()
+                    && let Some(bad) = attachments::first_foreign_ref(
+                        self.conn(),
+                        &self.table.base_id,
+                        text,
+                        old.and_then(Json::as_str),
+                    )?
+                {
+                    return Err(field_error(field, not_a_project_file(&bad)));
+                }
+                Ok(Some(value))
             }
             _ => Ok(Some(value)),
         }

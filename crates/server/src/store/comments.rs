@@ -24,7 +24,7 @@ use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm;
 use crate::store::links::NameCache;
-use crate::store::{notifications, schema};
+use crate::store::{attachments, notifications, schema};
 
 /// Characters of a comment shown in a notification.
 const SNIPPET_LEN: usize = 140;
@@ -133,6 +133,22 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<CommentRow> {
     .ok_or_else(|| AppError::not_found("comment"))
 }
 
+/// Files embedded or linked in a comment (`/api/attachments/<id>/...`) must be files of the
+/// record's project, as in long text cells; `held` is the body being replaced.
+fn require_project_files(
+    conn: &Connection,
+    base_id: &str,
+    body: &str,
+    held: Option<&str>,
+) -> AppResult<()> {
+    match attachments::first_foreign_ref(conn, base_id, body, held)? {
+        Some(bad) => Err(AppError::bad_request(
+            crate::engine::write::not_a_project_file(&bad),
+        )),
+        None => Ok(()),
+    }
+}
+
 /// Add a comment by `author` to a live record and notify the mentioned.
 pub fn create(
     tx: &Connection,
@@ -142,6 +158,7 @@ pub fn create(
     now: i64,
 ) -> AppResult<Comment> {
     let body = validate_body(body)?;
+    require_project_files(tx, &perm::base_of_record(tx, record_id)?, &body, None)?;
     let id = new_id(ob_core::ids::COMMENT);
     tx.execute(
         "INSERT INTO comments (id, record_id, user_id, body, created_at, updated_at)
@@ -157,6 +174,7 @@ pub fn create(
 pub fn update(tx: &Connection, id: &str, body: &str, now: i64) -> AppResult<Comment> {
     let body = validate_body(body)?;
     let current = get(tx, id)?;
+    require_project_files(tx, &current.base_id, &body, Some(&current.comment.body))?;
     tx.execute(
         "UPDATE comments SET body = ?2, updated_at = ?3 WHERE id = ?1",
         params![id, body, now],

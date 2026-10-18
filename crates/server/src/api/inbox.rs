@@ -12,7 +12,8 @@
 //!   creates a record in the table through the normal record write path (so the
 //!   caller needs the Editor role there, and validation, history, events and
 //!   automations all apply), hands the draft's files that `fields` uses over to
-//!   the table's base, with `note_as_comment` adds the draft's text as the
+//!   the table's base (also the unattached uploads that long text values in `fields`, or the
+//!   draft text with `note_as_comment`, embed by address), with `note_as_comment` adds the draft's text as the
 //!   record's first comment, and deletes the draft, all in one transaction. The
 //!   answer is the created record.
 //!
@@ -168,7 +169,17 @@ async fn file(
             let fields = schema::table_fields(tx, &body.table_id)?;
             // The files the caller puts into the record move into the base
             // first: a record may only hold files of its own base.
-            inbox::move_files_to_base(tx, &actor.user_id, &item, &base_id, &fields, &body.fields)?;
+            let note = (body.note_as_comment && !item.body.trim().is_empty())
+                .then_some(item.body.as_str());
+            inbox::move_files_to_base(
+                tx,
+                &actor.user_id,
+                &item,
+                &base_id,
+                &fields,
+                &body.fields,
+                note,
+            )?;
             let values = convert_fields(tx, &base_id, &fields, &body.fields, true, false)
                 .map_err(|e| AppError::bad_request(e.message))?;
             let ctx = WriteCtx::for_user(tx, &actor.user_id, WriteSource::Api)?.typecast(true);
@@ -185,7 +196,7 @@ async fn file(
                 .next()
                 .ok_or_else(|| AppError::internal("the filed record was not created"))?;
             // A comment that cannot be added (too long) undoes the whole filing.
-            let commented = if body.note_as_comment && !item.body.trim().is_empty() {
+            let commented = if note.is_some() {
                 comments::create(tx, &record.id, &actor.user_id, &item.body, now_ms())?;
                 Some(base_id)
             } else {
