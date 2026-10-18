@@ -286,6 +286,27 @@ describe("attaching files", () => {
     expect(body(api.callsTo("PATCH /api/inbox/inb1")[0]!).attachments).toEqual([]);
   });
 
+  it("embeds a file inserted into the note: it goes up to the inbox and lives in the note, not in the chips", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({
+      "POST /api/inbox/attachments": { ...att("att7", "photo one.png", 900), mime: "image/png" },
+      "POST /api/inbox": (call) => item("inb1", String(body(call).body), (body(call).attachments as AttachmentRef[]) ?? []),
+      "PATCH /api/inbox/inb1": (call) => item("inb1", String(body(call).body), (body(call).attachments as AttachmentRef[]) ?? []),
+    });
+    renderApp();
+    await screen.findByRole("textbox", { name: "Note" });
+    await user.upload(await screen.findByLabelText("Media files"), new File(["png"], "photo one.png", { type: "image/png" }));
+    await waitFor(() => expect(document.querySelector("figure.ob-media img")).toHaveAttribute("src", "/api/attachments/att7/photo%20one.png"));
+    const form = api.callsTo("POST /api/inbox/attachments")[0]!.body as FormData;
+    expect((form.get("file") as File).name).toBe("photo one.png");
+    await waitFor(() => expect(api.callsTo("POST /api/inbox").length + api.callsTo("PATCH /api/inbox/inb1").length).toBeGreaterThan(0), SAVE_WAIT);
+    const saved = [...api.callsTo("POST /api/inbox"), ...api.callsTo("PATCH /api/inbox/inb1")].map(body).at(-1)!;
+    expect(saved.body).toBe("![](/api/attachments/att7/photo%20one.png)");
+    expect(saved.attachments ?? []).toEqual([]);
+    expect(screen.queryByRole("list", { name: "Attached files" })).not.toBeInTheDocument();
+  });
+
   it("leaves a file out of whichever draft is open when it finishes uploading, if it started in another", async () => {
     stubDesktop();
     const user = userEvent.setup();

@@ -43,6 +43,9 @@ interface Filed {
   tableName: string;
 }
 
+/** Files embedded in the note go up as inbox files (no project yet; only the uploader can read them). */
+const uploadToInbox = (file: File) => api.inbox.upload(file);
+
 export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[] }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -174,7 +177,8 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
             </div>
           }
         >
-          <RichTextEditor key={draft.key} value={draft.body} onChange={draft.setBody} onBlur={() => void draft.save()} autoFocus={desktop} placeholder="Write something…" aria-label="Note" />
+          {/* Files embedded in the note stay in the note: the server moves them into the project when the draft is filed. */}
+          <RichTextEditor key={draft.key} value={draft.body} onChange={draft.setBody} onBlur={() => void draft.save()} autoFocus={desktop} placeholder="Write something…" upload={uploadToInbox} aria-label="Note" />
         </Suspense>
         {target && <NoteChooser form={form} />}
         <AttachmentChips files={draft.attachments} uploading={uploads.uploading} onRemove={draft.removeAttachment} />

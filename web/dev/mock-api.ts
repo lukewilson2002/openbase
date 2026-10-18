@@ -876,6 +876,19 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48"><rect width="64" height="48" fill="hsl(${hue} 60% 70%)"/><circle cx="32" cy="24" r="12" fill="hsl(${hue} 60% 40%)"/></svg>`);
     return true;
   }
+  // The file itself (what an embed in rich text points at): a drawing for images, a few bytes for the rest.
+  if ((g = /^\/api\/attachments\/([^/]+)\/([^/]+)$/.exec(p)) && m === "GET") {
+    const name = decodeURIComponent(g[2]!);
+    if (/\.(png|jpe?g|gif|webp|avif)$/i.test(name)) {
+      res.writeHead(200, { "Content-Type": "image/svg+xml" });
+      const hue = [...g[1]!].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+      res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="hsl(${hue} 60% 78%)"/><circle cx="320" cy="180" r="90" fill="hsl(${hue} 60% 40%)"/></svg>`);
+    } else {
+      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": `attachment; filename="${name}"` });
+      res.end("mock file");
+    }
+    return true;
+  }
   if ((g = /^\/api\/views\/([^/]+)\/query$/.exec(p)) && m === "POST") {
     const v = views.find((x) => x.id === g![1]);
     if (!v) return err(res, 404, "not_found", "view not found"), true;
