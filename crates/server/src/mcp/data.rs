@@ -184,7 +184,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_records",
             "Create records",
-            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. With typecast (default true) values are converted leniently and new select choices are created.",
+            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. Long text is Markdown: it can embed an uploaded file of the same project with the `markdown` line upload_attachment returns (other projects' files are refused; external images are never shown). With typecast (default true) values are converted leniently and new select choices are created.",
             object(
                 json!({
                     "project_id": string(BASE_ID),

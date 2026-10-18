@@ -489,6 +489,12 @@ async fn attachments_upload_from_base64_and_from_urls() {
     assert_eq!(up["attachment"]["filename"], "a b.txt");
     assert_eq!(up["attachment"]["size"], 5);
     assert_eq!(up["attachment"]["mime"], "text/plain");
+    // ...with the Markdown line that embeds it in long text (the file name percent-encoded).
+    let first_id = up["attachment"]["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        up["markdown"],
+        format!("![](/api/attachments/{first_id}/a%20b.txt)")
+    );
 
     // URL: name from the path, content fetched by the server
     let up = a
@@ -517,6 +523,14 @@ async fn attachments_upload_from_base64_and_from_urls() {
         )
         .await;
     assert_eq!(rec[0]["fields"]["File"][0]["filename"], "dot.png");
+    // ...and its `markdown` line is accepted in a long text field of the same project.
+    r.field("Docs", "Notes", "long_text", json!({"rich": true}))
+        .await;
+    let note = format!("Look:\n\n{}", up["markdown"].as_str().unwrap());
+    let rec = r
+        .records("Docs", json!([{"fields": {"Name": "e", "Notes": note}}]))
+        .await;
+    assert_eq!(rec[0]["fields"]["Notes"], note.as_str());
 
     // Refusals
     let e = a

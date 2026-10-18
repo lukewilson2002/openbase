@@ -35,7 +35,7 @@ pub fn definitions() -> Vec<ToolDef> {
             object(
                 json!({
                     "title": string("A one-line title, like a record's primary field (optional, up to 1,000 characters)."),
-                    "body": string("The note, in Markdown (up to 100,000 characters; may be empty when there is a title or files)."),
+                    "body": string("The note, in Markdown (up to 100,000 characters; may be empty when there is a title or files). It can embed your inbox uploads with the `markdown` line upload_attachment (without project_id) returns; filing moves them into the project."),
                     "attachments": files.clone(),
                 }),
                 &[],

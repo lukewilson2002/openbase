@@ -260,3 +260,53 @@ async fn project_limited_tokens_cannot_use_the_inbox() {
         1
     );
 }
+
+#[tokio::test]
+async fn an_agent_embeds_an_inbox_upload_in_a_note_and_files_it() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let up = a
+        .call(
+            "upload_attachment",
+            json!({"filename": "site photo.png", "content_base64": b64(b"png?")}),
+        )
+        .await;
+    let att = up["attachment"]["id"].as_str().unwrap().to_string();
+    let line = up["markdown"].as_str().unwrap().to_string();
+    assert_eq!(
+        line,
+        format!("![](/api/attachments/{att}/site%20photo.png)")
+    );
+
+    let added = a
+        .call(
+            "add_to_inbox",
+            json!({"body": format!("Site visit\n\n{line}")}),
+        )
+        .await;
+    let id = added["item"]["id"].as_str().unwrap().to_string();
+    r.table("Visits").await;
+    r.field("Visits", "Notes", "long_text", json!({"rich": true}))
+        .await;
+    let filed = a
+        .call(
+            "file_inbox_item",
+            json!({"id": id, "project_id": r.base, "table": "Visits",
+                   "fields": {"Name": "Site", "Notes": format!("Site visit\n\n{line}")}}),
+        )
+        .await;
+    assert_eq!(filed["filed"], true);
+    // The upload moved into the project with the record.
+    let rows = a
+        .call(
+            "list_records",
+            json!({"project_id": r.base, "table": "Visits"}),
+        )
+        .await;
+    assert!(
+        rows["records"][0]["fields"]["Notes"]
+            .as_str()
+            .unwrap()
+            .contains(&att)
+    );
+}

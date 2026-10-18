@@ -1118,7 +1118,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "long_text",
             "Long text",
             false,
-            "{rich?: boolean} rich = markdown",
+            "{rich?: boolean} rich = markdown; it can embed files of the same project, see upload_attachment (`markdown`); an https:// image is shown only as a link",
             "string",
             json!({"rich": true}),
         ),
