@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { NavLink } from "react-router";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { useScrollEdges } from "@/hooks/useScrollEdges";
 import { cn } from "@/lib/cn";
@@ -25,8 +25,8 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
 }
 
 /**
- * The menu's column: the Inbox row, the page's own content and the footer links (Members,
- * Automations, Trash) scroll together, so a long menu pushes the footer down instead of squeezing
+ * The menu's column: the Inbox row, the page's own content and the footer links (Trash)
+ * scroll together, so a long menu pushes the footer down instead of squeezing
  * the content between fixed rows; the footer still sits at the bottom of a short one. Only the
  * profile stays put. A shadow at either end shows there is more to scroll that way.
  */
@@ -127,7 +127,6 @@ export function SidebarDrawer({
   open,
   onOpenChange,
   returnFocus,
-  header,
   inbox,
   inboxPanel,
   onCloseInbox,
@@ -138,8 +137,6 @@ export function SidebarDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLButtonElement | null>;
-  /** The drawer's top row beside the close button (a base's place pickers); "Menu" when absent. */
-  header?: ReactNode;
   inbox?: ReactNode;
   /** The notifications, shown in place of the menu while the Inbox row is open. */
   inboxPanel?: ReactNode;
@@ -163,14 +160,7 @@ export function SidebarDrawer({
           className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
         >
           <div className="mx-2.5 flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line py-1.5">
-            {header ? (
-              <>
-                <D.Title className="sr-only">Menu</D.Title>
-                <div className="flex min-w-0 flex-1 items-center gap-0.5">{header}</div>
-              </>
-            ) : (
-              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
-            )}
+            <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
             <D.Close aria-label="Close menu" className="inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-muted hover:bg-hover hover:text-fg">
               <X aria-hidden className="size-5" />
             </D.Close>
@@ -259,6 +249,26 @@ export function SidebarButton({ icon, children, onClick, className }: { icon?: R
     <button type="button" onClick={onClick} className={cn(sidebarItemClass, "w-full text-left text-muted hover:text-fg", className)}>
       {icon && <span className="flex shrink-0 items-center [&>svg]:size-[1.125rem]">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
+    </button>
+  );
+}
+
+/** A tree row's "…" button: hidden until the row is hovered or the button focused, with a mouse; always there for a finger. */
+export const rowActionClass =
+  "absolute right-0.5 top-1/2 size-7 -translate-y-1/2 opacity-100 pointer-coarse:size-9 md:pointer-fine:opacity-0 md:pointer-fine:focus-visible:opacity-100 md:pointer-fine:group-hover/item:opacity-100 data-[state=open]:opacity-100";
+
+/** The chevron at the start of a tree row: it folds the row's children and never navigates. */
+export function RowChevron({ expanded, label, controls, onClick }: { expanded: boolean; label: string; controls: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      aria-controls={expanded ? controls : undefined}
+      aria-label={label}
+      className="inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg pointer-coarse:h-11"
+    >
+      <ChevronRight aria-hidden className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
     </button>
   );
 }

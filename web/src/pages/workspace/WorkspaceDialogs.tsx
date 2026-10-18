@@ -54,7 +54,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
         open={open === "delete"}
         onOpenChange={onOpenChange}
         title={`Delete ${ws.name}?`}
-        description="The workspace and all of its bases move to the trash. Restore it from Trash in the menu for 30 days."
+        description="The workspace and all of its projects move to the trash. Restore it from Trash in the menu for 30 days."
         confirmLabel="Delete workspace"
         destructive
         onConfirm={() => remove.mutateAsync()}

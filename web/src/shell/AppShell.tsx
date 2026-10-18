@@ -1,10 +1,10 @@
 /**
- * The frame of every signed-in page: a top bar (menu toggle, then the logo or the base's place
- * pickers, then a slot for the page) over the main menu and the page itself. The menu always starts
+ * The frame of every signed-in page: a top bar (menu toggle, then the logo or the project's name,
+ * then a slot for the page) over the main menu and the page itself. The menu always starts
  * with the Inbox. On a desktop the menu is docked, resizable and collapsible and the Inbox opens
  * beside it; on a phone the menu is a drawer that the same toggle opens and the Inbox opens inside it.
  */
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { Menu, PanelLeft } from "lucide-react";
 import { BrandMark, Logo } from "@/components/Logo";
@@ -18,15 +18,28 @@ import { DockedSidebar, SidebarDrawer } from "./Sidebar";
 /** Tailwind's `md` (raised to 1024px in styles/index.css): from here up the desktop layout, with the menu docked beside the page. */
 export const DESKTOP_QUERY = "(min-width: 1024px)";
 
-/** Closes the phone drawer; a no-op on a desktop, where the menu is docked. */
-const CloseMenuContext = createContext<() => void>(() => {});
+interface MenuControl {
+  open: () => void;
+  close: () => void;
+}
+
+/** Opens and closes the phone drawer; no-ops on a desktop, where the menu is docked. */
+const MenuControlContext = createContext<MenuControl>({ open: () => {}, close: () => {} });
 
 /**
  * For menu items that act without changing the URL (picking the view already open): the drawer
  * closes only on navigation by itself and would otherwise stay over the page.
  */
 export function useCloseMenu(): () => void {
-  return useContext(CloseMenuContext);
+  return useContext(MenuControlContext).close;
+}
+
+/**
+ * Opens the phone drawer, for a title that stands in for the menu toggle (the project's name, now
+ * that it no longer opens a picker). On a desktop the menu is docked: it unfolds if it was folded.
+ */
+export function useOpenMenu(): () => void {
+  return useContext(MenuControlContext).open;
 }
 
 export interface AppShellProps {
@@ -36,10 +49,8 @@ export interface AppShellProps {
   sidebarFooter?: ReactNode;
   /** Page content for the top bar, after the logo (or `brand`). */
   topBar?: ReactNode;
-  /** Replaces the logo at the start of the top bar on a desktop (a base's workspace and base pickers). */
+  /** Replaces the logo at the start of the top bar on a desktop (a project's workspace and name). */
   brand?: ReactNode;
-  /** The phone drawer's top row in place of its "Menu" title (a base's workspace and base pickers). */
-  drawerHeader?: ReactNode;
   children: ReactNode;
   className?: string;
   /**
@@ -53,7 +64,7 @@ export interface AppShellProps {
   hidePhoneLogo?: boolean;
 }
 
-export function AppShell({ sidebar, sidebarFooter, topBar, brand, drawerHeader, children, className, fill, mainLabel, hidePhoneLogo }: AppShellProps) {
+export function AppShell({ sidebar, sidebarFooter, topBar, brand, children, className, fill, mainLabel, hidePhoneLogo }: AppShellProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [prefs, setPrefs] = useSidebarPrefs();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -77,12 +88,16 @@ export function AppShell({ sidebar, sidebarFooter, topBar, brand, drawerHeader, 
   const expanded = desktop ? !prefs.collapsed : drawerOpen;
   const toggle = () => (desktop ? setPrefs({ collapsed: !prefs.collapsed }) : setDrawerOpen((o) => !o));
   const closeMenu = useCallback(() => setDrawerOpen(false), []);
+  const control = useMemo<MenuControl>(
+    () => ({ close: closeMenu, open: () => (desktop ? setPrefs({ collapsed: false }) : setDrawerOpen(true)) }),
+    [closeMenu, desktop, setPrefs],
+  );
   // The Inbox is in the menu, so a hidden menu carries its unread mark on the toggle.
   const flagUnread = unread > 0 && !expanded;
   const toggleLabel = expanded ? "Hide menu" : flagUnread ? `Show menu (${unread} unread in Inbox)` : "Show menu";
 
   return (
-    <CloseMenuContext.Provider value={closeMenu}>
+    <MenuControlContext.Provider value={control}>
       <div className={cn(fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-dvh pb-[env(safe-area-inset-bottom)]", className)}>
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-1 border-b border-line bg-surface px-1.5 pt-[env(safe-area-inset-top)] md:gap-3 md:px-3">
           <button
@@ -124,7 +139,6 @@ export function AppShell({ sidebar, sidebarFooter, topBar, brand, drawerHeader, 
             open={drawerOpen}
             onOpenChange={setDrawerOpen}
             returnFocus={toggleRef}
-            header={drawerHeader}
             inbox={<InboxRow open={drawerInbox} onClick={() => setDrawerInbox(true)} />}
             inboxPanel={drawerInbox ? <InboxPanel onOpened={closeMenu} className="flex-1" /> : undefined}
             onCloseInbox={() => setDrawerInbox(false)}
@@ -134,7 +148,7 @@ export function AppShell({ sidebar, sidebarFooter, topBar, brand, drawerHeader, 
           </SidebarDrawer>
         )}
       </div>
-    </CloseMenuContext.Provider>
+    </MenuControlContext.Provider>
   );
 }
 

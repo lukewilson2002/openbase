@@ -70,7 +70,7 @@ export function TrashPage() {
   const filtered = !!(workspaceId || baseId || kind);
 
   return (
-    <HomeShell workspaceId={workspaceId ?? undefined} section={workspaceId ? "trash" : undefined}>
+    <HomeShell workspaceId={workspaceId ?? undefined}>
       <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5 px-4 py-6 sm:px-6 md:px-8 md:py-8">
         <h1 className="text-[1.625rem] leading-tight tracking-[-0.015em]">Trash</h1>
 
