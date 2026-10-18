@@ -55,7 +55,7 @@ export function TokensSection() {
                 <p className="text-xs text-muted">
                   Created {formatDate(t.created_at)} - {t.last_used_at ? `last used ${formatDate(t.last_used_at)}` : "never used"}
                   {t.expires_at ? ` - expires ${formatDate(t.expires_at)}` : ""}
-                  {t.base_ids ? ` - ${t.base_ids.length} base${t.base_ids.length === 1 ? "" : "s"}` : " - all bases"}
+                  {t.base_ids ? ` - ${t.base_ids.length} project${t.base_ids.length === 1 ? "" : "s"}` : " - all projects"}
                 </p>
               </div>
               <IconButton label={`Revoke ${t.name}`} size="sm" onClick={() => setRevoking(t)}>
@@ -155,7 +155,7 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
             settings, sessions and tokens can never be changed with a token.
           </p>
         </div>
-        <Field label="Bases">
+        <Field label="Projects">
           {(ctl) => (
             <Select
               {...ctl}
@@ -165,13 +165,13 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                 if (e.target.value !== "some") setBaseIds([]);
               }}
             >
-              <option value="all">All bases I can access</option>
-              <option value="some">Only the bases I select</option>
+              <option value="all">All projects I can access</option>
+              <option value="some">Only the projects I select</option>
             </Select>
           )}
         </Field>
         {limitBases && (
-          <div className="flex flex-col gap-1.5" role="group" aria-label="Allowed bases">
+          <div className="flex flex-col gap-1.5" role="group" aria-label="Allowed projects">
             {workspaces.isPending ? (
               <Spinner />
             ) : workspaces.isError ? (
@@ -188,7 +188,7 @@ function CreateTokenDialog({ onClose, onCreated }: { onClose: () => void; onCrea
                 )),
               )
             )}
-            <p className="text-xs text-muted">A token limited to bases cannot manage workspaces, members or the admin pages.</p>
+            <p className="text-xs text-muted">A token limited to projects cannot manage workspaces, members or the admin pages.</p>
           </div>
         )}
         <Field label="Expires">

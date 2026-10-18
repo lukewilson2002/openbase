@@ -202,8 +202,8 @@ describe("account", () => {
     await user.type(within(form).getByLabelText("Name"), "Scoped");
     // Without the list of bases being asked for, nothing is fetched.
     expect(api.callsTo("GET /api/workspaces")).toHaveLength(0);
-    await user.selectOptions(within(form).getByLabelText("Bases"), "some");
-    const group = await within(form).findByRole("group", { name: "Allowed bases" });
+    await user.selectOptions(within(form).getByLabelText("Projects"), "some");
+    const group = await within(form).findByRole("group", { name: "Allowed projects" });
     expect(within(form).getByRole("button", { name: "Create token" })).toBeDisabled();
     await user.click(await within(group).findByRole("checkbox", { name: "Acme / Ops" }));
     expect(within(group).getByRole("checkbox", { name: "Acme / CRM" })).not.toBeChecked();

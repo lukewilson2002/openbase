@@ -184,7 +184,7 @@ export function NotifyEditor({ action, onChange, ctx }: ActionEditorProps<"notif
       <fieldset>
         <legend className="mb-1 text-[0.8125rem] font-medium">Who to notify</legend>
         {collaborators.length === 0 ? (
-          <p className="text-xs text-muted">Nobody else has access to this base yet. Share the base to notify teammates.</p>
+          <p className="text-xs text-muted">Nobody else has access to this project yet. Share the project to notify teammates.</p>
         ) : (
           <ul className="grid gap-1.5 sm:grid-cols-2">
             {collaborators.map((c) => (

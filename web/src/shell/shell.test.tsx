@@ -191,7 +191,7 @@ describe("ProfileMenu", () => {
     expect(await screen.findByRole("menuitem", { name: "Appearance: Dark" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: "Replay the intro" }));
-    expect(await screen.findByRole("dialog", { name: "A base holds one project" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "A project holds your tables" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
     // Replaying never saves anything: the account had already seen it.
     expect(api.callsTo("PATCH /api/auth/me")).toHaveLength(0);

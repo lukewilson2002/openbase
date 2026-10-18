@@ -12,7 +12,7 @@ export const TRASH_KIND_LABELS: Record<TrashKind, string> = {
   field: "Field",
   table: "Table",
   view: "View",
-  base: "Base",
+  base: "Project",
   workspace: "Workspace",
 };
 

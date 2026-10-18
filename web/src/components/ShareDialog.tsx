@@ -70,7 +70,7 @@ export function ShareDialog(props: ShareDialogProps) {
     <InviteForm target={props} onNavigate={() => onOpenChange(false)} />
   ) : (
     <Notice>
-      {props.scope === "workspace" ? "Only owners can invite people to the whole workspace. Open a base to invite people to it, or share a view." : "Only creators and owners can invite people. Ask one of them, or share a view."}
+      {props.scope === "workspace" ? "Only owners can invite people to the whole workspace. Open a project to invite people to it, or share a view." : "Only creators and owners can invite people. Ask one of them, or share a view."}
     </Notice>
   );
   return (
@@ -128,7 +128,7 @@ function WorkspaceViews({ bases }: { bases: readonly Pick<BaseSummary, "id" | "n
       }
     }
   }
-  return <ShareViewTab views={views} label={(v) => labels.get(v.id) ?? v.name} emptyText="None of these bases has a view that can be shared yet. Personal views stay private." />;
+  return <ShareViewTab views={views} label={(v) => labels.get(v.id) ?? v.name} emptyText="None of these projects has a view that can be shared yet. Personal views stay private." />;
 }
 
 function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavigate: () => void }) {
@@ -147,7 +147,7 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
   const roles = ROLE_CHOICES.filter((r) => grantableRoles(myRole).includes(r));
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>(roles.includes("editor") ? "editor" : (roles[0] ?? "viewer"));
-  // From a base, the obvious meaning is "this base"; from the workspace, its owner means everything.
+  // From a base, the obvious meaning is "this project"; from the workspace, its owner means everything.
   const [mode, setMode] = useState<"pick" | "all">(!fromBase && isOwner ? "all" : "pick");
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(fromBase ? [target.base.id] : []));
   const [created, setCreated] = useState<CreatedInvite | null>(null);
@@ -186,7 +186,7 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
   return (
     <form onSubmit={submit} className="flex flex-col gap-[18px]" aria-label="Invite people">
       <p className="text-sm leading-normal text-muted">
-        People you invite join the <strong className="font-semibold text-fg">{workspaceName}</strong> workspace. Choose which of its bases they can open.
+        People you invite join the <strong className="font-semibold text-fg">{workspaceName}</strong> workspace. Choose which of its projects they can open.
       </p>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
         <Field label="Email" hint="Leave it empty to get a link anyone can use." className={FIELD}>
@@ -206,18 +206,18 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
       </div>
 
       <fieldset disabled={role === "owner"} className="flex flex-col gap-1.5 disabled:opacity-70">
-        <legend className="mb-2 text-sm font-semibold">Bases they can open</legend>
+        <legend className="mb-2 text-sm font-semibold">Projects they can open</legend>
         {role === "owner" ? (
-          <p className="text-sm text-muted">Owners can always open every base in {workspaceName}.</p>
+          <p className="text-sm text-muted">Owners can always open every project in {workspaceName}.</p>
         ) : (
           <>
             <Choice type="radio" name="share-access" checked={mode === "pick"} onChange={() => setMode("pick")}>
-              Only the bases I pick
+              Only the projects I pick
             </Choice>
             {mode === "pick" && (
-              <div className="ml-[42px] flex flex-col gap-0.5" role="group" aria-label="Bases">
+              <div className="ml-[42px] flex flex-col gap-0.5" role="group" aria-label="Projects">
                 {bases.length === 0 ? (
-                  <p className="px-2.5 py-2 text-sm text-muted">This workspace has no bases yet.</p>
+                  <p className="px-2.5 py-2 text-sm text-muted">This workspace has no projects yet.</p>
                 ) : (
                   bases.map((b) => (
                     <Choice key={b.id} type="checkbox" small checked={picked.has(b.id)} onChange={(on) => toggle(b.id, on)} icon={<EntityTile name={b.name} icon={b.icon} color={b.color} variant="tint" size="sm" className="rounded-md" />}>
@@ -225,12 +225,12 @@ function InviteForm({ target, onNavigate }: { target: ShareDialogTarget; onNavig
                     </Choice>
                   ))
                 )}
-                {bases.length > 0 && pickedIds.length === 0 && <p className="px-2.5 text-xs text-danger">Pick at least one base.</p>}
+                {bases.length > 0 && pickedIds.length === 0 && <p className="px-2.5 text-xs text-danger">Pick at least one project.</p>}
               </div>
             )}
             {isOwner && (
-              <Choice type="radio" name="share-access" checked={mode === "all"} onChange={() => setMode("all")} hint="Including bases made later">
-                All bases in {workspaceName}
+              <Choice type="radio" name="share-access" checked={mode === "all"} onChange={() => setMode("all")} hint="Including projects made later">
+                All projects in {workspaceName}
               </Choice>
             )}
           </>

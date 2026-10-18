@@ -104,7 +104,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Create my account" }).click();
     // A new account meets the intro first; skipping it is remembered by the server.
-    await expect(page.getByRole("dialog", { name: "A base holds one project" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "A project holds your tables" })).toBeVisible();
     await page.getByRole("button", { name: "Skip the intro" }).click();
     await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
     expect(await api<{ needs_setup: boolean }>(page, "/api/setup")).toMatchObject({ needs_setup: false });

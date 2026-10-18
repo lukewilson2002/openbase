@@ -369,7 +369,7 @@ describe("the workspace menu in the tree", () => {
     await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
     await user.click(await screen.findByRole("menuitem", { name: /Invite people/ }));
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-    expect(within(dialog).getByRole("radio", { name: "All bases in Acme" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "All projects in Acme" })).toBeChecked();
     expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeInTheDocument();
     // The projects' schemas (for their views) load only once "Share a view" is opened.
     expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);

@@ -169,7 +169,7 @@ test("an MCP client connects through the browser, works with its token, and is r
     await expect(row).toBeVisible();
     await expect(row).toContainText("Read & edit");
     await expect(row).toContainText(`Connects from 127.0.0.1:${listener.port}`);
-    await expect(row).toContainText("all bases");
+    await expect(row).toContainText("all projects");
     await expect(row).toContainText(/last used/);
 
     // Revoke it there: the tokens stop working at once.

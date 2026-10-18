@@ -22,10 +22,10 @@ describe("intro", () => {
   it("opens for someone who has not seen it, with the heading focused", async () => {
     routes();
     renderApp({ route: "/" });
-    const dialog = await screen.findByRole("dialog", { name: "A base holds one project" });
+    const dialog = await screen.findByRole("dialog", { name: "A project holds your tables" });
     // No "Step 1 of 3" line above the heading any more: the dots say where you are.
     expect(within(dialog).queryByText(/^Step \d/)).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("heading", { name: "A base holds one project" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "A project holds your tables" })).toHaveFocus());
   });
 
   it("stays closed for someone who has seen it", async () => {
@@ -46,13 +46,13 @@ describe("intro", () => {
     const user = userEvent.setup();
     routes();
     renderApp({ route: "/" });
-    await screen.findByRole("dialog", { name: "A base holds one project" });
+    await screen.findByRole("dialog", { name: "A project holds your tables" });
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Tables store your information" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("heading", { name: "A base holds one project" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "A project holds your tables" })).toBeInTheDocument();
 
     await user.keyboard("{ArrowRight}{ArrowRight}");
     expect(screen.getByRole("heading", { name: "Views show your data in other ways" })).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("intro", () => {
       </IntroProvider>,
     );
     await user.click(screen.getByRole("button", { name: "Replay the intro" }));
-    expect(await screen.findByRole("dialog", { name: "A base holds one project" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "A project holds your tables" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.callsTo("PATCH /api/auth/me")).toHaveLength(0);

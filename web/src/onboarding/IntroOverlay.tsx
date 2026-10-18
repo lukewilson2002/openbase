@@ -21,8 +21,8 @@ const strong = "font-semibold text-fg";
 
 const SCREENS: Screen[] = [
   {
-    title: "A base holds one project",
-    text: ["Think of a base like a spreadsheet file. Inside it are tables. Make a separate base for each project, like planning a wedding or running a side business."],
+    title: "A project holds your tables",
+    text: ["Think of a project like a spreadsheet file. Inside it are tables. Make a separate project for each thing you are working on, like planning a wedding or running a side business."],
     Art: BasesArt,
   },
   {
@@ -46,7 +46,7 @@ const SCREENS: Screen[] = [
   },
   {
     title: "Workspaces keep things apart",
-    text: ["Each workspace has its own bases and its own people. You decide who to invite, and you can limit someone to just the bases they need."],
+    text: ["Each workspace has its own projects and its own people. You decide who to invite, and you can limit someone to just the projects they need."],
     Art: WorkspacesArt,
   },
   {

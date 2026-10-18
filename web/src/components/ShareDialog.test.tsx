@@ -40,12 +40,12 @@ describe("Share dialog: invite people", () => {
     const api = routes("creator");
     fromBase("creator");
     const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
-    expect(within(dialog).getByText(/People you invite join the/)).toHaveTextContent("People you invite join the Acme workspace. Choose which of its bases they can open.");
-    expect(within(dialog).getByRole("radio", { name: "Only the bases I pick" })).toBeChecked();
+    expect(within(dialog).getByText(/People you invite join the/)).toHaveTextContent("People you invite join the Acme workspace. Choose which of its projects they can open.");
+    expect(within(dialog).getByRole("radio", { name: "Only the projects I pick" })).toBeChecked();
     expect(await within(dialog).findByRole("checkbox", { name: "Project tracker" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "CRM" })).not.toBeChecked();
     // A creator can neither open everything up nor make owners.
-    expect(within(dialog).queryByRole("radio", { name: /All bases in Acme/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("radio", { name: /All projects in Acme/ })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("option", { name: "Owner" })).not.toBeInTheDocument();
     expect(within(dialog).getAllByRole("option").map((o) => o.textContent)).toEqual(["Editor", "Commenter", "Viewer", "Creator"]);
 
@@ -76,7 +76,7 @@ describe("Share dialog: invite people", () => {
     fromBase("creator");
     const dialog = await screen.findByRole("dialog");
     await user.click(await within(dialog).findByRole("checkbox", { name: "Project tracker" }));
-    expect(within(dialog).getByText("Pick at least one base.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Pick at least one project.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeDisabled();
   });
 
@@ -85,15 +85,15 @@ describe("Share dialog: invite people", () => {
     const api = routes("owner");
     fromBase("owner");
     const dialog = await screen.findByRole("dialog");
-    const all = within(dialog).getByRole("radio", { name: "All bases in Acme" });
-    expect(all).toHaveAccessibleDescription("Including bases made later");
+    const all = within(dialog).getByRole("radio", { name: "All projects in Acme" });
+    expect(all).toHaveAccessibleDescription("Including projects made later");
     await user.click(all);
     expect(within(dialog).queryByRole("checkbox", { name: "CRM" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: /Send invite/ }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/invites")[0]?.body).toEqual({ email: null, role: "editor", all_bases: true }));
 
     await user.selectOptions(within(dialog).getByLabelText("Role"), "owner");
-    expect(within(dialog).getByText("Owners can always open every base in Acme.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Owners can always open every project in Acme.")).toBeInTheDocument();
   });
 
   it("from the workspace page, has no view tab and defaults an owner to every base", async () => {
@@ -102,7 +102,7 @@ describe("Share dialog: invite people", () => {
     renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={makeWorkspace("owner")} />);
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
     expect(within(dialog).queryByRole("tab")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("radio", { name: "All bases in Acme" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "All projects in Acme" })).toBeChecked();
     await user.click(within(dialog).getByRole("button", { name: /Send invite/ }));
     await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/invites")[0]?.body).toEqual({ email: null, role: "editor", all_bases: true }));
     expect(await within(dialog).findByText("Anyone with this link can join. Send it to the person you are inviting:")).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("Share dialog: invite people", () => {
     routes("creator");
     fromBase("creator");
     const dialog = await screen.findByRole("dialog");
-    const list = within(dialog).getByRole("group", { name: "Bases" });
+    const list = within(dialog).getByRole("group", { name: "Projects" });
     await within(list).findByRole("checkbox", { name: "CRM" });
     expect(list.querySelectorAll("[data-entity-tile]")).toHaveLength(2);
   });
@@ -121,7 +121,7 @@ describe("Share dialog: invite people", () => {
     const api = routes("creator");
     renderWithProviders(<ShareDialog open onOpenChange={() => {}} scope="workspace" workspace={makeWorkspace("creator")} />);
     const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-    expect(within(dialog).getByRole("status")).toHaveTextContent("Only owners can invite people to the whole workspace. Open a base to invite people to it, or share a view.");
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Only owners can invite people to the whole workspace. Open a project to invite people to it, or share a view.");
     expect(within(dialog).queryByRole("button", { name: /Send invite/ })).not.toBeInTheDocument();
     expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(0);
   });
@@ -155,7 +155,7 @@ describe("Share dialog: share a view", () => {
     // Personal views cannot be shared, so they are not offered.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["All tasks", "Board"]);
     expect(
-      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the base."),
+      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the project."),
     ).toBeInTheDocument();
 
     await user.click(await within(dialog).findByRole("button", { name: /Create link/ }));

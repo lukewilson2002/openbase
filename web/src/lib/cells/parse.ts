@@ -72,7 +72,7 @@ function parseUsers(field: Extract<Field, { type: "user" }>, text: string, ctx: 
       const lower = t.toLowerCase();
       id = ctx.users?.find((u) => u.name.toLowerCase() === lower || u.email.toLowerCase() === lower)?.id;
     }
-    if (!id) return fail(`"${t}" is not a collaborator on this base`);
+    if (!id) return fail(`"${t}" is not a collaborator on this project`);
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length === 0) return CLEAR;

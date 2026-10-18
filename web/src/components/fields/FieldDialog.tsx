@@ -51,7 +51,7 @@ const TYPE_DESCRIPTIONS: Partial<Record<FieldType, string>> = {
   phone: "A phone number",
   attachment: "Files and images",
   link: "Link to records in a table",
-  user: "People who can access this base",
+  user: "People who can access this project",
   formula: "Calculate a value from other fields",
   lookup: "Show fields from linked records",
   rollup: "Summarize fields from linked records",

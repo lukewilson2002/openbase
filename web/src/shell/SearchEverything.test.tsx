@@ -56,7 +56,7 @@ describe("SearchEverything on a desktop", () => {
     expect(api.callsTo("GET /api/search")[0]!.query.get("q")).toBe("cho");
     expect(api.callsTo("GET /api/search")[0]!.query.get("limit")).toBe("20");
     const groups = within(list).getAllByRole("group");
-    expect(groups.map((g) => g.getAttribute("aria-labelledby") && document.getElementById(g.getAttribute("aria-labelledby")!)!.textContent)).toEqual(["Workspaces", "Bases", "Tables", "Views", "Records"]);
+    expect(groups.map((g) => g.getAttribute("aria-labelledby") && document.getElementById(g.getAttribute("aria-labelledby")!)!.textContent)).toEqual(["Workspaces", "Projects", "Tables", "Views", "Records"]);
     expect(within(list).getByRole("option", { name: /Take out trash/ })).toHaveTextContent("Household › Chores › Chores · every Tuesday");
     expect(box).toHaveAttribute("aria-expanded", "true");
   });

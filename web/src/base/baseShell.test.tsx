@@ -324,7 +324,7 @@ describe("base shell on a desktop", () => {
       });
       await screen.findByText("Grid view coming soon");
       expect(screen.queryByRole("button", { name: "Add table" })).not.toBeInTheDocument();
-      expect(screen.queryByTitle("Rename base")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Rename project")).not.toBeInTheDocument();
       // Shared views are creator territory; the editor's own personal view is manageable.
       expect(screen.queryByRole("button", { name: "Options for All tasks" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Options for My tasks" })).toBeInTheDocument();
@@ -614,7 +614,7 @@ describe("an empty base", () => {
 
   it.each(["viewer", "editor"])("tells a %s whom to ask", async (role) => {
     openBase(role, { "GET /api/bases/app1": empty(role) });
-    expect(await screen.findByText("This base has no tables yet. Ask someone who can create tables to add one.")).toBeInTheDocument();
+    expect(await screen.findByText("This project has no tables yet. Ask someone who can create tables to add one.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Create your first table" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Table name" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import a CSV" })).not.toBeInTheDocument();

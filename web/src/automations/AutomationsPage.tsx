@@ -67,7 +67,7 @@ export function AutomationsPage({ schema }: { schema: BaseSchema }) {
       <EmptyState
         icon={<Lock />}
         title="Automations are for creators"
-        description="Only creators and owners of this base can see and change its automations. Ask one of them for access."
+        description="Only creators and owners of this project can see and change its automations. Ask one of them for access."
       />
     );
   }

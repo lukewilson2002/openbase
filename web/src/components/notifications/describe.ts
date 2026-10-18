@@ -100,7 +100,7 @@ export function describeNotification(n: Notification): NotificationView {
     }
     case "invite": {
       const token = text(p, "token");
-      return { kind, title: `${actor} invited you to ${text(p, "base_name") ?? text(p, "workspace_name") ?? "a base"}`, detail: message, href: token ? `/invite/${encodeURIComponent(token)}` : href };
+      return { kind, title: `${actor} invited you to ${text(p, "base_name") ?? text(p, "workspace_name") ?? "a project"}`, detail: message, href: token ? `/invite/${encodeURIComponent(token)}` : href };
     }
     case "automation":
       return { kind, title: text(p, "title") ?? (text(p, "automation_name") ? `Automation "${text(p, "automation_name")}"` : "Automation notification"), detail: message ?? snippet, href };

@@ -55,8 +55,8 @@ export function ShareViewTab({
         <Eye aria-hidden className="mt-0.5 size-[18px] shrink-0 text-primary" />
         <p>
           {kind === "form"
-            ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the base."
-            : `Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the base.${hiddenNote(view)}`}
+            ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the project."
+            : `Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the project.${hiddenNote(view)}`}
         </p>
       </div>
       {/* Keyed by view: a half-typed password must not carry over to another view's link. */}

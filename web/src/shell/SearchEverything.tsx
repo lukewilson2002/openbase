@@ -28,7 +28,7 @@ const SEARCH_LIMIT = 20;
 
 type Kind = SearchResult["kind"];
 const KINDS: readonly Kind[] = ["workspace", "base", "table", "view", "record"];
-const HEADINGS: Record<Kind, string> = { workspace: "Workspaces", base: "Bases", table: "Tables", view: "Views", record: "Records" };
+const HEADINGS: Record<Kind, string> = { workspace: "Workspaces", base: "Projects", table: "Tables", view: "Views", record: "Records" };
 
 /** Where a result opens. A record opens expanded over its table, the way notification links do. */
 export function searchResultHref(r: SearchResult): string {

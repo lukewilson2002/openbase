@@ -28,7 +28,7 @@ const KIND_CHIPS: { kind: TrashKind | null; label: string }[] = [
   { kind: "record", label: "Records" },
   { kind: "field", label: "Fields" },
   { kind: "table", label: "Tables" },
-  { kind: "base", label: "Bases" },
+  { kind: "base", label: "Projects" },
   { kind: "workspace", label: "Workspaces" },
 ];
 
@@ -238,13 +238,13 @@ function BaseFilter({
   const current = all.find((b) => b.id === value);
   return (
     <DropdownMenu>
-      <FilterButton label="Base" active={!!value} value={current?.name ?? (value ? (fallbackName ?? "This base") : "All bases")} />
+      <FilterButton label="Project" active={!!value} value={current?.name ?? (value ? (fallbackName ?? "This project") : "All projects")} />
       <DropdownMenuContent align="start" className="max-h-[min(24rem,var(--ob-avail))] overflow-y-auto">
         <DropdownMenuRadioGroup
           value={value ?? ""}
           onValueChange={(v) => onChange(v || null, all.find((b) => b.id === v)?.workspace_id ?? null)}
         >
-          <DropdownMenuRadioItem value="">All bases</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="">All projects</DropdownMenuRadioItem>
           {shown.map((w) => (
             <div key={w.id} role="none">
               {!workspaceId && w.bases.length > 0 && <DropdownMenuLabel>{w.name}</DropdownMenuLabel>}

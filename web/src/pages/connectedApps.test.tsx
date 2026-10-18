@@ -67,13 +67,13 @@ describe("account: connected apps", () => {
     expect(items[0]).toHaveTextContent("Claude");
     expect(items[0]).toHaveTextContent("Read & edit");
     expect(items[0]).toHaveTextContent("Connects from claude.ai");
-    expect(items[0]).toHaveTextContent("2 bases: CRM, Notes");
+    expect(items[0]).toHaveTextContent("2 projects: CRM, Notes");
     expect(items[0]).toHaveTextContent(/last used/);
 
     expect(items[1]).toHaveTextContent("Claude Code");
     expect(items[1]).toHaveTextContent("Full control");
     expect(items[1]).toHaveTextContent("Connects from 127.0.0.1:53124");
-    expect(items[1]).toHaveTextContent("all bases");
+    expect(items[1]).toHaveTextContent("all projects");
     expect(items[1]).toHaveTextContent("never used");
 
     expect(items[2]).toHaveTextContent("Read only");

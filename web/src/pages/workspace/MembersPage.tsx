@@ -110,7 +110,7 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
         <div className="min-w-0 flex-[1_1_260px]">
           <p className="mb-1 truncate text-sm text-muted">{ws.name}</p>
           <h1 className="mb-1.5 text-[1.625rem] leading-tight tracking-[-0.015em]">Members</h1>
-          <p className="text-[0.9375rem] text-muted">Everyone here has one role. You choose which bases each person can open.</p>
+          <p className="text-[0.9375rem] text-muted">Everyone here has one role. You choose which projects each person can open.</p>
         </div>
         {isOwner && (
           <Button variant="primary" size="lg" className="h-[42px] rounded-[10px] px-[18px] font-semibold" onClick={() => setInviting(true)}>
@@ -166,7 +166,7 @@ function Members({ ws }: { ws: WorkspaceSummary }) {
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={removing?.user_id === me?.id ? `Leave ${ws.name}?` : `Remove ${removing?.name ?? "member"}?`}
-        description={removing?.user_id === me?.id ? "You lose access to every base in this workspace." : "They lose access to every base in this workspace. You can invite them again later."}
+        description={removing?.user_id === me?.id ? "You lose access to every project in this workspace." : "They lose access to every project in this workspace. You can invite them again later."}
         confirmLabel={removing?.user_id === me?.id ? "Leave workspace" : "Remove"}
         destructive
         onConfirm={async () => {
@@ -232,7 +232,7 @@ function MemberRow({
         </div>
         <div className="flex items-center gap-3.5 max-sm:w-full">
           {canManage && !owner ? (
-            <AccessButton open={open} controls={editorId} label={`Bases ${m.name} can open: ${summary}`} onClick={onToggle}>
+            <AccessButton open={open} controls={editorId} label={`Projects ${m.name} can open: ${summary}`} onClick={onToggle}>
               {summary}
             </AccessButton>
           ) : (
@@ -272,7 +272,7 @@ function MemberRow({
         </div>
       </div>
       {open && (
-        <AccessEditor id={editorId} who={m.name} access={m} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one base, or remove them from the workspace." />
+        <AccessEditor id={editorId} who={m.name} access={m} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one project, or remove them from the workspace." />
       )}
     </li>
   );
@@ -281,7 +281,7 @@ function MemberRow({
 // 38 px controls in the rows, as on the design.
 const CONTROL = "h-[38px] rounded-[9px] text-sm";
 
-/** The access column of a row that can be changed: opens the inline "Bases X can open" picker. */
+/** The access column of a row that can be changed: opens the inline "Projects X can open" picker. */
 function AccessButton({ open, controls, label, onClick, children }: { open: boolean; controls: string; label: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -301,7 +301,7 @@ function AccessButton({ open, controls, label, onClick, children }: { open: bool
   );
 }
 
-/** The inline "Bases X can open" picker, for a member or an invite. */
+/** The inline "Projects X can open" picker, for a member or an invite. */
 function AccessEditor({
   id,
   who,
@@ -343,7 +343,7 @@ function AccessEditor({
   return (
     <fieldset id={id} className="mt-3.5 flex flex-col gap-1 rounded-xl border border-line bg-surface p-3.5 sm:ml-[54px]">
       <legend className="px-1.5 text-[0.8125rem] font-semibold text-muted">
-        Bases {who} can open
+        Projects {who} can open
       </legend>
       <Checkbox
         checked={all}
@@ -351,7 +351,7 @@ function AccessEditor({
         className="p-2 [&>button]:size-[18px] [&>label]:text-sm"
         label={
           <>
-            <strong className="font-semibold">All bases</strong>, including new ones
+            <strong className="font-semibold">All projects</strong>, including new ones
           </>
         }
       />
@@ -423,7 +423,7 @@ function InviteRow({
             <button
               type="button"
               disabled={busy || basesGone}
-              title={basesGone ? "Its bases are in the trash. Cancel it and invite them again." : undefined}
+              title={basesGone ? "Its projects are in the trash. Cancel it and invite them again." : undefined}
               onClick={onResend}
               className={link}
             >
@@ -440,7 +440,7 @@ function InviteRow({
           {owner ? (
             <span className={cn("text-sm text-muted max-sm:flex-1", ACCESS_COL)}>{summary}</span>
           ) : (
-            <AccessButton open={open} controls={editorId} label={`Bases ${name} can open: ${summary}`} onClick={onToggle}>
+            <AccessButton open={open} controls={editorId} label={`Projects ${name} can open: ${summary}`} onClick={onToggle}>
               {summary}
             </AccessButton>
           )}
@@ -458,7 +458,7 @@ function InviteRow({
         </div>
       </div>
       {open && !owner && (
-        <AccessEditor id={editorId} who={name} access={invite} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one base, or cancel the invite." />
+        <AccessEditor id={editorId} who={name} access={invite} ws={ws} saving={saving} onSave={onUpdate} onDone={onToggle} emptyHint="Pick at least one project, or cancel the invite." />
       )}
       {result && (
         <div className="mt-3 sm:ml-[54px]">

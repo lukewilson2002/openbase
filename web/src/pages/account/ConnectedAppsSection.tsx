@@ -40,7 +40,7 @@ export function ConnectedAppsSection() {
                   <span className="ml-2 rounded-full bg-subtle px-2 py-0.5 text-xs font-normal text-muted">{ACCESS_LABEL[accessOf(g)]}</span>
                 </p>
                 <p className="text-xs text-muted">
-                  Connects from {g.redirect_host} - {g.bases ? `${g.bases.length} base${g.bases.length === 1 ? "" : "s"}: ${g.bases.map((b) => b.name).join(", ")}` : "all bases"}
+                  Connects from {g.redirect_host} - {g.bases ? `${g.bases.length} project${g.bases.length === 1 ? "" : "s"}: ${g.bases.map((b) => b.name).join(", ")}` : "all projects"}
                 </p>
                 <p className="text-xs text-muted">
                   Connected {formatDate(g.created_at)} - {g.last_used_at ? `last used ${formatDate(g.last_used_at)}` : "never used"}

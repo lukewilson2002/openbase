@@ -39,7 +39,7 @@ export function EmptyBase({ schema, onImport }: { schema: BaseSchema; onImport: 
           </>
         ) : (
           <p id="empty-base-title" className="text-sm text-muted">
-            This base has no tables yet. Ask someone who can create tables to add one.
+            This project has no tables yet. Ask someone who can create tables to add one.
           </p>
         )}
       </section>

@@ -42,7 +42,7 @@ describe("describeNotification", () => {
 
   it("describes invites (token link wins) and automations", () => {
     expect(describeNotification(n("invite", { actor_name: "Ada", base_name: "Roadmap", token: "tok" }))).toMatchObject({ title: "Ada invited you to Roadmap", href: "/invite/tok" });
-    expect(describeNotification(n("invite", { base_id: "app1" }))).toMatchObject({ title: "Someone invited you to a base", href: "/base/app1" });
+    expect(describeNotification(n("invite", { base_id: "app1" }))).toMatchObject({ title: "Someone invited you to a project", href: "/base/app1" });
     expect(describeNotification(n("automation", { automation_name: "Weekly digest", message: "Sent 4 emails", base_id: "app1" }))).toMatchObject({
       kind: "automation",
       title: 'Automation "Weekly digest"',

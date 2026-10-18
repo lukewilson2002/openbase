@@ -123,7 +123,7 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
       const forms = formViews(schema);
       const known = forms.some((f) => f.view.id === trigger.view_id);
       return (
-        <Field label="Form" className="max-w-md" hint={forms.length === 0 ? "This base has no form views. Create one from a table's view sidebar." : undefined}>
+        <Field label="Form" className="max-w-md" hint={forms.length === 0 ? "This project has no form views. Create one from a table's view sidebar." : undefined}>
           {(ctl) => (
             <EntitySelect
               {...ctl}

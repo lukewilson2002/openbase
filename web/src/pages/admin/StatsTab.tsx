@@ -25,7 +25,7 @@ export function StatsTab() {
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Users" value={formatNumber(s.users)} />
         <Stat label="Workspaces" value={formatNumber(s.workspaces)} />
-        <Stat label="Bases" value={formatNumber(s.bases)} />
+        <Stat label="Projects" value={formatNumber(s.bases)} />
         <Stat label="Records" value={formatNumber(s.records)} />
         <Stat label="Database size" value={formatBytes(s.database_bytes)} />
         <Stat label="Attachments" value={formatBytes(s.attachments_bytes)} />

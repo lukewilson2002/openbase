@@ -49,7 +49,7 @@ export const ACTION_HINTS: Record<ActionType, string> = {
   update_record: "Change fields of an existing record, such as the one that fired the trigger.",
   send_email: "Send a plain-text email. Needs SMTP to be configured on the server.",
   http_request: "Call an external URL (GET, POST, PUT, PATCH or DELETE).",
-  notify: "Send an in-app notification to people with access to this base.",
+  notify: "Send an in-app notification to people with access to this project.",
 };
 
 export type TriggerShape = "record" | "webhook" | "schedule";

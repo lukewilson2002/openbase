@@ -40,22 +40,22 @@ describe("members page", () => {
     routes();
     renderApp({ route: "/workspace/wsp1/members" });
     expect(await screen.findByRole("heading", { level: 1, name: "Members" })).toBeInTheDocument();
-    expect(screen.getByText("Everyone here has one role. You choose which bases each person can open.")).toBeInTheDocument();
+    expect(screen.getByText("Everyone here has one role. You choose which projects each person can open.")).toBeInTheDocument();
 
     const ada = await row("Ada Lovelace");
     expect(ada).toHaveTextContent("(you)");
-    expect(within(ada).getByText("All bases")).toBeInTheDocument();
+    expect(within(ada).getByText("All projects")).toBeInTheDocument();
     expect(within(ada).getByText("Owner")).toBeInTheDocument();
     expect(within(ada).queryByRole("combobox")).not.toBeInTheDocument();
-    expect(within(await row("Tori Smith")).getByRole("button", { name: "Bases Tori Smith can open: Chores only" })).toBeInTheDocument();
-    expect(within(await row("Sam Lee")).getByRole("button", { name: "Bases Sam Lee can open: All bases" })).toBeInTheDocument();
-    expect(within(await row("Kim Park")).getByRole("button", { name: "Bases Kim Park can open: 2 of 3 bases" })).toBeInTheDocument();
+    expect(within(await row("Tori Smith")).getByRole("button", { name: "Projects Tori Smith can open: Chores only" })).toBeInTheDocument();
+    expect(within(await row("Sam Lee")).getByRole("button", { name: "Projects Sam Lee can open: All projects" })).toBeInTheDocument();
+    expect(within(await row("Kim Park")).getByRole("button", { name: "Projects Kim Park can open: 2 of 3 projects" })).toBeInTheDocument();
 
     const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
     expect(within(pending).getByText("Invited")).toBeInTheDocument();
     expect(within(pending).getByRole("button", { name: "Resend" })).toBeInTheDocument();
     // An invite's bases and role are changed like a member's.
-    expect(within(pending).getByRole("button", { name: "Bases Jordan can open: Budget only" })).toBeInTheDocument();
+    expect(within(pending).getByRole("button", { name: "Projects Jordan can open: Budget only" })).toBeInTheDocument();
     expect(within(pending).getByRole("combobox", { name: "Role for jordan@example.com" })).toHaveValue("viewer");
     expect(pending.querySelector("[data-pending]")).toHaveClass("border-dashed");
     expect(screen.getByText(/Want someone outside the workspace to see a few records\? Share a view instead\./)).toBeInTheDocument();
@@ -66,22 +66,22 @@ describe("members page", () => {
     const api = routes({ "PATCH /api/workspaces/wsp1/members/usr2": { ok: true }, "PATCH /api/workspaces/wsp1/members/usr3": { ok: true } });
     renderApp({ route: "/workspace/wsp1/members" });
     const tori = await row("Tori Smith");
-    const toggle = within(tori).getByRole("button", { name: /Bases Tori Smith can open/ });
+    const toggle = within(tori).getByRole("button", { name: /Projects Tori Smith can open/ });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const editor = within(tori).getByRole("group", { name: "Bases Tori Smith can open" });
+    const editor = within(tori).getByRole("group", { name: "Projects Tori Smith can open" });
     expect(within(editor).getByRole("checkbox", { name: "Chores" })).toBeChecked();
     await user.click(within(editor).getByRole("checkbox", { name: "Recipes" }));
     await user.click(within(editor).getByRole("button", { name: "Save access" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")[0]!.body).toEqual({ all_bases: false, base_ids: ["app1", "app3"] });
-    await waitFor(() => expect(within(tori).queryByRole("group", { name: "Bases Tori Smith can open" })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(tori).queryByRole("group", { name: "Projects Tori Smith can open" })).not.toBeInTheDocument());
 
-    // Ticking "All bases" locks the list; unticking it on someone with every base starts from none.
+    // Ticking "All projects" locks the list; unticking it on someone with every base starts from none.
     const sam = await row("Sam Lee");
-    await user.click(within(sam).getByRole("button", { name: /Bases Sam Lee can open/ }));
-    const samEditor = within(sam).getByRole("group", { name: "Bases Sam Lee can open" });
-    const all = within(samEditor).getByRole("checkbox", { name: "All bases, including new ones" });
+    await user.click(within(sam).getByRole("button", { name: /Projects Sam Lee can open/ }));
+    const samEditor = within(sam).getByRole("group", { name: "Projects Sam Lee can open" });
+    const all = within(samEditor).getByRole("checkbox", { name: "All projects, including new ones" });
     expect(all).toBeChecked();
     expect(within(samEditor).getByRole("checkbox", { name: "Budget" })).toBeDisabled();
     await user.click(all);
@@ -95,12 +95,12 @@ describe("members page", () => {
     const api = routes();
     renderApp({ route: "/workspace/wsp1/members" });
     const tori = await row("Tori Smith");
-    await user.click(within(tori).getByRole("button", { name: /Bases Tori Smith can open/ }));
+    await user.click(within(tori).getByRole("button", { name: /Projects Tori Smith can open/ }));
     await user.click(within(tori).getByRole("checkbox", { name: "Chores" }));
-    expect(within(tori).getByText("Pick at least one base, or remove them from the workspace.")).toBeInTheDocument();
+    expect(within(tori).getByText("Pick at least one project, or remove them from the workspace.")).toBeInTheDocument();
     expect(within(tori).getByRole("button", { name: "Save access" })).toBeDisabled();
-    // "All bases" is a valid choice again.
-    await user.click(within(tori).getByRole("checkbox", { name: "All bases, including new ones" }));
+    // "All projects" is a valid choice again.
+    await user.click(within(tori).getByRole("checkbox", { name: "All projects, including new ones" }));
     expect(within(tori).getByRole("button", { name: "Save access" })).toBeEnabled();
     expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr2")).toHaveLength(0);
   });
@@ -110,8 +110,8 @@ describe("members page", () => {
     const api = routes({ "PATCH /api/workspaces/wsp1/members/usr4": { ok: true } });
     renderApp({ route: "/workspace/wsp1/members" });
     const kim = await row("Kim Park");
-    await user.click(within(kim).getByRole("button", { name: /Bases Kim Park can open/ }));
-    await user.click(within(kim).getByRole("checkbox", { name: "All bases, including new ones" }));
+    await user.click(within(kim).getByRole("button", { name: /Projects Kim Park can open/ }));
+    await user.click(within(kim).getByRole("checkbox", { name: "All projects, including new ones" }));
     await user.click(within(kim).getByRole("button", { name: "Save access" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1/members/usr4")[0]?.body).toEqual({ all_bases: true }));
   });
@@ -121,10 +121,10 @@ describe("members page", () => {
     routes({ "PATCH /api/workspaces/wsp1/members/usr2": { status: 403, json: { error: { code: "forbidden", message: "Only owners can change access" } } } });
     renderApp({ route: "/workspace/wsp1/members" });
     const tori = await row("Tori Smith");
-    await user.click(within(tori).getByRole("button", { name: /Bases Tori Smith can open/ }));
+    await user.click(within(tori).getByRole("button", { name: /Projects Tori Smith can open/ }));
     await user.click(within(tori).getByRole("button", { name: "Save access" }));
     expect(await screen.findByText("Only owners can change access")).toBeInTheDocument();
-    expect(within(tori).getByRole("group", { name: "Bases Tori Smith can open" })).toBeInTheDocument();
+    expect(within(tori).getByRole("group", { name: "Projects Tori Smith can open" })).toBeInTheDocument();
   });
 
   it("changes a role", async () => {
@@ -177,7 +177,7 @@ describe("members page", () => {
     const goneRow = await screen.findByRole("listitem", { name: "gone@example.com, invited" });
     const goneResend = within(goneRow).getByRole("button", { name: "Resend" });
     expect(goneResend).toBeDisabled();
-    expect(goneResend).toHaveAttribute("title", "Its bases are in the trash. Cancel it and invite them again.");
+    expect(goneResend).toHaveAttribute("title", "Its projects are in the trash. Cancel it and invite them again.");
     expect(within(goneRow).getByRole("button", { name: "Cancel invite" })).toBeEnabled();
 
     const pending = screen.getByRole("listitem", { name: "jordan@example.com, invited" });
@@ -191,15 +191,15 @@ describe("members page", () => {
     const api = routes({ "PATCH /api/invites/inv1": { ...invite, base_ids: ["app1", "app2"] } });
     renderApp({ route: "/workspace/wsp1/members" });
     const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
-    const toggle = within(pending).getByRole("button", { name: /Bases Jordan can open/ });
+    const toggle = within(pending).getByRole("button", { name: /Projects Jordan can open/ });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const editor = within(pending).getByRole("group", { name: "Bases Jordan can open" });
+    const editor = within(pending).getByRole("group", { name: "Projects Jordan can open" });
     expect(within(editor).getByRole("checkbox", { name: "Budget" })).toBeChecked();
     await user.click(within(editor).getByRole("checkbox", { name: "Chores" }));
     await user.click(within(editor).getByRole("button", { name: "Save access" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/invites/inv1")[0]?.body).toEqual({ all_bases: false, base_ids: ["app1", "app2"] }));
-    await waitFor(() => expect(within(pending).queryByRole("group", { name: "Bases Jordan can open" })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(pending).queryByRole("group", { name: "Projects Jordan can open" })).not.toBeInTheDocument());
     // Changed in place: nothing was created or revoked.
     expect(api.callsTo("POST /api/workspaces/wsp1/invites")).toHaveLength(0);
     expect(api.callsTo("DELETE /api/invites/inv1")).toHaveLength(0);
@@ -210,11 +210,11 @@ describe("members page", () => {
     const api = routes({ "PATCH /api/invites/inv1": { ...invite, all_bases: true, base_ids: [] } });
     renderApp({ route: "/workspace/wsp1/members" });
     const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
-    await user.click(within(pending).getByRole("button", { name: /Bases Jordan can open/ }));
+    await user.click(within(pending).getByRole("button", { name: /Projects Jordan can open/ }));
     await user.click(within(pending).getByRole("checkbox", { name: "Budget" }));
-    expect(within(pending).getByText("Pick at least one base, or cancel the invite.")).toBeInTheDocument();
+    expect(within(pending).getByText("Pick at least one project, or cancel the invite.")).toBeInTheDocument();
     expect(within(pending).getByRole("button", { name: "Save access" })).toBeDisabled();
-    await user.click(within(pending).getByRole("checkbox", { name: "All bases, including new ones" }));
+    await user.click(within(pending).getByRole("checkbox", { name: "All projects, including new ones" }));
     await user.click(within(pending).getByRole("button", { name: "Save access" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/invites/inv1")[0]?.body).toEqual({ all_bases: true }));
   });
@@ -236,7 +236,7 @@ describe("members page", () => {
     renderApp({ route: "/workspace/wsp1/members" });
     const pending = await screen.findByRole("listitem", { name: "jordan@example.com, invited" });
     expect(within(pending).queryByRole("button", { name: /can open/ })).not.toBeInTheDocument();
-    expect(within(pending).getByText("All bases")).toBeInTheDocument();
+    expect(within(pending).getByText("All projects")).toBeInTheDocument();
   });
 
   it("refreshes the bases' faces and the workspace list after a change", async () => {
@@ -267,7 +267,7 @@ describe("members page", () => {
     const tori = await row("Tori Smith");
     expect(within(tori).getByText("Editor")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Bases .* can open/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Projects .* can open/ })).not.toBeInTheDocument();
     // Only their own row has actions (to leave).
     expect(screen.getAllByRole("button", { name: /Actions for/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["Actions for Ada Lovelace"]);
     expect(screen.queryByRole("button", { name: /Invite people/ })).not.toBeInTheDocument();
@@ -278,10 +278,10 @@ describe("members page", () => {
     routes({ "GET /api/workspaces": [{ ...ws, role: "editor" }] });
     renderApp({ route: "/workspace/wsp1/members" });
     // They cannot see every base or anyone's full list, so no counts or names.
-    expect(within(await row("Tori Smith")).getByText("Some bases")).toBeInTheDocument();
-    expect(within(await row("Kim Park")).getByText("Some bases")).toBeInTheDocument();
-    expect(within(await row("Sam Lee")).getByText("All bases")).toBeInTheDocument();
-    expect(within(await row("Ada Lovelace")).getByText("All bases")).toBeInTheDocument();
+    expect(within(await row("Tori Smith")).getByText("Some projects")).toBeInTheDocument();
+    expect(within(await row("Kim Park")).getByText("Some projects")).toBeInTheDocument();
+    expect(within(await row("Sam Lee")).getByText("All projects")).toBeInTheDocument();
+    expect(within(await row("Ada Lovelace")).getByText("All projects")).toBeInTheDocument();
   });
 
   it("lets someone who is not an owner leave, then goes home", async () => {

@@ -141,26 +141,26 @@ function Consent({ request }: { request: ConsentRequest }) {
       </fieldset>
 
       <fieldset className="mt-5">
-        <legend className="mb-2 text-[0.8125rem] font-medium">Which bases?</legend>
+        <legend className="mb-2 text-[0.8125rem] font-medium">Which projects?</legend>
         <Select
-          aria-label="Bases"
+          aria-label="Projects"
           value={limitBases ? "some" : "all"}
           onChange={(e) => {
             setLimitBases(e.target.value === "some");
             if (e.target.value !== "some") setBaseIds([]);
           }}
         >
-          <option value="all">All bases I can access</option>
-          <option value="some">Only the bases I select</option>
+          <option value="all">All projects I can access</option>
+          <option value="some">Only the projects I select</option>
         </Select>
         {limitBases && (
-          <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Allowed bases">
+          <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Allowed projects">
             {workspaces.isPending ? (
               <Spinner />
             ) : workspaces.isError ? (
               <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
             ) : workspaces.data.every((w) => w.bases.length === 0) ? (
-              <p className="text-xs text-muted">You have no bases yet.</p>
+              <p className="text-xs text-muted">You have no projects yet.</p>
             ) : (
               workspaces.data.flatMap((w) =>
                 w.bases.map((b) => (
@@ -173,7 +173,7 @@ function Consent({ request }: { request: ConsentRequest }) {
                 )),
               )
             )}
-            {access === "manage" && <p className="text-xs text-muted">An app limited to some bases cannot manage workspaces, members or the admin pages.</p>}
+            {access === "manage" && <p className="text-xs text-muted">An app limited to some projects cannot manage workspaces, members or the admin pages.</p>}
           </div>
         )}
       </fieldset>

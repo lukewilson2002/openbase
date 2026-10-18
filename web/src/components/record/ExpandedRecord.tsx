@@ -270,7 +270,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
 
   const copyLink = async () => {
     const ok = await copyToClipboard(window.location.href);
-    toast.toast({ title: ok ? "Link copied" : "Could not copy the link", description: ok ? "Anyone with access to this base can open this record." : window.location.href, variant: ok ? "success" : "error" });
+    toast.toast({ title: ok ? "Link copied" : "Could not copy the link", description: ok ? "Anyone with access to this project can open this record." : window.location.href, variant: ok ? "success" : "error" });
   };
 
   // The share sheet where the browser has one (phones), else the link is copied.

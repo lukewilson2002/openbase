@@ -119,7 +119,7 @@ describe("setup", () => {
     await user.type(screen.getByLabelText("Password"), "longenough1");
     await user.click(screen.getByRole("button", { name: "Create my account" }));
 
-    expect(await screen.findByRole("dialog", { name: "A base holds one project" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "A project holds your tables" })).toBeInTheDocument();
     expect(api.callsTo("POST /api/auth/signup")[0]?.body).toMatchObject({ name: "Ada", email: "ada@example.com", password: "longenough1" });
     await user.click(screen.getByRole("button", { name: "Skip the intro" }));
     expect(await screen.findByRole("heading", { name: "Create your first workspace" })).toBeInTheDocument();

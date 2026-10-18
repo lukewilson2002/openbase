@@ -97,7 +97,7 @@ describe("Trash page", () => {
     // Nobody recorded: no "by".
     expect(await row("Old list")).toHaveTextContent(/Household › Chores · Deleted 3 days ago/);
     expect(await row("Old list")).toHaveTextContent("27 days left");
-    expect(await row("Wedding")).toHaveTextContent("WeddingBaseHousehold · Deleted by you");
+    expect(await row("Wedding")).toHaveTextContent("WeddingProjectHousehold · Deleted by you");
     expect(await row("Book club")).toHaveTextContent("Your workspaces · Deleted by you");
     expect(await row("Book club")).toHaveTextContent("10 days left");
     // Bases and workspaces show their own tiles; everything else a plain icon of its kind.
@@ -116,7 +116,7 @@ describe("Trash page", () => {
     expect(lastQuery(api).get("workspace_id")).toBe("wsp2");
     expect(screen.queryByText("Vacuum")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspace: Side business" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Base: All bases" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project: All projects" })).toBeInTheDocument();
     // The menu opens that workspace, as it does for any page of one.
     expect(within(await projectsOf("Side business")).getByRole("link", { name: "Clients" })).toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe("Trash page", () => {
     expect(lastQuery(api).get("base_id")).toBe("app1");
     expect(within(await list()).queryByText("Wedding")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Workspace: Household" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Base: Chores" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project: Chores" })).toBeInTheDocument();
   });
 
   it("filters by kind, workspace and base, and writes the filters to the URL", async () => {
@@ -151,9 +151,9 @@ describe("Trash page", () => {
     expect(within(await projectsOf("Household")).getByRole("link", { name: "Chores" })).toBeInTheDocument();
 
     // The base list follows the workspace.
-    await user.click(screen.getByRole("button", { name: "Base: All bases" }));
+    await user.click(screen.getByRole("button", { name: "Project: All projects" }));
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["All bases", "Chores", "Budget"]);
+    expect(within(menu).getAllByRole("menuitemradio").map((i) => i.textContent)).toEqual(["All projects", "Chores", "Budget"]);
     await user.click(within(menu).getByRole("menuitemradio", { name: "Budget" }));
     await waitFor(() => expect(lastQuery(api).get("base_id")).toBe("app2"));
     expect(await screen.findByText("Nothing like that in the trash.")).toBeInTheDocument();

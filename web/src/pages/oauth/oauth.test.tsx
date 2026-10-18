@@ -47,7 +47,7 @@ describe("OAuth consent page", () => {
     expect(screen.getByLabelText(/Read only/)).toBeChecked();
     expect(screen.getByLabelText(/Read & edit/)).not.toBeChecked();
     expect(screen.getByLabelText(/Full control/)).not.toBeChecked();
-    expect(screen.getByLabelText("Bases")).toHaveValue("all");
+    expect(screen.getByLabelText("Projects")).toHaveValue("all");
   });
 
   it("approves with the chosen access and follows the redirect the server returns", async () => {
@@ -111,10 +111,10 @@ describe("OAuth consent page", () => {
       },
     );
     renderApp({ route: ROUTE });
-    await user.selectOptions(await screen.findByLabelText("Bases"), "some");
+    await user.selectOptions(await screen.findByLabelText("Projects"), "some");
     const approve = screen.getByRole("button", { name: "Approve" });
     expect(approve).toBeDisabled();
-    const group = await screen.findByRole("group", { name: "Allowed bases" });
+    const group = await screen.findByRole("group", { name: "Allowed projects" });
     await user.click(await within(group).findByLabelText("Acme / CRM"));
     expect(approve).toBeEnabled();
     await user.click(approve);

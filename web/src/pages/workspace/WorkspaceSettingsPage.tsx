@@ -85,7 +85,7 @@ function Settings({ ws }: { ws: WorkspaceSummary }) {
           <ul className="mt-6 rounded-lg border border-danger/40 bg-surface">
             <Row
               title="Delete workspace"
-              description="The workspace and all of its bases move to the trash for 30 days."
+              description="The workspace and all of its projects move to the trash for 30 days."
               action={
                 <Button variant="danger" onClick={() => setDialog("delete")}>
                   <Trash2 aria-hidden className="size-4" /> Delete workspace

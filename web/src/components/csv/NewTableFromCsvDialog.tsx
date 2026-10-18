@@ -39,7 +39,7 @@ export function NewTableFromCsvDialog({ open, onOpenChange, ...target }: NewTabl
       onOpenChange={onOpenChange}
       size="xl"
       title={newBase ? "Import a spreadsheet" : "New table from CSV"}
-      description={newBase ? "OpenBase makes a new base named after the file, picks a field type for each column and adds every row." : "OpenBase reads the file, picks a field type for each column and adds every row."}
+      description={newBase ? "OpenBase makes a new project named after the file, picks a field type for each column and adds every row." : "OpenBase reads the file, picks a field type for each column and adds every row."}
     >
       {open && <Body target={target} onClose={() => onOpenChange(false)} />}
     </Dialog>
@@ -104,7 +104,7 @@ function Body({ target, onClose }: { target: ImportTarget; onClose: () => void }
         <>
           <Field
             label={target.createBase ? "Name" : "Table name"}
-            hint={target.createBase ? "The new base and its table get this name." : "Leave it as it is to use the file name. A name that is taken gets a number."}
+            hint={target.createBase ? "The new project and its table get this name." : "Leave it as it is to use the file name. A name that is taken gets a number."}
           >
             {(ctl) => <Input {...ctl} value={name} maxLength={255} disabled={busy} onChange={(e) => setName(e.target.value)} />}
           </Field>
