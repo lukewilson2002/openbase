@@ -609,9 +609,9 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "search",
         "viewer",
         Read,
-        "Search everything you can open: workspace, base, table and view names, and the text of records (primary field and text, email, URL and phone fields). Names come before records, text that starts with q before text that contains it. Large instances: records are read up to a budget per request, so very many or very large tables may not all be searched.",
+        "Search everything you can open: workspace, base, table and view names, the text of records (primary field and text, email, URL and phone fields) and comments. Names come before records, records before comments (newest first), text that starts with q before text that contains it. Large instances: records are read up to a budget per request, so very many or very large tables may not all be searched.",
         "query: q (1-200 characters), limit? (default 20, max 50)",
-        "SearchResponse {results: [{kind: workspace|base|table|view|record, id, name, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, view_id, view_type, record_id, snippet}]}",
+        "SearchResponse {results: [{kind: workspace|base|table|view|record|comment, id, name, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, view_id, view_type, record_id, snippet, author_name}]} (a comment: name is its record's, snippet its text around the match)",
     ),
     // ---------------------------------------------------------------------- trash
     e(

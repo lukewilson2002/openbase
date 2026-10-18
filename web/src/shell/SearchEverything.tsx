@@ -8,7 +8,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Search, Table2, X } from "lucide-react";
+import { FileText, MessageSquare, Search, Table2, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
@@ -27,10 +27,10 @@ export const SEARCH_DEBOUNCE_MS = 200;
 const SEARCH_LIMIT = 20;
 
 type Kind = SearchResult["kind"];
-const KINDS: readonly Kind[] = ["workspace", "base", "table", "view", "record"];
-const HEADINGS: Record<Kind, string> = { workspace: "Workspaces", base: "Projects", table: "Tables", view: "Views", record: "Records" };
+const KINDS: readonly Kind[] = ["workspace", "base", "table", "view", "record", "comment"];
+const HEADINGS: Record<Kind, string> = { workspace: "Workspaces", base: "Projects", table: "Tables", view: "Views", record: "Records", comment: "Comments" };
 
-/** Where a result opens. A record opens expanded over its table, the way notification links do. */
+/** Where a result opens. A record, and a comment's record, opens expanded over its table, the way notification links do. */
 export function searchResultHref(r: SearchResult): string {
   const e = encodeURIComponent;
   const base = r.base_id ?? r.id;
@@ -44,6 +44,7 @@ export function searchResultHref(r: SearchResult): string {
     case "view":
       return `/base/${e(base)}/${e(r.table_id ?? "")}/${e(r.id)}`;
     case "record":
+    case "comment":
       return `/base/${e(base)}/${e(r.table_id ?? "")}?record=${e(r.record_id ?? r.id)}`;
     default:
       // The server types `kind` as a plain string; a kind added there later still opens somewhere sensible.
@@ -112,6 +113,12 @@ function ResultIcon({ r }: { r: SearchResult }) {
           <FileText />
         </span>
       );
+    case "comment":
+      return (
+        <span aria-hidden className={tile}>
+          <MessageSquare />
+        </span>
+      );
   }
 }
 
@@ -168,16 +175,27 @@ function Results({
               className={cn("mx-1.5 flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 pointer-coarse:py-2.5", index === active && "bg-hover")}
             >
               <ResultIcon r={r} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[0.875rem] font-medium text-fg">{r.name || "Untitled"}</span>
-                {(path || r.snippet) && (
+              {r.kind === "comment" ? (
+                // A comment reads as what was said, then who said it on which record, and where.
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.875rem] text-fg">{r.snippet}</span>
                   <span className="block truncate text-xs text-muted">
-                    {path}
-                    {path && r.snippet ? " · " : ""}
-                    {r.snippet}
+                    {r.author_name ?? "Someone"} on {r.name || "Untitled"}
+                    {path ? ` · ${path}` : ""}
                   </span>
-                )}
-              </span>
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.875rem] font-medium text-fg">{r.name || "Untitled"}</span>
+                  {(path || r.snippet) && (
+                    <span className="block truncate text-xs text-muted">
+                      {path}
+                      {path && r.snippet ? " · " : ""}
+                      {r.snippet}
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
           );
         })}

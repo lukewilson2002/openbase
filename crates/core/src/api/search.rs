@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// `GET /api/search?q=&limit=`: matches in workspace, base, table and view
-/// names and in record text, best first.
+/// names, in record text and in comments, best first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SearchResponse {
@@ -16,10 +16,11 @@ pub struct SearchResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SearchResult {
-    /// workspace | base | table | view | record
+    /// workspace | base | table | view | record | comment
     pub kind: String,
     pub id: String,
-    /// The name; for a record, the text of its primary field.
+    /// The name; for a record, the text of its primary field; for a comment,
+    /// that of the record it is on.
     pub name: String,
     pub workspace_id: String,
     pub workspace_name: String,
@@ -45,8 +46,11 @@ pub struct SearchResult {
     pub view_type: Option<String>,
     #[serde(default)]
     pub record_id: Option<String>,
-    /// For a record found by another field than its primary one: the text
-    /// around the match.
+    /// For a record found by another field than its primary one, or a
+    /// comment: the text around the match.
     #[serde(default)]
     pub snippet: Option<String>,
+    /// For a comment: who wrote it (absent when that account is gone).
+    #[serde(default)]
+    pub author_name: Option<String>,
 }

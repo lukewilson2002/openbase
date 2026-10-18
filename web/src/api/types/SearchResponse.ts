@@ -3,6 +3,6 @@ import type { SearchResult } from "./SearchResult";
 
 /**
  * `GET /api/search?q=&limit=`: matches in workspace, base, table and view
- * names and in record text, best first.
+ * names, in record text and in comments, best first.
  */
 export type SearchResponse = { results: Array<SearchResult>, };

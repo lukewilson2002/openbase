@@ -1,5 +1,5 @@
 //! Search everything the caller can open (`GET /api/search`): the names of
-//! workspaces, bases, tables and views, and the text of records.
+//! workspaces, bases, tables and views, the text of records, and comments.
 //!
 //! Access is decided exactly as for opening things: workspaces the caller is a
 //! member of, the bases of them they can open (`perm::require_base`, which also
@@ -15,6 +15,7 @@ use crate::engine::write::user_timezone;
 use crate::error::{AppError, AppResult};
 use crate::perm::{self, Role};
 use crate::store::bases::{self, BaseRow};
+use crate::store::links::NameCache;
 use crate::store::schema::{self, TableRow};
 
 /// Results returned when the request names no limit, and the most it may ask for.
@@ -94,6 +95,7 @@ fn located(
         view_type: None,
         record_id: None,
         snippet: None,
+        author_name: None,
     }
 }
 
@@ -235,9 +237,9 @@ pub fn search(
 
     // Names rank above every record, so once there are `limit` of them no
     // record could make the cut and the scans are skipped.
+    let tz = user_timezone(conn, &actor.user_id);
     let wanted = limit.saturating_sub(ranked.len());
     if wanted > 0 {
-        let tz = user_timezone(conn, &actor.user_id);
         let mut rows_left = MAX_RECORDS_SCANNED;
         let mut starting = 0;
         for scan in scans.iter().take(MAX_TABLES_SCANNED) {
@@ -256,9 +258,109 @@ pub fn search(
         }
     }
 
+    // Comments rank below records: they fill what room is left, newest first in
+    // each table. Anyone who can open a table's records can read their comments.
+    let wanted = limit.saturating_sub(ranked.len());
+    if wanted > 0 {
+        let names = NameCache::new(conn, tz);
+        let mut found = 0;
+        for scan in scans.iter().take(MAX_TABLES_SCANNED) {
+            if found >= wanted {
+                break;
+            }
+            for hit in comment_hits(conn, &scan.table.id, needle, wanted - found)? {
+                found += 1;
+                ranked.push(comment_result(scan, hit, needle, &names));
+            }
+        }
+    }
+
     // Stable: ties keep the order things were found in (sidebar order).
     ranked.sort_by_key(|r| (r.group, r.rank, r.kind));
     Ok(ranked.into_iter().take(limit).map(|r| r.result).collect())
+}
+
+struct CommentHit {
+    id: String,
+    record_id: String,
+    body: String,
+    author: Option<String>,
+}
+
+/// Comments read per table when the search text is not plain ASCII (see [`comment_hits`]).
+const MAX_COMMENTS_SCANNED: i64 = 5_000;
+
+/// The newest comments on live records of a table whose text holds `needle`
+/// (already lower-cased). SQLite's `lower` folds ASCII only: for an ASCII
+/// needle it narrows the rows in SQL, for any other the newest
+/// [`MAX_COMMENTS_SCANNED`] are read; either way the match is checked with
+/// full Unicode lower-casing.
+fn comment_hits(
+    conn: &Connection,
+    table_id: &str,
+    needle: &str,
+    limit: usize,
+) -> AppResult<Vec<CommentHit>> {
+    let ascii = needle.is_ascii();
+    let sql = format!(
+        "SELECT c.id, c.record_id, c.body, u.name FROM comments c
+         JOIN records r ON r.id = c.record_id
+         LEFT JOIN users u ON u.id = c.user_id
+         WHERE r.table_id = ?1 AND r.deleted_at IS NULL AND c.deleted_at IS NULL
+           {}
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT ?3",
+        if ascii {
+            "AND instr(lower(c.body), ?2) > 0"
+        } else {
+            "AND ?2 IS NOT NULL"
+        }
+    );
+    let cap = if ascii {
+        limit as i64
+    } else {
+        MAX_COMMENTS_SCANNED
+    };
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params![table_id, needle, cap], |r| {
+        Ok(CommentHit {
+            id: r.get(0)?,
+            record_id: r.get(1)?,
+            body: r.get(2)?,
+            author: r.get(3)?,
+        })
+    })?;
+    let mut hits = Vec::new();
+    for hit in rows {
+        let hit = hit?;
+        if hit.body.to_lowercase().contains(needle) {
+            hits.push(hit);
+            if hits.len() >= limit {
+                break;
+            }
+        }
+    }
+    Ok(hits)
+}
+
+fn comment_result(scan: &Scan, hit: CommentHit, needle: &str, names: &NameCache) -> Ranked {
+    let name = names.record_text(&hit.record_id).unwrap_or_default();
+    let mut r = located("comment", &hit.id, &name, scan.ws, Some(scan.base));
+    r.table_id = Some(scan.table.id.clone());
+    r.table_name = Some(scan.table.name.clone());
+    if let Some((id, kind)) = &scan.first_view {
+        r.view_id = Some(id.clone());
+        r.view_type = kind.clone();
+    }
+    r.record_id = Some(hit.record_id);
+    r.snippet = Some(snippet(&hit.body, needle));
+    r.author_name = hit.author;
+    Ranked {
+        group: 2,
+        rank: 0,
+        kind: 5,
+        result: r,
+    }
 }
 
 fn record_result(scan: &Scan, hit: RecordHit, needle: &str) -> Ranked {

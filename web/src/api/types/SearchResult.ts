@@ -7,11 +7,12 @@
  */
 export type SearchResult = { 
 /**
- * workspace | base | table | view | record
+ * workspace | base | table | view | record | comment
  */
 kind: string, id: string, 
 /**
- * The name; for a record, the text of its primary field.
+ * The name; for a record, the text of its primary field; for a comment,
+ * that of the record it is on.
  */
 name: string, workspace_id: string, workspace_name: string, workspace_color: string, base_id?: string | null, base_name?: string | null, base_icon?: string | null, base_color?: string | null, table_id?: string | null, table_name?: string | null, 
 /**
@@ -24,7 +25,11 @@ view_id?: string | null,
  */
 view_type?: string | null, record_id?: string | null, 
 /**
- * For a record found by another field than its primary one: the text
- * around the match.
+ * For a record found by another field than its primary one, or a
+ * comment: the text around the match.
  */
-snippet?: string | null, };
+snippet?: string | null, 
+/**
+ * For a comment: who wrote it (absent when that account is gone).
+ */
+author_name?: string | null, };

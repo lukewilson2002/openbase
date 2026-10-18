@@ -61,6 +61,22 @@ describe("SearchEverything on a desktop", () => {
     expect(box).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("lists comments last, as what was said, by whom on which record, and opens the record", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const comment: SearchResult = { kind: "comment", id: "cmt1", name: "Take out trash", ...where, base_id: "app1", base_name: "Chores", table_id: "tbl1", table_name: "Chores", record_id: "rec1", snippet: "…remember the recycling on Tuesday", author_name: "Ada" };
+    searchApi(() => ({ results: [RESULTS[0], comment] }));
+    renderSearch();
+    await user.type(screen.getByRole("combobox", { name: "Search everything" }), "recycling");
+    const list = await screen.findByRole("listbox", { name: "Search results" });
+    const option = await within(list).findByRole("option", { name: /remember the recycling/ });
+    const groups = within(list).getAllByRole("group");
+    expect(groups.map((g) => document.getElementById(g.getAttribute("aria-labelledby")!)!.textContent)).toEqual(["Records", "Comments"]);
+    expect(option).toHaveTextContent("Ada on Take out trash · Household › Chores › Chores");
+    await user.click(option);
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1?record=rec1");
+  });
+
   it("walks the results with the arrow keys and opens one with Enter", async () => {
     stubDesktop();
     const user = userEvent.setup();

@@ -327,3 +327,73 @@ async fn record_search_counts_rows_against_one_budget() {
             .all(|h| h.starts_with && h.matched_text.is_none())
     );
 }
+
+#[tokio::test]
+async fn comments_are_found_below_records_by_those_who_can_open_them() {
+    let f = Fixture::new().await;
+    let kitchen = f.insert_record(&f.table_id, json!({ &f.primary_id: "Kitchen" }));
+    let pantry = f.insert_record(&f.table_id, json!({ &f.primary_id: "Pantry" }));
+    f.insert_record(&f.table_id, json!({ &f.primary_id: "Dish rack" }));
+    let comment = |record: String, body: &str| {
+        let app = &f.app;
+        let owner = &f.owner;
+        let body = body.to_string();
+        async move {
+            let r = app
+                .post(
+                    owner,
+                    &format!("/api/records/{record}/comments"),
+                    json!({ "body": body }),
+                )
+                .await;
+            r.assert_status(201);
+            sid(&r.body["id"]).to_string()
+        }
+    };
+    comment(kitchen.clone(), "Remember to wash the DISHES before Friday").await;
+    let gone = comment(pantry.clone(), "No dishes here any more").await;
+    f.app
+        .delete(&f.owner, &format!("/api/comments/{gone}"))
+        .await
+        .assert_status(204);
+    // Ünicode case folding: SQLite's lower() alone would miss this one.
+    comment(pantry.clone(), "ÉCLAIR DISHES go on the top shelf").await;
+
+    let r = search(&f.app, &f.owner, "q=dish").await;
+    assert_eq!(
+        found(&r),
+        [
+            hit("record", "Dish rack"),
+            hit("comment", "Pantry"),
+            hit("comment", "Kitchen")
+        ]
+    );
+    let first = &r.body["results"][1];
+    assert_eq!(first["record_id"], pantry);
+    assert_eq!(first["table_id"], f.table_id);
+    assert_eq!(first["author_name"], "Owner");
+    assert!(sid(&first["snippet"]).contains("ÉCLAIR DISHES"));
+    assert_eq!(
+        found(&search(&f.app, &f.owner, "q=%C3%A9clair").await),
+        [hit("comment", "Pantry")]
+    );
+
+    // Someone who cannot open the base finds none of its comments.
+    let stranger = f.app.user("stranger@example.com", "Stranger");
+    assert!(found(&search(&f.app, &stranger, "q=dish").await).is_empty());
+
+    // A record in the trash takes its comments out of the search.
+    f.app
+        .request(
+            &f.owner,
+            "DELETE",
+            &format!("/api/tables/{}/records", f.table_id),
+            Some(json!({ "ids": [&kitchen] })),
+        )
+        .await
+        .assert_status(204);
+    assert_eq!(
+        found(&search(&f.app, &f.owner, "q=wash").await),
+        Vec::<(String, String)>::new()
+    );
+}
