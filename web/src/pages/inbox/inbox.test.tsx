@@ -201,6 +201,45 @@ describe("drafts: switching", () => {
     await waitFor(() => expect(sent()).toContain("Old newer!"), SAVE_WAIT);
     expect(sent()).not.toContain("Old");
   });
+
+  it("stays on the text that could not be saved when another draft is tapped, and says so", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({
+      "GET /api/inbox": [item("inb2", "Older draft")],
+      "POST /api/inbox": apiError(500, "internal", "disk full"),
+    });
+    renderApp();
+    await write("Half a thought");
+    await user.click(await screen.findByRole("button", { name: /Older draft/ }));
+    expect(await screen.findByText(/Could not save the draft: disk full/)).toBeInTheDocument();
+    // Still the unsaved text in the box, not the other draft.
+    expect(editorOf().getText()).toBe("Half a thought");
+    expect(screen.getByRole("button", { name: /Older draft/ })).not.toHaveAttribute("aria-current");
+
+    // Once the save works, the same tap switches.
+    api.set("POST /api/inbox", (call) => item("inb9", String(body(call).body)));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("Saved as draft");
+    await user.click(screen.getByRole("button", { name: /Older draft/ }));
+    await waitFor(() => expect(editorOf().getText()).toBe("Older draft"));
+  });
+
+  it("keeps an unsaved change when New note is pressed", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    routes({
+      "GET /api/inbox": [item("inb2", "Older draft")],
+      "PATCH /api/inbox/inb2": apiError(500, "internal", "offline"),
+    });
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: /Older draft/ }));
+    await waitFor(() => expect(editorOf().getText()).toBe("Older draft"));
+    await write(" plus more");
+    await user.click(screen.getByRole("button", { name: "New note" }));
+    expect(await screen.findByText(/Could not save the draft: offline/)).toBeInTheDocument();
+    expect(editorOf().getText()).toBe("Older draft plus more");
+  });
 });
 
 describe("attaching files", () => {

@@ -38,7 +38,8 @@ export interface Draft extends Doc {
   save(force?: boolean): Promise<string | null>;
   /**
    * Saves the open draft, then opens `item`, or a blank one. Answers whether it did: it does not when
-   * `item` is the draft that is open already.
+   * `item` is the draft that is open already, nor when the text in the box could not be saved (the box
+   * stays as it is, with its error, rather than losing the text).
    */
   open(item?: InboxItem): Promise<boolean>;
   /** Deletes the open draft (if it exists on the server) and starts a blank one. */
@@ -165,6 +166,8 @@ export function useDraft(): Draft {
       // The row is the draft as the list last rendered it, which is older than the box.
       if (item && item.id === ref.current.id) return false;
       await save();
+      // Whatever is still unsaved (the save failed) would be lost by loading something else.
+      if (dirty.current) return false;
       // The freshest copy there is: the list may have moved on while the save ran.
       const fresh = item && qc.getQueryData<InboxItem[]>(keys.inbox)?.find((i) => i.id === item.id);
       const next = fresh ?? item;
