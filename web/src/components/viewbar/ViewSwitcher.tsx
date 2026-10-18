@@ -1,19 +1,25 @@
 /**
- * The start of the view toolbar: the open table's icon and name as plain text, then one icon button
+ * The start of the view toolbar: the open table's icon (a tap changes it, for those who may) and its
+ * name, then one icon button
  * per view of that table (the view type's icon, the open one highlighted, the view's name as its
  * tooltip and accessible name, small badges for personal and locked views). Views past what fits go
  * into a "…" menu, and a trailing "+" adds a view for those who may. Which table to open is the
  * menu's job, not the toolbar's.
  */
 import { Link } from "react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
+import { api } from "@/api/endpoints";
+import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
-import { EntityIcon } from "@/components/icons/EntityIcon";
+import { IconPicker } from "@/components/icons/IconPicker";
+import { TableIcon } from "@/components/icons/TableIcon";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useToast } from "@/components/ui/toast";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
@@ -39,12 +45,34 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const canCreateView = !!openDialog && basePermissions.createView(schema.role);
   const { shown, hidden } = splitViews(table.views, view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
   const to = (v: View) => `/base/${schema.id}/${table.id}/${v.id}`;
+  const qc = useQueryClient();
+  const toast = useToast();
+  const setIcon = useMutation({
+    mutationFn: (icon: string | null) => api.tables.update(table.id, { icon }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.base(schema.id) }),
+    onError: (e) => toast.error(e, "Could not change the table's icon"),
+  });
 
   return (
     <div className={cn("flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
-      <h2 className="mr-1 flex min-w-0 max-w-full items-center gap-2 px-1.5 text-[0.9375rem] font-bold">
-        {table.icon ? <EntityIcon name={table.icon} className="size-4 text-muted" /> : <Table2 aria-hidden className="size-4 shrink-0 text-muted" />}
-        <span className="min-w-0 truncate">{table.name}</span>
+      <h2 className="mr-1 flex min-w-0 max-w-full items-center gap-1 text-[0.9375rem] font-bold">
+        {basePermissions.manageTables(schema.role) ? (
+          <IconPicker value={table.icon} onChange={(icon) => setIcon.mutate(icon)} label={`Change the icon of ${table.name}`}>
+            <button
+              type="button"
+              aria-label={`Change the icon of ${table.name}`}
+              title="Change icon"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:size-10"
+            >
+              <TableIcon icon={table.icon} className="size-[1.125rem]" />
+            </button>
+          </IconPicker>
+        ) : (
+          <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted">
+            <TableIcon icon={table.icon} className="size-[1.125rem]" />
+          </span>
+        )}
+        <span className="min-w-0 truncate pr-1.5">{table.name}</span>
       </h2>
       <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5">
         {shown.map((v) => {
