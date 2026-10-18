@@ -45,6 +45,12 @@ export function noteFields(table: Table): Field[] {
   return [...long.filter(isRichLongText), ...long.filter((f) => !isRichLongText(f))];
 }
 
+/**
+ * In place of a field id where the note goes: it becomes the new record's first comment (filed with
+ * `note_as_comment`, in the same step as the record). Field ids start with "fld", so it never clashes.
+ */
+export const NOTE_AS_COMMENT = "comment";
+
 /** The field the note goes into unless the person picks another: the first rich long text, else the first long text. */
 export function defaultNoteField(table: Table): Field | undefined {
   return noteFields(table)[0];

@@ -46,8 +46,10 @@ pub struct UpdateInboxItem {
 
 /// `POST /api/inbox/{id}/file`: create a record in `table_id` from the
 /// draft. `fields` is keyed by field name or id; to keep the draft's files,
-/// put them (`{"id": ...}` is enough) in an attachment field. The answer is
-/// the created record (`TableRecord` in TypeScript) and the draft is gone.
+/// put them (`{"id": ...}` is enough) in an attachment field. With
+/// `note_as_comment` the draft's text becomes the record's first comment
+/// instead (in the same step). The answer is the created record
+/// (`TableRecord` in TypeScript) and the draft is gone.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FileInboxItem {
@@ -61,4 +63,8 @@ pub struct FileInboxItem {
         )
     )]
     pub fields: Map<String, Json>,
+    /// Add the draft's text to the new record as a comment by the caller.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub note_as_comment: bool,
 }

@@ -11,8 +11,9 @@
 //!   creates a record in the table through the normal record write path (so the
 //!   caller needs the Editor role there, and validation, history, events and
 //!   automations all apply), hands the draft's files that `fields` uses over to
-//!   the table's base, and deletes the draft, all in one transaction. The answer
-//!   is the created record.
+//!   the table's base, with `note_as_comment` adds the draft's text as the
+//!   record's first comment, and deletes the draft, all in one transaction. The
+//!   answer is the created record.
 //!
 //! Everything works for sessions and API tokens (read-only tokens can only
 //! list) and only ever touches the caller's own drafts: someone else's draft is
@@ -30,17 +31,20 @@ use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
+use ob_core::api::events::BaseEvent;
 use ob_core::api::inbox::{CreateInboxItem, FileInboxItem, InboxItem, UpdateInboxItem};
 use ob_core::api::records::{NewRecord, Record};
 use ob_core::field::AttachmentRef;
 
+use crate::api::schema_support::publish;
 use crate::auth::Actor;
+use crate::db::now_ms;
 use crate::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
 use crate::error::{AppError, AppResult};
 use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
-use crate::store::{inbox, records as record_store, schema};
+use crate::store::{comments, inbox, records as record_store, schema};
 use crate::v1::input::convert_fields;
 
 /// Inbox uploads per user per minute.
@@ -151,7 +155,7 @@ async fn file(
     // table is even looked at.
     actor.require_no_base_limit(WHAT)?;
     let who = actor.clone();
-    let (outcome, record) = state
+    let (outcome, record, commented) = state
         .db
         .write(move |tx| {
             // The draft first: someone else's is a 404 whatever the table is.
@@ -177,10 +181,28 @@ async fn file(
                 .into_iter()
                 .next()
                 .ok_or_else(|| AppError::internal("the filed record was not created"))?;
+            // A comment that cannot be added (too long) undoes the whole filing.
+            let commented = if body.note_as_comment && !item.body.trim().is_empty() {
+                comments::create(tx, &record.id, &actor.user_id, &item.body, now_ms())?;
+                Some(base_id)
+            } else {
+                None
+            };
             inbox::delete(tx, &actor.user_id, &id)?;
-            Ok((outcome, record))
+            Ok((outcome, record, commented))
         })
         .await?;
     crate::api::records::publish_outcome(&state, &headers, &who, &outcome);
+    if let Some(base) = commented {
+        publish(
+            &state,
+            &headers,
+            &who,
+            &base,
+            BaseEvent::CommentsChanged {
+                record_id: record.id.clone(),
+            },
+        );
+    }
     Ok((StatusCode::CREATED, Json(record)))
 }

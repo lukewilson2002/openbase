@@ -59,13 +59,14 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "file_inbox_item",
             "File an inbox draft into a table",
-            "Turn an inbox draft into a record of a table and remove the draft, in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's text is NOT copied automatically: put it in a long-text field yourself). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
+            "Turn an inbox draft into a record of a table and remove the draft, in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's text is NOT copied automatically: put it in a long-text field yourself, or set note_as_comment to add it as the record's first comment). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
             object(
                 json!({
                     "id": string("Inbox draft id (inb...), from list_inbox."),
                     "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "fields": free_object("Field name -> value for the new record, same shapes as create_records."),
+                    "note_as_comment": boolean("Add the draft's text to the new record as a comment by you (at most 10,000 characters). Default false."),
                 }),
                 &["id", "project_id", "table"],
             ),
@@ -180,6 +181,8 @@ struct FileArgs {
     table: String,
     #[serde(default)]
     fields: Map<String, Value>,
+    #[serde(default)]
+    note_as_comment: bool,
 }
 
 async fn file_inbox_item(ctx: &McpCtx, a: FileArgs) -> ToolResult {
@@ -192,7 +195,8 @@ async fn file_inbox_item(ctx: &McpCtx, a: FileArgs) -> ToolResult {
         Err(e) => return e,
     };
     let path = format!("/api/inbox/{}/file", encode_segment(&a.id));
-    let body = json!({ "table_id": table, "fields": a.fields });
+    let body =
+        json!({ "table_id": table, "fields": a.fields, "note_as_comment": a.note_as_comment });
     match fetch(ctx, "POST", &path, None, Some(body)).await {
         Ok(record) => ToolResult::ok(json!({
             "filed": true,

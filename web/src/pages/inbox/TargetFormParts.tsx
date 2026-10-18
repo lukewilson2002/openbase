@@ -16,7 +16,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { displayShapeOf, type DisplayShape } from "@/lib/cells/kinds";
-import { attachmentFields, formFields, isTextTitle, noteFields, primaryField, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, attachmentFields, formFields, isTextTitle, noteFields, primaryField, type TargetRef } from "./targets";
 import type { TargetForm } from "./useTargetForm";
 
 /** "Saving to Acme › Project tracker › Tasks", with Change and Remove. */
@@ -89,7 +89,7 @@ export function TitleField({ form }: { form: TargetForm }) {
   );
 }
 
-/** "Note goes into: [field]": the long text field that takes what was written, or none. */
+/** "Note goes into: [field]": the long text field that takes what was written, a comment, or nowhere. */
 export function NoteChooser({ form }: { form: TargetForm }) {
   const id = useId();
   const table = form.table;
@@ -107,6 +107,7 @@ export function NoteChooser({ form }: { form: TargetForm }) {
               {f.name}
             </option>
           ))}
+          <option value={NOTE_AS_COMMENT}>A comment on the record</option>
           <option value="">Nowhere (leave the note out)</option>
         </Select>
       </div>

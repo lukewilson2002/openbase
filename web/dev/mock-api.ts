@@ -1046,6 +1046,9 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (!draft) return err(res, 404, "not_found", "draft not found"), true;
     if (!PRIMARY[body.table_id]) return err(res, 404, "not_found", "table not found"), true;
     const rec = addRecord(body.table_id, body.fields ?? {});
+    if (body.note_as_comment && String(draft.body).trim()) {
+      comments.push({ id: newId("cmt"), record_id: rec.id, user_id: ME, user_name: "Ada Lovelace", body: draft.body, created_at: Date.now(), updated_at: Date.now() });
+    }
     inbox.splice(inbox.indexOf(draft), 1);
     return send(res, 201, shape(rec)), true;
   }

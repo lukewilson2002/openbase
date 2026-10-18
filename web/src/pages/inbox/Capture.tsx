@@ -25,7 +25,7 @@ import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { AttachmentChips } from "./AttachmentChips";
 import { FileChooser, FormStatus, NoteChooser, OtherFields, TargetBar, TitleField } from "./TargetFormParts";
 import { TargetPicker } from "./TargetPicker";
-import { fileFields, hasContent, isBlank, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, fileFields, hasContent, isBlank, type TargetRef } from "./targets";
 import { DraftsList } from "./DraftsList";
 import { useDraft, type Draft } from "./useDraft";
 import { useTargetForm } from "./useTargetForm";
@@ -62,7 +62,9 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
     ? fileFields({ table: form.table, values: form.values, note: draft.body, noteFieldId: form.noteFieldId, attachments: draft.attachments, attachmentFieldId: form.fileFieldId })
     : null;
   const problems = Object.keys(form.errors).length > 0;
-  const canFile = !!target && !!form.table && !!fields && hasContent(fields) && !problems && uploads.uploading.length === 0 && !filing;
+  // A note filed as a comment is content enough for a record of its own.
+  const asComment = form.noteFieldId === NOTE_AS_COMMENT && draft.body.trim() !== "";
+  const canFile = !!target && !!form.table && !!fields && (hasContent(fields) || asComment) && !problems && uploads.uploading.length === 0 && !filing;
   const hasDraft = draft.id !== null || !isBlank(draft.body, draft.attachments);
 
   const file = async () => {
@@ -74,7 +76,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
       // The draft has to exist (with its files) for the server to file it.
       const id = await draft.save(true);
       if (!id) throw new Error("The draft could not be saved, so it cannot be filed yet. Try again.");
-      const record = await api.inbox.file(id, { table_id: table.id, fields });
+      const record = await api.inbox.file(id, { table_id: table.id, fields, ...(asComment ? { note_as_comment: true } : {}) });
       qc.setQueryData<InboxItem[]>(keys.inbox, (list) => list?.filter((i) => i.id !== id));
       void qc.invalidateQueries({ queryKey: keys.inbox });
       void qc.invalidateQueries({ queryKey: recordKeys.table(table.id) });

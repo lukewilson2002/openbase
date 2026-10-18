@@ -4,7 +4,13 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * `POST /api/inbox/{id}/file`: create a record in `table_id` from the
  * draft. `fields` is keyed by field name or id; to keep the draft's files,
- * put them (`{"id": ...}` is enough) in an attachment field. The answer is
- * the created record (`TableRecord` in TypeScript) and the draft is gone.
+ * put them (`{"id": ...}` is enough) in an attachment field. With
+ * `note_as_comment` the draft's text becomes the record's first comment
+ * instead (in the same step). The answer is the created record
+ * (`TableRecord` in TypeScript) and the draft is gone.
  */
-export type FileInboxItem = { table_id: string, fields?: { [key in string]: JsonValue }, };
+export type FileInboxItem = { table_id: string, fields?: { [key in string]: JsonValue }, 
+/**
+ * Add the draft's text to the new record as a comment by the caller.
+ */
+note_as_comment?: boolean, };

@@ -334,6 +334,73 @@ async fn filing_creates_the_record_and_removes_the_draft() {
 }
 
 #[tokio::test]
+async fn filing_can_add_the_note_as_the_records_first_comment() {
+    let f = Fixture::new().await;
+    let item = add(&f.app, &f.owner, "Ask about **Tuesday**").await;
+    let id = item["id"].as_str().unwrap();
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/inbox/{id}/file"),
+            json!({ "table_id": f.table_id, "fields": { "Name": "Plumber" }, "note_as_comment": true }),
+        )
+        .await;
+    r.assert_status(201);
+    let rec = r.body["id"].as_str().unwrap().to_string();
+    // The note is not in any field, but in the one comment, by the person who filed it.
+    assert!(r.body["values"].get(&f.notes_id).is_none());
+    let comments = f
+        .app
+        .get(&f.owner, &format!("/api/records/{rec}/comments"))
+        .await;
+    comments.assert_status(200);
+    let list = comments.body.as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["body"], "Ask about **Tuesday**");
+    assert_eq!(list[0]["user_id"], f.owner.user_id.clone().unwrap());
+    assert!(
+        f.app
+            .get(&f.owner, "/api/inbox")
+            .await
+            .body
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn a_note_too_long_for_a_comment_files_nothing() {
+    let f = Fixture::new().await;
+    let item = add(&f.app, &f.owner, &"x".repeat(10_001)).await;
+    let id = item["id"].as_str().unwrap();
+    let live = "SELECT count(*) FROM records WHERE table_id = ?1 AND deleted_at IS NULL";
+    let before = f.app.query_i64(live, &[f.table_id.as_str()]);
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/inbox/{id}/file"),
+            json!({ "table_id": f.table_id, "fields": { "Name": "Long" }, "note_as_comment": true }),
+        )
+        .await;
+    r.assert_status(400);
+    // Neither the record nor the comment exists, and the draft is still there.
+    assert_eq!(f.app.query_i64(live, &[f.table_id.as_str()]), before);
+    assert_eq!(
+        f.app
+            .get(&f.owner, "/api/inbox")
+            .await
+            .body
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn filing_publishes_the_record_event() {
     use ob_core::api::events::BaseEvent;
     let f = Fixture::new().await;

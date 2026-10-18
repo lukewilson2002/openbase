@@ -13,7 +13,7 @@ import type { EditValue, EditorEnv } from "@/components/record/editors/env";
 import { personColors } from "@/lib/colors";
 import { jsonEqual, parseText } from "@/lib/cells/parse";
 import { atLeast } from "@/lib/roles";
-import { defaultNoteField, attachmentFields, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, attachmentFields, defaultNoteField, type TargetRef } from "./targets";
 
 /** The browser's own zone, for people who have not set one. */
 function browserTimeZone(): string {
@@ -128,7 +128,7 @@ export function useTargetForm(target: TargetRef | null): TargetForm {
 
   const clear = useCallback(() => setTyped((cur) => ({ tableId: tableId, values: {}, errors: {}, gen: cur.gen + 1 })), [tableId]);
 
-  const noteFieldId = table ? (picked.note !== undefined ? picked.note : (defaultNoteField(table)?.id ?? null)) : null;
+  const noteFieldId = table ? (picked.note !== undefined ? picked.note : (defaultNoteField(table)?.id ?? NOTE_AS_COMMENT)) : null;
   const fileFieldId = table ? (picked.file !== undefined ? picked.file : (attachmentFields(table)[0]?.id ?? null)) : null;
 
   return {
