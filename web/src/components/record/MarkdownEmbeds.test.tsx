@@ -86,7 +86,34 @@ describe("Markdown embeds", () => {
     );
     expect(out).not.toContain("evil.test");
     expect(out).not.toMatch(/onerror|poster|<source|logout/);
-    expect(out.match(/<img /g)).toHaveLength(1);
+    // Media only comes from Markdown image syntax: raw HTML gets no <img> at all, even one of ours.
+    expect(out).not.toMatch(/<(img|video|audio)\b/);
+  });
+
+  it("shows no media for raw HTML that spells our address in disguise", () => {
+    const id = "att0123456789abcde";
+    for (const source of [
+      `<img src="&#47;api&#47;attachments&#47;${id}/x.png">`,
+      `<img src="&#x2F;api&#x2f;attachments/${id}/x.png" alt="x">`,
+      `<video src="&sol;api/attachments/${id}/x.mp4" controls></video>`,
+      `<audio data-embed="/api/attachments/${id}/x.mp3" controls></audio>`,
+      `<IMG SRC="/api/attachments/${id}/x.png">`,
+      `<div><img src="/api/attachments/${id}/x.png"></div>`,
+      `<p data-ob-media="1"><img data-ob-media="1" src="/api/attachments/${id}/x.png"></p>`,
+    ]) {
+      const el = html(source);
+      expect(el.querySelector("img, video, audio, figure"), source).toBeNull();
+    }
+  });
+
+  it("shows no media for an address that only means ours after Markdown unescapes it", () => {
+    const id = "att0123456789abcde";
+    for (const source of [`![](/api\\/attachments/${id}/x.png)`, `![x](/api/attachments\\/${id}/x.png "c")`, `![](/api&#47;attachments/${id}/x.png)`]) {
+      const el = html(source);
+      expect(el.querySelector("img, video, audio, figure"), source).toBeNull();
+    }
+    // The plain form is unaffected.
+    expect(html(`![](/api/attachments/${id}/x.png)`).querySelector("figure img")).not.toBeNull();
   });
 
   it("keeps the caption and alt text from becoming markup", () => {

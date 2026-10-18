@@ -10,6 +10,9 @@
  * Images are only ever our own files (`/api/attachments/...`, see lib/media.ts): shown as an image,
  * video, audio player or file card in a `<figure>` with its caption, as blocks of their own. Every
  * other image is an ordinary link and is never fetched, whatever the text (or raw HTML in it) says.
+ * Media only comes from Markdown image syntax written out plainly: raw HTML in the text never gets an
+ * `<img>`, `<video>` or `<audio>` (even one that spells our address in disguise, as `&#47;api...`), and
+ * neither does an address that only becomes ours after Markdown unescapes it (`/api\/attachments/...`).
  * On a shared page (ShareContext) the embeds carry the share token, or, for a link with a password,
  * are loaded with it (public/view/ShareEmbeds.ts).
  */
@@ -26,6 +29,21 @@ let hooked = false;
 /** The elements that fetch a file by themselves: they may only be given one of our own. */
 const FETCHING = new Set(["IMG", "VIDEO", "AUDIO"]);
 
+/** Marks the elements our own image renderer made, so the ones that came from raw HTML can be told apart. */
+const MARK = "data-ob-media";
+
+/**
+ * A secret of the render in progress: raw HTML in the text cannot know it, so an element carrying it was
+ * made by the renderer and nothing else was.
+ */
+let nonce = "";
+
+function newNonce(): string {
+  const bytes = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function ensureHooks(): void {
   if (hooked) return;
   hooked = true;
@@ -35,9 +53,12 @@ function ensureHooks(): void {
       node.setAttribute("rel", "noopener noreferrer nofollow");
     }
     if (FETCHING.has(node.tagName)) {
-      // Raw HTML in the text gets no more than the Markdown does: nothing is fetched from anywhere else.
+      // Only Markdown image syntax makes media (the renderer marked its own with the nonce), and only
+      // of our own files: nothing is fetched from anywhere else, and raw HTML fetches nothing.
+      const mine = nonce !== "" && node.getAttribute(MARK) === nonce;
+      node.removeAttribute(MARK);
       const src = node.getAttribute("src") ?? node.getAttribute("data-embed");
-      if (!isEmbedSrc(src?.split("?")[0])) node.parentNode?.removeChild(node);
+      if (!mine || !isEmbedSrc(src?.split("?")[0])) node.parentNode?.removeChild(node);
     }
   });
 }
@@ -77,7 +98,7 @@ renderer.image = (href: string, title: string | null, text: string) => {
   const name = esc(mediaLabel(href, ""));
   // Open shares authorise by token in the address; protected ones get their bytes through ShareEmbeds.
   const address = embeds && !embeds.password ? withShare(href, embeds.token) : href;
-  const where = embeds?.password ? `data-embed="${esc(href)}"` : `src="${esc(address)}"`;
+  const where = `${MARK}="${nonce}" ${embeds?.password ? `data-embed="${esc(href)}"` : `src="${esc(address)}"`}`;
   const label = text.trim() || name;
   let body: string;
   if (kind === "image") body = `<img ${where} alt="${text}" loading="lazy">`;
@@ -105,18 +126,40 @@ renderer.paragraph = (text: string) => {
 renderer.checkbox = (checked: boolean) => `<span class="ob-check" role="checkbox" aria-checked="${checked}" aria-disabled="true"></span> `;
 
 /**
+ * An image whose address is ours only after Markdown has unescaped it (`/api\\/attachments/...`) is no
+ * embed: it becomes a link, like any other address that is not written out plainly.
+ */
+function plainEmbeds(found: marked.Token): void {
+  const token = found as unknown as { type: string; href: string; raw?: string; text: string; tokens?: unknown[] };
+  if (token.type !== "image" || !isEmbedSrc(token.href)) return;
+  const raw = token.raw ?? "";
+  // Written inline, the address must appear in the text just as it is (a reference-style image has
+  // its address elsewhere; the server checks that text for the same references).
+  if (!/\]\(/.test(raw) || raw.includes(token.href)) return;
+  const label = token.text.trim() || esc(token.href);
+  token.type = "link";
+  token.tokens = [{ type: "text", raw: label, text: label }];
+}
+
+/**
  * Render markdown to sanitized HTML. `share` is given on a shared page, where the embedded files
  * are authorised by the share's token.
  */
 export function renderMarkdown(source: string, share?: Embeds | null): string {
   ensureHooks();
   embeds = share ?? null;
+  nonce = newNonce();
   let html: string;
   try {
-    html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer });
+    html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer, walkTokens: plainEmbeds });
+    return sanitize(html);
   } finally {
     embeds = null;
+    nonce = "";
   }
+}
+
+function sanitize(html: string): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed", "source", "track"],
