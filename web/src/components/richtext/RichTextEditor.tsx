@@ -124,14 +124,14 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
       {!fullScreen && (
         // Zero-height strip that sticks to the bottom of the visible part of the box, so the button
         // stays in reach however long the document grows.
-        <div className="pointer-events-none sticky bottom-2 h-0">
+        <div className="pointer-events-none sticky bottom-0 h-0">
           <button
             type="button"
             aria-label="Open full screen"
             title="Open full screen"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setExpanded(true)}
-            className="pointer-events-auto absolute bottom-0 right-2 inline-flex size-8 pointer-coarse:size-10 items-center justify-center rounded-md border border-line bg-surface text-muted shadow-pop hover:bg-hover hover:text-fg"
+            className="pointer-events-auto absolute bottom-2 right-2 inline-flex size-8 pointer-coarse:size-10 items-center justify-center rounded-md border border-line bg-surface text-muted shadow-pop hover:bg-hover hover:text-fg"
           >
             <Maximize2 aria-hidden className="size-4" />
           </button>
