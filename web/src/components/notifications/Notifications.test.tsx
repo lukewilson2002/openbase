@@ -8,7 +8,7 @@ import { AppShell } from "@/shell/AppShell";
 import { avatarColor } from "@/components/ui/avatar";
 import { accentHue } from "@/lib/colors";
 import { USER, makeWorkspace, mockApi, renderWithProviders, stubDesktop, type Handler } from "@/test/utils";
-import { markedRead } from "./Inbox";
+import { markedRead } from "./Notifications";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -56,25 +56,25 @@ function renderShell() {
   );
 }
 
-/** Opens the Inbox beside the docked menu and returns its panel. */
-async function openInbox(user: ReturnType<typeof userEvent.setup>, name: RegExp | string = /^Inbox/) {
+/** Opens Notifications beside the docked menu and returns its panel. */
+async function openNotifications(user: ReturnType<typeof userEvent.setup>, name: RegExp | string = /^Notifications/) {
   await user.click(await screen.findByRole("button", { name }));
-  return screen.findByRole("dialog", { name: "Inbox" });
+  return screen.findByRole("dialog", { name: "Notifications" });
 }
 
-describe("Inbox in the docked menu", () => {
-  it("is the menu's first row, with the unread count, and lists each kind beside the menu", async () => {
+describe("Notifications in the docked menu", () => {
+  it("is the menu's second row (below the Inbox link), with the unread count, and lists each kind beside the menu", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes(listing());
     renderShell();
-    const row = await screen.findByRole("button", { name: "Inbox, 3 unread" });
+    const row = await screen.findByRole("button", { name: "Notifications, 3 unread" });
     expect(within(screen.getByRole("navigation", { name: "Main menu" })).getAllByRole("button")[0]).toBe(row);
-    expect(screen.getByTestId("inbox-badge")).toHaveTextContent("3");
+    expect(screen.getByTestId("notifications-badge")).toHaveTextContent("3");
     expect(row).toHaveAttribute("aria-expanded", "false");
-    const panel = await openInbox(user, "Inbox, 3 unread");
+    const panel = await openNotifications(user, "Notifications, 3 unread");
     expect(row).toHaveAttribute("aria-expanded", "true");
-    expect(within(panel).getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    expect(within(panel).getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(within(panel).getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
     expect(within(panel).getByText("please review")).toBeInTheDocument();
     expect(within(panel).getByText("You were assigned to Fix login")).toBeInTheDocument();
@@ -82,20 +82,22 @@ describe("Inbox in the docked menu", () => {
     expect(within(panel).getByText("Weekly digest sent")).toBeInTheDocument();
     expect(within(panel).getByText("Alan invited you to Roadmap")).toBeInTheDocument();
     expect(within(panel).getByText("3 hours ago")).toBeInTheDocument();
-    // The header bell is gone: the Inbox is the only way in.
-    expect(screen.queryByRole("button", { name: /^Notifications/ })).not.toBeInTheDocument();
+    // The Inbox is the link above it; the notifications are only this row.
+    const menu = screen.getByRole("navigation", { name: "Main menu" });
+    expect(within(menu).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(menu).getAllByRole("button", { name: /^Notifications/ })).toHaveLength(1);
   });
 
   it("caps the badge and hides it when everything is read", async () => {
     stubDesktop();
     routes({ notifications: [], unread: 120 });
     const first = renderShell();
-    expect(await screen.findByTestId("inbox-badge")).toHaveTextContent("99+");
+    expect(await screen.findByTestId("notifications-badge")).toHaveTextContent("99+");
     first.unmount();
     routes({ notifications: [], unread: 0 });
     renderShell();
-    await screen.findByRole("button", { name: "Inbox" });
-    expect(screen.queryByTestId("inbox-badge")).not.toBeInTheDocument();
+    await screen.findByRole("button", { name: "Notifications" });
+    expect(screen.queryByTestId("notifications-badge")).not.toBeInTheDocument();
   });
 
   it("says what will show up while there is nothing", async () => {
@@ -103,22 +105,22 @@ describe("Inbox in the docked menu", () => {
     const user = userEvent.setup();
     routes({ notifications: [], unread: 0 });
     renderShell();
-    const panel = await openInbox(user, "Inbox");
+    const panel = await openNotifications(user, "Notifications");
     expect(await within(panel).findByText("Nothing yet. Mentions, invites and automation alerts will show up here.")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Mark all as read" })).toBeDisabled();
   });
 
-  it("marks a notification read and opens its record when clicked, closing the inbox", async () => {
+  it("marks a notification read and opens its record when clicked, closing the panel", async () => {
     stubDesktop();
     const user = userEvent.setup();
     const api = routes(listing(), { "POST /api/notifications/read": { ok: true } });
     renderShell();
-    const panel = await openInbox(user, /Inbox, 3 unread/);
+    const panel = await openNotifications(user, /Notifications, 3 unread/);
     await user.click(within(panel).getByRole("button", { name: /^Grace mentioned you in Launch plan/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n1"] });
     expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1?record=rec1");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Inbox" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Notifications" })).not.toBeInTheDocument());
   });
 
   it("marks one or all read without navigating", async () => {
@@ -135,16 +137,16 @@ describe("Inbox in the docked menu", () => {
       },
     });
     renderShell();
-    const panel = await openInbox(user, /Inbox, 3 unread/);
+    const panel = await openNotifications(user, /Notifications, 3 unread/);
     await user.click(within(panel).getByRole("button", { name: /Mark "You were assigned to Fix login" as read/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n2"] });
     // The optimistic update drops the count straight away.
-    expect(await screen.findByRole("button", { name: "Inbox, 2 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Mark all as read" }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(2));
     expect(api.callsTo("POST /api/notifications/read")[1]!.body).toEqual({});
-    expect(await screen.findByRole("button", { name: "Inbox" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("/");
   });
 
@@ -156,7 +158,7 @@ describe("Inbox in the docked menu", () => {
       notifications: [note("n1", "assigned", { base_id: "app1", base_name: "Roadmap", table_id: "tbl1", table_name: "Tasks", record_id: "rec2", record_name: "Fix login", field_name: "Owner" })],
     });
     renderShell();
-    const panel = await openInbox(user);
+    const panel = await openNotifications(user);
     const item = (await within(panel).findByText("You were assigned to Fix login")).closest("li")!;
     expect(item).toHaveTextContent("In Owner");
     expect(item).toHaveTextContent("Roadmap › Tasks · 1 minute ago");
@@ -171,7 +173,7 @@ describe("Inbox in the docked menu", () => {
       { "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", people: [grace], tables: [] }])] },
     );
     renderShell();
-    const panel = await openInbox(user);
+    const panel = await openNotifications(user);
     await within(panel).findByText("Grace mentioned you in Launch plan");
     const hue = `ob-hue-${accentHue(avatarColor("grace@example.com"))}`;
     await waitFor(() => expect(panel.querySelector("[role=img]")).toHaveClass("ob-solid", hue));
@@ -182,7 +184,7 @@ describe("Inbox in the docked menu", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const api = routes(listing());
     renderShell();
-    await screen.findByRole("button", { name: /Inbox, 3 unread/ });
+    await screen.findByRole("button", { name: /Notifications, 3 unread/ });
     const initial = api.callsTo("GET /api/notifications").length;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
@@ -200,22 +202,22 @@ describe("Inbox in the docked menu", () => {
     const user = userEvent.setup();
     mockApi({ "GET /api/auth/me": USER });
     renderShell();
-    const panel = await openInbox(user, "Inbox");
+    const panel = await openNotifications(user, "Notifications");
     expect(await within(panel).findByRole("alert")).toHaveTextContent("Notifications are unavailable");
   });
 });
 
-describe("Inbox on a phone", () => {
+describe("Notifications on a phone", () => {
   it("marks the menu button while anything is unread and opens inside the drawer", async () => {
     const user = userEvent.setup();
     routes(listing());
     renderShell();
-    const toggle = await screen.findByRole("button", { name: "Show menu (3 unread in Inbox)" });
+    const toggle = await screen.findByRole("button", { name: "Show menu (3 unread in Notifications)" });
     expect(screen.getByTestId("menu-unread-dot")).toBeInTheDocument();
     await user.click(toggle);
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    await user.click(within(drawer).getByRole("button", { name: "Inbox, 3 unread" }));
-    expect(within(drawer).getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("button", { name: "Notifications, 3 unread" }));
+    expect(within(drawer).getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(within(drawer).getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
     expect(within(drawer).queryByText("Menu content")).not.toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "Back to the menu" }));

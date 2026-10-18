@@ -25,12 +25,12 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
 }
 
 /**
- * The menu's column: the Inbox row, the page's own content and the footer links (Trash)
+ * The menu's column: the Inbox and Notifications rows, the page's own content and the footer links (Trash)
  * scroll together, so a long menu pushes the footer down instead of squeezing
  * the content between fixed rows; the footer still sits at the bottom of a short one. Only the
  * profile stays put. A shadow at either end shows there is more to scroll that way.
  */
-function SidebarBody({ inbox, children, footer }: { inbox?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+function SidebarBody({ topRows, children, footer }: { topRows?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   const [scrollRef, edges] = useScrollEdges<HTMLDivElement>();
   return (
     <>
@@ -38,7 +38,7 @@ function SidebarBody({ inbox, children, footer }: { inbox?: ReactNode; children:
         <ScrollShade edge="top" show={edges.above} />
         <div ref={scrollRef} data-sidebar-scroll className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
           <div className="flex-1 px-3 pb-3 pt-3">
-            {inbox && <div className="mb-1.5">{inbox}</div>}
+            {topRows && <div className="mb-1.5">{topRows}</div>}
             {children}
           </div>
           {footer && <div className="flex flex-col gap-0.5 px-3 pb-2">{footer}</div>}
@@ -56,7 +56,7 @@ export function DockedSidebar({
   id,
   width,
   onResize,
-  inbox,
+  topRows,
   footer,
   children,
 }: {
@@ -64,7 +64,8 @@ export function DockedSidebar({
   width: number;
   /** `persist` is false while dragging, so storage is written once per drag rather than per pixel. */
   onResize: (width: number, persist: boolean) => void;
-  inbox?: ReactNode;
+  /** The Inbox and Notifications rows above the page's own content. */
+  topRows?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -98,7 +99,7 @@ export function DockedSidebar({
 
   return (
     <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-14 flex h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-line bg-surface">
-      <SidebarBody inbox={inbox} footer={footer}>
+      <SidebarBody topRows={topRows} footer={footer}>
         {children}
       </SidebarBody>
       <div
@@ -127,9 +128,9 @@ export function SidebarDrawer({
   open,
   onOpenChange,
   returnFocus,
-  inbox,
-  inboxPanel,
-  onCloseInbox,
+  topRows,
+  notificationsPanel,
+  onCloseNotifications,
   footer,
   children,
 }: {
@@ -137,10 +138,10 @@ export function SidebarDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLButtonElement | null>;
-  inbox?: ReactNode;
-  /** The notifications, shown in place of the menu while the Inbox row is open. */
-  inboxPanel?: ReactNode;
-  onCloseInbox?: () => void;
+  topRows?: ReactNode;
+  /** The notifications, shown in place of the menu while the Notifications row is open. */
+  notificationsPanel?: ReactNode;
+  onCloseNotifications?: () => void;
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -165,16 +166,16 @@ export function SidebarDrawer({
               <X aria-hidden className="size-5" />
             </D.Close>
           </div>
-          {inboxPanel ? (
+          {notificationsPanel ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <button type="button" onClick={onCloseInbox} className="mx-2.5 mt-1.5 flex h-11 items-center gap-1 self-start rounded-[10px] px-2 text-[0.9375rem] text-muted hover:bg-hover hover:text-fg">
+              <button type="button" onClick={onCloseNotifications} className="mx-2.5 mt-1.5 flex h-11 items-center gap-1 self-start rounded-[10px] px-2 text-[0.9375rem] text-muted hover:bg-hover hover:text-fg">
                 <ChevronLeft aria-hidden className="size-4" /> Back to the menu
               </button>
-              {inboxPanel}
+              {notificationsPanel}
             </div>
           ) : (
             <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
-              <SidebarBody inbox={inbox} footer={footer}>
+              <SidebarBody topRows={topRows} footer={footer}>
                 {children}
               </SidebarBody>
             </nav>
@@ -220,6 +221,7 @@ export function SidebarLink({
   muted,
   className,
   iconClassName,
+  onClick,
 }: {
   to: string;
   icon?: ReactNode;
@@ -230,11 +232,13 @@ export function SidebarLink({
   muted?: boolean;
   className?: string;
   iconClassName?: string;
+  onClick?: () => void;
 }) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={onClick}
       aria-current={active === undefined ? undefined : active ? "page" : false}
       className={({ isActive }) => cn(sidebarItemClass, muted && "text-muted hover:text-fg", (active ?? isActive) && sidebarActiveClass, className)}
     >

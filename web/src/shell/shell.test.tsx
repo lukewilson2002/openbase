@@ -91,6 +91,28 @@ describe("AppShell on a desktop", () => {
     expect(JSON.parse(localStorage.getItem(SIDEBAR_KEY)!)).toEqual({ width: 200, collapsed: false });
   });
 
+  it("starts the menu with the Inbox, a link to /, above Notifications and its unread count", async () => {
+    stubDesktop();
+    mockApi({ "GET /api/auth/me": USER, "GET /api/notifications": { notifications: [], unread: 3 } });
+    renderWithProviders(<Shell />, "/workspace/wsp1");
+    const menu = screen.getByRole("navigation", { name: "Main menu" });
+    const inbox = within(menu).getByRole("link", { name: "Inbox" });
+    expect(inbox).toHaveAttribute("href", "/");
+    expect(inbox).not.toHaveAttribute("aria-current", "page");
+    const notifications = await within(menu).findByRole("button", { name: "Notifications, 3 unread" });
+    expect(notifications).toHaveTextContent("3");
+    // Inbox first, Notifications under it, then the page's own menu.
+    const order = [inbox, notifications, within(menu).getByRole("link", { name: "Acme" })];
+    for (let i = 1; i < order.length; i++) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("marks the Inbox as the page being shown on /", () => {
+    stubDesktop();
+    routes();
+    renderWithProviders(<Shell />, "/");
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("ignores unreadable storage", () => {
     stubDesktop();
     localStorage.setItem(SIDEBAR_KEY, "{not json");
@@ -117,6 +139,15 @@ describe("AppShell on a phone", () => {
     await user.click(within(drawer).getByRole("button", { name: "Close menu" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Show menu" })).toHaveFocus();
+  });
+
+  it("closes the drawer on a tap on the Inbox even when the Inbox is already the page", async () => {
+    const user = userEvent.setup();
+    routes();
+    renderWithProviders(<Shell />, "/");
+    await user.click(screen.getByRole("button", { name: "Show menu" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Inbox" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
   it("closes the drawer with Escape and after following a link", async () => {
