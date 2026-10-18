@@ -270,6 +270,59 @@ describe("attaching files", () => {
     expect(body(api.callsTo("PATCH /api/inbox/inb1")[0]!).attachments).toEqual([]);
   });
 
+  it("leaves a file out of whichever draft is open when it finishes uploading, if it started in another", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    let finish!: () => void;
+    const api = routes({
+      "GET /api/inbox": [item("inb2", "Draft A"), item("inb3", "Draft B")],
+      "POST /api/inbox/attachments": async () => {
+        await new Promise<void>((r) => (finish = r));
+        return att("att1", "slow.pdf");
+      },
+      "PATCH /api/inbox/inb3": (call) => item("inb3", String(body(call).body), (body(call).attachments as AttachmentRef[]) ?? []),
+    });
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: /Draft A/ }));
+    await waitFor(() => expect(editorOf().getText()).toBe("Draft A"));
+    await upload(user, new File(["%PDF"], "slow.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(api.callsTo("POST /api/inbox/attachments")).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: /Draft B/ }));
+    await waitFor(() => expect(editorOf().getText()).toBe("Draft B"));
+    await act(async () => finish());
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("slow.pdf"));
+    expect(screen.queryByRole("list", { name: "Attached files" })).not.toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(api.callsTo("PATCH /api/inbox/inb3")).toHaveLength(0);
+    expect(api.callsTo("POST /api/inbox")).toHaveLength(0);
+  });
+
+  it("does not make a new draft of a file that finishes uploading after Discard", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    let finish!: () => void;
+    const api = routes({
+      "GET /api/inbox": [item("inb2", "Draft A")],
+      "POST /api/inbox/attachments": async () => {
+        await new Promise<void>((r) => (finish = r));
+        return att("att1", "slow.pdf");
+      },
+      "DELETE /api/inbox/inb2": { status: 204 },
+    });
+    renderApp();
+    await user.click(await screen.findByRole("button", { name: /Draft A/ }));
+    await waitFor(() => expect(editorOf().getText()).toBe("Draft A"));
+    await upload(user, new File(["%PDF"], "slow.pdf", { type: "application/pdf" }));
+    await waitFor(() => expect(api.callsTo("POST /api/inbox/attachments")).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/inbox/inb2")).toHaveLength(1));
+    await act(async () => finish());
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByRole("list", { name: "Attached files" })).not.toBeInTheDocument();
+    expect(api.callsTo("POST /api/inbox")).toHaveLength(0);
+  });
+
   it("says in plain words when there is no room for a file, and when uploads come too fast", async () => {
     stubDesktop();
     const user = userEvent.setup();

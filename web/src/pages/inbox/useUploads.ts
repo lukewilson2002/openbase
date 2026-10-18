@@ -1,8 +1,10 @@
 /**
  * Uploading files into the open draft (`POST /api/inbox/attachments`): one after the other, each
- * landing in the draft as soon as it is up (and saved with it), failures named in plain words.
+ * landing in the draft as soon as it is up (and saved with it), failures named in plain words. A
+ * file belongs to the draft it was started in: if another draft (or a blank one) is open when it
+ * arrives, it is left out (the server keeps an unreferenced upload for a while, then removes it).
  */
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ApiError, errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import type { AttachmentRef } from "@/api/types";
@@ -19,6 +21,10 @@ export function uploadProblem(name: string, e: unknown): string {
   return `${name}: ${errorMessage(e)}`;
 }
 
+function leftOut(name: string): string {
+  return `${name}: not added, because another draft was opened while it was uploading. Attach it again where you want it.`;
+}
+
 export interface Uploads {
   /** Names of the files going up right now. */
   uploading: string[];
@@ -27,9 +33,12 @@ export interface Uploads {
   dismissErrors(): void;
 }
 
-export function useUploads(held: number, onUploaded: (ref: AttachmentRef) => void): Uploads {
+/** `draftKey` is the open draft's (it changes whenever another draft is loaded). */
+export function useUploads(held: number, onUploaded: (ref: AttachmentRef) => void, draftKey: number): Uploads {
   const [uploading, setUploading] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const openKey = useRef(draftKey);
+  openKey.current = draftKey;
 
   const upload = useCallback(
     async (files: readonly File[]) => {
@@ -39,10 +48,17 @@ export function useUploads(held: number, onUploaded: (ref: AttachmentRef) => voi
       if (take.length < files.length) {
         setErrors([`A draft holds at most ${MAX_DRAFT_FILES} files. ${files.length - take.length} not added.`]);
       }
+      const startedIn = draftKey;
       for (const file of take) {
+        if (openKey.current !== startedIn) {
+          setErrors((cur) => [...cur, leftOut(file.name)]);
+          continue;
+        }
         setUploading((cur) => [...cur, file.name]);
         try {
-          onUploaded(await api.inbox.upload(file));
+          const uploaded = await api.inbox.upload(file);
+          if (openKey.current === startedIn) onUploaded(uploaded);
+          else setErrors((cur) => [...cur, leftOut(file.name)]);
         } catch (e) {
           setErrors((cur) => [...cur, uploadProblem(file.name, e)]);
         } finally {
@@ -53,7 +69,7 @@ export function useUploads(held: number, onUploaded: (ref: AttachmentRef) => voi
         }
       }
     },
-    [held, onUploaded, uploading.length],
+    [draftKey, held, onUploaded, uploading.length],
   );
 
   const dismissErrors = useCallback(() => setErrors([]), []);

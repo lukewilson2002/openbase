@@ -55,7 +55,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
   const [filing, setFiling] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [filed, setFiled] = useState<Filed | null>(null);
-  const uploads = useUploads(draft.attachments.length, draft.addAttachment);
+  const uploads = useUploads(draft.attachments.length, draft.addAttachment, draft.key);
   const input = useRef<HTMLInputElement>(null);
 
   const fields = form.table
