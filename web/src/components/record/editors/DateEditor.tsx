@@ -17,11 +17,12 @@ export interface DateEditorProps extends FieldEditorCallbacks {
   value: unknown;
   initialText?: string;
   variant: "cell" | "form";
+  autoFocus?: boolean;
 }
 
 const DEFAULT_OPTS: DateOptions = { include_time: false, date_format: "us", time_format: "h12", timezone: null };
 
-export function DateEditor({ field, value, initialText, variant, onChange, onCommit, onCancel }: DateEditorProps) {
+export function DateEditor({ field, value, initialText, variant, autoFocus, onChange, onCommit, onCancel }: DateEditorProps) {
   const env = useEditorEnv();
   const opts = dateOptionsOf(field) ?? DEFAULT_OPTS;
   const pickerRef = useRef<HTMLInputElement>(null);
@@ -74,6 +75,7 @@ export function DateEditor({ field, value, initialText, variant, onChange, onCom
         initialText={initialText}
         seedText={formatStoredDate(value, opts, env.timeZone)}
         variant={variant}
+        autoFocus={autoFocus}
         trailing={picker}
         onChange={onChange}
         onCommit={onCommit}

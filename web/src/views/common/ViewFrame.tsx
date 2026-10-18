@@ -135,6 +135,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           nextId={neighbours.next}
           onNavigate={setup.openRecord}
           onClose={() => setup.openRecord(null)}
+          justCreated={setup.newRecordId === setup.openRecordId}
           emails={setup.emails}
           timeZone={setup.timeZone}
           currentUserId={setup.currentUserId}

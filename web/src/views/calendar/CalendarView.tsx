@@ -188,7 +188,7 @@ function CalendarInner(props: ViewProps) {
   const createOn = useCallback(
     async (wallMs: number, allDay: boolean) => {
       const rec = await writes.create(fields ? dateClickValues(wallMs, allDay, fields, timeZone) : {});
-      if (rec) setup.openRecord(rec.id);
+      if (rec) setup.openNewRecord(rec.id);
     },
     [fields, writes, timeZone, setup],
   );

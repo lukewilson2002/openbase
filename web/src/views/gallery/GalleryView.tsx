@@ -52,7 +52,7 @@ function GalleryInner(props: ViewProps) {
 
   const addRecord = async () => {
     const rec = await writes.create({});
-    if (rec) setup.openRecord(rec.id);
+    if (rec) setup.openNewRecord(rec.id);
   };
 
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";

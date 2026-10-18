@@ -38,7 +38,7 @@ function ListInner(props: ViewProps) {
 
   const add = async (defaults: Record<string, unknown>) => {
     const rec = await writes.create(defaults);
-    if (rec) setup.openRecord(rec.id);
+    if (rec) setup.openNewRecord(rec.id);
   };
 
   const total = data?.total ?? 0;

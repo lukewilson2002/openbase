@@ -67,10 +67,16 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
   return { api, props };
 }
 
+/** Starts editing a field: clicks its value and answers the editor's input. */
+async function edit(field: string): Promise<HTMLInputElement> {
+  await userEvent.click(await screen.findByRole("button", { name: `Edit ${field}` }));
+  return (await screen.findByRole("textbox", { name: field })) as HTMLInputElement;
+}
+
 describe("ExpandedRecord", () => {
   it("opens with the dialog itself focused (not a button whose tooltip would swallow the first Escape) and closes on Escape", async () => {
     const { props } = setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveFocus();
     await userEvent.keyboard("{Escape}");
@@ -79,24 +85,29 @@ describe("ExpandedRecord", () => {
 
   it("shows every field with its value, computed ones read-only, hidden ones collapsed", async () => {
     setup();
-    expect(await screen.findByDisplayValue("Launch")).toBeInTheDocument();
+    const nameRow = await screen.findByRole("group", { name: "Name" });
+    // Values are shown rendered, not as inputs.
+    expect(within(nameRow).getByText("Launch")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Launch" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("1200")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Budget" })).getByText("$1,200.00")).toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     const scoreRow = screen.getByRole("group", { name: "Score" });
     expect(within(scoreRow).getByText("24.0")).toBeInTheDocument();
     expect(within(scoreRow).getByText(/computed, read-only/)).toBeInTheDocument();
     expect(within(scoreRow).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(scoreRow).queryByRole("button")).not.toBeInTheDocument();
     // Hidden fields live in a collapsible section.
-    expect(screen.queryByDisplayValue("hush")).not.toBeInTheDocument();
+    expect(screen.queryByText("hush")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Show 1 hidden field/ }));
-    expect(screen.getByDisplayValue("hush")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Secret" })).getByText("hush")).toBeInTheDocument();
   });
 
   it("edits a field through the shared editor and sends the wire value with typecast", async () => {
     const { api } = setup();
-    const input = await screen.findByDisplayValue("Launch");
+    const input = await edit("Name");
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it{Enter}");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
@@ -106,7 +117,7 @@ describe("ExpandedRecord", () => {
 
   it("shows a validation message for an unparseable value and does not save", async () => {
     const { api } = setup();
-    const input = await screen.findByDisplayValue("1200");
+    const input = await edit("Budget");
     await userEvent.clear(input);
     await userEvent.type(input, "lots{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent(/not a number/);
@@ -115,7 +126,7 @@ describe("ExpandedRecord", () => {
 
   it("navigates between records and closes", async () => {
     const { props } = setup();
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     await userEvent.click(screen.getByRole("button", { name: /Previous record/ }));
     await userEvent.click(screen.getByRole("button", { name: /Next record/ }));
     expect(props.onNavigate).toHaveBeenNthCalledWith(1, "rec0");
@@ -128,7 +139,7 @@ describe("ExpandedRecord", () => {
 
   it("disables navigation at the ends", async () => {
     setup({ prevId: null, nextId: null });
-    await screen.findByDisplayValue("Launch");
+    await screen.findByRole("button", { name: "Edit Name" });
     expect(screen.getByRole("button", { name: /Previous record/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Next record/ })).toBeDisabled();
   });
@@ -137,6 +148,13 @@ describe("ExpandedRecord", () => {
     setup({ role: "viewer" });
     await screen.findByRole("heading", { name: "Launch" });
     expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+    // A viewer's values are plain text: nothing to click, no hover tint, no button.
+    const nameRow = screen.getByRole("group", { name: "Name" });
+    expect(within(nameRow).getByText("Launch")).toBeInTheDocument();
+    expect(within(nameRow).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
+    expect(nameRow.innerHTML).not.toContain("hover:bg-hover");
     expect(screen.getByText(/You can read comments but not write them/)).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Write a comment" })).not.toBeInTheDocument();
   });

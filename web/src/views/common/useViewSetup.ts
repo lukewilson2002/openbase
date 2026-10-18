@@ -50,6 +50,10 @@ export interface ViewSetup extends ViewProps {
   writes: RecordWrites;
   openRecordId: string | null;
   openRecord(recordId: string | null): void;
+  /** Opens a record the person just added: its first field starts being edited. */
+  openNewRecord(recordId: string): void;
+  /** The record that was just added, while it is the one open. */
+  newRecordId: string | null;
 }
 
 export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetup {
@@ -95,6 +99,22 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     },
     [setSearchParams],
   );
+  // Which record was added a moment ago, so its expanded form starts in edit mode; opening any other record forgets it.
+  const [newId, setNewId] = useState<string | null>(null);
+  const openRecordOrForget = useCallback(
+    (recordId: string | null) => {
+      setNewId((cur) => (cur === recordId ? cur : null));
+      openRecord(recordId);
+    },
+    [openRecord],
+  );
+  const openNewRecord = useCallback(
+    (recordId: string) => {
+      setNewId(recordId);
+      openRecord(recordId);
+    },
+    [openRecord],
+  );
 
   return {
     schema,
@@ -120,6 +140,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     debouncedSearch,
     writes,
     openRecordId,
-    openRecord,
+    openRecord: openRecordOrForget,
+    openNewRecord,
+    newRecordId: newId,
   };
 }
