@@ -12,7 +12,7 @@ import { Maximize2 } from "lucide-react";
 import { FullScreen } from "@/components/record/editors/FullScreen";
 import { cn } from "@/lib/cn";
 import { richTextExtensions } from "./extensions";
-import { Toolbar } from "./Toolbar";
+import { Toolbar, toolbarControls } from "./Toolbar";
 
 export interface RichTextEditorProps {
   /** Markdown. */
@@ -89,6 +89,13 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
     <div
       className={cn("relative flex flex-col text-[0.8125rem] leading-relaxed", fullScreen ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "rounded-md border border-line-strong bg-surface focus-within:border-ring")}
       onKeyDown={(e) => {
+        // Alt+F10 goes to the toolbar (its controls are out of the Tab order, so Tab lands in the text).
+        if (e.altKey && e.key === "F10") {
+          e.preventDefault();
+          const toolbar = e.currentTarget.querySelector('[role="toolbar"]');
+          if (toolbar) toolbarControls(toolbar)[0]?.focus();
+          return;
+        }
         // Ctrl/Cmd+K is "link" in every editor; the toolbar's button owns the popover.
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !e.shiftKey && !e.altKey) {
           e.preventDefault();

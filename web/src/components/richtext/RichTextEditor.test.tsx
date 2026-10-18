@@ -147,4 +147,26 @@ describe("RichTextEditor", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Notes" })).toHaveTextContent("shared and more"));
   });
+
+  it("is one Tab stop: Tab lands in the text, Alt+F10 reaches the toolbar, arrows move along it, Escape goes back", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <input aria-label="Before" />
+        <Host initial="Hello" onMarkdown={vi.fn()} />
+      </>,
+    );
+    const text = await screen.findByRole("textbox", { name: "Notes" });
+    screen.getByRole("textbox", { name: "Before" }).focus();
+    await user.tab();
+    expect(text).toHaveFocus();
+    // No control of the toolbar is in the Tab order.
+    for (const b of within(screen.getByRole("toolbar", { name: "Formatting" })).getAllByRole("button")) expect(b).toHaveAttribute("tabindex", "-1");
+    await user.keyboard("{Alt>}{F10}{/Alt}");
+    expect(screen.getByRole("button", { name: "Text style" })).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("button", { name: "Bold" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(text).toHaveFocus();
+  });
 });

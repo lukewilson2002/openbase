@@ -3,8 +3,12 @@
  * sideways when it does not fit (phones), and its buttons grow to 40px on touch. Buttons keep the
  * editor's focus (mousedown is not allowed to move it), so the on-screen keyboard stays up; the
  * menus hand focus back to the editor when they close.
+ *
+ * Its controls are out of the Tab order, so tabbing into a field lands in the text. The keyboard
+ * reaches the toolbar with Alt+F10 from the text (as in most editors), moves along it with the
+ * arrow keys, Home and End, and goes back to the text with Escape.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import {
@@ -43,10 +47,47 @@ const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
 function ToolButton({ label, active, disabled, onClick, children }: { label: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-label={label} title={label} aria-pressed={active} disabled={disabled} onMouseDown={keepFocus} onClick={onClick} className={btn}>
+    <button type="button" tabIndex={-1} aria-label={label} title={label} aria-pressed={active} disabled={disabled} onMouseDown={keepFocus} onClick={onClick} className={btn}>
       {children}
     </button>
   );
+}
+
+/** The toolbar's controls a keyboard can move to, in order. */
+export function toolbarControls(toolbar: Element): HTMLButtonElement[] {
+  return [...toolbar.querySelectorAll<HTMLButtonElement>("button")].filter((b) => !b.disabled);
+}
+
+/** Arrow keys, Home and End move along the toolbar (Escape is `useEscapeBack`). */
+function moveAlong(e: React.KeyboardEvent<HTMLDivElement>) {
+  // Keys inside an open menu or popover belong to it (they render in portals, but bubble through React).
+  if (!e.currentTarget.contains(e.target as Node)) return;
+  const controls = toolbarControls(e.currentTarget);
+  const at = controls.indexOf(e.target as HTMLButtonElement);
+  if (at < 0) return;
+  const next = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? controls.length - 1 : null;
+  if (next === null) return;
+  e.preventDefault();
+  controls[(next + controls.length) % controls.length]?.focus();
+}
+
+/**
+ * Escape on a toolbar control goes back to the text. Caught on the window before anything else: a
+ * dialog around the editor (an open record, full screen) listens for Escape on the document in its
+ * capture phase and would close itself instead.
+ */
+function useEscapeBack(ref: RefObject<HTMLDivElement | null>, editor: Editor) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !ref.current?.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      // At once (the `focus` command waits a frame), with the selection where it was.
+      editor.view.focus();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [ref, editor]);
 }
 
 function Divider() {
@@ -65,7 +106,7 @@ function ToolMenu({ editor, label, trigger, children, className }: { editor: Edi
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" aria-label={label} title={label} onMouseDown={keepFocus} className={cn(btn, className)}>
+        <button type="button" tabIndex={-1} aria-label={label} title={label} onMouseDown={keepFocus} className={cn(btn, className)}>
           {trigger}
         </button>
       </DropdownMenuTrigger>
@@ -116,7 +157,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="Link" title="Link (Ctrl+K)" aria-pressed={active} onMouseDown={keepFocus} className={btn}>
+        <button type="button" tabIndex={-1} aria-label="Link" title="Link (Ctrl+K)" aria-pressed={active} onMouseDown={keepFocus} className={btn}>
           <Link2 aria-hidden className="size-4" />
         </button>
       </PopoverTrigger>
@@ -203,11 +244,13 @@ export function Toolbar({ editor }: { editor: Editor }) {
   });
   const run = () => editor.chain().focus();
   const itemType = editor.isActive("taskItem") ? "taskItem" : "listItem";
+  const ref = useRef<HTMLDivElement>(null);
+  useEscapeBack(ref, editor);
 
   // `shrink-0`: in the full-screen editor this sits in a scrolling column, where a long document would
   // otherwise squeeze it (it scrolls sideways, so the browser lets it shrink below its buttons).
   return (
-    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <ToolMenu editor={editor} label="Text style" trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
         <DropdownMenuItem onSelect={() => run().setParagraph().run()}>Paragraph</DropdownMenuItem>
         {HEADINGS.map((level) => (
