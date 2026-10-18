@@ -12,7 +12,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, FileDown, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
+import { Copy, Ellipsis, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
@@ -161,9 +161,6 @@ function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
         <>
           <DropdownMenuItem onSelect={() => openDialog({ kind: "create-project", workspaceId: ws.id })}>
             <Plus aria-hidden className="size-4" /> New project
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => openDialog({ kind: "import-project", workspaceId: ws.id })}>
-            <FileDown aria-hidden className="size-4" /> Import a spreadsheet…
           </DropdownMenuItem>
           <DropdownMenuSeparator />
         </>

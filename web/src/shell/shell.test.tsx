@@ -398,7 +398,6 @@ describe("HomeShell", () => {
     let menu = await screen.findByRole("menu");
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual([
       "New project",
-      "Import a spreadsheet…",
       "Members",
       "Invite people…",
       "Trash",

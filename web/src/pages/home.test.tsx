@@ -195,12 +195,12 @@ describe("/workspace/:id", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Project tracker" })).toBeInTheDocument();
   });
 
-  it("gives an empty workspace its page: make a project, or import a spreadsheet", async () => {
+  it("gives an empty workspace its page: make a project", async () => {
     stubDesktop();
     routes({ "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }] });
     renderApp({ route: "/workspace/wsp1" });
     expect(await screen.findByRole("heading", { name: "No projects in Acme yet" })).toBeInTheDocument();
-    expect(screen.getByText("A project holds your tables. Start empty, or bring in a spreadsheet you already have.")).toBeInTheDocument();
+    expect(screen.getByText("A project holds your tables. Make one, then add a table to it, or import a CSV file as its first table.")).toBeInTheDocument();
   });
 
   it("tells a viewer to wait, with nothing to create", async () => {
@@ -208,7 +208,7 @@ describe("/workspace/:id", () => {
     routes({ "GET /api/workspaces": [{ ...workspaces[1]!, bases: [] }] });
     renderApp({ route: "/workspace/wsp2" });
     expect(await screen.findByRole("heading", { name: "No projects in Shared with me yet" })).toBeInTheDocument();
-    for (const name of ["New project", "Import a spreadsheet"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New project" })).not.toBeInTheDocument();
   });
 
   it("creates an empty project with an icon from the empty page, and opens it", async () => {
@@ -232,24 +232,16 @@ describe("/workspace/:id", () => {
     await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
   });
 
-  it("imports a spreadsheet into a new project named after the file", async () => {
+  it("offers no spreadsheet import of its own: a CSV file is one table, imported inside a project", async () => {
     stubDesktop();
     const user = userEvent.setup();
-    const api = routes({
-      "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }],
-      "POST /api/workspaces/wsp1/bases": { id: "app9", workspace_id: "wsp1", name: "contacts", color: "blue_dark", role: "owner", people: [], tables: [], workspace_name: "Acme" },
-      "POST /api/bases/app9/import": { table_id: "tbl9", created: 2, fields: [{ id: "f1", name: "Name", type: "single_line_text" }] },
-    });
+    routes({ "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }] });
     renderApp({ route: "/workspace/wsp1" });
-    await user.click(await screen.findByRole("button", { name: "Import a spreadsheet" }));
-    const dialog = await screen.findByRole("dialog", { name: "Import a spreadsheet" });
-    await user.upload(await within(dialog).findByLabelText("CSV file"), new File(["Name\nAda\nGrace\n"], "contacts.csv", { type: "text/csv" }));
-    expect(await within(dialog).findByLabelText("Name")).toHaveValue("contacts");
-    await user.click(within(dialog).getByRole("button", { name: "Import" }));
-
-    await waitFor(() => expect(api.callsTo("POST /api/bases/app9/import")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "contacts", empty: true });
-    await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
+    expect(await screen.findByRole("button", { name: "New project" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /spreadsheet|import/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: /spreadsheet|import/i })).not.toBeInTheDocument();
   });
 
   it("says when the workspace does not exist and forgets it as the last one", async () => {

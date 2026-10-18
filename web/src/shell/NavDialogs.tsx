@@ -1,6 +1,6 @@
 /**
  * The dialogs the menu's workspace and project rows open: a new workspace or project, a
- * spreadsheet import, rename, icon, colour, delete, and inviting people. They live here, around the page
+ * rename, icon, colour, delete, and inviting people. They live here, around the page
  * rather than inside the menu, because on a phone the menu is a drawer that unmounts when it
  * closes, and a dialog inside it would vanish with it. Both shells (the home pages and a project)
  * wrap their frame in `NavDialogsProvider`; the menu and the empty workspace page open dialogs
@@ -16,7 +16,6 @@ import type { BaseSummary, WorkspaceSummary } from "@/api/types";
 import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { ShareDialog } from "@/components/ShareDialog";
-import { NewTableFromCsvDialog } from "@/components/csv/LazyCsvDialogs";
 import { IconPickerDialog } from "@/components/icons/IconPicker";
 import { iconPatch } from "@/components/icons/iconPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -30,7 +29,6 @@ export type NavDialog =
   | { kind: "workspace"; ws: WorkspaceSummary; dialog: NonNullable<WorkspaceDialog> }
   | { kind: "invite"; ws: WorkspaceSummary }
   | { kind: "create-project"; workspaceId: string }
-  | { kind: "import-project"; workspaceId: string }
   | { kind: "rename-project"; base: BaseSummary }
   | { kind: "project-icon"; base: BaseSummary }
   | { kind: "project-color"; base: BaseSummary }
@@ -116,9 +114,6 @@ function NavDialogs({ dialog, onClose }: { dialog: NavDialog | null; onClose: ()
           await navigate(`/base/${base.id}`);
         }}
       />
-      {dialog?.kind === "import-project" && (
-        <NewTableFromCsvDialog open onOpenChange={onOpenChange} createBase={async (name) => (await createBase.mutateAsync({ workspaceId: dialog.workspaceId, name, empty: true })).id} />
-      )}
       <NameDialog
         open={!!renaming}
         onOpenChange={onOpenChange}

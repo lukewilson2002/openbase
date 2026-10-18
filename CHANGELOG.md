@@ -61,6 +61,9 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   Share, which opens the phone's share sheet where there is one.
 - The old Inbox, with mentions and other alerts, is called **Notifications**, below the new Inbox.
   The intro has a step about the Inbox.
+- **Importing a CSV file makes a table**, since a file holds one table: "New table from CSV…" in a
+  project's "+ Add table" menu, or "Import a CSV" in a new, empty project. Workspaces no longer
+  offer "Import a spreadsheet", which made a whole project from one file.
 - Every item of the profile menu has an icon.
 - The toolbar's Add button looks like the other buttons instead of taking the project's colour.
 
