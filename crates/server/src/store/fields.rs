@@ -439,13 +439,14 @@ fn refuse_foreign_file_refs(tx: &Transaction, table: &TableRow, old: &Field) -> 
     use crate::store::attachments;
     const LISTED: usize = 5;
     let path = format!("$.\"{}\"", old.id);
-    let mut stmt = tx.prepare(
+    let mut stmt = tx.prepare(&format!(
         "SELECT id, data FROM records
-         WHERE table_id = ?1 AND json_type(data, ?2) IS NOT NULL AND instr(data, ?3) > 0
+         WHERE table_id = ?2 AND json_type(data, ?3) IS NOT NULL AND {}
          ORDER BY id",
-    )?;
+        attachments::may_reference_sql("data")
+    ))?;
     let rows: Vec<(String, String)> = stmt
-        .query_map(params![table.id, path, attachments::REF_PREFIX], |r| {
+        .query_map(params![attachments::REF_PREFIX, table.id, path], |r| {
             Ok((r.get(0)?, r.get(1)?))
         })?
         .collect::<Result<_, _>>()?;

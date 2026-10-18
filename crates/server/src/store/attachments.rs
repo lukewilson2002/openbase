@@ -283,6 +283,13 @@ fn ids_in(text: &str, out: &mut HashSet<String>) {
 /// The prefix of the address an embedded or linked file has in long text.
 pub const REF_PREFIX: &str = "/api/attachments/";
 
+/// SQL condition on a text column `col`: it may name a file by address, plainly or in disguise
+/// (see [`referenced_ids`]). A cheap prefilter; the text is then scanned in Rust. `?1` is
+/// [`REF_PREFIX`].
+pub fn may_reference_sql(col: &str) -> String {
+    format!("(instr({col}, ?1) > 0 OR instr({col}, '&') > 0 OR instr({col}, char(92)) > 0)")
+}
+
 /// Spans `(start, end, id)` of every `/api/attachments/<id>/` reference in `text`: `start..end`
 /// is the id. Only this address form counts, never a bare id in prose.
 fn ref_spans(text: &str) -> Vec<(usize, usize, &str)> {
@@ -306,8 +313,87 @@ fn ref_spans(text: &str) -> Vec<(usize, usize, &str)> {
     out
 }
 
-/// The distinct file ids referenced in `text` (`/api/attachments/<id>/...`), in order.
+/// `text` as a Markdown reader and a browser would read its addresses, for scanning only: HTML
+/// character references decoded (`&#47;` and `&#x2F;` and `&sol;` are `/`, so are the ones that
+/// spell a letter) and Markdown backslash escapes removed (`\/` is `/`); a backslash that is left
+/// counts as a slash, as browsers read it in an address. So `<img src="&#47;api&#47;attachments/...">`
+/// and `![](/api\/attachments/...)`, which load the file all the same, are found like the plain form.
+fn scannable(text: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    if !text.contains(['&', '\\']) {
+        return Cow::Borrowed(text);
+    }
+    let mut unescaped = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match chars.peek() {
+            Some(next) if c == '\\' && next.is_ascii_punctuation() => {
+                unescaped.extend(chars.next());
+            }
+            _ => unescaped.push(c),
+        }
+    }
+    Cow::Owned(decode_char_refs(&unescaped).replace('\\', "/"))
+}
+
+/// Decode numeric character references (`&#47;`, `&#x2F;`, the closing `;` optional as in
+/// browsers) and `&sol;`; everything else stays as written.
+fn decode_char_refs(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(pos) = rest.find('&') {
+        out.push_str(&rest[..pos]);
+        rest = &rest[pos..];
+        let (decoded, used) = char_ref(rest).unwrap_or(('&', 1));
+        out.push(decoded);
+        rest = &rest[used..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The character the reference at the start of `s` (which starts with `&`) stands for, and its
+/// length in bytes.
+fn char_ref(s: &str) -> Option<(char, usize)> {
+    if s.starts_with("&sol;") {
+        return Some(('/', 5));
+    }
+    let body = s.strip_prefix("&#")?;
+    let (radix, digits) = match body.strip_prefix(['x', 'X']) {
+        Some(hex) => (16, hex),
+        None => (10, body),
+    };
+    let len = digits
+        .bytes()
+        .take(8)
+        .take_while(|b| (*b as char).is_digit(radix))
+        .count();
+    if len == 0 {
+        return None;
+    }
+    let code = u32::from_str_radix(&digits[..len], radix).ok()?;
+    let c = char::from_u32(code).filter(|c| *c != '\0')?;
+    let mut used = s.len() - digits.len() + len;
+    if s[used..].starts_with(';') {
+        used += 1;
+    }
+    Some((c, used))
+}
+
+/// The distinct file ids referenced in `text` (`/api/attachments/<id>/...`), in order. Also
+/// finds a reference written in disguise (see [`scannable`]), so every ownership rule and the
+/// cleanup see what the browser would load.
 pub fn referenced_ids(text: &str) -> Vec<String> {
+    distinct_ids(&scannable(text))
+}
+
+/// Like [`referenced_ids`], for the references that are written plainly: the only ones
+/// [`remap_refs`] can re-point.
+pub fn plain_referenced_ids(text: &str) -> Vec<String> {
+    distinct_ids(text)
+}
+
+fn distinct_ids(text: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     ref_spans(text)
         .into_iter()
@@ -396,10 +482,10 @@ pub fn delete_unreferenced(
     }
     // Files of unfiled inbox drafts are still wanted: those in the file list and those
     // embedded or linked in the text.
-    let mut stmt = conn.prepare(
-        "SELECT attachments, body FROM inbox_items
-         WHERE attachments != '[]' OR instr(body, ?1) > 0",
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT attachments, body FROM inbox_items WHERE attachments != '[]' OR {}",
+        may_reference_sql("body")
+    ))?;
     let mut rows = stmt.query([REF_PREFIX])?;
     while let Some(row) = rows.next()? {
         let files: String = row.get(0)?;
@@ -409,7 +495,10 @@ pub fn delete_unreferenced(
     }
     // Files embedded or linked in comments (including ones filed from a draft's note) are
     // referenced from there only.
-    let mut stmt = conn.prepare("SELECT body FROM comments WHERE instr(body, ?1) > 0")?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT body FROM comments WHERE {}",
+        may_reference_sql("body")
+    ))?;
     let mut rows = stmt.query([REF_PREFIX])?;
     while let Some(row) = rows.next()? {
         let body: String = row.get(0)?;
@@ -564,6 +653,37 @@ mod tests {
         assert!(!out.contains(&format!("{a}/")));
         assert_eq!(referenced_ids(&out), ["attCCCCCCCCCCCCC3", b]);
         assert!(out.contains(&format!("see {b} and")));
+    }
+
+    #[test]
+    fn finds_references_written_in_disguise() {
+        let a = "attAAAAAAAAAAAAA1";
+        for text in [
+            format!("<img src=\"&#47;api&#47;attachments&#47;{a}/x.png\">"),
+            format!("<img src=\"&#x2F;api&#x2f;attachments/{a}/x.png\">"),
+            format!("<img src=\"&#47;api&#47;attachments&#47;{a}&#47;x.png\">"),
+            format!("<img src=\"&sol;api/attachments/{a}/x\">"),
+            format!("<img src=\"&#47;api/&#97;ttachments/{a}/x\">"),
+            format!("![](/api\\/attachments/{a}/x)"),
+            format!("![](\\/api/attachments\\/{a}\\/x)"),
+            format!("<img src=\"\\api\\attachments\\{a}\\x\">"),
+            format!("<img src=\"&#47;api&#47;attachments&#47;{a}/x\"> and /api/attachments/{a}/y"),
+        ] {
+            assert_eq!(referenced_ids(&text), [a], "{text}");
+        }
+        // Only the plain spelling can be re-pointed or copied.
+        let text = format!("![](/api\\/attachments/{a}/x) ![](/api/attachments/{a}/y)");
+        assert_eq!(plain_referenced_ids(&text), [a]);
+        assert!(plain_referenced_ids(&format!("![](/api\\/attachments/{a}/x)")).is_empty());
+        // Things that merely look similar are not references.
+        for text in [
+            format!("&#47;api&#47;attachments&#47;{a}"),
+            format!("&amp;#47;api&amp;#47;attachments&amp;#47;{a}/x"),
+            format!("\\a\\p\\i/attachments/{a}/x"),
+            "&#99999999999;/api/attachments/att/x".to_string(),
+        ] {
+            assert!(referenced_ids(&text).is_empty(), "{text}");
+        }
     }
 
     #[test]

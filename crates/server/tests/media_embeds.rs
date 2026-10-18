@@ -1157,3 +1157,91 @@ async fn video_and_audio_are_never_compressed() {
     r.assert_status(200);
     assert_eq!(header_str(&r, "content-encoding"), "gzip");
 }
+
+#[tokio::test]
+async fn references_written_in_disguise_obey_the_same_rule() {
+    let f = Fixture::new().await;
+    let (other, _) = other_base(&f).await;
+    let own = upload(&f, &f.base_id, "own.png", b"own").await;
+    let foreign = upload(&f, &other, "foreign.png", b"foreign").await;
+    let notes = |t: &str| json!({ &f.primary_id: "r", &f.notes_id: t });
+    // A browser or a Markdown reader still finds the address in each of these.
+    let disguised = |id: &str| {
+        vec![
+            format!("<img src=\"&#47;api&#47;attachments&#47;{id}/x.png\">"),
+            format!("<img src=\"&#x2F;api&#x2f;attachments/{id}/x.png\">"),
+            format!("<video src=\"&sol;api/attachments/{id}/x.mp4\"></video>"),
+            format!("<img src=\"&#47;api/&#97;ttachments/{id}/x.png\">"),
+            format!("![](/api\\/attachments/{id}/x.png)"),
+            format!("![x](\\/api/attachments\\/{id}\\/x.png)"),
+            format!("<img src=\"\\api\\attachments\\{id}\\x.png\">"),
+        ]
+    };
+    for text in disguised(&foreign) {
+        let r = f.create_as(&f.owner, &f.table_id, notes(&text)).await;
+        r.assert_status(400);
+        assert!(message(&r).contains(&foreign), "{text}: {}", message(&r));
+    }
+    // The project's own files are fine in any spelling, and stay referenced for the cleanup.
+    for text in disguised(&own) {
+        f.create_as(&f.owner, &f.table_id, notes(&text))
+            .await
+            .assert_status(201);
+    }
+    let far = openbase::db::now_ms() + 10_000_000;
+    let deleted = sql(&f.app, |tx| {
+        Ok(openbase::store::attachments::delete_unreferenced(tx, far, far).unwrap())
+    });
+    assert!(
+        deleted.len() <= 1,
+        "only the foreign file may go: {deleted:?}"
+    );
+    assert_eq!(
+        f.app
+            .query_i64("SELECT count(*) FROM attachments WHERE id = ?1", &[&own]),
+        1
+    );
+}
+
+#[tokio::test]
+async fn drafts_comments_and_the_cleanup_see_disguised_references_too() {
+    let f = Fixture::new().await;
+    let other = f.member("other@example.com", openbase::perm::Role::Editor);
+    let theirs = inbox_upload(&f.app, &other, "theirs.png", b"theirs").await;
+    let mine = inbox_upload(&f.app, &f.owner, "mine.png", b"mine").await;
+    let own = upload(&f, &f.base_id, "own.png", b"own").await;
+    let disguised = |id: &str| format!("<img src=\"&#47;api&#47;attachments&#47;{id}/x.png\">");
+
+    // A draft may only name the caller's own uploads, however the address is spelled.
+    let r = add_draft(&f, &disguised(&theirs)).await;
+    r.assert_status(400);
+    assert!(message(&r).contains(&theirs), "{}", message(&r));
+    add_draft(&f, &disguised(&mine)).await.assert_status(201);
+    // ... and one draft only.
+    add_draft(&f, &embed(&mine, "mine.png"))
+        .await
+        .assert_status(400);
+
+    // A comment that names a file only in disguise keeps it from the cleanup.
+    let rec = f.create(&f.table_id, json!({ &f.primary_id: "r" })).await;
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/records/{}/comments", id_str(&rec["id"])),
+            json!({ "body": disguised(&own) }),
+        )
+        .await
+        .assert_status(201);
+    let far = openbase::db::now_ms() + 10_000_000;
+    let deleted = sql(&f.app, |tx| {
+        Ok(openbase::store::attachments::delete_unreferenced(tx, far, far).unwrap())
+    });
+    assert_eq!(deleted.len(), 1, "only their unfiled upload goes");
+    let exists = |id: &str| {
+        f.app
+            .query_i64("SELECT count(*) FROM attachments WHERE id = ?1", &[id])
+            == 1
+    };
+    assert!(exists(&own) && exists(&mine));
+    assert!(!exists(&theirs));
+}

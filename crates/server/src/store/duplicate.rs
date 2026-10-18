@@ -725,7 +725,7 @@ fn copy_text_files(
     cache: &mut HashMap<String, Option<String>>,
 ) -> AppResult<String> {
     let mut map = HashMap::new();
-    for old in crate::store::attachments::referenced_ids(text) {
+    for old in crate::store::attachments::plain_referenced_ids(text) {
         if let Some(new) = copy_attachment(tx, &old, copy, cache)? {
             map.insert(old, new);
         }

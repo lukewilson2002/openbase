@@ -207,7 +207,7 @@ record must name a file of the record's project, exactly like attachment cells. 
 with `400` (`422` in `/api/v1`) and `field "Notes": attachment attXXX is not a file of this project; upload
 the file to this project to embed or link it`. The rule covers every write path: the app, `/api/v1`, CSV import,
 automations, MCP and the inbox filing, and a file that does not exist is refused like another project's file.
-A reference the value being replaced already contains is not checked again, so editing other text of an old
+References are found the way a browser would read them, so an address written with HTML character references (`&#47;api&#47;attachments/...`) or Markdown backslash escapes (`/api\/attachments/...`) counts and is checked too. A reference the value being replaced already contains is not checked again, so editing other text of an old
 value never fails. Comments follow the same rule (`400`, `attachment attXXX is not a file of this project; ...`).
 Changing a field of another type to long text is refused with `400` (`field "Tag" cannot become long text:
 N record(s) refer to files that are not files of this project: rec... (att...)`, naming up to five records,
@@ -233,7 +233,7 @@ file is `416` with `Content-Range: bytes */length`; several ranges or malformed 
 whole file is sent. Bodies are streamed. Thumbnails support `Range` too.
 
 **External media is not embedded.** `![](https://...)`, or any address not starting with `/api/attachments/`,
-is shown by the web app as an ordinary link and never fetched by the browser; the editor does not create one.
+is shown by the web app as an ordinary link and never fetched by the browser; the editor does not create one. Raw HTML in the text never produces `<img>`, `<video>` or `<audio>` either: media only comes from plainly written Markdown image syntax.
 
 ---
 

@@ -125,14 +125,15 @@ fn files_of_other_drafts(
     user_id: &str,
     except: Option<&str>,
 ) -> AppResult<HashSet<String>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT attachments, body FROM inbox_items
-         WHERE user_id = ?1 AND id != ?2
-           AND (attachments != '[]' OR instr(body, ?3) > 0)",
-    )?;
+         WHERE user_id = ?2 AND id != ?3
+           AND (attachments != '[]' OR {})",
+        attachments::may_reference_sql("body")
+    ))?;
     let rows = stmt
         .query_map(
-            params![user_id, except.unwrap_or_default(), attachments::REF_PREFIX],
+            params![attachments::REF_PREFIX, user_id, except.unwrap_or_default()],
             |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
         )?
         .collect::<Result<Vec<_>, _>>()?;
@@ -167,9 +168,6 @@ fn check_body_files(
     body: &str,
     held: Option<&str>,
 ) -> AppResult<()> {
-    if !body.contains(attachments::REF_PREFIX) {
-        return Ok(());
-    }
     let held: HashSet<String> = held
         .map(attachments::referenced_ids)
         .unwrap_or_default()
