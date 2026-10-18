@@ -137,5 +137,8 @@ export function queryKeysForEvent(env: EventEnvelope): (readonly unknown[])[] {
       return [keys.comments(ev.record_id)];
     case "base_changed":
       return [keys.base(env.base_id), keys.workspaces];
+    case "presence_changed":
+      // Who is viewing is not cached data: nothing to refetch.
+      return [];
   }
 }

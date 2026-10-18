@@ -285,6 +285,13 @@ async fn removing_a_workspace_member_closes_their_stream() {
     // ... while the owner's stream gets the event and stays open.
     let (name, _) = mine.next_event().await;
     assert_eq!(name, "base_changed");
+    // The closed stream leaves the base: the owner is told who is still viewing.
+    let (name, data) = mine.next_event().await;
+    assert_eq!(name, "presence_changed");
+    assert_eq!(
+        data["event"]["viewers"],
+        json!([f.owner.user_id.clone().unwrap()])
+    );
     f.create(&f.table_id, json!({ &f.primary_id: "after" }))
         .await;
     assert_eq!(mine.next_event().await.0, "records_changed");

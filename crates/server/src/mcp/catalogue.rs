@@ -129,6 +129,10 @@ pub const AREAS: &[(&str, &str)] = &[
     ("invites", "invite links"),
     ("notifications", "in-app notifications"),
     (
+        "inbox",
+        "your private quick-capture drafts, filed into tables later",
+    ),
+    (
         "account",
         "the signed-in user's profile, tokens and sessions",
     ),
@@ -976,6 +980,67 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "{ids?}",
         "OkResponse",
     ),
+    // ------------------------------------------------------------------- inbox
+    e(
+        GET,
+        "/api/inbox",
+        "inbox",
+        "-",
+        Read,
+        "The caller's inbox drafts, most recently changed first (only ever the caller's own).",
+        NO_BODY,
+        "InboxItem[] {id, body (Markdown), attachments (AttachmentRef[]), created_at, updated_at}",
+    ),
+    e(
+        POST,
+        "/api/inbox",
+        "inbox",
+        "-",
+        Write,
+        "Add a draft. Files are uploaded first (POST /api/inbox/attachments) and referenced here.",
+        "{body, attachments?: AttachmentRef[]}",
+        "InboxItem (201)",
+    ),
+    e(
+        POST,
+        "/api/inbox/attachments",
+        "inbox",
+        "-",
+        Write,
+        "Upload a file for an inbox draft (multipart field `file`); only you can download it until the draft is filed. With api_request use {\"multipart\": {\"file\": {\"filename\": \"a.png\", \"content_base64\": \"...\"}}}.",
+        "multipart: file",
+        "AttachmentRef {id, filename, mime, size}",
+    ),
+    e(
+        PATCH,
+        "/api/inbox/{id}",
+        "inbox",
+        "-",
+        Write,
+        "Change a draft's text and/or replace its list of files.",
+        "{body?, attachments?}",
+        "InboxItem",
+    ),
+    e(
+        DELETE,
+        "/api/inbox/{id}",
+        "inbox",
+        "-",
+        Write,
+        "Delete a draft (permanently; drafts have no trash).",
+        NO_BODY,
+        "204",
+    ),
+    e(
+        POST,
+        "/api/inbox/{id}/file",
+        "inbox",
+        "editor",
+        Write,
+        "File a draft: create a record in a table (editor role there) and delete the draft. To keep the draft's files put them ({\"id\": \"att...\"}) in an attachment field.",
+        "{table_id, fields: {field name or id: value}}",
+        "TableRecord (201)",
+    ),
     // -------------------------------------------------------------------- account
     e(
         GET,
@@ -1562,6 +1627,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
     ),
     e(
         GET,
+        "/api/bases/{id}/presence",
+        "bases",
+        "viewer",
+        Read,
+        "Who has the base open right now: the user ids with a live-update stream on it, in arrival order (several tabs of one person count once).",
+        NO_BODY,
+        "Presence {viewers: user id[]}",
+    ),
+    e(
+        GET,
         "/api/bases/{id}/events",
         "system",
         "viewer",
@@ -1723,9 +1798,9 @@ pub fn reference(area: Option<&str>, oauth: bool) -> Result<Value, String> {
                 })
                 .collect();
             Ok(json!({
-                "usage": "Call api_reference with an area for its endpoints, then api_request with a method and a path from the list. Paths contain ids you get from list_bases / get_base_schema / earlier responses. Errors use {\"error\": {\"code\", \"message\"}}; 404 can also mean \"you have no access\".",
+                "usage": "Call api_reference with an area for its endpoints, then api_request with a method and a path from the list. Paths contain ids you get from list_projects / get_project_schema / earlier responses. Errors use {\"error\": {\"code\", \"message\"}}; 404 can also mean \"you have no access\".",
                 "conventions": [
-                    "Record values are keyed by field id in the internal API (use get_base_schema for ids); the curated tools and /api/v1 use field names.",
+                    "Record values are keyed by field id in the internal API (use get_project_schema for ids); the curated tools and /api/v1 use field names.",
                     "A token's role per base is the owner's role, capped at viewer for read-only tokens; some endpoints need the 'manage' permission (see token_capability).",
                     "Deleting things moves them to the trash for 30 days; restore with POST /api/trash/restore.",
                     "Multipart endpoints: send body {\"multipart\": {\"file\": {\"filename\": \"x.csv\", \"text\": \"...\"}, \"field\": \"value\"}} (use content_base64 for binary files)."

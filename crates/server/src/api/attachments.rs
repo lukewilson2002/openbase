@@ -90,7 +90,7 @@ async fn upload(
         .read(move |c| perm::require_base(c, &a, &b, Role::Editor))
         .await?;
     let multipart = multipart_with_limit(&state, req).await?;
-    let saved = save_upload(&state, &base_id, Some(actor.user_id), multipart).await?;
+    let saved = save_upload(&state, Some(&base_id), Some(actor.user_id), multipart).await?;
     Ok(Json(saved))
 }
 
@@ -137,11 +137,12 @@ fn multipart_error(state: &AppState, e: axum::extract::multipart::MultipartError
     }
 }
 
-/// Store the multipart field named `file` as an attachment of `base_id`.
-/// Other fields are skipped. The caller must have authorized the upload.
+/// Store the multipart field named `file` as an attachment of `base_id` (or of
+/// no base yet, for inbox drafts). Other fields are skipped. The caller must
+/// have authorized the upload.
 pub async fn save_upload(
     state: &AppState,
-    base_id: &str,
+    base_id: Option<&str>,
     created_by: Option<String>,
     mut multipart: Multipart,
 ) -> AppResult<AttachmentRef> {
@@ -168,14 +169,15 @@ impl Drop for TempFile {
     }
 }
 
-/// Store a byte stream as an attachment of `base_id`: stream to a temp file
+/// Store a byte stream as an attachment of `base_id` (`None`: an inbox upload that
+/// only its uploader can read, see [`authorize`]): stream to a temp file
 /// under `<data_dir>/tmp` while hashing (413 past the limit), sniff the type,
 /// make a thumbnail for images, then move the bytes to their content address
 /// and insert the row in one write transaction (so garbage collection, which
 /// also runs under the writer, can never delete a file a new row needs).
 pub async fn save_stream<S>(
     state: &AppState,
-    base_id: &str,
+    base_id: Option<&str>,
     created_by: Option<String>,
     filename: &str,
     stream: S,
@@ -234,7 +236,7 @@ where
         width: info.width,
         height: info.height,
         has_thumb: false,
-        base_id: Some(base_id.to_string()),
+        base_id: base_id.map(str::to_string),
         created_by,
         created_at: now_ms(),
     };
@@ -458,7 +460,13 @@ async fn authorize(
         .read(move |c| store::get(c, &id))
         .await?
         .ok_or_else(not_found)?;
-    let base_id = row.base_id.clone().ok_or_else(not_found)?;
+    let Some(base_id) = row.base_id.clone() else {
+        // Not in any base yet: an inbox upload, readable by its uploader only.
+        return match actor {
+            Some(a) if row.created_by.as_deref() == Some(a.user_id.as_str()) => Ok(row),
+            _ => Err(not_found()),
+        };
+    };
 
     if let Some(actor) = actor {
         let b = base_id.clone();

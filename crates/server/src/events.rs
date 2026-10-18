@@ -22,11 +22,38 @@ impl Default for Shutdown {
     }
 }
 
+/// A user with open event streams on one base.
+struct Viewer {
+    user_id: String,
+    /// Open streams (browser tabs); the user counts as present while > 0.
+    streams: usize,
+}
+
+/// Who is viewing each base, by first arrival. Memory only: a restart empties
+/// it and clients reconnect (and so rejoin).
+type Presence = Arc<Mutex<HashMap<String, Vec<Viewer>>>>;
+
 #[derive(Clone, Default)]
 pub struct EventBus {
     channels: Arc<Mutex<HashMap<String, broadcast::Sender<Arc<EventEnvelope>>>>>,
+    presence: Presence,
     versions: DataVersions,
     shutdown: Shutdown,
+}
+
+/// One open event stream of a user on a base. Dropping it (the stream ended or
+/// the client went away) leaves the base; the last guard of a user announces
+/// that they stopped viewing.
+pub struct PresenceGuard {
+    bus: EventBus,
+    base_id: String,
+    user_id: String,
+}
+
+impl Drop for PresenceGuard {
+    fn drop(&mut self) {
+        self.bus.leave(&self.base_id, &self.user_id);
+    }
 }
 
 impl EventBus {
@@ -47,6 +74,72 @@ impl EventBus {
         &self.versions
     }
 
+    /// Register an open event stream of `user_id` on `base_id`. The user's first
+    /// stream on the base broadcasts `presence_changed`; more streams of the
+    /// same user (other tabs) change nothing. Hold the guard as long as the
+    /// stream lives.
+    pub fn join(&self, base_id: &str, user_id: &str) -> PresenceGuard {
+        {
+            let mut map = self.presence.lock().unwrap_or_else(|p| p.into_inner());
+            let viewers = map.entry(base_id.to_string()).or_default();
+            match viewers.iter_mut().find(|v| v.user_id == user_id) {
+                Some(v) => v.streams += 1,
+                None => {
+                    viewers.push(Viewer {
+                        user_id: user_id.to_string(),
+                        streams: 1,
+                    });
+                    // Announced under the lock so announcements keep their order.
+                    self.announce(base_id, user_id, viewers);
+                }
+            }
+        }
+        PresenceGuard {
+            bus: self.clone(),
+            base_id: base_id.to_string(),
+            user_id: user_id.to_string(),
+        }
+    }
+
+    fn leave(&self, base_id: &str, user_id: &str) {
+        let mut map = self.presence.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(viewers) = map.get_mut(base_id) else {
+            return;
+        };
+        let Some(at) = viewers.iter().position(|v| v.user_id == user_id) else {
+            return;
+        };
+        viewers[at].streams -= 1;
+        if viewers[at].streams > 0 {
+            return;
+        }
+        viewers.remove(at);
+        self.announce(base_id, user_id, viewers);
+        if viewers.is_empty() {
+            map.remove(base_id);
+        }
+    }
+
+    fn announce(&self, base_id: &str, user_id: &str, viewers: &[Viewer]) {
+        self.publish(
+            base_id,
+            None,
+            Some(user_id.to_string()),
+            BaseEvent::PresenceChanged {
+                viewers: viewers.iter().map(|v| v.user_id.clone()).collect(),
+            },
+        );
+    }
+
+    /// The users viewing `base_id` now (one open event stream or more), in the
+    /// order they arrived.
+    pub fn viewers(&self, base_id: &str) -> Vec<String> {
+        let map = self.presence.lock().unwrap_or_else(|p| p.into_inner());
+        map.get(base_id)
+            .map(|v| v.iter().map(|v| v.user_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
     pub fn subscribe(&self, base_id: &str) -> broadcast::Receiver<Arc<EventEnvelope>> {
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(base_id.to_string())
@@ -61,8 +154,12 @@ impl EventBus {
         user_id: Option<String>,
         event: BaseEvent,
     ) {
-        // Every committed mutation publishes; comments do not affect queries.
-        if !matches!(event, BaseEvent::CommentsChanged { .. }) {
+        // Every committed mutation publishes; comments and who is looking do not
+        // affect queries.
+        if !matches!(
+            event,
+            BaseEvent::CommentsChanged { .. } | BaseEvent::PresenceChanged { .. }
+        ) {
             self.versions.bump(base_id);
         }
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
@@ -108,6 +205,33 @@ mod tests {
         let bus = EventBus::default();
         bus.publish("app1", None, None, BaseEvent::BaseChanged);
         assert_eq!(bus.active_channels(), 0);
+    }
+
+    #[tokio::test]
+    async fn presence_counts_a_user_once_and_announces_first_and_last_stream() {
+        let bus = EventBus::default();
+        let mut rx = bus.subscribe("app1");
+        let first = bus.join("app1", "usr1");
+        let viewers = |env: Arc<EventEnvelope>| match &env.event {
+            BaseEvent::PresenceChanged { viewers } => viewers.clone(),
+            other => panic!("unexpected {other:?}"),
+        };
+        assert_eq!(viewers(rx.recv().await.unwrap()), ["usr1"]);
+        // A second tab of the same user announces nothing.
+        let second = bus.join("app1", "usr1");
+        assert!(rx.try_recv().is_err());
+        let other = bus.join("app1", "usr2");
+        assert_eq!(viewers(rx.recv().await.unwrap()), ["usr1", "usr2"]);
+        assert_eq!(bus.viewers("app1"), ["usr1", "usr2"]);
+        drop(first);
+        assert!(rx.try_recv().is_err(), "usr1 still has a tab open");
+        drop(second);
+        assert_eq!(viewers(rx.recv().await.unwrap()), ["usr2"]);
+        drop(other);
+        assert!(viewers(rx.recv().await.unwrap()).is_empty());
+        assert!(bus.viewers("app1").is_empty());
+        // Presence never counts as a data change.
+        assert_eq!(bus.versions().current("app1"), 0);
     }
 
     #[test]

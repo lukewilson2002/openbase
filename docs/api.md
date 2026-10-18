@@ -88,7 +88,7 @@ The class is decided in one place (`Actor::require_capability`), and
 
 | Class | Read-only token | Write token | Write + `manage` token | Session |
 |---|---|---|---|---|
-| Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
+| Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, your inbox drafts, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Manage**: create / rename / delete / restore workspaces, workspace members (role and base access changes, removal), the members of a base (listing, taking a base off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
@@ -142,6 +142,34 @@ the two sign-in calls are session-only.
 
 `GET /api/setup` reports `passkeys_enabled` (false when `OPENBASE_PUBLIC_URL` is an IP address).
 How passkeys are protected: [security.md](security.md#passkeys).
+
+### Presence (internal API)
+
+Who has a base open right now. The web app calls bases "projects"; the routes keep the name `bases`.
+Presence lives in memory only (a restart empties it and clients reconnect). Every open live-update
+stream, `GET /api/bases/{id}/events`, counts its user as a viewer of that base, whatever the
+credential (session or API token); several streams (tabs) of one user count once.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/bases/{id}/presence` | `{viewers: [user_id, ...]}`: everyone with an open stream on the base, in the order they arrived. Same access as reading the base (Viewer role; a read-only token may call it). |
+| `GET /api/bases/{id}/events` | Also sends `presence_changed` with `data` `{base_id, user_id, event: {kind: "presence_changed", viewers: [...]}}` to the streams already open when a user's **first** stream opens or their **last** one closes (closing the tab, losing access, the server stopping). `user_id` is the person who arrived or left. A new stream is not told about its own arrival: read `/presence` once when it connects. Presence never counts as a data change (no view cache is invalidated). |
+
+### Inbox (internal API)
+
+The inbox holds a person's private quick-capture drafts: Markdown text plus uploaded files, not yet in
+any project. Only their owner sees them (anyone else gets `404`, like a missing draft). They work with
+sessions and API tokens, in the token's owner's inbox; a read-only token can only list. Timestamps are
+Unix milliseconds; ids start with `inb`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/inbox` | Your drafts, most recently changed first: `[{id, body, attachments, created_at, updated_at}]`. |
+| `POST /api/inbox` | Body `{body?, attachments?}`; `201` with the draft. `body` is at most 100,000 characters, a draft holds at most 100 files, and one person keeps at most 500 drafts. |
+| `PATCH /api/inbox/{id}` | Body `{body?, attachments?}`: what is given changes, `attachments` replaces the whole list. |
+| `DELETE /api/inbox/{id}` | `204`. Permanent: drafts have no trash. |
+| `POST /api/inbox/attachments` | Multipart field `file` (the upload limit applies). Answers the attachment reference `{id, filename, mime, size, ...}` to put in a draft's `attachments`. The file belongs to no project yet: only its uploader can download it (`GET /api/attachments/{id}/{filename}`). Files no draft or record refers to are cleaned up like any unreferenced upload. |
+| `POST /api/inbox/{id}/file` | Body `{table_id, fields}`; `201` with the created record. `fields` is keyed by field name or id and read like the Airtable-compatible API (typecast on). Needs the Editor role on the table's project (`403`; `404` when you cannot see it). It goes through the normal record write path, so validation, history, live-update events and automations apply. To keep the draft's files, put them (`{"id": "att..."}` is enough) in an attachment field: they move into the table's project. The draft's text is not copied anywhere by itself. Creating the record, moving the files and deleting the draft are one transaction: if anything fails, the draft and its files stay as they were. |
 
 ---
 

@@ -12,6 +12,7 @@ pub mod comments;
 pub mod csv;
 pub mod events;
 pub mod fields;
+pub mod inbox;
 pub mod invites;
 pub mod notifications;
 pub mod oauth;
@@ -56,5 +57,6 @@ pub fn router() -> Router<AppState> {
         .merge(sharing::router())
         .merge(automations::router())
         .merge(notifications::router())
+        .merge(inbox::router())
         .merge(v1::router())
 }

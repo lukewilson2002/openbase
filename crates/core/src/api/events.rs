@@ -29,6 +29,18 @@ pub enum BaseEvent {
     CommentsChanged { record_id: String },
     /// Base membership or the base itself changed (rename, delete, access).
     BaseChanged,
+    /// Who is viewing the base changed: a person's first event stream opened
+    /// or their last one closed. `viewers` is every user id with at least one
+    /// open stream now, in the order they arrived (several tabs count once).
+    PresenceChanged { viewers: Vec<String> },
+}
+
+/// `GET /api/bases/{id}/presence`: the users with an open event stream on the
+/// base right now, in the order they arrived.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct Presence {
+    pub viewers: Vec<String>,
 }
 
 /// Wrapper carrying who caused the event, so a client can skip echoes of its
