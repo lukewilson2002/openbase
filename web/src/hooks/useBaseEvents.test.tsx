@@ -1,8 +1,9 @@
-import { render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { EventSourceLike } from "@/api/events";
 import { useBaseEvents } from "./useBaseEvents";
+import { usePresence } from "./usePresence";
 
 class Fake implements EventSourceLike {
   onopen: ((ev: Event) => unknown) | null = null;
@@ -46,6 +47,35 @@ describe("useBaseEvents", () => {
 
     unmount();
     expect(source.closed).toBe(true);
+  });
+
+  it("keeps who is viewing from the presence frames, refetches nothing for them, and forgets them on unmount", async () => {
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    const source = new Fake();
+    const seen: (readonly string[])[] = [];
+    function Viewers() {
+      seen.push(usePresence("app1"));
+      return null;
+    }
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <Probe source={source} />
+        <Viewers />
+      </QueryClientProvider>,
+    );
+    expect(seen.at(-1)).toEqual([]);
+
+    // The listener is the one for the event's name: the browser delivers named events only to those.
+    expect([...source.listeners.keys()]).toContain("presence_changed");
+    act(() => source.emit("presence_changed", { base_id: "app1", client_id: null, user_id: null, event: { kind: "presence_changed", viewers: ["usr1", "usr2"] } }));
+    await waitFor(() => expect(seen.at(-1)).toEqual(["usr1", "usr2"]));
+    act(() => source.emit("presence_changed", { base_id: "app1", client_id: null, user_id: null, event: { kind: "presence_changed", viewers: ["usr1"] } }));
+    await waitFor(() => expect(seen.at(-1)).toEqual(["usr1"]));
+    expect(spy).not.toHaveBeenCalled();
+
+    unmount();
+    expect(qc.getQueryData(["presence", "app1"])).toEqual([]);
   });
 
   it("refetches the base and records after the stream reconnects", () => {

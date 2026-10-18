@@ -1,6 +1,6 @@
 /**
  * The project's parts of the app's top bar. On a desktop: `[tile] Household / [tile] Chores` as
- * plain text at the start, in place of the logo, then who can open the project and Share. On a
+ * plain text at the start, in place of the logo, then who is viewing the project and Share. On a
  * phone: the project's tile with the workspace's name over its own, which opens the menu like the
  * toggle beside it, then the faces and a Share icon. Getting to another workspace or project is
  * the menu's job. Share is for creators and owners: inviting and sharing a view both need that role,
@@ -14,6 +14,7 @@ import { keys } from "@/api/keys";
 import type { BaseSchema } from "@/api/types";
 import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
 import { Button } from "@/components/ui/button";
+import { usePresence } from "@/hooks/usePresence";
 import { BaseAvatars } from "@/shell/BaseAvatars";
 import { useOpenMenu } from "@/shell/AppShell";
 import { basePermissions } from "./permissions";
@@ -43,12 +44,13 @@ export function BaseBrand({ schema }: { schema: BaseSchema }) {
 /** The rest of the top bar: on a phone the project's title, then faces and Share. */
 export function BaseTopBar({ schema, onShare, desktop }: { schema: BaseSchema; onShare: () => void; desktop: boolean }) {
   const canShare = basePermissions.manageSharing(schema.role);
+  const viewers = usePresence(schema.id);
   return (
     <>
       {desktop ? <div className="flex-1" /> : <PhoneBaseTitle schema={schema} />}
       {/* Below 360 px the faces would leave the name no room at all; Members in the menu lists them. */}
       <Link to={`/workspace/${schema.workspace_id}/members`} className="shrink-0 rounded-full px-1 no-underline max-[359px]:hidden">
-        <BaseAvatars people={schema.people} max={desktop ? 4 : 3} size={desktop ? "md" : "sm"} />
+        <BaseAvatars people={schema.people} viewers={viewers} max={desktop ? 4 : 3} size={desktop ? "md" : "sm"} />
       </Link>
       {canShare &&
         (desktop ? (

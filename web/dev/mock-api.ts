@@ -840,8 +840,21 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === `/api/bases/${BASE_ID}/events`) {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.write(": hello\n\n");
+    // Like the real server: the first frame says who is viewing (you included). Grace is in the
+    // project already; Alan drops in and out every few seconds so the top bar's faces move.
+    const presence = (viewers: string[]) =>
+      res.write(`event: presence_changed\ndata: ${JSON.stringify({ base_id: BASE_ID, client_id: null, user_id: null, event: { kind: "presence_changed", viewers } })}\n\n`);
+    presence([ME, "usr2"]);
+    let alanIn = false;
+    const timer = setInterval(() => {
+      alanIn = !alanIn;
+      presence(alanIn ? [ME, "usr2", "usr3"] : [ME, "usr2"]);
+    }, 6000);
     sseClients.add(res);
-    req.on("close", () => sseClients.delete(res));
+    req.on("close", () => {
+      clearInterval(timer);
+      sseClients.delete(res);
+    });
     return true;
   }
   if (p === `/api/bases/${BASE_ID}/attachments` && m === "POST") {

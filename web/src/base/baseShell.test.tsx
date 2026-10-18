@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasePerson, BaseSchema } from "@/api/types";
@@ -130,14 +130,55 @@ describe("base shell on a desktop", () => {
     expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Garden", empty: true });
   });
 
-  it("shows who can open the base, linking to the members page", async () => {
+  describe("who is viewing", () => {
     const people: BasePerson[] = [
       { user_id: "usr1", name: "Ada Lovelace", email: "ada@example.com", pending: false, role: "owner" },
       { user_id: "usr2", name: "Grace Hopper", email: "grace@example.com", pending: false, role: "editor" },
+      { user_id: null, name: "alan@example.com", email: "alan@example.com", pending: true, role: "viewer" },
     ];
-    openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { people }) });
-    const faces = await screen.findByRole("img", { name: "Who can open this base: you and Grace Hopper" });
-    expect(faces.closest("a")).toHaveAttribute("href", "/workspace/wsp1/members");
+
+    /** The stream the page opens, driven by the test. */
+    function stubStream() {
+      const streams: { emit: (viewers: string[]) => void }[] = [];
+      class FakeEventSource {
+        onopen: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        private listeners = new Map<string, (ev: MessageEvent<string>) => void>();
+        constructor() {
+          streams.push({
+            emit: (viewers) => this.listeners.get("presence_changed")?.({ data: JSON.stringify({ base_id: "app1", client_id: null, user_id: null, event: { kind: "presence_changed", viewers } }) } as MessageEvent<string>),
+          });
+        }
+        addEventListener(type: string, l: (ev: MessageEvent<string>) => void) {
+          this.listeners.set(type, l);
+        }
+        close() {}
+      }
+      vi.stubGlobal("EventSource", FakeEventSource);
+      return streams;
+    }
+
+    it("shows you alone until someone else arrives, the others who can open it as +N, linking to the members page", async () => {
+      openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { people }) });
+      const faces = await screen.findByRole("img", { name: "1 person viewing now, 2 more can open this project: you" });
+      expect(faces.closest("a")).toHaveAttribute("href", "/workspace/wsp1/members");
+      expect(faces).toHaveTextContent("+2");
+    });
+
+    it("draws a face for each person the project's stream says is viewing, and drops it when they leave", async () => {
+      const streams = stubStream();
+      openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { people }) });
+      await screen.findByRole("img", { name: /^1 person viewing now/ });
+      await waitFor(() => expect(streams).toHaveLength(1));
+
+      act(() => streams[0]!.emit(["usr1", "usr2"]));
+      const both = await screen.findByRole("img", { name: "2 people viewing now, 1 more can open this project: you and Grace Hopper" });
+      expect(both).toHaveTextContent("+1");
+      expect(within(both).getAllByRole("img", { hidden: true }).map((f) => f.getAttribute("aria-label"))).toEqual(["Ada Lovelace", "Grace Hopper"]);
+
+      act(() => streams[0]!.emit(["usr1"]));
+      expect(await screen.findByRole("img", { name: "1 person viewing now, 2 more can open this project: you" })).toHaveTextContent("+2");
+    });
   });
 
   it.each([
