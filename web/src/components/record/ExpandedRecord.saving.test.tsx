@@ -3,6 +3,8 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { recordKeys } from "@/api/records";
 import { Providers, createQueryClient } from "@/providers";
 import { PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
 import { apiError, makeSchema, mockApi } from "@/test/utils";
@@ -297,6 +299,62 @@ describe("ExpandedRecord: long text while saves and refetches are in flight", ()
     });
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Plain notes" })).toHaveValue("theirs"));
     expect(screen.getByRole("textbox", { name: "Plain notes" })).not.toBe(area);
+  });
+});
+
+describe("ExpandedRecord: Alt+Arrow while typing", () => {
+  const rec2 = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec2");
+
+  it("saves what was typed into the record it was typed in, and shows the next record as it is", async () => {
+    // Both records hold the same text, so nothing about the field's value tells the two editors apart.
+    const api = mockApi({
+      "GET /api/tables/tbl1/records/rec1": record,
+      "GET /api/tables/tbl1/records/rec2": rec2,
+      "GET /api/records/rec1/comments": [],
+      "GET /api/records/rec1/history": [],
+      "GET /api/records/rec2/comments": [],
+      "GET /api/records/rec2/history": [],
+      [PATCH]: (call: { body: unknown }) => ({ records: [{ ...record, values: { ...record.values, ...(call.body as { records: { values: object }[] }).records[0]!.values } }] }),
+    } as never);
+    const client = createQueryClient();
+    client.setQueryData(recordKeys.record("tbl1", "rec2"), rec2);
+    function Host() {
+      const [id, setId] = useState("rec1");
+      return (
+        <ExpandedRecord
+          schema={schema}
+          table={table}
+          role="owner"
+          recordId={id}
+          prevId={null}
+          nextId={id === "rec1" ? "rec2" : null}
+          onNavigate={setId}
+          onClose={vi.fn()}
+          emails={new Map(PEOPLE.map((p) => [p.id, p.email]))}
+          timeZone="UTC"
+          currentUserId="usr1"
+          collaborators={PEOPLE}
+        />
+      );
+    }
+    render(
+      <Providers client={client}>
+        <Host />
+      </Providers>,
+    );
+    const input = await screen.findByDisplayValue("Launch");
+    await userEvent.type(input, "!");
+    await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    // The typing went to the record it was typed in, without waiting for the field to lose focus by itself.
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
+    expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Launch!" } }] });
+    // The next record shows its own text in an editor of its own, and leaving it saves nothing.
+    const next = await screen.findByDisplayValue("Launch");
+    expect(next).not.toBe(input);
+    next.focus();
+    await userEvent.tab();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(api.callsTo(PATCH)).toHaveLength(1);
   });
 });
 

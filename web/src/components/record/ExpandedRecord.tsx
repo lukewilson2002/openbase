@@ -153,7 +153,7 @@ function FieldRow({
       if (!jsonEqual(value, lastSaved.current.get(textKey) ?? null) && !unsent.current.isWaiting(textKey)) rebuilds.current.n++;
     }
   }
-  const editorKey = field.type === "long_text" ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${field.id}:${JSON.stringify(value)}`;
+  const editorKey = field.type === "long_text" ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
   return (
     <div className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-3" role="group" aria-labelledby={labelId}>
       <div className="flex min-w-0 items-start gap-1.5 pt-1.5">
@@ -222,14 +222,21 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
 
   // Alt+Up / Alt+Down move through the records of the view.
   useEffect(() => {
+    // What is being typed is committed (the editor commits when it loses focus) before the next record is
+    // shown: it belongs to the record it was typed in.
+    const go = (id: string) => {
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.closest("[role=dialog]") && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) el.blur();
+      onNavigate(id);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey) return;
       if (e.key === "ArrowUp" && prevId) {
         e.preventDefault();
-        onNavigate(prevId);
+        go(prevId);
       } else if (e.key === "ArrowDown" && nextId) {
         e.preventDefault();
-        onNavigate(nextId);
+        go(nextId);
       }
     };
     document.addEventListener("keydown", onKey);
