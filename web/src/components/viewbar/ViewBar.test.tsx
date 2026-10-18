@@ -172,22 +172,46 @@ describe("ViewBar export and sharing", () => {
 });
 
 describe("ViewBar view switcher", () => {
-  it("names the table as text, then one icon link per view, the open one marked and none showing its name as text", () => {
+  it("without room for names, shows icons only, views of one type sharing a button that lists them", async () => {
+    const user = userEvent.setup();
     const schema = makeSchema("creator");
     const t = schema.tables[0]!;
     renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" });
-    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
-    const views = within(screen.getByRole("navigation", { name: "Views of Tasks" })).getAllByRole("link");
-    expect(views.map((l) => [l.getAttribute("aria-label"), l.getAttribute("href")])).toEqual([
-      ["All tasks", "/base/app1/tbl1/viw1"],
-      ["Board", "/base/app1/tbl1/viw2"],
-      ["My tasks", "/base/app1/tbl1/viw3"],
+    expect(screen.getByRole("heading", { name: /Tasks/ })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
+    // All tasks and My tasks are both grids: one button, open because All tasks is.
+    const grids = within(nav).getByRole("button", { name: "2 grid views, All tasks open" });
+    expect(within(nav).getAllByRole("link").map((l) => [l.getAttribute("aria-label"), l.getAttribute("href")])).toEqual([["Board", "/base/app1/tbl1/viw2"]]);
+    expect(within(nav).getByRole("link", { name: "Board" })).toHaveTextContent("");
+    expect(within(nav).queryByText("All tasks")).not.toBeInTheDocument();
+    await user.click(grids);
+    const menu = await screen.findByRole("menu", { name: "Grid views of Tasks" });
+    expect(within(menu).getAllByRole("menuitem").map((i) => [i.textContent, i.getAttribute("href"), i.getAttribute("aria-current")])).toEqual([
+      ["All tasks", "/base/app1/tbl1/viw1", "page"],
+      ["My tasks", "/base/app1/tbl1/viw3", null],
     ]);
-    expect(views.map((l) => l.getAttribute("aria-current"))).toEqual(["page", null, null]);
-    // The personal view carries its marker; the name is the tooltip, not text.
-    expect(within(views[2]!).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
-    expect(views[0]).toHaveTextContent("");
-    expect(screen.queryByText("All tasks")).not.toBeInTheDocument();
+    expect(within(menu).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
+  });
+
+  it("with room for every name, gives each view its own button with its name, merging none", () => {
+    const widths = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
+    const room = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
+    try {
+      const schema = makeSchema("creator");
+      const t = schema.tables[0]!;
+      renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true });
+      const views = within(screen.getByRole("navigation", { name: "Views of Tasks" })).getAllByRole("link");
+      expect(views.map((l) => [l.getAttribute("aria-label"), l.textContent])).toEqual([
+        ["All tasks", "All tasks"],
+        ["Board", "Board"],
+        ["My tasks", "My tasks"],
+      ]);
+      expect(views.map((l) => l.getAttribute("aria-current"))).toEqual(["page", null, null]);
+      expect(within(views[2]!).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
+    } finally {
+      widths.mockRestore();
+      room.mockRestore();
+    }
   });
 
   it("marks a locked view", () => {
@@ -198,30 +222,21 @@ describe("ViewBar view switcher", () => {
     expect(within(screen.getByRole("link", { name: "Frozen" })).getByRole("img", { name: "Locked view" })).toBeInTheDocument();
   });
 
-  it("puts the views that do not fit into a … menu, keeping the open one in sight", async () => {
+  it("puts the buttons that do not fit into a … menu, four on a phone, keeping the open view in sight", async () => {
     const user = userEvent.setup();
     const schema = makeSchema("viewer");
-    const views = Array.from({ length: 11 }, (_, i) => makeView({ id: `v${i + 1}`, name: `View ${i + 1}` }));
+    const types = ["grid", "kanban", "gallery", "calendar", "timeline", "list"] as const;
+    const views = types.map((type, i) => makeView({ id: `v${i + 1}`, name: `View ${i + 1}`, type }));
     const t = { ...schema.tables[0]!, views };
-    // The open view is the tenth: it takes the last of the eight places.
-    renderBar({ schema, table: t, view: views[9]!, config: views[9]!.config });
+    // The open view is the sixth: it takes the last of the four places.
+    renderBar({ schema, table: t, view: views[5]!, config: views[5]!.config }, { phone: true });
     const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
-    expect(within(nav).getAllByRole("link").map((l) => l.getAttribute("aria-label"))).toEqual(["View 1", "View 2", "View 3", "View 4", "View 5", "View 6", "View 7", "View 10"]);
-    expect(within(nav).getByRole("link", { name: "View 10" })).toHaveAttribute("aria-current", "page");
-    await user.click(within(nav).getByRole("button", { name: "3 more views" }));
+    expect(within(nav).getAllByRole("link").map((l) => l.getAttribute("aria-label"))).toEqual(["View 1", "View 2", "View 3", "View 6"]);
+    expect(within(nav).getByRole("link", { name: "View 6" })).toHaveAttribute("aria-current", "page");
+    await user.click(screen.getByRole("button", { name: "2 more views" }));
     const menu = await screen.findByRole("menu", { name: "More views of Tasks" });
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["View 8", "View 9", "View 11"]);
-    expect(within(menu).getByRole("menuitem", { name: "View 9" })).toHaveAttribute("href", "/base/app1/tbl1/v9");
-  });
-
-  it("shows four on a phone", () => {
-    const schema = makeSchema("viewer");
-    const views = Array.from({ length: 6 }, (_, i) => makeView({ id: `v${i + 1}`, name: `View ${i + 1}` }));
-    const t = { ...schema.tables[0]!, views };
-    renderBar({ schema, table: t, view: views[0]!, config: views[0]!.config }, { phone: true });
-    const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
-    expect(within(nav).getAllByRole("link")).toHaveLength(4);
-    expect(within(nav).getByRole("button", { name: "2 more views" })).toBeInTheDocument();
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["View 4", "View 5"]);
+    expect(within(menu).getByRole("menuitem", { name: "View 5" })).toHaveAttribute("href", "/base/app1/tbl1/v5");
   });
 
   it("opens the project's dialog for a new view of the chosen type", async () => {
