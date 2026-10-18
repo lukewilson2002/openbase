@@ -2,6 +2,10 @@
  * Sanitized markdown for rich long-text fields: `marked` renders, DOMPurify sanitizes (no
  * scripts, no inline event handlers, links forced to open safely). The HTML never reaches the
  * DOM unsanitized, and only http(s)/mailto/tel links and relative anchors survive.
+ *
+ * It shows what the rich text editor (components/richtext) edits, with the same look (`ob-prose`
+ * in styles/index.css): tables, numbered lists that keep their start number, task lists, and
+ * GitHub alert callouts (`> [!WARNING]`), which marked renders as plain quotes.
  */
 import { useMemo } from "react";
 import DOMPurify from "dompurify";
@@ -21,14 +25,33 @@ function ensureHooks(): void {
   });
 }
 
+const CALLOUT = /^\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s|<br\s*\/?>)*/i;
+
+// Only the pieces that differ from marked's own HTML: alert callouts, and task-list boxes (an
+// <input> would not survive the sanitizer below, so the box is a span with the checkbox role).
+const renderer = new marked.Renderer();
+renderer.blockquote = (quote: string) => {
+  const m = CALLOUT.exec(quote);
+  if (!m) return `<blockquote>\n${quote}</blockquote>\n`;
+  const rest = quote.slice(m[0].length);
+  // Text after the marker stays in the first paragraph; with none, that paragraph is gone.
+  const body = /^<\/p>/.test(rest) ? rest.replace(/^<\/p>\s*/, "") : `<p>${rest}`;
+  return `<div class="ob-callout" data-callout="${m[1]!.toLowerCase()}">\n${body}</div>\n`;
+};
+renderer.checkbox = (checked: boolean) => `<span class="ob-check" role="checkbox" aria-checked="${checked}" aria-disabled="true"></span> `;
+
 /** Render markdown to sanitized HTML. */
 export function renderMarkdown(source: string): string {
   ensureHooks();
-  const html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false });
+  const html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer });
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed"],
     FORBID_ATTR: ["style", "srcset"],
+    // DOMPurify drops `start` by default, which would restart "5." at 1. Its value is a number, not a
+    // URL, so it also has to be exempt from the URI check above.
+    ADD_ATTR: ["start"],
+    ADD_URI_SAFE_ATTR: ["start"],
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/))/i,
   });
 }
@@ -50,10 +73,7 @@ export function Markdown({ source, className }: { source: string; className?: st
   const html = useMemo(() => renderMarkdown(source), [source]);
   return (
     <div
-      className={cn(
-        "ob-markdown text-[0.8125rem] leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-subtle [&_code]:px-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-subtle [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-5",
-        className,
-      )}
+      className={cn("ob-markdown ob-prose text-[0.8125rem] leading-relaxed", className)}
       // Sanitized by DOMPurify in renderMarkdown.
       dangerouslySetInnerHTML={{ __html: html }}
     />

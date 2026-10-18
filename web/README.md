@@ -39,6 +39,11 @@ The grid adds @glideapps/glide-data-grid (with its peers lodash, marked 4 and re
 all loaded only with the lazy grid chunk. The other views add @dnd-kit/core, @dnd-kit/sortable and @dnd-kit/utilities
 (kanban) and FullCalendar 6.1.21, standard MIT packages only: core, react, daygrid, timegrid, list and interaction
 (calendar). Each is imported only by its lazy view chunk; the timeline is custom DOM + SVG with no dependency.
+The rich long text editor adds Tiptap 3 (exact version 3.31.3, all `@tiptap/*` the same): core, pm, react, starter-kit,
+markdown (the official Markdown extension; it brings its own `marked` 17), and the extensions for blocks the starter kit
+lacks or that we adapt (list for task lists, table, blockquote, paragraph, hard-break, extensions for the placeholder).
+They load only with the editor chunk (`components/richtext/RichTextEditor`, imported with `React.lazy` by `FieldEditor`),
+so the shell and the views do not carry them; the value stays plain Markdown, rendered elsewhere by `Markdown.tsx` (marked 4).
 
 ## Commands
 
