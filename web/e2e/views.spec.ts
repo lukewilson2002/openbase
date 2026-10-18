@@ -333,9 +333,8 @@ test.describe("trash and notifications", () => {
 
     // Clicking it marks it read and goes to the base (an automation says which base, not which table).
     await popup.getByRole("button", { name: new RegExp(zulu) }).click();
-    // The shell turns the bare base URL into the first table's first view, away from the list view we were on.
-    await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/`));
-    await expect(page).not.toHaveURL(new RegExp(fx.views.list));
+    // The shell turns the bare base URL into the view last used there: the list view we were on.
+    await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/${fx.tableId}/${fx.views.list}`));
     await expect.poll(async () => (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread).toBe(unreadBefore - 1);
   });
 });

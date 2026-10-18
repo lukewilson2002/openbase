@@ -149,6 +149,10 @@ describe("raw stream", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const frames = readFrames(res.body!);
+    // Every stream starts with who is viewing the base, the new reader included.
+    const first = (await frames.next()).value!;
+    expect(first.event).toBe("presence_changed");
+    expect(parse("EventEnvelope", JSON.parse(first.data)).event).toMatchObject({ kind: "presence_changed", viewers: expect.arrayContaining([reader.id]) });
     const rec = (await writer.run(() => recordsApi.create(tableId, { records: [{ values: {} }] }))).records[0]!;
     const frame = (await frames.next()).value!;
     expect(frame.event).toBe("records_changed");

@@ -59,6 +59,9 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   // Folding a row is not navigating: the drawer stays open.
   await drawer.getByRole("button", { name: "Collapse A base with a fairly long name" }).tap();
   await expect(drawer).toBeVisible();
+  // Folded by hand is remembered on this device: open it again for the steps below.
+  await drawer.getByRole("button", { name: "Expand A base with a fairly long name" }).tap();
+  await expect(drawer.getByRole("list", { name: /^Tables in / })).toBeVisible();
   await drawer.getByRole("button", { name: "Close menu" }).tap();
   await expect(drawer).toBeHidden();
 
