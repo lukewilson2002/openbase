@@ -943,3 +943,117 @@ async fn a_file_referenced_only_from_a_comment_survives_the_cleanup() {
     assert!(exists(&photo));
     assert!(!exists(&lost));
 }
+
+#[tokio::test]
+async fn a_share_opens_only_files_embedded_in_what_the_shared_view_shows() {
+    let f = Fixture::new().await;
+    let secret_field = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Secret", "type": "long_text", "options": {} }),
+        )
+        .await;
+    let secret_id = id_str(&secret_field["id"]).to_string();
+    let up = |name: &'static str| upload(&f, &f.base_id, name, name.as_bytes());
+    let (shown, both, hidden, filtered, trashed, loose) = (
+        up("shown.png").await,
+        up("both.png").await,
+        up("hidden.png").await,
+        up("filtered.png").await,
+        up("trashed.png").await,
+        up("loose.png").await,
+    );
+    let rec = |name: &str, notes: String, secret: String| json!({ &f.primary_id: name, &f.notes_id: notes, &secret_id: secret });
+    let keep = f
+        .create(
+            &f.table_id,
+            rec(
+                "keep",
+                format!(
+                    "{} {}",
+                    embed(&shown, "shown.png"),
+                    embed(&both, "both.png")
+                ),
+                embed(&hidden, "hidden.png"),
+            ),
+        )
+        .await;
+    let keep = id_str(&keep["id"]).to_string();
+    f.create(
+        &f.table_id,
+        rec(
+            "drop",
+            format!(
+                "{} {}",
+                embed(&filtered, "filtered.png"),
+                embed(&both, "both.png")
+            ),
+            String::new(),
+        ),
+    )
+    .await;
+    let gone = f
+        .create(
+            &f.table_id,
+            rec(
+                "keep trashed",
+                embed(&trashed, "trashed.png"),
+                String::new(),
+            ),
+        )
+        .await;
+    f.delete_records(&f.table_id, &[id_str(&gone["id"])])
+        .await
+        .assert_status(204);
+    let view = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/tables/{}/views", f.table_id),
+            json!({ "name": "Public", "type": "grid", "config": {
+                "filter": { "conjunction": "and", "items": [
+                    { "field_id": f.primary_id, "op": "contains", "value": "keep" } ] },
+                "hidden_fields": [secret_id],
+            } }),
+        )
+        .await;
+    view.assert_status(201);
+    let token = openbase::ids::new_token("shr_");
+    let (t, view_id) = (token.clone(), id_str(&view.body["id"]).to_string());
+    sql(&f.app, |tx| {
+        tx.execute(
+            "INSERT INTO share_links (id, token, kind, view_id, enabled, created_at)
+             VALUES (?1, ?2, 'view', ?3, 1, ?4)",
+            rusqlite::params![
+                openbase::ids::new_id(ob_core::ids::SHARE),
+                t,
+                view_id,
+                openbase::db::now_ms()
+            ],
+        )
+    });
+    let anon = f.app.anon();
+    let status = |id: &str, name: &str| {
+        let path = format!("/api/attachments/{id}/{name}?share={token}");
+        let (app, anon) = (&f.app, &anon);
+        async move { get_range(app, anon, &path, None).await.status.as_u16() }
+    };
+    assert_eq!(status(&shown, "shown.png").await, 200);
+    // In a shown record too, though also in a filtered-out one.
+    assert_eq!(status(&both, "both.png").await, 200);
+    assert_eq!(status(&hidden, "hidden.png").await, 404, "hidden field");
+    assert_eq!(status(&filtered, "filtered.png").await, 404, "filtered out");
+    assert_eq!(status(&trashed, "trashed.png").await, 404, "trashed record");
+    assert_eq!(status(&loose, "loose.png").await, 404, "in no record");
+
+    // Editing the record closes the download at once.
+    f.patch_as(
+        &f.owner,
+        &f.table_id,
+        &keep,
+        json!({ &f.notes_id: "no files" }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(status(&shown, "shown.png").await, 404);
+}

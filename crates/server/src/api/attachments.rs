@@ -21,7 +21,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex};
 
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path as UrlPath, Request, State};
@@ -48,8 +48,8 @@ use crate::ids::new_id;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::attachments::{self as store, Attachment};
+use crate::store::schema;
 use crate::store::sharing::{self, Resolved};
-use crate::store::{records, schema};
 
 /// Allowance for multipart framing on top of the per-file limit.
 const MULTIPART_OVERHEAD: u64 = 64 * 1024;
@@ -376,15 +376,27 @@ pub const SHARE_TOKEN_LIMIT: u32 = 2400;
 /// guesses cannot be spread across the two.
 const SHARE_PASSWORD_LIMIT: u32 = crate::api::sharing::PASSWORD_LIMIT;
 const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
-/// Views whose allowed-attachment sets are kept.
-const SHARE_SET_ENTRIES: usize = 64;
+/// Share decisions kept (view and file).
+const SHARE_DECISION_ENTRIES: usize = 4096;
 
-/// What a shared view exposes: attachment ids in visible attachment fields, and
-/// referenced in visible long text, of the live records the view's filter lets through. Keyed by view; valid
-/// for one data version of the base, one view config and one day (relative
-/// date filters).
-type ShareSets = HashMap<String, (u64, u64, chrono::NaiveDate, Arc<HashSet<String>>)>;
-static SHARE_SETS: LazyLock<Mutex<ShareSets>> = LazyLock::new(Mutex::default);
+/// Whether a file is shown by a shared view, for one data version of the base, one view config
+/// and one day (relative date filters).
+struct Decision {
+    version: u64,
+    config: u64,
+    day: chrono::NaiveDate,
+    exposed: bool,
+    /// Last use, to drop the least recently used decision when the cache is full.
+    used: u64,
+}
+
+#[derive(Default)]
+struct Decisions {
+    tick: u64,
+    map: HashMap<(String, String), Decision>,
+}
+
+static SHARE_DECISIONS: LazyLock<Mutex<Decisions>> = LazyLock::new(Mutex::default);
 
 fn config_hash(config: &ob_core::view::ViewConfig) -> u64 {
     use std::hash::{Hash, Hasher};
@@ -395,25 +407,66 @@ fn config_hash(config: &ob_core::view::ViewConfig) -> u64 {
     h.finish()
 }
 
-/// Every attachment id a public viewer of `r` can see (see [`ShareSets`]).
-fn exposed_attachment_ids(
+/// Whether a public viewer of `r` can see the file `att_id`: it is in a visible attachment
+/// field, or referenced (`/api/attachments/{id}/...`) in a visible long text field, of a live
+/// record the view's filter lets through. Decided per file, from the few records that mention
+/// its id, not by reading the whole view; the answer is cached (least recently used).
+fn attachment_exposed(
     conn: &rusqlite::Connection,
     state: &AppState,
     r: &Resolved,
-) -> AppResult<Arc<HashSet<String>>> {
+    att_id: &str,
+) -> AppResult<bool> {
     let base_id = r.table.base_id.as_str();
     // Version first, data second (see store::versions).
     let version = state.events.versions().current(base_id);
-    let hash = config_hash(&r.view.view.config);
+    let config = config_hash(&r.view.view.config);
     let day = chrono::Utc::now().date_naive();
+    let key = (r.view.view.id.clone(), att_id.to_string());
     {
-        let sets = SHARE_SETS.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some((v, h, d, set)) = sets.get(&r.view.view.id)
-            && (*v, *h, *d) == (version, hash, day)
+        let mut cache = SHARE_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
+        cache.tick += 1;
+        let tick = cache.tick;
+        if let Some(d) = cache.map.get_mut(&key)
+            && (d.version, d.config, d.day) == (version, config, day)
         {
-            return Ok(set.clone());
+            d.used = tick;
+            return Ok(d.exposed);
         }
     }
+    let exposed = compute_exposed(conn, state, r, att_id)?;
+    let mut cache = SHARE_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
+    cache.tick += 1;
+    let used = cache.tick;
+    if cache.map.len() >= SHARE_DECISION_ENTRIES
+        && !cache.map.contains_key(&key)
+        && let Some(oldest) = cache
+            .map
+            .iter()
+            .min_by_key(|(_, d)| d.used)
+            .map(|(k, _)| k.clone())
+    {
+        cache.map.remove(&oldest);
+    }
+    cache.map.insert(
+        key,
+        Decision {
+            version,
+            config,
+            day,
+            exposed,
+            used,
+        },
+    );
+    Ok(exposed)
+}
+
+fn compute_exposed(
+    conn: &rusqlite::Connection,
+    state: &AppState,
+    r: &Resolved,
+    att_id: &str,
+) -> AppResult<bool> {
     let fields = schema::table_fields(conn, &r.table.id)?;
     let visible = sharing::visible_fields(&r.view.view.config, &fields);
     let attachment_fields: Vec<&str> = visible
@@ -427,50 +480,47 @@ fn exposed_attachment_ids(
         .filter(|f| matches!(f.kind, FieldKind::LongText(_)))
         .map(|f| f.id.as_str())
         .collect();
-    let mut out = HashSet::new();
-    if !attachment_fields.is_empty() || !text_fields.is_empty() {
-        // Same query as the public records endpoint: the view's own filter,
-        // no signed-in user.
-        let req = QueryRequest::default();
-        let entry = query::query_ids(
-            conn,
-            &state.query_cache,
-            state.events.versions(),
-            "",
-            &r.view,
-            &req,
-        )?;
-        for chunk in entry.ids.chunks(500) {
-            for row in records::get_many(conn, chunk)? {
-                if row.table_id != r.table.id || !row.is_live() {
-                    continue;
-                }
-                for f in &attachment_fields {
-                    let Some(Json2::Array(items)) = row.data.get(*f) else {
-                        continue;
-                    };
-                    out.extend(
-                        items
-                            .iter()
-                            .filter_map(|i| i.get("id").and_then(Json2::as_str))
-                            .map(str::to_string),
-                    );
-                }
-                for f in &text_fields {
-                    if let Some(Json2::String(text)) = row.data.get(*f) {
-                        out.extend(store::referenced_ids(text));
-                    }
-                }
-            }
+    if attachment_fields.is_empty() && text_fields.is_empty() {
+        return Ok(false);
+    }
+    // The live records of the shared table that mention the id at all, and then show it in a
+    // visible field.
+    let mut stmt = conn.prepare(
+        "SELECT id, data FROM records
+         WHERE table_id = ?1 AND deleted_at IS NULL AND instr(data, ?2) > 0",
+    )?;
+    let mut showing = HashSet::new();
+    let mut rows = stmt.query(rusqlite::params![r.table.id, att_id])?;
+    while let Some(row) = rows.next()? {
+        let (id, data): (String, String) = (row.get(0)?, row.get(1)?);
+        let Ok(Json2::Object(data)) = serde_json::from_str::<Json2>(&data) else {
+            continue;
+        };
+        let in_attachments = attachment_fields.iter().any(|f| {
+            matches!(data.get(*f), Some(Json2::Array(items))
+                if items.iter().any(|i| i.get("id").and_then(Json2::as_str) == Some(att_id)))
+        });
+        let in_text = text_fields.iter().any(|f| {
+            matches!(data.get(*f), Some(Json2::String(text))
+                if store::referenced_ids(text).iter().any(|i| i == att_id))
+        });
+        if in_attachments || in_text {
+            showing.insert(id);
         }
     }
-    let out = Arc::new(out);
-    let mut sets = SHARE_SETS.lock().unwrap_or_else(|p| p.into_inner());
-    if sets.len() >= SHARE_SET_ENTRIES {
-        sets.clear();
+    if showing.is_empty() {
+        return Ok(false);
     }
-    sets.insert(r.view.view.id.clone(), (version, hash, day, out.clone()));
-    Ok(out)
+    // Same query as the public records endpoint: the view's own filter, no signed-in user.
+    let entry = query::query_ids(
+        conn,
+        &state.query_cache,
+        state.events.versions(),
+        "",
+        &r.view,
+        &QueryRequest::default(),
+    )?;
+    Ok(entry.ids.iter().any(|id| showing.contains(id)))
 }
 
 /// Load an attachment the caller may read: Viewer on its base, or a live,
@@ -556,7 +606,7 @@ async fn authorize(
     let (st, att_id) = (state.clone(), row.id.clone());
     let exposed = state
         .db
-        .read(move |c| Ok(exposed_attachment_ids(c, &st, &resolved)?.contains(&att_id)))
+        .read(move |c| attachment_exposed(c, &st, &resolved, &att_id))
         .await?;
     if !exposed {
         return Err(not_found());
