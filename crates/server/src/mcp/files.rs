@@ -27,7 +27,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "upload_attachment",
             "Upload a file",
-            "Upload a file to a project from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. Leave project_id out to upload for your inbox instead: only you can read the file until you file the draft (add_to_inbox / update_inbox_item attachments). The size limit is the server's upload limit (5 MB by default). Needs the editor role on the project.",
+            "Upload a file to a project from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. Leave project_id out to upload for your inbox instead: only you can read the file until you file the draft (add_to_inbox / update_inbox_item attachments); not available to tokens limited to specific projects, and the inbox holds 200 MB per person by default. The size limit is the server's upload limit (5 MB by default). Needs the editor role on the project.",
             object(
                 json!({
                     "project_id": string("Project id (see list_projects). Leave out to upload a file for your inbox."),

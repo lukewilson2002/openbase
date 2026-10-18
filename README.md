@@ -262,6 +262,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 | `OPENBASE_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
 | `OPENBASE_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenBase can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
 | `OPENBASE_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
+| `OPENBASE_MAX_INBOX_MB` | `200` | Maximum total size of the files one user keeps in their inbox (uploaded but not yet filed into a project), in MB. |
 | `OPENBASE_BACKUP_HOUR` | `3` | Hour (0-23, server local time, see `TZ`) for the daily automatic backup. `-1` turns automatic backups off. |
 | `OPENBASE_BACKUP_KEEP` | `7` | Number of automatic backups to keep. |
 | `OPENBASE_TRASH_DAYS` | `30` | Days deleted items stay in the trash. |

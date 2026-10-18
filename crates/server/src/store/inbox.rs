@@ -10,15 +10,17 @@
 use std::collections::HashSet;
 
 use ob_core::api::inbox::InboxItem;
-use ob_core::field::AttachmentRef;
+use ob_core::field::{AttachmentRef, Field, FieldKind};
 use ob_core::ids;
 use ob_core::limits;
 use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Map, Value};
 
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::store::attachments;
+use crate::v1::input::FieldIndex;
 
 fn not_found() -> AppError {
     AppError::not_found("inbox item")
@@ -91,12 +93,38 @@ fn check_body(body: &str) -> AppResult<()> {
     Ok(())
 }
 
+/// The ids of the files in the user's drafts other than `except` (a file may be in one
+/// draft only: filing a draft hands its files to a base, which would leave a second draft
+/// pointing at a file it can no longer reach).
+fn files_of_other_drafts(
+    conn: &Connection,
+    user_id: &str,
+    except: Option<&str>,
+) -> AppResult<HashSet<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT attachments FROM inbox_items
+         WHERE user_id = ?1 AND id != ?2 AND attachments != '[]'",
+    )?;
+    let rows = stmt
+        .query_map(params![user_id, except.unwrap_or_default()], |r| {
+            r.get::<_, String>(0)
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows
+        .iter()
+        .flat_map(|json| serde_json::from_str::<Vec<AttachmentRef>>(json).unwrap_or_default())
+        .map(|a| a.id)
+        .collect())
+}
+
 /// The references to store for the files `given`: each must be an upload of
-/// this user that is not in any base yet (`POST /api/inbox/attachments`). The
-/// reference is rebuilt from the `attachments` row, never taken from the client.
+/// this user that is not in any base yet (`POST /api/inbox/attachments`) and not in
+/// another of their drafts (`draft`: the one being changed, if any). The reference is
+/// rebuilt from the `attachments` row, never taken from the client.
 fn resolve_attachments(
     conn: &Connection,
     user_id: &str,
+    draft: Option<&str>,
     given: &[AttachmentRef],
 ) -> AppResult<Vec<AttachmentRef>> {
     if given.len() > limits::MAX_INBOX_ATTACHMENTS {
@@ -105,6 +133,11 @@ fn resolve_attachments(
             limits::MAX_INBOX_ATTACHMENTS
         )));
     }
+    let taken = if given.is_empty() {
+        HashSet::new()
+    } else {
+        files_of_other_drafts(conn, user_id, draft)?
+    };
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for a in given {
@@ -119,6 +152,13 @@ fn resolve_attachments(
                     a.id
                 ))
             })?;
+        if taken.contains(&row.id) {
+            return Err(AppError::bad_request(format!(
+                "attachment {} is already in another draft; a file can be in one draft at a \
+                 time (remove it there first, or upload it again)",
+                row.id
+            )));
+        }
         out.push(row.to_ref());
     }
     Ok(out)
@@ -147,7 +187,7 @@ pub fn create(
             limits::MAX_INBOX_ITEMS
         )));
     }
-    let refs = resolve_attachments(conn, user_id, files)?;
+    let refs = resolve_attachments(conn, user_id, None, files)?;
     let id = new_id(ids::INBOX);
     let now = now_ms();
     conn.execute(
@@ -175,7 +215,7 @@ pub fn update(
         None => current.body,
     };
     let refs = match files {
-        Some(f) => resolve_attachments(conn, user_id, f)?,
+        Some(f) => resolve_attachments(conn, user_id, Some(id), f)?,
         None => current.attachments,
     };
     conn.execute(
@@ -199,27 +239,86 @@ pub fn delete(conn: &Connection, user_id: &str, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Hand the draft's files that `fields_json` mentions over to `base_id`, so a
-/// record of that base can hold them. Returns how many moved.
+/// The attachment ids that `given` (the `fields` of a record to create, keyed by field name
+/// or id) puts into attachment fields of `fields`. Text that merely contains an id, or a
+/// non-attachment field, does not count.
+fn attachment_ids_in(fields: &[Field], given: &Map<String, Value>) -> HashSet<String> {
+    let index = FieldIndex::new(fields);
+    given
+        .iter()
+        .filter(|(key, _)| {
+            index
+                .resolve(key)
+                .is_some_and(|f| matches!(f.kind, FieldKind::Attachment(_)))
+        })
+        .filter_map(|(_, v)| v.as_array())
+        .flatten()
+        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Hand the draft's files that the attachment fields of `given` use over to `base_id`, so a
+/// record of that base can hold them, and take them out of the user's other drafts (a file
+/// lives in one draft only, but a stale reference must never outlive the move). Returns how
+/// many files moved.
 pub fn move_files_to_base(
     conn: &Connection,
     user_id: &str,
     item: &InboxItem,
     base_id: &str,
-    fields_json: &str,
+    fields: &[Field],
+    given: &Map<String, Value>,
 ) -> AppResult<usize> {
-    let mut moved = 0;
-    for a in &item.attachments {
-        if !fields_json.contains(&a.id) {
-            continue;
-        }
-        moved += conn.execute(
+    let wanted = attachment_ids_in(fields, given);
+    let mut moved = HashSet::new();
+    for a in item.attachments.iter().filter(|a| wanted.contains(&a.id)) {
+        let n = conn.execute(
             "UPDATE attachments SET base_id = ?1
              WHERE id = ?2 AND base_id IS NULL AND created_by = ?3",
             params![base_id, a.id, user_id],
         )?;
+        if n > 0 {
+            moved.insert(a.id.clone());
+        }
     }
-    Ok(moved)
+    if !moved.is_empty() {
+        strip_from_other_drafts(conn, user_id, &item.id, &moved)?;
+    }
+    Ok(moved.len())
+}
+
+/// Remove the files `ids` from the user's drafts other than `except`.
+fn strip_from_other_drafts(
+    conn: &Connection,
+    user_id: &str,
+    except: &str,
+    ids: &HashSet<String>,
+) -> AppResult<()> {
+    let mut stmt = conn.prepare(
+        "SELECT id, attachments FROM inbox_items
+         WHERE user_id = ?1 AND id != ?2 AND attachments != '[]'",
+    )?;
+    let rows = stmt
+        .query_map(params![user_id, except], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for (id, json) in rows {
+        let files: Vec<AttachmentRef> = serde_json::from_str(&json).unwrap_or_default();
+        let kept: Vec<AttachmentRef> = files
+            .iter()
+            .filter(|a| !ids.contains(&a.id))
+            .cloned()
+            .collect();
+        if kept.len() != files.len() {
+            conn.execute(
+                "UPDATE inbox_items SET attachments = ?1 WHERE id = ?2 AND user_id = ?3",
+                params![attachments_json(&kept)?, id, user_id],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

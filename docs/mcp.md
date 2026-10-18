@@ -421,6 +421,10 @@ one, otherwise the viewer's. `exact_date` is the day as written. Details:
 
 Your inbox holds private quick-capture drafts (Markdown text plus files) that are in no project yet;
 only you see them. They are the tools' way to "write it down now, decide where it goes later".
+A token limited to specific projects (and an app connected with only some projects) cannot use the inbox
+tools or `upload_attachment` without `project_id`: they fail with a message saying so. A draft holds up to
+20 files, each file can be in one draft only, the files you have uploaded but not filed add up to at most
+200 MB (`OPENBASE_MAX_INBOX_MB`), and inbox uploads are limited to 60 per minute.
 
 | Tool | Needs | What it does |
 |---|---|---|
@@ -470,7 +474,7 @@ needs only read access.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field. Without `project_id` the file is uploaded for your inbox (see below) |
+| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field. Without `project_id` the file is uploaded for your inbox (see [Inbox](#inbox); not for tokens limited to specific projects) |
 | `export_csv` | any | A view as CSV text; cut at about 80 KB at a row boundary with the totals |
 | `import_csv` | write | CSV text into an existing table (columns by header or `mapping`) or into a new table with inferred field types; all or nothing |
 
@@ -641,6 +645,7 @@ More in [security.md](security.md).
 | `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE` | false | **development only**: let client metadata documents be fetched from loopback and private addresses and `http://localhost`. Independent of `OPENBASE_ALLOW_PRIVATE_WEBHOOKS`, which never applies to them |
 | `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | also the OAuth issuer; OAuth is served only for `https://` or loopback addresses |
 | `OPENBASE_MAX_UPLOAD_MB` | 100 | largest uploaded file (`upload_attachment`, URL or base64) |
+| `OPENBASE_MAX_INBOX_MB` | 200 | files one person may keep in their inbox (uploaded without a project, not yet filed) |
 | `OPENBASE_ALLOW_PRIVATE_WEBHOOKS` | false | allow automations and URL uploads to reach private addresses |
 | `OPENBASE_TRASH_DAYS` | 30 | how long deleted items can be restored |
 

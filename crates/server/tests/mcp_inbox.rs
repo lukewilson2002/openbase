@@ -207,3 +207,56 @@ async fn presence_and_the_inbox_routes_are_in_the_api_catalogue() {
         .await;
     assert_eq!(presence["body"], json!({"viewers": []}), "{presence}");
 }
+
+#[tokio::test]
+async fn project_limited_tokens_cannot_use_the_inbox() {
+    let r = Rig::new().await;
+    r.table("Shopping").await;
+    let added = r
+        .agent
+        .call("add_to_inbox", json!({"body": "private note"}))
+        .await;
+    let id = added["item"]["id"].as_str().unwrap().to_string();
+
+    let limited = r
+        .agent_with(json!({"write": true, "base_ids": [r.base]}))
+        .await;
+    for (tool, args) in [
+        ("list_inbox", json!({})),
+        ("add_to_inbox", json!({"body": "x"})),
+        ("update_inbox_item", json!({"id": id, "body": "x"})),
+        ("delete_inbox_item", json!({"id": id})),
+        (
+            "file_inbox_item",
+            json!({"id": id, "project_id": r.base, "table": "Shopping", "fields": {"Name": "x"}}),
+        ),
+        (
+            "upload_attachment",
+            json!({"filename": "a.txt", "content_base64": b64(b"hello")}),
+        ),
+    ] {
+        let e = limited.fails(tool, args).await;
+        assert!(e.contains("limited to specific"), "{tool}: {e}");
+    }
+    // Uploading into a project it may reach still works.
+    limited
+        .call(
+            "upload_attachment",
+            json!({"project_id": r.base, "filename": "a.txt", "content_base64": b64(b"hello")}),
+        )
+        .await;
+    // Nothing happened to the draft.
+    let left = r.agent.call("list_inbox", json!({})).await;
+    assert_eq!(left["items"].as_array().unwrap().len(), 1);
+    assert_eq!(left["items"][0]["body"], "private note");
+
+    // A token for the same user without a project limit uses the inbox.
+    let open = r.agent_with(json!({"write": true})).await;
+    assert_eq!(
+        open.call("list_inbox", json!({})).await["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

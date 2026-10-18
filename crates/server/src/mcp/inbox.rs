@@ -1,6 +1,7 @@
 //! The inbox tools: the caller's private quick-capture drafts (see [`crate::api::inbox`]).
 //! They call the REST endpoints as the caller, so ownership checks, limits and the record
-//! write path (when a draft is filed) are the web app's own.
+//! write path (when a draft is filed) are the web app's own. A token limited to specific
+//! projects is refused by those endpoints (the inbox is in no project), so these tools fail for it.
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -18,7 +19,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "properties": { "id": string("Attachment id from upload_attachment (called without project_id).") },
             "required": ["id"],
         },
-        "description": "Files of the draft as [{\"id\": \"att...\"}]; upload each with upload_attachment first, leaving project_id out. On update it replaces the whole list.",
+        "description": "Files of the draft as [{\"id\": \"att...\"}]; upload each with upload_attachment first, leaving project_id out (at most 20 per draft; a file can be in one draft only). On update it replaces the whole list.",
     });
     vec![
         ToolDef::new(

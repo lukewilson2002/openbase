@@ -242,9 +242,22 @@ where
     };
     let dir = state.config.attachments_dir();
     let (src, thumb_src) = (tmp.0.clone(), thumb_tmp.0.clone());
+    let inbox_cap = state.config.max_inbox_bytes();
     let saved = state
         .db
         .write(move |tx| {
+            // Files in no base are the uploader's own storage: capped per user,
+            // checked here under the writer so concurrent uploads cannot both fit.
+            if let (None, Some(owner)) = (&row.base_id, &row.created_by) {
+                let used = store::unattached_bytes(tx, owner)?;
+                if used.saturating_add(row.size) > inbox_cap {
+                    return Err(AppError::PayloadTooLarge(format!(
+                        "your inbox can hold at most {} MB of files and this one does not fit; \
+                         file or delete drafts with files first",
+                        inbox_cap / (1024 * 1024)
+                    )));
+                }
+            }
             let blob = store::blob_path(&dir, &row.sha256)?;
             let thumb = store::thumb_path(&dir, &row.sha256)?;
             if !blob.exists() {
@@ -461,9 +474,13 @@ async fn authorize(
         .await?
         .ok_or_else(not_found)?;
     let Some(base_id) = row.base_id.clone() else {
-        // Not in any base yet: an inbox upload, readable by its uploader only.
+        // Not in any base yet: an inbox upload, readable by its uploader only, and not by a
+        // token limited to specific bases.
         return match actor {
-            Some(a) if row.created_by.as_deref() == Some(a.user_id.as_str()) => Ok(row),
+            Some(a) if row.created_by.as_deref() == Some(a.user_id.as_str()) => {
+                a.require_no_base_limit("the inbox or its files")?;
+                Ok(row)
+            }
             _ => Err(not_found()),
         };
     };

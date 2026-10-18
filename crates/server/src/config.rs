@@ -37,6 +37,15 @@ pub struct Config {
     #[arg(long, env = "OPENBASE_MAX_UPLOAD_MB", default_value_t = 100)]
     pub max_upload_mb: u64,
 
+    /// Maximum total size of the files one user keeps in their inbox (uploaded
+    /// but not yet filed into a base), in megabytes.
+    #[arg(
+        long,
+        env = "OPENBASE_MAX_INBOX_MB",
+        default_value_t = ob_core::limits::MAX_INBOX_UPLOAD_BYTES / (1024 * 1024)
+    )]
+    pub max_inbox_mb: u64,
+
     /// Hour of day (0-23, server local time) to take the automatic daily backup.
     /// Set to -1 to disable automatic backups.
     #[arg(
@@ -164,6 +173,9 @@ impl Config {
     pub fn max_upload_bytes(&self) -> u64 {
         self.max_upload_mb.saturating_mul(1024 * 1024)
     }
+    pub fn max_inbox_bytes(&self) -> u64 {
+        self.max_inbox_mb.saturating_mul(1024 * 1024)
+    }
     /// Origin (scheme://host[:port]) of `public_url`, for the CSRF Origin check.
     pub fn public_origin(&self) -> String {
         match url::Url::parse(&self.public_url) {
@@ -210,6 +222,7 @@ impl Config {
             open_signup: false,
             trust_proxy: false,
             max_upload_mb: 5,
+            max_inbox_mb: ob_core::limits::MAX_INBOX_UPLOAD_BYTES / (1024 * 1024),
             backup_hour: -1,
             backup_keep: 3,
             trash_days: 30,

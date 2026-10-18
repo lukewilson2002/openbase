@@ -274,6 +274,18 @@ pub fn delete_unreferenced(
     Ok(shas)
 }
 
+/// Bytes of the files `user_id` uploaded that are in no base (inbox uploads, whether or not
+/// a draft holds them yet).
+pub fn unattached_bytes(conn: &Connection, user_id: &str) -> AppResult<u64> {
+    let n: i64 = conn.query_row(
+        "SELECT coalesce(sum(size), 0) FROM attachments
+         WHERE base_id IS NULL AND created_by = ?1",
+        [user_id],
+        |r| r.get(0),
+    )?;
+    Ok(n.max(0) as u64)
+}
+
 /// Whether any attachment row still uses the file with this hash.
 pub fn sha_in_use(conn: &Connection, sha: &str) -> AppResult<bool> {
     Ok(conn

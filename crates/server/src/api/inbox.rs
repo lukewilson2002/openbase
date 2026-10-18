@@ -16,7 +16,15 @@
 //!
 //! Everything works for sessions and API tokens (read-only tokens can only
 //! list) and only ever touches the caller's own drafts: someone else's draft is
-//! a 404, like a missing one.
+//! a 404, like a missing one. A token limited to specific bases gets a 403 on
+//! every inbox route (filing included) and on downloading an inbox file: the
+//! inbox belongs to no base, so such a token has no business in it.
+//!
+//! Limits: [`ob_core::limits::MAX_INBOX_ITEMS`] drafts per user,
+//! [`ob_core::limits::MAX_INBOX_ATTACHMENTS`] files per draft, a file can be in
+//! one draft only, a user's unattached files add up to at most
+//! `OPENBASE_MAX_INBOX_MB` (413 beyond), and uploads are rate limited
+//! ([`UPLOAD_LIMIT`] per minute per user, 429).
 
 use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -25,7 +33,6 @@ use axum::{Json, Router};
 use ob_core::api::inbox::{CreateInboxItem, FileInboxItem, InboxItem, UpdateInboxItem};
 use ob_core::api::records::{NewRecord, Record};
 use ob_core::field::AttachmentRef;
-use serde_json::Value as Json2;
 
 use crate::auth::Actor;
 use crate::engine::write::{self, CreateOpts, WriteCtx, WriteSource};
@@ -35,6 +42,12 @@ use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::{inbox, records as record_store, schema};
 use crate::v1::input::convert_fields;
+
+/// Inbox uploads per user per minute.
+pub const UPLOAD_LIMIT: u32 = 60;
+const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
+
+const WHAT: &str = "the inbox";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -49,6 +62,7 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn list(State(state): State<AppState>, actor: Actor) -> AppResult<Json<Vec<InboxItem>>> {
+    actor.require_no_base_limit(WHAT)?;
     let items = state
         .db
         .read(move |conn| inbox::list(conn, &actor.user_id))
@@ -61,6 +75,7 @@ async fn create(
     actor: Actor,
     ApiJson(body): ApiJson<CreateInboxItem>,
 ) -> AppResult<(StatusCode, Json<InboxItem>)> {
+    actor.require_no_base_limit(WHAT)?;
     let item = state
         .db
         .write(move |tx| {
@@ -81,6 +96,7 @@ async fn update(
     Path(id): Path<String>,
     ApiJson(body): ApiJson<UpdateInboxItem>,
 ) -> AppResult<Json<InboxItem>> {
+    actor.require_no_base_limit(WHAT)?;
     let item = state
         .db
         .write(move |tx| {
@@ -101,6 +117,7 @@ async fn remove(
     actor: Actor,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
+    actor.require_no_base_limit(WHAT)?;
     state
         .db
         .write(move |tx| inbox::delete(tx, &actor.user_id, &id))
@@ -113,6 +130,10 @@ async fn upload(
     actor: Actor,
     req: Request,
 ) -> AppResult<Json<AttachmentRef>> {
+    actor.require_no_base_limit("the inbox or its files")?;
+    state
+        .limiter
+        .check("inbox_upload", &actor.user_id, UPLOAD_LIMIT, MINUTE)?;
     let multipart = crate::api::attachments::multipart_with_limit(&state, req).await?;
     let saved =
         crate::api::attachments::save_upload(&state, None, Some(actor.user_id), multipart).await?;
@@ -126,6 +147,9 @@ async fn file(
     Path(id): Path<String>,
     ApiJson(body): ApiJson<FileInboxItem>,
 ) -> AppResult<(StatusCode, Json<Record>)> {
+    // Filing reads the draft, which is outside every base; refused before the
+    // table is even looked at.
+    actor.require_no_base_limit(WHAT)?;
     let who = actor.clone();
     let (outcome, record) = state
         .db
@@ -137,8 +161,7 @@ async fn file(
             let fields = schema::table_fields(tx, &body.table_id)?;
             // The files the caller puts into the record move into the base
             // first: a record may only hold files of its own base.
-            let mentioned = Json2::Object(body.fields.clone()).to_string();
-            inbox::move_files_to_base(tx, &actor.user_id, &item, &base_id, &mentioned)?;
+            inbox::move_files_to_base(tx, &actor.user_id, &item, &base_id, &fields, &body.fields)?;
             let values = convert_fields(tx, &base_id, &fields, &body.fields, true, false)
                 .map_err(|e| AppError::bad_request(e.message))?;
             let ctx = WriteCtx::for_user(tx, &actor.user_id, WriteSource::Api)?.typecast(true);

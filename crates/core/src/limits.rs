@@ -26,4 +26,7 @@ pub const MAX_FORMULA_DEPTH: usize = 64;
 /// Drafts one user can keep in their inbox.
 pub const MAX_INBOX_ITEMS: usize = 500;
 /// Files on one inbox draft.
-pub const MAX_INBOX_ATTACHMENTS: usize = 100;
+pub const MAX_INBOX_ATTACHMENTS: usize = 20;
+/// Bytes of files one user may keep in no base (inbox uploads): the default of the server's
+/// `OPENBASE_MAX_INBOX_MB` setting.
+pub const MAX_INBOX_UPLOAD_BYTES: u64 = 200 * 1024 * 1024;

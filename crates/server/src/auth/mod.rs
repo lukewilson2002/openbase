@@ -128,6 +128,24 @@ impl Actor {
         Ok(())
     }
 
+    /// For what belongs to the user rather than to any base (the inbox and the files uploaded for
+    /// it): refused for a token limited to specific bases, because such a token must not reach
+    /// what is not in one of its bases. `what` names it, e.g. "the inbox". Sessions and tokens
+    /// without a base limit pass.
+    pub fn require_no_base_limit(&self, what: &str) -> AppResult<()> {
+        if self
+            .token_scope
+            .as_ref()
+            .is_some_and(|s| s.base_ids.is_some())
+        {
+            return Err(AppError::forbidden(format!(
+                "an API token limited to specific bases cannot use {what}, which belongs to no \
+                 base; use a token without a base limit, or sign in to the web app"
+            )));
+        }
+        Ok(())
+    }
+
     /// Instance administrator: signed in, or a token with the `manage` permission whose user is
     /// an administrator. Not an audited check; admin handlers use [`admin_guard`].
     pub fn require_admin(&self) -> AppResult<()> {
