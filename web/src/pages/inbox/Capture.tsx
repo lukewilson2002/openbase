@@ -167,7 +167,8 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
         {fileError && <Notice tone="error">{fileError}</Notice>}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2.5 sm:px-4">
+      {/* Stays at the bottom of the screen while a long form scrolls, so Save is never a long way down. */}
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-b-[16px] border-t border-line bg-surface px-3 py-2.5 sm:px-4">
         <input ref={input} type="file" multiple tabIndex={-1} aria-label="Attach files" onChange={(e) => attach(e.target.files)} className="sr-only" />
         <Button size="sm" onClick={() => input.current?.click()}>
           <Paperclip aria-hidden className="size-4" /> Attach files

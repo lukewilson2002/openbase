@@ -280,6 +280,12 @@ seedProjects();
 
 // ---- notifications and trash fixtures -----------------------------------------------------------
 
+/** Inbox drafts (`/api/inbox`), two to start with so the list is not empty. */
+const inbox: Obj[] = [
+  { id: "inb_demo1", body: "# Ideas for the offsite\n\n- somewhere with a lake\n- no slides", attachments: [], created_at: Date.now() - 3 * 3_600_000, updated_at: Date.now() - 3 * 3_600_000 },
+  { id: "inb_demo2", body: "Call the accountant about Q3", attachments: [{ id: "att_demo", filename: "receipts.pdf", mime: "application/pdf", size: 48_213 }], created_at: Date.now() - 2 * 86_400_000, updated_at: Date.now() - 2 * 86_400_000 },
+];
+
 const notifications: Obj[] = [];
 function seedNotifications(): void {
   const firstTask = [...records.values()].find((r) => r.table_id === T_TASKS)!;
@@ -992,6 +998,42 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if ((g = /^\/api\/tables\/([^/]+)\/formula\/check$/.exec(p))) {
     const expr = String(body.expression ?? "");
     return send(res, 200, expr.includes("(") && !expr.includes(")") ? { ok: false, error: "Unbalanced parentheses" } : { ok: true, result_type: "text", preview: "42" }), true;
+  }
+  // The inbox: private drafts (text and uploaded files), filed into a table as a record.
+  if (p === "/api/inbox" && m === "GET") return send(res, 200, [...inbox].sort((a, b) => b.updated_at - a.updated_at)), true;
+  if (p === "/api/inbox" && m === "POST") {
+    const now = Date.now();
+    const draft: Obj = { id: newId("inb"), body: String(body.body ?? ""), attachments: body.attachments ?? [], created_at: now, updated_at: now };
+    inbox.push(draft);
+    return send(res, 201, draft), true;
+  }
+  if (p === "/api/inbox/attachments" && m === "POST") {
+    const text = String(body.__raw ?? "");
+    const filename = /filename="([^"]+)"/.exec(text)?.[1] ?? "upload.bin";
+    const mime = /Content-Type: ([^\r\n]+)/i.exec(text)?.[1] ?? "application/octet-stream";
+    return send(res, 201, { id: newId("att"), filename, mime, size: text.length, width: null, height: null }), true;
+  }
+  if ((g = /^\/api\/inbox\/([^/]+)$/.exec(p))) {
+    const draft = inbox.find((d) => d.id === g![1]);
+    if (!draft) return err(res, 404, "not_found", "draft not found"), true;
+    if (m === "PATCH") {
+      if (typeof body.body === "string") draft.body = body.body;
+      if (Array.isArray(body.attachments)) draft.attachments = body.attachments;
+      draft.updated_at = Date.now();
+      return send(res, 200, draft), true;
+    }
+    if (m === "DELETE") {
+      inbox.splice(inbox.indexOf(draft), 1);
+      return send(res, 204), true;
+    }
+  }
+  if ((g = /^\/api\/inbox\/([^/]+)\/file$/.exec(p)) && m === "POST") {
+    const draft = inbox.find((d) => d.id === g![1]);
+    if (!draft) return err(res, 404, "not_found", "draft not found"), true;
+    if (!PRIMARY[body.table_id]) return err(res, 404, "not_found", "table not found"), true;
+    const rec = addRecord(body.table_id, body.fields ?? {});
+    inbox.splice(inbox.indexOf(draft), 1);
+    return send(res, 201, shape(rec)), true;
   }
   if (p === "/api/notifications" && m === "GET") {
     const list = [...notifications].sort((a, b) => b.created_at - a.created_at);

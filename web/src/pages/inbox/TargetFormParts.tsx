@@ -4,8 +4,8 @@
  * and the one that takes the files, and the table's other fields (the same editors as the expanded
  * record's form).
  */
-import { useId } from "react";
-import { X } from "lucide-react";
+import { useId, useState } from "react";
+import { ChevronDown, X } from "lucide-react";
 import type { Field, WorkspaceSummary } from "@/api/types";
 import { EntityTile } from "@/components/icons/EntityIcon";
 import { EditorEnvProvider } from "@/components/record/editors/env";
@@ -14,6 +14,7 @@ import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input, Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/cn";
 import { displayShapeOf, type DisplayShape } from "@/lib/cells/kinds";
 import { attachmentFields, formFields, isTextTitle, noteFields, primaryField, type TargetRef } from "./targets";
 import type { TargetForm } from "./useTargetForm";
@@ -25,7 +26,7 @@ export function TargetBar({ form, target, workspaces, onChange, onRemove }: { fo
   return (
     <div className="flex min-w-0 items-center gap-2 text-[0.8125rem]">
       {base && <EntityTile name={base.name} icon={base.icon} color={base.color} size="sm" />}
-      <p className="min-w-0 flex-1 truncate">
+      <p className="min-w-0 flex-1 break-words leading-snug">
         <span className="text-muted">Saving to </span>
         <span className="font-semibold">{[base?.name, table?.name].filter(Boolean).join(" › ") || "this table"}</span>
       </p>
@@ -143,20 +144,32 @@ export function FileChooser({ form, count }: { form: TargetForm; count: number }
 
 /** The table's other fields, one editor each. */
 export function OtherFields({ form }: { form: TargetForm }) {
+  const [all, setAll] = useState(false);
   const table = form.table;
   if (!table || !form.env) return null;
   const fields = formFields(table, form.noteFieldId);
   if (fields.length === 0) return null;
+  // A table with many fields would push Save far down: the rest is one tap away.
+  const shown = all ? fields : fields.slice(0, FIELDS_SHOWN);
   return (
     <EditorEnvProvider value={form.env}>
       <div className="flex flex-col gap-3.5 border-t border-line pt-4">
-        {fields.map((f) => (
+        {shown.map((f) => (
           <FieldRow key={`${f.id}:${form.generation}`} field={f} form={form} />
         ))}
+        {fields.length > FIELDS_SHOWN && (
+          <button type="button" aria-expanded={all} onClick={() => setAll((a) => !a)} className="flex h-9 items-center gap-1 self-start rounded-[10px] px-1.5 text-[0.8125rem] font-medium text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11">
+            <ChevronDown aria-hidden className={cn("size-4 transition-transform", all && "rotate-180")} />
+            {all ? "Show fewer fields" : `Show ${fields.length - FIELDS_SHOWN} more ${fields.length - FIELDS_SHOWN === 1 ? "field" : "fields"}`}
+          </button>
+        )}
       </div>
     </EditorEnvProvider>
   );
 }
+
+/** How many of the table's other fields are shown before "Show more". */
+const FIELDS_SHOWN = 5;
 
 function FieldRow({ field, form }: { field: Field; form: TargetForm }) {
   const labelId = useId();

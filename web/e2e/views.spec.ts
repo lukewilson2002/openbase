@@ -12,7 +12,7 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  * not, set OPENBASE_E2E_EMAIL and OPENBASE_E2E_PASSWORD to an existing account). Results are
  * asserted against the server (the records API), not against pixels.
  *
- * Notifications: mentions and assignments skip their author, so the Inbox test makes an automation
+ * Notifications: mentions and assignments skip their author, so the Notifications test makes an automation
  * ("record created" -> notify) tell the signed-in user about a record they create.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
@@ -325,10 +325,10 @@ test.describe("trash and notifications", () => {
     const unreadBefore = (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread;
 
     await open(page, "list");
-    const inbox = page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: /^Inbox, \d+ unread/ });
-    await expect(inbox).toBeVisible();
-    await inbox.click();
-    const popup = page.getByRole("dialog", { name: "Inbox" });
+    const bell = page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: /^Notifications, \d+ unread/ });
+    await expect(bell).toBeVisible();
+    await bell.click();
+    const popup = page.getByRole("dialog", { name: "Notifications" });
     await expect(popup.getByText(`Created ${zulu}`)).toBeVisible();
 
     // Clicking it marks it read and goes to the base (an automation says which base, not which table).

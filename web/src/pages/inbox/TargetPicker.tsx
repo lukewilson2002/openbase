@@ -55,7 +55,7 @@ function Steps({ workspaces, onPick }: Pick<TargetPickerProps, "workspaces" | "o
           {project.tables.map((t) => (
             <li key={t.id}>
               <button type="button" onClick={() => onPick({ baseId: project.id, tableId: t.id })} className={rowClass}>
-                <EntityLabel icon={t.icon} reserveIcon className="flex-1 text-fg" iconClassName="text-muted">
+                <EntityLabel icon={t.icon} className="flex-1 text-fg" iconClassName="text-muted">
                   {t.name}
                 </EntityLabel>
               </button>

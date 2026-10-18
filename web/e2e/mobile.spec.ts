@@ -47,8 +47,18 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   const created = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: {} }] }, headers: CSRF })).json();
   const recordId = created.records[0].id as string;
 
-  // There is no workspace page: `/` opens the workspace's only project, at its first table and view.
+  // `/` is the Inbox (it no longer opens the last project): a capture box that fits the phone. The menu leads on.
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "What\u2019s on your mind?" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expectFits(page, "inbox");
+  await page.getByRole("button", { name: /^Show menu/ }).tap();
+  const inboxMenu = page.getByRole("dialog", { name: "Menu" });
+  await expect(inboxMenu.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+  // No workspace is open on the Inbox: open the only one, then its project, at its first table and view.
+  await inboxMenu.getByRole("button", { name: "Expand Mobile workspace" }).tap();
+  await inboxMenu.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("link", { name: "A base with a fairly long name" }).tap();
   await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
   await expectFits(page, "project");
 
