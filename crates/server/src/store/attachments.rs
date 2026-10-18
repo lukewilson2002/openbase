@@ -362,7 +362,7 @@ pub fn first_foreign_ref(
 /// Delete attachment rows that nothing references: created before
 /// `cutoff_ms`, or (uploads without a user, i.e. from public forms) before
 /// `anonymous_cutoff_ms`. "Referenced" means mentioned in the data of any
-/// record (live or trashed) or in the retained record history, in any field including long text: removing a
+/// record (live or trashed), in a comment or in the retained record history, in any field including long text: removing a
 /// file from a cell must stay undoable (client-side undo, copying from the
 /// history panel) for as long as that history exists. Returns the hashes of
 /// the deleted rows. Files of inbox drafts (list and embedded in the text) count as referenced too.
@@ -405,6 +405,14 @@ pub fn delete_unreferenced(
         let files: String = row.get(0)?;
         ids_in(&files, &mut referenced);
         let body: String = row.get(1)?;
+        referenced.extend(referenced_ids(&body));
+    }
+    // Files embedded or linked in comments (including ones filed from a draft's note) are
+    // referenced from there only.
+    let mut stmt = conn.prepare("SELECT body FROM comments WHERE instr(body, ?1) > 0")?;
+    let mut rows = stmt.query([REF_PREFIX])?;
+    while let Some(row) = rows.next()? {
+        let body: String = row.get(0)?;
         referenced.extend(referenced_ids(&body));
     }
     if candidates.iter().any(|(id, _)| !referenced.contains(id)) {

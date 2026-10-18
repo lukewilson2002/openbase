@@ -217,8 +217,8 @@ but only files of the source project: a reference to any other file (another pro
 never copied, so a copy cannot be used to read it. In an attachment cell it is dropped, in long text it is left
 as written and does not load in the copy.
 
-**Cleanup.** Files referenced only from long text, record history or an inbox draft's text stay: the cleanup
-looks for attachment ids in all record data and in the draft text, not just in attachment fields.
+**Cleanup.** Files referenced only from long text, a comment, record history or an inbox draft's text stay: the
+cleanup looks for attachment ids in all record data, in comments and in the draft text, not just in attachment fields.
 
 **Serving.** `GET /api/attachments/{id}/{filename}` is allowed for Viewers of the file's project (session or
 token), for holders of an enabled view share link of the project (below) and, for an inbox upload, only for its

@@ -899,3 +899,47 @@ async fn converting_a_field_to_long_text_refuses_references_to_foreign_files() {
         .assert_status(200);
     convert().await.assert_status(200);
 }
+
+#[tokio::test]
+async fn a_file_referenced_only_from_a_comment_survives_the_cleanup() {
+    let f = Fixture::new().await;
+    let commented = upload(&f, &f.base_id, "commented.png", b"commented").await;
+    let lost = upload(&f, &f.base_id, "lost.png", b"lost").await;
+    let rec = f.create(&f.table_id, json!({ &f.primary_id: "r" })).await;
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/records/{}/comments", id_str(&rec["id"])),
+            json!({ "body": embed(&commented, "commented.png") }),
+        )
+        .await
+        .assert_status(201);
+
+    // A draft filed as a comment moves its upload into the project, where only the comment
+    // names it.
+    let photo = inbox_upload(&f.app, &f.owner, "photo.png", b"photo").await;
+    let draft = add_draft(&f, &embed(&photo, "photo.png")).await;
+    let did = id_str(&draft.body["id"]).to_string();
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/inbox/{did}/file"),
+            json!({ "table_id": f.table_id, "fields": { "Name": "Trip" }, "note_as_comment": true }),
+        )
+        .await
+        .assert_status(201);
+
+    let far = openbase::db::now_ms() + 10_000_000;
+    let deleted = sql(&f.app, |tx| {
+        Ok(openbase::store::attachments::delete_unreferenced(tx, far, far).unwrap())
+    });
+    assert_eq!(deleted.len(), 1);
+    let exists = |id: &str| {
+        f.app
+            .query_i64("SELECT count(*) FROM attachments WHERE id = ?1", &[id])
+            == 1
+    };
+    assert!(exists(&commented));
+    assert!(exists(&photo));
+    assert!(!exists(&lost));
+}
