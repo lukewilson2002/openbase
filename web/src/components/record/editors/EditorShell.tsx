@@ -5,7 +5,8 @@
  *   in a portal. The panel carries `click-outside-ignore` so Glide does not treat clicks inside
  *   it as clicks outside the overlay. Clicking elsewhere commits what was reported through
  *   `onChange` (Glide's behaviour); Escape cancels.
- * - `form`: a button showing the current value opens the panel; closing it reports `onDismiss`.
+ * - `form`: a button showing the current value opens the panel; closing it reports `onDismiss`. In an
+ *   edit session (see session.ts) the panel starts open and its closing is reported to the session.
  *
  * `children` may be a function receiving `close`, which closes the pop-over (a no-op in the
  * grid, where committing closes Glide's overlay).
@@ -13,6 +14,7 @@
 import { useState, type ReactNode } from "react";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
+import { useEditSession } from "./session";
 
 export interface EditorShellProps {
   variant: "cell" | "form";
@@ -30,7 +32,8 @@ export interface EditorShellProps {
 }
 
 export function EditorShell({ variant, target, trigger, triggerLabel, onCancel, onDismiss, width = 320, children, className }: EditorShellProps) {
-  const [open, setOpen] = useState(false);
+  const session = useEditSession();
+  const [open, setOpen] = useState(variant === "form" && !!session?.openOnMount);
   const close = variant === "cell" ? () => {} : () => setOpen(false);
   const body = typeof children === "function" ? children({ close }) : children;
   const content = (
@@ -79,7 +82,10 @@ export function EditorShell({ variant, target, trigger, triggerLabel, onCancel, 
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) onDismiss?.();
+        if (!next) {
+          onDismiss?.();
+          session?.popupClosed();
+        }
       }}
     >
       <PopoverTrigger asChild>

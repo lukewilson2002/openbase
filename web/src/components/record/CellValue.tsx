@@ -3,6 +3,7 @@
  * The canvas renderer in views/grid/glide draws the same things for the grid.
  */
 import { ExternalLink, Star, Heart } from "lucide-react";
+import { attachmentsApi } from "@/api/records";
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
@@ -24,12 +25,14 @@ export interface CellValueProps {
   className?: string;
   /** Render rich long text as markdown (default true). */
   markdown?: boolean;
+  /** Attachments open their file (in a new tab) when clicked, instead of being pictures only. */
+  linkFiles?: boolean;
 }
 
 /** Height of one row of chips (a person chip: a 16 px face and 2 px above and below). */
 const CHIP_ROW_PX = 20;
 
-export function CellValue({ field, value, format, emails, className, markdown = true }: CellValueProps) {
+export function CellValue({ field, value, format, emails, className, markdown = true, linkFiles = false }: CellValueProps) {
   const shape = displayShapeOf(field);
   const text = displayText(field, value, format);
   const empty = <span className="text-faint">—</span>;
@@ -91,7 +94,13 @@ export function CellValue({ field, value, format, emails, className, markdown = 
           <ul className="flex flex-wrap gap-1.5">
             {files.map((f) => (
               <li key={f.id} title={f.filename}>
-                <AttachmentThumb file={f} size={48} />
+                {linkFiles ? (
+                  <a href={attachmentsApi.downloadUrl(f.id, f.filename)} target="_blank" rel="noopener noreferrer" aria-label={f.filename} className="block">
+                    <AttachmentThumb file={f} size={48} />
+                  </a>
+                ) : (
+                  <AttachmentThumb file={f} size={48} />
+                )}
               </li>
             ))}
           </ul>

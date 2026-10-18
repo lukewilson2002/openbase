@@ -28,6 +28,10 @@ export interface FieldEditorProps extends FieldEditorCallbacks {
   /** Character typed to start the edit (cell variant). */
   initialText?: string;
   labelledBy?: string;
+  /** Focus the editor when it appears (text, dates and rich text; pop-over editors open instead, see session.ts). */
+  autoFocus?: boolean;
+  /** No box of its own: the control sits on the page, for a field that is edited where it is shown (rating). */
+  bare?: boolean;
 }
 
 /** Whether a field has an editor at all. */
@@ -36,11 +40,11 @@ export function isEditable(field: Field): boolean {
 }
 
 export function FieldEditor(props: FieldEditorProps) {
-  const { field, value, variant, target, initialText, onChange, onCommit, onCancel, labelledBy } = props;
+  const { field, value, variant, target, initialText, onChange, onCommit, onCancel, labelledBy, autoFocus, bare } = props;
   const shape = displayShapeOf(field);
   switch (shape) {
     case "date":
-      return <DateEditor field={field} value={value} initialText={initialText} variant={variant} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
+      return <DateEditor field={field} value={value} initialText={initialText} variant={variant} autoFocus={autoFocus} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
     case "select":
     case "multi_select":
       return <ChoiceEditor field={field} value={value} variant={variant} target={target} initialText={initialText} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
@@ -51,19 +55,20 @@ export function FieldEditor(props: FieldEditorProps) {
     case "attachment":
       return <AttachmentEditor field={field} value={value} variant={variant} target={target} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
     case "rating":
-      return <RatingEditor field={field} value={value} variant={variant} onCommit={onCommit} onCancel={onCancel} />;
+      return <RatingEditor field={field} value={value} variant={variant} bare={bare} onCommit={onCommit} onCancel={onCancel} />;
     case "checkbox":
       return <CheckboxEditor field={field} value={value} onCommit={onCommit} onCancel={onCancel} />;
     case "long_text": {
       const rich = field.type === "long_text" && field.options.rich;
       // The record form edits rich text visually; the grid's cell stays a text area (Markdown) that can open the visual editor full screen.
-      if (rich && variant === "form") return <RichFormEditor field={field} value={value} onChange={onChange} onCommit={onCommit} />;
+      if (rich && variant === "form") return <RichFormEditor field={field} value={value} autoFocus={autoFocus} onChange={onChange} onCommit={onCommit} />;
       return (
         <TextEditor
           field={field}
           value={value}
           initialText={initialText}
           variant={variant}
+          autoFocus={autoFocus}
           labelledBy={labelledBy}
           renderFullScreen={({ value: text, onChange: change }) =>
             rich ? (
@@ -81,7 +86,7 @@ export function FieldEditor(props: FieldEditorProps) {
       );
     }
     default:
-      return <TextEditor field={field} value={value} initialText={initialText} variant={variant} labelledBy={labelledBy} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
+      return <TextEditor field={field} value={value} initialText={initialText} variant={variant} autoFocus={autoFocus} labelledBy={labelledBy} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
   }
 }
 
@@ -103,7 +108,7 @@ function FullScreenLoading() {
  * Rich long text in the expanded record: the WYSIWYG editor, saving while typing (once typing
  * pauses) and when focus leaves it, so the record's save status follows along.
  */
-function RichFormEditor({ field, value, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "onChange" | "onCommit">) {
+function RichFormEditor({ field, value, autoFocus, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "autoFocus" | "onChange" | "onCommit">) {
   const upload = useProjectUpload();
   const seed = typeof value === "string" ? value : "";
   const [draft, setDraft] = useState(seed);
@@ -124,6 +129,7 @@ function RichFormEditor({ field, value, onChange, onCommit }: Pick<FieldEditorPr
           autosave.change(md);
         }}
         onBlur={autosave.flush}
+        autoFocus={autoFocus}
         placeholder="Write something…"
         upload={upload}
         aria-label={field.name}
