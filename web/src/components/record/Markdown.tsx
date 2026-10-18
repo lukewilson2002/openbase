@@ -6,13 +6,25 @@
  * It shows what the rich text editor (components/richtext) edits, with the same look (`ob-prose`
  * in styles/index.css): tables, numbered lists that keep their start number, task lists, and
  * GitHub alert callouts (`> [!WARNING]`), which marked renders as plain quotes.
+ *
+ * Images are only ever our own files (`/api/attachments/...`, see lib/media.ts): shown as an image,
+ * video, audio player or file card in a `<figure>` with its caption, as blocks of their own. Every
+ * other image is an ordinary link and is never fetched, whatever the text (or raw HTML in it) says.
+ * On a shared page (ShareContext) the embeds carry the share token, or, for a link with a password,
+ * are loaded with it (public/view/ShareEmbeds.ts).
  */
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { cn } from "@/lib/cn";
+import { embedFilename, isEmbedSrc, mediaKind, mediaLabel, withShare } from "@/lib/media";
+import { useShareOrNull } from "@/public/view/ShareContext";
+import { protectedDownload, useProtectedEmbeds } from "@/public/view/ShareEmbeds";
 
 let hooked = false;
+
+/** The elements that fetch a file by themselves: they may only be given one of our own. */
+const FETCHING = new Set(["IMG", "VIDEO", "AUDIO"]);
 
 function ensureHooks(): void {
   if (hooked) return;
@@ -22,8 +34,23 @@ function ensureHooks(): void {
       node.setAttribute("target", "_blank");
       node.setAttribute("rel", "noopener noreferrer nofollow");
     }
+    if (FETCHING.has(node.tagName)) {
+      // Raw HTML in the text gets no more than the Markdown does: nothing is fetched from anywhere else.
+      const src = node.getAttribute("src") ?? node.getAttribute("data-embed");
+      if (!isEmbedSrc(src?.split("?")[0])) node.parentNode?.removeChild(node);
+    }
   });
 }
+
+/** Where the render in progress is (marked's renderer has no way to be handed options). */
+interface Embeds {
+  token: string;
+  /** The link has a password, so the bytes are fetched with it (ShareEmbeds.ts). */
+  password: boolean;
+}
+let embeds: Embeds | null = null;
+
+const esc = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 const CALLOUT = /^\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s|<br\s*\/?>)*/i;
 
@@ -38,20 +65,67 @@ renderer.blockquote = (quote: string) => {
   const body = /^<\/p>/.test(rest) ? rest.replace(/^<\/p>\s*/, "") : `<p>${rest}`;
   return `<div class="ob-callout" data-callout="${m[1]!.toLowerCase()}">\n${body}</div>\n`;
 };
+
+// An image is one of our files, as a block (`<figure>`), or a link. `text` and `title` come escaped from marked.
+renderer.image = (href: string, title: string | null, text: string) => {
+  if (!isEmbedSrc(href)) {
+    const label = text.trim() || (href.startsWith("data:") ? "image" : esc(href));
+    return `<a href="${esc(href)}"${title ? ` title="${title}"` : ""}>${label}</a>`;
+  }
+  const filename = embedFilename(href);
+  const kind = mediaKind(filename);
+  const name = esc(mediaLabel(href, ""));
+  // Open shares authorise by token in the address; protected ones get their bytes through ShareEmbeds.
+  const address = embeds && !embeds.password ? withShare(href, embeds.token) : href;
+  const where = embeds?.password ? `data-embed="${esc(href)}"` : `src="${esc(address)}"`;
+  const label = text.trim() || name;
+  let body: string;
+  if (kind === "image") body = `<img ${where} alt="${text}" loading="lazy">`;
+  else if (kind === "video") body = `<video ${where} controls playsinline preload="metadata" aria-label="${label}"></video>`;
+  else if (kind === "audio") body = `<audio ${where} controls preload="metadata" aria-label="${label}"></audio>`;
+  else {
+    const link = embeds?.password ? `href="${esc(address)}" data-embed="${esc(href)}"` : `href="${esc(address)}"`;
+    body = `<div class="ob-file"><span class="ob-file-icon" aria-hidden="true"></span><span class="ob-file-name">${name}</span><a ${link} download="${name}" class="ob-file-download">Download</a></div>`;
+  }
+  return `<figure class="ob-media" data-kind="${kind}">${body}${title ? `<figcaption>${title}</figcaption>` : ""}</figure>`;
+};
+// A figure is a block: lifted out of the paragraph it was written in, the text around it staying paragraphs.
+const FIGURE = /(<figure class="ob-media"[\s\S]*?<\/figure>)/;
+renderer.paragraph = (text: string) => {
+  if (!text.includes('<figure class="ob-media"')) return `<p>${text}</p>\n`;
+  return text
+    .split(FIGURE)
+    .map((piece) => {
+      if (piece.startsWith('<figure class="ob-media"')) return `${piece}\n`;
+      const rest = piece.replace(/^(?:\s|<br\s*\/?>)+|(?:\s|<br\s*\/?>)+$/gi, "");
+      return rest ? `<p>${rest}</p>\n` : "";
+    })
+    .join("");
+};
 renderer.checkbox = (checked: boolean) => `<span class="ob-check" role="checkbox" aria-checked="${checked}" aria-disabled="true"></span> `;
 
-/** Render markdown to sanitized HTML. */
-export function renderMarkdown(source: string): string {
+/**
+ * Render markdown to sanitized HTML. `share` is given on a shared page, where the embedded files
+ * are authorised by the share's token.
+ */
+export function renderMarkdown(source: string, share?: Embeds | null): string {
   ensureHooks();
-  const html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer });
+  embeds = share ?? null;
+  let html: string;
+  try {
+    html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer });
+  } finally {
+    embeds = null;
+  }
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
-    FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed"],
-    FORBID_ATTR: ["style", "srcset"],
+    FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "iframe", "object", "embed", "source", "track"],
+    FORBID_ATTR: ["style", "srcset", "poster"],
     // DOMPurify drops `start` by default, which would restart "5." at 1. Its value is a number, not a
-    // URL, so it also has to be exempt from the URI check above.
+    // URL, so it also has to be exempt from the URI check above, as are the other attributes of the
+    // embeds whose values are words (`lazy`, `metadata`, a file name).
     ADD_ATTR: ["start"],
-    ADD_URI_SAFE_ATTR: ["start"],
+    ADD_URI_SAFE_ATTR: ["start", "download", "loading", "preload"],
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/))/i,
   });
 }
@@ -70,9 +144,16 @@ export function markdownToText(source: string): string {
 }
 
 export function Markdown({ source, className }: { source: string; className?: string }) {
-  const html = useMemo(() => renderMarkdown(source), [source]);
+  const share = useShareOrNull();
+  const token = share?.token;
+  const protectedShare = share ? share.password !== null : false;
+  const html = useMemo(() => renderMarkdown(source, token === undefined ? null : { token, password: protectedShare }), [source, token, protectedShare]);
+  const ref = useRef<HTMLDivElement>(null);
+  useProtectedEmbeds(ref, html, share);
   return (
     <div
+      ref={ref}
+      onClick={protectedShare ? (e) => protectedDownload(e, share) : undefined}
       className={cn("ob-markdown ob-prose text-[0.8125rem] leading-relaxed", className)}
       // Sanitized by DOMPurify in renderMarkdown.
       dangerouslySetInnerHTML={{ __html: html }}

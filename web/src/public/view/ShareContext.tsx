@@ -18,3 +18,8 @@ export function useShare(): ShareCtx {
   if (!ctx) throw new Error("useShare must be used inside a <ShareProvider>");
   return ctx;
 }
+
+/** The share the page belongs to, or null outside of a shared page (rendering that is also used elsewhere). */
+export function useShareOrNull(): ShareCtx | null {
+  return useContext(ShareContext);
+}

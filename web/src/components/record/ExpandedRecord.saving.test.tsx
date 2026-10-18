@@ -172,6 +172,17 @@ describe("ExpandedRecord: long text saves while typing", () => {
     expect(document.querySelector(".ProseMirror")).toBe(pm);
   });
 
+  it("embeds a file inserted into the rich text: it goes up to the project of the record and is saved as an image line", async () => {
+    const { api } = setup({ "POST /api/bases/app1/attachments": { id: "att5", filename: "plan.png", mime: "image/png", size: 3, width: 1, height: 1 } });
+    await screen.findByRole("toolbar", { name: "Formatting" });
+    await userEvent.upload(screen.getByLabelText("Media files"), new File(["png"], "plan.png", { type: "image/png" }));
+    await waitFor(() => expect(document.querySelector(".ProseMirror figure.ob-media img")).toHaveAttribute("src", "/api/attachments/att5/plan.png"));
+    expect(api.callsTo("POST /api/bases/app1/attachments")).toHaveLength(1);
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
+    const sent = (api.callsTo(PATCH)[0]!.body as { records: { values: Record<string, string> }[] }).records[0]!.values.fld_rich!;
+    expect(sent).toBe("# Plan\n\n![](/api/attachments/att5/plan.png)\n\n- one");
+  });
+
   it("opens the rich text editor full screen from the corner button and closes it on Escape without closing the record", async () => {
     const { props } = setup();
     await screen.findByRole("toolbar", { name: "Formatting" });

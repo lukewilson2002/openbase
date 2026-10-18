@@ -12,6 +12,7 @@ import { CheckboxEditor, RatingEditor } from "./RatingEditor";
 import { TextEditor } from "./TextEditor";
 import { UserEditor } from "./UserEditor";
 import { useAutosave } from "./useAutosave";
+import { useProjectUpload } from "./useProjectUpload";
 import type { FieldEditorCallbacks } from "./env";
 
 // Tiptap and its extensions are a chunk of their own, fetched the first time a rich text field is edited.
@@ -67,7 +68,7 @@ export function FieldEditor(props: FieldEditorProps) {
           renderFullScreen={({ value: text, onChange: change }) =>
             rich ? (
               <Suspense fallback={<FullScreenLoading />}>
-                <RichTextEditor value={text} onChange={change} autoFocus fullScreen placeholder="Write something…" aria-label={field.name} />
+                <RichFullScreenEditor value={text} onChange={change} label={field.name} />
               </Suspense>
             ) : (
               <FullScreenTextarea value={text} onChange={change} label={field.name} />
@@ -84,6 +85,12 @@ export function FieldEditor(props: FieldEditorProps) {
   }
 }
 
+/** The rich text editor of a grid cell, full screen: files go to the project of the table. */
+function RichFullScreenEditor({ value, onChange, label }: { value: string; onChange: (md: string) => void; label: string }) {
+  const upload = useProjectUpload();
+  return <RichTextEditor value={value} onChange={onChange} autoFocus fullScreen placeholder="Write something…" upload={upload} aria-label={label} />;
+}
+
 function FullScreenLoading() {
   return (
     <div className="flex flex-1 items-center justify-center">
@@ -97,6 +104,7 @@ function FullScreenLoading() {
  * pauses) and when focus leaves it, so the record's save status follows along.
  */
 function RichFormEditor({ field, value, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "onChange" | "onCommit">) {
+  const upload = useProjectUpload();
   const seed = typeof value === "string" ? value : "";
   const [draft, setDraft] = useState(seed);
   const autosave = useAutosave(seed, (text) => onCommit({ text }));
@@ -117,6 +125,7 @@ function RichFormEditor({ field, value, onChange, onCommit }: Pick<FieldEditorPr
         }}
         onBlur={autosave.flush}
         placeholder="Write something…"
+        upload={upload}
         aria-label={field.name}
       />
     </Suspense>

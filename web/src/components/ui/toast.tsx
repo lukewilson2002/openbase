@@ -98,3 +98,8 @@ export function useToast(): ToastContextValue {
   if (!ctx) throw new Error("useToast must be used inside <ToastProvider>");
   return ctx;
 }
+
+/** Like `useToast`, for components that may also render where no toast is shown (it answers null there). */
+export function useToastIfAny(): ToastContextValue | null {
+  return useContext(ToastContext);
+}
