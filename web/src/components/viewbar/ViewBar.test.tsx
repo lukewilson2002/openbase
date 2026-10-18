@@ -171,77 +171,80 @@ describe("ViewBar export and sharing", () => {
   });
 });
 
-describe("ViewBar table and view picker", () => {
-  it("names the table and view, and lists the tables with the pointed-at table's views", async () => {
-    const user = userEvent.setup();
+describe("ViewBar view switcher", () => {
+  it("names the table as text, then one icon link per view, the open one marked and none showing its name as text", () => {
     const schema = makeSchema("creator");
     const t = schema.tables[0]!;
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog: vi.fn() });
-    const trigger = screen.getByRole("button", { name: "Showing the Tasks table, All tasks view. Switch table or view" });
-    expect(trigger).toHaveTextContent("Tasks/All tasks");
-    await user.click(trigger);
-    const menu = await screen.findByRole("menu", { name: "Pick a table, then a view" });
-    expect(within(menu).getByRole("menuitemradio", { name: "Tasks" })).toHaveAttribute("aria-checked", "true");
-    expect(within(menu).getByRole("menuitemradio", { name: "All tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1");
-    expect(within(menu).getByRole("menuitemradio", { name: "All tasks" })).toHaveAttribute("aria-checked", "true");
-    expect(within(menu).getByRole("menuitemradio", { name: /My tasks/ })).toHaveAttribute("aria-checked", "false");
-    // Pointing at another table previews its views; the open view stays checked where it is.
-    await user.click(within(menu).getByRole("menuitemradio", { name: "People" }));
-    expect(within(menu).getByRole("menuitemradio", { name: "Everyone" })).toHaveAttribute("href", "/base/app1/tbl2/viw4");
-    expect(within(menu).getByRole("group", { name: "Views of People" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "New table" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Add view" })).toBeInTheDocument();
+    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" });
+    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    const views = within(screen.getByRole("navigation", { name: "Views of Tasks" })).getAllByRole("link");
+    expect(views.map((l) => [l.getAttribute("aria-label"), l.getAttribute("href")])).toEqual([
+      ["All tasks", "/base/app1/tbl1/viw1"],
+      ["Board", "/base/app1/tbl1/viw2"],
+      ["My tasks", "/base/app1/tbl1/viw3"],
+    ]);
+    expect(views.map((l) => l.getAttribute("aria-current"))).toEqual(["page", null, null]);
+    // The personal view carries its marker; the name is the tooltip, not text.
+    expect(within(views[2]!).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
+    expect(views[0]).toHaveTextContent("");
+    expect(screen.queryByText("All tasks")).not.toBeInTheDocument();
   });
 
-  it("opens the base's dialogs for a new table and a new view", async () => {
+  it("marks a locked view", () => {
+    const view = makeView({ id: "viw1", name: "Frozen", locked: true });
+    const schema = makeSchema("viewer");
+    const t = { ...schema.tables[0]!, views: [view] };
+    renderBar({ schema, table: t, view, config: view.config });
+    expect(within(screen.getByRole("link", { name: "Frozen" })).getByRole("img", { name: "Locked view" })).toBeInTheDocument();
+  });
+
+  it("puts the views that do not fit into a … menu, keeping the open one in sight", async () => {
+    const user = userEvent.setup();
+    const schema = makeSchema("viewer");
+    const views = Array.from({ length: 11 }, (_, i) => makeView({ id: `v${i + 1}`, name: `View ${i + 1}` }));
+    const t = { ...schema.tables[0]!, views };
+    // The open view is the tenth: it takes the last of the eight places.
+    renderBar({ schema, table: t, view: views[9]!, config: views[9]!.config });
+    const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
+    expect(within(nav).getAllByRole("link").map((l) => l.getAttribute("aria-label"))).toEqual(["View 1", "View 2", "View 3", "View 4", "View 5", "View 6", "View 7", "View 10"]);
+    expect(within(nav).getByRole("link", { name: "View 10" })).toHaveAttribute("aria-current", "page");
+    await user.click(within(nav).getByRole("button", { name: "3 more views" }));
+    const menu = await screen.findByRole("menu", { name: "More views of Tasks" });
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["View 8", "View 9", "View 11"]);
+    expect(within(menu).getByRole("menuitem", { name: "View 9" })).toHaveAttribute("href", "/base/app1/tbl1/v9");
+  });
+
+  it("shows four on a phone", () => {
+    const schema = makeSchema("viewer");
+    const views = Array.from({ length: 6 }, (_, i) => makeView({ id: `v${i + 1}`, name: `View ${i + 1}` }));
+    const t = { ...schema.tables[0]!, views };
+    renderBar({ schema, table: t, view: views[0]!, config: views[0]!.config }, { phone: true });
+    const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
+    expect(within(nav).getAllByRole("link")).toHaveLength(4);
+    expect(within(nav).getByRole("button", { name: "2 more views" })).toBeInTheDocument();
+  });
+
+  it("opens the project's dialog for a new view of the chosen type", async () => {
     const user = userEvent.setup();
     const onDialog = vi.fn();
     const schema = makeSchema("creator");
     const t = schema.tables[0]!;
     renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
-    await user.click(screen.getByRole("button", { name: /^Showing the Tasks table/ }));
-    await user.click(await screen.findByRole("menuitem", { name: "New table" }));
-    expect(onDialog).toHaveBeenCalledWith({ kind: "create-table" });
-    await user.click(screen.getByRole("button", { name: /^Showing the Tasks table/ }));
-    // By keyboard: jsdom has no layout, so a pointer leaving the submenu's trigger closes it.
-    (await screen.findByRole("menuitem", { name: "Add view" })).focus();
-    await user.keyboard("{ArrowRight}");
-    expect(await screen.findByRole("menuitem", { name: /^Calendar/ })).toBeInTheDocument();
-    await user.keyboard("cal{Enter}");
-    expect(onDialog).toHaveBeenLastCalledWith({ kind: "create-view", table: t, type: "calendar" });
+    await user.click(screen.getByRole("button", { name: "Add view" }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Calendar/ }));
+    expect(onDialog).toHaveBeenCalledWith({ kind: "create-view", table: t, type: "calendar" });
   });
 
-  it("unfolds the view types in place where a submenu would run off the screen", async () => {
+  it("tells editors they can make personal views only, and offers viewers no +", async () => {
     const user = userEvent.setup();
-    const onDialog = vi.fn();
-    const schema = makeSchema("creator");
+    const schema = makeSchema("editor");
     const t = schema.tables[0]!;
-    // No room to the right of the menu for a submenu (jsdom places everything at x = 0, so the
-    // window has to be narrower than the submenu itself).
-    const wide = window.innerWidth;
-    Object.defineProperty(window, "innerWidth", { value: 200, configurable: true });
-    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { onDialog });
-    await user.click(screen.getByRole("button", { name: /^Showing the Tasks table/ }));
-    const menu = await screen.findByRole("menu", { name: "Pick a table, then a view" });
-    // Measured once the menu is placed: an item that unfolds, not a submenu trigger.
-    await waitFor(() => expect(within(menu).getByRole("menuitem", { name: "Add view" })).not.toHaveAttribute("aria-haspopup"));
-    const add = within(menu).getByRole("menuitem", { name: "Add view" });
-    expect(add).toHaveAttribute("aria-expanded", "false");
-    await user.click(add);
-    // Same menu, still open: the types are listed under "Add view".
-    expect(add).toHaveAttribute("aria-expanded", "true");
-    await user.click(within(menu).getByRole("menuitem", { name: /^Calendar/ }));
-    expect(onDialog).toHaveBeenLastCalledWith({ kind: "create-view", table: t, type: "calendar" });
-    Object.defineProperty(window, "innerWidth", { value: wide, configurable: true });
-  });
-
-  it("offers neither to people who cannot make tables or views", async () => {
-    const user = userEvent.setup();
+    const { unmount } = renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "editor" }, { onDialog: vi.fn() });
+    await user.click(screen.getByRole("button", { name: "Add view" }));
+    expect(await screen.findByText("Editors can create personal views.")).toBeInTheDocument();
+    unmount();
     renderBar({}, { onDialog: vi.fn() });
-    await user.click(screen.getByRole("button", { name: /^Showing the Tasks table/ }));
-    const menu = await screen.findByRole("menu", { name: "Pick a table, then a view" });
-    expect(within(menu).queryByRole("menuitem", { name: "New table" })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: "Add view" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add view" })).not.toBeInTheDocument();
   });
 });
 
