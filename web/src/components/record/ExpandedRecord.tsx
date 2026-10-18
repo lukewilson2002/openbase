@@ -427,7 +427,8 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
       {/* From md up this column scrolls by itself, inside its padding: editors' toolbars stick to its top edge. */}
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:[--ob-sticky-top:-1rem]">
-        <div className="flex flex-col gap-4">
+        {/* Fields sit close: each is as tall as its value, and a hover tints it, which marks it off enough. */}
+        <div className="flex flex-col gap-2">
           {visible.map((f) => (
             <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={justCreated && f.id === table.primary_field_id} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
           ))}
@@ -438,7 +439,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
                 {showHidden ? "Hide" : "Show"} {hidden.length} hidden field{hidden.length === 1 ? "" : "s"}
               </button>
               {showHidden && (
-                <div id="hidden-fields" className="mt-3 flex flex-col gap-4">
+                <div id="hidden-fields" className="mt-3 flex flex-col gap-2">
                   {hidden.map((f) => (
                     <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={false} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
                   ))}

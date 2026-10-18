@@ -91,7 +91,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    // Escape in the record's long text closes the record, which saves what was typed; nothing to cancel.
+    // Escape in the record's long text ends the edit (EditableValue) and keeps what was typed: it is saved as it is typed.
     if (e.key === "Escape" && !autosaves) {
       e.preventDefault();
       doneRef.current = true;

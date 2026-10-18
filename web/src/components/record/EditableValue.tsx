@@ -9,7 +9,10 @@
  * - A checkbox and a rating are edited where they are: they are the control, not a picture of one.
  * - The edit ends when the editor commits (Enter, a pick, Done), is cancelled (Escape), or when focus
  *   leaves the field. Pop-overs, menus and the full-screen dialog of an editor are part of the field,
- *   though they render in portals (React's focus events tell). Long text saves while it is typed, so only leaving ends its edit.
+ *   though they render in portals (React's focus events tell). Long text saves while it is typed, so
+ *   Escape there ends the edit and keeps the text. Escape never closes the record around the field.
+ * - The value area is as tall as what it shows (one line when empty), not as tall as its editor: a
+ *   record of many short or empty fields stays compact.
  * - What was just saved stays on screen until the record catches up, and what could not be saved stays
  *   too (with the field's error under it), so the typed text is not lost.
  */
@@ -145,10 +148,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
     if (!long && !direct) stop(true);
   };
 
-  const box = cn(
-    "w-full min-w-0 rounded-md border border-transparent px-2 text-left text-[0.8125rem]",
-    shape === "long_text" ? (field.type === "long_text" && field.options.rich ? "min-h-[8rem] px-2.5 py-2" : "min-h-[5.5rem] py-1.5") : "flex min-h-8 flex-col justify-center py-1 pointer-coarse:min-h-11",
-  );
+  const box = "flex w-full min-w-0 min-h-8 flex-col justify-center rounded-md border border-transparent px-2 py-1 text-left text-[0.8125rem] pointer-coarse:min-h-11";
 
   if (direct) {
     return (
@@ -167,7 +167,22 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
   if (editing) {
     return (
       <EditSessionProvider value={session}>
-        <div ref={editRef} onFocus={onFocus} onBlur={onBlur} data-escape-cancels={long ? undefined : ""}>
+        <div
+          ref={editRef}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          // Escape belongs to the field, not to the record (ExpandedRecord leaves it alone in here). The
+          // single-line editors cancel on it themselves; long text, saved as it is typed, just ends the edit.
+          data-escape-cancels=""
+          onKeyDown={(e) => {
+            // Only an Escape from the field itself: one in a pop-over of its editor (a link, alt text)
+            // reaches here through the portal too, and closes just that pop-over.
+            if (long && e.key === "Escape" && editRef.current?.contains(e.target as Node)) {
+              e.preventDefault();
+              stop(true);
+            }
+          }}
+        >
           <FieldEditor key={editorKey} field={field} value={shown} variant="form" labelledBy={labelId} autoFocus onChange={onChange} onCommit={commit} onCancel={() => stop(true)} />
         </div>
       </EditSessionProvider>

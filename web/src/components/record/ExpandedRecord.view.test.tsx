@@ -215,6 +215,33 @@ describe("ExpandedRecord: view mode", () => {
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
   });
 
+  it("Escape in long text ends the edit, keeps the text and leaves the record open", async () => {
+    const { props } = setup();
+    // Rich text: the editor gives way to the rendered text.
+    await userEvent.click(await area("Notes"));
+    await waitFor(() => expect(document.querySelector(".ProseMirror")).toHaveFocus());
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
+    expect(await area("Notes")).toHaveFocus();
+    expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
+    // Plain long text: the same, and what was typed stays.
+    await userEvent.click(await area("Plain notes"));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Plain notes" }), " and two");
+    await userEvent.keyboard("{Escape}");
+    expect(await area("Plain notes")).toHaveFocus();
+    expect(within(row("Plain notes")).getByText(/line one and two/)).toBeInTheDocument();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps a value only as tall as what it shows, whatever its editor's size", async () => {
+    setup();
+    for (const f of ["Notes", "Plain notes", "Nickname"]) {
+      const cls = (await area(f)).className;
+      expect(cls).toContain("min-h-8");
+      expect(cls).not.toMatch(/min-h-\[/);
+    }
+  });
+
   it("opens a select's menu straight away, and the menu opening is not the field being left", async () => {
     const { api } = setup();
     await userEvent.click(await area("Status"));
