@@ -4,6 +4,8 @@
  * plus the alert syntax of `callout.ts`); there is no underline, colour or alignment because
  * Markdown cannot store them.
  *
+ * Embedded files (media.ts) are Markdown images of our own files; any other image is read as a link.
+ *
  * Three small departures from the library's own Markdown writer, each covered in markdown.test.ts:
  * a table is written without the blank lines it pads itself with, a line break is a plain newline
  * (Markdown.tsx and the parser both treat a single newline as a break, so `a\nb` stays as typed
@@ -19,6 +21,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import StarterKit from "@tiptap/starter-kit";
 import { Callout, QuoteOrCallout } from "./callout";
+import { ImageAsLink, Media, parseParagraph, type MediaOptions } from "./media";
 
 const ASCII_PUNCT = /[!-/:-@[-`{-~]/;
 const isSpace = (c: string | undefined) => c !== undefined && /\s/.test(c);
@@ -96,7 +99,8 @@ const ListTabStays = Extension.create({
   },
 });
 
-export function richTextExtensions(placeholder?: string): AnyExtension[] {
+/** `media` gives the editor its way to add files (the `upload` of RichTextEditor); without it files cannot be added, only shown. */
+export function richTextExtensions(placeholder?: string, media: MediaOptions = {}): AnyExtension[] {
   return [
     StarterKit.configure({
       blockquote: false,
@@ -107,7 +111,13 @@ export function richTextExtensions(placeholder?: string): AnyExtension[] {
       link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" } },
     }),
     HardBreak.extend({ renderMarkdown: () => "\n" }),
-    Paragraph.extend({ renderMarkdown: (node, h, ctx) => escapeLineStarts(Paragraph.config.renderMarkdown?.(node, h, ctx) ?? "") }),
+    Paragraph.extend({
+      // Images of our own files in a paragraph become media blocks; any other image is a link (media.ts).
+      parseMarkdown: parseParagraph,
+      renderMarkdown: (node, h, ctx) => escapeLineStarts(Paragraph.config.renderMarkdown?.(node, h, ctx) ?? ""),
+    }),
+    Media.configure(media),
+    ImageAsLink,
     QuoteOrCallout,
     Callout,
     TaskList,

@@ -4,7 +4,7 @@
  * editor's focus (mousedown is not allowed to move it), so the on-screen keyboard stays up; the
  * menus hand focus back to the editor when they close.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import {
@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Code,
   Code2,
+  ImagePlus,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -175,7 +176,32 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
   );
 }
 
-export function Toolbar({ editor }: { editor: Editor }) {
+/** Insert media: a file picker whose files are uploaded and added as blocks at the cursor. */
+function MediaButton({ editor }: { editor: Editor }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <ToolButton label="Insert media" onClick={() => input.current?.click()}>
+        <ImagePlus aria-hidden className="size-4" />
+      </ToolButton>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        tabIndex={-1}
+        aria-label="Media files"
+        className="sr-only"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (files.length > 0) editor.chain().focus().uploadMedia(files).run();
+        }}
+      />
+    </>
+  );
+}
+
+export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boolean }) {
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => {
@@ -290,6 +316,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
       <ToolButton label="Horizontal rule" onClick={() => run().setHorizontalRule().run()}>
         <Minus aria-hidden className="size-4" />
       </ToolButton>
+      {canUpload && <MediaButton editor={editor} />}
     </div>
   );
 }

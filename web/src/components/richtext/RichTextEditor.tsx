@@ -3,13 +3,19 @@
  * Markdown and `onChange` reports Markdown, so the field's value stays readable by people, the API
  * and agents. Loaded lazily (FieldEditor imports it with React.lazy) so Tiptap is its own chunk.
  *
+ * With an `upload` function the editor takes files: a toolbar button, paste and drop each add a media
+ * block (an image, video, audio or other file; see media.ts). Without it files cannot be added.
+ *
  * The expand button at the bottom-right of the box opens the same editor full screen; the two
  * share the value through the caller, and whichever is not being typed in follows it.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Maximize2 } from "lucide-react";
+import { errorMessage } from "@/api/client";
+import type { AttachmentRef } from "@/api/types";
 import { FullScreen } from "@/components/record/editors/FullScreen";
+import { useToastIfAny } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { richTextExtensions } from "./extensions";
 import { Toolbar } from "./Toolbar";
@@ -25,6 +31,8 @@ export interface RichTextEditorProps {
   /** Fills its container and scrolls inside it, with no expand button (the full-screen view itself). */
   fullScreen?: boolean;
   placeholder?: string;
+  /** Uploads a file to where it will be kept and answers its reference. Without it there is no way to add files. */
+  upload?: (file: File) => Promise<AttachmentRef>;
   "aria-label"?: string;
 }
 
@@ -34,12 +42,20 @@ function typingElsewhere(): boolean {
   return !!el && el !== document.body && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable);
 }
 
-export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen, placeholder, "aria-label": label }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen, placeholder, upload, "aria-label": label }: RichTextEditorProps) {
   const [expanded, setExpanded] = useState(false);
-  const extensions = useMemo(() => richTextExtensions(placeholder), [placeholder]);
+  const toast = useToastIfAny();
   // Callbacks change every render; the editor is created once and reads the latest through this.
-  const cb = useRef({ onChange, onBlur });
-  cb.current = { onChange, onBlur };
+  const cb = useRef({ onChange, onBlur, upload, toast });
+  cb.current = { onChange, onBlur, upload, toast };
+  const extensions = useMemo(
+    () =>
+      richTextExtensions(placeholder, {
+        upload: () => cb.current.upload,
+        onError: (file, e) => cb.current.toast?.toast({ title: `${file.name} was not added`, description: errorMessage(e), variant: "error", durationMs: 8000 }),
+      }),
+    [placeholder],
+  );
   // The Markdown the editor last produced or was given: a `value` equal to it is our own echo.
   const known = useRef(value);
   const focusOnCreate = useRef(autoFocus);
@@ -96,7 +112,7 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
         }
       }}
     >
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} canUpload={!!upload} />
       <EditorContent editor={editor} className={fullScreen ? "flex-1" : undefined} />
       {!fullScreen && (
         // Zero-height strip that sticks to the bottom of the visible part of the box, so the button
@@ -116,7 +132,7 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
       )}
       {expanded && (
         <FullScreen title={label ?? "Edit text"} onClose={() => setExpanded(false)}>
-          <RichTextEditor value={value} onChange={onChange} onBlur={onBlur} autoFocus fullScreen placeholder={placeholder} aria-label={label} />
+          <RichTextEditor value={value} onChange={onChange} onBlur={onBlur} autoFocus fullScreen placeholder={placeholder} upload={upload} aria-label={label} />
         </FullScreen>
       )}
     </div>

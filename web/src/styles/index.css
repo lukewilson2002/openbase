@@ -414,6 +414,7 @@
  *   .ob-prose        the content
  *   .ob-callout      a GitHub alert (> [!NOTE] ...), with data-callout="note|tip|important|warning|caution"
  *   .ob-check        a task-list box in the read-only rendering (the editor draws a real checkbox)
+ *   .ob-media        an embedded file (image, video, audio, or a .ob-file card) with its caption
  */
 [data-callout="note"] {
   --co: #1f5ae0;
@@ -630,6 +631,116 @@
     border-color: var(--primary);
     background: var(--primary);
     box-shadow: inset 0 0 0 2px var(--surface);
+  }
+  /*
+   * Embedded files (components/richtext/media.ts in the editor, Markdown.tsx when read): a block of
+   * its own, centered, the caption under it. A file that is not shown as media is a card.
+   */
+  .ob-prose .ob-media {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-block: 0.75rem;
+    border-radius: 0.5rem;
+  }
+  .ob-prose .ob-media > :where(img, video) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    max-height: 80vh;
+    border-radius: 0.5rem;
+  }
+  .ob-prose .ob-media > video {
+    width: 100%;
+    background: #000;
+  }
+  .ob-prose .ob-media > audio {
+    width: 100%;
+    max-width: 28rem;
+  }
+  .ob-prose .ob-media figcaption,
+  .ob-prose .ob-media-caption-input {
+    margin-top: 0.375rem;
+    max-width: 100%;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: var(--muted);
+    text-align: center;
+  }
+  .ob-prose .ob-media-caption-input {
+    width: min(100%, 24rem);
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    padding: 0.25rem 0.5rem;
+    outline: none;
+  }
+  .ob-prose .ob-media-caption-input:hover,
+  .ob-prose .ob-media-caption-input:focus {
+    background: var(--hover);
+  }
+  .ob-prose .ob-media-caption-input::placeholder {
+    color: var(--faint);
+  }
+  .ob-prose .ob-file {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: min(100%, 26rem);
+    border: 1px solid var(--line-strong);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    padding: 0.5rem 0.75rem;
+  }
+  .ob-prose .ob-file-icon {
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    background: var(--muted);
+    -webkit-mask: var(--ob-file-icon) center / contain no-repeat;
+    mask: var(--ob-file-icon) center / contain no-repeat;
+    --ob-file-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3C/svg%3E");
+  }
+  .ob-prose .ob-file-name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ob-prose .ob-file-download {
+    flex: none;
+    font-weight: 500;
+  }
+  .ob-editor .ob-media[data-selected="true"] {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .ob-editor .ob-media-tools {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.375rem;
+  }
+  .ob-editor .ob-media-pending {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-block: 0.75rem;
+    border: 1px dashed var(--line-strong);
+    border-radius: 0.5rem;
+    padding: 1.25rem 0.75rem;
+    color: var(--muted);
+  }
+  .ob-editor .ob-media-pending-icon {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--primary);
+    border-radius: 9999px;
   }
   /* The editor itself. */
   .ob-editor p.is-editor-empty:first-child::before {
