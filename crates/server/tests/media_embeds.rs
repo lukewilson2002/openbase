@@ -766,3 +766,136 @@ async fn files_embedded_in_draft_text_survive_the_cleanup() {
     assert!(exists(&kept));
     assert!(!exists(&lost));
 }
+
+// ------------------------------------------------------------ foreign references and copies
+
+#[tokio::test]
+async fn duplicating_a_project_never_copies_a_file_of_another_project() {
+    let f = Fixture::new().await;
+    let (other, _) = other_base(&f).await;
+    let foreign = upload(&f, &other, "foreign.png", b"foreign").await;
+    let inbox = inbox_upload(&f.app, &f.owner, "inbox.png", b"inbox").await;
+    let own = upload(&f, &f.base_id, "own.png", b"own").await;
+    // Bob may copy A only; he must not get B's files through the copy.
+    let bob = f.base_guest("bob@example.com", openbase::perm::Role::Creator);
+    let files = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Files", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let files_id = id_str(&files["id"]).to_string();
+    let cell =
+        |id: &str| json!([{ "id": id, "filename": "x.png", "mime": "image/png", "size": 1 }]);
+    // References written behind the API's back (old data, or a type change).
+    let text = format!(
+        "{} {} {}",
+        embed(&foreign, "foreign.png"),
+        embed(&inbox, "inbox.png"),
+        embed(&own, "own.png")
+    );
+    f.insert_record(
+        &f.table_id,
+        json!({ &f.primary_id: "r", &f.notes_id: text, &files_id: cell(&foreign) }),
+    );
+    let r = f
+        .app
+        .post(
+            &bob,
+            &format!("/api/bases/{}/duplicate", f.base_id),
+            json!({ "include_records": true }),
+        )
+        .await;
+    r.assert_status(201);
+    let copy = id_str(&r.body["id"]).to_string();
+
+    // Only A's own file got a copy.
+    let copied: i64 = f.app.query_i64(
+        "SELECT count(*) FROM attachments WHERE base_id = ?1",
+        &[&copy],
+    );
+    assert_eq!(copied, 1, "only the project's own file is copied");
+    let dump = dump_records(&f.app, &copy);
+    let (_, data, _) = dump.values().next().expect("the copied record");
+    let note = data
+        .as_object()
+        .unwrap()
+        .values()
+        .find_map(|v| v.as_str().filter(|s| s.contains("/api/attachments/")))
+        .expect("the copied note");
+    // Foreign references are left as they were: they do not load in the copy either.
+    assert!(note.contains(&foreign) && note.contains(&inbox), "{note}");
+    assert!(!note.contains(&own), "{note}");
+    // The attachment cell naming a foreign file is dropped.
+    assert!(!data.to_string().contains("\"filename\""), "{data}");
+    // Bob can open neither file.
+    for (id, name) in [(&foreign, "foreign.png"), (&inbox, "inbox.png")] {
+        f.app
+            .get(&bob, &format!("/api/attachments/{id}/{name}"))
+            .await
+            .assert_status(404);
+    }
+}
+
+#[tokio::test]
+async fn converting_a_field_to_long_text_refuses_references_to_foreign_files() {
+    let f = Fixture::new().await;
+    let (other, _) = other_base(&f).await;
+    let foreign = upload(&f, &other, "foreign.png", b"foreign").await;
+    let own = upload(&f, &f.base_id, "own.png", b"own").await;
+    let bob = f.base_guest("bob@example.com", openbase::perm::Role::Creator);
+    let tag = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Tag", "type": "single_line_text", "options": {} }),
+        )
+        .await;
+    let tag_id = id_str(&tag["id"]).to_string();
+    let mine = f
+        .create_as(
+            &bob,
+            &f.table_id,
+            json!({ &tag_id: embed(&own, "own.png") }),
+        )
+        .await;
+    mine.assert_status(201);
+    let theirs = f
+        .create_as(
+            &bob,
+            &f.table_id,
+            json!({ &tag_id: embed(&foreign, "foreign.png") }),
+        )
+        .await;
+    theirs.assert_status(201);
+    let their_id = id_str(&theirs.body["records"][0]["id"]).to_string();
+
+    let url = format!("/api/fields/{tag_id}");
+    let convert = || {
+        f.app
+            .patch(&bob, &url, json!({ "type": "long_text", "options": {} }))
+    };
+    let r = convert().await;
+    r.assert_status(400);
+    let m = message(&r);
+    assert!(
+        m.contains(&foreign) && m.contains("Tag") && m.contains(&their_id),
+        "{m}"
+    );
+    assert!(m.contains("not files of this project"), "{m}");
+    // Nothing changed.
+    let table = f.table(&f.table_id).await;
+    let kind = table["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == tag_id.as_str())
+        .unwrap()["type"]
+        .clone();
+    assert_eq!(kind, "single_line_text");
+
+    // Once the stray reference is gone the conversion goes through.
+    f.patch_as(&bob, &f.table_id, &their_id, json!({ &tag_id: "plain" }))
+        .await
+        .assert_status(200);
+    convert().await.assert_status(200);
+}

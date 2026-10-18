@@ -209,7 +209,13 @@ the file to this project to embed or link it`. The rule covers every write path:
 automations, MCP and the inbox filing, and a file that does not exist is refused like another project's file.
 A reference the value being replaced already contains is not checked again, so editing other text of an old
 value never fails. Comments follow the same rule (`400`, `attachment attXXX is not a file of this project; ...`).
-Duplicating a project copies the files its long text embeds and points the copy at them.
+Changing a field of another type to long text is refused with `400` (`field "Tag" cannot become long text:
+N record(s) refer to files that are not files of this project: rec... (att...)`, naming up to five records,
+trashed ones included) while any of its values carries such a reference; remove the references first.
+Duplicating a project copies the files its attachment cells and long text embed and points the copy at them,
+but only files of the source project: a reference to any other file (another project's, an inbox upload) is
+never copied, so a copy cannot be used to read it. In an attachment cell it is dropped, in long text it is left
+as written and does not load in the copy.
 
 **Cleanup.** Files referenced only from long text, record history or an inbox draft's text stay: the cleanup
 looks for attachment ids in all record data and in the draft text, not just in attachment fields.

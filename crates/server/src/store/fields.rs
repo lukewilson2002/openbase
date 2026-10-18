@@ -387,6 +387,9 @@ fn rewrite_for_new_kind(
         } else {
             RewriteMode::Convert
         };
+        if mode == RewriteMode::Convert && matches!(new.kind, FieldKind::LongText(_)) {
+            refuse_foreign_file_refs(tx, table, old)?;
+        }
         rewrite_cells(tx, &table.id, old, new, mode)?;
     }
     Ok(Rewrite { removed, touched })
@@ -427,6 +430,57 @@ fn tear_down_pair(
         removed: ids,
         touched,
     })
+}
+
+/// Long text may only name files of its project (`/api/attachments/<id>/...`). Other kinds of
+/// text have no such check, so turning one into long text must not carry such references
+/// across: the records (live and trashed) that hold one are listed and the change is refused.
+fn refuse_foreign_file_refs(tx: &Transaction, table: &TableRow, old: &Field) -> AppResult<()> {
+    use crate::store::attachments;
+    const LISTED: usize = 5;
+    let path = format!("$.\"{}\"", old.id);
+    let mut stmt = tx.prepare(
+        "SELECT id, data FROM records
+         WHERE table_id = ?1 AND json_type(data, ?2) IS NOT NULL AND instr(data, ?3) > 0
+         ORDER BY id",
+    )?;
+    let rows: Vec<(String, String)> = stmt
+        .query_map(params![table.id, path, attachments::REF_PREFIX], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?
+        .collect::<Result<_, _>>()?;
+    let mut bad = Vec::new();
+    for (record_id, data) in rows {
+        let Ok(obj) = serde_json::from_str::<Map<String, Json>>(&data) else {
+            continue;
+        };
+        if let Some(text) = obj.get(&old.id).and_then(Json::as_str)
+            && let Some(file) = attachments::first_foreign_ref(tx, &table.base_id, text, None)?
+        {
+            bad.push((record_id, file));
+        }
+    }
+    if bad.is_empty() {
+        return Ok(());
+    }
+    let listed: Vec<String> = bad
+        .iter()
+        .take(LISTED)
+        .map(|(rec, file)| format!("{rec} ({file})"))
+        .collect();
+    let more = bad.len().saturating_sub(LISTED);
+    Err(AppError::bad_request(format!(
+        "field \"{}\" cannot become long text: {} record(s) refer to files that are not files \
+         of this project: {}{}. Remove those references first.",
+        old.name,
+        bad.len(),
+        listed.join(", "),
+        if more > 0 {
+            format!(" and {more} more")
+        } else {
+            String::new()
+        }
+    )))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

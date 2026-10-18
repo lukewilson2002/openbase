@@ -505,7 +505,11 @@ fn copy_records(
                     &external_live,
                     &mut fills,
                     &mut attachment_cache,
-                    (!same_base).then_some((req.dest_base_id.as_str(), req.user_id.as_str())),
+                    (!same_base).then_some(AttachmentCopy {
+                        from_base: s.table.base_id.as_str(),
+                        to_base: req.dest_base_id.as_str(),
+                        user_id: req.user_id.as_str(),
+                    }),
                 )?;
                 tx.execute(
                     "INSERT INTO records (id, table_id, data, position, autonumber, created_at,
@@ -571,7 +575,7 @@ fn transform_data(
     external_live: &HashMap<String, HashSet<String>>,
     fills: &mut ExternalFills,
     attachment_cache: &mut HashMap<String, Option<String>>,
-    attachment_copy: Option<(&str, &str)>,
+    attachment_copy: Option<AttachmentCopy<'_>>,
 ) -> AppResult<Map<String, Json>> {
     let source: Map<String, Json> = serde_json::from_str(&row.data).unwrap_or_default();
     let mut out = Map::new();
@@ -613,17 +617,16 @@ fn transform_data(
                 })
             }
             CellPlan::LongText => match (attachment_copy, value.as_str()) {
-                (Some((base, user)), Some(text)) => Some(Json::String(copy_text_files(
+                (Some(copy), Some(text)) => Some(Json::String(copy_text_files(
                     tx,
                     text,
-                    base,
-                    user,
+                    copy,
                     attachment_cache,
                 )?)),
                 _ => Some(value.clone()),
             },
             CellPlan::Attachment => match attachment_copy {
-                Some((base, user)) => copy_attachments(tx, value, base, user, attachment_cache)?,
+                Some(copy) => copy_attachments(tx, value, copy, attachment_cache)?,
                 None => Some(value.clone()),
             },
         };
@@ -649,15 +652,24 @@ fn remap_select(value: &Json, ids: &HashMap<String, String>) -> Option<Json> {
     }
 }
 
+/// Copying records into another base also copies their files: from where, to where, and for whom.
+#[derive(Clone, Copy)]
+struct AttachmentCopy<'a> {
+    /// Only files of this base are copied; a reference to any other file (another project's,
+    /// somebody's inbox upload) is never followed, so a copy cannot be used to read it.
+    from_base: &'a str,
+    to_base: &'a str,
+    user_id: &'a str,
+}
+
 /// Attachment cells point at rows of `attachments` that belong to a base.
 /// Copying into another base duplicates those rows (the bytes are shared by
 /// content hash) and re-points the cell at the copies; refs whose row is gone
-/// are dropped.
+/// or belongs to another base are dropped.
 fn copy_attachments(
     tx: &Transaction,
     value: &Json,
-    dest_base: &str,
-    user_id: &str,
+    copy: AttachmentCopy<'_>,
     cache: &mut HashMap<String, Option<String>>,
 ) -> AppResult<Option<Json>> {
     let Some(items) = value.as_array() else {
@@ -668,7 +680,7 @@ fn copy_attachments(
         let Some(old_id) = item.get("id").and_then(Json::as_str) else {
             continue;
         };
-        let new_id = copy_attachment(tx, old_id, dest_base, user_id, cache)?;
+        let new_id = copy_attachment(tx, old_id, copy, cache)?;
         if let (Some(id), Some(obj)) = (new_id, item.as_object()) {
             let mut o = obj.clone();
             o.insert("id".into(), Json::String(id));
@@ -678,13 +690,12 @@ fn copy_attachments(
     Ok((!out.is_empty()).then_some(Json::Array(out)))
 }
 
-/// Copy the attachment row `old_id` into `dest_base` (once per copy: `cache`), returning the
-/// new id, or `None` when the row is gone.
+/// Copy the attachment row `old_id` into the destination base (once per copy: `cache`),
+/// returning the new id, or `None` when the row is gone or is not a file of the source base.
 fn copy_attachment(
     tx: &Transaction,
     old_id: &str,
-    dest_base: &str,
-    user_id: &str,
+    copy: AttachmentCopy<'_>,
     cache: &mut HashMap<String, Option<String>>,
 ) -> AppResult<Option<String>> {
     if let Some(cached) = cache.get(old_id) {
@@ -696,8 +707,8 @@ fn copy_attachment(
                                   has_thumb, base_id, created_by, created_at)
          SELECT ?1, sha256, filename, mime, size, width, height, has_thumb, ?2, ?3,
                 created_at
-         FROM attachments WHERE id = ?4",
-        params![fresh, dest_base, user_id, old_id],
+         FROM attachments WHERE id = ?4 AND base_id = ?5",
+        params![fresh, copy.to_base, copy.user_id, old_id, copy.from_base],
     )?;
     let result = (n == 1).then_some(fresh);
     cache.insert(old_id.to_string(), result.clone());
@@ -706,18 +717,17 @@ fn copy_attachment(
 
 /// Long text embeds files by address (`/api/attachments/<id>/...`): copying into another base
 /// copies those files too and re-points the text at the copies. References to files that
-/// are gone stay as they are.
+/// are gone or that belong to another base stay as they are (they will not load in the copy).
 fn copy_text_files(
     tx: &Transaction,
     text: &str,
-    dest_base: &str,
-    user_id: &str,
+    copy: AttachmentCopy<'_>,
     cache: &mut HashMap<String, Option<String>>,
 ) -> AppResult<String> {
     let mut map = HashMap::new();
     for old in crate::store::attachments::referenced_ids(text) {
-        if let Some(copy) = copy_attachment(tx, &old, dest_base, user_id, cache)? {
-            map.insert(old, copy);
+        if let Some(new) = copy_attachment(tx, &old, copy, cache)? {
+            map.insert(old, new);
         }
     }
     Ok(crate::store::attachments::remap_refs(text, &map))
