@@ -49,8 +49,8 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
     let tools = client.list_all_tools().await.expect("tools/list");
     let names: Vec<String> = tools.iter().map(|t| t.name.to_string()).collect();
     for expected in [
-        "list_bases",
-        "get_base_schema",
+        "list_projects",
+        "get_project_schema",
         "create_records",
         "create_table",
         "create_field",

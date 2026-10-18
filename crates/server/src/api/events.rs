@@ -2,7 +2,7 @@
 //!
 //! The stream carries the base's [`EventEnvelope`]s from the in-process event
 //! bus. Each message is `event: <kind>` (`records_changed`, `schema_changed`,
-//! `comments_changed`, `base_changed`) and `data: <envelope JSON>`; clients
+//! `comments_changed`, `base_changed`, `presence_changed`) and `data: <envelope JSON>`; clients
 //! use them as invalidation hints and refetch what they display. A comment
 //! line (`: keep-alive`) is sent every [`KEEP_ALIVE`] so proxies keep the
 //! connection open.
@@ -19,6 +19,13 @@
 //! * **Shutdown.** When the server is asked to stop, every stream ends
 //!   ([`crate::events::EventBus::begin_shutdown`]); otherwise graceful
 //!   shutdown would wait for them forever.
+//! * **Presence.** An open stream counts its user as viewing the base. The
+//!   user's first stream announces `presence_changed {viewers}` to the streams
+//!   already open, their last one closing announces it again (any way the
+//!   stream ends: client disconnect, lost access, shutdown), and
+//!   `GET /api/bases/{id}/presence` answers the same list on demand. Several
+//!   tabs of one user count once; a new stream does not receive its own
+//!   arrival, it reads the list when it connects.
 //! * **Echoes.** Every event carries the `client_id` (the `X-Client-Id` of the
 //!   request that caused it) so a client can skip its own changes.
 
@@ -26,12 +33,13 @@ use std::convert::Infallible;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use axum::Json;
 use axum::Router;
 use axum::extract::{Path, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
 use futures::Stream;
-use ob_core::api::events::{BaseEvent, EventEnvelope};
+use ob_core::api::events::{BaseEvent, EventEnvelope, Presence};
 use rusqlite::Connection;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::time::Instant;
@@ -39,7 +47,7 @@ use tokio::time::Instant;
 use crate::auth::Actor;
 use crate::db::now_ms;
 use crate::error::AppResult;
-use crate::events::EventBus;
+use crate::events::{EventBus, PresenceGuard};
 use crate::perm::{self, Role};
 use crate::state::AppState;
 
@@ -63,7 +71,25 @@ fn recheck_interval() -> Duration {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/api/bases/{id}/events", get(stream_events))
+    Router::new()
+        .route("/api/bases/{id}/events", get(stream_events))
+        .route("/api/bases/{id}/presence", get(presence))
+}
+
+/// Who has the base open right now.
+async fn presence(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(base_id): Path<String>,
+) -> AppResult<Json<Presence>> {
+    let (a, b) = (actor, base_id.clone());
+    state
+        .db
+        .read(move |conn| perm::require_base(conn, &a, &b, Role::Viewer).map(|_| ()))
+        .await?;
+    Ok(Json(Presence {
+        viewers: state.events.viewers(&base_id),
+    }))
 }
 
 /// Whether the actor may still read the base: the user is active, a session
@@ -131,6 +157,9 @@ struct Feed {
     shutdown: tokio::sync::watch::Receiver<bool>,
     greeted: bool,
     next_recheck: Instant,
+    /// Leaves the base's presence list when the feed is dropped, whichever way
+    /// the stream ends (including a client that simply disconnects).
+    _presence: PresenceGuard,
 }
 
 impl Feed {
@@ -152,6 +181,7 @@ pub fn event_name(event: &BaseEvent) -> &'static str {
         BaseEvent::SchemaChanged { .. } => "schema_changed",
         BaseEvent::CommentsChanged { .. } => "comments_changed",
         BaseEvent::BaseChanged => "base_changed",
+        BaseEvent::PresenceChanged { .. } => "presence_changed",
     }
 }
 
@@ -224,6 +254,9 @@ async fn stream_events(
         .await?;
     // Subscribe only after the access check: subscribing creates the base's
     // channel, which must not be possible for ids the caller cannot read.
+    // Join first and subscribe second, so the new stream is not told about its
+    // own arrival.
+    let presence = state.events.join(&base_id, &actor.user_id);
     let rx = subscribe(&state.events, &base_id);
     let shutdown = state.events.shutdown_signal();
     let feed = Feed {
@@ -234,6 +267,7 @@ async fn stream_events(
         shutdown,
         greeted: false,
         next_recheck: Instant::now() + recheck_interval(),
+        _presence: presence,
     };
     Ok(Sse::new(feed_stream(feed)).keep_alive(
         KeepAlive::new().interval(Duration::from_millis(KEEP_ALIVE_MS.load(Ordering::Relaxed))),
@@ -271,6 +305,12 @@ mod tests {
                 "comments_changed",
             ),
             (BaseEvent::BaseChanged, "base_changed"),
+            (
+                BaseEvent::PresenceChanged {
+                    viewers: vec!["u".into()],
+                },
+                "presence_changed",
+            ),
         ];
         for (event, name) in cases {
             assert_eq!(event_name(&event), name);

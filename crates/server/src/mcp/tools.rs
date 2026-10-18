@@ -232,8 +232,28 @@ pub fn truncate(text: &str, max: usize) -> String {
     )
 }
 
-/// The level a tool needs, if the tool exists.
+/// Tools that were renamed when "base" became "project" in the web app: the old name keeps
+/// working, but only the new one is listed, so assistants see a single name.
+const LEGACY_NAMES: &[(&str, &str)] = &[
+    ("list_bases", "list_projects"),
+    ("get_base_schema", "get_project_schema"),
+    ("create_base", "create_project"),
+    ("rename_base", "rename_project"),
+    ("delete_base", "delete_project"),
+    ("duplicate_base", "duplicate_project"),
+];
+
+/// The listed name of a tool: `name` itself, or what a legacy alias stands for.
+pub fn canonical_name(name: &str) -> &str {
+    LEGACY_NAMES
+        .iter()
+        .find(|(old, _)| *old == name)
+        .map_or(name, |(_, new)| *new)
+}
+
+/// The level a tool needs, if the tool exists (under its listed name or a legacy alias).
 pub fn required_level(name: &str) -> Option<Level> {
+    let name = canonical_name(name);
     registry().iter().find(|t| t.name == name).map(|t| t.level)
 }
 
@@ -285,6 +305,7 @@ pub fn list_page(actor: &Actor, cursor: Option<&str>, page_size: usize) -> Resul
 /// Run a tool. `None` = no such tool (a protocol error); a tool the token may not use is a tool
 /// error that says what it needs.
 pub async fn call(ctx: &McpCtx, name: &str, args: Value) -> Option<ToolResult> {
+    let name = canonical_name(name);
     let def = registry().iter().find(|t| t.name == name)?;
     if !def.level.allows(&ctx.actor) {
         return Some(ToolResult::error(format!(
@@ -385,6 +406,19 @@ mod tests {
                 t.name
             );
         }
+    }
+
+    #[test]
+    fn legacy_tool_names_resolve_but_are_not_listed() {
+        let all = names(&actor(true, true));
+        for (old, new) in LEGACY_NAMES {
+            assert!(!all.contains(&old.to_string()), "{old} is listed");
+            assert!(all.contains(&new.to_string()), "{new} is not listed");
+            assert_eq!(canonical_name(old), *new);
+            assert_eq!(required_level(old), required_level(new));
+            assert!(required_level(new).is_some());
+        }
+        assert_eq!(canonical_name("list_records"), "list_records");
     }
 
     #[test]

@@ -14,18 +14,19 @@ const HISTORY_DEFAULT: usize = 20;
 const HISTORY_MAX: usize = 100;
 const NOTIFICATIONS_DEFAULT: usize = 30;
 const NOTIFICATIONS_MAX: usize = 100;
-const TRASH_KINDS: &[&str] = &["record", "field", "table", "view", "base", "workspace"];
+/// What `restore_from_trash` accepts. `base` is the old name of `project`: still accepted, not listed.
+const TRASH_KINDS: &[&str] = &["record", "field", "table", "view", "project", "workspace"];
 
 pub fn definitions() -> Vec<ToolDef> {
     vec![
         ToolDef::new(
             "list_trash",
             "List the trash",
-            "List what was deleted and can still be restored: records, fields, tables and views of a base (creator role), or the bases of a workspace (workspace_id; owner role and the manage permission). With neither id, lists your deleted workspaces (manage permission). Items are kept for the trash retention period.",
+            "List what was deleted and can still be restored: records, fields, tables and views of a project (creator role), or the projects of a workspace (workspace_id; owner role and the manage permission). With neither id, lists your deleted workspaces (manage permission). Items are kept for the trash retention period.",
             object(
                 json!({
-                    "base_id": string("Base whose trash to list."),
-                    "workspace_id": string("Workspace whose deleted bases to list."),
+                    "project_id": string("Project whose trash to list."),
+                    "workspace_id": string("Workspace whose deleted projects to list."),
                 }),
                 &[],
             ),
@@ -33,7 +34,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "restore_from_trash",
             "Restore from the trash",
-            "Restore a deleted record, field, table, view, base or workspace by id (ids come from list_trash, or from the result of the delete). Restoring a field brings back the fields trashed with it. Bases and workspaces need the manage permission and the owner role.",
+            "Restore a deleted record, field, table, view, project or workspace by id (ids come from list_trash, or from the result of the delete). Restoring a field brings back the fields trashed with it. Projects and workspaces need the manage permission and the owner role.",
             object(
                 json!({
                     "kind": enumeration(TRASH_KINDS, "What to restore."),
@@ -106,6 +107,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 #[serde(deny_unknown_fields)]
 struct TrashArgs {
     #[serde(default)]
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: Option<String>,
     #[serde(default)]
     workspace_id: Option<String>,
@@ -114,7 +116,7 @@ struct TrashArgs {
 async fn list_trash(ctx: &McpCtx, a: TrashArgs) -> ToolResult {
     let path = match (&a.base_id, &a.workspace_id) {
         (Some(_), Some(_)) => {
-            return ToolResult::error("Give either base_id or workspace_id, not both.");
+            return ToolResult::error("Give either project_id or workspace_id, not both.");
         }
         (Some(b), None) => base_path(b, "/trash"),
         (None, Some(w)) => format!("/api/workspaces/{}/trash", encode_segment(w)),
@@ -140,11 +142,15 @@ struct RestoreArgs {
     id: String,
 }
 
-async fn restore_from_trash(ctx: &McpCtx, a: RestoreArgs) -> ToolResult {
-    if !TRASH_KINDS.contains(&a.kind.as_str()) {
+async fn restore_from_trash(ctx: &McpCtx, mut a: RestoreArgs) -> ToolResult {
+    let given = a.kind.clone();
+    if a.kind == "project" {
+        a.kind = "base".into();
+    }
+    if a.kind != "base" && !TRASH_KINDS.contains(&a.kind.as_str()) {
         return ToolResult::error(format!(
             "Unknown kind '{}'. Kinds: {}.",
-            a.kind,
+            given,
             TRASH_KINDS.join(", ")
         ));
     }
@@ -158,7 +164,7 @@ async fn restore_from_trash(ctx: &McpCtx, a: RestoreArgs) -> ToolResult {
     .await
     {
         Ok(v) => {
-            let mut out = json!({ "restored": { "kind": a.kind, "id": a.id } });
+            let mut out = json!({ "restored": { "kind": given, "id": a.id } });
             if let Some(ids) = v
                 .get("restored_field_ids")
                 .filter(|i| i.as_array().is_some_and(|a| !a.is_empty()))

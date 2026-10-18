@@ -43,70 +43,70 @@ pub fn definitions() -> Vec<ToolDef> {
     );
     vec![
         ToolDef::new(
-            "create_base",
-            "Create a base",
-            "Create a base in a workspace (you become its owner), optionally with a colour and an icon. Needs the creator role on the workspace and a token with write access that is not limited to specific bases.",
+            "create_project",
+            "Create a project",
+            "Create a project in a workspace (you become its owner), optionally with a colour and an icon. Needs the creator role on the workspace and a token with write access that is not limited to specific projects.",
             object(
                 json!({
-                    "workspace_id": string("Workspace id (from list_bases or list_workspaces)."),
-                    "name": string("Base name."),
+                    "workspace_id": string("Workspace id (from list_projects or list_workspaces)."),
+                    "name": string("Project name."),
                     "color": string("Optional colour name, e.g. blue, green, red, purple."),
-                    "icon": icon_schema("base"),
+                    "icon": icon_schema("project"),
                 }),
                 &["workspace_id", "name"],
             ),
         )
         .write(),
         ToolDef::new(
-            "rename_base",
-            "Rename or restyle a base",
-            "Change a base's name, colour or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
+            "rename_project",
+            "Rename or restyle a project",
+            "Change a project's name, colour or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "name": string("New name."),
                     "color": string("New colour name."),
-                    "icon": icon_schema("base"),
+                    "icon": icon_schema("project"),
                 }),
-                &["base_id"],
+                &["project_id"],
             ),
         )
         .write()
         .idempotent(),
         ToolDef::new(
-            "duplicate_base",
-            "Duplicate a base",
-            "Copy a base (tables, fields, views and icons; records only with include_records) into the same workspace. Needs the manage permission and the creator role.",
+            "duplicate_project",
+            "Duplicate a project",
+            "Copy a project (tables, fields, views and icons; records only with include_records) into the same workspace. Needs the manage permission and the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "name": string("Name of the copy (default: '<name> copy')."),
                     "include_records": boolean("Copy the records too (default false)."),
                 }),
-                &["base_id"],
+                &["project_id"],
             ),
         )
         .manage(),
         ToolDef::new(
-            "delete_base",
-            "Delete a base",
-            "Delete a base with everything in it. It moves to the trash and can be restored within the trash retention period (restore_from_trash, kind 'base'). Needs the manage permission and the owner role.",
-            object(json!({ "base_id": string(BASE_ID) }), &["base_id"]),
+            "delete_project",
+            "Delete a project",
+            "Delete a project with everything in it. It moves to the trash and can be restored within the trash retention period (restore_from_trash, kind 'project'). Needs the manage permission and the owner role.",
+            object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
         )
         .manage()
         .destructive(),
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a base, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new base (create_base): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the base, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
+            "Add a table to a project, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new project (create_project): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the project, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "name": string("Table name."),
                     "icon": icon_schema("table"),
                     "fields": {
                         "type": "array",
-                        "description": "Fields to create after the primary field 'Name', in order. Each one is exactly the arguments of create_field without base_id and table. 'Name' is taken by the primary field, so give the other fields other names. The whole call fails, creating nothing, if any field is invalid.",
+                        "description": "Fields to create after the primary field 'Name', in order. Each one is exactly the arguments of create_field without project_id and table. 'Name' is taken by the primary field, so give the other fields other names. The whole call fails, creating nothing, if any field is invalid.",
                         "items": object(
                             json!({
                                 "name": string("Field name (unique within the table; 'Name' is the primary field)."),
@@ -119,7 +119,7 @@ pub fn definitions() -> Vec<ToolDef> {
                         ),
                     },
                 }),
-                &["base_id", "name"],
+                &["project_id", "name"],
             ),
         )
         .write(),
@@ -129,13 +129,13 @@ pub fn definitions() -> Vec<ToolDef> {
             "Change a table's name, description and/or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("New name."),
                     "description": string("New description."),
                     "icon": icon_schema("table"),
                 }),
-                &["base_id", "table"],
+                &["project_id", "table"],
             ),
         )
         .write()
@@ -143,15 +143,15 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "duplicate_table",
             "Duplicate a table",
-            "Copy a table (fields, views and icon, and the records unless include_records is false) within its base. Needs the creator role.",
+            "Copy a table (fields, views and icon, and the records unless include_records is false) within its project. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("Name of the copy (default: '<name> copy')."),
                     "include_records": boolean("Copy the records too (default true)."),
                 }),
-                &["base_id", "table"],
+                &["project_id", "table"],
             ),
         )
         .write(),
@@ -160,8 +160,8 @@ pub fn definitions() -> Vec<ToolDef> {
             "Delete a table",
             "Delete a table with its records. It moves to the trash and can be restored (restore_from_trash, kind 'table'). Link fields pointing at it are trashed with it. Needs the creator role.",
             object(
-                json!({ "base_id": string(BASE_ID), "table": string(TABLE) }),
-                &["base_id", "table"],
+                json!({ "project_id": string(BASE_ID), "table": string(TABLE) }),
+                &["project_id", "table"],
             ),
         )
         .write()
@@ -172,7 +172,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Add a field (column) to a table. All 28 types are supported; call field_types for the options and value shape of each. Link fields also create the inverse field in the other table (name it with inverse_name). Computed fields (formula, lookup, rollup, count, ...) are filled in automatically. The result's views_note says what to check in the table's views (forms do not ask for a new field until you add it). Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("Field name (unique within the table)."),
                     "type": ftype.clone(),
@@ -180,7 +180,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "description": string("Optional description."),
                     "inverse_name": string("Link fields only: name of the field created in the linked table (default: the table's name)."),
                 }),
-                &["base_id", "table", "name", "type"],
+                &["project_id", "table", "name", "type"],
             ),
         )
         .write(),
@@ -190,7 +190,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "field": string("Field name or id."),
                     "name": string("New name."),
@@ -199,7 +199,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "options": free_object("Options to change, in the shape of create_field's `options` (merged into the current ones; names accepted). Needed with `type` for types that require options."),
                     "confirm_conversion": boolean("Set true to confirm a type change that converts existing data."),
                 }),
-                &["base_id", "table", "field"],
+                &["project_id", "table", "field"],
             ),
         )
         .write(),
@@ -209,11 +209,11 @@ pub fn definitions() -> Vec<ToolDef> {
             "Delete a field and the fields that depend on it (lookups, rollups, the inverse of a link). They move to the trash and can be restored with restore_from_trash (kind 'field'). The result lists the views that used them (views_to_check: a calendar's date field, a kanban's stack field, a filter, a form question, ...) so you can fix or delete those views. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "field": string("Field name or id."),
                 }),
-                &["base_id", "table", "field"],
+                &["project_id", "table", "field"],
             ),
         )
         .write()
@@ -224,11 +224,11 @@ pub fn definitions() -> Vec<ToolDef> {
             "Make another field the table's primary (first, name-giving) field. Links and record titles show it. Link, attachment, checkbox, multiple select, rating and computed-from-link fields cannot be primary. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "field": string("Field name or id."),
                 }),
-                &["base_id", "table", "field"],
+                &["project_id", "table", "field"],
             ),
         )
         .write()
@@ -239,12 +239,12 @@ pub fn definitions() -> Vec<ToolDef> {
             "Parse and type-check a formula without creating a field and preview its value on a record. Write field references as {Field Name}. Returns ok, the result type, or the error with its position. Needs the editor role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "expression": string("Formula, e.g. {Price} * {Qty} or IF({Status} = 'Done', 1, 0)."),
                     "record_id": string("Record to preview against (default: the table's first record)."),
                 }),
-                &["base_id", "table", "expression"],
+                &["project_id", "table", "expression"],
             ),
         )
         // The REST endpoint is a POST that needs a token with write access, though it changes
@@ -254,7 +254,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_icons",
             "Search icon names",
-            "Search the Lucide icon names that workspaces, bases and tables can have (set with the `icon` argument of create_workspace / rename_workspace, create_base / rename_base and create_table / rename_table). Every word of `query` has to match an icon's name or one of its old names ('cart shop' finds shopping-cart, 'home' finds house); without a query the first icons alphabetically are listed. Names are kebab-case, e.g. briefcase, users, chart-column.",
+            "Search the Lucide icon names that workspaces, projects and tables can have (set with the `icon` argument of create_workspace / rename_workspace, create_project / rename_project and create_table / rename_table). Every word of `query` has to match an icon's name or one of its old names ('cart shop' finds shopping-cart, 'home' finds house); without a query the first icons alphabetically are listed. Names are kebab-case, e.g. briefcase, users, chart-column.",
             object(
                 json!({
                     "query": string("Words to search for, e.g. 'money' or 'truck delivery'."),
@@ -285,10 +285,10 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
         };
     }
     match name {
-        "create_base" => with_args!(CreateBase, create_base),
-        "rename_base" => with_args!(RenameBase, rename_base),
-        "duplicate_base" => with_args!(DuplicateBase, duplicate_base),
-        "delete_base" => with_args!(BaseArg, delete_base),
+        "create_project" => with_args!(CreateBase, create_project),
+        "rename_project" => with_args!(RenameBase, rename_project),
+        "duplicate_project" => with_args!(DuplicateBase, duplicate_project),
+        "delete_project" => with_args!(BaseArg, delete_project),
         "create_table" => with_args!(CreateTable, create_table),
         "rename_table" => with_args!(RenameTable, rename_table),
         "duplicate_table" => with_args!(DuplicateTable, duplicate_table),
@@ -345,12 +345,14 @@ fn list_icons(a: ListIconsArg) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BaseArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TableArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
 }
@@ -358,6 +360,7 @@ struct TableArg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FieldArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     field: String,
@@ -437,13 +440,7 @@ fn base_out(v: &Value) -> Value {
     Value::Object(out)
 }
 
-fn insert_some(body: &mut Map<String, Value>, key: &str, value: Option<String>) {
-    if let Some(v) = value {
-        body.insert(key.into(), json!(v));
-    }
-}
-
-// ----------------------------------------------------------------------------------- bases
+// -------------------------------------------------------------------------------- projects
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -456,7 +453,7 @@ struct CreateBase {
     icon: Option<Option<String>>,
 }
 
-async fn create_base(ctx: &McpCtx, a: CreateBase) -> ToolResult {
+async fn create_project(ctx: &McpCtx, a: CreateBase) -> ToolResult {
     let mut body = Map::new();
     body.insert("name".into(), json!(a.name));
     insert_some(&mut body, "color", a.color);
@@ -474,6 +471,7 @@ async fn create_base(ctx: &McpCtx, a: CreateBase) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RenameBase {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     #[serde(default)]
     name: Option<String>,
@@ -483,7 +481,7 @@ struct RenameBase {
     icon: Option<Option<String>>,
 }
 
-async fn rename_base(ctx: &McpCtx, a: RenameBase) -> ToolResult {
+async fn rename_project(ctx: &McpCtx, a: RenameBase) -> ToolResult {
     let mut body = Map::new();
     insert_some(&mut body, "name", a.name);
     insert_some(&mut body, "color", a.color);
@@ -511,6 +509,7 @@ async fn rename_base(ctx: &McpCtx, a: RenameBase) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DuplicateBase {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     #[serde(default)]
     name: Option<String>,
@@ -518,7 +517,7 @@ struct DuplicateBase {
     include_records: Option<bool>,
 }
 
-async fn duplicate_base(ctx: &McpCtx, a: DuplicateBase) -> ToolResult {
+async fn duplicate_project(ctx: &McpCtx, a: DuplicateBase) -> ToolResult {
     let mut body = Map::new();
     insert_some(&mut body, "name", a.name);
     body.insert(
@@ -539,12 +538,12 @@ async fn duplicate_base(ctx: &McpCtx, a: DuplicateBase) -> ToolResult {
     }
 }
 
-async fn delete_base(ctx: &McpCtx, a: BaseArg) -> ToolResult {
+async fn delete_project(ctx: &McpCtx, a: BaseArg) -> ToolResult {
     match fetch(ctx, "DELETE", &base_path(&a.base_id, ""), None, None).await {
         Ok(_) => ToolResult::ok(json!({
             "deleted": a.base_id,
             "note": format!(
-                "Moved to the trash, not erased: restore_from_trash (kind 'base') brings it back within {} days.",
+                "Moved to the trash, not erased: restore_from_trash (kind 'project') brings it back within {} days.",
                 ctx.state.config.trash_days
             ),
         })),
@@ -571,6 +570,7 @@ struct NewField {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateTable {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     name: String,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
@@ -685,6 +685,7 @@ async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RenameTable {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     #[serde(default)]
@@ -731,6 +732,7 @@ async fn rename_table(ctx: &McpCtx, a: RenameTable) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DuplicateTable {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     #[serde(default)]
@@ -805,6 +807,7 @@ fn check_type(t: &str) -> Result<(), ToolResult> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateField {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     name: String,
@@ -860,6 +863,7 @@ async fn create_field(ctx: &McpCtx, a: CreateField) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateField {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     field: String,
@@ -1048,6 +1052,7 @@ async fn set_primary_field(ctx: &McpCtx, a: FieldArg) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CheckFormula {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     expression: String,
@@ -1197,7 +1202,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "Attachment",
             false,
             "{}",
-            "array of {id}: upload with upload_attachment (same base), then write the returned reference",
+            "array of {id}: upload with upload_attachment (same project), then write the returned reference",
             json!({}),
         ),
         e(
@@ -1213,7 +1218,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "User",
             false,
             "{multiple?: boolean, notify?: boolean}",
-            "{id} or {email} (array for multiple); the person must have access to the base (list_collaborators)",
+            "{id} or {email} (array for multiple); the person must have access to the project (list_collaborators)",
             json!({"multiple": false}),
         ),
         e(

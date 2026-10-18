@@ -19,8 +19,8 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_automations",
             "List automations",
-            "List a base's automations (name, enabled, trigger, actions, next scheduled run). Needs the creator role.",
-            object(json!({ "base_id": string(BASE_ID) }), &["base_id"]),
+            "List a project's automations (name, enabled, trigger, actions, next scheduled run). Needs the creator role.",
+            object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
         ),
         ToolDef::new(
             "get_automation",
@@ -37,7 +37,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Create an automation: one trigger and up to 25 actions. It is off unless enabled=true. Webhook automations return their secret token once. Use test_automation (dry run) to check it. Needs the creator role.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "name": string("Automation name."),
                     "enabled": boolean("Turn it on right away (default false)."),
                     "trigger": free_object(TRIGGER_HELP),
@@ -47,7 +47,7 @@ pub fn definitions() -> Vec<ToolDef> {
                         "description": ACTIONS_HELP,
                     }),
                 }),
-                &["base_id", "name", "trigger", "actions"],
+                &["project_id", "name", "trigger", "actions"],
             ),
         )
         .write(),
@@ -139,6 +139,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BaseArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
 }
 
@@ -296,6 +297,7 @@ fn actions_to_ids(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateAutomation {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     name: String,
     #[serde(default)]
@@ -387,7 +389,7 @@ async fn update_automation(ctx: &McpCtx, a: UpdateAutomation) -> ToolResult {
             Err(e) => return e,
         };
         let Some(base_id) = current["base_id"].as_str() else {
-            return ToolResult::error("could not determine the base of the automation");
+            return ToolResult::error("could not determine the project of the automation");
         };
         let schema = match load_schema(ctx, base_id).await {
             Ok(s) => s,

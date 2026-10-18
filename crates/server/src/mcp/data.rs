@@ -39,12 +39,12 @@ const MAX_HINT_NAMES: usize = 40;
 
 pub fn definitions() -> Vec<ToolDef> {
     let role_names = json!(["viewer", "commenter", "editor", "creator", "owner"]);
-    let scope = json!({ "type": "string", "enum": ["workspace", "base"], "description": "Whether `id` is a workspace id or a base id." });
+    let scope = json!({ "type": "string", "enum": ["workspace", "project"], "description": "Whether `id` is a workspace id or a project id." });
     vec![
         tool(
-            "list_bases",
-            "List workspaces and bases",
-            "List the workspaces and bases this token can reach, with your role on each (and their icons, when set). Start here to get base ids (and workspace ids for creating bases).",
+            "list_projects",
+            "List workspaces and projects",
+            "List the workspaces and projects this token can reach, with your role on each (and their icons, when set). Start here to get project ids (and workspace ids for creating projects).",
             object(json!({}), &[]),
             Level::Read,
             true,
@@ -52,10 +52,10 @@ pub fn definitions() -> Vec<ToolDef> {
             true,
         ),
         tool(
-            "get_base_schema",
-            "Get a base's schema",
-            "Get the tables, fields (name, id, type, options such as select choices or link targets) and views of a base. Use it to learn the exact table and field names before reading or writing records.",
-            object(json!({ "base_id": string(BASE_ID) }), &["base_id"]),
+            "get_project_schema",
+            "Get a project's schema",
+            "Get the tables, fields (name, id, type, options such as select choices or link targets) and views of a project. Use it to learn the exact table and field names before reading or writing records.",
+            object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
             Level::Read,
             true,
             false,
@@ -67,7 +67,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "List records of a table as {id, createdTime, fields} keyed by field NAME (linked records appear as {id, name}). Fields with no value are left out of `fields` (as in Airtable) unless include_empty is true, which returns them as null. Optionally use a saved view's filter/sort, an Airtable filterByFormula such as {Status}='Done', field selection and sorting. Returns up to max_records (default 50, max 200); if `offset` is returned there are more: call again with it.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "view": string("Optional view name or id; its filter, sorting and hidden records apply."),
                     "filter_by_formula": string("Optional Airtable formula; records where it is true are returned, e.g. AND({Status}='Open', {Priority}>2)."),
@@ -89,7 +89,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "offset": string("The `offset` of a previous result, to get the next records."),
                     "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
-                &["base_id", "table"],
+                &["project_id", "table"],
             ),
             Level::Read,
             true,
@@ -102,13 +102,13 @@ pub fn definitions() -> Vec<ToolDef> {
             "Find records whose any field contains the text (case-insensitive). Same result shape as list_records (include_empty works the same).",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "query": string("Text to look for (at most 500 characters)."),
                     "max_records": integer("How many records to return (default 50, max 200).", 1, MAX_RECORDS as u64),
                     "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
-                &["base_id", "table", "query"],
+                &["project_id", "table", "query"],
             ),
             Level::Read,
             true,
@@ -121,7 +121,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Counts, sums, averages, minimums and maximums computed on the server, optionally per group, without reading the records. Give `group_by` field names (e.g. [\"Status\"]; none = one row of totals) and `aggregates` ([{\"function\": \"sum\", \"field\": \"Amount\"}]; functions: count, sum, avg, min, max; sum and avg need a number field, min and max a number or date field; count with no field counts records, with a field it counts the records where that field is filled; default is one count). Narrow the records like list_records: `view` and/or `filter_by_formula`. Returns {group_by, groups: [{group: {Field: value}, aggregates: {alias: value}}], total_groups, truncated, record_count}. Group values are names, never ids: a select's choice name, linked records / people / multiple selects as arrays of names, dates as YYYY-MM-DD, null for the empty group; a multiple select, link or people field groups by its exact combination of values. Aggregates are named `count` or `<function>_<Field>` unless you give an `alias`.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "group_by": string_list("Field names to group by (at most 3). Leave out for one row of totals."),
                     "aggregates": {
@@ -156,7 +156,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     },
                     "limit": integer("Most groups to return (default 200, max 1000); `truncated` says whether more exist.", 1, MAX_GROUPS_RETURNED as u64),
                 }),
-                &["base_id", "table"],
+                &["project_id", "table"],
             ),
             Level::Read,
             true,
@@ -169,12 +169,12 @@ pub fn definitions() -> Vec<ToolDef> {
             "Get one record by id as {id, createdTime, fields} keyed by field name. Empty fields are left out unless include_empty is true (then they are null).",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "record_id": string("Record id, e.g. recXXXXXXXXXXXXXX."),
                     "include_empty": boolean("Return fields with no value as null (default false: empty fields are left out of `fields`, as in Airtable). Use it to learn a table's columns from the records; respects `fields`."),
                 }),
-                &["base_id", "table", "record_id"],
+                &["project_id", "table", "record_id"],
             ),
             Level::Read,
             true,
@@ -187,7 +187,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. With typecast (default true) values are converted leniently and new select choices are created.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "records": {
                         "type": "array",
@@ -203,7 +203,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     },
                     "typecast": { "type": "boolean", "description": "Convert values leniently and create missing select choices (default true)." },
                 }),
-                &["base_id", "table", "records"],
+                &["project_id", "table", "records"],
             ),
             Level::Write,
             false,
@@ -216,7 +216,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Update 1-10 existing records. Each is {\"id\": \"rec...\", \"fields\": {...}}; only the fields you give change (set a field to null to clear it). Same value shapes as create_records. The change is attributed to you in the record history.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "records": {
                         "type": "array",
@@ -235,7 +235,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     },
                     "typecast": { "type": "boolean", "description": "Convert values leniently and create missing select choices (default true)." },
                 }),
-                &["base_id", "table", "records"],
+                &["project_id", "table", "records"],
             ),
             Level::Write,
             false,
@@ -248,7 +248,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Delete 1-10 records by id. They are moved to the trash (restorable for the trash retention period, 30 days by default), not erased immediately.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "record_ids": {
                         "type": "array",
@@ -258,7 +258,7 @@ pub fn definitions() -> Vec<ToolDef> {
                         "description": "Ids of the records to delete (at most 10)."
                     },
                 }),
-                &["base_id", "table", "record_ids"],
+                &["project_id", "table", "record_ids"],
             ),
             Level::Write,
             false,
@@ -278,7 +278,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "add_comment",
             "Add a comment",
-            "Comment on a record as the token's user. To mention someone write @[Name](usrXXXX) with their user id (see get_base_schema / the collaborators endpoint in api_reference).",
+            "Comment on a record as the token's user. To mention someone write @[Name](usrXXXX) with their user id (see get_project_schema / the collaborators endpoint in api_reference).",
             object(
                 json!({
                     "record_id": string("Record id."),
@@ -296,7 +296,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Look up REST endpoints",
             "Catalogue of every REST endpoint of OpenBase's internal API (what the web app uses): method, path, purpose, minimum role, required token permission and request/response summary. Without `area` it lists the areas; with one it lists that area's endpoints in detail. Use it before api_request.",
             object(
-                json!({ "area": string("Area to list in detail: workspaces, bases, tables, fields, views, records, comments, search, trash, csv, attachments, sharing, automations, invites, notifications, account, admin, airtable, system.") }),
+                json!({ "area": string("Area to list in detail: workspaces, projects, tables, fields, views, records, comments, search, trash, csv, attachments, sharing, automations, invites, notifications, inbox, account, admin, airtable, system.") }),
                 &[],
             ),
             Level::Read,
@@ -325,10 +325,11 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_workspace",
             "Create a workspace",
-            "Create a workspace, optionally with an icon; you become its owner. Needs the manage permission.",
+            "Create a workspace, optionally with a colour and an icon; you become its owner. Needs the manage permission.",
             object(
                 json!({
                     "name": string("Workspace name."),
+                    "color": string("Optional colour name, e.g. blue, green, red, purple."),
                     "icon": icon_schema("workspace"),
                 }),
                 &["name"],
@@ -341,9 +342,9 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "list_members",
             "List members",
-            "List the members of a workspace with their role and the bases each can open (all_bases, or the base_ids they were given), or, for a base, the workspace members who can open it. People get access only by being workspace members. Needs the manage permission.",
+            "List the members of a workspace with their role and the projects each can open (all_projects, or the project_ids they were given), or, for a project, the workspace members who can open it. People get access only by being workspace members. Needs the manage permission.",
             object(
-                json!({ "scope": scope.clone(), "id": string("Workspace id or base id.") }),
+                json!({ "scope": scope.clone(), "id": string("Workspace id or project id.") }),
                 &["scope", "id"],
             ),
             Level::Manage,
@@ -353,16 +354,16 @@ pub fn definitions() -> Vec<ToolDef> {
         ),
         tool(
             "set_member_role",
-            "Change a member's role or bases",
-            "Change a workspace member's role and/or the bases they can open: all_bases true gives every base (including later ones), base_ids limits them to those bases. One role applies to every base they can open; owners always have all bases. Only scope 'workspace' is accepted (there are no per-base roles). Needs the manage permission and the owner role.",
+            "Change a member's role or projects",
+            "Change a workspace member's role and/or the projects they can open: all_projects true gives every project (including later ones), project_ids limits them to those projects. One role applies to every project they can open; owners always have all projects. Only scope 'workspace' is accepted (there are no per-project roles). Needs the manage permission and the owner role.",
             object(
                 json!({
                     "scope": scope.clone(),
                     "id": string("Workspace id."),
                     "user_id": string("User id of the member (from list_members)."),
                     "role": { "type": "string", "enum": role_names.clone(), "description": "New role (leave out to keep it)." },
-                    "all_bases": { "type": "boolean", "description": "true: every base of the workspace, including bases made later." },
-                    "base_ids": { "type": "array", "items": { "type": "string" }, "description": "Limit the member to these bases of the workspace (at least one)." },
+                    "all_projects": { "type": "boolean", "description": "true: every project of the workspace, including projects made later." },
+                    "project_ids": { "type": "array", "items": { "type": "string" }, "description": "Limit the member to these projects of the workspace (at least one)." },
                 }),
                 &["scope", "id", "user_id"],
             ),
@@ -374,15 +375,15 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_invite",
             "Invite someone",
-            "Create an invite link to join a workspace. Scope 'workspace' (owner role needed): any role, every base by default or only base_ids. Scope 'base' (creator role on that base needed): only that base by default, or base_ids you can open yourself; never all bases and never above your own role. Give the link to the person; with an email, the invite is only valid for that address (and emailed if the server can send mail). Needs the manage permission.",
+            "Create an invite link to join a workspace. Scope 'workspace' (owner role needed): any role, every project by default or only project_ids. Scope 'project' (creator role on that project needed): only that project by default, or project_ids you can open yourself; never all projects and never above your own role. Give the link to the person; with an email, the invite is only valid for that address (and emailed if the server can send mail). Needs the manage permission.",
             object(
                 json!({
                     "scope": scope,
-                    "id": string("Workspace id or base id."),
+                    "id": string("Workspace id or project id."),
                     "role": { "type": "string", "enum": role_names, "description": "Role the invitee gets (not above your own)." },
                     "email": string("Optional: restrict the invite to this email address."),
-                    "all_bases": { "type": "boolean", "description": "true: every base of the workspace, including bases made later (workspace owners only)." },
-                    "base_ids": { "type": "array", "items": { "type": "string" }, "description": "Bases of the workspace the invitee can open." },
+                    "all_projects": { "type": "boolean", "description": "true: every project of the workspace, including projects made later (workspace owners only)." },
+                    "project_ids": { "type": "array", "items": { "type": "string" }, "description": "Projects of the workspace the invitee can open." },
                 }),
                 &["scope", "id", "role"],
             ),
@@ -398,9 +399,9 @@ pub fn definitions() -> Vec<ToolDef> {
 // Dispatch
 
 pub async fn run(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
-    if name == "list_bases" {
+    if name == "list_projects" {
         return match no_args(args) {
-            Ok(()) => list_bases(ctx).await,
+            Ok(()) => list_projects(ctx).await,
             Err(e) => e,
         };
     }
@@ -417,7 +418,7 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
         };
     }
     match name {
-        "get_base_schema" => with_args!(BaseArg, get_base_schema),
+        "get_project_schema" => with_args!(BaseArg, get_project_schema),
         "list_records" => with_args!(ListArgs, list_records),
         "search_records" => with_args!(SearchArgs, search_records),
         "aggregate_records" => with_args!(AggregateArgs, aggregate_records),
@@ -443,7 +444,7 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
 fn app_error(e: &AppError) -> ToolResult {
     match e {
         AppError::NotFound(what) => ToolResult::error(format!(
-            "{what} not found, or you have no access to it. Check the id (list_bases and get_base_schema list valid ones)."
+            "{what} not found, or you have no access to it. Check the id (list_projects and get_project_schema list valid ones)."
         )),
         other => ToolResult::error(other.to_string()),
     }
@@ -461,11 +462,11 @@ async fn hints(ctx: &McpCtx, base_id: &str, table: Option<&str>) -> String {
         .db
         .read(move |c| {
             if perm::require_base(c, &actor, &base_id, Role::Viewer).is_err() {
-                return Ok("Use list_bases to see the base ids you can access.".to_string());
+                return Ok("Use list_projects to see the project ids you can access.".to_string());
             }
             let tables = schema::live_tables(c, &base_id)?;
             let mut text = format!(
-                "Tables in this base: {}.",
+                "Tables in this project: {}.",
                 names(tables.iter().map(|t| format!("'{}' ({})", t.name, t.id)))
             );
             if let Some(wanted) = table
@@ -509,7 +510,7 @@ async fn v1_failure(ctx: &McpCtx, e: V1Error, base_id: &str, table: Option<&str>
         "NOT_FOUND" | "UNKNOWN_FIELD_NAME" | "VIEW_NAME_NOT_FOUND" | "INVALID_VALUE_FOR_COLUMN"
     ) || e.status == axum::http::StatusCode::UNPROCESSABLE_ENTITY;
     let mut text = if e.kind == "INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND" {
-        "You do not have permission to do this on this base (check your role and the token's permissions), or the base or table does not exist.".to_string()
+        "You do not have permission to do this on this project (check your role and the token's permissions), or the project or table does not exist.".to_string()
     } else {
         format!("{} ({})", e.message, e.kind)
     };
@@ -536,7 +537,7 @@ async fn require_editor(ctx: &McpCtx, base_id: &str) -> Result<(), ToolResult> {
 // ---------------------------------------------------------------------------------------------
 // Tools
 
-async fn list_bases(ctx: &McpCtx) -> ToolResult {
+async fn list_projects(ctx: &McpCtx) -> ToolResult {
     let actor = ctx.actor.clone();
     let listed = ctx
         .state
@@ -567,10 +568,11 @@ async fn list_bases(ctx: &McpCtx) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BaseArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
 }
 
-async fn get_base_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
+async fn get_project_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
     let (actor, id) = (ctx.actor.clone(), a.base_id.clone());
     let res = ctx
         .state
@@ -585,7 +587,7 @@ async fn get_base_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
         Ok(s) => s,
         Err(AppError::NotFound(_)) => {
             return ToolResult::error(format!(
-                "Base '{}' not found, or you have no access to it. Use list_bases to see valid base ids.",
+                "Project '{}' not found, or you have no access to it. Use list_projects to see valid project ids.",
                 a.base_id
             ));
         }
@@ -668,6 +670,7 @@ struct SortArg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ListArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     #[serde(default)]
@@ -769,6 +772,7 @@ async fn list_records(ctx: &McpCtx, a: ListArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SearchArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     query: String,
@@ -799,6 +803,7 @@ async fn search_records(ctx: &McpCtx, a: SearchArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AggregateArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     #[serde(default)]
@@ -867,6 +872,7 @@ async fn aggregate_records(ctx: &McpCtx, a: AggregateArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GetArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     record_id: String,
@@ -905,6 +911,7 @@ struct NewRecordArg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     records: Vec<NewRecordArg>,
@@ -962,6 +969,7 @@ struct UpdateRecordArg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     records: Vec<UpdateRecordArg>,
@@ -998,6 +1006,7 @@ async fn update_records(ctx: &McpCtx, a: UpdateArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DeleteArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     table: String,
     record_ids: Vec<String>,
@@ -1117,6 +1126,8 @@ async fn api_request(ctx: &McpCtx, a: RequestArgs) -> ToolResult {
 #[serde(deny_unknown_fields)]
 struct WorkspaceArgs {
     name: String,
+    #[serde(default)]
+    color: Option<String>,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
@@ -1124,6 +1135,7 @@ struct WorkspaceArgs {
 async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
     let mut body = serde_json::Map::new();
     body.insert("name".into(), json!(a.name));
+    insert_some(&mut body, "color", a.color);
     let note = match put_icon(&mut body, a.icon) {
         Ok(n) => n,
         Err(e) => return e,
@@ -1150,6 +1162,8 @@ async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     Workspace,
+    /// Called `base` before projects got their name.
+    #[serde(rename = "project", alias = "base")]
     Base,
 }
 
@@ -1193,16 +1207,18 @@ struct MemberRoleArgs {
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
+    #[serde(rename = "all_projects", alias = "all_bases")]
     all_bases: Option<bool>,
     #[serde(default)]
+    #[serde(rename = "project_ids", alias = "base_ids")]
     base_ids: Option<Vec<String>>,
 }
 
 async fn set_member_role(ctx: &McpCtx, a: MemberRoleArgs) -> ToolResult {
     if matches!(a.scope, Scope::Base) {
         return ToolResult::error(
-            "There are no per-base roles: a member has one role in the workspace. Use scope \
-             'workspace' with the workspace id, and all_bases or base_ids to choose which bases \
+            "There are no per-project roles: a member has one role in the workspace. Use scope \
+             'workspace' with the workspace id, and all_projects or project_ids to choose which projects \
              they can open.",
         );
     }
@@ -1217,7 +1233,7 @@ async fn set_member_role(ctx: &McpCtx, a: MemberRoleArgs) -> ToolResult {
         body.insert("base_ids".into(), json!(ids));
     }
     if body.is_empty() {
-        return ToolResult::error("Give a new role, all_bases or base_ids.");
+        return ToolResult::error("Give a new role, all_projects or project_ids.");
     }
     let path = format!(
         "/api/workspaces/{}/members/{}",
@@ -1240,8 +1256,10 @@ struct InviteArgs {
     #[serde(default)]
     email: Option<String>,
     #[serde(default)]
+    #[serde(rename = "all_projects", alias = "all_bases")]
     all_bases: Option<bool>,
     #[serde(default)]
+    #[serde(rename = "project_ids", alias = "base_ids")]
     base_ids: Option<Vec<String>>,
 }
 

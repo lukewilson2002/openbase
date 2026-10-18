@@ -218,7 +218,7 @@ fn ids_in(text: &str, out: &mut HashSet<String>) {
 /// record (live or trashed) or in the retained record history: removing a
 /// file from a cell must stay undoable (client-side undo, copying from the
 /// history panel) for as long as that history exists. Returns the hashes of
-/// the deleted rows.
+/// the deleted rows. Files of inbox drafts count as referenced too.
 ///
 /// Equivalent to `NOT EXISTS (SELECT 1 FROM records WHERE instr(data, id))`
 /// but scans the records once instead of once per attachment; the history is
@@ -246,6 +246,13 @@ pub fn delete_unreferenced(
     while let Some(row) = rows.next()? {
         let data: String = row.get(0)?;
         ids_in(&data, &mut referenced);
+    }
+    // Files of unfiled inbox drafts are still wanted.
+    let mut stmt = conn.prepare("SELECT attachments FROM inbox_items WHERE attachments != '[]'")?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let files: String = row.get(0)?;
+        ids_in(&files, &mut referenced);
     }
     if candidates.iter().any(|(id, _)| !referenced.contains(id)) {
         let mut stmt =

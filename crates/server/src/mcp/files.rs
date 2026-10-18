@@ -27,15 +27,15 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "upload_attachment",
             "Upload a file",
-            "Upload a file to a base from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. The size limit is the server's upload limit (5 MB by default). Needs the editor role.",
+            "Upload a file to a project from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. Leave project_id out to upload for your inbox instead: only you can read the file until you file the draft (add_to_inbox / update_inbox_item attachments). The size limit is the server's upload limit (5 MB by default). Needs the editor role on the project.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string("Project id (see list_projects). Leave out to upload a file for your inbox."),
                     "filename": string("File name, e.g. invoice.pdf (required with content_base64; taken from the URL otherwise)."),
                     "content_base64": string("The file's bytes, base64-encoded."),
                     "url": string("Public http(s) URL to download the file from instead."),
                 }),
-                &["base_id"],
+                &[],
             ),
         )
         .write(),
@@ -45,11 +45,11 @@ pub fn definitions() -> Vec<ToolDef> {
             "Export a view as CSV text exactly as the web app's export does: the view's visible fields in view order, its filter, sort and grouping applied, dates in your time zone. Long exports are cut at about 80 KB at a row boundary with a note giving the totals; use a view with a filter, or query_view with offset, for the rest.",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "view": string("View name or id."),
                     "table": string("Table name or id; needed only when several tables have a view with this name."),
                 }),
-                &["base_id", "view"],
+                &["project_id", "view"],
             ),
         ),
         ToolDef::new(
@@ -58,14 +58,14 @@ pub fn definitions() -> Vec<ToolDef> {
             "Import CSV text into an existing table (rows become records; columns are matched to fields by header name, or by `mapping`) or, with new_table_name, create a new table from the CSV (fields and their types are inferred; the first column becomes the primary field; it starts with one grid view, so set up the others its purpose calls for). All or nothing: if any row is rejected nothing is written and the problem rows are listed. Values are read leniently like pasted text. Limits: 20 MB, 100,000 rows. Needs the editor role (creator for a new table).",
             object(
                 json!({
-                    "base_id": string(BASE_ID),
+                    "project_id": string(BASE_ID),
                     "csv_text": string("The CSV content, first row = header (unless has_header is false)."),
                     "table": string("Existing table (name or id) to add the rows to."),
                     "new_table_name": string("Create a new table with this name instead."),
                     "mapping": free_object("Existing table only: {\"CSV column\": \"Field name\" | null (skip)}. Columns not listed are matched by name. With has_header=false the keys are zero-based column numbers (\"0\", \"1\", ...)."),
                     "has_header": boolean("Whether the first row is a header (default true)."),
                 }),
-                &["base_id", "csv_text"],
+                &["project_id", "csv_text"],
             ),
         )
         .write(),
@@ -94,7 +94,8 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UploadArgs {
-    base_id: String,
+    #[serde(default, rename = "project_id", alias = "base_id")]
+    base_id: Option<String>,
     #[serde(default)]
     filename: Option<String>,
     #[serde(default)]
@@ -204,7 +205,10 @@ async fn upload_attachment(ctx: &McpCtx, a: UploadArgs) -> ToolResult {
     match fetch(
         ctx,
         "POST",
-        &base_path(&a.base_id, "/attachments"),
+        &match &a.base_id {
+            Some(id) => base_path(id, "/attachments"),
+            None => "/api/inbox/attachments".to_string(),
+        },
         None,
         Some(body),
     )
@@ -223,6 +227,7 @@ async fn upload_attachment(ctx: &McpCtx, a: UploadArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExportArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]
@@ -345,6 +350,7 @@ async fn export_csv(ctx: &McpCtx, a: ExportArgs) -> ToolResult {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ImportArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     csv_text: String,
     #[serde(default)]
@@ -479,7 +485,7 @@ async fn import_csv(ctx: &McpCtx, a: ImportArgs) -> ToolResult {
     if let Some(fields) = out.get("fields").and_then(Value::as_array)
         && !fields.is_empty()
     {
-        out["note"] = json!("A new table was created; get_base_schema shows it.");
+        out["note"] = json!("A new table was created; get_project_schema shows it.");
         out["views_note"] = json!(super::views::NEW_TABLE_VIEWS);
     }
     ToolResult::ok(out)

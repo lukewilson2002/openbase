@@ -45,6 +45,7 @@ pub mod catalogue;
 pub mod data;
 pub mod files;
 pub mod history;
+pub mod inbox;
 pub mod people;
 pub mod resolve;
 pub mod schema;
@@ -100,12 +101,12 @@ const TOOLS_PAGE: usize = 100;
 /// Guidance shown to the model by clients (`instructions` of `initialize` / `server/discover`).
 const INSTRUCTIONS: &str = "\
 OpenBase is a self-hosted Airtable alternative. Tools act as the token's user, within the token's permissions: anything the user can do in the web app. \
-Start with list_bases, then get_base_schema for table, field and view names (names or ids both work). \
+A project is called a base in the REST API (/api/bases, ids start with app); list_bases and base_id still work. Start with list_projects, then get_project_schema for table, field and view names. \
 Records: list_records, search_records, get_record, create_records, update_records, delete_records use field NAMES; writes take up to 10 records per call; deleted records go to the trash (restore_from_trash). For counts, sums, averages, min/max or per-group breakdowns use aggregate_records, not record reads. \
 Structure: create_table, create_field (field_types explains the 28 types), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups by field name). \
 Views: keep each table's views useful to people and to you. When you create or import a table, or add, remove or retype fields, add or fix the views its purpose and the user's use of it call for, and only those (a calendar for dated records, a kanban by status, a form for intake, a grid of contacts by company), named for what they show. Read through a fitting view with query_view (its filter and sort applied) and point people to views by name. \
-Also: icons (Lucide names; list_icons), formulas (check_formula), comments, record history, share links and public forms, automations (test_automation dry-runs), CSV import and export, file uploads, notifications. \
-Tokens with the 'manage' permission also manage workspaces, members (one role per workspace; no per-base roles), invites and bases; instance administrators get admin_* tools. \
+Also: icons (Lucide names; list_icons), formulas (check_formula), comments, record history, share links and public forms, automations, CSV import and export, file uploads, notifications, your inbox of quick-capture drafts (list_inbox, add_to_inbox, file_inbox_item). \
+Tokens with the 'manage' permission also manage workspaces, members (one role per workspace; no per-project roles), invites and projects; instance administrators get admin_* tools. \
 For anything else api_reference lists every REST endpoint and api_request calls one, with the web app's permission checks. \
 Credentials, sessions, API tokens, password resets, 2FA and the SMTP password can never be changed through MCP. Errors name what to fix.";
 
@@ -120,6 +121,7 @@ pub fn definitions() -> Vec<tools::ToolDef> {
     all.extend(sharing::definitions());
     all.extend(automations::definitions());
     all.extend(files::definitions());
+    all.extend(inbox::definitions());
     all.extend(admin::definitions());
     all
 }
@@ -145,6 +147,9 @@ pub async fn run(ctx: &McpCtx, name: &str, args: Value) -> tools::ToolResult {
         return r;
     }
     if let Some(r) = files::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = inbox::run(ctx, name, &args).await {
         return r;
     }
     if let Some(r) = admin::run(ctx, name, &args).await {

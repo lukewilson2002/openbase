@@ -10,7 +10,7 @@ use super::tools::{ToolDef, ToolResult};
 
 fn view_props() -> Value {
     json!({
-        "base_id": string(BASE_ID),
+        "project_id": string(BASE_ID),
         "view": string("View name or id (a form view for a public form)."),
         "table": string("Table name or id; needed only when several tables have a view with this name."),
     })
@@ -28,14 +28,14 @@ pub fn definitions() -> Vec<ToolDef> {
             "create_share_link",
             "Create a share link",
             "Publish a view as a public link anyone with the URL can open: a read-only page (kind 'view', non-form views) or a public form (kind 'form', form views) that creates records without signing in. Optional password. Returns the full URL. Needs the creator role.",
-            object(create_props, &["base_id", "view"]),
+            object(create_props, &["project_id", "view"]),
         )
         .write(),
         ToolDef::new(
             "list_share_links",
             "List share links",
             "List the share links of a view with their URL, kind, whether they are enabled and password-protected. Needs the creator role.",
-            object(view_props(), &["base_id", "view"]),
+            object(view_props(), &["project_id", "view"]),
         ),
         ToolDef::new(
             "update_share_link",
@@ -90,6 +90,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ListShares {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]
@@ -99,6 +100,7 @@ struct ListShares {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateShare {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     view: String,
     #[serde(default)]

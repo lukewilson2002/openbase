@@ -79,7 +79,7 @@ async fn an_agent_sets_changes_keeps_and_clears_icons_on_workspace_base_and_tabl
     let err = a
         .fails("rename_workspace", json!({"workspace_id": ws_id}))
         .await;
-    assert!(err.contains("name and/or icon"), "{err}");
+    assert!(err.contains("name, colour and/or icon"), "{err}");
 
     // ---- base: create with an icon, schema and listings show it, change, keep, clear
     let base = a

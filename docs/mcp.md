@@ -264,8 +264,19 @@ The details are in [Choose a token](#choose-a-token), [Scope model](#scope-model
 
 ## How an agent works here
 
+- **Projects.** What the web app calls a *project* is a *base* in the REST API
+  (`/api/bases/...`, ids start with `app`). The tools say project: `list_projects`,
+  `get_project_schema`, `create_project`, `rename_project`, `duplicate_project`,
+  `delete_project`, and every tool that took `base_id` takes `project_id` (also
+  `project_ids` for `base_ids`, `all_projects` for `all_bases`, scope `project` for
+  scope `base`, and kind `project` for `restore_from_trash`). The old names (`list_bases`,
+  `get_base_schema`, `create_base`, `rename_base`, `duplicate_base`, `delete_base`, and
+  the `base_id`, `base_ids`, `all_bases` arguments, scope `base`, kind `base`) keep working as
+  aliases for existing prompts and scripts, but are not listed in `tools/list`, so an assistant
+  sees one name. Results keep their keys (`base`, `bases`); the REST API, the Airtable-compatible
+  API and the `app...` ids do not change.
 - **Names, not ids.** Tables, fields, views and select choices are given by name
-  (an id works too). `get_base_schema` lists them. A wrong name returns the valid
+  (an id works too). `get_project_schema` lists them. A wrong name returns the valid
   ones.
 - **Value shapes** follow the [Airtable-compatible API](api.md#25-value-shapes): text,
   numbers, `true`/`false`, dates as `"YYYY-MM-DD"` or ISO datetimes, select names,
@@ -285,20 +296,20 @@ A typical run, as tool calls:
 
 ```text
 create_workspace {name: "Acme"}                              -> workspace id
-create_base {workspace_id, name: "CRM"}                      -> base id, with a first table
-rename_table {base_id, table: "Table 1", name: "Customers"}
-create_table {base_id, name: "Orders", fields: [             -> the whole table in one call
+create_project {workspace_id, name: "CRM"}                   -> project id, with a first table
+rename_table {project_id, table: "Table 1", name: "Customers"}
+create_table {project_id, name: "Orders", fields: [             -> the whole table in one call
   {name: "Customer", type: "link", options: {linked_table: "Customers"}, inverse_name: "Orders"},
   {name: "Qty", type: "number"},
   {name: "Total", type: "formula", options: {expression: "{Qty} * {Unit price}"}}]}
 create_field {..., table: "Customers", name: "Lifetime value", type: "rollup",
               options: {link_field: "Orders", target_field: "Total", expression: "SUM(values)"}}
-create_records {base_id, table: "Customers", records: [{fields: {Name: "Ada"}}]}
-create_view {base_id, table: "Orders", name: "Open by customer", type: "grid",
+create_records {project_id, table: "Customers", records: [{fields: {Name: "Ada"}}]}
+create_view {project_id, table: "Orders", name: "Open by customer", type: "grid",
              config: {filter: {items: [{field_id: "Status", op: "is", value: "Open"}]},
                       sorts: [{field_id: "Total", direction: "desc"}],
                       groups: [{field_id: "Customer"}]}}
-query_view {base_id, view: "Open by customer"}               -> rows in view order + groups
+query_view {project_id, view: "Open by customer"}               -> rows in view order + groups
 ```
 
 ## Tools
@@ -307,15 +318,15 @@ Tools are listed according to the token (a read-only token does not see
 `create_records`), and every tool re-checks permissions when called. A call that
 fails returns a tool result with `isError: true` and a message that says how to fix
 it; protocol problems are JSON-RPC errors. Results longer than 100,000 bytes are cut
-with a note. `base_id` always comes from `list_bases`; `table`, `field` and `view`
+with a note. `project_id` always comes from `list_projects`; `table`, `field` and `view`
 are names or ids.
 
 ### Records and comments (data tools)
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_bases` | any | Workspaces and bases the token can reach, with your role on each and their icons |
-| `get_base_schema` | any | The base's icon, and its tables (with icons), fields (id, name, type, options) and views |
+| `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`) |
+| `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
 | `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
 | `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
@@ -330,11 +341,11 @@ are names or ids.
 | Tool | Needs | What it does |
 |---|---|---|
 | `list_workspaces` | any | Workspaces (with icons) with your role, member and pending-invite counts, and the bases you can open (with who can open each) |
-| `create_workspace` | manage | New workspace, optionally with an `icon`; you become its owner |
-| `rename_workspace` | manage | Rename and/or change or remove the `icon` (owner role) |
+| `create_workspace` | manage | New workspace, optionally with a `color` (a colour name such as `blue`, checked like a project's colour; the next default colour otherwise) and an `icon`; you become its owner |
+| `rename_workspace` | manage | Rename and/or change the `color` and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
 | `list_members` | manage | Members of a workspace with their role and bases (`all_bases` or `base_ids`), or the workspace members who can open one base |
-| `set_member_role` | manage | Change a workspace member's `role`, and/or their bases: `all_bases: true` or a `base_ids` list (owner role; owners always have every base; a workspace always keeps an owner). Scope `base` is refused: there are no per-base roles |
+| `set_member_role` | manage | Change a workspace member's `role`, and/or their bases: `all_bases: true` or a `base_ids` list (owner role; owners always have every base; a workspace always keeps an owner). Scope `project` is refused: there are no per-project roles |
 | `remove_member` | manage | Remove someone from a workspace (they lose all its bases), or take one base off a limited member's list (not their last) |
 | `create_invite` | manage | Invite link to join a workspace, optional email restriction; returns the link. Scope `workspace` (owner): every base, or `base_ids`. Scope `base` (creator of that base): that base, or `base_ids` you can open; never `all_bases`, never above your role |
 | `list_invites` / `revoke_invite` | manage | A workspace's invites, or the pending ones that give a base; revoke one |
@@ -344,8 +355,8 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `create_base` / `rename_base` | write | Create a base in a workspace (it starts with the table "Table 1", which has just the primary field "Name" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
-| `duplicate_base` / `delete_base` | manage | Copy a base (records optional; the copy keeps the icons); delete to the trash (owner role) |
+| `create_project` / `rename_project` | write | (aliases `create_base` / `rename_base`) Create a project in a workspace (it starts with the table "Table 1", which has just the primary field "Name" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
+| `duplicate_project` / `delete_project` | manage | (aliases `duplicate_base` / `delete_base`) Copy a project (records optional; the copy keeps the icons); delete to the trash (owner role) |
 | `create_table` / `rename_table` | write | Add a table, optionally with its `icon` and a `fields` list (each entry is the arguments of `create_field` without `base_id` and `table`), so a table is set up in one call; rename it or change its description or `icon`. A new table always starts with just the primary text field "Name" and a grid view (the same as the first table of a new base): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the base; to link a table to itself, create it first and add the field with `create_field` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
@@ -360,8 +371,8 @@ are names or ids.
 
 Workspaces, bases and tables can have an icon: a [Lucide](https://lucide.dev) name in
 kebab-case such as `briefcase`, `users` or `chart-column` (the web app's icon picker offers
-the same set). `create_workspace`, `create_base` and `create_table` take an optional `icon`;
-`rename_workspace`, `rename_base` and `rename_table` change it. In those, **leaving `icon` out
+the same set). `create_workspace`, `create_project` and `create_table` take an optional `icon`;
+`rename_workspace`, `rename_project` and `rename_table` change it. In those, **leaving `icon` out
 keeps the current icon, a name sets it, and `null` removes it**. The tools keep their
 `rename_*` names (an `update_*` rename would have broken existing agents and prompts); their
 titles and descriptions say that they also change icons.
@@ -373,8 +384,8 @@ newer web client keeps working), the tools check the name against the list of Lu
 shopping-cart, ...`); an old name (`home` for `house`) or loose spelling (`Chart Column`) is
 accepted and stored under the canonical name, and the result says so in `note`. `list_icons`
 finds names: every word of `query` has to match a name or an old name (`cart shop` finds
-`shopping-cart`); without a query it lists alphabetically. Icons show in `list_bases`,
-`list_workspaces` and `get_base_schema`.
+`shopping-cart`); without a query it lists alphabetically. Icons show in `list_projects`,
+`list_workspaces` and `get_project_schema`.
 
 ### Views
 
@@ -406,12 +417,32 @@ dates; date-times are turned into a day in the field's own time zone if it has
 one, otherwise the viewer's. `exact_date` is the day as written. Details:
 [docs/api.md, section 6](api.md#6-relative-date-filters-and-time-zones).
 
+### Inbox
+
+Your inbox holds private quick-capture drafts (Markdown text plus files) that are in no project yet;
+only you see them. They are the tools' way to "write it down now, decide where it goes later".
+
+| Tool | Needs | What it does |
+|---|---|---|
+| `list_inbox` | any | Your drafts, most recently changed first |
+| `add_to_inbox` | write | Save a note (`body`, Markdown) and/or files (`attachments: [{id}]` from `upload_attachment` without `project_id`) |
+| `update_inbox_item` | write | Change a draft's `body` and/or replace its `attachments` |
+| `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them; the text is not copied automatically. Needs the editor role there; on any failure the draft stays |
+| `delete_inbox_item` | write | Delete a draft permanently |
+
+### Presence
+
+Who has a project open right now is not a curated tool: call
+`api_request {method: "GET", path: "/api/bases/<project id>/presence"}` for `{viewers: [user ids]}`
+(the people with the project open in the web app; see [api.md](api.md#presence-internal-api)). It
+needs only read access.
+
 ### Trash, history, notifications
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_trash` | any | Deleted records, fields, tables and views of a base (creator role); a workspace's deleted bases; your deleted workspaces |
-| `restore_from_trash` | write | Bring back a record, field, table, view, base or workspace |
+| `list_trash` | any | Deleted records, fields, tables and views of a project (creator role); a workspace's deleted projects; your deleted workspaces |
+| `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace |
 | `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values |
 | `list_notifications` / `mark_notifications_read` | any / write | Your notifications; mark some or all read |
 
@@ -439,7 +470,7 @@ one, otherwise the viewer's. `exact_date` is the day as written. Details:
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field |
+| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field. Without `project_id` the file is uploaded for your inbox (see below) |
 | `export_csv` | any | A view as CSV text; cut at about 80 KB at a row boundary with the totals |
 | `import_csv` | write | CSV text into an existing table (columns by header or `mapping`) or into a new table with inferred field types; all or nothing |
 

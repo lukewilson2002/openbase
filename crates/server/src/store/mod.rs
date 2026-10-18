@@ -12,6 +12,7 @@ pub mod field_kind;
 pub mod fields;
 pub mod fields_engine;
 pub mod history;
+pub mod inbox;
 pub mod invites;
 pub mod links;
 pub mod notifications;

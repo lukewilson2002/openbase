@@ -669,6 +669,7 @@ async fn upload_form_file(
     charge_upload_bytes(&state, &client, &r.table.base_id, &headers, cap)?;
     let multipart = crate::api::csv::limited_multipart(&state, req, cap).await?;
     let saved =
-        crate::api::attachments::save_upload(&state, &r.table.base_id, None, multipart).await?;
+        crate::api::attachments::save_upload(&state, Some(&r.table.base_id), None, multipart)
+            .await?;
     Ok(Json(saved))
 }

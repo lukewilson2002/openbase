@@ -108,7 +108,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "admin_stats",
             "Instance statistics",
-            "Counts of users, workspaces, bases and records, database and attachment sizes, the time of the last backup and the version. Instance administrators only.",
+            "Counts of users, workspaces, projects and records, database and attachment sizes, the time of the last backup and the version. Instance administrators only.",
             object(json!({}), &[]),
         )
         .admin(),

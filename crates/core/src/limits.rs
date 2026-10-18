@@ -23,3 +23,7 @@ pub const MAX_SEARCH_LEN: usize = 500;
 pub const MAX_PAGE_SIZE: usize = 1_000;
 /// Formula evaluation nesting (function calls / computed field chains).
 pub const MAX_FORMULA_DEPTH: usize = 64;
+/// Drafts one user can keep in their inbox.
+pub const MAX_INBOX_ITEMS: usize = 500;
+/// Files on one inbox draft.
+pub const MAX_INBOX_ATTACHMENTS: usize = 100;

@@ -13,10 +13,10 @@ use super::data::Scope;
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
 
-const SCOPE_HELP: &str = "Whether `id` is a workspace id or a base id.";
+const SCOPE_HELP: &str = "Whether `id` is a workspace id or a project id.";
 
 fn scope_schema() -> Value {
-    enumeration(&["workspace", "base"], SCOPE_HELP)
+    enumeration(&["workspace", "project"], SCOPE_HELP)
 }
 
 pub fn definitions() -> Vec<ToolDef> {
@@ -24,17 +24,18 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_workspaces",
             "List workspaces",
-            "List the workspaces you belong to with your role on each, the bases inside you can open (with who else can open each) and member and pending-invite counts (a base-limited token sees only its bases). list_bases returns the same; use this one when you care about workspaces.",
+            "List the workspaces you belong to with your role on each, the projects inside you can open (with who else can open each) and member and pending-invite counts (a project-limited token sees only its projects). list_projects returns the same; use this one when you care about workspaces.",
             object(json!({}), &[]),
         ),
         ToolDef::new(
             "rename_workspace",
-            "Rename a workspace or change its icon",
-            "Change a workspace's name and/or icon (either; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the manage permission and the owner role on the workspace.",
+            "Rename or restyle a workspace",
+            "Change a workspace's name, colour and/or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the manage permission and the owner role on the workspace.",
             object(
                 json!({
                     "workspace_id": string("Workspace id (from list_workspaces)."),
                     "name": string("New name."),
+                    "color": string("New colour name, e.g. blue, green, red, purple."),
                     "icon": icon_schema("workspace"),
                 }),
                 &["workspace_id"],
@@ -45,7 +46,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_workspace",
             "Delete a workspace",
-            "Delete a workspace and all its bases. They move to the trash and can be restored for the trash retention period (restore_from_trash with kind 'workspace'). Needs the manage permission and the owner role.",
+            "Delete a workspace and all its projects. They move to the trash and can be restored for the trash retention period (restore_from_trash with kind 'workspace'). Needs the manage permission and the owner role.",
             object(
                 json!({ "workspace_id": string("Workspace id (from list_workspaces).") }),
                 &["workspace_id"],
@@ -56,11 +57,11 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "remove_member",
             "Remove a member",
-            "Scope 'workspace': remove someone from the workspace (they lose every base in it; a workspace always keeps an owner). Scope 'base': take that base off the list of a member who was given only some bases (not their last one; members with all bases are changed with set_member_role). You may also remove yourself. Needs the manage permission and the owner role.",
+            "Scope 'workspace': remove someone from the workspace (they lose every project in it; a workspace always keeps an owner). Scope 'project': take that project off the list of a member who was given only some projects (not their last one; members with all projects are changed with set_member_role). You may also remove yourself. Needs the manage permission and the owner role.",
             object(
                 json!({
                     "scope": scope_schema(),
-                    "id": string("Workspace id or base id."),
+                    "id": string("Workspace id or project id."),
                     "user_id": string("User id of the member (from list_members)."),
                 }),
                 &["scope", "id", "user_id"],
@@ -71,9 +72,9 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_invites",
             "List invites",
-            "List the invite links of a workspace (owner role; accepted and expired included) or the pending ones that give access to a base (creator role). Invite links are shown only when created (create_invite); this lists their ids, roles, bases, emails and expiry so they can be revoked.",
+            "List the invite links of a workspace (owner role; accepted and expired included) or the pending ones that give access to a project (creator role). Invite links are shown only when created (create_invite); this lists their ids, roles, projects, emails and expiry so they can be revoked.",
             object(
-                json!({ "scope": scope_schema(), "id": string("Workspace id or base id.") }),
+                json!({ "scope": scope_schema(), "id": string("Workspace id or project id.") }),
                 &["scope", "id"],
             ),
         )
@@ -92,8 +93,8 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_collaborators",
             "List collaborators",
-            "List the people who can see a base (id, name, email): the values for user fields and the ids for @mentions in comments. Any role can read this.",
-            object(json!({ "base_id": string(BASE_ID) }), &["base_id"]),
+            "List the people who can see a project (id, name, email): the values for user fields and the ids for @mentions in comments. Any role can read this.",
+            object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
         ),
     ]
 }
@@ -110,6 +111,8 @@ struct RenameWorkspace {
     workspace_id: String,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
@@ -138,6 +141,7 @@ struct InviteArg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BaseArg {
+    #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
 }
 
@@ -170,12 +174,13 @@ async fn rename_workspace(ctx: &McpCtx, a: RenameWorkspace) -> ToolResult {
     if let Some(name) = a.name {
         body.insert("name".into(), json!(name));
     }
+    insert_some(&mut body, "color", a.color);
     let note = match put_icon(&mut body, a.icon) {
         Ok(n) => n,
         Err(e) => return e,
     };
     if body.is_empty() {
-        return ToolResult::error("Give a new name and/or icon.");
+        return ToolResult::error("Give a new name, colour and/or icon.");
     }
     let path = format!("/api/workspaces/{}", encode_segment(&a.workspace_id));
     match fetch(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {

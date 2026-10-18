@@ -76,7 +76,7 @@ async fn an_agent_runs_the_business_without_the_ui() {
     for expected in [
         "create_workspace",
         "create_invite",
-        "create_base",
+        "create_project",
         "create_field",
         "create_view",
         "query_view",
