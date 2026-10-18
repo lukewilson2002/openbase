@@ -86,7 +86,7 @@ function KanbanInner(props: ViewProps) {
     async (key: string) => {
       const value = stackField ? stackValue(stackField, key) : null;
       const rec = await writes.create(value === null || !stackField ? {} : { [stackField.id]: value });
-      if (rec) setup.openRecord(rec.id);
+      if (rec) setup.openNewRecord(rec.id);
     },
     [stackField, writes, setup],
   );

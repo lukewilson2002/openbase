@@ -202,7 +202,7 @@ function TimelineInner(props: ViewProps) {
   const create = useCallback(
     async (values: Record<string, unknown>) => {
       const rec = await writes.create(values);
-      if (rec) setup.openRecord(rec.id);
+      if (rec) setup.openNewRecord(rec.id);
     },
     [writes, setup],
   );
