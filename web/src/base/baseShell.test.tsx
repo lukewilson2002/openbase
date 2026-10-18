@@ -75,6 +75,9 @@ describe("base shell on a desktop", () => {
     const header = document.querySelector("header")!;
     expect(within(header).getByText("Acme")).toBeInTheDocument();
     expect(within(header).getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
+    // The open table is the breadcrumb's last part; a viewer cannot change its icon.
+    expect(within(header).getByRole("heading", { name: "Tasks", level: 2 })).toBeInTheDocument();
+    expect(within(header).queryByRole("button", { name: "Change the icon of Tasks" })).not.toBeInTheDocument();
     // The names are text now, not pickers.
     expect(within(header).queryByRole("button", { name: /Acme|Project tracker/ })).not.toBeInTheDocument();
     // A viewer can neither invite nor share a view, so there is no Share to open.
@@ -599,14 +602,14 @@ describe("base shell on a phone", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
-  it("names the project in the top bar, where a tap opens the drawer: the Inbox, then the tree", async () => {
+  it("names the table in the top bar, where a tap opens the drawer: the Inbox, then the tree", async () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
-    // The workspace small over the project's name; not a picker.
+    // The workspace and project small over the open table's name; not a picker.
     const title = screen.getByRole("heading", { level: 1 });
-    expect(title).toHaveTextContent("AcmeProject tracker");
-    await user.click(within(title).getByRole("button", { name: "Project tracker in Acme. Open the menu" }));
+    expect(title).toHaveTextContent("Acme / Project trackerTasks");
+    await user.click(within(title).getByRole("button", { name: "Tasks in Project tracker in Acme. Open the menu" }));
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(drawer).getByRole("button", { name: "Close menu" })).toBeInTheDocument();
     const nav = within(drawer).getByRole("navigation", { name: "Main menu" });

@@ -177,7 +177,6 @@ describe("ViewBar view switcher", () => {
     const schema = makeSchema("creator");
     const t = schema.tables[0]!;
     renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" });
-    expect(screen.getByRole("heading", { name: /Tasks/ })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Views of Tasks" });
     // All tasks and My tasks are both grids: one button, open because All tasks is.
     const grids = within(nav).getByRole("button", { name: "2 grid views, All tasks open" });
@@ -248,20 +247,6 @@ describe("ViewBar view switcher", () => {
     await user.click(screen.getByRole("button", { name: "Add view" }));
     await user.click(await screen.findByRole("menuitem", { name: /^Calendar/ }));
     expect(onDialog).toHaveBeenCalledWith({ kind: "create-view", table: t, type: "calendar" });
-  });
-
-  it("changes the table's icon from the icon before its name, for creators only", async () => {
-    const user = userEvent.setup();
-    const api = mockApi({ "PATCH /api/tables/tbl1": (c) => ({ ...schema.tables[0]!, ...(c.body as object) }) });
-    const schema = makeSchema("creator");
-    const t = schema.tables[0]!;
-    const { unmount } = renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" });
-    await user.click(screen.getByRole("button", { name: "Change the icon of Tasks" }));
-    await user.click(within(await screen.findByRole("group", { name: "Popular icons" })).getByRole("button", { name: "Briefcase" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1").map((c) => c.body)).toEqual([{ icon: "briefcase" }]));
-    unmount();
-    renderBar();
-    expect(screen.queryByRole("button", { name: "Change the icon of Tasks" })).not.toBeInTheDocument();
   });
 
   it("tells editors they can make personal views only, and offers viewers no +", async () => {
