@@ -275,8 +275,11 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
 
   // `shrink-0`: in the full-screen editor this sits in a scrolling column, where a long document would
   // otherwise squeeze it (it scrolls sideways, so the browser lets it shrink below its buttons).
+  // It sticks at `--ob-sticky-top`: where the visible part of the surrounding scroll area starts. A
+  // padded scroll area sets it to minus its padding (sticky stops at the padding's inner edge, and
+  // the text would show above it); the page under the app's top bar sets it to the bar's height.
   return (
-    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-0 z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" ref={ref} onKeyDown={moveAlong} className="sticky top-[var(--ob-sticky-top,0px)] z-10 flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-t-md border-b border-line bg-surface px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <ToolMenu editor={editor} label="Text style" trigger={<span className="flex items-center gap-1 px-1.5 text-[0.8125rem] text-fg">{s.heading ? `Heading ${s.heading}` : "Paragraph"}<ChevronDown aria-hidden className="size-3.5 text-muted" /></span>} className="w-auto min-w-24 justify-between">
         <DropdownMenuItem onSelect={() => run().setParagraph().run()}>Paragraph</DropdownMenuItem>
         {HEADINGS.map((level) => (

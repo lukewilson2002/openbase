@@ -132,7 +132,10 @@ export function AppShell({ sidebar, sidebarFooter, topBar, brand, children, clas
               {sidebar}
             </DockedSidebar>
           )}
-          <main aria-label={mainLabel} className={cn("min-w-0 flex-1", fill && "relative overflow-hidden")}>{children}</main>
+          {/* A page that scrolls as a whole does so under the sticky top bar: sticky parts of it (an editor's toolbar) stop below the bar. */}
+          <main aria-label={mainLabel} className={cn("min-w-0 flex-1", fill ? "relative overflow-hidden" : "[--ob-sticky-top:calc(3.5rem+env(safe-area-inset-top))]")}>
+            {children}
+          </main>
         </div>
         {!desktop && (
           <SidebarDrawer

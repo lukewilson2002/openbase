@@ -425,7 +425,8 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     // Below md the fields and the comments stack in one scrolling column: two scroll areas on a phone
     // left the fields about half the screen and the comments pane fighting it for every swipe.
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
-      <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
+      {/* From md up this column scrolls by itself, inside its padding: editors' toolbars stick to its top edge. */}
+      <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:[--ob-sticky-top:-1rem]">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
             <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={justCreated && f.id === table.primary_field_id} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
