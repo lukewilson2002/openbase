@@ -178,6 +178,9 @@ test("a swipe that starts on a menu button scrolls the menu and opens nothing; a
   await page.goto("/");
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
+  // `/` is the Inbox, outside any workspace: open this one to list its projects.
+  await drawer.getByRole("button", { name: "Expand Swipe workspace" }).tap();
+  await expect(drawer.getByRole("button", { name: "Project options for Project 24" })).toBeAttached();
   const scroller = drawer.locator("[data-sidebar-scroll]");
   await expect(scroller).toBeVisible();
   expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight), "the menu has to scroll for this test").toBeGreaterThan(100);
