@@ -45,19 +45,19 @@ reset link or `openbase reset-password`. Passkey sign-in (Touch ID, Windows Hell
 a phone, a security key or a password manager: no username, no password, and no
 two-factor code, because a passkey is verified on the device), TOTP two-factor
 authentication, profiles with time zones, and personal access tokens (read or write, optionally
-limited to some bases). Admin pages cover users, outgoing email (SMTP settings
+limited to some projects). Admin pages cover users, outgoing email (SMTP settings
 and a "Send test email" button, no restart needed), instance stats, the audit log
 and backups (list, create now, download).
 
 **Workspaces and sharing.** People get access by joining a workspace, with one
-of five roles (owner, creator, editor, commenter, viewer) and either every base
-of the workspace, including bases made later, or a picked list of bases. Owners
-always have every base. Invites by link, or by email if SMTP is set up; a
-creator can invite people to the bases they can open. Read-only view share
+of five roles (owner, creator, editor, commenter, viewer) and either every project
+of the workspace, including projects made later, or a picked list of projects. Owners
+always have every project. Invites by link, or by email if SMTP is set up; a
+creator can invite people to the projects they can open. Read-only view share
 links (optional password) and public form links show data to people outside.
 
-**Bases, tables and fields.** Create, rename, duplicate (with or without
-records), delete and restore bases and tables. 28 field types: single line text,
+**Projects, tables and fields.** Create, rename, duplicate (with or without
+records), delete and restore projects and tables. 28 field types: single line text,
 long text (plain or Markdown), number, currency, percent, duration, rating,
 checkbox, single and multiple select, date (optional time, formats, time zones),
 email, URL, phone, attachment (with thumbnails), link to another record (paired
@@ -100,10 +100,10 @@ clients and n8n / Make / Zapier HTTP steps work once you change the base URL.
 `/mcp`. An agent that you connect with a personal access token, or by signing in
 from its connector screen (Claude, ChatGPT; OAuth is built in), can do everything
 you can do in the web app, within the access you give it, so you do not have to use the app
-yourself if you would rather not: build bases, tables, all 28 field types and views,
+yourself if you would rather not: build projects, tables, all 28 field types and views,
 edit records, run formulas, set up automations and public forms, invite people,
 import and export CSV, upload files, read history and notifications, and (for
-administrators) manage users, email settings and backups. Workspaces, bases and
+administrators) manage users, email settings and backups. Workspaces, projects and
 tables can be given icons. About 70 tools, plus a generic request tool for anything
 else. **Account -> AI assistants** shows the address and short steps for Claude, ChatGPT and
 other clients, and lists the connected apps you signed in with, each revocable. Passwords (including the SMTP password and
@@ -126,7 +126,7 @@ docker-compose file with Caddy for automatic HTTPS, and a systemd unit.
 | Sync and vendor integrations (Slack, Gmail, Jira, ...) | They depend on outside services and break easily. Webhooks, HTTP requests and SMTP cover most needs. |
 | Email-received automation trigger | It would need an inbound mail server. |
 | SSO (SAML / OIDC) | Too much setup and support for a deployment of 25 users or fewer. Passwords, passkeys and TOTP 2FA are solid. |
-| Field- and table-level permissions | Every write path would need an extra check. Five roles plus a per-member choice of bases are enough for small teams. |
+| Field- and table-level permissions | Every write path would need an extra check. Five roles plus a per-member choice of projects are enough for small teams. |
 | S3 storage, multiple nodes, Postgres | Each adds a moving part. The design is one node, local disk and backups. |
 | Excel (.xlsx) and Airtable-base import | CSV covers it, since both Airtable and Excel export CSV. |
 | Airtable-style webhooks API | Automations ("record created / updated -> HTTP request") cover outbound notifications. |
@@ -378,7 +378,7 @@ it on your own server.
 |---|---|---|
 | Records per table | 50,000 comfortable, 100,000 hard cap | 50,000 measured; the 100,000 cap is enforced but not benchmarked |
 | Fields per table | 500 | enforced |
-| Tables per base | 200 | enforced |
+| Tables per project | 200 | enforced |
 | Upload size | 100 MB per file (`OPENBASE_MAX_UPLOAD_MB`) | enforced |
 | CSV import | 100,000 rows, 20 MB, 3,000,000 cells | enforced |
 | Concurrent active users | about 25 | design target, not load-tested |

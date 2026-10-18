@@ -31,12 +31,12 @@ We defend against:
   do is rate limited. Also in scope: password and second-factor guessing,
   enumeration of accounts, and spam through the server's SMTP identity.
 - **Signed-in users acting beyond their role.** A user is trusted according to
-  their role on a base (Viewer, Commenter, Editor, Creator, Owner); reading other
+  their role on a project (Viewer, Commenter, Editor, Creator, Owner); reading other
   workspaces, escalating through invites or API tokens and abusing read-only
   tokens are in scope. A Viewer must not be able to hurt other users'
   availability with one request. Editors and Owners can create expensive
   formulas and large requests, so those are bounded too. An Editor can read and
-  export all of a base's data: the limits keep one user from taking the whole
+  export all of a project's data: the limits keep one user from taking the whole
   server down, they are not a boundary between roles.
 - **Stolen or leaked credentials**: a leaked API token, an old session or invite
   link, a compromised session that mints a token.
@@ -58,7 +58,7 @@ Not defended against: an administrator or anyone with shell access to the server
 cookie or API token that has not been revoked (use HTTPS and revoke tokens),
 denial of service by volume (use your proxy or provider), and a determined
 attacker with many IP addresses against limits that are keyed by IP. Instance
-admins get no implicit access to base data, but they can reset passwords and
+admins get no implicit access to project data, but they can reset passwords and
 disable 2FA, which is a path to any account (signed in; their API tokens cannot).
 
 ## Checklist for administrators
@@ -125,7 +125,7 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   nearly everything you can in the app except change credentials and download backup
   archives; give agents the
   least permission that works (read-only, or write without `manage`), restrict
-  them to the bases they need, set an expiry, and revoke the token when the work
+  them to the projects they need, set an expiry, and revoke the token when the work
   is done. See [MCP](mcp.md#security-model).
 - **Lower the Airtable-compatible API limits** with `OPENBASE_V1_RATE_PER_TOKEN`
   (default 5 per second) and `OPENBASE_V1_RATE_PER_USER` (default 50 per second)
@@ -160,7 +160,7 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   up front (only `/api/...`, no `..`, no `/mcp` recursion) and credential, session
   and token endpoints are refused before anything is sent. A test fails when a
   route is registered without an entry in the endpoint catalogue. The curated
-  tools (bases, tables, fields, views, automations, share links, CSV, uploads, the
+  tools (projects, tables, fields, views, automations, share links, CSV, uploads, the
   admin pages) run through the same router; none of them can set a password, switch
   off 2FA or touch tokens, and `admin_*` tools exist only for a `manage` token of an
   instance administrator. **Downloading a backup archive is session-only** for every token,
@@ -184,8 +184,8 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 - **No dynamic SQL from user input.** User tables are JSON rows keyed by field id;
   adding, renaming or deleting a field never builds SQL from names.
 - **Roles are checked in one place** (`perm.rs`). Access comes only from workspace
-  membership: one role per member, for every base of the workspace or a picked list
-  (`workspace_member_bases`); the same SQL condition decides base access, collaborator
+  membership: one role per member, for every project of the workspace or a picked list
+  (`workspace_member_bases`); the same SQL condition decides project access, collaborator
   lists and notification recipients. No access answers 404 (no existence leaks);
   insufficient role answers 403. API tokens can manage
   workspaces, members, invites and (for administrators) the admin pages only with
@@ -216,7 +216,7 @@ The design was checked against the OAuth 2.1 security best current practice (RFC
 | Consent phishing, look-alike apps | The page leads with the redirect host (who receives the access), shows the app's name as plain text (a name with control, invisible or direction-changing characters is refused at registration and stripped from every display; 100 characters at most), warns for loopback and unverified hosts, and flags names that imitate Claude or ChatGPT unless the redirect address is exactly one of the providers' documented callbacks (`https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback`, `https://chatgpt.com/connector_platform_oauth_redirect`, `https://platform.openai.com/apps-manage/oauth`). Other paths on those domains, such as a GPT's own callback, count as third parties. Names are compared as a skeleton: Unicode NFKC, case, accents, hidden characters, digit and symbol swaps, and a hand-picked table of Cyrillic, Greek and Armenian look-alikes of Latin letters are ignored (a subset of the Unicode confusables, not the whole table; a name written backwards under a direction override is caught too). **Read only is always preselected.** Read & edit is offered when the app asked for write (or named no scope we know); Full control only when the app asked for `openbase:manage` (the `/mcp` 401 challenge names `openbase:read openbase:write`, so a client that follows it does not) and the person could create such a token themselves. A name is not a credential: nothing is trusted because of it. |
 | Stolen access token | Opaque 256-bit tokens, stored as SHA-256 only, one hour, valid on `/mcp` only: not on `/api/*` or `/api/v1`, which cannot even be used to list, create or revoke grants. The audience (`resource`) is checked on every use. |
 | Stolen refresh token | Rotation on every use with reuse detection: presenting a token again more than 30 seconds after it was exchanged revokes the grant. Inside those 30 seconds (a client racing itself with two parallel refreshes) the second request is refused with `invalid_grant` and nothing is revoked, so a legitimate client does not destroy its own connection. 30 days idle expiry; bound to the client; a refresh may repeat the grant's scope but neither widen it nor narrow it (`invalid_scope`: tokens carry the scope of the connection, so a narrower request is refused rather than answered with a wider token). The grant is **deleted** (not suspended) when its user changes or resets their password, turns on two-factor authentication, uses "sign out other sessions", is deactivated (reactivating the account does not bring the app back), or has their two-factor switched off by an administrator or the `disable-2fa` command. Personal access tokens are different, see [Behaviour worth knowing](#behaviour-worth-knowing). A client that loses a refresh response has to be approved again: deliberate. |
-| Token leakage | Tokens are never in URLs (codes only in the redirect, by design), never logged, never in the audit log (it names the app, host, access and bases), and token responses are `no-store`. Secrets in the database are hashes; a test greps every OAuth table and the audit log for the raw values. |
+| Token leakage | Tokens are never in URLs (codes only in the redirect, by design), never logged, never in the audit log (it names the app, host, access and projects), and token responses are `no-store`. Secrets in the database are hashes; a test greps every OAuth table and the audit log for the raw values. |
 | Registration abuse (DCR) | 30 registrations per address per hour (IPv6: per /64), 16 KB bodies, validated names and redirect addresses, identical registrations share one client, and at most 5,000 self-registered clients. When that table is full the longest unused client that nobody connected through is forgotten to make room, so a trickle of registrations cannot keep real apps out. A client counts as used only when an authorization code was exchanged for it: starting an authorization request does not (anyone can start one), and clients never used are deleted after 7 days by the hourly cleanup. A registration grants nothing. `OPENBASE_OAUTH_REGISTRATION=false` turns it off, but not the metadata-document route (see accepted risks). |
 | Server-side request forgery through `client_id` URLs | Client metadata documents are fetched only for a signed-in person, through the automations' SSRF guard (public addresses only, resolved and pinned, no redirects). **`OPENBASE_ALLOW_PRIVATE_WEBHOOKS` never relaxes it** (that switch is for automations calling your own network); the only exception is the separate development-only `OPENBASE_OAUTH_CIMD_ALLOW_PRIVATE`, off by default, which lets a client under development on the same machine be fetched from loopback. The person sees only "could not fetch the app's metadata document": resolved addresses, status codes and timeouts go to the server log, so the page is no probe of the internal network. 5 second deadline, 16 KB limit, JSON only, the document's `client_id` must equal the URL, and no secrets or secret-based authentication are accepted in it. |
 | Denial of service | Per-address limits (IPv6: per /64): 60 authorization requests per minute (a visitor's request only redirects to the sign-in page and writes nothing), 300 token and 300 revocation requests per minute (separate buckets); 20 authorization requests per minute per signed-in person; at most 5,000 waiting authorization requests (200 per app), 5,000 cached documents, 100 connected apps per user; expired data is removed hourly. Only a signed-in person can store a request, fetch a document or make a client count as used, so anonymous traffic cannot fill or keep full any table. |
@@ -272,12 +272,12 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
 - **The `manage` permission** (off by default, needs `write`) lets a token do the
   account-level things a user can do in the UI: create, rename, delete and
   restore workspaces, change members' roles and remove them, create / list /
-  revoke / accept invites, delete, duplicate and restore bases, and, when the
+  revoke / accept invites, delete, duplicate and restore projects, and, when the
   owner is an instance administrator, use the admin pages. Every such check goes
   through `Actor::require_capability` (`Manage`, `ManageUnscoped` or
   `SessionOnly`); a refusal names the `manage` permission. A `manage` token that
-  is limited to specific bases is additionally refused everything that reaches
-  beyond a single base (workspaces, workspace members and invites, admin).
+  is limited to specific projects is additionally refused everything that reaches
+  beyond a single project (workspaces, workspace members and invites, admin).
   Admin calls made with a token are written to the audit log as `admin_token_use`
   with the token's id and the request. **Credentials are session-only
   whatever the token's scope**: password change, 2FA setup / enable / disable,
@@ -303,22 +303,22 @@ ChatGPT's own servers) that holds valid tokens. Revoke from **Connected apps**.
   (the authentication extractor), apart from the view-query POST. A new mutating
   route is therefore safe by default; `tests/security_auth.rs` lists all mutating
   routes and checks them.
-- **Base-limited tokens** only see, and mark read, the notifications of their
-  bases.
+- **Project-limited tokens** only see, and mark read, the notifications of their
+  projects.
 - **Open event streams** end when their session or API token is deleted or
   expires, the user is deactivated, or access is lost: removal from the workspace or
-  the base taken off their list publishes `base_changed`, which re-checks access at
+  the project taken off their list publishes `base_changed`, which re-checks access at
   once (and it is re-checked every 60 s anyway).
-- **Invites** always join a workspace, for every base or a list of bases. They are
+- **Invites** always join a workspace, for every project or a list of projects. They are
   valid only while their creator is active and holds the invited role as an Owner of
-  the workspace or, for an invite limited to some bases, as a Creator who can still
+  the workspace or, for an invite limited to some projects, as a Creator who can still
   open each of them; they cannot be accepted by their creator. Removing, demoting or
   narrowing someone therefore voids what they had pending, and a voided invite is not
   listed and cannot be changed (changing it would make the editor its inviter and
-  revive the link). Creators can never invite to every base or to a base they cannot
+  revive the link). Creators can never invite to every project or to a project they cannot
   open. Accepting raises an existing member's workspace role only when its terms were
   last set by an owner acting for the whole workspace, not through a token limited to
-  some bases (recorded on the invite when its terms are set).
+  some projects (recorded on the invite when its terms are set).
 
 ## Passkeys
 
@@ -361,7 +361,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id |
 | Attachment downloads with `?share=` | 600 per minute per client IP, 2,400 per minute per token (own buckets, so a gallery of thumbnails does not eat the public-request budget) |
 | Public form submissions / uploads | 20 each per 10 minutes per (client IP, link); a file is at most 25 MB and never above the configured upload limit |
-| Anonymous upload bytes | per hour: 200 MB per client IP, 500 MB per base, 1,000 MB for the whole server; charged when the request starts, for its declared length (the cap if none is declared) |
+| Anonymous upload bytes | per hour: 200 MB per client IP, 500 MB per project, 1,000 MB for the whole server; charged when the request starts, for its declared length (the cap if none is declared) |
 | Unattached uploads | public-form uploads that no record references are deleted after 2 hours, other unattached uploads after 24 hours |
 | CSV import | 20 MB, 100,000 rows, 500 columns, **3,000,000 cells** (rows x widest row), two imports at a time server-wide; bad rows are found by bisection, at most 50 are reported |
 | Webhook calls (`/api/hooks/{token}`) | body up to 1 MB; 60 per minute per automation and 30 per minute with unknown tokens per client address; 200 queued runs per automation; a finished run keeps the first 16,384 characters of the body, runs are deleted after 30 days |
@@ -372,7 +372,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 - A read-only link exposes the fields its view shows and the records its filter
   lists. Attachments are downloadable through the link only when they sit in a
   visible attachment field of such a record; knowing an attachment id is not
-  enough. Trashing the workspace, base, table or view, disabling the link, hiding
+  enough. Trashing the workspace, project, table or view, disabling the link, hiding
   the field or removing the file all close the download.
 - Because a link follows its view's live configuration, **changing the shown
   fields, their order, the filter or the form of a view that has an enabled link
@@ -398,7 +398,7 @@ A formula that exhausts a budget evaluates to `#ERROR: Formula is too expensive 
 evaluate`, and `IF(ISERROR(...))` cannot hide that. The cost of a normal formula is
 orders of magnitude below the budgets.
 
-Also in place: view queries read the base's data version *before* building their
+Also in place: view queries read the project's data version *before* building their
 plan from the field definitions, so a schema change that races with a scan can
 never be cached under the version that already includes it. Date parsing accepts
 ASCII digits only. The dependency graph orders a lookup or rollup whose target is
@@ -445,7 +445,7 @@ Authentication and email:
 - Any signed-in user can create a workspace and so send invite and automation
   emails to arbitrary addresses within the budgets. There is no setting to
   restrict workspace creation to admins; keep sign-up invite-only.
-- A member limited to some bases still sees the workspace's member list (names and
+- A member limited to some projects still sees the workspace's member list (names and
   email addresses of everyone in it), like any other member.
 - Reactivating a deactivated user restores their API tokens (see above); their connected
   apps (OAuth grants) were deleted when the account was deactivated.
@@ -470,8 +470,8 @@ Shares, uploads and imports:
   history" keep working. The cost is disk space for files that were deliberately
   cleared; lower the history retention if that matters.
 - **Share-scoped attachment checks scan the shared view once per data change.**
-  The set of files a view exposes is cached per view and base version; after
-  every change to the base the next download from a link rebuilds it (one pass
+  The set of files a view exposes is cached per view and project version; after
+  every change to the project the next download from a link rebuilds it (one pass
   over the view's records). A very large, constantly edited shared view makes that
   pass the dominant cost of a download.
 - **Re-enabling a link re-publishes whatever the view looks like then.** The
@@ -483,7 +483,7 @@ Shares, uploads and imports:
   imports are best done off-hours.
 - **Per-IP limits can be shared or dodged:** visitors behind one NAT share a
   budget, and an attacker with many addresses (an IPv6 range) multiplies theirs.
-  The per-base and server-wide upload budgets and the Argon2 concurrency cap are
+  The per-project and server-wide upload budgets and the Argon2 concurrency cap are
   what hold in that case.
 
 Formulas and queries:

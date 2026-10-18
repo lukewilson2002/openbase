@@ -1,7 +1,7 @@
 # Automations
 
 An automation is one **trigger** and an ordered list of up to 25 **actions**.
-Only creators (and owners) of a base can create, edit, test and delete them;
+Only creators (and owners) of a project can create, edit, test and delete them;
 editors and above can read the run history. Everything below is enforced when
 an automation is saved, so mistakes show up as a `400` with a precise message
 instead of as failed runs later.
@@ -121,7 +121,7 @@ are recorded in the run history (`trigger_data.test = true`).
 
 ## In the web app
 
-Creators open **Automations** in the base's sidebar, below its tables (`/base/<id>/automations`). Each automation has an editor
+Creators open **Automations** in the project's sidebar, below its tables (`/base/<id>/automations`). Each automation has an editor
 (trigger, actions, optional per-action conditions, an "Insert data" menu for the `{{...}}` placeholders), a **Test** panel (a dry run
 by default; running for real asks for confirmation) and a **Runs** tab with the step log of every run. A webhook's URL is shown once,
 when the automation is created or its token is rotated.

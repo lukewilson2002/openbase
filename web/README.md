@@ -15,7 +15,7 @@ React 19 + TypeScript (strict) single-page app, built with Vite and embedded int
 | Contract | TypeScript types generated from the Rust DTOs by ts-rs into `src/api/types` |
 | Tests | Vitest + Testing Library + jsdom; live contract tests against the real server (`contract/`); Playwright end-to-end tests in Chrome (`e2e/`) |
 
-Icons for workspaces, bases and tables (`src/components/icons/`): the 20 popular Lucide icons are bundled
+Icons for workspaces, projects and tables (`src/components/icons/`): the 20 popular Lucide icons are bundled
 (`popular.ts`) and draw instantly; the full set (~1,900 icons, a ~190 kB gzipped chunk) is a dynamic `import()`
 (`registry.ts` -> `fullSet.ts`) that loads only when an icon picker opens or an icon outside the popular 20 has to be
 drawn, and is then cached. `<EntityIcon>` / `<EntityTile>` / `<EntityLabel>` draw an icon by name with the first
@@ -93,7 +93,7 @@ administrator already exists for the data plane:
 
 | File | Covers |
 |---|---|
-| `workspaces.contract.test.ts` | workspaces (create, rename, members, delete + restore), bases (schema, rename, duplicate, collaborators, members), tables |
+| `workspaces.contract.test.ts` | workspaces (create, rename, members, delete + restore), projects (schema, rename, duplicate, collaborators, members), tables |
 | `fields.contract.test.ts` | every type the field dialog can create with its defaults, link pairs, formulas and the live check, lookup / rollup / count, type changes, delete + restore |
 | `views.contract.test.ts` | every view type, config replacement, personal and locked views, duplicate, delete |
 | `records.contract.test.ts` | create / update / delete / restore / move, typecast, links from both sides, `before_record_id`, view query (filter, sort, group, search, range, paging, colors, `transient`), aggregations, link lookup, history |
@@ -101,7 +101,7 @@ administrator already exists for the data plane:
 | `sharing.contract.test.ts` | share links (create, disable, password, delete, limits, who may), public views and forms without credentials (visible fields only, search / paging / transient / range, passwords, uploads, submissions, rate limit), attachments through `?share=`, CSV export and both CSV imports |
 | `automations.contract.test.ts` | what the automations UI relies on: every trigger and action type as the editor sends it, the `action N: ...` error wording, on/off rules, `next_run_at`, real test runs in the history, roles |
 | `email.contract.test.ts` | Administration -> Email: the effective settings and their sources, saving (never a host: the shared server keeps email off), the write-only password, validation errors, the test-email answer, closed to regular users |
-| `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a base built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
+| `mcp.contract.test.ts` | the MCP endpoint: handshake, the tools a token sees, a project built through tools and read back through REST, icons set / kept / cleared and read back, the email tools |
 | `oauth.contract.test.ts` | OAuth for the MCP endpoint, driven by the official `@modelcontextprotocol/sdk` client (`OAuthClientProvider`): discovery from the 401, dynamic registration, PKCE, code exchange, tools, automatic refresh with rotation, revocation from the connected-apps list, `insufficient_scope`, OAuth tokens refused on the REST API; the consent and grant responses are checked against the generated bindings |
 | (in `flow.contract.test.ts`) | passkeys as far as a server on an IP address goes: `passkeys_enabled: false`, the "needs a domain name" answer, the empty list, session-only for tokens, the administrator's removal. The ceremonies need a domain name and a browser: they are covered by the server tests (`crates/server/tests/passkeys.rs`) and the `passkeys` end-to-end project |
 | `events.contract.test.ts` | the SSE stream read by the real `connectBaseEvents` while a second client writes (writer's client id, echo skipping, access changes) |
@@ -124,13 +124,13 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | Project | Spec | Depends on | Covers |
 |---|---|---|---|
 | `smoke` | `smoke.spec.ts` | | the embedded build loads `/` without console errors or CSP violations |
-| `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and base, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
+| `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and project, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
 | `grid` | `grid.spec.ts` | journey | cell editing, undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
 | `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> AI assistants -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `assistants` | `assistants.spec.ts` | grid | Account -> AI assistants: the MCP address is the server's public URL and answers `401` with the sign-in metadata, Claude is open by default and the sections are an accordion (mouse and keyboard), the copy buttons write the real clipboard, the token variants are collapsed until opened, the plain-http server shows the public-address warning, and the tab fits 375 px in the light and dark themes |
 | `passkeys` | `passkeys.spec.ts` | grid | Chrome's virtual authenticator (CDP `WebAuthn.addVirtualAuthenticator`: CTAP2, internal transport, resident keys, user verification): add a passkey in Account -> Security, sign out, sign in with it and no password (the background request for the email field's autofill list stays pending until the button replaces it), rename and remove it, the removed passkey's leftover credential refused; a TOTP-enabled user signing in by passkey skips the code while the password still asks for it; the autofill request completing the sign-in; an administrator removing another user's passkeys |
-| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen: the home page, a base, search, the filter builder and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
+| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen: the home page, a project, search, the filter builder and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
 | `admin-email` | `adminEmail.spec.ts` | sharing, automations, views, oauth, assistants, mobile, passkeys | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
@@ -168,7 +168,7 @@ The suite must not depend on how fast the machine is (it passes on a laptop and 
 ```
 src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE), keys.ts, types/ (generated)
 src/auth/       current-user hooks and route guards
-src/base/       base screen in the app shell: top bar, menu (tables, views, actions), dialogs, empty base, permission rules
+src/base/       project screen in the app shell: top bar, menu (tables, views, actions), dialogs, empty project, permission rules
 src/components/ design-system primitives (ui/) and shared dialogs
 src/lib/webauthn.ts  the WebAuthn browser API <-> the server's JSON (base64url conversion, support checks, errors); `src/auth/usePasskeyLogin.ts` is the login page's passkey button and background autofill request
 src/pages/      setup, login, signup, invite, password reset, home, account/ (SecuritySection: password, PasskeysSection, two-factor), admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
@@ -199,7 +199,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
 
 To work on the grid without a server run `VITE_MOCK=1 npm run dev`: `dev/mock-api.ts` is a Vite middleware that serves a
-3,000-record fixture base with every field type (it is never part of a production build). `/api/__mock/role/viewer` switches the
+3,000-record fixture project with every field type (it is never part of a production build). `/api/__mock/role/viewer` switches the
 caller's role and `POST /api/__mock/external-edit` simulates another client's write (live refresh).
 
 ### The other views (`src/views/{kanban,gallery,calendar,timeline,list}`)
@@ -257,11 +257,11 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 
 ### Trash and notifications
 
-`components/trash`: `TrashButton` in the base top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). A deleted *workspace* has no trash of its own to open (`GET /api/workspaces/{id}/trash` answers 404 once it is deleted), so the home page lists the caller's own deleted workspaces in "Recently deleted workspaces" (`DeletedWorkspaces`, from `GET /api/trash/workspaces`, owners only) with a Restore button; the section is absent when there are none. `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
+`components/trash`: `TrashButton` in the project top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). A deleted *workspace* has no trash of its own to open (`GET /api/workspaces/{id}/trash` answers 404 once it is deleted), so the home page lists the caller's own deleted workspaces in "Recently deleted workspaces" (`DeletedWorkspaces`, from `GET /api/trash/workspaces`, owners only) with a Restore button; the section is absent when there are none. `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
 
 ### Automations (`src/automations`)
 
-`/base/:baseId/automations/:automationId?/:tab?` renders inside the base shell (`BaseShell section="automations"`, lazy chunk), reached
+`/base/:baseId/automations/:automationId?/:tab?` renders inside the project shell (`BaseShell section="automations"`, lazy chunk), reached
 from the "Automations" button in the top bar. Creators and owners only (`basePermissions.manageAutomations`): the server lets editors
 read run history, but listing automations needs a creator, so editors have no way to learn an automation's id.
 

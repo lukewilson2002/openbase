@@ -13,6 +13,13 @@ in `crates/core/src/api` (exported to TypeScript in `web/src/api/types`). This
 document covers the Airtable-compatible API in full, and summarises the public
 links and CSV endpoints.
 
+**Projects are called "bases" in the API.** OpenBase and its web app say *project*
+(a project holds tables, and lives in a workspace), but the API keeps the older
+name so that existing clients and Airtable-compatible tools keep working: routes
+are `/api/bases/...` and `/api/v1/meta/bases`, fields are `base_id`, `base_ids`
+and `all_bases`, events are `base_changed`, and ids look like `appXXXX`. This
+document says "project" in prose and keeps every route and field name exact.
+
 ---
 
 ## 1. API tokens
@@ -21,20 +28,20 @@ Create a token with `POST /api/tokens` from a signed-in session (tokens cannot
 create or list tokens themselves):
 
 ```json
-{ "name": "n8n", "write": true, "manage": false, "base_ids": ["bseXXXX"], "expires_in_days": 90 }
+{ "name": "n8n", "write": true, "manage": false, "base_ids": ["appXXXX"], "expires_in_days": 90 }
 ```
 
 The secret is shown once. A token acts as its owner, limited further by:
 
-- **write**: a read-only token acts as a Viewer on every base and may only
+- **write**: a read-only token acts as a Viewer on every project and may only
   read. Every state-changing request (anything but GET/HEAD, apart from view
   queries, which are POSTs) answers `403`, including actions on the owner's own
   data such as deleting a comment or marking notifications read.
 - **manage** (needs `write`; default `false`): lets the token do the account-level
   things a signed-in user can do in the web app, see
   [token permissions](#token-permissions) below.
-- **base_ids**: the bases the token may reach; any other base answers 404.
-  `/api/notifications` only lists (and marks read) notifications of those bases.
+- **base_ids**: the projects the token may reach; any other project answers 404.
+  `/api/notifications` only lists (and marks read) notifications of those projects.
 - expiry: expired tokens answer 401. Open event streams (`/api/bases/{id}/events`)
   end when their token is deleted or expires.
 - Changing or resetting the owner's password deletes all of their tokens.
@@ -43,32 +50,32 @@ Roles are the owner's: Viewer < Commenter < Editor < Creator < Owner. Records
 can be written by Editors and above. The Airtable API changes no schema, except
 that `typecast` may add select options.
 
-### Who can open a base
+### Who can open a project
 
 Access comes only from workspace membership. Each member has one role in the
-workspace and either every base (`all_bases`, including bases created later) or
-a picked list (`base_ids`); their role applies to each base they can open, and
-any other base answers 404. Owners always have every base. A member limited to
-some bases who creates or duplicates a base gets it added to their list.
+workspace and either every project (`all_bases`, including projects created later) or
+a picked list (`base_ids`); their role applies to each project they can open, and
+any other project answers 404. Owners always have every project. A member limited to
+some projects who creates or duplicates a project gets it added to their list.
 
-- `GET /api/workspaces` lists the caller's workspaces with the bases they can
-  open, `member_count`, `pending_invite_count` and, per base, `people` (members
+- `GET /api/workspaces` lists the caller's workspaces with the projects they can
+  open, `member_count`, `pending_invite_count` and, per project, `people` (members
   who can open it, then pending invites sent to an address).
 - `GET|PATCH /api/workspaces/{id}/members[/{user_id}]`: members carry
   `all_bases` and `base_ids`; the owner changes `role`, `all_bases` or
-  `base_ids` (at least one base; owners cannot be limited).
-- `GET /api/bases/{id}/members` (any role on the base) lists the members who can
-  open it; `DELETE /api/bases/{id}/members/{user_id}` takes the base off a
-  limited member's list (owners, or the member themself; not their last base,
-  and not for all-bases members).
+  `base_ids` (at least one project; owners cannot be limited).
+- `GET /api/bases/{id}/members` (any role on the project) lists the members who can
+  open it; `DELETE /api/bases/{id}/members/{user_id}` takes the project off a
+  limited member's list (owners, or the member themself; not their last project,
+  and not for all-projects members).
 - Invites always join a workspace: `POST /api/workspaces/{id}/invites` (owners;
-  every base unless `base_ids` is given) or `POST /api/bases/{id}/invites`
-  (creators of that base; that base unless `base_ids` lists other bases they can
+  every project unless `base_ids` is given) or `POST /api/bases/{id}/invites`
+  (creators of that project; that project unless `base_ids` lists other projects they can
   open; never `all_bases`, never above their role). Accepting keeps the higher
-  of the invited and existing role and adds up the bases.
-- `POST /api/workspaces/{id}/bases` accepts `empty: true` for a base without
+  of the invited and existing role and adds up the projects.
+- `POST /api/workspaces/{id}/bases` accepts `empty: true` for a project without
   tables; by default it starts with "Table 1".
-- Every new table, a base's "Table 1" or one added with `POST /api/bases/{id}/tables`,
+- Every new table, a project's "Table 1" or one added with `POST /api/bases/{id}/tables`,
   starts with just its primary field "Name" and a grid view; nothing else is added.
   `POST /api/bases/{id}/tables` takes an optional `fields` array to create the rest in
   the same call: each entry has the shape of `POST /api/tables/{id}/fields` (`name`,
@@ -88,24 +95,24 @@ The class is decided in one place (`Actor::require_capability`), and
 
 | Class | Read-only token | Write token | Write + `manage` token | Session |
 |---|---|---|---|---|
-| Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a base in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
-| **Your inbox** (`/api/inbox*`, and downloading a file uploaded for it): private to you and in no base | reads only | yes, but **403** for a token limited to specific bases | yes, same exception | yes |
-| **Manage**: create / rename / delete / restore workspaces, workspace members (role and base access changes, removal), the members of a base (listing, taking a base off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring bases, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
+| Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a project in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
+| **Your inbox** (`/api/inbox*`, and downloading a file uploaded for it): private to you and in no project | reads only | yes, but **403** for a token limited to specific projects | yes, same exception | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
 
 Apps that connected through OAuth (see [MCP](mcp.md#connect-with-oauth-sign-in)) hold a grant with
-the same read / write / `manage` / base-list scope, but its access tokens are valid on `/mcp`
+the same read / write / `manage` / project-list scope, but its access tokens are valid on `/mcp`
 only: the REST API and `/api/v1` answer `401` to them (the MCP tool `api_request` runs requests
 as the grant, inside the server, with these same classes).
 
 A request that needs `manage` and does not have it answers `403` with a message that
-names the `manage` permission. Actions that reach beyond a single base (workspaces,
+names the `manage` permission. Actions that reach beyond a single project (workspaces,
 workspace members and invites, the admin pages) are also refused for a `manage` token
-that is limited to specific bases (`base_ids`): such a token cannot touch what it
-cannot see. Base-level management (deleting a base, the members of a base, base
-invites, restoring a base) works on the bases in its list only; others answer 404. Credentials,
+that is limited to specific projects (`base_ids`): such a token cannot touch what it
+cannot see. Project-level management (deleting a project, the members of a project, project
+invites, restoring a project) works on the projects in its list only; others answer 404. Credentials,
 sessions and tokens are never reachable with a token, so a leaked token cannot take
 over the account or mint a longer-lived replacement. `GET /api/tokens/whoami` reports
 `write` and `manage`.
@@ -146,14 +153,14 @@ How passkeys are protected: [security.md](security.md#passkeys).
 
 ### Presence (internal API)
 
-Who has a base open right now. The web app calls bases "projects"; the routes keep the name `bases`.
+Who has a project open right now. (The routes keep the name `bases`: see the note at the top.)
 Presence lives in memory only (a restart empties it and clients reconnect). Every open live-update
-stream, `GET /api/bases/{id}/events`, counts its user as a viewer of that base, whatever the
+stream, `GET /api/bases/{id}/events`, counts its user as a viewer of that project, whatever the
 credential (session or API token); several streams (tabs) of one user count once.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/bases/{id}/presence` | `{viewers: [user_id, ...]}`: everyone with an open stream on the base, in the order they arrived. Same access as reading the base (Viewer role; a read-only token may call it). |
+| `GET /api/bases/{id}/presence` | `{viewers: [user_id, ...]}`: everyone with an open stream on the project, in the order they arrived. Same access as reading the project (Viewer role; a read-only token may call it). |
 | `GET /api/bases/{id}/events` | Also sends `presence_changed` with `data` `{base_id, user_id, event: {kind: "presence_changed", viewers: [...]}}` to the streams already open when a user's **first** stream opens or their **last** one closes (closing the tab, losing access, the server stopping). `user_id` is the person who arrived or left. Every new stream also starts with the current list as its first event, right after the `: connected` comment: a `presence_changed` frame whose `user_id` is `null` and whose `viewers` already include the new viewer, so a client needs no separate `GET /presence` and cannot miss an arrival between the two. The stream is not told about its own arrival a second time. Presence never counts as a data change (no view cache is invalidated). |
 
 ### Inbox (internal API)
@@ -161,8 +168,8 @@ credential (session or API token); several streams (tabs) of one user count once
 The inbox holds a person's private quick-capture drafts: Markdown text plus uploaded files, not yet in
 any project. Only their owner sees them (anyone else gets `404`, like a missing draft). They work with
 sessions and API tokens, in the token's owner's inbox; a read-only token can only list. A token limited to
-specific bases (also an OAuth grant limited to some projects) gets `403` on every route below, filing included,
-and on downloading an inbox file: the inbox is in no base, so such a token has no business in it. Timestamps
+specific projects (also an OAuth grant limited to some projects) gets `403` on every route below, filing included,
+and on downloading an inbox file: the inbox is in no project, so such a token has no business in it. Timestamps
 are Unix milliseconds; ids start with `inb`.
 
 Limits: a draft's text is at most 100,000 characters, a draft holds at most 20 files, one person keeps at
@@ -219,8 +226,8 @@ Every error, including unknown paths and malformed bodies, is
 | Status | `type` | When |
 |---|---|---|
 | 401 | `AUTHENTICATION_REQUIRED` | no, invalid or expired token; cookie-only request |
-| 403 | `INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND` | the token cannot write (read-only token, or the owner is below Editor on the base) |
-| 404 | `NOT_FOUND` | unknown/inaccessible base (a base outside a token's `base_ids` or one the user cannot see is a 404, not a 403), table, record, or route |
+| 403 | `INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND` | the token cannot write (read-only token, or the owner is below Editor on the project) |
+| 404 | `NOT_FOUND` | unknown/inaccessible project (a project outside a token's `base_ids` or one the user cannot see is a 404, not a 403), table, record, or route |
 | 405 | `METHOD_NOT_ALLOWED` | |
 | 409 | `CONFLICT` | a write would exceed the recompute budget |
 | 413 | `REQUEST_BODY_TOO_LARGE` | body over 4 MB |
@@ -240,7 +247,7 @@ All batches are **atomic**: if any record fails, nothing is written.
 
 `GET /api/v1/meta/bases` → `{"bases": [{"id", "name", "permissionLevel"}]}`.
 `permissionLevel` is `read`, `comment`, `edit` or `create` (Creators and
-Owners), capped at `read` for read-only tokens. Bases a token cannot reach are
+Owners), capped at `read` for read-only tokens. Projects a token cannot reach are
 not listed. There is no pagination (no `offset`).
 
 `GET /api/v1/meta/bases/{baseId}/tables` →
@@ -408,9 +415,9 @@ are clamped, and **missing select options are created**.
 - linked records take an array of record ids (`["recXXXX"]`, or `[{"id"}]`);
   the ids must be live records of the linked table;
 - collaborators take `{"id"}` or `{"email"}` (or an array of them for multiple
-  collaborator fields); the person must have access to the base;
+  collaborator fields); the person must have access to the project;
 - attachments take `[{"id": "attXXXX"}]`, the id of a file uploaded to the same
-  base with `POST /api/bases/{id}/attachments` (session or token with write
+  project with `POST /api/bases/{id}/attachments` (session or token with write
   access). OpenBase does **not** fetch `url`s on a client's behalf (SSRF), so
   `[{"url": …}]` is a 422;
 - barcode takes `{"text"}` or a string;
@@ -421,8 +428,8 @@ are clamped, and **missing select options are created**.
 
 | Airtable | OpenBase |
 |---|---|
-| `https://api.airtable.com/v0/…` | `https://<server>/api/v1/…`; base ids look like `bseXXXX`, table ids `tblXXXX`, field ids `fldXXXX`, record ids `recXXXX` |
-| personal access tokens with scopes | OpenBase API tokens: read/write plus an optional base list; there is no schema scope because this API cannot change schema |
+| `https://api.airtable.com/v0/…` | `https://<server>/api/v1/…`; project ids look like `appXXXX`, table ids `tblXXXX`, field ids `fldXXXX`, record ids `recXXXX` |
+| personal access tokens with scopes | OpenBase API tokens: read/write plus an optional project list; there is no schema scope because this API cannot change schema |
 | schema changes, webhooks, comments, collaborators API | not provided; use the internal API (`/api/...`) or automations |
 | `POST …/listRecords` | not provided (use `GET`) |
 | `performUpsert` | 422 (update by record id) |
@@ -433,7 +440,7 @@ are clamped, and **missing select options are created**.
 | attachment URLs on reads | absolute, need the bearer token, thumbnails have one real size |
 | `offset` expires after 5 minutes | same, and offsets also stay valid while you edit the listed records |
 | rate limit 5 req/s per base, 30 s penalty | 5 req/s per token and 50 req/s per user; retry in the next second |
-| a read-only/unreachable base → 403 or 404 | an inaccessible base is always 404, a read-only token writing is 403 |
+| a read-only/unreachable base → 403 or 404 | an inaccessible project is always 404, a read-only token writing is 403 |
 | 2xx for create is 200 | same |
 | select colors like `blueLight2` | OpenBase's palette names (`blue`, `blue_dark`, …) |
 | barcode `{"type", "text"}` | `{"text"}` |
@@ -461,7 +468,7 @@ wrong-kind links are 404, like unknown tokens. All responses are
 `Cache-Control: no-store`; requests are rate limited per client IP (300/min),
 per token (1,200/min), password checks (30/min) and form traffic (20 submits
 and 20 uploads per 10 minutes per IP and link). Anonymous form uploads also
-have hourly byte budgets: 200 MB per client IP, 500 MB per base and 1,000 MB
+have hourly byte budgets: 200 MB per client IP, 500 MB per project and 1,000 MB
 for the whole server (429 when used up; a request is charged its declared
 length). Unattached public-form uploads are deleted after 2 hours.
 
@@ -542,7 +549,7 @@ Response:
 - **Selecting records** works as in listing: `view` (name or id; its filter applies, personal
   views of others are not found) and/or `filter_by_formula` (an Airtable formula, the same
   5-second evaluation budget); with neither, every record is included. The caller needs the
-  Viewer role on the base, exactly as for listing.
+  Viewer role on the project, exactly as for listing.
 - **`group_by`**: up to 3 fields, by name or id; none gives one row with the totals (also for an
   empty table: count 0, sum 0, others `null`). Groups are the same as the grid's grouping:
   a multiple select, link or user field groups by the exact combination of its values, dates by

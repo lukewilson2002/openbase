@@ -4,7 +4,7 @@ OpenBase contains an [MCP](https://modelcontextprotocol.io) (Model Context Proto
 server in the same binary, at `/mcp`. An AI agent that you connected with a personal
 access token, or by signing in to OpenBase from the agent's own connector screen
 (OAuth), can do **everything you can do in the web app**, within the permissions you
-gave it: build bases, tables, fields of all 28 types and views, fill in and edit
+gave it: build projects, tables, fields of all 28 types and views, fill in and edit
 records, run formulas and rollups, set up automations and public forms, invite
 people, import and export CSV, upload files, read history and notifications, and
 (for administrators) manage users and backups. You do not have to open the app
@@ -47,7 +47,7 @@ below.
 1. **Account → API tokens → New token.** Give it a name. Tick "Allow writes" if the
    assistant should change things, and (only for an assistant that should also manage
    workspaces and members) "Allow managing workspaces, members and settings". You can
-   limit the token to chosen bases and give it an expiry. Copy the token; it is shown
+   limit the token to chosen projects and give it an expiry. Copy the token; it is shown
    once.
 2. Add the server to your assistant. For Claude Code:
 
@@ -56,7 +56,7 @@ below.
      --header "Authorization: Bearer YOUR_TOKEN"
    ```
 
-Then ask it to do something: "Create a base for tracking customers and orders, with a
+Then ask it to do something: "Create a project for tracking customers and orders, with a
 rollup of each customer's lifetime value, and add three sample customers."
 
 ## Set up your client
@@ -115,11 +115,11 @@ and approve. The app then holds a short-lived access token for `/mcp`.
 
 | Choice | What the app can do | Same as a token with |
 |---|---|---|
-| Read only | read bases, schema, records, views, history | read-only |
-| Read & edit | also create, change and delete content in your bases | "Allow writes" |
+| Read only | read projects, schema, records, views, history | read-only |
+| Read & edit | also create, change and delete content in your projects | "Allow writes" |
 | Full control | also manage workspaces, members, invites and settings (and the admin pages for an administrator) | "Allow managing ..." |
 
-Plus **All bases** or **only the bases you tick**. The page **always preselects Read
+Plus **All projects** or **only the projects you tick**. The page **always preselects Read
 only**; you choose more. An app is offered what it asked for and nothing above it: Read &
 edit when it asked for write (an app that named no scope we know can get that much), and
 Full control only when it asked for `openbase:manage` (the `401` from `/mcp` names
@@ -133,12 +133,12 @@ of those providers' documented callback addresses
 `https://chatgpt.com/connector_platform_oauth_redirect`,
 `https://platform.openai.com/apps-manage/oauth`); other pages on their domains, such as a
 custom GPT's own callback, are treated like any third party. The same permission checks as for a token
-apply afterwards: the grant becomes the same scope (`write`, `manage`, bases), so the
+apply afterwards: the grant becomes the same scope (`write`, `manage`, projects), so the
 rules in [Scope model](#scope-model) hold unchanged, credentials, sessions and tokens
-stay out of reach, and what you can do in a base limits what the app can do.
+stay out of reach, and what you can do in a project limits what the app can do.
 
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
-its access, bases, where it connects from, when it connected and when it was last used,
+its access, projects, where it connects from, when it connected and when it was last used,
 with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing or resetting your password, turning on
 two-factor authentication, **Sign out other sessions** and having your account deactivated
@@ -229,18 +229,18 @@ access tokens keep getting a tool error that names the permission they lack.
 ## Choose a token
 
 Give an agent the least permission that does the job. What a token can do is the
-intersection of its owner's role on each base and the token's scope:
+intersection of its owner's role on each project and the token's scope:
 
 | Token | The agent can | Tools it sees |
 |---|---|---|
-| **Read only** | read bases, schema, records, views, comments, history, trash listings, automations, notifications; export CSV | the read tools, `api_reference`, `api_request` (reads only) |
-| **Read and write** | additionally create and edit records, comments, bases, tables, fields, views, share links, automations, imports and uploads, and restore from the trash, as far as the owner's role allows | + the write tools |
-| **Write + manage** | additionally rename, delete, duplicate and restore workspaces and bases, change members' roles and bases and remove members, create, list and revoke invites, and (if the owner is an instance administrator) use the admin pages | + the manage tools, and the `admin_*` tools for administrators |
+| **Read only** | read projects, schema, records, views, comments, history, trash listings, automations, notifications; export CSV | the read tools, `api_reference`, `api_request` (reads only) |
+| **Read and write** | additionally create and edit records, comments, projects, tables, fields, views, share links, automations, imports and uploads, and restore from the trash, as far as the owner's role allows | + the write tools |
+| **Write + manage** | additionally rename, delete, duplicate and restore workspaces and projects, change members' roles and projects and remove members, create, list and revoke invites, and (if the owner is an instance administrator) use the admin pages | + the manage tools, and the `admin_*` tools for administrators |
 
-Optionally limit a token to chosen **bases** (it cannot see or touch any other base,
-through any tool) and give it an **expiry**. A base-limited `manage` token manages only
-its bases: workspace-level actions (workspaces, workspace members and invites,
-duplicating bases, the admin pages) are refused for it, and so are creating bases
+Optionally limit a token to chosen **projects** (it cannot see or touch any other project,
+through any tool) and give it an **expiry**. A project-limited `manage` token manages only
+its projects: workspace-level actions (workspaces, workspace members and invites,
+duplicating projects, the admin pages) are refused for it, and so are creating projects
 and workspaces.
 
 The permission table, route by route, is in [api.md](api.md#token-permissions).
@@ -248,9 +248,9 @@ The permission table, route by route, is in [api.md](api.md#token-permissions).
 ## How access works
 
 - An assistant acts **as you**, never as someone else, and never with more than your
-  own role allows in each base.
+  own role allows in each project.
 - You choose its access when you approve it (OAuth) or create the token: read only,
-  read and edit, or full control, on all bases or only the ones you tick.
+  read and edit, or full control, on all projects or only the ones you tick.
 - Its changes show in the record history under your name.
 - Passwords, two-factor settings, passkeys, sessions, API tokens and backup downloads stay
   out of its reach, whatever access it has.
@@ -284,7 +284,7 @@ The details are in [Choose a token](#choose-a-token), [Scope model](#scope-model
   explains each of the 28 types.
 - **Every tool returns compact JSON** (and the same data as `structuredContent`).
   Select values, people and linked records read the same way in every tool.
-- **Deletions are recoverable.** Deleted records, fields, tables, views, bases and
+- **Deletions are recoverable.** Deleted records, fields, tables, views, projects and
   workspaces go to the trash and come back with `restore_from_trash` within
   `OPENBASE_TRASH_DAYS` (30). Changing a field's type is the exception: it converts
   the data and asks for confirmation first.
@@ -340,24 +340,24 @@ are names or ids.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_workspaces` | any | Workspaces (with icons) with your role, member and pending-invite counts, and the bases you can open (with who can open each) |
+| `list_workspaces` | any | Workspaces (with icons) with your role, member and pending-invite counts, and the projects you can open (with who can open each) |
 | `create_workspace` | manage | New workspace, optionally with a `color` (a colour name such as `blue`, checked like a project's colour; the next default colour otherwise) and an `icon`; you become its owner |
 | `rename_workspace` | manage | Rename and/or change the `color` and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
-| `list_members` | manage | Members of a workspace with their role and bases (`all_bases` or `base_ids`), or the workspace members who can open one base |
-| `set_member_role` | manage | Change a workspace member's `role`, and/or their bases: `all_bases: true` or a `base_ids` list (owner role; owners always have every base; a workspace always keeps an owner). Scope `project` is refused: there are no per-project roles |
-| `remove_member` | manage | Remove someone from a workspace (they lose all its bases), or take one base off a limited member's list (not their last) |
-| `create_invite` | manage | Invite link to join a workspace, optional email restriction; returns the link. Scope `workspace` (owner): every base, or `base_ids`. Scope `base` (creator of that base): that base, or `base_ids` you can open; never `all_bases`, never above your role |
-| `list_invites` / `revoke_invite` | manage | A workspace's invites, or the pending ones that give a base; revoke one |
-| `list_collaborators` | any | People who can see a base (user ids for user fields and @mentions) |
+| `list_members` | manage | Members of a workspace with their role and projects (`all_projects` or `project_ids`), or the workspace members who can open one project |
+| `set_member_role` | manage | Change a workspace member's `role`, and/or their projects: `all_projects: true` or a `project_ids` list (owner role; owners always have every project; a workspace always keeps an owner). Scope `project` is refused: there are no per-project roles |
+| `remove_member` | manage | Remove someone from a workspace (they lose all its projects), or take one project off a limited member's list (not their last) |
+| `create_invite` | manage | Invite link to join a workspace, optional email restriction; returns the link. Scope `workspace` (owner): every project, or `project_ids`. Scope `project` (creator of that project): that project, or `project_ids` you can open; never `all_projects`, never above your role |
+| `list_invites` / `revoke_invite` | manage | A workspace's invites, or the pending ones that give a project; revoke one |
+| `list_collaborators` | any | People who can see a project (user ids for user fields and @mentions) |
 
-### Bases, tables and fields
+### Projects, tables and fields
 
 | Tool | Needs | What it does |
 |---|---|---|
 | `create_project` / `rename_project` | write | (aliases `create_base` / `rename_base`) Create a project in a workspace (it starts with the table "Table 1", which has just the primary field "Name" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
 | `duplicate_project` / `delete_project` | manage | (aliases `duplicate_base` / `delete_base`) Copy a project (records optional; the copy keeps the icons); delete to the trash (owner role) |
-| `create_table` / `rename_table` | write | Add a table, optionally with its `icon` and a `fields` list (each entry is the arguments of `create_field` without `base_id` and `table`), so a table is set up in one call; rename it or change its description or `icon`. A new table always starts with just the primary text field "Name" and a grid view (the same as the first table of a new base): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the base; to link a table to itself, create it first and add the field with `create_field` |
+| `create_table` / `rename_table` | write | Add a table, optionally with its `icon` and a `fields` list (each entry is the arguments of `create_field` without `project_id` and `table`), so a table is set up in one call; rename it or change its description or `icon`. A new table always starts with just the primary text field "Name" and a grid view (the same as the first table of a new project): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the project; to link a table to itself, create it first and add the field with `create_field` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
 | `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |
@@ -369,7 +369,7 @@ are names or ids.
 
 #### Icons
 
-Workspaces, bases and tables can have an icon: a [Lucide](https://lucide.dev) name in
+Workspaces, projects and tables can have an icon: a [Lucide](https://lucide.dev) name in
 kebab-case such as `briefcase`, `users` or `chart-column` (the web app's icon picker offers
 the same set). `create_workspace`, `create_project` and `create_table` take an optional `icon`;
 `rename_workspace`, `rename_project` and `rename_table` change it. In those, **leaving `icon` out
@@ -463,7 +463,7 @@ needs only read access.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_automations` / `get_automation` | any | A base's automations; one with trigger and actions |
+| `list_automations` / `get_automation` | any | A project's automations; one with trigger and actions |
 | `create_automation` | write | One trigger (record created / updated / matches, form submitted, schedule, webhook) and up to 25 actions; tables and fields by name; off unless `enabled` |
 | `update_automation` | write | Enable or disable, rename, replace trigger or actions, rotate a webhook token |
 | `delete_automation` | write | Delete with its run history |
@@ -555,22 +555,22 @@ for every registered route and fails if one is missing from it.
 Four things decide whether a call works, all enforced by the server on every call (the
 tool list is only a convenience). An OAuth grant is the same model: "Read only", "Read &
 edit" and "Full control" are a token without write, with write, and with write and
-`manage`, optionally limited to bases.
+`manage`, optionally limited to projects.
 
 1. **The token's user and their role.** A token never has more rights than its owner
-   has on the base: viewer, commenter, editor, creator or owner.
+   has on the project: viewer, commenter, editor, creator or owner.
 2. **Write.** A read-only token acts with at most the viewer role.
-3. **Bases.** A base-limited token sees only those bases; everything else is "not
+3. **Projects.** A project-limited token sees only those projects; everything else is "not
    found".
 4. **`manage`** (needs write): workspaces, members, invites, deleting and duplicating
-   bases, trash of bases and workspaces, the account name and time zone. Tools that
-   reach beyond one base also need a token that is *not* base-limited. Admin tools
+   projects, trash of projects and workspaces, the account name and time zone. Tools that
+   reach beyond one project also need a token that is *not* project-limited. Admin tools
    additionally need the owner to be an instance administrator.
 
 Errors tell the cause apart: "requires the creator role on this base" (the user's
 role), "needs an API token with the 'manage' permission" (the token), "this API token
 is read-only" or "limited to specific bases" (the token's limits), "not found, or you
-have no access" (the base is outside the user's or the token's reach).
+have no access" (the project is outside the user's or the token's reach).
 
 ## Security model
 
@@ -628,7 +628,7 @@ have no access" (the base is outside the user's or the token's reach).
   control grant can fetch it.
 - **Prompt injection.** An agent reads text that other people wrote (record contents,
   comments, imported files, web pages behind an upload URL). Anything the agent may
-  do, text it reads might trick it into doing: use read-only or base-limited tokens
+  do, text it reads might trick it into doing: use read-only or project-limited tokens
   for agents that process untrusted content, avoid `manage` tokens for them, and set
   an expiry.
 
