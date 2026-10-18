@@ -27,7 +27,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
-import { baseAccentButtonClass } from "@/lib/colors";
 import { countConditions, isFilterable } from "@/lib/cells/filters";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { visibleToolCount } from "./toolbarFit";
@@ -51,6 +50,9 @@ import {
   setRowHeight,
   updateSortLike,
 } from "./config";
+
+/** Add looks like a secondary button: the toolbar has no colored call to action. */
+const addButtonClass = "border border-line-strong bg-surface text-fg hover:bg-hover";
 
 export interface ViewBarProps {
   schema: BaseSchema;
@@ -515,7 +517,7 @@ export function ViewBar(props: ViewBarProps) {
             onClick={props.onAdd}
             className={cn(
               "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-pop transition-colors",
-              baseAccentButtonClass(schema.color),
+              addButtonClass,
             )}
           >
             <Plus aria-hidden className="size-5" /> Add
@@ -543,7 +545,7 @@ export function ViewBar(props: ViewBarProps) {
               type="button"
               aria-label="Add record"
               onClick={props.onAdd}
-              className={cn("inline-flex h-[38px] items-center gap-1.5 rounded-[10px] pl-3.5 pr-4 text-[0.875rem] font-semibold transition-colors", baseAccentButtonClass(schema.color))}
+              className={cn("inline-flex h-[38px] items-center gap-1.5 rounded-[10px] pl-3.5 pr-4 text-[0.875rem] font-semibold transition-colors", addButtonClass)}
             >
               <Plus aria-hidden className="size-4" /> Add
             </button>

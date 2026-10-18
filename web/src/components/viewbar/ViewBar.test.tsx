@@ -265,14 +265,15 @@ describe("ViewBar on a phone", () => {
 });
 
 describe("ViewBar Add", () => {
-  it("adds a record from the toolbar on a desktop, tinted with the base's colour", async () => {
+  it("adds a record from the toolbar on a desktop, as a secondary button", async () => {
     const onAdd = vi.fn();
     renderBar({ onAdd });
     const add = screen.getByRole("button", { name: "Add record" });
     expect(add).toHaveTextContent("Add");
     expect(add.closest("[role=toolbar]")).not.toBeNull();
-    expect(add).toHaveClass("ob-hue-green", "ob-tint-button");
+    expect(add).toHaveClass("border-line-strong", "bg-surface");
     expect(add).not.toHaveClass("bg-primary");
+    expect(add).not.toHaveClass("ob-tint-button");
     await userEvent.click(add);
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
@@ -281,7 +282,7 @@ describe("ViewBar Add", () => {
     const onAdd = vi.fn();
     renderBar({ onAdd }, { phone: true });
     const add = screen.getByRole("button", { name: "Add record" });
-    expect(add).toHaveClass("fixed", "ob-tint-button");
+    expect(add).toHaveClass("fixed", "bg-surface");
     await userEvent.click(add);
     expect(onAdd).toHaveBeenCalledTimes(1);
   });

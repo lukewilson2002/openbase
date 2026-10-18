@@ -67,11 +67,6 @@ export function colorDotClass(color: string | null | undefined): string {
   return `ob-hue-${accentHue(color)} ob-dot`;
 }
 
-/** A soft button in the base's colour (the views' "Add"): tint background, dark text, thin line. */
-export function baseAccentButtonClass(color: string | null | undefined): string {
-  return accentClass(color, "button");
-}
-
 /** Stable colour per identity (email, else name), so the same person looks the same everywhere. */
 export function personColor(seed: string): ChoiceColor {
   let h = 0;

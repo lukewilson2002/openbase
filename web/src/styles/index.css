@@ -340,7 +340,7 @@
  *   .ob-hue-<hue>    the strong shade, as --accent
  *   .ob-tint         soft tile (a base's tile, its icon in the strong shade)
  *   .ob-solid        strong tile with white text (a workspace's tile)
- *   .ob-tint-button  soft button with a thin line and dark text (a base's "Add")
+ *   .ob-tint-button  soft button with a thin line and dark text
  */
 .ob-hue-blue {
   --accent: #1f5ae0;
