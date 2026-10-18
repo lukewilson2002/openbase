@@ -14,14 +14,13 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 ### Added
 
 - **The Inbox: a place to write things down first.** The home page is now a capture box, like the
-  start page of an AI chat: write a note in rich text and attach files. It is kept as a draft
-  (only you see your drafts, listed below the box) until you choose **Save to…** a project and a
-  table. The box then turns into that table's form, with its primary field as the title and the
-  note going into a long text field you choose (or into the new record's first comment), and Save
-  adds the record. Agents have the same
-  inbox through the new MCP tools `list_inbox`, `add_to_inbox`, `update_inbox_item`,
-  `file_inbox_item` and `delete_inbox_item`, and the REST routes under `/api/inbox` (see
-  [docs/api.md](docs/api.md)). A draft holds up to 20 files, and the files waiting in one person's
+  start page of an AI chat: give it a title, write a note in rich text, attach files, or any of
+  these. It is kept as a draft (only you see your drafts, listed below the box) until you choose
+  **Save to…** a project and a table. The box then turns into that table's form: the title goes
+  into its primary field, the note into a long text field you choose (or into the new record's
+  first comment), and Save adds the record. Agents have the same inbox through the new MCP tools
+  `list_inbox`, `add_to_inbox`, `update_inbox_item`, `file_inbox_item` and `delete_inbox_item`, and
+  the REST routes under `/api/inbox` (see [docs/api.md](docs/api.md)). A draft holds up to 20 files, and the files waiting in one person's
   drafts can take up to 200 MB (`OPENBASE_MAX_INBOX_MB`). API tokens limited to some projects
   cannot use the inbox.
 - **Rich text you can see while you write.** Long text fields with formatting turned on are edited
@@ -61,6 +60,7 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   saved. Long text is saved as you type, not only when you leave the field. Its link button is now
   Share, which opens the phone's share sheet where there is one.
 - The old Inbox, with mentions and other alerts, is called **Notifications**, below the new Inbox.
+  The intro has a step about the Inbox.
 - Every item of the profile menu has an icon.
 - The toolbar's Add button looks like the other buttons instead of taking the project's colour.
 

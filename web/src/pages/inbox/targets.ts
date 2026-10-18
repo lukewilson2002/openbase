@@ -115,12 +115,13 @@ export function hasContent(fields: Record<string, JsonValue>): boolean {
 // ---- drafts --------------------------------------------------------------------------------
 
 /** A draft with nothing in it is not worth creating. */
-export function isBlank(body: string, attachments: readonly unknown[]): boolean {
-  return body.trim() === "" && attachments.length === 0;
+export function isBlank(title: string, body: string, attachments: readonly unknown[]): boolean {
+  return title.trim() === "" && body.trim() === "" && attachments.length === 0;
 }
 
-/** The first line with text, without Markdown's marks: a draft's preview in the list. */
-export function draftPreview(item: Pick<InboxItem, "body" | "attachments">): string {
+/** A draft's preview in the list: its title, else the first line with text, without Markdown's marks. */
+export function draftPreview(item: Pick<InboxItem, "title" | "body" | "attachments">): string {
+  if (item.title.trim()) return item.title.trim();
   for (const line of item.body.split("\n")) {
     const text = line
       .replace(/^\s*(?:[>#]+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)\s*/, "")

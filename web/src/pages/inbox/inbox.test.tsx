@@ -10,7 +10,7 @@ import { USER, apiError, makeSchema, mockApi, renderApp, stubDesktop, type Handl
 afterEach(() => vi.unstubAllGlobals());
 
 const NOW = Date.now();
-const item = (id: string, body: string, attachments: AttachmentRef[] = [], ago = 60_000): InboxItem => ({ id, body, attachments, created_at: NOW - ago, updated_at: NOW - ago });
+const item = (id: string, body: string, attachments: AttachmentRef[] = [], ago = 60_000, title = ""): InboxItem => ({ id, title, body, attachments, created_at: NOW - ago, updated_at: NOW - ago });
 const att = (id: string, filename: string, size = 2048): AttachmentRef => ({ id, filename, mime: "application/pdf", size });
 
 const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
@@ -84,7 +84,7 @@ describe("drafts", () => {
     await write(" there");
     // Two changes in quick succession are one save, and it is the first, so a POST.
     await waitFor(() => expect(api.callsTo("POST /api/inbox")).toHaveLength(1), SAVE_WAIT);
-    expect(body(api.callsTo("POST /api/inbox")[0]!)).toEqual({ body: "Hello there", attachments: [] });
+    expect(body(api.callsTo("POST /api/inbox")[0]!)).toEqual({ title: "", body: "Hello there", attachments: [] });
     expect(await screen.findByText("Saved as draft")).toBeInTheDocument();
     expect(api.callsTo("PATCH /api/inbox/inb1")).toHaveLength(0);
 
@@ -95,6 +95,22 @@ describe("drafts", () => {
     expect(api.callsTo("POST /api/inbox")).toHaveLength(1);
     // It shows in the list under the box.
     expect(await screen.findByRole("button", { name: /Hello there again/ })).toBeInTheDocument();
+  });
+
+  it("keeps a title on its own as a draft, with no placeholder, and lists the draft by it", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const reply = (call: RecordedCall) => item("inb1", String(body(call).body), [], 0, String(body(call).title));
+    const api = routes({ "POST /api/inbox": reply, "PATCH /api/inbox/inb1": reply });
+    renderApp();
+    const title = await screen.findByRole("textbox", { name: "Title" });
+    expect(title).not.toHaveAttribute("placeholder");
+    const saves = () => [...api.callsTo("POST /api/inbox"), ...api.callsTo("PATCH /api/inbox/inb1")].map(body);
+    await user.type(title, "Cabin for the offsite");
+    // One draft is made (a slow typist's pause may save part of the title first, then the rest).
+    await waitFor(() => expect(saves().at(-1)).toMatchObject({ title: "Cabin for the offsite", body: "" }), SAVE_WAIT);
+    expect(api.callsTo("POST /api/inbox")).toHaveLength(1);
+    expect(await screen.findByRole("button", { name: /Cabin for the offsite/ })).toBeInTheDocument();
   });
 
   it("saves at once on Ctrl+Enter, without waiting for typing to pause", async () => {
@@ -358,7 +374,8 @@ describe("saving into a table", () => {
     routes();
     renderApp();
     const title = await pickTasks(user);
-    expect(title).toHaveAttribute("placeholder", "Name");
+    // The draft's own title box is the primary field now, named after it, still without a placeholder.
+    expect(title).not.toHaveAttribute("placeholder");
     expect(screen.getByText("Project tracker › Tasks")).toBeInTheDocument();
     // The note goes into the first rich long text field, and another can be chosen.
     const chooser = screen.getByRole("combobox", { name: "Note goes into" });

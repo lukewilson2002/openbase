@@ -12,7 +12,7 @@ import { EditorEnvProvider } from "@/components/record/editors/env";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input, Select } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { displayShapeOf, type DisplayShape } from "@/lib/cells/kinds";
@@ -59,27 +59,18 @@ export function FormStatus({ form }: { form: TargetForm }) {
   return null;
 }
 
-/** The primary field as the record's title: a big text box, or the field's own editor for a primary that is not text. */
+/**
+ * A primary field that is not text gets its own editor below the title (a text primary is the draft's
+ * title itself, see `Capture`).
+ */
 export function TitleField({ form }: { form: TargetForm }) {
   const table = form.table;
   const field = table ? primaryField(table) : undefined;
-  if (!table || !field || !form.env) return null;
+  if (!table || !field || !form.env || isTextTitle(field)) return null;
   const error = form.errors[field.id];
   return (
     <EditorEnvProvider value={form.env}>
-      {isTextTitle(field) ? (
-        <Input
-          aria-label={field.name}
-          placeholder={field.name}
-          value={typeof form.values[field.id] === "string" ? (form.values[field.id] as string) : ""}
-          onChange={(e) => form.setText(field, e.target.value)}
-          maxLength={10_000}
-          autoComplete="off"
-          className="h-12 rounded-[10px] px-3.5 text-[1.0625rem] font-semibold"
-        />
-      ) : (
-        <EditorRow key={`${field.id}:${form.generation}`} field={field} form={form} />
-      )}
+      <EditorRow key={`${field.id}:${form.generation}`} field={field} form={form} />
       {error && (
         <p role="alert" className="text-xs text-danger">
           {error}

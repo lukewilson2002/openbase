@@ -25,6 +25,8 @@ pub const MAX_PAGE_SIZE: usize = 1_000;
 pub const MAX_FORMULA_DEPTH: usize = 64;
 /// Drafts one user can keep in their inbox.
 pub const MAX_INBOX_ITEMS: usize = 500;
+/// Characters in an inbox draft's title.
+pub const MAX_INBOX_TITLE_LEN: usize = 1_000;
 /// Files on one inbox draft.
 pub const MAX_INBOX_ATTACHMENTS: usize = 20;
 /// Bytes of files one user may keep in no base (inbox uploads): the default of the server's

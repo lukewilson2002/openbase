@@ -282,8 +282,8 @@ seedProjects();
 
 /** Inbox drafts (`/api/inbox`), two to start with so the list is not empty. */
 const inbox: Obj[] = [
-  { id: "inb_demo1", body: "# Ideas for the offsite\n\n- somewhere with a lake\n- no slides", attachments: [], created_at: Date.now() - 3 * 3_600_000, updated_at: Date.now() - 3 * 3_600_000 },
-  { id: "inb_demo2", body: "Call the accountant about Q3", attachments: [{ id: "att_demo", filename: "receipts.pdf", mime: "application/pdf", size: 48_213 }], created_at: Date.now() - 2 * 86_400_000, updated_at: Date.now() - 2 * 86_400_000 },
+  { id: "inb_demo1", title: "Ideas for the offsite", body: "- somewhere with a lake\n- no slides", attachments: [], created_at: Date.now() - 3 * 3_600_000, updated_at: Date.now() - 3 * 3_600_000 },
+  { id: "inb_demo2", title: "", body: "Call the accountant about Q3", attachments: [{ id: "att_demo", filename: "receipts.pdf", mime: "application/pdf", size: 48_213 }], created_at: Date.now() - 2 * 86_400_000, updated_at: Date.now() - 2 * 86_400_000 },
 ];
 
 const notifications: Obj[] = [];
@@ -1017,7 +1017,8 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === "/api/inbox" && m === "GET") return send(res, 200, [...inbox].sort((a, b) => b.updated_at - a.updated_at)), true;
   if (p === "/api/inbox" && m === "POST") {
     const now = Date.now();
-    const draft: Obj = { id: newId("inb"), body: String(body.body ?? ""), attachments: body.attachments ?? [], created_at: now, updated_at: now };
+    const title = String(body.title ?? "").replace(/[\r\n]+/g, " ").trim();
+    const draft: Obj = { id: newId("inb"), title, body: String(body.body ?? ""), attachments: body.attachments ?? [], created_at: now, updated_at: now };
     inbox.push(draft);
     return send(res, 201, draft), true;
   }
@@ -1031,6 +1032,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     const draft = inbox.find((d) => d.id === g![1]);
     if (!draft) return err(res, 404, "not_found", "draft not found"), true;
     if (m === "PATCH") {
+      if (typeof body.title === "string") draft.title = body.title.replace(/[\r\n]+/g, " ").trim();
       if (typeof body.body === "string") draft.body = body.body;
       if (Array.isArray(body.attachments)) draft.attachments = body.attachments;
       draft.updated_at = Date.now();

@@ -6,6 +6,10 @@ import type { AttachmentRef } from "./AttachmentRef";
  */
 export type InboxItem = { id: string, 
 /**
+ * One line, may be empty: what a record's primary field would say.
+ */
+title: string, 
+/**
  * Markdown text.
  */
 body: string, 

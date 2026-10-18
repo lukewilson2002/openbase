@@ -17,6 +17,7 @@ import type { InboxItem, WorkspaceSummary } from "@/api/types";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -25,7 +26,7 @@ import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { AttachmentChips } from "./AttachmentChips";
 import { FileChooser, FormStatus, NoteChooser, OtherFields, TargetBar, TitleField } from "./TargetFormParts";
 import { TargetPicker } from "./TargetPicker";
-import { NOTE_AS_COMMENT, fileFields, hasContent, isBlank, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, fileFields, hasContent, isBlank, isTextTitle, primaryField, type TargetRef } from "./targets";
 import { DraftsList } from "./DraftsList";
 import { useDraft, type Draft } from "./useDraft";
 import { useTargetForm } from "./useTargetForm";
@@ -58,14 +59,20 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
   const uploads = useUploads(draft.attachments.length, draft.addAttachment, draft.key);
   const input = useRef<HTMLInputElement>(null);
 
+  // The draft's title is the record's: a text primary field takes it, any other primary has its own
+  // editor and the title leads the note instead.
+  const primary = form.table ? primaryField(form.table) : undefined;
+  const titleIsPrimary = !!primary && isTextTitle(primary);
+  const note = !titleIsPrimary && draft.title.trim() ? `${draft.title.trim()}\n\n${draft.body}` : draft.body;
+  const values = titleIsPrimary && primary ? { ...form.values, [primary.id]: draft.title } : form.values;
   const fields = form.table
-    ? fileFields({ table: form.table, values: form.values, note: draft.body, noteFieldId: form.noteFieldId, attachments: draft.attachments, attachmentFieldId: form.fileFieldId })
+    ? fileFields({ table: form.table, values, note, noteFieldId: form.noteFieldId, attachments: draft.attachments, attachmentFieldId: form.fileFieldId })
     : null;
   const problems = Object.keys(form.errors).length > 0;
   // A note filed as a comment is content enough for a record of its own.
   const asComment = form.noteFieldId === NOTE_AS_COMMENT && draft.body.trim() !== "";
   const canFile = !!target && !!form.table && !!fields && (hasContent(fields) || asComment) && !problems && uploads.uploading.length === 0 && !filing;
-  const hasDraft = draft.id !== null || !isBlank(draft.body, draft.attachments);
+  const hasDraft = draft.id !== null || !isBlank(draft.title, draft.body, draft.attachments);
 
   const file = async () => {
     if (!form.table || !fields || !canFile) return;
@@ -149,6 +156,15 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
             </Button>
           </div>
         )}
+        <Input
+          aria-label={titleIsPrimary && primary ? primary.name : "Title"}
+          value={draft.title}
+          onChange={(e) => draft.setTitle(e.target.value)}
+          onBlur={() => void draft.save()}
+          maxLength={1_000}
+          autoComplete="off"
+          className="h-12 rounded-[10px] px-3.5 text-[1.0625rem] font-semibold"
+        />
         {target && <FormStatus form={form} />}
         {target && <TitleField form={form} />}
         <Suspense

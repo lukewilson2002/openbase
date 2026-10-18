@@ -5,4 +5,4 @@ import type { AttachmentRef } from "./AttachmentRef";
  * `PATCH /api/inbox/{id}`: only the fields given change; `attachments`
  * replaces the whole list.
  */
-export type UpdateInboxItem = { body?: string | null, attachments?: Array<AttachmentRef> | null, };
+export type UpdateInboxItem = { title?: string | null, body?: string | null, attachments?: Array<AttachmentRef> | null, };

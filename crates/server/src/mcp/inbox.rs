@@ -25,16 +25,17 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_inbox",
             "List inbox drafts",
-            "List your inbox: private quick-capture drafts (Markdown text plus files) that are not in any project yet, most recently changed first. Only you ever see them. File one into a table with file_inbox_item.",
+            "List your inbox: private quick-capture drafts (an optional title, Markdown text and files) that are not in any project yet, most recently changed first. Only you ever see them. File one into a table with file_inbox_item.",
             object(json!({}), &[]),
         ),
         ToolDef::new(
             "add_to_inbox",
             "Add a draft to the inbox",
-            "Save a note in your inbox for later (Markdown text, optionally files). Use it to capture something when you do not know yet which table it belongs in; file_inbox_item turns it into a record later.",
+            "Save a note in your inbox for later (a title, Markdown text, files: any of them). Use it to capture something when you do not know yet which table it belongs in; file_inbox_item turns it into a record later.",
             object(
                 json!({
-                    "body": string("The note, in Markdown (up to 100,000 characters; may be empty when files are attached)."),
+                    "title": string("A one-line title, like a record's primary field (optional, up to 1,000 characters)."),
+                    "body": string("The note, in Markdown (up to 100,000 characters; may be empty when there is a title or files)."),
                     "attachments": files.clone(),
                 }),
                 &[],
@@ -44,10 +45,11 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_inbox_item",
             "Edit an inbox draft",
-            "Change an inbox draft's text and/or its list of files (what you leave out stays).",
+            "Change an inbox draft's title, text and/or its list of files (what you leave out stays).",
             object(
                 json!({
                     "id": string("Inbox draft id (inb...), from list_inbox."),
+                    "title": string("New title (empty to clear it)."),
                     "body": string("New Markdown text."),
                     "attachments": files,
                 }),
@@ -59,7 +61,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "file_inbox_item",
             "File an inbox draft into a table",
-            "Turn an inbox draft into a record of a table and remove the draft, in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's text is NOT copied automatically: put it in a long-text field yourself, or set note_as_comment to add it as the record's first comment). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
+            "Turn an inbox draft into a record of a table and remove the draft, in one step. You choose the values: `fields` is {\"Field name\": value} like create_records (the draft's title and text are NOT copied automatically: put the title in the primary field and the text in a long-text field yourself, or set note_as_comment to add the text as the record's first comment). To keep the draft's files, list them ([{\"id\": \"att...\"}]) in an attachment field. Needs the editor role on the project; nothing changes if the record cannot be created.",
             object(
                 json!({
                     "id": string("Inbox draft id (inb...), from list_inbox."),
@@ -129,6 +131,8 @@ fn file_refs(files: Vec<Value>) -> Vec<Value> {
 #[serde(deny_unknown_fields)]
 struct AddArgs {
     #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
     body: Option<String>,
     #[serde(default)]
     attachments: Option<Vec<Value>>,
@@ -136,6 +140,7 @@ struct AddArgs {
 
 async fn add_to_inbox(ctx: &McpCtx, a: AddArgs) -> ToolResult {
     let mut body = Map::new();
+    body.insert("title".into(), json!(a.title.unwrap_or_default()));
     body.insert("body".into(), json!(a.body.unwrap_or_default()));
     if let Some(files) = a.attachments {
         body.insert("attachments".into(), json!(file_refs(files)));
@@ -151,6 +156,8 @@ async fn add_to_inbox(ctx: &McpCtx, a: AddArgs) -> ToolResult {
 struct UpdateArgs {
     id: String,
     #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
     body: Option<String>,
     #[serde(default)]
     attachments: Option<Vec<Value>>,
@@ -158,12 +165,13 @@ struct UpdateArgs {
 
 async fn update_inbox_item(ctx: &McpCtx, a: UpdateArgs) -> ToolResult {
     let mut body = Map::new();
+    insert_some(&mut body, "title", a.title);
     insert_some(&mut body, "body", a.body);
     if let Some(files) = a.attachments {
         body.insert("attachments".into(), json!(file_refs(files)));
     }
     if body.is_empty() {
-        return ToolResult::error("Give a new body and/or attachments.");
+        return ToolResult::error("Give a new title, body and/or attachments.");
     }
     let path = format!("/api/inbox/{}", encode_segment(&a.id));
     match fetch(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {

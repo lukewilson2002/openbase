@@ -429,8 +429,8 @@ tools or `upload_attachment` without `project_id`: they fail with a message sayi
 | Tool | Needs | What it does |
 |---|---|---|
 | `list_inbox` | any | Your drafts, most recently changed first |
-| `add_to_inbox` | write | Save a note (`body`, Markdown) and/or files (`attachments: [{id}]` from `upload_attachment` without `project_id`) |
-| `update_inbox_item` | write | Change a draft's `body` and/or replace its `attachments` |
+| `add_to_inbox` | write | Save a note (`title`, one line; `body`, Markdown) and/or files (`attachments: [{id}]` from `upload_attachment` without `project_id`) |
+| `update_inbox_item` | write | Change a draft's `title`, `body` and/or replace its `attachments` |
 | `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them; the text is not copied automatically (put it in a long-text field, or set `note_as_comment` to add it as the record's first comment). Needs the editor role there; on any failure the draft stays |
 | `delete_inbox_item` | write | Delete a draft permanently |
 

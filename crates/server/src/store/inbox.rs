@@ -28,6 +28,7 @@ fn not_found() -> AppError {
 
 fn row_to_item(
     id: String,
+    title: String,
     body: String,
     attachments: String,
     created_at: i64,
@@ -35,6 +36,7 @@ fn row_to_item(
 ) -> InboxItem {
     InboxItem {
         id,
+        title,
         body,
         // Written only by this module; a damaged value reads as "no files".
         attachments: serde_json::from_str(&attachments).unwrap_or_default(),
@@ -46,7 +48,7 @@ fn row_to_item(
 /// The user's drafts, most recently changed first.
 pub fn list(conn: &Connection, user_id: &str) -> AppResult<Vec<InboxItem>> {
     let mut stmt = conn.prepare(
-        "SELECT id, body, attachments, created_at, updated_at FROM inbox_items
+        "SELECT id, title, body, attachments, created_at, updated_at FROM inbox_items
          WHERE user_id = ?1 ORDER BY updated_at DESC, rowid DESC",
     )?;
     let items = stmt
@@ -57,6 +59,7 @@ pub fn list(conn: &Connection, user_id: &str) -> AppResult<Vec<InboxItem>> {
                 r.get(2)?,
                 r.get(3)?,
                 r.get(4)?,
+                r.get(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -66,7 +69,7 @@ pub fn list(conn: &Connection, user_id: &str) -> AppResult<Vec<InboxItem>> {
 /// One of the user's drafts; 404 when it is missing or someone else's.
 pub fn get(conn: &Connection, user_id: &str, id: &str) -> AppResult<InboxItem> {
     conn.query_row(
-        "SELECT id, body, attachments, created_at, updated_at FROM inbox_items
+        "SELECT id, title, body, attachments, created_at, updated_at FROM inbox_items
          WHERE id = ?1 AND user_id = ?2",
         params![id, user_id],
         |r| {
@@ -76,11 +79,29 @@ pub fn get(conn: &Connection, user_id: &str, id: &str) -> AppResult<InboxItem> {
                 r.get(2)?,
                 r.get(3)?,
                 r.get(4)?,
+                r.get(5)?,
             ))
         },
     )
     .optional()?
     .ok_or_else(not_found)
+}
+
+/// A title is one line: line breaks become spaces, and the ends are trimmed.
+fn clean_title(title: &str) -> AppResult<String> {
+    let title = title
+        .split(['\r', '\n'])
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let title = title.trim().to_string();
+    if title.chars().count() > limits::MAX_INBOX_TITLE_LEN {
+        return Err(AppError::bad_request(format!(
+            "the title is too long (maximum {} characters)",
+            limits::MAX_INBOX_TITLE_LEN
+        )));
+    }
+    Ok(title)
 }
 
 fn check_body(body: &str) -> AppResult<()> {
@@ -172,9 +193,11 @@ fn attachments_json(refs: &[AttachmentRef]) -> AppResult<String> {
 pub fn create(
     conn: &Connection,
     user_id: &str,
+    title: &str,
     body: &str,
     files: &[AttachmentRef],
 ) -> AppResult<InboxItem> {
+    let title = clean_title(title)?;
     check_body(body)?;
     let count: i64 = conn.query_row(
         "SELECT count(*) FROM inbox_items WHERE user_id = ?1",
@@ -191,9 +214,9 @@ pub fn create(
     let id = new_id(ids::INBOX);
     let now = now_ms();
     conn.execute(
-        "INSERT INTO inbox_items (id, user_id, body, attachments, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![id, user_id, body, attachments_json(&refs)?, now],
+        "INSERT INTO inbox_items (id, user_id, title, body, attachments, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        params![id, user_id, title, body, attachments_json(&refs)?, now],
     )?;
     get(conn, user_id, &id)
 }
@@ -203,10 +226,15 @@ pub fn update(
     conn: &Connection,
     user_id: &str,
     id: &str,
+    title: Option<&str>,
     body: Option<&str>,
     files: Option<&[AttachmentRef]>,
 ) -> AppResult<InboxItem> {
     let current = get(conn, user_id, id)?;
+    let title = match title {
+        Some(t) => clean_title(t)?,
+        None => current.title,
+    };
     let body = match body {
         Some(b) => {
             check_body(b)?;
@@ -219,9 +247,9 @@ pub fn update(
         None => current.attachments,
     };
     conn.execute(
-        "UPDATE inbox_items SET body = ?1, attachments = ?2, updated_at = ?3
-         WHERE id = ?4 AND user_id = ?5",
-        params![body, attachments_json(&refs)?, now_ms(), id, user_id],
+        "UPDATE inbox_items SET title = ?1, body = ?2, attachments = ?3, updated_at = ?4
+         WHERE id = ?5 AND user_id = ?6",
+        params![title, body, attachments_json(&refs)?, now_ms(), id, user_id],
     )?;
     get(conn, user_id, id)
 }

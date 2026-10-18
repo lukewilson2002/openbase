@@ -28,6 +28,12 @@ export interface RichTextEditorProps {
   "aria-label"?: string;
 }
 
+/** Whether a text box, or anything else that takes typing, has the focus already. */
+function typingElsewhere(): boolean {
+  const el = document.activeElement;
+  return !!el && el !== document.body && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable);
+}
+
 export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen, placeholder, "aria-label": label }: RichTextEditorProps) {
   const [expanded, setExpanded] = useState(false);
   const extensions = useMemo(() => richTextExtensions(placeholder), [placeholder]);
@@ -36,12 +42,12 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
   cb.current = { onChange, onBlur };
   // The Markdown the editor last produced or was given: a `value` equal to it is our own echo.
   const known = useRef(value);
+  const focusOnCreate = useRef(autoFocus);
 
   const editor = useEditor({
     extensions,
     content: value,
     contentType: "markdown",
-    autofocus: autoFocus ? "end" : false,
     editorProps: {
       attributes: {
         role: "textbox",
@@ -57,6 +63,17 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
       cb.current.onChange(md);
     },
     onBlur: () => cb.current.onBlur?.(),
+    // Focused here rather than through Tiptap's `autofocus` or `focus` command, which move the focus a
+    // frame later: the editor is ready a moment after the page (its chunk may arrive later still), and by
+    // then the person may be typing somewhere else (a title above it). Deciding and focusing in one step
+    // never takes the focus from under their keystrokes.
+    onCreate: ({ editor: ed }) => {
+      if (focusOnCreate.current && !typingElsewhere()) {
+        ed.commands.setTextSelection(ed.state.doc.content.size);
+        ed.view.focus();
+      }
+      focusOnCreate.current = false;
+    },
   });
 
   // A value that did not come from this editor (the other view of the field, a refresh) replaces the document.

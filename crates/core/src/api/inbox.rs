@@ -1,5 +1,5 @@
 //! DTOs for the inbox: a user's private quick-capture drafts
-//! (`/api/inbox`). A draft is Markdown text plus uploaded files; filing it
+//! (`/api/inbox`). A draft is an optional title, Markdown text and uploaded files; filing it
 //! into a table creates a record and removes the draft.
 
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,8 @@ use crate::field::AttachmentRef;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct InboxItem {
     pub id: String,
+    /// One line, may be empty: what a record's primary field would say.
+    pub title: String,
     /// Markdown text.
     pub body: String,
     /// Uploaded files (`POST /api/inbox/attachments`), in the shape an
@@ -25,7 +27,11 @@ pub struct InboxItem {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct CreateInboxItem {
-    /// Markdown text (may be empty when files are attached).
+    /// One line (may be empty).
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>", optional))]
+    pub title: String,
+    /// Markdown text (may be empty when there is a title or files).
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(as = "Option<String>", optional))]
     pub body: String,
@@ -38,6 +44,8 @@ pub struct CreateInboxItem {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateInboxItem {
+    #[serde(default)]
+    pub title: Option<String>,
     #[serde(default)]
     pub body: Option<String>,
     #[serde(default)]

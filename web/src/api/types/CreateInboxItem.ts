@@ -6,6 +6,10 @@ import type { AttachmentRef } from "./AttachmentRef";
  */
 export type CreateInboxItem = { 
 /**
- * Markdown text (may be empty when files are attached).
+ * One line (may be empty).
+ */
+title?: string, 
+/**
+ * Markdown text (may be empty when there is a title or files).
  */
 body?: string, attachments?: Array<AttachmentRef> | null, };

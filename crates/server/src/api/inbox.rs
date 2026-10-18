@@ -1,8 +1,9 @@
 //! The inbox: a user's private quick-capture drafts.
 //!
 //! - `GET /api/inbox` lists the caller's drafts, most recently changed first.
-//! - `POST /api/inbox` (`{body, attachments?}`, 201) adds one.
-//! - `PATCH /api/inbox/{id}` changes the text and/or the list of files.
+//! - `POST /api/inbox` (`{title?, body, attachments?}`, 201) adds one. The title
+//!   is one line (line breaks become spaces) and may be empty.
+//! - `PATCH /api/inbox/{id}` changes the title, the text and/or the list of files.
 //! - `DELETE /api/inbox/{id}` deletes a draft (204; there is no trash for drafts).
 //! - `POST /api/inbox/attachments` (multipart field `file`) uploads a file that
 //!   belongs to no base yet; only its uploader can download it. Put the returned
@@ -86,6 +87,7 @@ async fn create(
             inbox::create(
                 tx,
                 &actor.user_id,
+                &body.title,
                 &body.body,
                 body.attachments.as_deref().unwrap_or_default(),
             )
@@ -108,6 +110,7 @@ async fn update(
                 tx,
                 &actor.user_id,
                 &id,
+                body.title.as_deref(),
                 body.body.as_deref(),
                 body.attachments.as_deref(),
             )

@@ -22,6 +22,8 @@ export type DraftStatus = "idle" | "saving" | "saved" | "error";
 interface Doc {
   /** The draft's id once it exists on the server. */
   id: string | null;
+  /** One line, may be empty: what the record's primary field will say. */
+  title: string;
   body: string;
   attachments: AttachmentRef[];
   /** Changes whenever another draft (or a blank one) is loaded, so the editor is rebuilt around it. */
@@ -31,6 +33,7 @@ interface Doc {
 export interface Draft extends Doc {
   status: DraftStatus;
   error: string | null;
+  setTitle(title: string): void;
   setBody(md: string): void;
   addAttachment(ref: AttachmentRef): void;
   removeAttachment(id: string): void;
@@ -48,7 +51,8 @@ export interface Draft extends Doc {
   reset(): void;
 }
 
-const BLANK: Doc = { id: null, body: "", attachments: [], key: 0 };
+const BLANK: Doc = { id: null, title: "", body: "", attachments: [], key: 0 };
+const EMPTY = { id: null, title: "", body: "", attachments: [] };
 
 export function useDraft(): Draft {
   const qc = useQueryClient();
@@ -79,7 +83,7 @@ export function useDraft(): Draft {
     async (force: boolean): Promise<string | null> => {
       const snap = ref.current;
       if (!dirty.current && (snap.id !== null || !force)) return snap.id;
-      if (snap.id === null && isBlank(snap.body, snap.attachments) && !force) {
+      if (snap.id === null && isBlank(snap.title, snap.body, snap.attachments) && !force) {
         dirty.current = false;
         return null;
       }
@@ -89,14 +93,14 @@ export function useDraft(): Draft {
       try {
         let item: InboxItem;
         if (snap.id === null) {
-          item = await api.inbox.create({ body: snap.body, attachments: snap.attachments });
+          item = await api.inbox.create({ title: snap.title, body: snap.body, attachments: snap.attachments });
         } else {
           try {
-            item = await api.inbox.update(snap.id, { body: snap.body, attachments: snap.attachments });
+            item = await api.inbox.update(snap.id, { title: snap.title, body: snap.body, attachments: snap.attachments });
           } catch (e) {
             // Deleted elsewhere (another tab, an agent): keep what is in the box as a new draft.
             if (!isApiError(e) || e.status !== 404) throw e;
-            item = await api.inbox.create({ body: snap.body, attachments: snap.attachments });
+            item = await api.inbox.create({ title: snap.title, body: snap.body, attachments: snap.attachments });
           }
         }
         // Still the same draft? (`open` waits for saves, so only a new draft's id can have moved on.)
@@ -139,6 +143,13 @@ export function useDraft(): Draft {
     [save, update],
   );
 
+  const setTitle = useCallback(
+    (title: string) => {
+      if (title === ref.current.title) return;
+      changed({ title });
+    },
+    [changed],
+  );
   const setBody = useCallback(
     (body: string) => {
       // The editor reports its own echo of a document it was given: nothing changed.
@@ -151,7 +162,7 @@ export function useDraft(): Draft {
   const removeAttachment = useCallback((id: string) => changed({ attachments: ref.current.attachments.filter((a) => a.id !== id) }, true), [changed]);
 
   const load = useCallback(
-    (next: Pick<Doc, "id" | "body" | "attachments">) => {
+    (next: Pick<Doc, "id" | "title" | "body" | "attachments">) => {
       clearTimeout(timer.current);
       dirty.current = false;
       update({ ...next, key: ref.current.key + 1 });
@@ -171,7 +182,7 @@ export function useDraft(): Draft {
       // The freshest copy there is: the list may have moved on while the save ran.
       const fresh = item && qc.getQueryData<InboxItem[]>(keys.inbox)?.find((i) => i.id === item.id);
       const next = fresh ?? item;
-      load(next ? { id: next.id, body: next.body, attachments: next.attachments } : { id: null, body: "", attachments: [] });
+      load(next ? { id: next.id, title: next.title, body: next.body, attachments: next.attachments } : EMPTY);
       return true;
     },
     [load, qc, save],
@@ -187,10 +198,10 @@ export function useDraft(): Draft {
       await api.inbox.remove(id);
       qc.setQueryData<InboxItem[]>(keys.inbox, (list) => list?.filter((i) => i.id !== id));
     }
-    load({ id: null, body: "", attachments: [] });
+    load(EMPTY);
   }, [load, qc]);
 
-  const reset = useCallback(() => load({ id: null, body: "", attachments: [] }), [load]);
+  const reset = useCallback(() => load(EMPTY), [load]);
 
   // What is waiting is saved when the page goes to the background (a phone's tab switch may be the last
   // chance) and when the person leaves the Inbox.
@@ -206,5 +217,5 @@ export function useDraft(): Draft {
     };
   }, [save]);
 
-  return { ...doc, status, error, setBody, addAttachment, removeAttachment, save, open, discard, reset };
+  return { ...doc, status, error, setTitle, setBody, addAttachment, removeAttachment, save, open, discard, reset };
 }

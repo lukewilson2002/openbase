@@ -123,6 +123,46 @@ async fn drafts_can_be_added_listed_changed_and_deleted() {
 }
 
 #[tokio::test]
+async fn a_draft_has_an_optional_one_line_title() {
+    let f = Fixture::new().await;
+    // A title alone is a draft; line breaks become spaces and the ends are trimmed.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            "/api/inbox",
+            json!({ "title": "  Cabin\nfor the offsite \r\n" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["title"], "Cabin for the offsite");
+    assert_eq!(r.body["body"], "");
+    let id = r.body["id"].as_str().unwrap().to_string();
+    // A draft made without one has an empty title, and a PATCH can set or clear it.
+    let plain = add(&f.app, &f.owner, "Just a note").await;
+    assert_eq!(plain["title"], "");
+    let p = f
+        .app
+        .patch(
+            &f.owner,
+            &format!("/api/inbox/{id}"),
+            json!({ "title": "" }),
+        )
+        .await;
+    p.assert_status(200);
+    assert_eq!(p.body["title"], "");
+    let long = f
+        .app
+        .patch(
+            &f.owner,
+            &format!("/api/inbox/{id}"),
+            json!({ "title": "x".repeat(1_001) }),
+        )
+        .await;
+    long.assert_status(400);
+}
+
+#[tokio::test]
 async fn drafts_are_private_to_their_owner() {
     let app = TestApp::new();
     let me = app.user("me@example.com", "Me");

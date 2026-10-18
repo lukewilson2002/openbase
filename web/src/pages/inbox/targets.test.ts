@@ -49,17 +49,19 @@ describe("fileFields", () => {
 });
 
 describe("drafts", () => {
-  it("previews the first line with text, without Markdown's marks", () => {
-    expect(draftPreview({ body: "\n\n# **Trip** ideas\nLisbon", attachments: [] })).toBe("Trip ideas");
-    expect(draftPreview({ body: "- [ ] call [Ada](https://x.test)", attachments: [] })).toBe("call Ada");
-    expect(draftPreview({ body: "", attachments: [{ id: "a", filename: "scan.pdf", mime: "", size: 1 }] })).toBe("scan.pdf");
-    expect(draftPreview({ body: "  ", attachments: [] })).toBe("Empty draft");
+  it("previews the title, else the first line with text, without Markdown's marks", () => {
+    expect(draftPreview({ title: " Lisbon trip ", body: "# Ideas", attachments: [] })).toBe("Lisbon trip");
+    expect(draftPreview({ title: "", body: "\n\n# **Trip** ideas\nLisbon", attachments: [] })).toBe("Trip ideas");
+    expect(draftPreview({ title: "", body: "- [ ] call [Ada](https://x.test)", attachments: [] })).toBe("call Ada");
+    expect(draftPreview({ title: "", body: "", attachments: [{ id: "a", filename: "scan.pdf", mime: "", size: 1 }] })).toBe("scan.pdf");
+    expect(draftPreview({ title: "  ", body: "  ", attachments: [] })).toBe("Empty draft");
   });
 
-  it("is blank without text and files", () => {
-    expect(isBlank(" \n", [])).toBe(true);
-    expect(isBlank("", [1])).toBe(false);
-    expect(isBlank("x", [])).toBe(false);
+  it("is blank without a title, text and files", () => {
+    expect(isBlank("", " \n", [])).toBe(true);
+    expect(isBlank("", "", [1])).toBe(false);
+    expect(isBlank("", "x", [])).toBe(false);
+    expect(isBlank("Cabin", "", [])).toBe(false);
   });
 });
 
