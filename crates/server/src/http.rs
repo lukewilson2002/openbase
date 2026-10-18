@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
@@ -55,7 +56,16 @@ fn assemble(state: AppState, with_mcp: bool) -> Router {
         app = app.merge(crate::mcp::router());
     }
     app.merge(crate::web::router())
-        .layer(CompressionLayer::new())
+        // Compress text, but not what is already compressed or must stay byte-exact for `Range`
+        // requests: video, audio and the opaque downloads (`application/octet-stream`).
+        .layer(
+            CompressionLayer::new().compress_when(
+                DefaultPredicate::new()
+                    .and(NotForContentType::new("video/"))
+                    .and(NotForContentType::new("audio/"))
+                    .and(NotForContentType::new("application/octet-stream")),
+            ),
+        )
         // CSP for the React SPA: only same-origin scripts (no inline, no eval, no WASM).
         // `style-src 'unsafe-inline'` is needed because Radix UI and canvas widgets set
         // inline styles; `img-src data: blob:` covers generated QR codes and previews.

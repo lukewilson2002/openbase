@@ -227,7 +227,7 @@ uploader. Sniffed raster images (png, jpeg, gif, webp), **video** (mp4, mov, web
 decide, never the file name or the stored type. Everything else (HTML, SVG, PDF, a video whose bytes are not
 a video, ...) is an `application/octet-stream` attachment. Every response keeps `nosniff` and
 `Content-Security-Policy: sandbox; default-src 'none'`, `Cache-Control: private, max-age=86400` and sends
-`Accept-Ranges: bytes`. One `Range: bytes=first-last`, `bytes=first-` or `bytes=-count` is answered
+`Accept-Ranges: bytes`; video, audio and `application/octet-stream` responses are never gzip-compressed. One `Range: bytes=first-last`, `bytes=first-` or `bytes=-count` is answered
 `206 Partial Content` with `Content-Range: bytes first-last/length` (so players can seek); a range outside the
 file is `416` with `Content-Range: bytes */length`; several ranges or malformed values are ignored and the
 whole file is sent. Bodies are streamed. Thumbnails support `Range` too.

@@ -1125,3 +1125,35 @@ async fn filing_cannot_take_a_file_out_from_under_another_drafts_text() {
     assert!(still_unattached(&f));
     assert_eq!(records(&f), 0);
 }
+
+#[tokio::test]
+async fn video_and_audio_are_never_compressed() {
+    let f = Fixture::new().await;
+    // Long enough for the compression layer's size threshold.
+    let data = mp4(5000);
+    let id = upload(&f, &f.base_id, "clip.mp4", &data).await;
+    let gzip = |path: String| {
+        request(&f.owner, "GET", &path)
+            .header(header::ACCEPT_ENCODING, "gzip")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let r = f
+        .app
+        .send(gzip(format!("/api/attachments/{id}/clip.mp4")))
+        .await;
+    r.assert_status(200);
+    assert_eq!(header_str(&r, "content-type"), "video/mp4");
+    assert!(
+        r.headers.get("content-encoding").is_none(),
+        "{:?}",
+        r.headers
+    );
+    assert_eq!(header_str(&r, "accept-ranges"), "bytes");
+    assert_eq!(r.bytes, data);
+
+    // Everything else still is: JSON compresses.
+    let r = f.app.send(gzip(format!("/api/bases/{}", f.base_id))).await;
+    r.assert_status(200);
+    assert_eq!(header_str(&r, "content-encoding"), "gzip");
+}
