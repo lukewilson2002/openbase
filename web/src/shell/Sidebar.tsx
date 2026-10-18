@@ -160,19 +160,24 @@ export function SidebarDrawer({
           }}
           className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
         >
+          {/* With the notifications open, the way back takes the title's place, beside the close button. */}
           <div className="mx-2.5 flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line py-1.5">
-            <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
+            {notificationsPanel ? (
+              <>
+                <D.Title className="sr-only">Menu</D.Title>
+                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-11 min-w-0 flex-1 items-center gap-1 self-center rounded-[10px] px-1.5 text-left text-[0.9375rem] font-semibold text-fg hover:bg-hover">
+                  <ChevronLeft aria-hidden className="size-4 shrink-0 text-muted" /> <span className="truncate">Back to the menu</span>
+                </button>
+              </>
+            ) : (
+              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
+            )}
             <D.Close aria-label="Close menu" className="inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-muted hover:bg-hover hover:text-fg">
               <X aria-hidden className="size-5" />
             </D.Close>
           </div>
           {notificationsPanel ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <button type="button" onClick={onCloseNotifications} className="mx-2.5 mt-1.5 flex h-11 items-center gap-1 self-start rounded-[10px] px-2 text-[0.9375rem] text-muted hover:bg-hover hover:text-fg">
-                <ChevronLeft aria-hidden className="size-4" /> Back to the menu
-              </button>
-              {notificationsPanel}
-            </div>
+            <div className="flex min-h-0 flex-1 flex-col">{notificationsPanel}</div>
           ) : (
             <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
               <SidebarBody topRows={topRows} footer={footer}>
