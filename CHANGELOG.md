@@ -17,7 +17,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   start page of an AI chat: write a note in rich text and attach files. It is kept as a draft
   (only you see your drafts, listed below the box) until you choose **Save to…** a project and a
   table. The box then turns into that table's form, with its primary field as the title and the
-  note going into a long text field you choose, and Save adds the record. Agents have the same
+  note going into a long text field you choose (or into the new record's first comment), and Save
+  adds the record. Agents have the same
   inbox through the new MCP tools `list_inbox`, `add_to_inbox`, `update_inbox_item`,
   `file_inbox_item` and `delete_inbox_item`, and the REST routes under `/api/inbox` (see
   [docs/api.md](docs/api.md)). A draft holds up to 20 files, and the files waiting in one person's
