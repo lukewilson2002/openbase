@@ -146,6 +146,8 @@ describe("ProfileMenu", () => {
     await user.click(trigger);
     const menu = await screen.findByRole("menu");
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Settings", "Connect an assistant", "Replay the intro", "Appearance: System", "Sign out"]);
+    // Every row leads with an icon, like the other menus.
+    for (const item of within(menu).getAllByRole("menuitem")) expect(item.querySelector("svg[aria-hidden='true']"), item.textContent ?? "").not.toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/account");
     expect(within(menu).getByRole("menuitem", { name: "Connect an assistant" })).toHaveAttribute("href", "/account?tab=assistants");
     // The theme is one row that opens its choices, by keyboard as by pointer.
