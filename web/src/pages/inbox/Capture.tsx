@@ -161,6 +161,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
         )}
         <Input
           aria-label={titleIsPrimary && primary ? primary.name : "Title"}
+          placeholder={titleIsPrimary && primary ? primary.name : "Title"}
           value={draft.title}
           onChange={(e) => draft.setTitle(e.target.value)}
           onBlur={() => void draft.save()}

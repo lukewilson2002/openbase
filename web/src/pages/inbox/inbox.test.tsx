@@ -97,14 +97,14 @@ describe("drafts", () => {
     expect(await screen.findByRole("button", { name: /Hello there again/ })).toBeInTheDocument();
   });
 
-  it("keeps a title on its own as a draft, with no placeholder, and lists the draft by it", async () => {
+  it("keeps a title on its own as a draft, and lists the draft by it", async () => {
     stubDesktop();
     const user = userEvent.setup();
     const reply = (call: RecordedCall) => item("inb1", String(body(call).body), [], 0, String(body(call).title));
     const api = routes({ "POST /api/inbox": reply, "PATCH /api/inbox/inb1": reply });
     renderApp();
     const title = await screen.findByRole("textbox", { name: "Title" });
-    expect(title).not.toHaveAttribute("placeholder");
+    expect(title).toHaveAttribute("placeholder", "Title");
     const saves = () => [...api.callsTo("POST /api/inbox"), ...api.callsTo("PATCH /api/inbox/inb1")].map(body);
     await user.type(title, "Cabin for the offsite");
     // One draft is made (a slow typist's pause may save part of the title first, then the rest).
@@ -395,8 +395,8 @@ describe("saving into a table", () => {
     routes();
     renderApp();
     const title = await pickTasks(user);
-    // The draft's own title box is the primary field now, named after it, still without a placeholder.
-    expect(title).not.toHaveAttribute("placeholder");
+    // The draft's own title box is the primary field now, named after it.
+    expect(title).toHaveAttribute("placeholder", "Name");
     expect(screen.getByText("Project tracker › Tasks")).toBeInTheDocument();
     // The note goes into the first rich long text field, and another can be chosen.
     const chooser = screen.getByRole("combobox", { name: "Note goes into" });
