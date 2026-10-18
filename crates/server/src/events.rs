@@ -50,6 +50,10 @@ pub struct PresenceGuard {
     user_id: String,
 }
 
+fn viewer_ids(viewers: &[Viewer]) -> Vec<String> {
+    viewers.iter().map(|v| v.user_id.clone()).collect()
+}
+
 impl Drop for PresenceGuard {
     fn drop(&mut self) {
         self.bus.leave(&self.base_id, &self.user_id);
@@ -79,7 +83,38 @@ impl EventBus {
     /// same user (other tabs) change nothing. Hold the guard as long as the
     /// stream lives.
     pub fn join(&self, base_id: &str, user_id: &str) -> PresenceGuard {
-        {
+        self.join_then(base_id, user_id, |_| ()).0
+    }
+
+    /// [`EventBus::join`] and [`EventBus::subscribe`] in one step, plus the viewers right after
+    /// joining (the new stream included): the subscription starts exactly where that list
+    /// ends, so a stream that sends the list first never misses an arrival or departure, and
+    /// is not told about its own.
+    pub fn join_and_subscribe(
+        &self,
+        base_id: &str,
+        user_id: &str,
+    ) -> (
+        PresenceGuard,
+        broadcast::Receiver<Arc<EventEnvelope>>,
+        Vec<String>,
+    ) {
+        let (guard, (rx, viewers)) = self.join_then(base_id, user_id, |viewers| {
+            // Presence lock held: nobody joins or leaves before the subscription exists.
+            (self.subscribe(base_id), viewer_ids(viewers))
+        });
+        (guard, rx, viewers)
+    }
+
+    /// Register the stream (announcing it to the subscribers there are), then run `then` with the
+    /// viewer list while the presence lock is still held.
+    fn join_then<T>(
+        &self,
+        base_id: &str,
+        user_id: &str,
+        then: impl FnOnce(&[Viewer]) -> T,
+    ) -> (PresenceGuard, T) {
+        let out = {
             let mut map = self.presence.lock().unwrap_or_else(|p| p.into_inner());
             let viewers = map.entry(base_id.to_string()).or_default();
             match viewers.iter_mut().find(|v| v.user_id == user_id) {
@@ -93,12 +128,16 @@ impl EventBus {
                     self.announce(base_id, user_id, viewers);
                 }
             }
-        }
-        PresenceGuard {
-            bus: self.clone(),
-            base_id: base_id.to_string(),
-            user_id: user_id.to_string(),
-        }
+            then(viewers)
+        };
+        (
+            PresenceGuard {
+                bus: self.clone(),
+                base_id: base_id.to_string(),
+                user_id: user_id.to_string(),
+            },
+            out,
+        )
     }
 
     fn leave(&self, base_id: &str, user_id: &str) {
@@ -126,7 +165,7 @@ impl EventBus {
             None,
             Some(user_id.to_string()),
             BaseEvent::PresenceChanged {
-                viewers: viewers.iter().map(|v| v.user_id.clone()).collect(),
+                viewers: viewer_ids(viewers),
             },
         );
     }

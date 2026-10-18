@@ -24,8 +24,11 @@
 //!   already open, their last one closing announces it again (any way the
 //!   stream ends: client disconnect, lost access, shutdown), and
 //!   `GET /api/bases/{id}/presence` answers the same list on demand. Several
-//!   tabs of one user count once; a new stream does not receive its own
-//!   arrival, it reads the list when it connects.
+//!   tabs of one user count once. Every new stream starts with the current list
+//!   (the new viewer included) as its first event, right after the greeting
+//!   comment: a `presence_changed` frame without a `user_id`, so a client needs
+//!   no separate GET and cannot miss an arrival in between. It does not receive
+//!   its own arrival a second time.
 //! * **Echoes.** Every event carries the `client_id` (the `X-Client-Id` of the
 //!   request that caused it) so a client can skip its own changes.
 
@@ -47,7 +50,7 @@ use tokio::time::Instant;
 use crate::auth::Actor;
 use crate::db::now_ms;
 use crate::error::AppResult;
-use crate::events::{EventBus, PresenceGuard};
+use crate::events::PresenceGuard;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 
@@ -156,6 +159,8 @@ struct Feed {
     /// `true` once the server is shutting down: the stream ends.
     shutdown: tokio::sync::watch::Receiver<bool>,
     greeted: bool,
+    /// The viewers at connect time, sent as the first event (see the module docs).
+    snapshot: Option<Vec<String>>,
     next_recheck: Instant,
     /// Leaves the base's presence list when the feed is dropped, whichever way
     /// the stream ends (including a client that simply disconnects).
@@ -208,6 +213,15 @@ fn feed_stream(feed: Feed) -> impl Stream<Item = Result<Event, Infallible>> {
             feed.greeted = true;
             return Some((Ok(Event::default().comment("connected")), feed));
         }
+        if let Some(viewers) = feed.snapshot.take() {
+            let env = EventEnvelope {
+                base_id: feed.base_id.clone(),
+                client_id: None,
+                user_id: None,
+                event: BaseEvent::PresenceChanged { viewers },
+            };
+            return Some((Ok(to_sse(&env)), feed));
+        }
         loop {
             let received = tokio::select! {
                 // Checked first so a closing server is never kept waiting by
@@ -254,10 +268,9 @@ async fn stream_events(
         .await?;
     // Subscribe only after the access check: subscribing creates the base's
     // channel, which must not be possible for ids the caller cannot read.
-    // Join first and subscribe second, so the new stream is not told about its
-    // own arrival.
-    let presence = state.events.join(&base_id, &actor.user_id);
-    let rx = subscribe(&state.events, &base_id);
+    // Join, subscribe and read the viewers in one step: the new stream is not
+    // told about its own arrival, and misses no later one.
+    let (presence, rx, viewers) = state.events.join_and_subscribe(&base_id, &actor.user_id);
     let shutdown = state.events.shutdown_signal();
     let feed = Feed {
         state,
@@ -266,16 +279,13 @@ async fn stream_events(
         rx,
         shutdown,
         greeted: false,
+        snapshot: Some(viewers),
         next_recheck: Instant::now() + recheck_interval(),
         _presence: presence,
     };
     Ok(Sse::new(feed_stream(feed)).keep_alive(
         KeepAlive::new().interval(Duration::from_millis(KEEP_ALIVE_MS.load(Ordering::Relaxed))),
     ))
-}
-
-fn subscribe(bus: &EventBus, base_id: &str) -> broadcast::Receiver<std::sync::Arc<EventEnvelope>> {
-    bus.subscribe(base_id)
 }
 
 #[cfg(test)]

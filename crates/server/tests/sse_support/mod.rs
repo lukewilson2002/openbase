@@ -39,6 +39,11 @@ pub struct Msg {
 pub struct Stream {
     pub body: Body,
     pub buf: String,
+    /// The `presence_changed` frame every stream starts with (right after the
+    /// greeting comment): the viewers at connect time, with no `user_id`.
+    /// [`Stream::try_event`] skips it, keeping it here; read it with
+    /// [`Stream::next_msg`] to test it.
+    pub snapshot: Option<Value>,
 }
 
 pub async fn open(app: &TestApp, client: &Client, base_id: &str) -> Opened {
@@ -80,6 +85,7 @@ pub async fn open(app: &TestApp, client: &Client, base_id: &str) -> Opened {
         stream: Some(Stream {
             body: res.into_body(),
             buf: String::new(),
+            snapshot: None,
         }),
     }
 }
@@ -132,7 +138,8 @@ impl Stream {
         }
     }
 
-    /// The next real event (comments skipped): (event name, data JSON).
+    /// The next real event (comments skipped, and the connect-time presence
+    /// snapshot, see [`Stream::snapshot`]): (event name, data JSON).
     pub async fn next_event(&mut self) -> (String, Value) {
         self.try_event(Duration::from_secs(5))
             .await
@@ -148,7 +155,15 @@ impl Stream {
                 Ok(None) => panic!("stream ended while waiting for an event"),
                 Ok(Some(m)) if m.event.is_some() => {
                     let data: Value = serde_json::from_str(m.data.as_ref().unwrap()).unwrap();
-                    return Some((m.event.unwrap(), data));
+                    let name = m.event.unwrap();
+                    if self.snapshot.is_none()
+                        && name == "presence_changed"
+                        && data["user_id"].is_null()
+                    {
+                        self.snapshot = Some(data);
+                        continue;
+                    }
+                    return Some((name, data));
                 }
                 Ok(Some(_)) => {}
             }

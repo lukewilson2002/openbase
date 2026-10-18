@@ -192,3 +192,47 @@ async fn losing_access_ends_the_stream_and_the_presence() {
     }
     assert_eq!(left, Some(vec![uid(&f.owner)]));
 }
+
+#[tokio::test]
+async fn a_new_stream_starts_with_the_current_viewers() {
+    let f = Fixture::new().await;
+    let editor = f.member("editor@example.com", Role::Editor);
+    let (owner_id, editor_id) = (uid(&f.owner), uid(&editor));
+
+    // Alone: the frame after the greeting lists just the new viewer.
+    let mut first = open(&f.app, &f.owner, &f.base_id).await.stream();
+    let greeting = first.next_msg(SOON).await.unwrap().unwrap();
+    assert_eq!(greeting.comment.as_deref(), Some("connected"));
+    let msg = first.next_msg(SOON).await.unwrap().unwrap();
+    assert_eq!(msg.event.as_deref(), Some("presence_changed"));
+    let data: Value = serde_json::from_str(msg.data.as_ref().unwrap()).unwrap();
+    assert_eq!(data["base_id"], f.base_id);
+    assert_eq!(data["user_id"], Value::Null, "nobody caused this frame");
+    assert_eq!(viewers(&data), std::slice::from_ref(&owner_id));
+
+    // A second user's stream starts with both, in arrival order, so the client
+    // needs no separate GET; the first stream hears about the arrival.
+    let mut second = open(&f.app, &editor, &f.base_id).await.stream();
+    second.next_msg(SOON).await.unwrap().unwrap(); // greeting
+    let msg = second.next_msg(SOON).await.unwrap().unwrap();
+    assert_eq!(msg.event.as_deref(), Some("presence_changed"));
+    let data: Value = serde_json::from_str(msg.data.as_ref().unwrap()).unwrap();
+    assert_eq!(viewers(&data), [owner_id.clone(), editor_id.clone()]);
+    let (_, data) = first.next_event().await;
+    assert_eq!(data["user_id"], editor_id);
+    assert_eq!(viewers(&data), [owner_id, editor_id]);
+    // The new stream is not told about its own arrival a second time.
+    second.expect_quiet(Duration::from_millis(300)).await;
+}
+
+#[tokio::test]
+async fn another_tab_of_a_present_user_still_gets_the_current_list() {
+    let f = Fixture::new().await;
+    let owner_id = uid(&f.owner);
+    let _tab1 = open(&f.app, &f.owner, &f.base_id).await.stream();
+    let mut tab2 = open(&f.app, &f.owner, &f.base_id).await.stream();
+    tab2.next_msg(SOON).await.unwrap().unwrap(); // greeting
+    let msg = tab2.next_msg(SOON).await.unwrap().unwrap();
+    let data: Value = serde_json::from_str(msg.data.as_ref().unwrap()).unwrap();
+    assert_eq!(viewers(&data), [owner_id]);
+}

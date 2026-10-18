@@ -45,6 +45,8 @@ async fn keep_alive_comments_arrive_while_idle() {
     let f = Fixture::new().await;
     let mut s = open(&f.app, &f.owner, &f.base_id).await.stream();
     s.next_msg(SOON).await.unwrap().unwrap(); // greeting
+    let snapshot = s.next_msg(SOON).await.unwrap().unwrap();
+    assert_eq!(snapshot.event.as_deref(), Some("presence_changed"));
     let ka = s.next_msg(SOON).await.unwrap().unwrap();
     assert!(ka.event.is_none() && ka.comment.is_some(), "{ka:?}");
 }
