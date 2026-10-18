@@ -274,6 +274,10 @@ describe("attaching files", () => {
     const chips = await screen.findByRole("list", { name: "Attached files" });
     expect(chips).toHaveTextContent("report.pdf");
     expect(chips).toHaveTextContent("2.0 KB");
+    // The chip opens the file in a new tab.
+    const open = within(chips).getByRole("link", { name: /report\.pdf/ });
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open.getAttribute("href")).toMatch(/^\/api\/attachments\/[^/]+\/report\.pdf$/);
     const form = api.callsTo("POST /api/inbox/attachments")[0]!.body as FormData;
     expect((form.get("file") as File).name).toBe("report.pdf");
     // A file alone is worth a draft, and is saved straight away.

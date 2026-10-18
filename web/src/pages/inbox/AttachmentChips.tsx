@@ -1,5 +1,10 @@
-/** The files in the open draft, as chips with their size and a way to remove them; files still going up show a spinner. */
+/**
+ * The files in the open draft, as chips with their size and a way to remove them; files still going
+ * up show a spinner. A chip opens its file in a new tab (an image shows there, anything else
+ * downloads); an inbox upload is readable by its uploader only, so that is the person here.
+ */
 import { FileText, Image as ImageIcon, X } from "lucide-react";
+import { attachmentsApi } from "@/api/records";
 import type { AttachmentRef } from "@/api/types";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes } from "@/lib/format";
@@ -14,9 +19,17 @@ export function AttachmentChips({ files, uploading, onRemove }: { files: readonl
         const Icon = f.mime.startsWith("image/") ? ImageIcon : FileText;
         return (
           <li key={f.id} className={chip}>
-            <Icon aria-hidden className="size-4 shrink-0 text-muted" />
-            <span className="min-w-0 truncate">{f.filename}</span>
-            <span className="shrink-0 text-xs text-muted">{formatBytes(f.size)}</span>
+            <a
+              href={attachmentsApi.downloadUrl(f.id, f.filename)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Open ${f.filename}`}
+              className="flex min-w-0 items-center gap-2 text-fg no-underline hover:underline"
+            >
+              <Icon aria-hidden className="size-4 shrink-0 text-muted" />
+              <span className="min-w-0 truncate">{f.filename}</span>
+              <span className="shrink-0 text-xs text-muted">{formatBytes(f.size)}</span>
+            </a>
             <button
               type="button"
               aria-label={`Remove ${f.filename}`}
