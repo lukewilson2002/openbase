@@ -1,17 +1,21 @@
 /** Picks the editor for a field. Used by the grid's overlay (`variant="cell"`) and the expanded record (`variant="form"`). */
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import type { Field } from "@/api/types";
-import { cn } from "@/lib/cn";
+import { Spinner } from "@/components/ui/spinner";
 import { displayShapeOf, isComputed } from "@/lib/cells/kinds";
-import { Markdown } from "../Markdown";
 import { AttachmentEditor } from "./AttachmentEditor";
 import { ChoiceEditor } from "./ChoiceEditor";
 import { DateEditor } from "./DateEditor";
+import { FullScreenTextarea } from "./FullScreen";
 import { LinkEditor } from "./LinkEditor";
 import { CheckboxEditor, RatingEditor } from "./RatingEditor";
 import { TextEditor } from "./TextEditor";
 import { UserEditor } from "./UserEditor";
+import { useAutosave } from "./useAutosave";
 import type { FieldEditorCallbacks } from "./env";
+
+// Tiptap and its extensions are a chunk of their own, fetched the first time a rich text field is edited.
+const RichTextEditor = lazy(() => import("@/components/richtext/RichTextEditor").then((m) => ({ default: m.RichTextEditor })));
 
 export interface FieldEditorProps extends FieldEditorCallbacks {
   field: Field;
@@ -32,7 +36,6 @@ export function isEditable(field: Field): boolean {
 
 export function FieldEditor(props: FieldEditorProps) {
   const { field, value, variant, target, initialText, onChange, onCommit, onCancel, labelledBy } = props;
-  const [draft, setDraft] = useState<string | null>(null);
   const shape = displayShapeOf(field);
   switch (shape) {
     case "date":
@@ -52,51 +55,70 @@ export function FieldEditor(props: FieldEditorProps) {
       return <CheckboxEditor field={field} value={value} onCommit={onCommit} onCancel={onCancel} />;
     case "long_text": {
       const rich = field.type === "long_text" && field.options.rich;
-      const editor = (
+      // The record form edits rich text visually; the grid's cell stays a text area (Markdown) that can open the visual editor full screen.
+      if (rich && variant === "form") return <RichFormEditor field={field} value={value} onChange={onChange} onCommit={onCommit} />;
+      return (
         <TextEditor
           field={field}
           value={value}
           initialText={initialText}
           variant={variant}
           labelledBy={labelledBy}
-          onChange={(e) => {
-            setDraft(e.text ?? "");
-            onChange?.(e);
-          }}
+          renderFullScreen={({ value: text, onChange: change }) =>
+            rich ? (
+              <Suspense fallback={<FullScreenLoading />}>
+                <RichTextEditor value={text} onChange={change} autoFocus fullScreen placeholder="Write something…" aria-label={field.name} />
+              </Suspense>
+            ) : (
+              <FullScreenTextarea value={text} onChange={change} label={field.name} />
+            )
+          }
+          onChange={onChange}
           onCommit={onCommit}
           onCancel={onCancel}
         />
       );
-      if (!rich) return editor;
-      return <RichTextShell draft={draft ?? (typeof value === "string" ? value : "")}>{editor}</RichTextShell>;
     }
     default:
       return <TextEditor field={field} value={value} initialText={initialText} variant={variant} labelledBy={labelledBy} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
   }
 }
 
-/** Write / Preview switch for rich (markdown) long text; the editor stays mounted so its text is kept. */
-function RichTextShell({ draft, children }: { draft: string; children: React.ReactNode }) {
-  const [preview, setPreview] = useState(false);
+function FullScreenLoading() {
   return (
-    <div className="flex flex-col gap-1">
-      <div role="tablist" aria-label="Rich text mode" className="flex gap-1 text-xs">
-        {(["Write", "Preview"] as const).map((label) => {
-          const on = (label === "Preview") === preview;
-          return (
-            <button key={label} type="button" role="tab" aria-selected={on} onClick={() => setPreview(label === "Preview")} className={cn("rounded px-2 py-0.5", on ? "bg-primary-soft text-primary" : "text-muted hover:bg-hover")}>
-              {label}
-            </button>
-          );
-        })}
-        <span className="ml-auto self-center text-faint">Markdown</span>
-      </div>
-      <div hidden={preview}>{children}</div>
-      {preview && (
-        <div className="min-h-[5.5rem] rounded-md border border-line bg-surface p-2" aria-label="Markdown preview">
-          {draft.trim() ? <Markdown source={draft} /> : <span className="text-faint">Nothing to preview.</span>}
-        </div>
-      )}
+    <div className="flex flex-1 items-center justify-center">
+      <Spinner className="size-6" label="Loading editor" />
     </div>
+  );
+}
+
+/**
+ * Rich long text in the expanded record: the WYSIWYG editor, saving while typing (once typing
+ * pauses) and when focus leaves it, so the record's save status follows along.
+ */
+function RichFormEditor({ field, value, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "onChange" | "onCommit">) {
+  const seed = typeof value === "string" ? value : "";
+  const [draft, setDraft] = useState(seed);
+  const autosave = useAutosave(seed, (text) => onCommit({ text }));
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[8rem] items-center justify-center rounded-md border border-line-strong">
+          <Spinner label="Loading editor" />
+        </div>
+      }
+    >
+      <RichTextEditor
+        value={draft}
+        onChange={(md) => {
+          setDraft(md);
+          onChange?.({ text: md });
+          autosave.change(md);
+        }}
+        onBlur={autosave.flush}
+        placeholder="Write something…"
+        aria-label={field.name}
+      />
+    </Suspense>
   );
 }

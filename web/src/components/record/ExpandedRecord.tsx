@@ -1,12 +1,13 @@
 /**
- * Expanded record: a modal with every field of one record (hidden fields in a collapsible
- * section), editors shared with the grid, previous/next navigation, a shareable URL
- * (`?record=recXXX`, owned by the host view), comments and revision history in a side panel,
- * and delete/duplicate actions. Reusable by every view type.
+ * Expanded record: a modal (full screen on a phone) with every field of one record (hidden fields
+ * in a collapsible section), editors shared with the grid, previous/next navigation, a shareable
+ * URL (`?record=recXXX`, owned by the host view) behind a Share button, comments and revision
+ * history in a side panel, and delete/duplicate actions. Fields save by themselves; the header
+ * says whether that is going on ("Saving…", "Saved", "Couldn't save"). Reusable by every view type.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronRight, CopyPlus, Link2, MoreHorizontal, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CopyPlus, MoreHorizontal, Share2, Trash2, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { errorMessage } from "@/api/client";
 import { recordKeys, recordsApi } from "@/api/records";
@@ -64,10 +65,61 @@ function useFormat(timeZone: string, collaborators: readonly Collaborator[]): Fo
   }, [timeZone, collaborators]);
 }
 
-function FieldRow({ field, record, readOnly, error, env, emails, onSave }: { field: Field; record: TableRecord; readOnly: boolean; error?: string; env: EditorEnv; emails: ReadonlyMap<string, string>; onSave: (field: Field, edit: EditValue) => void }) {
+/** How long "Saved" stays in the header. */
+const SAVED_VISIBLE_MS = 3000;
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+/** The record's save status. A polite live region, present from the start so changes are announced. */
+function SaveStatus({ state }: { state: SaveState }) {
+  return (
+    <span role="status" aria-label="Save status" aria-live="polite" className={cn("flex shrink-0 items-center gap-1 whitespace-nowrap px-1 text-xs", state === "error" ? "text-danger" : "text-muted")}>
+      {state === "saving" && "Saving…"}
+      {state === "saved" && (
+        <span className="ob-fade-in flex items-center gap-1">
+          <Check aria-hidden className="size-3.5 text-success" /> Saved
+        </span>
+      )}
+      {state === "error" && "Couldn't save"}
+    </span>
+  );
+}
+
+function FieldRow({
+  field,
+  record,
+  readOnly,
+  error,
+  env,
+  emails,
+  lastSaved,
+  onSave,
+}: {
+  field: Field;
+  record: TableRecord;
+  readOnly: boolean;
+  error?: string;
+  env: EditorEnv;
+  emails: ReadonlyMap<string, string>;
+  /** What this record's fields were last saved as, by field id. */
+  lastSaved: RefObject<Map<string, unknown>>;
+  onSave: (field: Field, edit: EditValue) => void;
+}) {
   const value = record.values[field.id] ?? null;
   const computed = isComputed(field);
   const labelId = `field-${field.id}`;
+  // An editor is rebuilt when its value changes under it (someone else edited it, a save was refused). Long
+  // text saves while it is typed in, so a value that is only our own save coming back must not rebuild the
+  // editor, or the caret would jump out from under the typing.
+  const rebuilds = useRef({ json: JSON.stringify(value), n: 0 });
+  if (field.type === "long_text") {
+    const json = JSON.stringify(value);
+    if (json !== rebuilds.current.json) {
+      rebuilds.current.json = json;
+      if (!jsonEqual(value, lastSaved.current.get(`${record.id}:${field.id}`) ?? null)) rebuilds.current.n++;
+    }
+  }
+  const editorKey = field.type === "long_text" ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${field.id}:${JSON.stringify(value)}`;
   return (
     <div className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-3" role="group" aria-labelledby={labelId}>
       <div className="flex min-w-0 items-start gap-1.5 pt-1.5">
@@ -86,7 +138,7 @@ function FieldRow({ field, record, readOnly, error, env, emails, onSave }: { fie
             {computed && <span className="sr-only"> (computed, read-only)</span>}
           </div>
         ) : (
-          <FieldEditor key={`${field.id}:${JSON.stringify(value)}`} field={field} value={value} variant="form" labelledBy={labelId} onCommit={(edit) => onSave(field, edit)} onCancel={() => {}} />
+          <FieldEditor key={editorKey} field={field} value={value} variant="form" labelledBy={labelId} onCommit={(edit) => onSave(field, edit)} onCancel={() => {}} />
         )}
         {error && (
           <p role="alert" className="mt-1 text-xs text-danger">
@@ -108,6 +160,13 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const recordKey = recordKeys.record(table.id, recordId);
   const record = useQuery({ queryKey: recordKey, queryFn: () => recordsApi.get(table.id, recordId) });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Saves of this record in flight, and whether the last one finished a moment ago ("Saved").
+  const [pending, setPending] = useState(0);
+  const [justSaved, setJustSaved] = useState(false);
+  const inflight = useRef(0);
+  const lastSaved = useRef(new Map<string, unknown>());
+  const currentId = useRef(recordId);
+  currentId.current = recordId;
   const [showHidden, setShowHidden] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -133,34 +192,64 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     return () => document.removeEventListener("keydown", onKey);
   }, [prevId, nextId, onNavigate]);
 
+  // Everything a save needs travels in its variables: long text saves when the editor goes away (the
+  // record is closed or navigated), which is after `recordId` has already moved on.
   const save = useMutation({
-    mutationFn: async ({ field, value }: { field: Field; value: unknown }) => recordsApi.update(table.id, { typecast: true, records: [{ id: recordId, values: { [field.id]: toWire(field, value) as never } }] }),
-    onMutate: async ({ field, value }) => {
-      await qc.cancelQueries({ queryKey: recordKey });
-      const prev = qc.getQueryData<TableRecord>(recordKey);
+    // One save at a time per table, in the order they were made, so a slow earlier save of a text
+    // being typed cannot land after a later one.
+    scope: { id: `record-saves:${table.id}` },
+    mutationFn: async ({ recordId: id, field, value }: { recordId: string; field: Field; value: unknown }) => recordsApi.update(table.id, { typecast: true, records: [{ id, values: { [field.id]: toWire(field, value) as never } }] }),
+    onMutate: async ({ recordId: id, field, value }) => {
+      inflight.current++;
+      setPending((n) => n + 1);
+      setJustSaved(false);
+      const key = recordKeys.record(table.id, id);
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<TableRecord>(key);
       if (prev) {
         const values = { ...prev.values } as Record<string, unknown>;
         if (value === null || value === undefined || value === "" || value === false || (Array.isArray(value) && value.length === 0)) delete values[field.id];
         else values[field.id] = value;
-        qc.setQueryData<TableRecord>(recordKey, { ...prev, values: values as TableRecord["values"] });
+        qc.setQueryData<TableRecord>(key, { ...prev, values: values as TableRecord["values"] });
       }
-      return { prev };
+      return { prev, key };
     },
-    onError: (e, { field }, ctx) => {
-      if (ctx?.prev) qc.setQueryData(recordKey, ctx.prev);
-      setErrors((cur) => ({ ...cur, [field.id]: errorMessage(e) }));
+    onError: (e, { recordId: id, field }, ctx) => {
+      if (ctx?.prev) {
+        // The text the person typed stays in its editor (so it can be corrected and saved again): the
+        // rolled-back value must not look like someone else's edit.
+        lastSaved.current.set(`${id}:${field.id}`, ctx.prev.values[field.id] ?? null);
+        qc.setQueryData(ctx.key, ctx.prev);
+      }
+      if (id === currentId.current) setErrors((cur) => ({ ...cur, [field.id]: errorMessage(e) }));
     },
-    onSuccess: (res, { field }) => {
-      setErrors((cur) => {
-        const { [field.id]: _gone, ...rest } = cur;
-        return rest;
-      });
+    onSuccess: (res, { recordId: id, field }, ctx) => {
+      if (id === currentId.current) {
+        setErrors((cur) => {
+          const { [field.id]: _gone, ...rest } = cur;
+          return rest;
+        });
+      }
+      // With another save of this table still on its way, its own answer is the newer one.
       const updated = res?.records?.[0];
-      if (updated) qc.setQueryData(recordKey, updated);
+      if (updated && inflight.current <= 1) qc.setQueryData(ctx?.key ?? recordKeys.record(table.id, id), updated);
       // The grid refreshes its pages from this invalidation (events from this tab are not echoed back).
       void qc.invalidateQueries({ queryKey: recordKeys.table(table.id) });
     },
+    onSettled: () => {
+      inflight.current = Math.max(0, inflight.current - 1);
+      setPending((n) => Math.max(0, n - 1));
+      setJustSaved(true);
+    },
   });
+
+  // "Saved" fades after a few seconds.
+  useEffect(() => {
+    if (!justSaved || pending > 0) return;
+    const t = setTimeout(() => setJustSaved(false), SAVED_VISIBLE_MS);
+    return () => clearTimeout(t);
+  }, [justSaved, pending]);
+  const saveState: SaveState = pending > 0 ? "saving" : Object.keys(errors).length > 0 ? "error" : justSaved ? "saved" : "idle";
 
   const onSave = (field: Field, edit: EditValue) => {
     const before = record.data?.values[field.id] ?? null;
@@ -175,12 +264,26 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       after = res.value;
     }
     if (jsonEqual(before, after)) return;
-    save.mutate({ field, value: after });
+    lastSaved.current.set(`${recordId}:${field.id}`, after);
+    save.mutate({ recordId, field, value: after });
   };
 
   const copyLink = async () => {
     const ok = await copyToClipboard(window.location.href);
     toast.toast({ title: ok ? "Link copied" : "Could not copy the link", description: ok ? "Anyone with access to this base can open this record." : window.location.href, variant: ok ? "success" : "error" });
+  };
+
+  // The share sheet where the browser has one (phones), else the link is copied.
+  const share = async () => {
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ url: window.location.href, title });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return; // the person closed the sheet
+      }
+    }
+    await copyLink();
   };
 
   const duplicate = async () => {
@@ -228,7 +331,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
-            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} onSave={onSave} />
+            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} onSave={onSave} />
           ))}
           {hidden.length > 0 && (
             <div className="border-t border-line pt-3">
@@ -239,7 +342,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               {showHidden && (
                 <div id="hidden-fields" className="mt-3 flex flex-col gap-4">
                   {hidden.map((f) => (
-                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} onSave={onSave} />
+                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} onSave={onSave} />
                   ))}
                 </div>
               )}
@@ -272,13 +375,18 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
           <D.Content
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => {
-              // Radix would focus the first button ("Copy link"), which pops its tooltip open and makes the
+              // Radix would focus the first button ("Previous record"), which pops its tooltip open and makes the
               // first Escape close the tooltip instead of the record. Focus the dialog itself; Tab still
               // reaches the first control.
               e.preventDefault();
               (e.currentTarget as HTMLElement).focus();
             }}
-            className="ob-pop-in fixed inset-2 z-50 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-pop sm:inset-x-6 sm:inset-y-6"
+            // A phone (below sm) gets the whole screen: no margin, no radius, the dynamic viewport's height (so
+            // the browser's collapsing toolbar does not cut it off), and padding that keeps clear of the notch and the home indicator.
+            className={cn(
+              "ob-pop-in fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]",
+              "sm:inset-6 sm:mx-auto sm:h-auto sm:max-w-5xl sm:rounded-lg sm:border sm:border-line sm:p-0 sm:shadow-pop",
+            )}
             onInteractOutside={(e) => {
               // Pop-over editors render outside the dialog; clicking them must not dismiss it.
               if ((e.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
@@ -292,8 +400,9 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
                 <ChevronRight aria-hidden className="size-4 rotate-90" />
               </IconButton>
               <D.Title className="ml-1 min-w-0 flex-1 truncate text-base font-semibold">{title}</D.Title>
-              <IconButton label="Copy link to this record" onClick={() => void copyLink()}>
-                <Link2 aria-hidden className="size-4" />
+              <SaveStatus state={saveState} />
+              <IconButton label="Share record" onClick={() => void share()}>
+                <Share2 aria-hidden className="size-4" />
               </IconButton>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

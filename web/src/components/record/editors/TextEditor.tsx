@@ -3,12 +3,15 @@
  * email, URL, phone, barcode, and the text half of date editing. The editor reports the typed
  * text; the host parses it with `parseText` (so grid and expanded record validate identically).
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Maximize2 } from "lucide-react";
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { editText } from "@/lib/cells/format";
 import { parseText } from "@/lib/cells/parse";
 import { useEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
+import { FullScreen } from "./FullScreen";
+import { useAutosave } from "./useAutosave";
 
 export interface TextEditorProps extends FieldEditorCallbacks {
   field: Field;
@@ -24,6 +27,11 @@ export interface TextEditorProps extends FieldEditorCallbacks {
   className?: string;
   labelledBy?: string;
   label?: string;
+  /**
+   * Long text: shows an expand button in the corner of the box that opens this full screen, given the
+   * text so far and a way to change it. The text area and the full-screen view are one value.
+   */
+  renderFullScreen?: (p: { value: string; onChange: (text: string) => void }) => ReactNode;
 }
 
 const HINTS: Partial<Record<Field["type"], string>> = {
@@ -34,9 +42,10 @@ const HINTS: Partial<Record<Field["type"], string>> = {
   phone: "+1 555 010 0000",
 };
 
-export function TextEditor({ field, value, initialText, variant, autoFocus, trailing, seedText, className, labelledBy, label, onChange, onCommit, onCancel }: TextEditorProps) {
+export function TextEditor({ field, value, initialText, variant, autoFocus, trailing, seedText, className, labelledBy, label, renderFullScreen, onChange, onCommit, onCancel }: TextEditorProps) {
   const env = useEditorEnv();
   const isLong = field.type === "long_text";
+  const [fullScreen, setFullScreen] = useState(false);
   const seed = useMemo(() => initialText ?? seedText ?? (typeof value === "string" || typeof value === "number" ? editText(field, value, env.format) : ""), [initialText, seedText, value, field, env.format]);
   const [text, setText] = useState(seed);
   const textRef = useRef(text);
@@ -44,6 +53,10 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const errorId = useId();
   const doneRef = useRef(false);
+  // Long text in the expanded record saves while typing (once typing pauses) and on blur, so the
+  // record's save status follows it. Everything else commits on blur or Enter.
+  const autosaves = isLong && variant === "form";
+  const autosave = useAutosave(seed, (t) => onCommit({ text: t }));
 
   const error = useMemo(() => {
     if (isLong || text.trim() === "") return null;
@@ -78,7 +91,8 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
+    // Escape in the record's long text closes the record, which saves what was typed; nothing to cancel.
+    if (e.key === "Escape" && !autosaves) {
       e.preventDefault();
       doneRef.current = true;
       onCancel();
@@ -97,16 +111,21 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
     }
   };
 
+  /** The text changed (typed, or edited in the full-screen view). */
+  const update = (next: string) => {
+    setText(next);
+    onChange?.({ text: next });
+    if (autosaves) autosave.change(next);
+  };
+
   const common = {
     ref: inputRef as never,
     value: text,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setText(e.target.value);
-      onChange?.({ text: e.target.value });
-    },
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => update(e.target.value),
     onKeyDown,
     onBlur: () => {
-      if (variant === "form" && !doneRef.current) {
+      if (autosaves) autosave.flush();
+      else if (variant === "form" && !doneRef.current) {
         if (textRef.current === seed) return;
         if (!error) onCommit({ text: textRef.current });
       }
@@ -128,7 +147,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   return (
     <div className={cn("relative flex items-start text-[0.8125rem]", box)} style={variant === "cell" ? { minWidth: "100%" } : undefined}>
       {isLong ? (
-        <textarea {...common} rows={variant === "cell" ? 4 : 5} className="min-h-[5.5rem] w-full resize-y bg-transparent px-2 py-1.5 outline-none" style={variant === "cell" ? { minWidth: 280 } : undefined} />
+        <textarea {...common} rows={variant === "cell" ? 4 : 5} className={cn("min-h-[5.5rem] w-full resize-y bg-transparent px-2 py-1.5 outline-none", renderFullScreen && "pb-9")} style={variant === "cell" ? { minWidth: 280 } : undefined} />
       ) : (
         <input
           {...common}
@@ -138,6 +157,32 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
         />
       )}
       {trailing}
+      {isLong && renderFullScreen && (
+        <>
+          <button
+            type="button"
+            aria-label="Open full screen"
+            title="Open full screen"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setFullScreen(true)}
+            className="absolute bottom-1.5 right-1.5 inline-flex size-7 pointer-coarse:size-10 items-center justify-center rounded-md border border-line bg-surface text-muted hover:bg-hover hover:text-fg"
+          >
+            <Maximize2 aria-hidden className="size-4" />
+          </button>
+          {fullScreen && (
+            <FullScreen
+              title={field.name}
+              onClose={() => {
+                setFullScreen(false);
+                // Back in the text area, with the caret where the user will want it.
+                requestAnimationFrame(() => inputRef.current?.focus());
+              }}
+            >
+              {renderFullScreen({ value: text, onChange: update })}
+            </FullScreen>
+          )}
+        </>
+      )}
       {error && (
         <p id={errorId} role="alert" className="absolute left-0 top-full z-10 mt-1 rounded bg-danger px-2 py-1 text-xs text-danger-fg shadow-pop">
           {error}
