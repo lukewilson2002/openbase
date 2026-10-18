@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronRight, Heart, ListChecks, Receipt, Table2, Users, Wallet, type LucideIcon } from "lucide-react";
+import { ChevronRight, FolderInput, Heart, Inbox, ListChecks, Receipt, Tent, Table2, Users, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { accentClass, accentHue } from "@/lib/colors";
 
@@ -470,6 +470,56 @@ export function WorkspacesArt() {
             </Animated>
           </div>
         ))}
+      </div>
+    </Fit>
+  );
+}
+
+// ---- Step 5: a note written in the Inbox goes into a table later -----------------------------------
+
+const IDEAS = ["Find a caterer", "Pick a date"];
+
+export function InboxArt() {
+  return (
+    <Fit width={470} height={176}>
+      <div className="relative h-[176px] w-[470px]">
+        {/* The Inbox: something written down, nowhere in particular yet. */}
+        <Animated motion="rise" delay={0.1} className="absolute left-0 top-3 flex w-[226px] flex-col gap-2.5 rounded-2xl border border-line bg-surface p-3 shadow-[0_12px_32px_rgb(15_20_30/0.12)]">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted">
+            <Inbox className="size-4" strokeWidth={1.8} /> Inbox
+          </div>
+          <Animated motion="fade" delay={0.45} className="rounded-[10px] border border-line bg-bg px-2.5 py-2 text-[0.8125rem] leading-snug text-fg">
+            Rent a cabin for the team offsite
+            <span className="ob-intro-dot ml-px inline-block h-3.5 w-px translate-y-0.5 bg-primary" />
+          </Animated>
+          <Animated motion="pop" delay={1.0} className="flex items-center gap-1.5 self-start rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-fg">
+            <FolderInput className="size-3.5" strokeWidth={1.8} /> Save to…
+          </Animated>
+        </Animated>
+        {/* Later, it finds its place. */}
+        <svg className="absolute overflow-visible" style={{ left: 0, top: 0 }} width={470} height={176} fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path {...anim("draw", 1.3, 0.55)} pathLength={1} d="M 120 142 C 160 172, 236 168, 262 118" />
+          <path {...anim("fade", 1.8, 0.2)} d="M 254 121 L 262 117 L 266 126" />
+        </svg>
+        <Animated motion="rise" delay={0.25} className="absolute right-0 top-3 w-[196px] overflow-hidden rounded-2xl border border-line bg-surface">
+          <div className="flex items-center gap-2 px-3 py-2.5 text-[0.8125rem] font-[650] text-fg">
+            <BaseTile icon={Tent} color="green" className="size-[22px] rounded-md" iconClassName="size-[13px]" />
+            Team offsite
+          </div>
+          <div className="flex flex-col gap-1 border-t border-line bg-bg p-1.5">
+            <div className="flex items-center gap-1.5 px-1 text-[0.6875rem] font-semibold text-muted">
+              <Table2 className="size-3.5 text-primary" strokeWidth={1.8} /> Ideas
+            </div>
+            {IDEAS.map((idea) => (
+              <div key={idea} className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs text-fg">
+                {idea}
+              </div>
+            ))}
+            <Animated motion="slide" delay={1.9} className="rounded-lg border border-primary bg-primary-soft px-2 py-1.5 text-xs font-semibold text-primary-ink">
+              Rent a cabin for the team offsite
+            </Animated>
+          </div>
+        </Animated>
       </div>
     </Fit>
   );

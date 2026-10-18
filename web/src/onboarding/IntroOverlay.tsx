@@ -7,7 +7,7 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { needsPublicHttps } from "@/pages/account/AssistantsSection";
-import { AssistantArt, BasesArt, TablesArt, TryMe, ViewsArt, WorkspacesArt } from "./illustrations";
+import { AssistantArt, BasesArt, InboxArt, TablesArt, TryMe, ViewsArt, WorkspacesArt } from "./illustrations";
 import "./intro.css";
 
 interface Screen {
@@ -50,6 +50,11 @@ const SCREENS: Screen[] = [
     Art: WorkspacesArt,
   },
   {
+    title: "The Inbox catches your ideas",
+    text: ["It is the first thing you see when you open OpenBase, so you never lose a thought while you look for the right place to keep it. Just write it down, and choose where it goes later."],
+    Art: InboxArt,
+  },
+  {
     title: "Let an assistant manage OpenBase for you",
     text: ["Connect an AI assistant you trust and ask in plain words. It can build tables and update records for you, and it can only do what you allow it to do."],
     Art: AssistantArt,
@@ -65,9 +70,9 @@ const TAP = "h-11 pointer-coarse:h-11";
 const BUTTON = cn(TAP, "rounded-[10px] px-[18px] text-[0.9375rem] font-semibold");
 
 /**
- * The full-screen intro: four steps explaining bases, tables, views and workspaces, then a closing
- * screen suggesting an AI assistant. `onFinish` runs for skip, Escape, "I'll do it myself" and
- * "Connect an assistant" alike.
+ * The full-screen intro: five steps explaining projects, tables, views, workspaces and the Inbox,
+ * then a closing screen suggesting an AI assistant. `onFinish` runs for skip, Escape, "I'll do it
+ * myself" and "Connect an assistant" alike.
  */
 export function IntroOverlay({ onFinish }: { onFinish: () => void }) {
   const navigate = useNavigate();

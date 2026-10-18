@@ -59,6 +59,8 @@ describe("intro", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Workspaces keep things apart" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "The Inbox catches your ideas" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Let an assistant manage OpenBase for you" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
@@ -106,7 +108,7 @@ describe("intro", () => {
     api.set("GET /api/auth/me", () => (api.callsTo("PATCH /api/auth/me").length ? { ...NEW_USER, intro_seen: true } : NEW_USER));
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "I'll do it myself" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.callsTo("PATCH /api/auth/me")[0]?.body).toEqual({ intro_seen: true });
@@ -117,7 +119,7 @@ describe("intro", () => {
     const api = routes({ "GET /api/oauth/grants": [] });
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Connect an assistant" }));
     expect(await screen.findByRole("heading", { name: "Account settings" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "AI assistants" })).toHaveAttribute("aria-selected", "true");
@@ -130,7 +132,7 @@ describe("intro", () => {
     routes({ "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "http://localhost:8080", passkeys_enabled: false } });
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     const note = await screen.findByRole("note");
     expect(note).toHaveTextContent("Claude and ChatGPT on the web need OpenBase at a public https address. Claude Code works from this computer now. Learn more");
     expect(within(note).getByRole("link", { name: "Learn more" })).toHaveAttribute("href", expect.stringContaining("docs/self-hosting.md"));
@@ -141,7 +143,7 @@ describe("intro", () => {
     routes();
     renderApp({ route: "/" });
     await screen.findByRole("dialog");
-    for (let i = 0; i < 4; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Let an assistant manage OpenBase for you" })).toBeInTheDocument();
     expect(screen.queryByText(/need OpenBase at a public https address/)).not.toBeInTheDocument();
   });
