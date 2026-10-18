@@ -1057,3 +1057,71 @@ async fn a_share_opens_only_files_embedded_in_what_the_shared_view_shows() {
     .assert_status(200);
     assert_eq!(status(&shown, "shown.png").await, 404);
 }
+
+#[tokio::test]
+async fn filing_cannot_take_a_file_out_from_under_another_drafts_text() {
+    let f = Fixture::new().await;
+    let photo = inbox_upload(&f.app, &f.owner, "photo.png", b"photo").await;
+    let holder = add_draft(&f, &embed(&photo, "photo.png")).await;
+    holder.assert_status(201);
+    let mine = add_draft(&f, "my own note").await;
+    let did = id_str(&mine.body["id"]).to_string();
+    let url = format!("/api/inbox/{did}/file");
+    let records = |f: &Fixture| {
+        f.app.query_i64(
+            "SELECT count(*) FROM records WHERE table_id = ?1",
+            &[&f.table_id],
+        )
+    };
+    let still_unattached = |f: &Fixture| {
+        f.app.query_i64(
+            "SELECT count(*) FROM attachments WHERE id = ?1 AND base_id IS NULL",
+            &[&photo],
+        ) == 1
+    };
+
+    // A long text value of the filing names the other draft's file.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "table_id": f.table_id, "fields": {
+                "Name": "x", "Notes": embed(&photo, "photo.png") } }),
+        )
+        .await;
+    r.assert_status(400);
+    assert!(
+        message(&r).contains(&photo) && message(&r).contains("already in another draft"),
+        "{}",
+        message(&r)
+    );
+    assert!(still_unattached(&f));
+    assert_eq!(records(&f), 0);
+
+    // So does the draft's own text, filed as a comment (written behind the API's back, as
+    // an old draft might hold it).
+    let body = embed(&photo, "photo.png");
+    sql(&f.app, |tx| {
+        tx.execute(
+            "UPDATE inbox_items SET body = ?2 WHERE id = ?1",
+            [&did, &body],
+        )
+    });
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            json!({ "table_id": f.table_id, "fields": { "Name": "x" }, "note_as_comment": true }),
+        )
+        .await;
+    r.assert_status(400);
+    assert!(
+        message(&r).contains("already in another draft"),
+        "{}",
+        message(&r)
+    );
+    assert!(still_unattached(&f));
+    assert_eq!(records(&f), 0);
+}

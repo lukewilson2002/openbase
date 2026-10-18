@@ -149,6 +149,13 @@ fn files_of_other_drafts(
     Ok(out)
 }
 
+fn already_in_another_draft(id: &str) -> AppError {
+    AppError::bad_request(format!(
+        "attachment {id} is already in another draft; a file can be in one draft at a time \
+         (remove it there first, or upload it again)"
+    ))
+}
+
 /// A draft's text may only embed or link the user's own unattached uploads (the files
 /// `POST /api/inbox/attachments` gives), none of which is in another draft. References the
 /// draft's current text (`held`) already has are left alone, so a file filed away
@@ -186,10 +193,7 @@ fn check_body_files(
             )));
         }
         if taken.contains(&id) {
-            return Err(AppError::bad_request(format!(
-                "attachment {id} is already in another draft; a file can be in one draft at a \
-                 time (remove it there first, or upload it again)"
-            )));
+            return Err(already_in_another_draft(&id));
         }
     }
     Ok(())
@@ -365,8 +369,8 @@ fn text_refs_in(fields: &[Field], given: &Map<String, Value>) -> Vec<String> {
 /// record of that base can hold them, and take them out of the user's other drafts (a file
 /// lives in one draft only, but a stale reference must never outlive the move). Also moves
 /// every unattached upload of the user that long text values in `given`, or the `note`
-/// (the draft text about to become a comment), embed or link by address. Returns how many
-/// files moved.
+/// (the draft text about to become a comment), embed or link by address; one that another
+/// draft's text embeds is refused (`400`). Returns how many files moved.
 pub fn move_files_to_base(
     conn: &Connection,
     user_id: &str,
@@ -387,6 +391,13 @@ pub fn move_files_to_base(
         .into_iter()
         .chain(note.map(attachments::referenced_ids).unwrap_or_default())
         .collect();
+    if !referenced.is_empty() {
+        // A file another draft's text names stays where it is: moving it would break that draft.
+        let taken = files_of_other_drafts(conn, user_id, Some(&item.id))?;
+        if let Some(id) = referenced.iter().find(|id| taken.contains(*id)) {
+            return Err(already_in_another_draft(id));
+        }
+    }
     ids.extend(referenced.iter().map(String::as_str));
     let mut moved = HashSet::new();
     for id in ids {
