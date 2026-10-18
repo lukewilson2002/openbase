@@ -431,7 +431,7 @@ tools or `upload_attachment` without `project_id`: they fail with a message sayi
 | `list_inbox` | any | Your drafts, most recently changed first |
 | `add_to_inbox` | write | Save a note (`title`, one line; `body`, Markdown) and/or files (`attachments: [{id}]` from `upload_attachment` without `project_id`) |
 | `update_inbox_item` | write | Change a draft's `title`, `body` and/or replace its `attachments` |
-| `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them; the text is not copied automatically (put it in a long-text field, or set `note_as_comment` to add it as the record's first comment). Needs the editor role there; on any failure the draft stays |
+| `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them, or embed them in a long-text value (uploads the long-text `fields` or the `note_as_comment` text embed move into the project with the record); the text is not copied automatically (put it in a long-text field, or set `note_as_comment` to add it as the record's first comment). Needs the editor role there; on any failure the draft stays |
 | `delete_inbox_item` | write | Delete a draft permanently |
 
 ### Presence
@@ -474,9 +474,20 @@ needs only read access.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field. Without `project_id` the file is uploaded for your inbox (see [Inbox](#inbox); not for tokens limited to specific projects) |
+| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field, and `markdown`: a line like `![](/api/attachments/att.../photo.png)` that embeds the file in a long-text field (see [Embedding files in long text](#embedding-files-in-long-text)). Without `project_id` the file is uploaded for your inbox (see [Inbox](#inbox); not for tokens limited to specific projects) |
 | `export_csv` | any | A view as CSV text; cut at about 80 KB at a row boundary with the totals |
 | `import_csv` | write | CSV text into an existing table (columns by header or `mapping`) or into a new table with inferred field types; all or nothing |
+
+#### Embedding files in long text
+
+A long-text field holds Markdown, and an uploaded file can be embedded in it: put the `markdown` line that
+`upload_attachment` returns on a line of its own in the value you write with `create_records` or
+`update_records` (or in an inbox draft's `body`). Images, video and audio then show as blocks, any other
+file as a download card; add alt text and a caption with `![Alt](/api/attachments/att.../name.png "Caption")`.
+The file must belong to the same project as the record (upload with that `project_id`), otherwise the write
+fails with `attachment att... is not a file of this project`; for an inbox draft, upload without `project_id`
+and filing moves the file into the project. Images from other websites (`![](https://...)`) are never shown,
+only a link. Details and the serving rules: [docs/api.md](api.md#files-in-long-text-internal-api).
 
 ### Administration
 

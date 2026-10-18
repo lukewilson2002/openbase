@@ -180,11 +180,54 @@ per minute per person (`429`).
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/inbox` | Your drafts, most recently changed first: `[{id, body, attachments, created_at, updated_at}]`. |
-| `POST /api/inbox` | Body `{title?, body?, attachments?}`; `201` with the draft. `title` is one line (line breaks become spaces, at most 1,000 characters) and may be empty, like `body`. `attachments` must be your own unfiled uploads that no other draft holds. |
+| `POST /api/inbox` | Body `{title?, body?, attachments?}`; `201` with the draft. `title` is one line (line breaks become spaces, at most 1,000 characters) and may be empty, like `body`. `attachments` must be your own unfiled uploads that no other draft holds. `body` may embed or link your own unfiled uploads by address (see [Files in long text](#files-in-long-text-internal-api)); a reference to anything else (someone else's upload, a project's file, a missing file) is a `400` naming the id, and so is a file another draft already holds, in its file list or its text. References a draft's current text already has are left alone when you edit it. |
 | `PATCH /api/inbox/{id}` | Body `{title?, body?, attachments?}`: what is given changes, `attachments` replaces the whole list. |
 | `DELETE /api/inbox/{id}` | `204`. Permanent: drafts have no trash. |
 | `POST /api/inbox/attachments` | Multipart field `file` (the upload limit applies, and so does your inbox quota). Answers the attachment reference `{id, filename, mime, size, ...}` to put in a draft's `attachments`. The file belongs to no project yet: only its uploader can download it (`GET /api/attachments/{id}/{filename}`). Files no draft or record refers to are cleaned up like any unreferenced upload. |
-| `POST /api/inbox/{id}/file` | Body `{table_id, fields, note_as_comment?}`; `201` with the created record. `fields` is keyed by field name or id and read like the Airtable-compatible API (typecast on). Needs the Editor role on the table's project (`403`; `404` when you cannot see it). It goes through the normal record write path, so validation, history, live-update events and automations apply. To keep the draft's files, put them (`{"id": "att..."}` is enough) in an attachment field: they move into the table's project (only files named in attachment fields move; a mention in a text field does not). The draft's text is not copied anywhere by itself: put it in a long text field, or send `note_as_comment: true` to add it as the record's first comment, by you (at most 10,000 characters, else `400`). Creating the record, adding the comment, moving the files and deleting the draft are one transaction: if anything fails, the draft and its files stay as they were. |
+| `POST /api/inbox/{id}/file` | Body `{table_id, fields, note_as_comment?}`; `201` with the created record. `fields` is keyed by field name or id and read like the Airtable-compatible API (typecast on). Needs the Editor role on the table's project (`403`; `404` when you cannot see it). It goes through the normal record write path, so validation, history, live-update events and automations apply. To keep the draft's files, put them (`{"id": "att..."}` is enough) in an attachment field: they move into the table's project (a bare id mentioned in a text field does not move anything). Your unfiled uploads that a long text value in `fields` embeds or links by address (`/api/attachments/{id}/...`), or that the draft's text embeds when `note_as_comment` is set, move into the project too, even when they are not in the draft's file list; the record and its comment are then written with the ordinary ownership rule, so a reference to someone else's upload, a file of another project or a missing file fails the whole filing with `400`. The draft's text is not copied anywhere by itself: put it in a long text field, or send `note_as_comment: true` to add it as the record's first comment, by you (at most 10,000 characters, else `400`). Creating the record, adding the comment, moving the files and deleting the draft are one transaction: if anything fails, the draft and its files stay as they were. |
+### Files in long text (internal API)
+
+Long text (Markdown) can embed and link uploaded files by their download address. An **embed** is Markdown
+image syntax on a line of its own, a **link** the usual link syntax; the address is relative (no host) and the
+file name is percent-encoded:
+
+```
+![Alt text](/api/attachments/attXXXXXXXXXXXXXX/site%20photo.png "Caption")
+[the report](/api/attachments/attXXXXXXXXXXXXXX/report.pdf)
+```
+
+Alt text and caption are optional (`![](...)` is valid). The reference carries no type: clients pick the
+player from the file name extension, and the server decides how to serve the bytes (below). Only references
+in the exact `/api/attachments/{id}/` form count; an id written bare in prose is just text. `POST
+/api/bases/{id}/attachments` answers the reference to build the address from (`id`, `filename`); the
+MCP tool `upload_attachment` also returns the finished line as `markdown`.
+
+**Ownership on save.** Every `/api/attachments/{id}/` reference inside a **long text** value written to a
+record must name a file of the record's project, exactly like attachment cells. Otherwise the write fails
+with `400` (`422` in `/api/v1`) and `field "Notes": attachment attXXX is not a file of this project; upload
+the file to this project to embed or link it`. The rule covers every write path: the app, `/api/v1`, CSV import,
+automations, MCP and the inbox filing, and a file that does not exist is refused like another project's file.
+A reference the value being replaced already contains is not checked again, so editing other text of an old
+value never fails. Comments follow the same rule (`400`, `attachment attXXX is not a file of this project; ...`).
+Duplicating a project copies the files its long text embeds and points the copy at them.
+
+**Cleanup.** Files referenced only from long text, record history or an inbox draft's text stay: the cleanup
+looks for attachment ids in all record data and in the draft text, not just in attachment fields.
+
+**Serving.** `GET /api/attachments/{id}/{filename}` is allowed for Viewers of the file's project (session or
+token), for holders of an enabled view share link of the project (below) and, for an inbox upload, only for its
+uploader. Sniffed raster images (png, jpeg, gif, webp), **video** (mp4, mov, webm, ogg with Theora) and
+**audio** (mp3, aac, mp4/m4a, ogg, wav, flac) are served inline with their real `Content-Type`; the bytes
+decide, never the file name or the stored type. Everything else (HTML, SVG, PDF, a video whose bytes are not
+a video, ...) is an `application/octet-stream` attachment. Every response keeps `nosniff` and
+`Content-Security-Policy: sandbox; default-src 'none'`, `Cache-Control: private, max-age=86400` and sends
+`Accept-Ranges: bytes`. One `Range: bytes=first-last`, `bytes=first-` or `bytes=-count` is answered
+`206 Partial Content` with `Content-Range: bytes first-last/length` (so players can seek); a range outside the
+file is `416` with `Content-Range: bytes */length`; several ranges or malformed values are ignored and the
+whole file is sent. Bodies are streamed. Thumbnails support `Range` too.
+
+**External media is not embedded.** `![](https://...)`, or any address not starting with `/api/attachments/`,
+is shown by the web app as an ordinary link and never fetched by the browser; the editor does not create one.
 
 ---
 
@@ -420,6 +463,9 @@ are clamped, and **missing select options are created**.
   project with `POST /api/bases/{id}/attachments` (session or token with write
   access). OpenBase does **not** fetch `url`s on a client's behalf (SSRF), so
   `[{"url": …}]` is a 422;
+- long text may embed or link files of the same project as `/api/attachments/{id}/{filename}` addresses
+  (see [Files in long text](#files-in-long-text-internal-api)); a file of another project, or one that
+  does not exist, is a 422;
 - barcode takes `{"text"}` or a string;
 - computed fields (formula, lookup, rollup, count, created/modified time/by,
   autonumber, button) cannot be written: `INVALID_VALUE_FOR_COLUMN`.
@@ -476,7 +522,7 @@ length). Unattached public-form uploads are deleted after 2 hours.
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
 | `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
-| `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field of a live record the view's filter lists, otherwise 404 (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
+| `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible long text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
 | `POST /api/public/forms/{token}/attachments` | multipart `file` for an attachment field of the form (at most 25 MB, further capped by the upload limit) |
