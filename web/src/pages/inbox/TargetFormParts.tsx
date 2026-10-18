@@ -89,26 +89,34 @@ export function TitleField({ form }: { form: TargetForm }) {
   );
 }
 
-/** "Note goes into: [field]": the long text field that takes what was written, a comment, or nowhere. */
+/**
+ * Where the note goes: a long text field of the table, a comment on the new record, or nowhere. A curved
+ * arrow from the note box above points at the choice; "Note goes into" is its name for screen readers.
+ */
 export function NoteChooser({ form }: { form: TargetForm }) {
   const id = useId();
   const table = form.table;
   if (!table) return null;
   const fields = noteFields(table);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
-      <label htmlFor={id} className="text-muted">
+    <div className="-mt-3 flex items-center gap-1.5 text-[0.8125rem]">
+      <label htmlFor={id} className="sr-only">
         Note goes into
       </label>
-      <div className="min-w-[10rem] max-w-[16rem] flex-1">
+      {/* From the box's bottom edge, down and round to the right. */}
+      <svg aria-hidden viewBox="0 0 30 33" className="ml-3 h-[33px] w-[30px] shrink-0 self-start text-faint pointer-coarse:translate-y-1" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 1 C3 18 9 28 26 28" />
+        <path d="M21 23 L26 28 L21 33" />
+      </svg>
+      <div className="mt-2.5 min-w-[10rem] max-w-[16rem] flex-1">
         <Select id={id} value={form.noteFieldId ?? ""} onChange={(e) => form.setNoteField(e.target.value || null)} className="h-9 pointer-coarse:h-11">
           {fields.map((f) => (
             <option key={f.id} value={f.id}>
               {f.name}
             </option>
           ))}
-          <option value={NOTE_AS_COMMENT}>A comment on the record</option>
-          <option value="">Nowhere (leave the note out)</option>
+          <option value={NOTE_AS_COMMENT}>As a comment</option>
+          <option value="">Nowhere (discard on save)</option>
         </Select>
       </div>
     </div>

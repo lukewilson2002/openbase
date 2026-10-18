@@ -363,7 +363,7 @@ describe("saving into a table", () => {
     // The note goes into the first rich long text field, and another can be chosen.
     const chooser = screen.getByRole("combobox", { name: "Note goes into" });
     expect(chooser).toHaveValue("fld_notes");
-    expect(within(chooser).getAllByRole("option").map((o) => o.textContent)).toEqual(["Notes", "Details", "A comment on the record", "Nowhere (leave the note out)"]);
+    expect(within(chooser).getAllByRole("option").map((o) => o.textContent)).toEqual(["Notes", "Details", "As a comment", "Nowhere (discard on save)"]);
     // The other fields (not the title, not the note's field, no attachment fields: the files have their own chooser).
     const others = screen.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby"));
     expect(others).toHaveLength(2);
@@ -440,7 +440,7 @@ describe("saving into a table", () => {
     const title = await pickTasks(user);
     await user.type(title, "Only a title");
     await write("not for the record");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "Nowhere (leave the note out)");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "Nowhere (discard on save)");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.callsTo("POST /api/inbox/inb1/file")).toHaveLength(1));
     expect(body(api.callsTo("POST /api/inbox/inb1/file")[0]!)).toEqual({ table_id: "tbl1", fields: { fld_name: "Only a title" } });
@@ -456,7 +456,7 @@ describe("saving into a table", () => {
     renderApp();
     await pickTasks(user);
     await write("Ask about Tuesday");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "A comment on the record");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "As a comment");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.callsTo("POST /api/inbox/inb1/file")).toHaveLength(1));
     expect(body(api.callsTo("POST /api/inbox/inb1/file")[0]!)).toEqual({ table_id: "tbl1", fields: {}, note_as_comment: true });
