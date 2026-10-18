@@ -51,7 +51,7 @@ const SCREENS: Screen[] = [
   },
   {
     title: "Let an assistant manage OpenBase for you",
-    text: ["Connect an AI assistant you trust and ask in plain words. It can build tables and update records for you, and it can only do what you are allowed to do."],
+    text: ["Connect an AI assistant you trust and ask in plain words. It can build tables and update records for you, and it can only do what you allow it to do."],
     Art: AssistantArt,
   },
 ];
