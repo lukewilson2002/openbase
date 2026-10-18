@@ -275,7 +275,7 @@ describe("ViewBar view switcher", () => {
     }
   });
 
-  it("opens a view's menu on a right-click of it in a shared button's list, closing the list", async () => {
+  it("opens a view's menu on a right-click of it in a shared button's list, over the list, which stays open", async () => {
     const user = userEvent.setup();
     const onDialog = vi.fn();
     const schema = makeSchema("creator");
@@ -285,8 +285,14 @@ describe("ViewBar view switcher", () => {
     await user.click(screen.getByRole("button", { name: "2 grid views, All tasks open" }));
     const list = await screen.findByRole("menu", { name: "Grid views of Tasks" });
     fireEvent.contextMenu(within(list).getByRole("menuitem", { name: /My tasks/ }), { clientX: 60, clientY: 80 });
-    const menu = await screen.findByRole("menu", { name: "Options for My tasks" });
-    await waitFor(() => expect(screen.queryByRole("menu", { name: "Grid views of Tasks" })).not.toBeInTheDocument());
+    let menu = await screen.findByRole("menu", { name: "Options for My tasks" });
+    expect(screen.getByRole("menu", { name: "Grid views of Tasks" })).toBeInTheDocument();
+    // Escape closes the view's menu only; the list is still there to right-click another.
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Options for My tasks" })).not.toBeInTheDocument());
+    expect(screen.getByRole("menu", { name: "Grid views of Tasks" })).toBeInTheDocument();
+    fireEvent.contextMenu(within(screen.getByRole("menu", { name: "Grid views of Tasks" })).getByRole("menuitem", { name: /My tasks/ }), { clientX: 60, clientY: 80 });
+    menu = await screen.findByRole("menu", { name: "Options for My tasks" });
     await user.click(within(menu).getByRole("menuitem", { name: /Rename view/ }));
     expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[2] });
   });

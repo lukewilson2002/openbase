@@ -7,7 +7,7 @@
  * rename, duplicate, share, lock, delete, as on its row in the menu. Which table to open is the
  * menu's job, not the toolbar's.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router";
 import { Check, ChevronDown, Ellipsis, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
@@ -109,69 +109,71 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(table.views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
 
   return (
-    <div ref={rootRef} className={cn("relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
-      <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5">
-        {shown.map((g) => (
-          <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
-        ))}
-      </nav>
-      <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
-        {hidden.length > 0 && (
-          <ViewsDropdown
-            label={`More views of ${table.name}`}
-            views={hidden.flatMap((g) => g.views)}
-            activeId={view.id}
-            to={to}
-            onMenu={onMenu}
-            hasMenu={hasMenu}
-            trigger={
-              <IconButton label={`${count(hidden)} more ${count(hidden) === 1 ? "view" : "views"}`} noTooltip className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
-                <Ellipsis aria-hidden className="size-[1.125rem]" />
-              </IconButton>
-            }
-          />
-        )}
-        {canCreateView && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton label="Add view" className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
-                <Plus aria-hidden className="size-[1.125rem]" />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              {!basePermissions.createSharedView(schema.role) && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
-              {VIEW_TYPES.map((type) => {
-                const meta = VIEW_TYPE_META[type];
-                return (
-                  <DropdownMenuItem key={type} onSelect={() => openDialog({ kind: "create-view", table, type })} className="items-start gap-2.5 rounded-lg px-2.5 py-2">
-                    <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
-                    <span className="min-w-0">
-                      <span className="block font-medium">{meta.label}</span>
-                      <span className="block text-xs text-muted">{meta.description}</span>
-                    </span>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+    <ViewMenuOpen value={menu !== null}>
+      <div ref={rootRef} className={cn("relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
+        <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5">
+          {shown.map((g) => (
+            <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
+          ))}
+        </nav>
+        <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
+          {hidden.length > 0 && (
+            <ViewsDropdown
+              label={`More views of ${table.name}`}
+              views={hidden.flatMap((g) => g.views)}
+              activeId={view.id}
+              to={to}
+              onMenu={onMenu}
+              hasMenu={hasMenu}
+              trigger={
+                <IconButton label={`${count(hidden)} more ${count(hidden) === 1 ? "view" : "views"}`} noTooltip className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
+                  <Ellipsis aria-hidden className="size-[1.125rem]" />
+                </IconButton>
+              }
+            />
+          )}
+          {canCreateView && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton label="Add view" className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
+                  <Plus aria-hidden className="size-[1.125rem]" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-72">
+                {!basePermissions.createSharedView(schema.role) && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
+                {VIEW_TYPES.map((type) => {
+                  const meta = VIEW_TYPE_META[type];
+                  return (
+                    <DropdownMenuItem key={type} onSelect={() => openDialog({ kind: "create-view", table, type })} className="items-start gap-2.5 rounded-lg px-2.5 py-2">
+                      <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
+                      <span className="min-w-0">
+                        <span className="block font-medium">{meta.label}</span>
+                        <span className="block text-xs text-muted">{meta.description}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+        <AnchoredMenu anchor={menu?.anchor ?? null} onClose={() => setMenu(null)} label={menu ? `Options for ${menu.view.name}` : "View options"}>
+          {menu && <ViewMenuItems schema={schema} table={table} view={menu.view} onDialog={openDialog} />}
+        </AnchoredMenu>
+        {/* The buttons with their names, out of sight: measured to decide whether the names fit. */}
+        <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-0.5">
+          {table.views.map((v) => {
+            const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
+            return (
+              <span key={v.id} className={cn(buttonClass, labelledClass)}>
+                <Icon className="size-[1.125rem]" />
+                {v.name}
+              </span>
+            );
+          })}
+        </div>
       </div>
-      <AnchoredMenu anchor={menu?.anchor ?? null} onClose={() => setMenu(null)} label={menu ? `Options for ${menu.view.name}` : "View options"}>
-        {menu && <ViewMenuItems schema={schema} table={table} view={menu.view} onDialog={openDialog} />}
-      </AnchoredMenu>
-      {/* The buttons with their names, out of sight: measured to decide whether the names fit. */}
-      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-0.5">
-        {table.views.map((v) => {
-          const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
-          return (
-            <span key={v.id} className={cn(buttonClass, labelledClass)}>
-              <Icon className="size-[1.125rem]" />
-              {v.name}
-            </span>
-          );
-        })}
-      </div>
-    </div>
+    </ViewMenuOpen>
   );
 }
 
@@ -291,9 +293,14 @@ function GroupButton({
   );
 }
 
+/** Whether a view's own menu is open (from the toolbar): a list of views it came from stays open under it. */
+const ViewMenuOpen = createContext(false);
+
 /**
  * A dropdown of views (the views of one type sharing a button, or those that did not fit). A
- * right-click or a held press on one of them closes it and opens that view's own menu in its place.
+ * right-click or a held press on one of them opens that view's own menu over it; the list stays
+ * open underneath (it is not modal, so the new menu can take the focus and the pointer, and what
+ * happens in that menu does not count as leaving the list).
  */
 function ViewsDropdown({
   label,
@@ -312,33 +319,24 @@ function ViewsDropdown({
   onMenu?: (view: View, anchor: MenuAnchor) => void;
   hasMenu?: (view: View) => boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  // The view whose menu opens once this dropdown is gone. Not on a timer: the dropdown hands the focus
-  // back to its button as it goes (when depends on its closing animation), and focus landing outside
-  // the new menu would close that one at once. So the hand-back is skipped and the menu opens then.
-  const pending = useRef<{ view: View; anchor: MenuAnchor } | null>(null);
-  const menuFor = (v: View) =>
-    onMenu && hasMenu?.(v)
-      ? (anchor: MenuAnchor) => {
-          pending.current = { view: v, anchor };
-          setOpen(false);
-        }
-      : undefined;
+  const menuOpen = useContext(ViewMenuOpen);
+  const menuOpenRef = useRef(menuOpen);
+  menuOpenRef.current = menuOpen;
+  const stayWhileMenuOpen = (e: Event) => {
+    if (menuOpenRef.current) e.preventDefault();
+  };
+  const menuFor = (v: View) => (onMenu && hasMenu?.(v) ? (anchor: MenuAnchor) => onMenu(v, anchor) : undefined);
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
         aria-label={label}
         aria-labelledby={undefined}
         className="w-60"
-        onCloseAutoFocus={(e) => {
-          const next = pending.current;
-          if (!next || !onMenu) return;
-          pending.current = null;
-          e.preventDefault();
-          onMenu(next.view, next.anchor);
-        }}
+        onFocusOutside={stayWhileMenuOpen}
+        onPointerDownOutside={stayWhileMenuOpen}
+        onInteractOutside={stayWhileMenuOpen}
       >
         {views.map((v) => (
           <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} />
