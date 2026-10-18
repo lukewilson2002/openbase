@@ -21,7 +21,7 @@ const rowClass = "flex min-h-11 w-full items-center gap-2.5 rounded-[10px] px-2.
 
 export function TargetPicker({ open, onOpenChange, workspaces, onPick }: TargetPickerProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Save to…" description="Choose a project, then a table. What you wrote becomes a new record there." size="sm">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Save to…" size="sm">
       {/* Fresh each time the dialog opens: it always starts at the projects. */}
       {open && <Steps workspaces={workspaces} onPick={onPick} />}
     </Dialog>
