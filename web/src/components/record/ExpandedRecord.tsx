@@ -6,7 +6,7 @@
  * says whether that is going on ("Saving…", "Saved", "Couldn't save"). Reusable by every view type.
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { hashKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CopyPlus, MoreHorizontal, Share2, Trash2, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { errorMessage } from "@/api/client";
@@ -85,6 +85,34 @@ function SaveStatus({ state }: { state: SaveState }) {
   );
 }
 
+/**
+ * The long text of this record that has not reached the server: typed (waiting for typing to pause) or
+ * sent (waiting for the answer), by `recordId:fieldId`.
+ */
+class Unsent {
+  private typing = new Set<string>();
+  private sent = new Map<string, number>();
+  /** The text in a field is (or is no longer) different from what was last saved. */
+  typed(key: string, dirty: boolean) {
+    if (dirty) this.typing.add(key);
+    else this.typing.delete(key);
+  }
+  /** A save of the field is made: its typed text is the save's now. */
+  send(key: string) {
+    this.typing.delete(key);
+    this.sent.set(key, (this.sent.get(key) ?? 0) + 1);
+  }
+  /** A save of the field is answered (or refused). */
+  answered(key: string) {
+    const n = (this.sent.get(key) ?? 0) - 1;
+    if (n > 0) this.sent.set(key, n);
+    else this.sent.delete(key);
+  }
+  isWaiting(key: string) {
+    return this.typing.has(key) || this.sent.has(key);
+  }
+}
+
 function FieldRow({
   field,
   record,
@@ -93,6 +121,7 @@ function FieldRow({
   env,
   emails,
   lastSaved,
+  unsent,
   onSave,
 }: {
   field: Field;
@@ -103,6 +132,8 @@ function FieldRow({
   emails: ReadonlyMap<string, string>;
   /** What this record's fields were last saved as, by field id. */
   lastSaved: RefObject<Map<string, unknown>>;
+  /** Which long text fields have text of ours that is typed but not sent yet, or sent and not answered yet. */
+  unsent: RefObject<Unsent>;
   onSave: (field: Field, edit: EditValue) => void;
 }) {
   const value = record.values[field.id] ?? null;
@@ -110,13 +141,16 @@ function FieldRow({
   const labelId = `field-${field.id}`;
   // An editor is rebuilt when its value changes under it (someone else edited it, a save was refused). Long
   // text saves while it is typed in, so a value that is only our own save coming back must not rebuild the
-  // editor, or the caret would jump out from under the typing.
+  // editor, or the caret would jump out from under the typing. Nor is it rebuilt while text of ours is typed
+  // but not sent, or sent but not answered: a refetch in that time answers with what the server held before
+  // (the text being typed would be replaced by it, and the next keystroke would save the stale text).
+  const textKey = `${record.id}:${field.id}`;
   const rebuilds = useRef({ json: JSON.stringify(value), n: 0 });
   if (field.type === "long_text") {
     const json = JSON.stringify(value);
     if (json !== rebuilds.current.json) {
       rebuilds.current.json = json;
-      if (!jsonEqual(value, lastSaved.current.get(`${record.id}:${field.id}`) ?? null)) rebuilds.current.n++;
+      if (!jsonEqual(value, lastSaved.current.get(textKey) ?? null) && !unsent.current.isWaiting(textKey)) rebuilds.current.n++;
     }
   }
   const editorKey = field.type === "long_text" ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${field.id}:${JSON.stringify(value)}`;
@@ -138,7 +172,16 @@ function FieldRow({
             {computed && <span className="sr-only"> (computed, read-only)</span>}
           </div>
         ) : (
-          <FieldEditor key={editorKey} field={field} value={value} variant="form" labelledBy={labelId} onCommit={(edit) => onSave(field, edit)} onCancel={() => {}} />
+          <FieldEditor
+            key={editorKey}
+            field={field}
+            value={value}
+            variant="form"
+            labelledBy={labelId}
+            onChange={field.type === "long_text" ? (edit) => unsent.current.typed(textKey, edit.text !== undefined && edit.text !== (typeof value === "string" ? value : "")) : undefined}
+            onCommit={(edit) => onSave(field, edit)}
+            onCancel={() => {}}
+          />
         )}
         {error && (
           <p role="alert" className="mt-1 text-xs text-danger">
@@ -165,6 +208,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const [justSaved, setJustSaved] = useState(false);
   const inflight = useRef(0);
   const lastSaved = useRef(new Map<string, unknown>());
+  const unsent = useRef(new Unsent());
   const currentId = useRef(recordId);
   currentId.current = recordId;
   const [showHidden, setShowHidden] = useState(false);
@@ -232,11 +276,18 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       }
       // With another save of this table still on its way, its own answer is the newer one.
       const updated = res?.records?.[0];
-      if (updated && inflight.current <= 1) qc.setQueryData(ctx?.key ?? recordKeys.record(table.id, id), updated);
-      // The grid refreshes its pages from this invalidation (events from this tab are not echoed back).
-      void qc.invalidateQueries({ queryKey: recordKeys.table(table.id) });
+      const key = ctx?.key ?? recordKeys.record(table.id, id);
+      const answered = !!updated && inflight.current <= 1;
+      if (updated && answered) qc.setQueryData(key, updated);
+      // The grid refreshes its pages from this invalidation (events from this tab are not echoed back). The
+      // record itself is left out: a refetch of it would answer with what this save wrote while a later save
+      // of the same text is on its way, which the editor takes for someone else's edit. It is refetched
+      // only when its own save did not bring it up to date.
+      const own = hashKey(key);
+      void qc.invalidateQueries({ queryKey: recordKeys.table(table.id), predicate: (q) => q.queryHash !== own || (!updated && inflight.current <= 1) });
     },
-    onSettled: () => {
+    onSettled: (_res, _err, { recordId: id, field }) => {
+      unsent.current.answered(`${id}:${field.id}`);
       inflight.current = Math.max(0, inflight.current - 1);
       setPending((n) => Math.max(0, n - 1));
       setJustSaved(true);
@@ -252,6 +303,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const saveState: SaveState = pending > 0 ? "saving" : Object.keys(errors).length > 0 ? "error" : justSaved ? "saved" : "idle";
 
   const onSave = (field: Field, edit: EditValue) => {
+    const textKey = `${recordId}:${field.id}`;
     const before = record.data?.values[field.id] ?? null;
     let after: unknown = edit.json ?? null;
     if (edit.text !== undefined) {
@@ -263,8 +315,12 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       if (field.type === "link") return;
       after = res.value;
     }
-    if (jsonEqual(before, after)) return;
-    lastSaved.current.set(`${recordId}:${field.id}`, after);
+    if (jsonEqual(before, after)) {
+      unsent.current.typed(textKey, false);
+      return;
+    }
+    lastSaved.current.set(textKey, after);
+    unsent.current.send(textKey);
     save.mutate({ recordId, field, value: after });
   };
 
@@ -331,7 +387,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto">
         <div className="flex flex-col gap-4">
           {visible.map((f) => (
-            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} onSave={onSave} />
+            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
           ))}
           {hidden.length > 0 && (
             <div className="border-t border-line pt-3">
@@ -342,7 +398,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
               {showHidden && (
                 <div id="hidden-fields" className="mt-3 flex flex-col gap-4">
                   {hidden.map((f) => (
-                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} onSave={onSave} />
+                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
                   ))}
                 </div>
               )}

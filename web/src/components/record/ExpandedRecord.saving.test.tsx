@@ -44,12 +44,13 @@ function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecor
     collaborators: PEOPLE,
     ...over,
   };
+  const client = createQueryClient();
   const { unmount } = render(
-    <Providers client={createQueryClient()}>
+    <Providers client={client}>
       <ExpandedRecord {...props} />
     </Providers>,
   );
-  return { api, props, unmount };
+  return { api, props, unmount, client };
 }
 
 afterEach(() => {
@@ -199,6 +200,103 @@ describe("ExpandedRecord: long text saves while typing", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Plain notes" })).not.toBeInTheDocument());
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
     expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_plain: "first more" } }] });
+  });
+});
+
+describe("ExpandedRecord: long text while saves and refetches are in flight", () => {
+  const GET = "GET /api/tables/tbl1/records/rec1";
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** A server holding the record, whose saves wait for the test to release them (one gate per save, in order). */
+  function slowServer() {
+    let server = record;
+    const gates: (() => void)[] = [];
+    const routes = {
+      [GET]: () => server,
+      [PATCH]: async (call: { body: unknown }) => {
+        await new Promise<void>((r) => gates.push(r));
+        server = { ...server, values: { ...server.values, ...(call.body as { records: { values: object }[] }).records[0]!.values } };
+        return { records: [server] };
+      },
+    };
+    return { routes, release: () => gates.shift()!(), setServer: (v: Record<string, string>) => (server = { ...server, values: { ...server.values, ...v } }) };
+  }
+
+  it("keeps the text area (and what is in it) when a save finishes while a later one is queued", async () => {
+    // The first save's success must not refetch the open record: the answer would be the text of the first
+    // save, which the editor would take for someone else's edit while a newer save is on its way.
+    const s = slowServer();
+    const { api } = setup(s.routes);
+    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    await userEvent.click(area);
+    await userEvent.clear(area);
+    await userEvent.type(area, "abc");
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
+    await userEvent.type(area, "d");
+    await sleep(900); // typing paused again: the second save is queued behind the first
+    expect(api.callsTo(PATCH)).toHaveLength(1);
+    s.release();
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(2));
+    await sleep(100);
+    expect(screen.getByRole("textbox", { name: "Plain notes" })).toBe(area);
+    expect(area).toHaveValue("abcd");
+    expect(area).toHaveFocus();
+    s.release();
+    await userEvent.type(area, "e");
+    await userEvent.tab();
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(3));
+    expect(api.callsTo(PATCH)[2]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_plain: "abcde" } }] });
+    s.release();
+  });
+
+  it("does not rebuild the text area from a refetch that lands while its save is in flight", async () => {
+    // A refetch from elsewhere (another user's change, a reconnect) can answer with what the server held
+    // before this save: it must not replace the text being typed.
+    const s = slowServer();
+    const { api, client } = setup(s.routes);
+    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    await userEvent.click(area);
+    await userEvent.type(area, " draft");
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
+    });
+    await sleep(100);
+    expect(screen.getByRole("textbox", { name: "Plain notes" })).toBe(area);
+    expect(area).toHaveValue("first draft");
+    s.release();
+    await screen.findByText("Saved");
+    expect(area).toHaveValue("first draft");
+  });
+
+  it("does not rebuild the text area from a refetch that lands while typed text waits to be saved", async () => {
+    const s = slowServer();
+    const { api, client } = setup(s.routes);
+    const area = (await screen.findByRole("textbox", { name: "Plain notes" })) as HTMLTextAreaElement;
+    await userEvent.click(area);
+    await userEvent.type(area, "!");
+    s.setServer({ fld_plain: "theirs" });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
+    });
+    await sleep(100);
+    expect(screen.getByRole("textbox", { name: "Plain notes" })).toBe(area);
+    expect(area).toHaveValue("first!");
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
+    expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_plain: "first!" } }] });
+    s.release();
+  });
+
+  it("still rebuilds the text area for someone else's edit once nothing of ours is waiting", async () => {
+    const s = slowServer();
+    const { client } = setup(s.routes);
+    const area = await screen.findByRole("textbox", { name: "Plain notes" });
+    s.setServer({ fld_plain: "theirs" });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["records", "tbl1"] });
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Plain notes" })).toHaveValue("theirs"));
+    expect(screen.getByRole("textbox", { name: "Plain notes" })).not.toBe(area);
   });
 });
 
