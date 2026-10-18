@@ -5,18 +5,40 @@
  * the alt text (behind a small "Alt" button) and Remove. Backspace and Delete remove a selected
  * block, as for any other selected node. A read-only editor shows only the file and the caption.
  *
+ * Dragging the block shows a small chip (the kind's icon and the file's name) instead of a see-through
+ * copy of the whole block, which would cover the place it is dragged to.
+ *
  * The markup and classes are those of Markdown.tsx's rendering (`.ob-media` in styles/index.css), so
  * a value looks the same being edited and being read.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { Trash2 } from "lucide-react";
+import { File, Film, Image, Music, Trash2, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
 import { embedFilename, mediaKind, mediaLabel, type MediaKind } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { image: "Image", video: "Video", audio: "Audio", file: "File" };
+const KIND_ICONS: Record<MediaKind, LucideIcon> = { image: Image, video: Film, audio: Music, file: File };
+
+/**
+ * Makes `chip` the picture under the pointer while its block is dragged. Tiptap sets the whole block
+ * as the drag image from its own handler, which React runs at its root; a listener on the document
+ * runs after that, so its choice is the one the browser uses.
+ */
+function useDragChip(chip: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const onDragStart = (e: DragEvent) => {
+      const el = chip.current;
+      const block = el?.closest("figure");
+      if (!el || !block || !e.dataTransfer || !(e.target instanceof Node) || !block.contains(e.target)) return;
+      e.dataTransfer.setDragImage(el, 16, el.offsetHeight / 2);
+    };
+    document.addEventListener("dragstart", onDragStart);
+    return () => document.removeEventListener("dragstart", onDragStart);
+  }, [chip]);
+}
 
 // A grid cell editor closes on a click outside of it; the popover renders in a portal.
 const KEEP_GRID_EDITOR = "click-outside-ignore";
@@ -114,11 +136,21 @@ export function MediaView({ node, updateAttributes, deleteNode, selected, editor
 
   const kind = mediaKind(filename);
   const label = `${KIND_LABELS[kind]}: ${mediaLabel(src, alt)}`;
+  const KindIcon = KIND_ICONS[kind];
+  const chip = useRef<HTMLSpanElement>(null);
+  useDragChip(chip);
   const showCaptionInput = editable && (selected || caption !== "");
 
   return (
     <NodeViewWrapper as="figure" className="ob-media" data-kind={kind} data-selected={selected && editable ? "true" : undefined} data-drag-handle="" role="group" aria-label={label} contentEditable={false}>
       <MediaBody src={src} alt={alt} filename={filename} />
+      {/* The drag picture: off screen until a drag needs it (it must be laid out to be drawn). */}
+      {editable && (
+        <span ref={chip} aria-hidden className="ob-media-drag-chip">
+          <KindIcon className="size-4 shrink-0" />
+          <span className="truncate">{mediaLabel(src, alt)}</span>
+        </span>
+      )}
       {showCaptionInput ? (
         <input
           aria-label="Caption"

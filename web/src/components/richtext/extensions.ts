@@ -108,6 +108,8 @@ export function richTextExtensions(placeholder?: string, media: MediaOptions = {
       paragraph: false,
       underline: false,
       trailingNode: false,
+      // Where a dragged block or file will land: a clear line in the accent colour.
+      dropcursor: { color: "var(--primary)", width: 3 },
       link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" } },
     }),
     HardBreak.extend({ renderMarkdown: () => "\n" }),
