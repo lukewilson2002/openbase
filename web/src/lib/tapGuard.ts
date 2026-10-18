@@ -8,7 +8,9 @@
  * Spread the handlers on the trigger and put `onPointerDown` first: it calls `preventDefault()` for a
  * touch, which Radix's own handler checks before it opens. `onTap` runs from the click that follows
  * a clean tap; a browser sends no click after a scroll, and the movement check covers a click that
- * arrives anyway. `onTap` is not called for a mouse (its press opened already) or for the keyboard.
+ * arrives anyway. `onTap` is not called for a mouse (its press opened already) or for the keyboard
+ * (Radix opens on the key and cancels it, so no click follows). A click with no press before it at
+ * all is a screen reader or switch control activating the button: that opens too.
  */
 import { useCallback, useRef, type PointerEvent } from "react";
 import { TOUCH_HOLD_TOLERANCE_PX } from "./holdToDrag";
@@ -27,8 +29,10 @@ export interface TapGuardHandlers {
 }
 
 type Gesture =
-  /** No finger press is pending: a mouse press, the keyboard, or nothing yet. */
+  /** Nothing is pending: the next click came without a press (assistive technology). */
   | { phase: "idle" }
+  /** A mouse pressed: Radix opened on it, the click that follows is not a second toggle. */
+  | { phase: "pressed" }
   /** A finger is down at (x, y) and has not moved too far. */
   | { phase: "down"; id: number; x: number; y: number }
   /** The finger lifted in place: the click that follows is a tap. */
@@ -43,7 +47,7 @@ export function useTapGuard(onTap: () => void): TapGuardHandlers {
 
   const onPointerDown = useCallback((e: PointerEvent<Element>) => {
     if (!isTouchLike(e)) {
-      gesture.current = { phase: "idle" };
+      gesture.current = { phase: "pressed" };
       return;
     }
     gesture.current = { phase: "down", id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -72,7 +76,7 @@ export function useTapGuard(onTap: () => void): TapGuardHandlers {
   const onClick = useCallback(() => {
     const was = gesture.current.phase;
     gesture.current = { phase: "idle" };
-    if (was === "tapped") tap.current();
+    if (was === "tapped" || was === "idle") tap.current();
   }, []);
 
   return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClick };

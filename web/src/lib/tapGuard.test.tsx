@@ -141,14 +141,15 @@ describe("useTapGuard", () => {
     );
   }
 
-  it("calls onTap once for a clean tap and not for a second click with no press", () => {
+  it("calls onTap once for a clean tap, and for a click with no press before it (a screen reader)", () => {
     const onTap = vi.fn();
     render(<Probe onTap={onTap} />);
     const el = screen.getByRole("button");
     finger(el, { click: true });
     expect(onTap).toHaveBeenCalledOnce();
+    // VoiceOver and switch control activate a button with a bare click.
     fireEvent.click(el);
-    expect(onTap).toHaveBeenCalledOnce();
+    expect(onTap).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a mouse press and its click", () => {
