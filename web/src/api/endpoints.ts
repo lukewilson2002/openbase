@@ -9,6 +9,7 @@ import type {
   AdminCreatedUser,
   AdminUpdateUser,
   AdminUser,
+  AttachmentRef,
   AuditPage,
   Automation,
   BackupInfo,
@@ -17,6 +18,7 @@ import type {
   Collaborator,
   CreateAutomation,
   CreateBase,
+  CreateInboxItem,
   CreateInviteRequest,
   CreateTokenRequest,
   CreateView,
@@ -27,8 +29,10 @@ import type {
   CreatedToken,
   EmailSettings,
   EmailTestResult,
+  FileInboxItem,
   GrantInfo,
   DuplicateBase,
+  InboxItem,
   InstanceStats,
   InviteInfo,
   InvitePreview,
@@ -51,9 +55,11 @@ import type {
   SearchResponse,
   SessionInfo,
   UpdateEmailSettings,
+  UpdateInboxItem,
   SetupStatus,
   SignupRequest,
   Table,
+  TableRecord,
   TestAutomation,
   TestResult,
   TokenInfo,
@@ -258,6 +264,28 @@ export const api = {
     list: () => http.get<NotificationsResponse>("/api/notifications"),
     /** Without `ids` everything is marked read. */
     markRead: (ids?: string[]) => http.post<OkResponse>("/api/notifications/read", ids ? { ids } : {}),
+  },
+
+  /**
+   * The caller's inbox: private quick-capture drafts (Markdown text and uploaded files) that are in
+   * no project until `file` turns one into a record. Timestamps are Unix milliseconds.
+   */
+  inbox: {
+    /** Most recently changed first. */
+    list: () => http.get<InboxItem[]>("/api/inbox"),
+    create: (body: CreateInboxItem) => http.post<InboxItem>("/api/inbox", body),
+    /** Only what is given changes; `attachments` replaces the whole list. */
+    update: (id: string, body: UpdateInboxItem) => http.patch<InboxItem>(`/api/inbox/${enc(id)}`, body),
+    /** Permanent: drafts have no trash. */
+    remove: (id: string) => http.delete<void>(`/api/inbox/${enc(id)}`),
+    /** Multipart upload (field `file`) of a file that belongs to no project yet; put the answer in a draft's `attachments`. */
+    upload: (file: File, signal?: AbortSignal) => {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      return http.post<AttachmentRef>("/api/inbox/attachments", form, { signal });
+    },
+    /** Creates a record in `table_id` from the draft (which is gone afterwards) and answers the record. */
+    file: (id: string, body: FileInboxItem) => http.post<TableRecord>(`/api/inbox/${enc(id)}/file`, body),
   },
 
   trash: {

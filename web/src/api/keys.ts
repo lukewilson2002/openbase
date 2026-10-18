@@ -44,6 +44,8 @@ export const keys = {
   adminBackups: ["admin", "backups"] as const,
   adminEmail: ["admin", "email"] as const,
   notifications: ["notifications"] as const,
+  /** The caller's inbox drafts (`api.inbox.list`). */
+  inbox: ["inbox"] as const,
   /** "Search everything" results for `q` (`api.search.everything`). */
   search: (q: string, limit?: number) => ["search", q, limit ?? null] as const,
   /** Share links of one view (Creators). */

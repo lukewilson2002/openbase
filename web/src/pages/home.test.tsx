@@ -56,6 +56,7 @@ function routes(extra: Record<string, Handler> = {}) {
     "GET /api/auth/me": USER,
     "GET /api/workspaces": workspaces,
     "GET /api/notifications": { notifications: [], unread: 0 },
+    "GET /api/inbox": [],
     "GET /api/bases/app1": makeSchema("owner"),
     "GET /api/bases/app2": makeSchema("owner", { id: "app2", name: "CRM", tables: [] }),
     "GET /api/bases/app3": makeSchema("viewer", { id: "app3", workspace_id: "wsp2", name: "Roadmap", workspace_name: "Shared with me" }),
@@ -79,32 +80,25 @@ const remember = (place: { tables?: Record<string, string>; projects?: Record<st
   localStorage.setItem("ob-last-place", JSON.stringify({ tables: {}, projects: {}, workspaces: {}, ...place }));
 
 describe("/", () => {
-  it("opens the project last opened in the workspace opened last, at its last table and view", async () => {
+  it("is the Inbox: it does not take the person back to the project they left", async () => {
     stubDesktop();
     localStorage.setItem("ob-last-workspace", "wsp2");
     remember({ workspaces: { wsp2: "app3" }, projects: { app3: "tbl2" }, tables: { tbl2: "viw4" } });
     routes();
     renderApp();
-    expect(await screen.findByRole("heading", { level: 1, name: "Roadmap" })).toBeInTheDocument();
-    expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "What\u2019s on your mind?" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Roadmap" })).not.toBeInTheDocument();
+    // The menu is the way to the projects, and the Inbox row is the page being shown.
+    const menu = screen.getByRole("navigation", { name: "Main menu" });
+    expect(within(menu).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+    expect(await within(menu).findByRole("link", { name: "Shared with me" })).toBeInTheDocument();
   });
 
-  it("falls back to the first workspace and its first project", async () => {
-    stubDesktop();
-    localStorage.setItem("ob-last-workspace", "wspGone");
-    routes();
-    renderApp();
-    expect(await screen.findByRole("heading", { level: 1, name: "Project tracker" })).toBeInTheDocument();
-    expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
-  });
-
-  it("shows the page of a workspace without projects, with what to do about that", async () => {
+  it("is the Inbox for a workspace without projects too", async () => {
     stubDesktop();
     routes({ "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }] });
     renderApp();
-    expect(await screen.findByRole("heading", { name: "No projects in Acme yet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New project" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Import a spreadsheet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "What\u2019s on your mind?" })).toBeInTheDocument();
   });
 
   it("offers to create the first workspace and opens it", async () => {
