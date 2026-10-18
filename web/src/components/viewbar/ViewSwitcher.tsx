@@ -313,18 +313,33 @@ function ViewsDropdown({
   hasMenu?: (view: View) => boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // The view whose menu opens once this dropdown is gone. Not on a timer: the dropdown hands the focus
+  // back to its button as it goes (when depends on its closing animation), and focus landing outside
+  // the new menu would close that one at once. So the hand-back is skipped and the menu opens then.
+  const pending = useRef<{ view: View; anchor: MenuAnchor } | null>(null);
   const menuFor = (v: View) =>
     onMenu && hasMenu?.(v)
       ? (anchor: MenuAnchor) => {
+          pending.current = { view: v, anchor };
           setOpen(false);
-          // After this dropdown has closed (and handed the focus back), or the new menu would close with it.
-          setTimeout(() => onMenu(v, anchor), 0);
         }
       : undefined;
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="start" aria-label={label} aria-labelledby={undefined} className="w-60">
+      <DropdownMenuContent
+        align="start"
+        aria-label={label}
+        aria-labelledby={undefined}
+        className="w-60"
+        onCloseAutoFocus={(e) => {
+          const next = pending.current;
+          if (!next || !onMenu) return;
+          pending.current = null;
+          e.preventDefault();
+          onMenu(next.view, next.anchor);
+        }}
+      >
         {views.map((v) => (
           <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} />
         ))}
