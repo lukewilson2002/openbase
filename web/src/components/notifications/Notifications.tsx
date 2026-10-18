@@ -1,6 +1,6 @@
 /**
- * The Inbox: the first row of every menu, with the unread count (polled every minute and on
- * window focus), opening the person's notifications beside the menu (inside the drawer on a
+ * Notifications: a row of every menu (below the Inbox), with the unread count (polled every minute
+ * and on window focus), opening the person's notifications beside the menu (inside the drawer on a
  * phone). Clicking a notification marks it read and goes to its record.
  */
 import { useMemo, type ComponentProps } from "react";
@@ -68,15 +68,15 @@ export function unreadBadge(unread: number): string {
 
 /**
  * The menu row. Spreads the rest of its props on the button so it can be a popover trigger;
- * `open` highlights it while the inbox is showing.
+ * `open` highlights it while the panel is showing.
  */
-export function InboxRow({ open, className, ...props }: { open: boolean } & ComponentProps<"button">) {
+export function NotificationsRow({ open, className, ...props }: { open: boolean } & ComponentProps<"button">) {
   const unread = useUnreadCount();
   return (
     <button
       type="button"
       aria-expanded={open}
-      aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
+      aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
       className={cn(
         "flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-left text-[0.875rem] text-fg transition-colors hover:bg-hover pointer-coarse:h-11",
         open && "bg-primary-soft hover:bg-primary-soft",
@@ -85,9 +85,9 @@ export function InboxRow({ open, className, ...props }: { open: boolean } & Comp
       {...props}
     >
       <Bell aria-hidden className="size-[1.125rem] shrink-0 text-muted" />
-      <span className="min-w-0 flex-1 truncate">Inbox</span>
+      <span className="min-w-0 flex-1 truncate">Notifications</span>
       {unread > 0 && (
-        <span aria-hidden data-testid="inbox-badge" className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-fg">
+        <span aria-hidden data-testid="notifications-badge" className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-fg">
           {unreadBadge(unread)}
         </span>
       )}
@@ -98,10 +98,10 @@ export function InboxRow({ open, className, ...props }: { open: boolean } & Comp
 const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, invite: Mail, automation: Zap, other: Bell };
 
 /**
- * The inbox's content: a heading with "Mark all as read", then the notifications, newest first.
+ * The panel's content: a heading with "Mark all as read", then the notifications, newest first.
  * `onOpened` runs after a click took the person somewhere, so the container can close.
  */
-export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () => void; headingId?: string; className?: string }) {
+export function NotificationsPanel({ onOpened, headingId, className }: { onOpened?: () => void; headingId?: string; className?: string }) {
   const navigate = useNavigate();
   const list = useNotifications();
   const markRead = useMarkRead();
@@ -120,7 +120,7 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
     <div className={cn("flex min-h-0 flex-col", className)}>
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 pb-2.5 pt-3.5">
         <h2 id={headingId} className="text-[1rem] font-semibold">
-          Inbox
+          Notifications
         </h2>
         <button
           type="button"
@@ -145,7 +145,7 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
         ) : (
           <ul aria-label="Notifications">
             {list.data.notifications.map((n) => (
-              <InboxItem key={n.id} n={n} emails={emails} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
+              <NotificationItem key={n.id} n={n} emails={emails} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
             ))}
           </ul>
         )}
@@ -157,7 +157,7 @@ export function InboxPanel({ onOpened, headingId, className }: { onOpened?: () =
 /**
  * Emails of the people in the caller's workspaces, by user id. A face's colour comes from the
  * person's email, and notifications only carry a name, so without this the same person would get
- * another colour in the Inbox than everywhere else.
+ * another colour in Notifications than everywhere else.
  */
 function useKnownEmails(): ReadonlyMap<string, string> {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
@@ -168,7 +168,7 @@ function useKnownEmails(): ReadonlyMap<string, string> {
   }, [workspaces.data]);
 }
 
-function InboxItem({ n, emails, onOpen, onMarkRead }: { n: Notification; emails: ReadonlyMap<string, string>; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
+function NotificationItem({ n, emails, onOpen, onMarkRead }: { n: Notification; emails: ReadonlyMap<string, string>; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
   const v = describeNotification(n);
   const Icon = ICONS[v.kind];
   const actor = notificationActor(n);

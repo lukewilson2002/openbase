@@ -69,7 +69,7 @@ describe("base shell on a desktop", () => {
     expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
   });
 
-  it("puts the project in the app shell: `Acme / Project tracker` as plain text in the top bar, the Inbox then the tree in the menu", async () => {
+  it("puts the project in the app shell: `Acme / Project tracker` as plain text in the top bar, the Inbox and Notifications, then the tree in the menu", async () => {
     openBase("viewer");
     await screen.findByText("Grid view coming soon");
     const header = document.querySelector("header")!;
@@ -82,7 +82,8 @@ describe("base shell on a desktop", () => {
     expect(within(header).queryByRole("button", { name: /Acme|Project tracker/ })).not.toBeInTheDocument();
     // A viewer can neither invite nor share a view, so there is no Share to open.
     expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
-    expect(within(menu()).getAllByRole("button")[0]).toHaveAccessibleName("Inbox");
+    expect(within(menu()).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(menu()).getAllByRole("button")[0]).toHaveAccessibleName("Notifications");
     expect(await within(menu()).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
     // One tree: the workspace, its project, the project's tables.
     expect(within(menu()).getByRole("button", { name: "Collapse Acme" })).toHaveAttribute("aria-expanded", "true");
@@ -528,11 +529,11 @@ describe("base shell on a desktop", () => {
   });
 
   describe("the project's menu and rows", () => {
-    it("shows the Inbox to everyone and the project's Trash to creators only", async () => {
+    it("shows Notifications to everyone and the project's Trash to creators only", async () => {
       const user = userEvent.setup();
       openBase("viewer", { "GET /api/notifications": { notifications: [], unread: 2 } });
       await screen.findByText("Grid view coming soon");
-      expect(await within(menu()).findByRole("button", { name: "Inbox, 2 unread" })).toBeInTheDocument();
+      expect(await within(menu()).findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
       expect(itemNames(await openProjectMenu(user))).not.toContain("Trash");
       await user.keyboard("{Escape}");
       // The Trash of everything is always at the bottom.
@@ -643,7 +644,7 @@ describe("base shell on a phone", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
-  it("names the table in the top bar, where a tap opens the drawer: the Inbox, then the tree", async () => {
+  it("names the table in the top bar, where a tap opens the drawer: the Inbox and Notifications, then the tree", async () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
@@ -654,7 +655,8 @@ describe("base shell on a phone", () => {
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(drawer).getByRole("button", { name: "Close menu" })).toBeInTheDocument();
     const nav = within(drawer).getByRole("navigation", { name: "Main menu" });
-    expect(within(nav).getAllByRole("button")[0]).toHaveAccessibleName("Inbox");
+    expect(within(nav).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(nav).getAllByRole("button")[0]).toHaveAccessibleName("Notifications");
     expect(within(nav).getByRole("list", { name: "Tables in Project tracker" })).toBeInTheDocument();
     // Folding rows is not navigating: the drawer stays.
     await user.click(within(nav).getByRole("button", { name: "Show views of People" }));

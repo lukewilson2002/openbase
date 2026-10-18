@@ -1,0 +1,39 @@
+/** The files in the open draft, as chips with their size and a way to remove them; files still going up show a spinner. */
+import { FileText, Image as ImageIcon, X } from "lucide-react";
+import type { AttachmentRef } from "@/api/types";
+import { Spinner } from "@/components/ui/spinner";
+import { formatBytes } from "@/lib/format";
+
+const chip = "flex min-h-9 max-w-full items-center gap-2 rounded-[10px] border border-line bg-subtle px-2.5 py-1 text-[0.8125rem] pointer-coarse:min-h-11";
+
+export function AttachmentChips({ files, uploading, onRemove }: { files: readonly AttachmentRef[]; uploading: readonly string[]; onRemove: (id: string) => void }) {
+  if (files.length === 0 && uploading.length === 0) return null;
+  return (
+    <ul aria-label="Attached files" className="flex flex-wrap gap-2">
+      {files.map((f) => {
+        const Icon = f.mime.startsWith("image/") ? ImageIcon : FileText;
+        return (
+          <li key={f.id} className={chip}>
+            <Icon aria-hidden className="size-4 shrink-0 text-muted" />
+            <span className="min-w-0 truncate">{f.filename}</span>
+            <span className="shrink-0 text-xs text-muted">{formatBytes(f.size)}</span>
+            <button
+              type="button"
+              aria-label={`Remove ${f.filename}`}
+              onClick={() => onRemove(f.id)}
+              className="-mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg pointer-coarse:size-9"
+            >
+              <X aria-hidden className="size-3.5" />
+            </button>
+          </li>
+        );
+      })}
+      {uploading.map((name, i) => (
+        <li key={`${name}:${i}`} className={chip}>
+          <Spinner className="size-4" label={`Uploading ${name}`} />
+          <span className="min-w-0 truncate text-muted">{name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
