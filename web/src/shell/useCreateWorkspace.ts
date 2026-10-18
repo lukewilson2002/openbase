@@ -1,15 +1,19 @@
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/api/endpoints";
+import { http } from "@/api/client";
 import { keys } from "@/api/keys";
-import type { WorkspaceSummary } from "@/api/types";
+import type { CreateWorkspace, WorkspaceSummary } from "@/api/types";
 
-/** Creates a workspace and opens it. */
+/** Creates a workspace (with an icon and a colour, if chosen) and opens it. */
 export function useCreateWorkspace() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
-    mutationFn: (v: { name: string; icon?: string | null }) => api.workspaces.create(v.name, v.icon),
+    // Not `api.workspaces.create`, which takes only a name and an icon.
+    mutationFn: (v: { name: string; icon?: string | null; color?: string | null }) => {
+      const body: CreateWorkspace = { name: v.name, ...(v.icon ? { icon: v.icon } : {}), ...(v.color ? { color: v.color } : {}) };
+      return http.post<WorkspaceSummary>("/api/workspaces", body);
+    },
     onSuccess: async (ws) => {
       // Seed the list so the new page finds its workspace without a round trip.
       qc.setQueryData<WorkspaceSummary[]>(keys.workspaces, (cur) => (cur && !cur.some((w) => w.id === ws.id) ? [...cur, ws] : cur));

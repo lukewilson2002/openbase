@@ -374,6 +374,7 @@ describe("HomeShell", () => {
       "Settings",
       "Rename",
       "Change icon…",
+      "Change color…",
       "Delete workspace",
     ]);
     expect(within(menu).getByRole("menuitem", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
@@ -392,6 +393,7 @@ describe("HomeShell", () => {
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual([
       "Rename project",
       "Change icon…",
+      "Change color…",
       "Duplicate project",
       "Share…",
       "Members",

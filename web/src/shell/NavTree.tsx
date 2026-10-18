@@ -12,7 +12,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, FileDown, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
+import { Copy, Ellipsis, FileDown, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
@@ -191,6 +191,9 @@ function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
           <DropdownMenuItem onSelect={() => openDialog({ kind: "workspace", ws, dialog: "icon" })}>
             <Shapes aria-hidden className="size-4" /> Change icon…
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openDialog({ kind: "workspace", ws, dialog: "color" })}>
+            <Palette aria-hidden className="size-4" /> Change color…
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem danger onSelect={() => openDialog({ kind: "workspace", ws, dialog: "delete" })}>
             <Trash2 aria-hidden className="size-4" /> Delete workspace
@@ -246,6 +249,9 @@ function ProjectMenu({ base, workspaceName }: { base: BaseSummary; workspaceName
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openDialog({ kind: "project-icon", base })}>
             <Shapes aria-hidden className="size-4" /> Change icon…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openDialog({ kind: "project-color", base })}>
+            <Palette aria-hidden className="size-4" /> Change color…
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => duplicate.mutate()}>
             <Copy aria-hidden className="size-4" /> Duplicate project

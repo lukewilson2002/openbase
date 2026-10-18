@@ -681,7 +681,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
   }
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, workspaceList()), true;
   if (p === "/api/workspaces" && m === "POST") {
-    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, role: "owner" };
+    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, ...(body.color ? { color: body.color } : {}), role: "owner" };
     ws.workspaces.push(w);
     ws.members[w.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
     return send(res, 201, workspaceList().find((x) => x.id === w.id)), true;
@@ -692,6 +692,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     if (m === "PATCH") {
       if (body.name !== undefined) w.name = body.name;
       if (body.icon !== undefined) w.icon = body.icon;
+      if (body.color) w.color = body.color;
       return send(res, 200, workspaceList().find((x) => x.id === w.id)), true;
     }
     if (m === "DELETE") {
@@ -746,7 +747,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     ws.bases.push(b);
     return send(res, 201, { ...baseSummary(b, "owner"), tables: [], workspace_name: ws.workspaces.find((w) => w.id === g![1])?.name ?? "" }), true;
   }
-  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && g[1] !== BASE_ID && (m === "PATCH" || m === "DELETE")) {
+  if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && (g[1] !== BASE_ID || m === "PATCH") && (m === "PATCH" || m === "DELETE")) {
     const b = ws.bases.find((x) => x.id === g![1]);
     if (!b) return err(res, 404, "not_found", "base not found"), true;
     if (m === "DELETE") ws.bases.splice(ws.bases.indexOf(b), 1);

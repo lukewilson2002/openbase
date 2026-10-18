@@ -372,3 +372,110 @@ describe("the workspace menu in the tree", () => {
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Project tracker › Tasks › All tasks", "Project tracker › Tasks › Board", "Project tracker › People › Everyone"]);
   });
 });
+
+describe("colors of workspaces and projects", () => {
+  const open = () => renderApp({ route: "/workspace/wsp1/settings" });
+
+  it("creates a workspace with the color chosen in its dialog, and sends none when none was chosen", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "POST /api/workspaces": (call) => ({ ...workspaces[0]!, id: "wsp9", name: (call.body as { name: string }).name, bases: [] }) });
+    open();
+    const menu = await screen.findByRole("navigation", { name: "Main menu" });
+    await user.click(await within(menu).findByRole("button", { name: "New workspace" }));
+    const dialog = await screen.findByRole("dialog", { name: "New workspace" });
+    await user.type(within(dialog).getByLabelText("Name"), "Studio");
+    await user.click(within(dialog).getByRole("radio", { name: "Red" }));
+    expect(within(dialog).getByRole("radio", { name: "Red" })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
+    await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
+    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", color: "red" });
+  });
+
+  it("sends no color when none was chosen, so the server picks one", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "POST /api/workspaces": (call) => ({ ...workspaces[0]!, id: "wsp9", name: (call.body as { name: string }).name, bases: [] }) });
+    open();
+    const menu = await screen.findByRole("navigation", { name: "Main menu" });
+    await user.click(await within(menu).findByRole("button", { name: "New workspace" }));
+    const dialog = await screen.findByRole("dialog", { name: "New workspace" });
+    expect(within(dialog).queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Name"), "Garage");
+    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
+    await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
+    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Garage" });
+  });
+
+  it("creates a project with the color chosen in its dialog", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "POST /api/workspaces/wsp1/bases": makeSchema("owner", { id: "app9", name: "Garden", tables: [] }) });
+    open();
+    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New project" }));
+    const dialog = await screen.findByRole("dialog", { name: "New project" });
+    await user.type(within(dialog).getByLabelText("Project name"), "Garden");
+    await user.click(within(dialog).getByRole("radio", { name: "Teal" }));
+    await user.click(within(dialog).getByRole("button", { name: "Create project" }));
+    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
+    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Garden", color: "teal", empty: true });
+  });
+
+  it("changes a workspace's color from its menu, starting on the color it has", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/workspaces/wsp1": workspaces[0]! });
+    open();
+    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Change color/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Workspace color" });
+    expect(within(dialog).getByRole("radio", { name: "Green" })).toBeChecked();
+    await user.click(within(dialog).getByRole("radio", { name: "Purple" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ color: "purple" });
+    // The dialog closed, and the list is fetched again so every tile follows.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Workspace color" })).not.toBeInTheDocument());
+    await waitFor(() => expect(api.callsTo("GET /api/workspaces").length).toBeGreaterThan(1));
+  });
+
+  it("changes a workspace's color on its settings page", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/workspaces/wsp1": workspaces[0]! });
+    open();
+    await screen.findByRole("heading", { level: 1, name: "Workspace settings" });
+    await user.click(screen.getByRole("button", { name: "Change color…" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Workspace color" })).getByRole("radio", { name: "Orange" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ color: "orange" }));
+  });
+
+  it("changes a project's color from its menu", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ "PATCH /api/bases/app2": { status: 204 } });
+    open();
+    await user.click(await screen.findByRole("button", { name: "Project options for CRM" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Change color/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Project color" });
+    expect(within(dialog).getByRole("radio", { name: "Blue" })).toBeChecked();
+    await user.click(within(dialog).getByRole("radio", { name: "Pink" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app2")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/bases/app2")[0]?.body).toEqual({ color: "pink" });
+  });
+
+  it("offers the color to whoever may rename: no workspace color for a non-owner, no project color for a viewer", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    routes();
+    open();
+    await user.click(await screen.findByRole("button", { name: "Workspace options for Shared with me" }));
+    expect(await screen.findByRole("menuitem", { name: /Members/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Change color/ })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Expand Shared with me" }));
+    await user.click(await screen.findByRole("button", { name: "Project options for Roadmap" }));
+    expect(await screen.findByRole("menuitem", { name: /Members/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Change color/ })).not.toBeInTheDocument();
+  });
+});

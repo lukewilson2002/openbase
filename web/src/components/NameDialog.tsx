@@ -4,7 +4,9 @@ import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
 import { Notice } from "./layouts";
+import { ColorField } from "./ColorField";
 import { IconPicker } from "./icons/IconPicker";
+import type { ChoiceColor } from "@/lib/colors";
 
 export interface NameDialogProps {
   open: boolean;
@@ -21,12 +23,14 @@ export interface NameDialogProps {
   withIcon?: boolean;
   /** The icon the entity has now (the picker starts there). */
   initialIcon?: string | null;
-  /** `icon` is the chosen icon name, or `null` for none; it equals `initialIcon` when untouched. */
-  onSubmit: (name: string, icon: string | null) => void | Promise<unknown>;
+  /** Put a colour picker under the name (for creating a workspace or a project). */
+  withColor?: boolean;
+  /** `icon` is the chosen icon name, or `null` for none; it equals `initialIcon` when untouched. `color` is the chosen colour, or `null` when none was picked (the server then chooses). */
+  onSubmit: (name: string, icon: string | null, color: ChoiceColor | null) => void | Promise<unknown>;
 }
 
-/** Create/rename dialog with one required text input and, optionally, an icon. Closes when `onSubmit` resolves. */
-export function NameDialog({ open, onOpenChange, title, description, label = "Name", initialValue = "", submitLabel = "Save", extra, maxLength = 255, withIcon = false, initialIcon = null, onSubmit }: NameDialogProps) {
+/** Create/rename dialog with one required text input and, optionally, an icon and a colour. Closes when `onSubmit` resolves. */
+export function NameDialog({ open, onOpenChange, title, description, label = "Name", initialValue = "", submitLabel = "Save", extra, maxLength = 255, withIcon = false, initialIcon = null, withColor = false, onSubmit }: NameDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={title} description={description} size="sm">
       <NameForm
@@ -37,6 +41,7 @@ export function NameDialog({ open, onOpenChange, title, description, label = "Na
         maxLength={maxLength}
         withIcon={withIcon}
         initialIcon={initialIcon}
+        withColor={withColor}
         onSubmit={onSubmit}
         onCancel={() => onOpenChange(false)}
         onDone={() => onOpenChange(false)}
@@ -53,6 +58,7 @@ function NameForm({
   maxLength,
   withIcon,
   initialIcon,
+  withColor,
   onSubmit,
   onCancel,
   onDone,
@@ -64,12 +70,14 @@ function NameForm({
   maxLength: number;
   withIcon: boolean;
   initialIcon: string | null;
-  onSubmit: (name: string, icon: string | null) => void | Promise<unknown>;
+  withColor: boolean;
+  onSubmit: (name: string, icon: string | null, color: ChoiceColor | null) => void | Promise<unknown>;
   onCancel: () => void;
   onDone: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
   const [icon, setIcon] = useState<string | null>(initialIcon);
+  const [color, setColor] = useState<ChoiceColor | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +88,7 @@ function NameForm({
     setPending(true);
     setError(null);
     try {
-      await onSubmit(name, icon);
+      await onSubmit(name, icon, color);
       onDone();
     } catch (err) {
       setError(errorMessage(err));
@@ -98,6 +106,7 @@ function NameForm({
           </div>
         )}
       </Field>
+      {withColor && <ColorField value={color} onChange={setColor} />}
       {extra}
       {error && <Notice tone="error">{error}</Notice>}
       <div className="flex justify-end gap-2">
