@@ -86,7 +86,7 @@ describe("/", () => {
     remember({ workspaces: { wsp2: "app3" }, projects: { app3: "tbl2" }, tables: { tbl2: "viw4" } });
     routes();
     renderApp();
-    expect(await screen.findByRole("heading", { level: 1, name: "What\u2019s on your mind?" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: "Roadmap" })).not.toBeInTheDocument();
     // The menu is the way to the projects, and the Inbox row is the page being shown.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
@@ -98,7 +98,7 @@ describe("/", () => {
     stubDesktop();
     routes({ "GET /api/workspaces": [{ ...workspaces[0]!, bases: [] }] });
     renderApp();
-    expect(await screen.findByRole("heading", { level: 1, name: "What\u2019s on your mind?" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
   });
 
   it("offers to create the first workspace and opens it", async () => {

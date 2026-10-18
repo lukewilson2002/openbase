@@ -49,7 +49,7 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
 
   // `/` is the Inbox (it no longer opens the last project): a capture box that fits the phone. The menu leads on.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "What\u2019s on your mind?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expectFits(page, "inbox");

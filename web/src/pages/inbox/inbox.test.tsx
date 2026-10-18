@@ -63,7 +63,7 @@ describe("the Inbox page", () => {
     stubDesktop();
     routes();
     renderApp();
-    expect(await screen.findByRole("heading", { level: 1, name: "What’s on your mind?" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
     const box = await screen.findByRole("textbox", { name: "Note" });
     expect(box.querySelector("p")).toHaveAttribute("data-placeholder", "Write something…");
     expect(screen.getByRole("button", { name: "Attach files" })).toBeInTheDocument();

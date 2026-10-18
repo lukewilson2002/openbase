@@ -138,7 +138,17 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
             </span>
           </Notice>
         )}
-        {target && <TargetBar form={form} target={target} workspaces={workspaces} onChange={() => setPicking(true)} onRemove={() => setTarget(null)} />}
+        {/* Where it goes, above what is written: nowhere yet (a draft), or the table picked. */}
+        {target ? (
+          <TargetBar form={form} target={target} workspaces={workspaces} onChange={() => setPicking(true)} onRemove={() => setTarget(null)} />
+        ) : (
+          <div className="flex min-w-0 items-center gap-2 text-[0.8125rem]">
+            <p className="min-w-0 flex-1 leading-snug text-muted">Not in a table yet</p>
+            <Button size="sm" onClick={() => setPicking(true)}>
+              <FolderInput aria-hidden className="size-4" /> Save to…
+            </Button>
+          </div>
+        )}
         {target && <FormStatus form={form} />}
         {target && <TitleField form={form} />}
         <Suspense
@@ -175,11 +185,6 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
         <Button size="sm" onClick={() => input.current?.click()}>
           <Paperclip aria-hidden className="size-4" /> Attach files
         </Button>
-        {!target && (
-          <Button size="sm" onClick={() => setPicking(true)}>
-            <FolderInput aria-hidden className="size-4" /> Save to…
-          </Button>
-        )}
         <DraftStatus draft={draft} />
         <div className="ml-auto flex items-center gap-2">
           {hasDraft && (
