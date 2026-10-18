@@ -1,8 +1,8 @@
 /**
  * The project's parts of the app's top bar. On a desktop: `[tile] Household / [tile] Chores /
  * [icon] Tasks` as plain text at the start, in place of the logo (the open table last, its icon a
- * button that changes it), then who can open the project and Share. On a phone: the project's tile
- * with `Household / Chores` small over the table's name (or the project's, without a table open),
+ * button that changes it), then who can open the project and Share. On a phone: the open table's
+ * icon with `Household / Chores` small over its name (without a table open, the project's tile and name),
  * which opens the menu like the toggle beside it, then the faces and a Share icon. Getting to another workspace or project is
  * the menu's job. Share is for creators and owners: inviting and sharing a view both need that role,
  * so below it the dialog would hold nothing to do.
@@ -14,6 +14,7 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table } from "@/api/types";
 import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
+import { TableIcon } from "@/components/icons/TableIcon";
 import { Button } from "@/components/ui/button";
 import { BaseAvatars } from "@/shell/BaseAvatars";
 import { useOpenMenu } from "@/shell/AppShell";
@@ -85,7 +86,14 @@ function PhoneBaseTitle({ schema, table }: { schema: BaseSchema; table?: Table }
         aria-label={`${table ? `${table.name} in ${schema.name}` : schema.name} in ${schema.workspace_name}. Open the menu`}
         className="flex h-12 max-w-full items-center gap-2.5 rounded-[10px] pl-1 pr-2 text-left hover:bg-hover"
       >
-        <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="md" />
+        {/* The tile is what the big name is: the open table's icon, else the project's tile. */}
+        {table ? (
+          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-hover text-fg">
+            <TableIcon icon={table.icon} className="size-[1.125rem]" />
+          </span>
+        ) : (
+          <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="md" />
+        )}
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-xs font-normal leading-tight text-muted">{table ? `${schema.workspace_name} / ${schema.name}` : schema.workspace_name}</span>
           <span className="truncate font-bold leading-tight">{table?.name ?? schema.name}</span>
