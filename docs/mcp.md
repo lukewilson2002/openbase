@@ -441,13 +441,14 @@ Who has a project open right now is not a curated tool: call
 (the people with the project open in the web app; see [api.md](api.md#presence-internal-api)). It
 needs only read access.
 
-### Trash, history, notifications
+### Trash, history, activity, notifications
 
 | Tool | Needs | What it does |
 |---|---|---|
 | `list_trash` | any | Deleted records, fields, tables and views of a project (creator role); a workspace's deleted projects; your deleted workspaces |
 | `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace |
 | `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values |
+| `list_activity` | any | What changed lately across all your projects (or one workspace, project, table or person; one kind): who created, changed, deleted or restored which record with field names and readable values, and the comments, newest first; `before` pages it |
 | `list_notifications` / `mark_notifications_read` | any / write | Your notifications; mark some or all read |
 
 ### Share links and public forms

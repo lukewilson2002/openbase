@@ -13,6 +13,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **History: what changed lately, across every project.** A new **History** page (in the menu
+  above the Trash, and in each workspace's and project's "…" menu) lists the changes and comments
+  on records in everything you can open, newest first or oldest first. Activity on one record is
+  grouped into a card with the record, where it lives (workspace, project, table) and what each
+  person did, with how long ago and the exact time on every item and a heading for each day.
+  Narrow it by workspace, project, person, or kind (changes, new records, deleted, comments); the
+  filters are in the address, like the Trash. Agents get the same feed from the MCP tool
+  `list_activity` (filters by name or id) and the REST route `GET /api/history` (see
+  [docs/api.md](docs/api.md)); an API token limited to some projects sees only those.
 - **The Inbox: a place to write things down first.** The home page is now a capture box, like the
   start page of an AI chat: give it a title, write a note in rich text, attach files, or any of
   these. It is kept as a draft (only you see your drafts, listed below the box) until you choose

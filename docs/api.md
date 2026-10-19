@@ -163,6 +163,42 @@ credential (session or API token); several streams (tabs) of one user count once
 | `GET /api/bases/{id}/presence` | `{viewers: [user_id, ...]}`: everyone with an open stream on the project, in the order they arrived. Same access as reading the project (Viewer role; a read-only token may call it). |
 | `GET /api/bases/{id}/events` | Also sends `presence_changed` with `data` `{base_id, user_id, event: {kind: "presence_changed", viewers: [...]}}` to the streams already open when a user's **first** stream opens or their **last** one closes (closing the tab, losing access, the server stopping). `user_id` is the person who arrived or left. Every new stream also starts with the current list as its first event, right after the `: connected` comment: a `presence_changed` frame whose `user_id` is `null` and whose `viewers` already include the new viewer, so a client needs no separate `GET /presence` and cannot miss an arrival between the two. The stream is not told about its own arrival a second time. Presence never counts as a data change (no view cache is invalidated). |
 
+### Activity feed (internal API)
+
+`GET /api/history` lists what changed lately across every record the caller can open, in all their
+workspaces: the history entries (create, update, delete, restore: see `GET /api/records/{id}/history`
+for one record's own) and the comments, as one feed. It is what the web app's History page shows.
+Any signed-in user or API token may call it (a read-only token too); it contains only what the
+caller could open one by one: live projects of workspaces they belong to (and, for a token limited
+to some projects, only those), tables not in the trash. Deleted comments are not in it.
+
+| Query | Meaning |
+|---|---|
+| `workspace`, `base`, `table` | Only this workspace, project (`base`) or table (ids). Something that does not exist or is not the caller's matches nothing. |
+| `user` | Only what this person (a user id) did. |
+| `kind` | `create`, `update`, `delete`, `restore` or `comment`; `400` for anything else. |
+| `order` | `newest` (default) or `oldest`. |
+| `limit` | Items per page: default 50, at most 200. |
+| `before` | Page cursor: the `next` of the previous page. Opaque; `400` when it is not one this feed handed out. |
+
+Empty values count as absent. The answer is `{items, next, fields}`:
+
+- `items`, each `{id, kind, created_at, author, record, place, changes, comment}`. `id` is unique in
+  the feed. `author` is `{id, name}`, or `null` when the account is gone (or an automation did it).
+  `record` is `{id, name, deleted}`: the text of its primary field now, and whether it is in the
+  trash now. `place` is `{workspace_id, workspace_name, workspace_color, base_id, base_name,
+  base_icon, base_color, table_id, table_name}`. `changes` is keyed by field id, `{old, new}` per
+  field, as in the record history (link values as `[{id, name}]`); empty for a comment. `comment` is
+  a comment's text (mentions written `@[Name](usrXXXX)`), `null` otherwise.
+- `next`: the cursor of the next page, `null` at the end. Paging by it never repeats or skips an
+  item, also when several happened in the same millisecond, in both orders; new activity does not
+  disturb a feed being paged (in newest-first order it just is not on the pages already read).
+- `fields`: the fields the `changes` of this page refer to, by field id (`Field`, as in a schema), so
+  a client can show names and format values. A field deleted since is not in it.
+
+Records whose history is gone are gone from the feed too: purging a trashed record, table or project
+removes its history, and with it its entries here.
+
 ### Inbox (internal API)
 
 The inbox holds a person's private quick-capture drafts: Markdown text plus uploaded files, not yet in
