@@ -67,12 +67,26 @@ function trimRun(run: MarkdownToken[]): MarkdownToken[] {
 }
 
 /**
+ * Whether a paragraph's text is the mark of an empty one. The library writes the second of two empty
+ * paragraphs in a row as `&nbsp;` (a blank line alone would collapse) and reads that back as an empty
+ * paragraph again; some parsers give it as U+00A0. Values saved before this was read back hold it
+ * escaped once, `&amp;nbsp;`, which reads as the text "&nbsp;": that is an empty paragraph too, so
+ * those values come back as they were typed (a paragraph of just "&nbsp;" typed as text is lost to this).
+ */
+const isEmptyMark = (content: JSONContent[]): boolean =>
+  content.length === 1 && content[0]!.type === "text" && !content[0]!.marks?.length && (content[0]!.text === "&nbsp;" || content[0]!.text === "\u00a0");
+
+/**
  * A paragraph, with the images of our own files in it lifted out into media blocks (the text before,
  * between and after them stays paragraphs). Any other image is inline and read as a link by `ImageAsLink`.
+ * This stands in for the library's paragraph parser, so it keeps that one's reading of `&nbsp;`.
  */
 export function parseParagraph(token: MarkdownToken, helpers: MarkdownParseHelpers): JSONContent | JSONContent[] {
   const tokens = (token.tokens ?? []) as MarkdownToken[];
-  if (!tokens.some(isEmbedToken)) return helpers.createNode("paragraph", undefined, helpers.parseInline(tokens));
+  if (!tokens.some(isEmbedToken)) {
+    const content = helpers.parseInline(tokens);
+    return helpers.createNode("paragraph", undefined, isEmptyMark(content) ? [] : content);
+  }
   const out: JSONContent[] = [];
   let run: MarkdownToken[] = [];
   const flush = () => {
