@@ -123,7 +123,7 @@ describe("History page", () => {
     renderApp({ route: "/history" });
     await screen.findAllByRole("article");
     const deal = card("Big deal", 0);
-    expect(deal).toHaveTextContent(/Big deal.*Acme.*›.*CRM.*›.*Deals/);
+    expect(deal).toHaveTextContent(/Big dealRecord in.*Acme.*›.*CRM.*›.*Deals/);
     expect(within(deal).getByRole("link", { name: "Big deal" })).toHaveAttribute("href", "/base/app1/tbl1?record=rec1");
     expect(card("Sprint 1", 0)).toHaveTextContent(/Acme.*›.*Ops.*›.*Sprints/);
     expect(within(card("Sprint 1", 0)).getByRole("link", { name: "Sprint 1" })).toHaveAttribute("href", "/base/app2/tbl2?record=rec2");

@@ -27,13 +27,17 @@ export function trashItemName(item: TrashItem): string {
   return item.kind === "record" ? "Untitled record" : `Unnamed ${item.kind}`;
 }
 
-/** Where it was: "Household › Chores › Chores" (workspace, base, then table for what lives in one). */
+/**
+ * What it is and where it was: "Record in Household › Chores › Chores" (workspace, base, then table
+ * for what lives in one); a workspace is just "Workspace".
+ */
 export function trashItemPlace(item: TrashItem): string {
-  if (item.kind === "workspace") return "Your workspaces";
+  const kind = trashKindLabel(item.kind);
+  if (item.kind === "workspace") return kind;
   const parts = [item.workspace_name];
   if (item.kind !== "base" && item.base_name) parts.push(item.base_name);
   if (item.table_name) parts.push(item.table_name);
-  return parts.join(" › ");
+  return `${kind} in ${parts.join(" › ")}`;
 }
 
 /** "Deleted by Alex, 2 hours ago"; "you" for the caller, and no name when nobody was recorded. */

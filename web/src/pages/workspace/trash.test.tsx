@@ -92,13 +92,13 @@ describe("Trash page", () => {
     routes();
     renderApp({ route: "/trash" });
     expect(await screen.findByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
-    expect(await row("Vacuum")).toHaveTextContent("VacuumRecordHousehold › Chores › Chores · Deleted by Alex, 2 hours ago");
-    expect(await row("Notes")).toHaveTextContent("Household › Chores › Chore log · Deleted by you, yesterday");
+    expect(await row("Vacuum")).toHaveTextContent("VacuumRecord in Household › Chores › Chores · Deleted by Alex, 2 hours ago");
+    expect(await row("Notes")).toHaveTextContent("Field in Household › Chores › Chore log · Deleted by you, yesterday");
     // Nobody recorded: no "by".
-    expect(await row("Old list")).toHaveTextContent(/Household › Chores · Deleted 3 days ago/);
+    expect(await row("Old list")).toHaveTextContent(/Table in Household › Chores · Deleted 3 days ago/);
     expect(await row("Old list")).toHaveTextContent("27 days left");
-    expect(await row("Wedding")).toHaveTextContent("WeddingProjectHousehold · Deleted by you");
-    expect(await row("Book club")).toHaveTextContent("Your workspaces · Deleted by you");
+    expect(await row("Wedding")).toHaveTextContent("WeddingProject in Household · Deleted by you");
+    expect(await row("Book club")).toHaveTextContent("Workspace · Deleted by you");
     expect(await row("Book club")).toHaveTextContent("10 days left");
     // Bases and workspaces show their own tiles; everything else a plain icon of its kind.
     expect((await row("Wedding")).querySelector("[data-entity-tile] svg.lucide-heart")).toBeInTheDocument();
@@ -256,10 +256,10 @@ describe("useRestoreFromTrash", () => {
 describe("trash item text", () => {
   const record = ITEMS[0]!;
   it("names the place and who deleted it", () => {
-    expect(trashItemPlace(record)).toBe("Household › Chores › Chores");
-    expect(trashItemPlace(ITEMS[2]!)).toBe("Household › Chores");
-    expect(trashItemPlace(ITEMS[3]!)).toBe("Household");
-    expect(trashItemPlace(ITEMS[4]!)).toBe("Your workspaces");
+    expect(trashItemPlace(record)).toBe("Record in Household › Chores › Chores");
+    expect(trashItemPlace(ITEMS[2]!)).toBe("Table in Household › Chores");
+    expect(trashItemPlace(ITEMS[3]!)).toBe("Project in Household");
+    expect(trashItemPlace(ITEMS[4]!)).toBe("Workspace");
     expect(trashItemDeleted(record, "usr2", NOW)).toBe("Deleted by you, 2 hours ago");
     expect(trashItemDeleted(record, USER.id, NOW)).toBe("Deleted by Alex, 2 hours ago");
     expect(trashItemDeleted({ ...record, deleted_by_id: null, deleted_by_name: null }, USER.id, NOW)).toBe("Deleted 2 hours ago");

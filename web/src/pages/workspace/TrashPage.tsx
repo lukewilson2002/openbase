@@ -14,7 +14,7 @@ import type { TrashItem } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { BaseFilter, WorkspaceFilter } from "@/components/filters/PlaceFilters";
 import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
-import { trashDaysLeft, trashItemDeleted, trashItemName, trashItemPlace, trashKindLabel, retentionDays } from "@/components/trash/trashItem";
+import { trashDaysLeft, trashItemDeleted, trashItemName, trashItemPlace, retentionDays } from "@/components/trash/trashItem";
 import { useRestoreFromTrash } from "@/components/trash/useRestoreFromTrash";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -146,10 +146,7 @@ function TrashList({ items }: { items: TrashItem[] }) {
           <li key={`${item.kind}:${item.id}`} className="flex items-center gap-3.5 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] px-4 py-3.5 last:border-b-0 sm:px-[18px]">
             <ItemIcon item={item} />
             <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="min-w-0 break-words text-[0.9375rem] font-semibold">{name}</span>
-                <span className="rounded-full bg-subtle px-2 py-0.5 text-xs font-semibold text-muted">{trashKindLabel(item.kind)}</span>
-              </p>
+              <p className="min-w-0 break-words text-[0.9375rem] font-semibold">{name}</p>
               <p className="mt-0.5 text-[0.8125rem] text-muted sm:truncate">
                 {trashItemPlace(item)} · {trashItemDeleted(item, me?.id, now)}
               </p>

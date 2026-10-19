@@ -58,10 +58,11 @@ export function ActivityCard({ group, fields, format, now }: ActivityCardProps) 
   );
 }
 
-/** "Workspace › Project › Table", each with its tile like the Trash page. */
+/** "Record in Workspace › Project › Table", each with its tile like the Trash page. */
 function Place({ place }: { place: ActivityPlace }) {
   return (
     <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.8125rem] text-muted">
+      <span>Record in</span>
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <WorkspaceTile ws={{ name: place.workspace_name, color: place.workspace_color }} size="xs" />
         <span className="truncate">{place.workspace_name}</span>
