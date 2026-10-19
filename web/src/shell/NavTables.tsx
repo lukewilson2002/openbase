@@ -4,6 +4,10 @@
  * the views. In the open project every action is there; the dialogs behind most of them
  * (`BaseDialogs`) exist only inside the project's page, so in another project the menus keep what
  * needs no dialog (duplicating, locking) and "Add table"/"Add view" are left out.
+ *
+ * Each level of the tree sits one indent (pl-3.5) inside the one above it, and its rows put their
+ * icon where its tables put theirs (after the chevron): "Add table" lines up with the tables, a
+ * table's views and "Add view" one indent further in.
  */
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -64,7 +68,7 @@ export function NavTables({ schema, activeTableId, activeViewId, onDialog }: Nav
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[38px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
+                className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[34px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
               >
                 <Plus aria-hidden className="size-3.5 shrink-0" /> Add table
               </button>
@@ -189,13 +193,13 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
   const item = (v: View) => <ViewItem key={v.id} schema={schema} table={table} view={v} active={v.id === activeViewId} onDialog={onDialog} />;
 
   return (
-    <div id={id} className="flex flex-col gap-0.5 pb-1">
+    <div id={id} className="flex flex-col gap-0.5 pb-1 pl-3.5">
       <ul className="flex flex-col gap-0.5" aria-label="Shared views">
         {shared.map(item)}
       </ul>
       {mine.length > 0 && (
         <>
-          <div className="pb-0.5 pl-[38px] pt-1.5 text-xs font-semibold text-muted">Personal</div>
+          <div className="pb-0.5 pl-[34px] pt-1.5 text-xs font-semibold text-muted">Personal</div>
           <ul className="flex flex-col gap-0.5" aria-label="Personal views">
             {mine.map(item)}
           </ul>
@@ -206,7 +210,7 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[38px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
+              className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[34px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
             >
               <Plus aria-hidden className="size-3.5 shrink-0" /> Add view
             </button>
@@ -243,7 +247,7 @@ function ViewItem({ schema, table, view: v, active, onDialog }: { schema: BaseSc
         onClick={closeMenu}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex h-[34px] items-center gap-2.5 rounded-[10px] pl-[38px] pr-8 text-[0.875rem] no-underline transition-colors pointer-coarse:h-11 pointer-coarse:pr-10",
+          "flex h-[34px] items-center gap-2.5 rounded-[10px] pl-[34px] pr-8 text-[0.875rem] no-underline transition-colors pointer-coarse:h-11 pointer-coarse:pr-10",
           active ? "bg-primary-soft font-semibold text-primary-ink" : "text-muted hover:bg-hover hover:text-fg",
         )}
       >
