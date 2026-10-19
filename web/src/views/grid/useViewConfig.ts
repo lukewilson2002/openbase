@@ -30,6 +30,19 @@ export function canConfigureView(role: string, view: Pick<View, "personal" | "lo
   return view.locked ? atLeast(role, "creator") : atLeast(role, "editor");
 }
 
+/**
+ * The field layout (order and hidden fields) a record opened from any other view type shows: the
+ * table's grid view's, as this person sees that grid. The first shared grid wins over personal ones;
+ * null when the table has no grid view.
+ */
+export function gridRecordLayout(table: Pick<Table, "views">, role: string): Pick<ViewConfig, "field_order" | "hidden_fields"> | null {
+  const grids = table.views.filter((v) => v.type === "grid");
+  const grid = grids.find((v) => !v.personal) ?? grids[0];
+  if (!grid) return null;
+  const local = canConfigureView(role, grid) ? {} : readLocal(grid.id);
+  return { field_order: local.field_order ?? grid.config.field_order, hidden_fields: local.hidden_fields ?? grid.config.hidden_fields };
+}
+
 function storageKey(viewId: string): string {
   return `ob-view-local:${viewId}`;
 }

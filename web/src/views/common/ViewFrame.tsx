@@ -8,6 +8,7 @@ import { ExpandedRecord } from "@/components/record/ExpandedRecord";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
+import { gridRecordLayout } from "@/views/grid/useViewConfig";
 import type { ViewSetup } from "./useViewSetup";
 
 /**
@@ -60,6 +61,8 @@ export interface ViewFrameProps {
 export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarSetting, toolbarExtra, moreToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // A record shows its fields as the table's grid lays them out, whichever view it is opened from.
+  const recordLayout = useMemo(() => gridRecordLayout(table, role) ?? config, [table, role, config]);
 
   const neighbours = useMemo(() => {
     if (!setup.openRecordId || !recordIds) return { prev: null as string | null, next: null as string | null };
@@ -130,7 +133,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           view={view}
           role={role}
           recordId={setup.openRecordId}
-          config={config}
+          config={recordLayout}
           prevId={neighbours.prev}
           nextId={neighbours.next}
           onNavigate={setup.openRecord}

@@ -42,8 +42,8 @@ export interface ExpandedRecordProps {
   view?: View;
   role: string;
   recordId: string;
-  /** View config deciding field order and which fields are hidden. */
-  config?: ViewConfig;
+  /** Field order and which fields are hidden: the grid's own config, or the table grid's for the other view types (`gridRecordLayout`). */
+  config?: Pick<ViewConfig, "field_order" | "hidden_fields">;
   prevId?: string | null;
   nextId?: string | null;
   onNavigate: (recordId: string) => void;

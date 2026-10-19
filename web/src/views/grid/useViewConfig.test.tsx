@@ -5,7 +5,7 @@ import type { Filter, ViewConfig } from "@/api/types";
 import { addSortLike, setFilter } from "@/components/viewbar/config";
 import { Providers, createQueryClient } from "@/providers";
 import { makeSchema, makeView, mockApi } from "@/test/utils";
-import { applyTransient, canConfigureView, diffTransient, useViewConfig } from "./useViewConfig";
+import { applyTransient, canConfigureView, diffTransient, gridRecordLayout, useViewConfig } from "./useViewConfig";
 
 const condition: Filter = { conjunction: "and", items: [{ field_id: "fld1", op: "contains", value: "x" }] };
 
@@ -56,6 +56,32 @@ describe("canConfigureView", () => {
     expect(canConfigureView("creator", { personal: false, locked: true })).toBe(true);
     expect(canConfigureView("editor", { personal: true, locked: true })).toBe(true);
     expect(canConfigureView("viewer", { personal: true, locked: false })).toBe(false);
+  });
+});
+
+describe("gridRecordLayout", () => {
+  const config = (field_order: string[], hidden_fields: string[] = []) => ({ ...makeView({ id: "x" }).config, field_order, hidden_fields });
+
+  it("takes the first shared grid's order and hidden fields, over personal grids and other view types", () => {
+    const views = [
+      makeView({ id: "viwKanban", type: "kanban", config: config(["fldDue", "fldStart"]) }),
+      makeView({ id: "viwMine", personal: true, config: config(["fldDue"]) }),
+      makeView({ id: "viwGrid", config: config(["fldStart", "fldDue"], ["fldNotes"]) }),
+    ];
+    expect(gridRecordLayout({ views }, "editor")).toEqual({ field_order: ["fldStart", "fldDue"], hidden_fields: ["fldNotes"] });
+  });
+
+  it("falls back to a personal grid, and is null without any grid", () => {
+    expect(gridRecordLayout({ views: [makeView({ id: "viwMine", personal: true, config: config(["fldDue"]) })] }, "editor")?.field_order).toEqual(["fldDue"]);
+    expect(gridRecordLayout({ views: [makeView({ id: "viwKanban", type: "kanban" })] }, "editor")).toBeNull();
+  });
+
+  it("follows the grid as someone who cannot save it has arranged it locally", () => {
+    localStorage.setItem("ob-view-local:viwGridLocal", JSON.stringify({ field_order: ["fldDue", "fldStart"] }));
+    const views = [makeView({ id: "viwGridLocal", config: config(["fldStart", "fldDue"], ["fldNotes"]) })];
+    expect(gridRecordLayout({ views }, "viewer")).toEqual({ field_order: ["fldDue", "fldStart"], hidden_fields: ["fldNotes"] });
+    expect(gridRecordLayout({ views }, "editor")?.field_order).toEqual(["fldStart", "fldDue"]);
+    localStorage.removeItem("ob-view-local:viwGridLocal");
   });
 });
 
