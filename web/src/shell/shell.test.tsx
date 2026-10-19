@@ -332,7 +332,8 @@ describe("HomeShell", () => {
     expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
     // Each workspace has its solid colour tile.
     expect(within(section).getByRole("button", { name: "Acme" }).querySelector("[data-entity-tile]")).toHaveClass("ob-solid");
-    // The menu ends with the Trash of everything; the pages of a workspace are in its "…" menu.
+    // The menu ends with the History and the Trash of everything; the pages of a workspace are in its "…" menu.
+    expect(within(menu).getAllByRole("link", { name: "History" }).at(-1)).toHaveAttribute("href", "/history");
     expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
     expect(within(menu).queryByRole("link", { name: "Members" })).not.toBeInTheDocument();
   });
@@ -400,6 +401,7 @@ describe("HomeShell", () => {
       "New project",
       "Members",
       "Invite people…",
+      "History",
       "Trash",
       "Settings",
       "Rename",
@@ -408,6 +410,7 @@ describe("HomeShell", () => {
       "Delete workspace",
     ]);
     expect(within(menu).getByRole("menuitem", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
+    expect(within(menu).getByRole("menuitem", { name: "History" })).toHaveAttribute("href", "/history?workspace=wsp1");
     expect(within(menu).getByRole("menuitem", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
     expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
     await user.keyboard("{Escape}");
@@ -415,7 +418,7 @@ describe("HomeShell", () => {
     // An editor makes nothing here and has no settings.
     await user.click(screen.getByRole("button", { name: "Workspace options for Book club" }));
     menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members", "Trash"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members", "History", "Trash"]);
     await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: "Project options for Chores" }));
@@ -427,10 +430,12 @@ describe("HomeShell", () => {
       "Duplicate project",
       "Share…",
       "Members",
+      "History",
       "Trash",
       "Automations",
       "Delete project",
     ]);
+    expect(within(menu).getByRole("menuitem", { name: "History" })).toHaveAttribute("href", "/history?base=app1");
     expect(within(menu).getByRole("menuitem", { name: "Trash" })).toHaveAttribute("href", "/trash?base=app1");
     expect(within(menu).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
   });
@@ -441,7 +446,7 @@ describe("HomeShell", () => {
     home("/workspace/wsp2", { workspaceId: "wsp2" });
     await user.click(await screen.findByRole("button", { name: "Project options for Reading list" }));
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members", "History"]);
   });
 
   it("makes a new project from the workspace menu, the dialog living outside the menu", async () => {

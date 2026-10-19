@@ -1,7 +1,7 @@
 /**
- * The shell of the home pages (a workspace's members and settings, account, admin, trash): the logo
- * and "Search everything" in the top bar, and the menu with the Inbox, the navigation tree and the
- * Trash of everything.
+ * The shell of the home pages (a workspace's members and settings, account, admin, history, trash):
+ * the logo and "Search everything" in the top bar, and the menu with the Inbox, the navigation tree
+ * and the History and Trash of everything.
  */
 import type { ReactNode } from "react";
 import { useLocation } from "react-router";
@@ -11,7 +11,7 @@ import { keys } from "@/api/keys";
 import { WorkspaceTile } from "@/components/icons/EntityIcon";
 import { AppShell, useOpenMenu } from "./AppShell";
 import { NavDialogsProvider } from "./NavDialogs";
-import { NavTrashLink, NavTree } from "./NavTree";
+import { NavGlobalLinks, NavTree } from "./NavTree";
 import { SearchEverything } from "./SearchEverything";
 
 export { useCreateWorkspace } from "./useCreateWorkspace";
@@ -27,10 +27,11 @@ export interface HomeShellProps {
 export function HomeShell({ workspaceId: pageWorkspace, topBar, children }: HomeShellProps) {
   const { pathname, search } = useLocation();
   const params = new URLSearchParams(search);
-  // One Trash page for everything; a workspace's Trash is that page filtered to it.
-  const trashOf = pathname === "/trash" ? params.get("workspace") : null;
-  const workspaceId = pageWorkspace ?? trashOf ?? undefined;
-  const allTrash = pathname === "/trash" && !params.has("workspace") && !params.has("base");
+  // One Trash and one History for everything; a workspace's is that page filtered to it.
+  const filteredTo = pathname === "/trash" || pathname === "/history" ? params.get("workspace") : null;
+  const workspaceId = pageWorkspace ?? filteredTo ?? undefined;
+  const unfiltered = !params.has("workspace") && !params.has("base");
+  const globalPage = unfiltered && pathname === "/trash" ? "trash" : unfiltered && pathname === "/history" ? "history" : null;
   return (
     <NavDialogsProvider>
       <AppShell
@@ -43,7 +44,7 @@ export function HomeShell({ workspaceId: pageWorkspace, topBar, children }: Home
         }
         hidePhoneLogo={!!workspaceId}
         sidebar={<NavTree workspaceId={workspaceId} />}
-        sidebarFooter={<NavTrashLink active={allTrash} />}
+        sidebarFooter={<NavGlobalLinks page={globalPage} />}
       >
         {children}
       </AppShell>

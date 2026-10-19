@@ -311,7 +311,7 @@ describe("base shell on a desktop", () => {
       await screen.findByText("Grid view coming soon");
       expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
       const projectMenu = await openProjectMenu(user);
-      expect(itemNames(projectMenu)).toEqual(["Members"]);
+      expect(itemNames(projectMenu)).toEqual(["Members", "History"]);
       expect(within(projectMenu).getByRole("menuitem", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
     });
   });
@@ -345,7 +345,7 @@ describe("base shell on a desktop", () => {
       openBase("editor");
       await screen.findByText("Grid view coming soon");
       expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
-      expect(itemNames(await openProjectMenu(user))).toEqual(["Members"]);
+      expect(itemNames(await openProjectMenu(user))).toEqual(["Members", "History"]);
     });
   });
 
@@ -536,7 +536,8 @@ describe("base shell on a desktop", () => {
       expect(await within(menu()).findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
       expect(itemNames(await openProjectMenu(user))).not.toContain("Trash");
       await user.keyboard("{Escape}");
-      // The Trash of everything is always at the bottom.
+      // The History and Trash of everything are always at the bottom.
+      expect(within(menu()).getAllByRole("link", { name: "History" }).at(-1)).toHaveAttribute("href", "/history");
       expect(within(menu()).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
     });
 

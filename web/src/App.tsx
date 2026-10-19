@@ -20,6 +20,7 @@ const AccountPage = lazy(() => import("@/pages/account/AccountPage").then((m) =>
 const OAuthConsentPage = lazy(() => import("@/pages/oauth/OAuthConsentPage").then((m) => ({ default: m.OAuthConsentPage })));
 const MembersPage = lazy(() => import("@/pages/workspace/MembersPage").then((m) => ({ default: m.MembersPage })));
 const WorkspaceSettingsPage = lazy(() => import("@/pages/workspace/WorkspaceSettingsPage").then((m) => ({ default: m.WorkspaceSettingsPage })));
+const HistoryPage = lazy(() => import("@/pages/history/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const TrashPage = lazy(() => import("@/pages/workspace/TrashPage").then((m) => ({ default: m.TrashPage })));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage").then((m) => ({ default: m.AdminPage })));
 // Pages a person meets once (first-run setup, sign-up, an invite, a password reset) stay out of the shell too.
@@ -58,6 +59,7 @@ export function AppRoutes() {
             <Route path="/workspace/:workspaceId" element={<WorkspaceRedirect />} />
             <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
             <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
+            <Route path="/history" element={<HistoryPage />} />
             <Route path="/trash" element={<TrashPage />} />
             {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}
             <Route path="/account" element={<AccountPage />} />

@@ -7,12 +7,12 @@
  * the drawer closes on every navigation. Rows the page is inside start open, the rest closed, and
  * hand-made choices are remembered per device. A project's tables are loaded when it is opened,
  * from the same query the project's page uses. The "…" menus hold the workspace's and the project's
- * actions: new project, import, members, trash, settings, rename, icon, share, automations, delete.
+ * actions: new project, import, members, history, trash, settings, rename, icon, share, automations, delete.
  */
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
+import { Copy, Ellipsis, History, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
@@ -81,6 +81,25 @@ export function NavTrashLink({ active }: { active: boolean }) {
     <SidebarLink to="/trash" muted active={active} icon={<Trash2 />}>
       Trash
     </SidebarLink>
+  );
+}
+
+/** The global History (recent changes everywhere), above the Trash. */
+export function NavHistoryLink({ active }: { active: boolean }) {
+  return (
+    <SidebarLink to="/history" muted active={active} icon={<History />}>
+      History
+    </SidebarLink>
+  );
+}
+
+/** The pages of everything, pinned above the profile; `page` is the one showing, when it is unfiltered. */
+export function NavGlobalLinks({ page }: { page: "history" | "trash" | null }) {
+  return (
+    <>
+      <NavHistoryLink active={page === "history"} />
+      <NavTrashLink active={page === "trash"} />
+    </>
   );
 }
 
@@ -173,6 +192,9 @@ function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
           <UserPlus aria-hidden className="size-4" /> Invite people…
         </DropdownMenuItem>
       )}
+      <LinkItem to={`/history?workspace=${encodeURIComponent(ws.id)}`} icon={<History aria-hidden className="size-4" />}>
+        History
+      </LinkItem>
       <LinkItem to={`/trash?workspace=${encodeURIComponent(ws.id)}`} icon={<Trash2 aria-hidden className="size-4" />}>
         Trash
       </LinkItem>
@@ -263,6 +285,9 @@ function ProjectMenu({ base, workspaceName }: { base: BaseSummary; workspaceName
       )}
       <LinkItem to={`/workspace/${base.workspace_id}/members`} icon={<Users aria-hidden className="size-4" />}>
         Members
+      </LinkItem>
+      <LinkItem to={`/history?base=${encodeURIComponent(base.id)}`} icon={<History aria-hidden className="size-4" />}>
+        History
       </LinkItem>
       {basePermissions.manageTables(base.role) && (
         <LinkItem to={`/trash?base=${encodeURIComponent(base.id)}`} icon={<Trash2 aria-hidden className="size-4" />}>

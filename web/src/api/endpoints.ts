@@ -5,6 +5,7 @@
  */
 import { http } from "./client";
 import type {
+  ActivityPage,
   AdminCreateUser,
   AdminCreatedUser,
   AdminUpdateUser,
@@ -89,6 +90,22 @@ export type TrashFilter = {
   workspace_id?: string;
   base_id?: string;
   kind?: TrashKind;
+};
+
+/** What the History feed can be narrowed to (`GET /api/history`). */
+export type HistoryKind = "create" | "update" | "delete" | "restore" | "comment";
+
+/** Query of `GET /api/history` (`api.history.list`); `before` is the previous page's `next`. */
+export type HistoryFilter = {
+  workspace?: string;
+  base?: string;
+  table?: string;
+  /** The author's user id. */
+  user?: string;
+  kind?: HistoryKind;
+  order?: "newest" | "oldest";
+  before?: string;
+  limit?: number;
 };
 
 /**
@@ -286,6 +303,11 @@ export const api = {
     },
     /** Creates a record in `table_id` from the draft (which is gone afterwards) and answers the record. */
     file: (id: string, body: FileInboxItem) => http.post<TableRecord>(`/api/inbox/${enc(id)}/file`, body),
+  },
+
+  history: {
+    /** Changes and comments on records in every project the caller can open, newest first unless `order: "oldest"`. */
+    list: (filter: HistoryFilter = {}) => http.get<ActivityPage>("/api/history", { query: filter }),
   },
 
   trash: {

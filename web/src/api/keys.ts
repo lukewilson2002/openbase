@@ -6,7 +6,7 @@
  *                           workstreams must put their record queries under this prefix.
  *   ["comments", recordId]  comment threads
  */
-import type { TrashFilter } from "./endpoints";
+import type { HistoryFilter, TrashFilter } from "./endpoints";
 
 export const keys = {
   setup: ["setup"] as const,
@@ -25,6 +25,11 @@ export const keys = {
   /** `GET /api/trash` with these filters (`api.trash.all`). */
   trashListing: (filter: TrashFilter = {}) =>
     ["trash", filter.workspace_id ?? "", filter.base_id ?? "", filter.kind ?? ""] as const,
+  /** Prefix of every History feed: invalidate it when records change and the feed should be asked for again. */
+  history: ["history"] as const,
+  /** `GET /api/history` pages with these filters (`api.history.list`; the page cursor is the query's own). */
+  historyFeed: (filter: HistoryFilter = {}) =>
+    ["history", filter.workspace ?? "", filter.base ?? "", filter.table ?? "", filter.user ?? "", filter.kind ?? "", filter.order ?? "newest"] as const,
   workspaceMembers: (id: string) => ["workspace", id, "members"] as const,
   workspaceInvites: (id: string) => ["workspace", id, "invites"] as const,
   /** Prefix of every base's queries: who can open a base shows on all of them. */

@@ -307,6 +307,77 @@ const trashedExtras: Obj[] = [
   { kind: "view", id: "viw_old", name: "Archive board", table_id: T_PROJECTS, deleted_at: Date.now() - 20 * 86_400_000 },
 ];
 
+// ---- activity feed (History page) ---------------------------------------------------------------
+
+let activity: Obj[] | null = null;
+
+/** A believable week of changes and comments on a handful of records, in runs on one record, newest first. */
+function activityFeed(): Obj[] {
+  if (activity) return activity;
+  const picks = (table: string, base: string, n: number) =>
+    [...records.values()]
+      .filter((r) => r.table_id === table)
+      .slice(0, n)
+      .map((r) => ({ id: r.id, name: String(r.values[PRIMARY[table]!] ?? ""), table, base, deleted: !!r.deleted }));
+  const targets = [...picks(T_TASKS, BASE_ID, 4), ...picks(T_PEOPLE, "app2", 2), ...picks(T_PROJECTS, BASE_ID, 2)];
+  const by = [USERS[0]!, USERS[1]!, USERS[2]!];
+  const statusChange = (a: string, b: string) => ({ fld_status: { old: a, new: b } });
+  const script: Obj[] = [
+    { kind: "update", changes: statusChange("chs1", "chs2") },
+    { kind: "comment", comment: "Started on this today. @[Ada Lovelace](usr1) can you look at the notes?" },
+    { kind: "update", changes: { fld_due: { old: "2026-10-20", new: "2026-10-27" }, fld_effort: { old: 3, new: 5 }, fld_notes: { old: null, new: "Waiting on legal to review the new terms before we send anything to the customer. They asked for the revised pricing as well, so check with finance." }, fld_status: { old: "chs2", new: "chs4" } } },
+    { kind: "update", changes: statusChange("chs4", "chs3") },
+    { kind: "create", changes: { fld_name: { old: null, new: "Kickoff" }, fld_status: { old: null, new: "chs1" } } },
+    { kind: "update", changes: { fld_due: { old: null, new: "2026-11-02" } } },
+    { kind: "delete" },
+    { kind: "restore" },
+  ];
+  const out: Obj[] = [];
+  let at = Date.now() - 4 * 60_000;
+  let n = 0;
+  const runs = [3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 2, 3, 1, 2];
+  runs.forEach((len, ri) => {
+    const t = targets[ri % targets.length]!;
+    for (let i = 0; i < len; i++) {
+      const step = script[(n * 3 + ri) % script.length]!;
+      const project = (ws.bases.find((b) => b.id === t.base) as Obj) ?? ws.bases[0]!;
+      const home = ws.workspaces.find((w) => w.id === project.workspace_id)!;
+      out.push({
+        id: String(1000 - n),
+        kind: step.kind,
+        created_at: at,
+        author: by[(n + ri) % by.length],
+        record: { id: t.id, name: t.name, deleted: t.deleted },
+        place: { workspace_id: home.id, workspace_name: home.name, workspace_color: "green", base_id: project.id, base_name: project.name, base_icon: project.icon ?? null, base_color: project.color, table_id: t.table, table_name: tableDto(t.table).name },
+        changes: step.changes ?? {},
+        comment: step.comment ?? null,
+      });
+      at -= (7 + ((n * 13) % 35)) * 60_000;
+      n++;
+    }
+    at -= (45 + ((ri * 37) % 200)) * 60_000;
+  });
+  return (activity = out);
+}
+
+/** `GET /api/history`: the filters of the real route over the generated feed, paged by position. */
+function historyPage(q: URLSearchParams): Obj {
+  const kind = q.get("kind");
+  let items = activityFeed().filter(
+    (i) =>
+      (!q.get("workspace") || i.place.workspace_id === q.get("workspace")) &&
+      (!q.get("base") || i.place.base_id === q.get("base")) &&
+      (!q.get("user") || i.author?.id === q.get("user")) &&
+      (!kind || i.kind === kind),
+  );
+  if (q.get("order") === "oldest") items = [...items].reverse();
+  const from = Number(q.get("before") ?? 0) || 0;
+  const size = Math.min(Number(q.get("limit") ?? 12) || 12, 200);
+  const page = items.slice(from, from + size);
+  const fields = Object.fromEntries([...taskFields, ...peopleFields, ...projectFields].map((f) => [f.id, f]));
+  return { items: page, next: from + size < items.length ? String(from + size) : null, fields };
+}
+
 // ---- schema -----------------------------------------------------------------------------------
 
 const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fld_p_name", [T_PROJECTS]: "fld_j_name" };
@@ -760,6 +831,7 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     else Object.assign(b, Object.fromEntries(Object.entries(body).filter(([k]) => ["name", "color", "icon"].includes(k))));
     return send(res, 200, { ok: true }), true;
   }
+  if (p === "/api/history" && m === "GET") return send(res, 200, historyPage(url.searchParams)), true;
   if (p === "/api/trash/workspaces" && m === "GET") return send(res, 200, { items: ws.deleted }), true;
   if (p === "/api/trash" && m === "GET") {
     const q = url.searchParams;

@@ -14,7 +14,7 @@ import { lastTableOf, lastViewOf, rememberPlace } from "@/lib/lastPlace";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell, DESKTOP_QUERY } from "@/shell/AppShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
-import { NavTrashLink, NavTree } from "@/shell/NavTree";
+import { NavGlobalLinks, NavTree } from "@/shell/NavTree";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
 import { BaseBrand, BaseTopBar } from "./BaseTopBar";
@@ -123,7 +123,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
           brand={<BaseBrand schema={schema} table={table} />}
           topBar={<BaseTopBar schema={schema} table={table} desktop={desktop} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
           sidebar={<NavTree workspaceId={schema.workspace_id} baseId={schema.id} tableId={table?.id} viewId={view?.id} automations={automations} />}
-          sidebarFooter={<NavTrashLink active={false} />}
+          sidebarFooter={<NavGlobalLinks page={null} />}
         >
           {page}
           <BaseDialogs schema={schema} activeTableId={table?.id} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
