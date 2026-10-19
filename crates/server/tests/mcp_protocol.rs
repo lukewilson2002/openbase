@@ -769,6 +769,7 @@ async fn tools_listed_depend_on_the_token() {
         "query_view",
         "list_trash",
         "get_record_history",
+        "list_activity",
         "list_notifications",
         "list_share_links",
         "list_automations",

@@ -925,6 +925,101 @@ async fn csv_imports_are_all_or_nothing_and_say_which_rows_failed() {
 // ------------------------------------------------------------- history and notifications
 
 #[tokio::test]
+async fn list_activity_follows_changes_and_comments_across_projects_by_name() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Tasks").await;
+    r.field("Tasks", "Points", "number", json!({})).await;
+    let rec = r
+        .records(
+            "Tasks",
+            json!([{"fields": {"Name": "Ship it", "Points": 1}}]),
+        )
+        .await[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    a.call(
+        "update_records",
+        json!({"base_id": b, "table": "Tasks", "records": [{"id": rec, "fields": {"Points": 5}}]}),
+    )
+    .await;
+    a.call(
+        "add_comment",
+        json!({"record_id": rec, "body": "Done soon"}),
+    )
+    .await;
+    let other = a
+        .call(
+            "create_project",
+            json!({"workspace_id": r.ws, "name": "Elsewhere"}),
+        )
+        .await["base"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Newest first: the comment, then the change with field names, then the create.
+    let all = a.call("list_activity", json!({})).await;
+    assert_eq!(all["count"], 3);
+    assert!(all.get("next_before").is_none());
+    let items = all["items"].as_array().unwrap();
+    assert_eq!(items[0]["kind"], "comment");
+    assert_eq!(items[0]["comment"], "Done soon");
+    assert_eq!(items[1]["kind"], "update");
+    assert_eq!(items[1]["changes"]["Points"], json!({"old": 1, "new": 5}));
+    assert_eq!(items[1]["record"]["name"], "Ship it");
+    assert_eq!(items[1]["workspace"], "Workspace");
+    assert_eq!(items[1]["table"], "Tasks");
+    assert_eq!(items[1]["project_id"], b);
+    assert_eq!(items[2]["kind"], "create");
+
+    // Names or ids, in the filters.
+    let by_name = a
+        .call(
+            "list_activity",
+            json!({"workspace": "workspace", "table": "Tasks", "kind": "update"}),
+        )
+        .await;
+    assert_eq!(by_name["count"], 1);
+    let by_id = a
+        .call(
+            "list_activity",
+            json!({"project": b, "order": "oldest", "limit": 1}),
+        )
+        .await;
+    assert_eq!(by_id["items"][0]["kind"], "create");
+    assert!(by_id["next_before"].is_string());
+    let next = a
+        .call(
+            "list_activity",
+            json!({"project": b, "order": "oldest", "limit": 1, "before": by_id["next_before"]}),
+        )
+        .await;
+    assert_eq!(next["items"][0]["kind"], "update");
+    let me = r.admin.user_id.clone().unwrap();
+    assert_eq!(
+        a.call("list_activity", json!({"person": me})).await["count"],
+        3
+    );
+    let nobody = a.call("list_activity", json!({"project": other})).await;
+    assert_eq!(nobody["count"], 0);
+
+    // Unknown names say what exists.
+    let e = a.fails("list_activity", json!({"workspace": "Nope"})).await;
+    assert!(
+        e.contains("Workspace 'Nope' not found") && e.contains("Workspace"),
+        "{e}"
+    );
+    let e = a.fails("list_activity", json!({"table": "Nope"})).await;
+    assert!(e.contains("Tasks"), "{e}");
+    let e = a.fails("list_activity", json!({"person": "Nobody"})).await;
+    assert!(e.contains("not found"), "{e}");
+    a.fails("list_activity", json!({"kind": "sneeze"})).await;
+}
+
+#[tokio::test]
 async fn history_pages_and_notifications_can_be_marked_read() {
     let r = Rig::new().await;
     let a = &r.agent;

@@ -59,7 +59,7 @@ pub async fn load_schema(ctx: &McpCtx, base_id: &str) -> Result<BaseSchema, Tool
 
 /// Index of the single match of `key` among `names`: exact id, exact name, then name ignoring
 /// case. `Err(None)` = no match, `Err(Some(n))` = `n` names match equally.
-fn pick<'a, T>(
+pub fn pick<'a, T>(
     items: &'a [T],
     key: &str,
     id: impl Fn(&T) -> &str,
