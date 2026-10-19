@@ -287,7 +287,7 @@ pub struct ViewRow {
 }
 
 const VIEW_COLS: &str =
-    "id, table_id, name, type, config, position, personal_owner_id, locked, deleted_at";
+    "id, table_id, name, type, config, position, personal_owner_id, locked, deleted_at, is_default";
 
 fn view_from_row(r: &Row) -> rusqlite::Result<(ViewRow, String, String)> {
     let owner: Option<String> = r.get(6)?;
@@ -303,6 +303,7 @@ fn view_from_row(r: &Row) -> rusqlite::Result<(ViewRow, String, String)> {
             config: ViewConfig::default(),
             personal: owner.is_some(),
             locked,
+            is_default: r.get(9)?,
         },
         position: r.get(5)?,
         owner_id: owner,
@@ -338,7 +339,7 @@ pub fn live_view(conn: &Connection, view_id: &str) -> AppResult<ViewRow> {
     let raw = conn
         .query_row(
             "SELECT v.id, v.table_id, v.name, v.type, v.config, v.position, v.personal_owner_id,
-                    v.locked, v.deleted_at
+                    v.locked, v.deleted_at, v.is_default
              FROM views v JOIN tables t ON t.id = v.table_id
              WHERE v.id = ?1 AND v.deleted_at IS NULL AND t.deleted_at IS NULL",
             [view_id],
@@ -373,7 +374,7 @@ pub fn base_visible_views(
 ) -> AppResult<HashMap<String, Vec<ViewRow>>> {
     let mut stmt = conn.prepare(
         "SELECT v.id, v.table_id, v.name, v.type, v.config, v.position, v.personal_owner_id,
-                v.locked, v.deleted_at
+                v.locked, v.deleted_at, v.is_default
          FROM views v JOIN tables t ON t.id = v.table_id
          WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND v.deleted_at IS NULL
            AND (v.personal_owner_id IS NULL OR v.personal_owner_id = ?2)
@@ -402,8 +403,8 @@ pub fn insert_view(
     let ty = serde_json::to_value(view.view_type)?;
     conn.execute(
         "INSERT INTO views (id, table_id, name, type, config, position, personal_owner_id, locked,
-                            created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                            created_by, created_at, is_default)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             view.id,
             view.table_id,
@@ -414,7 +415,8 @@ pub fn insert_view(
             owner_id,
             view.locked,
             created_by,
-            created_at
+            created_at,
+            view.is_default
         ],
     )?;
     Ok(())

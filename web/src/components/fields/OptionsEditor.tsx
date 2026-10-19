@@ -334,7 +334,7 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
                 <Select {...c} value={kind.options.picker_view_id ?? ""} onChange={(e) => onChange({ ...kind, options: { ...kind.options, picker_view_id: e.target.value || null } })}>
                   <option value="">All records</option>
                   {target.views
-                    .filter((v) => !v.personal)
+                    .filter((v) => !v.personal && !v.is_default)
                     .map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name}

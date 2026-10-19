@@ -121,6 +121,7 @@ export function makeView(over: Partial<View> & { id: string; type?: View["type"]
     table_id: "tbl1",
     name: `${type} ${id}`,
     type,
+    is_default: false,
     config: {
       filter: null,
       sorts: [],

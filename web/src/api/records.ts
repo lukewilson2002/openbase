@@ -41,7 +41,9 @@ export const recordKeys = {
   page: (tableId: string, viewId: string, configKey: string, search: string, page: number) => ["records", tableId, viewId, "query", configKey, search, page] as const,
   aggregations: (tableId: string, viewId: string, configKey: string, search: string) => ["records", tableId, viewId, "aggregations", configKey, search] as const,
   record: (tableId: string, recordId: string) => ["records", tableId, "record", recordId] as const,
-  lookup: (tableId: string, q: string, viewId: string | null) => ["records", tableId, "lookup", q, viewId ?? ""] as const,
+  /** Several records by id (linked-record previews), in the order given. */
+  byIds: (tableId: string, ids: readonly string[]) => ["records", tableId, "byIds", ids.join(",")] as const,
+  lookup: (tableId: string, q: string, viewId: string | null, fields: readonly string[] = []) => ["records", tableId, "lookup", q, viewId ?? "", fields.join(",")] as const,
   history: (tableId: string, recordId: string) => ["records", tableId, "history", recordId] as const,
 };
 
@@ -66,8 +68,14 @@ export const recordsApi = {
   remove: (tableId: string, ids: string[]) => request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } }),
   restore: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids }),
   move: (tableId: string, body: MoveRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/move`, body),
-  lookup: (tableId: string, q: string, opts: { limit?: number; viewId?: string | null; signal?: AbortSignal } = {}) =>
-    http.get<LinkCandidates>(`/api/tables/${enc(tableId)}/records/lookup`, { query: { q, limit: opts.limit ?? 30, view_id: opts.viewId ?? undefined }, signal: opts.signal }),
+  /** Link picker candidates: `q` matches the primary field's text, and that of `fields` too. */
+  lookup: (tableId: string, q: string, opts: { limit?: number; viewId?: string | null; fields?: readonly string[]; signal?: AbortSignal } = {}) =>
+    http.get<LinkCandidates>(`/api/tables/${enc(tableId)}/records/lookup`, {
+      query: { q, limit: opts.limit ?? 30, view_id: opts.viewId ?? undefined, fields: opts.fields?.length ? opts.fields.join(",") : undefined },
+      signal: opts.signal,
+    }),
+  /** Records by id, in that order (at most 100 per request); ids that are not live records are left out. */
+  getMany: (tableId: string, ids: readonly string[], signal?: AbortSignal) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/get`, { ids }, { signal }),
   /** Newest first. Pass the last entry's id as `before` for the next page. */
   history: (recordId: string, opts: { before?: number; limit?: number } = {}) =>
     http.get<HistoryEntry[]>(`/api/records/${enc(recordId)}/history`, { query: { before: opts.before, limit: opts.limit } }),

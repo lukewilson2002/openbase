@@ -6,7 +6,8 @@
 //! - `GET /api/attachments/{id}/{filename}` serves the bytes to Viewers of the
 //!   base, or to holders of an enabled view share link of that base
 //!   (`?share=<token>`, plus `X-Share-Password` for protected shares).
-//! - `GET /api/attachments/{id}/thumb` serves the PNG thumbnail of an image.
+//! - `GET /api/attachments/{id}/thumb` serves the PNG preview of an image, a PDF's
+//!   first page or a video's first frame (see [`crate::previews`]).
 //!
 //! Downloads never let the browser interpret user content: only sniffed
 //! raster images, video and audio are inline (with their sniffed type);
@@ -37,7 +38,6 @@ use serde::Deserialize;
 use serde_json::Value as Json2;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio::sync::Semaphore;
 
 use crate::auth::{Actor, ClientInfo, MaybeActor};
 use crate::db::now_ms;
@@ -46,6 +46,7 @@ use crate::error::{AppError, AppResult};
 use crate::extract::ApiQuery;
 use crate::ids::new_id;
 use crate::perm::{self, Role};
+use crate::previews;
 use crate::state::AppState;
 use crate::store::attachments::{self as store, Attachment};
 use crate::store::schema;
@@ -53,17 +54,6 @@ use crate::store::sharing::{self, Resolved};
 
 /// Allowance for multipart framing on top of the per-file limit.
 const MULTIPART_OVERHEAD: u64 = 64 * 1024;
-/// Images above this many pixels get no thumbnail (decoding is too costly).
-pub const MAX_THUMB_SOURCE_PIXELS: u64 = 40_000_000;
-/// Decoder allocation cap.
-const MAX_DECODE_ALLOC: u64 = 256 * 1024 * 1024;
-/// Longest thumbnail side.
-pub const THUMB_SIZE: u32 = 400;
-
-/// One image decode at a time: decoding is the most memory-hungry thing the
-/// server does, and the VPS budget is small.
-static DECODE_PERMITS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
-
 /// Leading bytes of an upload kept for type sniffing.
 const HEAD_BYTES: usize = 64;
 /// Bytes read from the start of a stored file to sniff video/audio when serving it.
@@ -179,7 +169,7 @@ impl Drop for TempFile {
 /// Store a byte stream as an attachment of `base_id` (`None`: an inbox upload that
 /// only its uploader can read, see [`authorize`]): stream to a temp file
 /// under `<data_dir>/tmp` while hashing (413 past the limit), sniff the type,
-/// make a thumbnail for images, then move the bytes to their content address
+/// make its preview (see [`crate::previews`]), then move the bytes to their content address
 /// and insert the row in one write transaction (so garbage collection, which
 /// also runs under the writer, can never delete a file a new row needs).
 pub async fn save_stream<S>(
@@ -228,10 +218,9 @@ where
     let sha = hex::encode(hasher.finalize());
     let filename = store::sanitize_filename(filename);
     let mime = store::detect_mime(&head, &filename);
-    let info = if store::sniff_image(&head).is_some() {
-        image_info(tmp.0.clone(), thumb_tmp.0.clone()).await
-    } else {
-        ImageInfo::default()
+    let info = match previews::kind(&head, &mime) {
+        Some(kind) => previews::make(kind, tmp.0.clone(), thumb_tmp.0.clone()).await,
+        None => previews::Info::default(),
     };
 
     let mut row = Attachment {
@@ -298,67 +287,6 @@ fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     std::fs::rename(&partial, to)?;
     let _ = std::fs::remove_file(from);
     Ok(())
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-struct ImageInfo {
-    width: Option<u32>,
-    height: Option<u32>,
-    thumb: bool,
-}
-
-/// Dimensions and thumbnail of an image file. Failures are logged and give
-/// an empty result: a bad image is still a valid upload.
-async fn image_info(src: PathBuf, thumb_dest: PathBuf) -> ImageInfo {
-    let Ok(_permit) = DECODE_PERMITS.acquire().await else {
-        return ImageInfo::default();
-    };
-    match tokio::task::spawn_blocking(move || make_thumbnail(&src, &thumb_dest)).await {
-        Ok(info) => info,
-        Err(e) => {
-            tracing::warn!(error = %e, "thumbnail task failed");
-            ImageInfo::default()
-        }
-    }
-}
-
-fn decode_limits() -> image::Limits {
-    let mut limits = image::Limits::default();
-    limits.max_alloc = Some(MAX_DECODE_ALLOC);
-    limits
-}
-
-fn make_thumbnail(src: &Path, dest: &Path) -> ImageInfo {
-    let mut info = ImageInfo::default();
-    let open = || -> image::ImageResult<image::ImageReader<io::BufReader<std::fs::File>>> {
-        let mut r = image::ImageReader::open(src)?.with_guessed_format()?;
-        r.limits(decode_limits());
-        Ok(r)
-    };
-    let dims = open().and_then(|r| r.into_dimensions());
-    let (w, h) = match dims {
-        Ok(d) => d,
-        Err(e) => {
-            tracing::debug!(error = %e, "could not read image dimensions");
-            return info;
-        }
-    };
-    info.width = Some(w);
-    info.height = Some(h);
-    if u64::from(w) * u64::from(h) > MAX_THUMB_SOURCE_PIXELS {
-        tracing::debug!(w, h, "image too large for a thumbnail");
-        return info;
-    }
-    let result = open().and_then(|r| r.decode()).and_then(|img| {
-        img.thumbnail(THUMB_SIZE, THUMB_SIZE)
-            .to_rgba8()
-            .save_with_format(dest, image::ImageFormat::Png)
-    });
-    match result {
-        Ok(()) => info.thumb = true,
-        Err(e) => tracing::debug!(error = %e, "could not make thumbnail"),
-    }
-    info
 }
 
 #[derive(Debug, Deserialize)]
@@ -907,44 +835,5 @@ mod tests {
         let cd = content_disposition("inline", "日本.png");
         assert!(cd.is_ascii());
         assert!(cd.ends_with("filename*=UTF-8''%E6%97%A5%E6%9C%AC.png"));
-    }
-
-    #[test]
-    fn thumbnail_of_huge_dimensions_is_skipped_without_decoding() {
-        // A PNG header claiming 10000 x 10000 pixels (100 MP) with no data.
-        let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("big.png");
-        let img = image::RgbImage::new(1, 1);
-        let mut bytes = std::io::Cursor::new(Vec::new());
-        img.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
-        let mut bytes = bytes.into_inner();
-        // IHDR width/height live at offsets 16..24; patch them and fix the
-        // chunk CRC (over type + data, bytes 12..29) so the header is valid.
-        bytes[16..20].copy_from_slice(&10_000u32.to_be_bytes());
-        bytes[20..24].copy_from_slice(&10_000u32.to_be_bytes());
-        let mut crc = flate2::Crc::new();
-        crc.update(&bytes[12..29]);
-        bytes[29..33].copy_from_slice(&crc.sum().to_be_bytes());
-        std::fs::write(&src, &bytes).unwrap();
-        let dest = dir.path().join("t.png");
-        let info = make_thumbnail(&src, &dest);
-        assert_eq!((info.width, info.height), (Some(10_000), Some(10_000)));
-        assert!(!info.thumb);
-        assert!(!dest.exists());
-    }
-
-    #[test]
-    fn thumbnail_keeps_aspect_ratio() {
-        let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("tall.png");
-        image::RgbImage::new(100, 1000).save(&src).unwrap();
-        let dest = dir.path().join("t.png");
-        let info = make_thumbnail(&src, &dest);
-        assert_eq!(
-            (info.width, info.height, info.thumb),
-            (Some(100), Some(1000), true)
-        );
-        let t = image::open(&dest).unwrap();
-        assert_eq!((t.width(), t.height()), (40, 400));
     }
 }

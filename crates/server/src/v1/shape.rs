@@ -32,7 +32,7 @@ use serde_json::{Map, Value as Json, json};
 use crate::store::attachments;
 
 /// Longest side of the stored thumbnail (see `api::attachments`).
-const THUMB_SIZE: u32 = crate::api::attachments::THUMB_SIZE;
+const THUMB_SIZE: u32 = crate::previews::THUMB_SIZE;
 
 /// How to render a batch of records.
 pub struct RenderOpts<'a> {

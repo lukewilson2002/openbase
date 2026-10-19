@@ -77,9 +77,10 @@ COPY --from=builder /usr/local/bin/openbase /openbase
 # ------------------------------------------------------------------- runtime
 FROM ${RUNTIME_IMAGE} AS runtime-base
 
+# ffmpeg takes the first frame of uploaded videos as their preview.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates tzdata; \
+    apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg; \
     rm -rf /var/lib/apt/lists/*; \
     groupadd --system --gid 10001 openbase; \
     useradd --system --uid 10001 --gid openbase --home-dir /data \

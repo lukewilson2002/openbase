@@ -17,7 +17,7 @@ import { File, Film, Image, Music, Trash2, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
-import { embedFilename, mediaKind, mediaLabel, type MediaKind } from "@/lib/media";
+import { embedFilename, embedPreviewSrc, mediaKind, mediaLabel, type MediaKind } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { image: "Image", video: "Video", audio: "Audio", file: "File" };
 const KIND_ICONS: Record<MediaKind, LucideIcon> = { image: Image, video: Film, audio: Music, file: File };
@@ -48,9 +48,14 @@ const small =
 
 /** The file card: used for other files, and for an image that cannot be shown. */
 function FileCard({ src, filename }: { src: string; filename: string }) {
+  // A PDF's first page covers the icon (see `.ob-file-icon` in styles/index.css).
+  const preview = embedPreviewSrc(src);
+  const [failed, setFailed] = useState(false);
   return (
     <div className="ob-file">
-      <span className="ob-file-icon" aria-hidden />
+      <span className="ob-file-icon" aria-hidden>
+        {preview && !failed && <img src={preview} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} />}
+      </span>
       <span className="ob-file-name">{filename}</span>
       <a href={src} download={filename} target="_blank" rel="noopener noreferrer" className="ob-file-download">
         Download

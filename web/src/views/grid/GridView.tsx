@@ -21,7 +21,7 @@ import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDia
 import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/env";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { uploadFiles } from "@/components/record/editors/AttachmentEditor";
-import { ExpandedRecord } from "@/components/record/ExpandedRecord";
+import { LINKED_PARAM, RecordPanel } from "@/views/common/RecordPanel";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -129,8 +129,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const colors = useMemo(() => personColors(people), [people]);
   const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
   const editorEnv = useMemo<EditorEnv>(
-    () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null }),
-    [schema.id, table.id, people, timeZone, canManageFields, format, me.data?.id],
+    () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null, schema }),
+    [schema, table.id, people, timeZone, canManageFields, format, me.data?.id],
   );
 
   // ---- cell models -----------------------------------------------------------------------------
@@ -440,6 +440,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           const next = new URLSearchParams(prev);
           if (recordId) next.set("record", recordId);
           else next.delete("record");
+          // Linked records opened on top of the record go with it.
+          next.delete(LINKED_PARAM);
           return next;
         },
         { replace: false },
@@ -840,7 +842,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         }}
       />
       {openRecordId && (
-        <ExpandedRecord
+        <RecordPanel
           schema={schema}
           table={table}
           view={view}

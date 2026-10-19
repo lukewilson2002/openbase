@@ -57,10 +57,24 @@ async function showViews(user: ReturnType<typeof userEvent.setup>, table = "Task
   await user.click(screen.getByRole("button", { name: `Show views of ${table}` }));
 }
 
-/** Opens the "Add view" menu of the open table. */
+/** Opens the "Add view" menu of the open table: in the table's "…" menu. */
 async function openAddView(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(tables()).getByRole("button", { name: "Add view" }));
-  return screen.findByRole("menu");
+  await user.click(within(tables()).getByRole("button", { name: "Table options for Tasks" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Add view" }));
+  return (await screen.findAllByRole("menu")).at(-1)!;
+}
+
+/** Chooses an item of a submenu, as the keyboard does (jsdom gives Radix's submenus no pointer). */
+async function pick(user: ReturnType<typeof userEvent.setup>, name: string | RegExp) {
+  const item = await screen.findByRole("menuitem", { name });
+  item.focus();
+  await user.keyboard("{Enter}");
+}
+
+/** Opens "Add table" in the open project's "…" menu. */
+async function openAddTable(user: ReturnType<typeof userEvent.setup>) {
+  await openProjectMenu(user);
+  await user.click(await screen.findByRole("menuitem", { name: "Add table" }));
 }
 
 describe("base shell on a desktop", () => {
@@ -127,9 +141,8 @@ describe("base shell on a desktop", () => {
     expect(api.callsTo("GET /api/bases/app1")).toHaveLength(1);
     expect(screen.getByText("Grid view coming soon")).toBeInTheDocument();
     // The dialogs of tables and views exist only in the open project: another one keeps what needs none.
-    expect(within(plants).queryByRole("button", { name: "Add table" })).not.toBeInTheDocument();
     await user.click(within(plants).getByRole("button", { name: "Table options for Plants" }));
-    expect(itemNames(await screen.findByRole("menu"))).toEqual(["Duplicate table"]);
+    expect(itemNames(await screen.findByRole("menu"))).toEqual(["Edit schema", "Duplicate table"]);
   });
 
   it("makes a new project in the workspace from the workspace menu", async () => {
@@ -319,10 +332,11 @@ describe("base shell on a desktop", () => {
       openBase("viewer");
       await screen.findByText("Grid view coming soon");
       await showViews(user);
-      expect(screen.queryByRole("button", { name: "Add table" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /Table options/ })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Add view" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /^Options for/ })).not.toBeInTheDocument();
+      // A table's menu only takes a viewer to its default grid; the project's has nothing to add.
+      await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+      expect(itemNames(await screen.findByRole("menu"))).toEqual(["Edit schema"]);
+      await user.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
     });
@@ -346,7 +360,6 @@ describe("base shell on a desktop", () => {
       });
       await screen.findByText("Grid view coming soon");
       await showViews(user);
-      expect(screen.queryByRole("button", { name: "Add table" })).not.toBeInTheDocument();
       expect(screen.queryByTitle("Rename project")).not.toBeInTheDocument();
       // Shared views are creator territory; the editor's own personal view is manageable.
       expect(screen.queryByRole("button", { name: "Options for All tasks" })).not.toBeInTheDocument();
@@ -354,13 +367,14 @@ describe("base shell on a desktop", () => {
 
       const types = await openAddView(user);
       expect(within(types).getByText(/Editors can create personal views/)).toBeInTheDocument();
-      await user.click(within(types).getByRole("menuitem", { name: /^Calendar/ }));
+      expect(within(types).getByRole("menuitem", { name: /^Calendar/ })).toBeInTheDocument();
+      await pick(user, /^Calendar/);
       const dialog = await screen.findByRole("dialog", { name: "New calendar view" });
       expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
-      expect(within(dialog).getByLabelText("Name")).toHaveValue("Calendar view");
+      expect(within(dialog).getByLabelText("Name")).toHaveValue("Calendar");
       await user.click(within(dialog).getByRole("button", { name: "Create view" }));
       await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/views")).toHaveLength(1));
-      expect(api.callsTo("POST /api/tables/tbl1/views")[0]?.body).toEqual({ name: "Calendar view", type: "calendar", personal: true, config: null });
+      expect(api.callsTo("POST /api/tables/tbl1/views")[0]?.body).toEqual({ name: "Calendar", type: "calendar", personal: true, config: null });
     });
 
     it("has no Automations or project Trash, but Members", async () => {
@@ -386,18 +400,21 @@ describe("base shell on a desktop", () => {
     });
 
     it("keeps viewers and commenters out of it", async () => {
+      const user = userEvent.setup();
       openBase("commenter");
       await screen.findByText("Grid view coming soon");
-      expect(screen.queryByRole("button", { name: /Table options/ })).not.toBeInTheDocument();
+      // The table's menu holds only Edit schema for them: no Import CSV.
+      await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+      expect(itemNames(await screen.findByRole("menu"))).toEqual(["Edit schema"]);
     });
 
     it("offers creators a new table from CSV next to the empty one", async () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      await user.click(screen.getByRole("button", { name: "Add table" }));
+      await openAddTable(user);
       expect(await screen.findByRole("menuitem", { name: "New empty table" })).toBeInTheDocument();
-      await user.click(screen.getByRole("menuitem", { name: /New table from CSV/ }));
+      await pick(user, /New table from CSV/);
       expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
     });
   });
@@ -408,7 +425,6 @@ describe("base shell on a desktop", () => {
       openBase("creator");
       await screen.findByText("Grid view coming soon");
       await showViews(user);
-      expect(screen.getByRole("button", { name: "Add table" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Table options for Tasks" })).toBeInTheDocument();
       // Every table has its menu, not only the open one.
       expect(screen.getByRole("button", { name: "Table options for People" })).toBeInTheDocument();
@@ -434,7 +450,8 @@ describe("base shell on a desktop", () => {
       });
       await screen.findByText("Grid view coming soon");
       await showViews(user);
-      await user.click(within(await openAddView(user)).getByRole("menuitem", { name: /^Kanban/ }));
+      await openAddView(user);
+      await pick(user, /^Kanban/);
       const dialog = await screen.findByRole("dialog", { name: "New kanban view" });
       expect(within(dialog).getByRole("checkbox", { name: /Personal view/ })).not.toBeChecked();
       const name = within(dialog).getByLabelText("Name");
@@ -501,15 +518,32 @@ describe("base shell on a desktop", () => {
         "POST /api/bases/app1/tables": { id: "tbl9", base_id: "app1", name: "Projects", description: null, primary_field_id: "f", fields: [], views: [] },
       });
       await screen.findByText("Grid view coming soon");
-      await user.click(screen.getByRole("button", { name: "Add table" }));
-      await user.click(await screen.findByRole("menuitem", { name: "New empty table" }));
+      await openAddTable(user);
+      await pick(user, "New empty table");
       await user.type(await screen.findByLabelText("Name"), "Projects");
       await user.click(screen.getByRole("button", { name: "Create table" }));
       await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
       expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Projects" });
     });
 
-    it("cannot delete the last remaining view or table", async () => {
+    it("keeps the default grid out of the menu, and opens it from a table's Edit schema", async () => {
+      const user = userEvent.setup();
+      const schema = makeSchema("creator");
+      const t = schema.tables[0]!;
+      schema.tables[0] = { ...t, views: [{ ...t.views[0]!, id: "viwD", name: "Default grid", is_default: true }, ...t.views] };
+      openBase("creator", { "GET /api/bases/app1": schema });
+      await screen.findByText("Grid view coming soon");
+      // The table opens its first view, not the default grid (the open table's row links to what is open).
+      await waitFor(() => expect(within(tables()).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1"));
+      await showViews(user);
+      expect(within(tables()).queryByRole("link", { name: /Default grid/ })).toBeNull();
+      expect(within(tables()).getByRole("link", { name: /All tasks/ })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Edit schema" }));
+      await waitFor(() => expect(within(tables()).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viwD"));
+    });
+
+    it("can delete the last view (the default grid stays), but not the last table", async () => {
       const user = userEvent.setup();
       const schema = makeSchema("creator");
       schema.tables = [{ ...schema.tables[0]!, views: [schema.tables[0]!.views[0]!] }];
@@ -518,7 +552,7 @@ describe("base shell on a desktop", () => {
       await showViews(user);
 
       await user.click(screen.getByRole("button", { name: "Options for All tasks" }));
-      expect(await screen.findByRole("menuitem", { name: "Delete view" })).toHaveAttribute("aria-disabled", "true");
+      expect(await screen.findByRole("menuitem", { name: "Delete view" })).not.toHaveAttribute("aria-disabled");
       await user.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
       expect(await screen.findByRole("menuitem", { name: "Delete table" })).toHaveAttribute("aria-disabled", "true");
@@ -785,7 +819,7 @@ describe("icons", () => {
   it("gives viewers the icons but no picker", async () => {
     openBase("viewer", { "GET /api/bases/app1": withIcons("viewer") });
     await screen.findByText("Grid view coming soon");
-    expect(screen.queryByRole("button", { name: /Table options/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Change the icon of/ })).not.toBeInTheDocument();
     expect(document.querySelector("header [data-entity-tile] svg.lucide-store")).toBeInTheDocument();
   });
 
@@ -808,8 +842,8 @@ describe("icons", () => {
       "POST /api/bases/app1/tables": { id: "tbl9", base_id: "app1", name: "Orders", icon: "package", description: null, primary_field_id: "f", fields: [], views: [] },
     });
     await screen.findByText("Grid view coming soon");
-    await user.click(screen.getByRole("button", { name: "Add table" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New empty table" }));
+    await openAddTable(user);
+    await pick(user, "New empty table");
     const dialog = await screen.findByRole("dialog", { name: "New table" });
     await user.type(within(dialog).getByLabelText("Name"), "Orders");
     await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));

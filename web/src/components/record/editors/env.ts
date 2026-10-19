@@ -1,6 +1,6 @@
 /** Shared context for cell editors (grid overlay and expanded record). */
 import { createContext, useContext } from "react";
-import type { Collaborator } from "@/api/types";
+import type { BaseSchema, Collaborator } from "@/api/types";
 import type { FormatCtx } from "@/lib/cells/format";
 
 export interface EditorEnv {
@@ -16,11 +16,18 @@ export interface EditorEnv {
   format: FormatCtx;
   /** Id of the signed-in user ("me" in filters, the default for new user cells). */
   currentUserId: string | null;
+  /** The project (its tables and the viewer's role), for linked records' previews; absent where none are shown. */
+  schema?: BaseSchema;
 }
 
 const EditorEnvContext = createContext<EditorEnv | null>(null);
 
 export const EditorEnvProvider = EditorEnvContext.Provider;
+
+/** The editing environment, or null outside of one (a value shown on its own). */
+export function useOptionalEditorEnv(): EditorEnv | null {
+  return useContext(EditorEnvContext);
+}
 
 export function useEditorEnv(): EditorEnv {
   const env = useContext(EditorEnvContext);

@@ -166,6 +166,8 @@ const views: Obj[] = [
   { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), description_field_id: "fld_j_summary", timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), description_field_id: "fld_j_summary", groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
   { id: "viw18", table_id: T_PROJECTS, name: "Unconfigured board", type: "kanban", config: emptyConfig(), personal: false, locked: false },
+  // Every table's default grid: listed apart from its views, the layout of its records.
+  ...[T_TASKS, T_PEOPLE, T_PROJECTS].map((t) => ({ id: `viw_default_${t}`, table_id: t, name: "Default grid", type: "grid", config: emptyConfig(), personal: false, locked: false, is_default: true })),
 ];
 
 interface Rec {

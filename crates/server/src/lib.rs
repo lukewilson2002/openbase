@@ -19,6 +19,7 @@ pub mod ids;
 pub mod mcp;
 pub mod oauth;
 pub mod perm;
+pub mod previews;
 pub mod ratelimit;
 pub mod state;
 pub mod store;

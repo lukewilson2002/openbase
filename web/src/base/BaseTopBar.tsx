@@ -16,11 +16,12 @@ import type { BaseSchema, Table } from "@/api/types";
 import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
 import { TableIcon } from "@/components/icons/TableIcon";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { usePresence } from "@/hooks/usePresence";
 import { BaseAvatars } from "@/shell/BaseAvatars";
 import { useOpenMenu } from "@/shell/AppShell";
 import { basePermissions } from "./permissions";
-import { TableCrumb } from "./TableCrumb";
+import { CRUMB_TEXT, TableCrumb } from "./TableCrumb";
 
 /** `Household / Chores / Tasks` with their icons: the desktop top bar's start, in place of the logo. */
 export function BaseBrand({ schema, table }: { schema: BaseSchema; table?: Table }) {
@@ -29,15 +30,15 @@ export function BaseBrand({ schema, table }: { schema: BaseSchema; table?: Table
   const ws = workspaces.data?.find((w) => w.id === schema.workspace_id) ?? { name: schema.workspace_name };
   return (
     <div className="-ml-1.5 flex min-w-0 items-center gap-2 px-2">
-      <span className="flex min-w-0 items-center gap-2 text-[0.875rem] font-medium text-muted">
-        <WorkspaceTile ws={ws} size="xs" />
+      <span className={cn("flex min-w-0 items-center gap-2", CRUMB_TEXT)}>
+        <WorkspaceTile ws={ws} size="sm" />
         <span className="min-w-0 truncate">{schema.workspace_name}</span>
       </span>
       <span aria-hidden className="shrink-0 text-lg text-line-strong">
         /
       </span>
-      <h1 className="flex min-w-0 items-center gap-2 text-base font-bold">
-        <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="md" className="size-7 rounded-[7px]" />
+      <h1 className={cn("flex min-w-0 items-center gap-2", CRUMB_TEXT)}>
+        <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="sm" />
         <span className="min-w-0 truncate">{schema.name}</span>
       </h1>
       {table && (

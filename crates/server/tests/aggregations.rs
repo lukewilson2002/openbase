@@ -344,6 +344,45 @@ async fn lookup_finds_records_by_primary_text_in_manual_order() {
 }
 
 #[tokio::test]
+async fn lookup_also_matches_the_fields_the_picker_shows() {
+    let p = people().await;
+    // bob's Status is Doing; the primary field alone does not match it.
+    let found = lookup(&p, &format!("?q=doing&fields={}", p.status)).await;
+    assert_eq!(lookup_names(&found), ["bob"]);
+    // Several fields, an unknown id and blanks are fine.
+    let found = lookup(&p, &format!("?q=don&fields=fldNope,%20,{}", p.status)).await;
+    assert_eq!(lookup_names(&found), ["Carol"]);
+}
+
+#[tokio::test]
+async fn records_get_answers_live_records_in_the_order_asked() {
+    let p = people().await;
+    let url = format!("/api/tables/{}/records/get", p.f.table_id);
+    let r =
+        p.f.app
+            .post(
+                &p.f.owner,
+                &url,
+                json!({ "ids": [&p.ids[2], "recMissing", &p.ids[0]] }),
+            )
+            .await;
+    r.assert_status(200);
+    let names: Vec<_> = r.body["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|rec| rec["values"][&p.name].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(names, ["Carol", "Alice"]);
+
+    let too_many: Vec<String> = (0..101).map(|i| format!("rec{i}")).collect();
+    p.f.app
+        .post(&p.f.owner, &url, json!({ "ids": too_many }))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
 async fn lookup_limit_defaults_to_20_and_caps_at_100() {
     let f = Fixture::new().await;
     for i in 0..130 {

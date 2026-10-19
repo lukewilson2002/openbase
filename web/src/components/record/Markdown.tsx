@@ -20,7 +20,7 @@ import { useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { cn } from "@/lib/cn";
-import { embedFilename, isEmbedSrc, mediaKind, mediaLabel, withShare } from "@/lib/media";
+import { embedFilename, embedPreviewSrc, isEmbedSrc, mediaKind, mediaLabel, withShare } from "@/lib/media";
 import { useShareOrNull } from "@/public/view/ShareContext";
 import { protectedDownload, useProtectedEmbeds } from "@/public/view/ShareEmbeds";
 
@@ -106,7 +106,10 @@ renderer.image = (href: string, title: string | null, text: string) => {
   else if (kind === "audio") body = `<audio ${where} controls preload="metadata" aria-label="${label}"></audio>`;
   else {
     const link = embeds?.password ? `href="${esc(address)}" data-embed="${esc(href)}"` : `href="${esc(address)}"`;
-    body = `<div class="ob-file"><span class="ob-file-icon" aria-hidden="true"></span><span class="ob-file-name">${name}</span><a ${link} download="${name}" class="ob-file-download">Download</a></div>`;
+    // A PDF shows its first page over the file icon; a preview that fails to load (alt "") leaves the icon.
+    const preview = embedPreviewSrc(embeds?.password ? href : address);
+    const thumb = preview ? `<img ${MARK}="${nonce}" ${embeds?.password ? `data-embed="${esc(preview)}"` : `src="${esc(preview)}"`} alt="" loading="lazy">` : "";
+    body = `<div class="ob-file"><span class="ob-file-icon" aria-hidden="true">${thumb}</span><span class="ob-file-name">${name}</span><a ${link} download="${name}" class="ob-file-download">Download</a></div>`;
   }
   return `<figure class="ob-media" data-kind="${kind}">${body}${title ? `<figcaption>${title}</figcaption>` : ""}</figure>`;
 };

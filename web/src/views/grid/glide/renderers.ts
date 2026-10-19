@@ -9,9 +9,10 @@ import { attachmentRefs } from "@/lib/cells/kinds";
 import { isFormulaError } from "@/lib/cells/format";
 import { hrefFor, isSafeLink } from "@/lib/cells/text";
 import { attachmentsApi } from "@/api/records";
+import { fileExt, hasPreview, isVideo, previewAlignTop } from "@/lib/filePreview";
 import type { RecordCellModel } from "../adapter";
 import { isObCell, withPending, type ObCell } from "./cells";
-import { DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fileExt, fitText, roundRectPath, type ChipDraw } from "./draw";
+import { DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fitText, roundRectPath, type ChipDraw } from "./draw";
 import { mixColors, paletteColor, ratingColor } from "@/lib/cells/palette";
 
 export interface RendererContext {
@@ -69,47 +70,84 @@ function drawRating(args: DrawArgs<ObCell>, m: RecordCellModel, active: boolean)
   }
 }
 
+/** Largest file tile in a grid cell, in pixels (the extra-tall row). */
+const MAX_TILE = 120;
+
 function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
   const { ctx, rect, theme, imageLoader, col, row } = args;
   const files = attachmentRefs(m.value);
-  const size = Math.min(40, rect.height - 8);
+  // Tiles grow with the row, so a taller row shows bigger previews, and sit in its middle in one line.
+  const size = Math.max(16, Math.min(MAX_TILE, rect.height - 8));
   const gap = 4;
   let x = rect.x + theme.cellHorizontalPadding;
-  let y = rect.y + (rect.height - size) / 2;
-  const rows = Math.max(1, Math.floor((rect.height - 4) / (size + gap)));
-  let line = 0;
-  for (const f of files) {
-    if (x + size > rect.x + rect.width - 4) {
-      line++;
-      if (line >= rows) break;
-      x = rect.x + theme.cellHorizontalPadding;
-    }
-    y = rows === 1 ? rect.y + (rect.height - size) / 2 : rect.y + 4 + line * (size + gap);
+  const y = rect.y + (rect.height - size) / 2;
+  const fits = Math.max(1, Math.floor((rect.x + rect.width - 4 - x + gap) / (size + gap)));
+  const shown = Math.min(files.length, fits);
+  for (const [i, f] of files.slice(0, shown).entries()) {
     ctx.save();
     roundRectPath(ctx, x, y, size, size, 4);
     ctx.clip();
-    const isImage = f.mime.startsWith("image/");
-    const img = isImage ? imageLoader.loadOrGetImage(attachmentsApi.thumbUrl(f.id), col, row) : undefined;
+    // An image itself, a PDF's first page, a video's first frame; the type's tile while it loads or without one.
+    const img = hasPreview(f) ? imageLoader.loadOrGetImage(attachmentsApi.thumbUrl(f.id), col, row) : undefined;
     if (img) {
       const iw = "width" in img ? img.width : size;
       const ih = "height" in img ? img.height : size;
       const scale = Math.max(size / iw, size / ih);
       const dw = iw * scale;
       const dh = ih * scale;
-      ctx.drawImage(img, x + (size - dw) / 2, y + (size - dh) / 2, dw, dh);
+      ctx.drawImage(img, x + (size - dw) / 2, previewAlignTop(f) ? y : y + (size - dh) / 2, dw, dh);
+      if (isVideo(f)) drawPlayBadge(ctx, x, y, size);
     } else {
       ctx.fillStyle = paletteColor("gray").bg;
       ctx.fillRect(x, y, size, size);
       ctx.fillStyle = paletteColor("gray").fg;
-      ctx.font = "600 9px system-ui, sans-serif";
+      ctx.font = `600 ${Math.max(9, Math.round(size / 4.5))}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(fileExt(f.filename), x + size / 2, y + size / 2);
       ctx.textAlign = "left";
     }
+    // The files that do not fit are counted on the last tile that does.
+    if (i === shown - 1 && files.length > shown) drawMoreBadge(ctx, x, y, size, files.length - shown);
     ctx.restore();
     x += size + gap;
   }
+}
+
+/** "+3" in a tile's bottom-right corner. */
+function drawMoreBadge(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, more: number): void {
+  const label = `+${more}`;
+  ctx.font = `600 ${Math.max(10, Math.round(size / 7))}px system-ui, sans-serif`;
+  const h = Math.max(14, Math.round(size / 5));
+  const w = ctx.measureText(label).width + h * 0.6;
+  const bx = x + size - w - 3;
+  const by = y + size - h - 3;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+  roundRectPath(ctx, bx, by, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, bx + w / 2, by + h / 2 + 0.5);
+  ctx.textAlign = "left";
+}
+
+/** A small play mark in a preview's corner, so a video's first frame reads as a video. */
+function drawPlayBadge(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const r = Math.max(5, Math.round(size * 0.17));
+  const cx = x + r + 3;
+  const cy = y + size - r - 3;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.35, cy - r * 0.5);
+  ctx.lineTo(cx + r * 0.55, cy);
+  ctx.lineTo(cx - r * 0.35, cy + r * 0.5);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawOpenIcon(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, color: string, bg: string): void {

@@ -16,7 +16,8 @@ use crate::store::{duplicate, fields};
 /// Name of the primary field every new table starts with.
 pub const PRIMARY_FIELD_NAME: &str = "Name";
 /// Name of the grid view every new table starts with.
-pub const DEFAULT_VIEW_NAME: &str = "Grid view";
+/// Name of a table's default grid (see `View::is_default`); apps show it as an icon, not by name.
+pub const DEFAULT_VIEW_NAME: &str = "Default grid";
 
 fn live_table_names(
     conn: &Connection,
@@ -57,8 +58,8 @@ pub fn free_name(conn: &Connection, base_id: &str, wanted: &str) -> AppResult<St
     ))
 }
 
-/// Create a table with its primary single-line-text field "Name" and a grid
-/// view "Grid view". Used by base and table creation.
+/// Create a table with its primary single-line-text field "Name" and its default
+/// grid (no other views). Used by base and table creation.
 pub fn create(
     tx: &Transaction,
     base_id: &str,
@@ -106,6 +107,7 @@ pub fn create(
         config: ViewConfig::default(),
         personal: false,
         locked: false,
+        is_default: true,
     };
     schema::insert_view(tx, &view, 1.0, None, Some(user_id), now)?;
     schema::live_table(tx, &table_id)

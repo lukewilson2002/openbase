@@ -278,7 +278,8 @@ async fn restoring_views_and_records() {
             .as_array()
             .unwrap()
             .len(),
-        1
+        2,
+        "the default grid and the Grid view"
     );
     restore(&f, &f.owner, "view", &vid).await.assert_status(200);
     assert_eq!(
@@ -286,7 +287,7 @@ async fn restoring_views_and_records() {
             .as_array()
             .unwrap()
             .len(),
-        2
+        3
     );
     restore(&f, &f.owner, "view", &vid).await.assert_status(409);
 
@@ -644,7 +645,7 @@ async fn personal_views_are_restored_by_their_owner_only() {
         .collect();
     assert_eq!(
         names,
-        ["Grid view"],
+        ["Default grid", "Grid view"],
         "the owner's schema view does not show another user's personal view"
     );
 }

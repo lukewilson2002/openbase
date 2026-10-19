@@ -54,7 +54,11 @@ async fn every_view_type_can_be_created_with_default_config() {
         assert_eq!(r.body["table_id"], f.table_id.as_str());
     }
     let t = f.table(&f.table_id).await;
-    assert_eq!(t["views"].as_array().unwrap().len(), 1 + 7);
+    assert_eq!(
+        t["views"].as_array().unwrap().len(),
+        2 + 7,
+        "default grid, fixture grid, 7 more"
+    );
 }
 
 #[tokio::test]
@@ -526,7 +530,7 @@ async fn personal_views_belong_to_their_owner() {
             .as_array()
             .unwrap()
             .len(),
-        1
+        2
     );
 }
 
@@ -569,7 +573,7 @@ async fn deleting_views() {
         .delete(&f.owner, &view_path(sid(&extra["id"])))
         .await
         .assert_status(404);
-    // the last shared view of a table stays - personal views do not count
+    // the last named view can go too: only the default grid is permanent
     f.app
         .post(
             &editor,
@@ -578,15 +582,97 @@ async fn deleting_views() {
         )
         .await
         .assert_status(201);
-    let r = f.app.delete(&f.owner, &view_path(&f.view_id)).await;
+    f.app
+        .delete(&f.owner, &view_path(&f.view_id))
+        .await
+        .assert_status(200);
+    let t = f.table(&f.table_id).await;
+    let shared: Vec<&str> = t["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v["personal"] == false)
+        .map(|v| v["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(shared, ["Default grid"]);
+    // ... but the default grid itself cannot be deleted, by anyone
+    let default_id = sid(&t["views"][0]["id"]).to_string();
+    f.app
+        .delete(&editor, &view_path(&default_id))
+        .await
+        .assert_status(409);
+    let r = f.app.delete(&f.owner, &view_path(&default_id)).await;
     r.assert_status(409);
     assert_eq!(r.body["error"]["code"], "conflict");
-    // another table has its own last view
+    // a new table starts with just its default grid, which stays too
     let t2 = f.add_table("Second").await;
+    assert_eq!(t2["views"].as_array().unwrap().len(), 1);
     f.app
         .delete(&f.owner, &view_path(sid(&t2["views"][0]["id"])))
         .await
         .assert_status(409);
+}
+
+#[tokio::test]
+async fn the_default_grid_cannot_be_renamed_locked_moved_filtered_sorted_or_grouped() {
+    let f = Fixture::new().await;
+    let editor = f.member("ed@example.com", Role::Editor);
+    let t = f.table(&f.table_id).await;
+    let default = &t["views"][0];
+    assert_eq!(default["name"], "Default grid");
+    assert_eq!(default["is_default"], true);
+    assert_eq!(default["type"], "grid");
+    let path = view_path(sid(&default["id"]));
+    let name_field = sid(&t["primary_field_id"]).to_string();
+
+    for body in [
+        json!({ "name": "Everything" }),
+        json!({ "locked": true }),
+        json!({ "position": 5.0 }),
+        json!({ "config": { "filter": { "conjunction": "and", "items": [
+            { "field_id": name_field, "operator": "is_not_empty" } ] } } }),
+        json!({ "config": { "sorts": [ { "field_id": name_field, "direction": "asc" } ] } }),
+        json!({ "config": { "groups": [ { "field_id": name_field, "direction": "asc" } ] } }),
+        json!({ "config": { "row_color": { "mode": "by_select", "field_id": name_field } } }),
+    ] {
+        for who in [&f.owner, &editor] {
+            let r = f.app.patch(who, &path, body.clone()).await;
+            r.assert_status(400);
+            assert!(
+                r.body["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("default grid"),
+                "{body}: {}",
+                r.body
+            );
+        }
+    }
+    // what the default grid does allow: the layout of its columns, even by an editor
+    let r = f
+        .app
+        .patch(
+            &editor,
+            &path,
+            json!({ "config": { "field_order": [name_field], "frozen_columns": 1 } }),
+        )
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["config"]["frozen_columns"], 1);
+    assert_eq!(r.body["name"], "Default grid");
+    assert_eq!(r.body["is_default"], true);
+
+    // duplicating it makes an ordinary view
+    let r = f
+        .app
+        .post(&f.owner, &format!("{path}/duplicate"), json!({}))
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["is_default"], false);
+    f.app
+        .delete(&f.owner, &view_path(sid(&r.body["id"])))
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]

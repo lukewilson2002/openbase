@@ -1,11 +1,13 @@
 /** Cover image, title, description and field list shared by kanban and gallery cards. */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { attachmentsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { swatchColor } from "@/lib/cells/palette";
-import { cardTitle, coverUrl, descriptionText, fieldsToShow } from "./cardFields";
+import { previewAlignTop } from "@/lib/filePreview";
+import { cardTitle, coverOf, descriptionText, fieldsToShow } from "./cardFields";
 import { DescriptionHover } from "./description";
 
 export interface CardBodyProps {
@@ -32,7 +34,10 @@ export interface CardBodyProps {
 }
 
 export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit }: CardBodyProps) {
-  const cover = coverUrl(coverField, record);
+  const coverFile = coverOf(coverField, record);
+  // A file without a preview (the server answers 404) shows no cover rather than a broken image.
+  const [failedCover, setFailedCover] = useState<string | null>(null);
+  const cover = coverFile && failedCover !== coverFile.id ? attachmentsApi.thumbUrl(coverFile.id) : null;
   const shown = fieldsToShow(fields, record, format, limit);
   const title = cardTitle(primary, record, format);
   const descValue = descriptionField ? record.values[descriptionField.id] : undefined;
@@ -43,7 +48,7 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
       {cover && (
         <div className="overflow-hidden rounded-t-[inherit] bg-subtle" style={{ height: coverHeight }}>
-          <img src={cover} alt="" loading="lazy" draggable={false} className={cn("size-full", coverFit === "cover" ? "object-cover" : "object-contain")} />
+          <img src={cover} alt="" loading="lazy" draggable={false} onError={() => setFailedCover(coverFile?.id ?? null)} className={cn("size-full", coverFit === "cover" ? "object-cover" : "object-contain", coverFile && previewAlignTop(coverFile) && "object-top")} />
         </div>
       )}
       {layout === "rows" ? (

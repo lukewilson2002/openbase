@@ -151,8 +151,8 @@ describe("attachments in a shared view", () => {
     await within(table).findByText("Task 1");
     const thumb = table.querySelector("tr[data-record-id='rec1'] img");
     expect(thumb).toHaveAttribute("src", "/api/attachments/att1/thumb?share=tok_s");
-    // A PDF has no thumbnail: a file icon, no image.
-    expect(table.querySelector("tr[data-record-id='rec2'] img")).toBeNull();
+    // A PDF shows its first page, through the share too.
+    expect(table.querySelector("tr[data-record-id='rec2'] img")).toHaveAttribute("src", "/api/attachments/att2/thumb?share=tok_s");
   });
 
   it("fetches images with the password header for a protected link (an <img> cannot send it)", async () => {

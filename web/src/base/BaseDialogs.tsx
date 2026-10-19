@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { VIEW_TYPE_META } from "@/views/meta";
 import { basePermissions } from "./permissions";
+import { defaultViewPath } from "@/lib/views";
 
 export type BaseDialog =
   | { kind: "create-table" }
@@ -70,8 +71,8 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
     mutationFn: (v: { name: string; icon: string | null }) => api.tables.create(schema.id, v.name, v.icon),
     onSuccess: async (table) => {
       await refresh();
-      const view = table.views?.[0];
-      navigate(`/base/${schema.id}/${table.id}${view ? `/${view.id}` : ""}`);
+      // A new table opens in its default grid, its only view.
+      navigate(defaultViewPath(schema.id, table));
     },
   });
   const updateTable = useMutation({

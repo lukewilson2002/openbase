@@ -1126,6 +1126,7 @@ pub fn lookup_candidates(
     q: &str,
     limit: usize,
     view: Option<&ViewRow>,
+    also_match: &[String],
 ) -> AppResult<Vec<LinkRef>> {
     let table = schema::live_table(conn, table_id)?;
     let tz = user_timezone(conn, user_id);
@@ -1137,8 +1138,15 @@ pub fn lookup_candidates(
         .cloned()
         .ok_or_else(|| AppError::internal("table has no primary field"))?;
     let names = NameCache::new(conn, tz);
+    // Besides the primary field, `q` matches the text of `also_match` (fields of this table only).
+    let also: Vec<_> = also_match
+        .iter()
+        .filter(|id| **id != primary.id)
+        .filter_map(|id| plan.by_id.get(id).cloned())
+        .collect();
     let mut ids: HashSet<String> = plan.filter.field_ids().into_iter().collect();
     ids.insert(primary.id.clone());
+    ids.extend(also.iter().map(|f| f.id.clone()));
     let needed = Needed::of(plan.fields.iter().filter(|f| ids.contains(&f.id)));
     let needle = q.trim().to_lowercase();
     let mut out: Vec<LinkRef> = Vec::new();
@@ -1147,7 +1155,14 @@ pub fn lookup_candidates(
     }
     scan_rows(conn, table_id, &needed, &names, |row| {
         let name = display_text(&primary, row.get(&primary.id), &names, tz);
-        if !needle.is_empty() && !name.to_lowercase().contains(&needle) {
+        if !needle.is_empty()
+            && !name.to_lowercase().contains(&needle)
+            && !also.iter().any(|f| {
+                display_text(f, row.get(&f.id), &names, tz)
+                    .to_lowercase()
+                    .contains(&needle)
+            })
+        {
             return Ok(true);
         }
         if !matches(&plan.filter, &row, &plan.ctx, &names) {
@@ -1362,6 +1377,7 @@ mod tests {
             config,
             personal: false,
             locked: false,
+            is_default: false,
         };
         schema::insert_view(&conn, &view, 1.0, None, None, 1).unwrap();
         let row = schema::live_view(&conn, "viw").unwrap();

@@ -35,11 +35,23 @@ async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view(
     assert_eq!(fields[0]["type"], "single_line_text");
     assert_eq!(fields[0]["id"], t["primary_field_id"]);
     let views = t["views"].as_array().unwrap();
-    assert_eq!(views.len(), 1);
-    assert_eq!(views[0]["name"], "Grid view");
+    assert_eq!(
+        views.len(),
+        2,
+        "the default grid, plus the Grid view the fixture added"
+    );
+    assert_eq!(views[0]["name"], "Default grid");
     assert_eq!(views[0]["type"], "grid");
+    assert_eq!(views[0]["is_default"], true);
     assert_eq!(views[0]["personal"], false);
     assert_eq!(views[0]["locked"], false);
+    assert_eq!(views[1]["name"], "Grid view");
+    assert_eq!(views[1]["is_default"], false);
+    // a bare starter table has only its default grid
+    let bare = r.body["tables"][0]["views"].as_array().unwrap();
+    assert_eq!(bare.len(), 1);
+    assert_eq!(bare[0]["name"], "Default grid");
+    assert_eq!(bare[0]["is_default"], true);
     assert_eq!(s["workspace_name"], "Acme");
     assert_eq!(s["people"][0]["email"], "owner@example.com");
     assert_eq!(s["people"][0]["role"], "owner");
@@ -234,15 +246,15 @@ async fn schema_shows_shared_views_plus_only_own_personal_views() {
     let path = format!("/api/bases/{}", f.base_id);
     assert_eq!(
         names(&f.app.get(&ed1, &path).await.body),
-        ["Grid view", "Mine", "Shared"]
+        ["Default grid", "Grid view", "Mine", "Shared"]
     );
     assert_eq!(
         names(&f.app.get(&ed2, &path).await.body),
-        ["Grid view", "Shared"]
+        ["Default grid", "Grid view", "Shared"]
     );
     assert_eq!(
         names(&f.app.get(&f.owner, &path).await.body),
-        ["Grid view", "Shared"]
+        ["Default grid", "Grid view", "Shared"]
     );
 }
 

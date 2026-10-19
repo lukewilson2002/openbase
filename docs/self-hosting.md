@@ -149,6 +149,9 @@ docker compose exec openbase openbase --help
    cargo build --release --locked -p openbase
    ```
 
+   Install ffmpeg too (`sudo apt install ffmpeg`) if videos should show their first frame as
+   their preview; without it they show a file-type tile. Images and PDFs need nothing extra.
+
 2. Install the binary, create a user and install the unit (use `openbase-$V-linux-$A/openbase` and
    `openbase-$V-linux-$A/openbase.service` from the download, or the paths below from a checkout):
 

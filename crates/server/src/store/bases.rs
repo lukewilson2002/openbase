@@ -78,7 +78,7 @@ pub fn live_bases_in(conn: &Connection, workspace_id: &str) -> AppResult<Vec<Bas
 }
 
 /// Create a base in `workspace_id`, by default with a starter table "Table 1"
-/// (just the primary field "Name" and a grid view "Grid view", like every table
+/// (just the primary field "Name" and its default grid, like every table
 /// created later); with `empty: true`, without tables. A creator limited to some
 /// bases gets the new base on their list.
 pub fn create(

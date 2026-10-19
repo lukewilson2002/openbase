@@ -11,6 +11,7 @@ import { PageSpinner } from "@/components/ui/spinner";
 import { useBaseEvents } from "@/hooks/useBaseEvents";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { lastTableOf, lastViewOf, rememberPlace } from "@/lib/lastPlace";
+import { defaultViewOf, namedViews } from "@/lib/views";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell, DESKTOP_QUERY } from "@/shell/AppShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
@@ -48,7 +49,8 @@ export function BaseShell({ section }: { section?: "automations" }) {
   const automations = section === "automations";
   // An address without a table or a view opens the one last used here, if it still exists.
   const table = !loaded || automations ? undefined : (loaded.tables.find((t) => t.id === tableId) ?? (tableId ? undefined : loaded.tables.find((t) => t.id === lastTableOf(loaded.id))) ?? loaded.tables[0]);
-  const view = table?.views.find((v) => v.id === viewId) ?? (viewId ? undefined : table?.views.find((v) => v.id === lastViewOf(table.id))) ?? table?.views[0];
+  // Else its first view, else its default grid (a new table has no other).
+  const view = table?.views.find((v) => v.id === viewId) ?? (viewId ? undefined : (table?.views.find((v) => v.id === lastViewOf(table.id)) ?? (table ? (namedViews(table)[0] ?? defaultViewOf(table)) : undefined)));
 
   // What the menu's rows open next time: this view, its table, its project.
   const workspaceId = loaded?.workspace_id;

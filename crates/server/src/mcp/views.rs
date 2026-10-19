@@ -62,7 +62,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_view",
             "Update a view",
-            "Rename a view, lock it, or change its configuration. Parts of `config` you give replace the same parts of the saved config (kanban, calendar, gallery, timeline and form settings merge key by key); parts you omit stay; a null value resets a part. Shared views need the creator role. Relative date filters such as {mode: today} follow the VIEWER's time zone, not the server's or UTC; see `config`.",
+            "Rename a view, lock it, or change its configuration. Parts of `config` you give replace the same parts of the saved config (kanban, calendar, gallery, timeline and form settings merge key by key); parts you omit stay; a null value resets a part. Shared views need the creator role. A table's default grid (is_default in get_project_schema) holds the layout of every record: change its field_order and hidden_fields to reorder or hide fields in every record (the editor role is enough); it cannot be renamed or locked and keeps no filter, sort, grouping or colours. Relative date filters such as {mode: today} follow the VIEWER's time zone, not the server's or UTC; see `config`.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -80,7 +80,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_view",
             "Delete a view",
-            "Delete a view (it moves to the trash and can be restored with restore_from_trash, kind 'view'). Share links of the view stop working. Shared views need the creator role.",
+            "Delete a view (it moves to the trash and can be restored with restore_from_trash, kind 'view'). Share links of the view stop working. Shared views need the creator role. A table's default grid cannot be deleted.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -449,7 +449,7 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
 
 /// What a new table's result tells the model about views: only the default grid exists, and the
 /// views the table's purpose calls for are the model's to set up.
-pub const NEW_TABLE_VIEWS: &str = "The table has one view, 'Grid view'. Now set up the views its purpose calls for with create_view, and only those: a calendar or timeline for dated records, a kanban stacked by a status, a gallery for pictures, a form for collecting entries, grids or lists filtered and sorted for the questions people ask (contacts by company, open tasks by due date). Name each for what it shows. People open them in the app, you can point them to one by name, and query_view reads one with its filter and sort applied.";
+pub const NEW_TABLE_VIEWS: &str = "The table has only its default grid ('Default grid', is_default: true): every record, laid out in its field order. Reorder or hide fields there (update_view) to change the layout of every record; it keeps no filter or sort and cannot be deleted. Now set up the views its purpose calls for with create_view, and only those: a calendar or timeline for dated records, a kanban stacked by a status, a gallery for pictures, a form for collecting entries, grids or lists filtered and sorted for the questions people ask (contacts by company, open tasks by due date). Name each for what it shows. People open them in the app, you can point them to one by name, and query_view reads one with its filter and sort applied.";
 
 /// Types whose values the server computes; forms cannot ask for them.
 const COMPUTED_TYPES: &[&str] = &[

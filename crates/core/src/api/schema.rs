@@ -22,6 +22,12 @@ pub struct View {
     /// Locked views can only be reconfigured by creators/owners.
     #[serde(default)]
     pub locked: bool,
+    /// The table's default grid: every table has exactly one, it cannot be deleted, renamed or
+    /// locked, and apps list it apart from the table's views (a plain grid of all the records). Its
+    /// field order and hidden fields are the layout of every record of the table; it has no saved
+    /// filter, sort, grouping or colours (each person filters it for themselves: `transient`).
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

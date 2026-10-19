@@ -314,6 +314,174 @@ async fn image_upload_records_dimensions_thumbnail_and_downloads_inline() {
     assert_eq!((img.width(), img.height()), (400, 300));
 }
 
+/// A one-page US Letter PDF with a black square in the middle of the page.
+fn pdf() -> Vec<u8> {
+    let content = b"0 0 0 rg 156 246 300 300 re f";
+    let objects: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>".to_vec(),
+        [
+            format!("<< /Length {} >>\nstream\n", content.len()).as_bytes(),
+            content,
+            b"\nendstream",
+        ]
+        .concat(),
+    ];
+    let mut out = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(body);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
+    for off in offsets {
+        out.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    out
+}
+
+#[tokio::test]
+async fn pdf_upload_previews_its_first_page_but_still_downloads_as_a_file() {
+    let app = TestApp::new();
+    let fx = Fixture::new(&app);
+    let res = upload(&app, &fx.owner, &fx.base, "pricing.pdf", &pdf()).await;
+    res.assert_status(200);
+    assert_eq!(res.body["mime"], "application/pdf");
+    // The page's size in points.
+    assert_eq!(
+        (res.body["width"].as_u64(), res.body["height"].as_u64()),
+        (Some(612), Some(792))
+    );
+    let id = res.body["id"].as_str().unwrap();
+
+    let thumb = app
+        .get(&fx.owner, &format!("/api/attachments/{id}/thumb"))
+        .await;
+    thumb.assert_status(200);
+    assert_eq!(header_str(&thumb, "content-type"), "image/png");
+    assert_safe_headers(&thumb);
+    let img = image::load_from_memory(&thumb.bytes).unwrap().to_rgb8();
+    assert_eq!((img.width(), img.height()), (309, 400));
+    assert!(img.get_pixel(154, 200).0[0] < 64, "the page's square shows");
+
+    // The PDF itself is still never rendered by the browser.
+    let dl = app
+        .get(&fx.owner, &format!("/api/attachments/{id}/pricing.pdf"))
+        .await;
+    assert_eq!(header_str(&dl, "content-type"), "application/octet-stream");
+    assert!(header_str(&dl, "content-disposition").starts_with("attachment;"));
+}
+
+#[tokio::test]
+async fn video_upload_previews_its_first_frame_when_ffmpeg_is_installed() {
+    let Some(ffmpeg) = openbase::previews::ffmpeg() else {
+        eprintln!("ffmpeg not installed: skipped");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clip.mp4");
+    let made = std::process::Command::new(ffmpeg)
+        .args([
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=160x90:d=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+        ])
+        .arg(&path)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let data = std::fs::read(&path).unwrap();
+
+    let app = TestApp::new();
+    let fx = Fixture::new(&app);
+    let res = upload(&app, &fx.owner, &fx.base, "clip.mp4", &data).await;
+    res.assert_status(200);
+    assert_eq!(res.body["mime"], "video/mp4");
+    assert_eq!(
+        (res.body["width"].as_u64(), res.body["height"].as_u64()),
+        (Some(160), Some(90))
+    );
+    let id = res.body["id"].as_str().unwrap();
+    let thumb = app
+        .get(&fx.owner, &format!("/api/attachments/{id}/thumb"))
+        .await;
+    thumb.assert_status(200);
+    let img = image::load_from_memory(&thumb.bytes).unwrap().to_rgb8();
+    // Scaled to the thumbnail size, keeping the frame's shape.
+    assert_eq!((img.width(), img.height()), (400, 225));
+    let [r, g, b] = img.get_pixel(200, 112).0;
+    assert!(
+        r > 200 && g < 60 && b < 60,
+        "the red frame shows: {r} {g} {b}"
+    );
+    assert_eq!(tmp_files(&app), 0, "the extracted frame is cleaned up");
+}
+
+#[tokio::test]
+async fn files_stored_without_a_preview_get_one_from_the_backfill() {
+    let app = TestApp::new();
+    let fx = Fixture::new(&app);
+    let data = pdf();
+    let res = upload(&app, &fx.owner, &fx.base, "old.pdf", &data).await;
+    let id = res.body["id"].as_str().unwrap().to_string();
+    // As a PDF stored before previews existed: no preview, no dimensions.
+    let sha = sha_hex(&data);
+    std::fs::remove_file(blob_file(&app, &data).with_file_name(format!("{sha}.thumb.png")))
+        .unwrap();
+    app.state
+        .db
+        .write_sync(|tx| {
+            Ok(tx.execute(
+                "UPDATE attachments SET has_thumb = 0, width = NULL, height = NULL",
+                [],
+            )?)
+        })
+        .unwrap();
+    app.get(&fx.owner, &format!("/api/attachments/{id}/thumb"))
+        .await
+        .assert_status(404);
+
+    assert_eq!(openbase::previews::backfill(&app.state).await.unwrap(), 1);
+    let thumb = app
+        .get(&fx.owner, &format!("/api/attachments/{id}/thumb"))
+        .await;
+    thumb.assert_status(200);
+    let (w, h): (Option<i64>, Option<i64>) = app
+        .state
+        .db
+        .write_sync(|tx| {
+            Ok(
+                tx.query_row("SELECT width, height FROM attachments", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?,
+            )
+        })
+        .unwrap();
+    assert_eq!((w, h), (Some(612), Some(792)));
+    // Nothing is left to do the second time.
+    assert_eq!(openbase::previews::backfill(&app.state).await.unwrap(), 0);
+}
+
 #[tokio::test]
 async fn identical_uploads_share_one_file() {
     let app = TestApp::new();

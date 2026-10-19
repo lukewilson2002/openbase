@@ -448,8 +448,10 @@ checkboxes are `true` or absent.
 
 Attachment `url`s are **absolute** (built from `OPENBASE_PUBLIC_URL`) and, unlike
 Airtable's, need the same bearer token (or a signed-in session) to download.
-`thumbnails` (images only) has `small` and `large` pointing at OpenBase's single
-400 px thumbnail and `full` at the original, each with `url`, `width`, `height`.
+`thumbnails` (images, PDFs and videos) has `small` and `large` pointing at OpenBase's
+single 400 px preview (an image scaled down, a PDF's first page, a video's first frame)
+and `full` at the original, each with `url`, `width`, `height`. A PDF's `width` and
+`height` are its first page's size in points; a video's, its frame's in pixels.
 
 ### 2.6 Writing records
 

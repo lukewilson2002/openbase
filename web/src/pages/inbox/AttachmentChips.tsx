@@ -3,9 +3,10 @@
  * up show a spinner. A chip opens its file in a new tab (an image shows there, anything else
  * downloads); an inbox upload is readable by its uploader only, so that is the person here.
  */
-import { FileText, Image as ImageIcon, X } from "lucide-react";
+import { X } from "lucide-react";
 import { attachmentsApi } from "@/api/records";
 import type { AttachmentRef } from "@/api/types";
+import { FilePreview } from "@/components/record/FilePreview";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes } from "@/lib/format";
 
@@ -16,7 +17,6 @@ export function AttachmentChips({ files, uploading, onRemove }: { files: readonl
   return (
     <ul aria-label="Attached files" className="flex flex-wrap gap-2">
       {files.map((f) => {
-        const Icon = f.mime.startsWith("image/") ? ImageIcon : FileText;
         return (
           <li key={f.id} className={chip}>
             <a
@@ -26,7 +26,7 @@ export function AttachmentChips({ files, uploading, onRemove }: { files: readonl
               title={`Open ${f.filename}`}
               className="flex min-w-0 items-center gap-2 text-fg no-underline hover:underline"
             >
-              <Icon aria-hidden className="size-4 shrink-0 text-muted" />
+              <FilePreview file={f} src={attachmentsApi.thumbUrl(f.id)} size={24} />
               <span className="min-w-0 truncate">{f.filename}</span>
               <span className="shrink-0 text-xs text-muted">{formatBytes(f.size)}</span>
             </a>

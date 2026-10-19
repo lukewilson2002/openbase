@@ -72,7 +72,7 @@ export function ViewMenuItems({ schema, table, view: v, onDialog }: { schema: Ba
       {canConfigure && onDialog && (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuItem danger disabled={table.views.length <= 1} onSelect={() => onDialog({ kind: "delete-view", table, view: v })}>
+          <DropdownMenuItem danger disabled={v.is_default} onSelect={() => onDialog({ kind: "delete-view", table, view: v })}>
             <Trash2 aria-hidden className="size-4" /> Delete view
           </DropdownMenuItem>
         </>

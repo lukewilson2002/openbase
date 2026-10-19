@@ -609,11 +609,18 @@ async fn get_project_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
                     "description": t.description,
                     "primary_field": primary,
                     "fields": t.fields.iter().map(field_json).collect::<Vec<_>>(),
-                    "views": t.views.iter().map(|v| json!({
-                        "id": v.id,
-                        "name": v.name,
-                        "type": serde_json::to_value(v.view_type).unwrap_or(Value::Null),
-                    })).collect::<Vec<_>>(),
+                    "views": t.views.iter().map(|v| {
+                        let mut view = json!({
+                            "id": v.id,
+                            "name": v.name,
+                            "type": serde_json::to_value(v.view_type).unwrap_or(Value::Null),
+                        });
+                        // The default grid: the layout of every record, never deleted, filtered per person.
+                        if v.is_default {
+                            view["is_default"] = json!(true);
+                        }
+                        view
+                    }).collect::<Vec<_>>(),
                 }),
                 &t.icon,
             )

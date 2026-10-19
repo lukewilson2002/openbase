@@ -60,7 +60,7 @@ links (optional password) and public form links show data to people outside.
 records), delete and restore projects and tables. 28 field types: single line text,
 long text (plain or Markdown), number, currency, percent, duration, rating,
 checkbox, single and multiple select, date (optional time, formats, time zones),
-email, URL, phone, attachment (with thumbnails), link to another record (paired
+email, URL, phone, attachment (with previews: images, a PDF's first page, a video's first frame), link to another record (paired
 both ways), user, formula, lookup, rollup, count, created / last modified time,
 created / last modified by, autonumber, barcode and button (opens a URL computed
 by a formula). Fields support descriptions and defaults. Changing a field's type
@@ -286,6 +286,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 | `OPENBASE_MCP_ALLOWED_ORIGINS` | *(none)* | Comma separated browser origins, besides the public URL, that may call `/mcp` (for browser-based MCP clients). Requests without an `Origin` header are not affected. |
 | `OPENBASE_LOG_FORMAT` | `pretty` | `pretty` or `json`. |
 | `OPENBASE_LOG` | `info,tower_http=info` | Log filter (`tracing` env-filter syntax, for example `debug`). Environment variable only. |
+| `OPENBASE_FFMPEG` | `ffmpeg` on the `PATH` | The ffmpeg binary that takes the first frame of uploaded videos as their preview (the Docker image includes it). Without ffmpeg videos show a file-type tile. Environment variable only. |
 | `OPENBASE_ADMIN_PASSWORD` | – | Password for `create-admin`. |
 | `OPENBASE_NEW_PASSWORD` | – | Password for `reset-password`. |
 

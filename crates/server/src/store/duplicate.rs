@@ -388,6 +388,7 @@ fn insert_views(
                 config: remap_config(&v.view.config, ids)?,
                 personal: v.owner_id.is_some(),
                 locked: v.view.locked,
+                is_default: v.view.is_default,
             };
             schema::insert_view(
                 tx,

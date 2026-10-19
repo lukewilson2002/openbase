@@ -128,10 +128,16 @@ async fn meta_tables_describes_tables_fields_and_views() {
     );
     // Views: id, name and type.
     let views = table["views"].as_array().unwrap();
-    assert_eq!(views.len(), 1);
-    assert_eq!(views[0]["id"], v.p.f.view_id);
+    assert_eq!(
+        views.len(),
+        2,
+        "the default grid, then the fixture's Grid view"
+    );
+    assert_eq!(views[0]["name"], "Default grid");
     assert_eq!(views[0]["type"], "grid");
-    assert!(views[0]["name"].is_string());
+    assert_eq!(views[1]["id"], v.p.f.view_id);
+    assert_eq!(views[1]["type"], "grid");
+    assert!(views[1]["name"].is_string());
 }
 
 #[tokio::test]

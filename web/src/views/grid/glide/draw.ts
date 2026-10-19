@@ -136,9 +136,12 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
   const gap = 4;
   const lines = Math.max(1, Math.floor((rect.height - 6) / (chipH + gap)));
   const boxes: { x: number; y: number; w: number; h: number }[] = [];
-  ctx.font = theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
+  const chipFont = theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
+  ctx.font = chipFont;
   ctx.textBaseline = "middle";
-  const startY = lines === 1 ? rect.y + (rect.height - chipH) / 2 : rect.y + 5;
+  // Lay the chips out first, then centre the lines they fill: in a tall row one line of chips sits in
+  // the middle, level with a line of text in the next cell, rather than at the top.
+  const placed: { chip: ChipDraw; x: number; line: number; w: number; avatar: number }[] = [];
   let x = rect.x + padX;
   let line = 0;
   const right = rect.x + rect.width - padX;
@@ -153,6 +156,13 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     }
     if (x >= right) break;
     w = Math.min(w, right - x);
+    placed.push({ chip, x, line, w, avatar });
+    x += w + gap;
+  }
+  const used = placed.length > 0 ? placed[placed.length - 1]!.line + 1 : 1;
+  const blockH = used * chipH + (used - 1) * gap;
+  const startY = rect.y + Math.max(lines > 1 ? 5 : 0, (rect.height - blockH) / 2);
+  for (const { chip, x, line, w, avatar } of placed) {
     const y = startY + line * (chipH + gap);
     // Choices and people carry their own colour, the same pill in both themes; links are blue, the rest grey.
     const own = chip.kind === "select" || chip.kind === "user";
@@ -175,7 +185,7 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
       ctx.textAlign = "center";
       ctx.fillText(initials, x + 2 + avatar / 2, y + chipH / 2 + 0.5);
       ctx.textAlign = "left";
-      ctx.font = theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
+      ctx.font = chipFont;
       tx = x + avatar + 6;
     }
     ctx.fillStyle = fg;
@@ -192,7 +202,6 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     }
     ctx.fillText(label, tx, y + chipH / 2 + 0.5);
     boxes.push({ x, y, w, h: chipH });
-    x += w + gap;
   }
   return boxes;
 }
@@ -290,8 +299,3 @@ export function drawChevron(ctx: CanvasRenderingContext2D, cx: number, cy: numbe
   ctx.stroke();
 }
 
-/** Extension label for a non-image attachment. */
-export function fileExt(name: string): string {
-  const i = name.lastIndexOf(".");
-  return i > 0 && i < name.length - 1 ? name.slice(i + 1, i + 5).toUpperCase() : "FILE";
-}

@@ -9,7 +9,11 @@ import type { BaseSchema, Table } from "@/api/types";
 import { IconPicker } from "@/components/icons/IconPicker";
 import { TableIcon } from "@/components/icons/TableIcon";
 import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/cn";
 import { basePermissions } from "./permissions";
+
+/** Each part of the desktop path (workspace, project, table): the same type, after a 24 px tile. */
+export const CRUMB_TEXT = "text-[0.875rem] font-semibold text-fg";
 
 export function TableCrumb({ schema, table }: { schema: BaseSchema; table: Table }) {
   const qc = useQueryClient();
@@ -20,21 +24,21 @@ export function TableCrumb({ schema, table }: { schema: BaseSchema; table: Table
     onError: (e) => toast.error(e, "Could not change the table's icon"),
   });
   return (
-    <h2 className="flex min-w-0 items-center gap-1 text-base font-bold">
+    <h2 className={cn("flex min-w-0 items-center gap-2", CRUMB_TEXT)}>
       {basePermissions.manageTables(schema.role) ? (
         <IconPicker value={table.icon} onChange={(icon) => setIcon.mutate(icon)} label={`Change the icon of ${table.name}`}>
           <button
             type="button"
             aria-label={`Change the icon of ${table.name}`}
             title="Change icon"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-hover text-fg transition-colors hover:bg-line-strong data-[state=open]:bg-line-strong"
           >
-            <TableIcon icon={table.icon} className="size-[1.125rem]" />
+            <TableIcon icon={table.icon} className="size-3.5" />
           </button>
         </IconPicker>
       ) : (
-        <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted">
-          <TableIcon icon={table.icon} className="size-[1.125rem]" />
+        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-hover text-fg">
+          <TableIcon icon={table.icon} className="size-3.5" />
         </span>
       )}
       <span className="min-w-0 truncate">{table.name}</span>

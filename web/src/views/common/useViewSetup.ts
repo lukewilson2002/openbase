@@ -15,6 +15,7 @@ import { useDebounced } from "@/components/record/editors/useDebounced";
 import { queryRelevantKey } from "@/components/viewbar/config";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
+import { LINKED_PARAM } from "./RecordPanel";
 import { personColors } from "@/lib/colors";
 import type { FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
@@ -71,8 +72,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
   const currentUserId = me.data?.id ?? null;
   const editorEnv = useMemo<EditorEnv>(
-    () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions, format, currentUserId }),
-    [schema.id, table.id, people, timeZone, canCreateOptions, format, currentUserId],
+    () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions, format, currentUserId, schema }),
+    [schema, table.id, people, timeZone, canCreateOptions, format, currentUserId],
   );
 
   const cfg = useViewConfig(schema, table, view, role);
@@ -92,6 +93,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
           const next = new URLSearchParams(prev);
           if (recordId) next.set("record", recordId);
           else next.delete("record");
+          // Linked records opened on top of the record go with it.
+          next.delete(LINKED_PARAM);
           return next;
         },
         { replace: false },

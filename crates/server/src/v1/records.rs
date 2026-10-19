@@ -262,6 +262,7 @@ pub(crate) fn all_records_view(table: &TableRow) -> ViewRow {
             config: ViewConfig::default(),
             personal: false,
             locked: false,
+            is_default: false,
         },
         position: 0.0,
         owner_id: None,

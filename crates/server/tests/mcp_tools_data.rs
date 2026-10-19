@@ -685,7 +685,7 @@ async fn csv_exports_are_cut_at_row_boundaries_with_a_note() {
     let (is_error, text, meta) = a
         .raw(
             "export_csv",
-            json!({"base_id": b, "table": "Big", "view": "Grid view"}),
+            json!({"base_id": b, "table": "Big", "view": "Default grid"}),
         )
         .await;
     assert!(!is_error, "{text}");
@@ -720,7 +720,7 @@ async fn csv_exports_are_cut_at_row_boundaries_with_a_note() {
     let (_, text, meta) = a
         .raw(
             "export_csv",
-            json!({"base_id": b, "table": "Small", "view": "Grid view"}),
+            json!({"base_id": b, "table": "Small", "view": "Default grid"}),
         )
         .await;
     assert_eq!(text, "Name,Text\r\nrow 0,a\r\nrow 1,b\r\n");
@@ -755,7 +755,7 @@ async fn csv_round_trips_odd_cells_and_imports_with_mappings() {
     let csv = a
         .text(
             "export_csv",
-            json!({"base_id": b, "table": "People", "view": "Grid view"}),
+            json!({"base_id": b, "table": "People", "view": "Default grid"}),
         )
         .await;
     assert!(

@@ -6,6 +6,7 @@ import { DescriptionHover } from "@/views/common/description";
 import { buildStacks, stackKind } from "@/views/kanban/stacks";
 import { cn } from "@/lib/cn";
 import { attachmentRefs, displayShapeOf } from "@/lib/cells/kinds";
+import { coverFile, previewAlignTop } from "@/lib/filePreview";
 import { swatchColor } from "@/lib/cells/palette";
 import { useThumbSrc } from "./PublicAttachments";
 import { PublicCell } from "./PublicCell";
@@ -21,13 +22,13 @@ export interface CardFields {
 }
 
 function Cover({ record, field, fit, height }: { record: TableRecord; field: Field; fit: "cover" | "contain"; height: number }) {
-  const image = attachmentRefs(record.values[field.id]).find((a) => a.mime.startsWith("image/"));
+  const image = coverFile(attachmentRefs(record.values[field.id]));
   const src = useThumbSrc(image);
   const [broken, setBroken] = useState(false);
   if (!image || broken) return null;
   return (
     <div className="overflow-hidden rounded-t-[inherit] bg-subtle" style={{ height }}>
-      {src && <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} className={cn("size-full", fit === "cover" ? "object-cover" : "object-contain")} />}
+      {src && <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} className={cn("size-full", fit === "cover" ? "object-cover" : "object-contain", previewAlignTop(image) && "object-top")} />}
     </div>
   );
 }

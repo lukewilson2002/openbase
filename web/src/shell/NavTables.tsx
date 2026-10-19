@@ -1,17 +1,18 @@
 /**
  * A project's tables in the menu, each expanding into its views, with the "…" menus for their
- * actions. A tap on a table opens the view last used in it on this device; the chevron only shows
- * the views. In the open project every action is there; the dialogs behind most of them
- * (`BaseDialogs`) exist only inside the project's page, so in another project the menus keep what
- * needs no dialog (duplicating, locking) and "Add table"/"Add view" are left out.
+ * actions. A tap on a table opens the view last used in it on this device (its default grid if
+ * none); the chevron only shows the views. A table's default grid is not among them (the toolbar
+ * has its icon, and "Edit schema" in the table's menu opens it). Adding is in the menus: a view in
+ * the table's ("Add view"), a table in the project's. In the open project every action is there;
+ * the dialogs behind most of them (`BaseDialogs`) exist only inside the project's page, so in
+ * another project the menus keep what needs no dialog (duplicating, locking, Edit schema).
  *
  * Each level of the tree sits one indent (pl-3.5) inside the one above it, and its rows put their
- * icon where its tables put theirs (after the chevron): "Add table" lines up with the tables, a
- * table's views and "Add view" one indent further in.
+ * icon where its tables put theirs (after the chevron): a table's views sit one indent further in.
  */
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, FileUp, Lock, Pencil, Plus, Shapes, Table2, Trash2, User as UserIcon } from "lucide-react";
+import { Columns3, Copy, Ellipsis, FileUp, Lock, Pencil, Plus, Shapes, Trash2, User as UserIcon } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSchema, Table, View } from "@/api/types";
@@ -19,11 +20,12 @@ import type { BaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
 import { EntityIcon } from "@/components/icons/EntityIcon";
 import { ViewMenuItems, hasViewActions } from "@/components/viewbar/ViewMenuItems";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { lastViewOf } from "@/lib/lastPlace";
+import { defaultViewPath, namedViews } from "@/lib/views";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import { useCloseMenu } from "./AppShell";
 import { RowChevron, rowActionClass } from "./Sidebar";
@@ -46,7 +48,6 @@ function tablePath(baseId: string, table: Table, currentViewId?: string): string
 
 export function NavTables({ schema, activeTableId, activeViewId, onDialog }: NavTablesProps) {
   const [toggled, toggle] = useOpenState("ob-tables-open");
-  const canManage = basePermissions.manageTables(schema.role);
   return (
     <ul aria-label={`Tables in ${schema.name}`} className="flex flex-col gap-0.5">
       {schema.tables.length === 0 && <li className="py-1 pl-[42px] text-xs text-muted">No tables yet.</li>}
@@ -63,28 +64,6 @@ export function NavTables({ schema, activeTableId, activeViewId, onDialog }: Nav
           onDialog={onDialog}
         />
       ))}
-      {onDialog && canManage && (
-        <li>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[34px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
-              >
-                <Plus aria-hidden className="size-3.5 shrink-0" /> Add table
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table" })}>
-                <Table2 aria-hidden className="size-4" /> New empty table
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onDialog({ kind: "create-table-csv" })}>
-                <FileUp aria-hidden className="size-4" /> New table from CSV…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </li>
-      )}
     </ul>
   );
 }
@@ -112,6 +91,8 @@ function TableItem({
   const closeMenu = useCloseMenu();
   const canManage = basePermissions.manageTables(schema.role);
   const canImport = !!onDialog && basePermissions.importRecords(schema.role);
+  const canCreateView = !!onDialog && basePermissions.createView(schema.role);
+  const canCreateShared = basePermissions.createSharedView(schema.role);
   const duplicate = useMutation({
     mutationFn: (id: string) => api.tables.duplicate(id),
     onSuccess: async (table) => {
@@ -139,47 +120,77 @@ function TableItem({
           {t.icon && <EntityIcon name={t.icon} className="size-4 shrink-0 text-muted" />}
           <span className="min-w-0 flex-1 truncate">{t.name}</span>
         </Link>
-        {(canManage || canImport) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className={rowActionClass}>
-                <Ellipsis aria-hidden className="size-4" />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {canImport && (
-                <DropdownMenuItem onSelect={() => onDialog({ kind: "import", table: t })}>
-                  <FileUp aria-hidden className="size-4" /> Import CSV…
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className={rowActionClass}>
+              <Ellipsis aria-hidden className="size-4" />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {/* How every record of the table is laid out is changed in its default grid. */}
+            <DropdownMenuItem
+              onSelect={() => {
+                closeMenu();
+                navigate(defaultViewPath(schema.id, t));
+              }}
+            >
+              <Columns3 aria-hidden className="size-4" /> Edit schema
+            </DropdownMenuItem>
+            {canCreateView && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Plus aria-hidden className="size-4" /> Add view
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-72">
+                  {!canCreateShared && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
+                  {VIEW_TYPES.map((type) => {
+                    const meta = VIEW_TYPE_META[type];
+                    return (
+                      <DropdownMenuItem key={type} onSelect={() => onDialog!({ kind: "create-view", table: t, type })} className="items-start">
+                        <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
+                        <span className="min-w-0">
+                          <span className="block font-medium">{meta.label}</span>
+                          <span className="block text-xs text-muted">{meta.description}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+            {(canManage || canImport) && <DropdownMenuSeparator />}
+            {canImport && (
+              <DropdownMenuItem onSelect={() => onDialog({ kind: "import", table: t })}>
+                <FileUp aria-hidden className="size-4" /> Import CSV…
+              </DropdownMenuItem>
+            )}
+            {canManage && (
+              <>
+                {onDialog && (
+                  <>
+                    <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-table", table: t })}>
+                      <Pencil aria-hidden className="size-4" /> Rename table
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onDialog({ kind: "table-icon", table: t })}>
+                      <Shapes aria-hidden className="size-4" /> Change icon…
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
+                  <Copy aria-hidden className="size-4" /> Duplicate table
                 </DropdownMenuItem>
-              )}
-              {canManage && (
-                <>
-                  {onDialog && (
-                    <>
-                      <DropdownMenuItem onSelect={() => onDialog({ kind: "rename-table", table: t })}>
-                        <Pencil aria-hidden className="size-4" /> Rename table
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => onDialog({ kind: "table-icon", table: t })}>
-                        <Shapes aria-hidden className="size-4" /> Change icon…
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuItem onSelect={() => duplicate.mutate(t.id)}>
-                    <Copy aria-hidden className="size-4" /> Duplicate table
-                  </DropdownMenuItem>
-                  {onDialog && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => onDialog({ kind: "delete-table", table: t })}>
-                        <Trash2 aria-hidden className="size-4" /> Delete table
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+                {onDialog && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem danger disabled={schema.tables.length <= 1} onSelect={() => onDialog({ kind: "delete-table", table: t })}>
+                      <Trash2 aria-hidden className="size-4" /> Delete table
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {expanded && <ViewList id={viewsId} schema={schema} table={t} activeViewId={active ? activeViewId : undefined} onDialog={onDialog} />}
     </li>
@@ -187,10 +198,9 @@ function TableItem({
 }
 
 function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; schema: BaseSchema; table: Table; activeViewId: string | undefined; onDialog: ((dialog: BaseDialog) => void) | null }) {
-  const shared = table.views.filter((v) => !v.personal);
-  const mine = table.views.filter((v) => v.personal);
-  const canCreate = !!onDialog && basePermissions.createView(schema.role);
-  const canCreateShared = basePermissions.createSharedView(schema.role);
+  const views = namedViews(table);
+  const shared = views.filter((v) => !v.personal);
+  const mine = views.filter((v) => v.personal);
   const item = (v: View) => <ViewItem key={v.id} schema={schema} table={table} view={v} active={v.id === activeViewId} onDialog={onDialog} />;
 
   return (
@@ -206,33 +216,7 @@ function ViewList({ id, schema, table, activeViewId, onDialog }: { id: string; s
           </ul>
         </>
       )}
-      {canCreate && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex h-[34px] w-full items-center gap-2.5 rounded-[10px] pl-[34px] pr-2 text-left text-[0.8125rem] text-muted transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover pointer-coarse:h-11"
-            >
-              <Plus aria-hidden className="size-3.5 shrink-0" /> Add view
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72">
-            {!canCreateShared && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
-            {VIEW_TYPES.map((type) => {
-              const meta = VIEW_TYPE_META[type];
-              return (
-                <DropdownMenuItem key={type} onSelect={() => onDialog({ kind: "create-view", table, type })} className="items-start">
-                  <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
-                  <span className="min-w-0">
-                    <span className="block font-medium">{meta.label}</span>
-                    <span className="block text-xs text-muted">{meta.description}</span>
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {shared.length === 0 && mine.length === 0 && <p className="py-1 pl-[34px] text-xs text-muted">No views yet.</p>}
     </div>
   );
 }

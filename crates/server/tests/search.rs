@@ -106,7 +106,11 @@ async fn names_come_before_records_and_starts_with_before_contains() {
     assert_eq!(rec["record_id"], dishes.as_str());
     assert_eq!(rec["table_id"], f.table_id.as_str());
     assert_eq!(rec["table_name"], "Table 1");
-    assert_eq!(rec["view_id"], f.view_id.as_str());
+    let default_grid = f.schema().await["tables"][0]["views"][0]["id"].clone();
+    assert_eq!(
+        rec["view_id"], default_grid,
+        "a record opens in the table's first view, its default grid"
+    );
     assert!(rec["snippet"].is_null(), "matched in the primary field");
     let by_notes = &results[6];
     assert_eq!(by_notes["record_id"], kitchen.as_str());

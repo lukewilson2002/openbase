@@ -4,7 +4,7 @@
  * opened by `?record=recXXX`.
  */
 import { useMemo, useRef, type ComponentProps, type ReactNode } from "react";
-import { ExpandedRecord } from "@/components/record/ExpandedRecord";
+import { RecordPanel } from "./RecordPanel";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
@@ -127,7 +127,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
         {body}
       </div>
       {setup.openRecordId && (
-        <ExpandedRecord
+        <RecordPanel
           schema={schema}
           table={table}
           view={view}

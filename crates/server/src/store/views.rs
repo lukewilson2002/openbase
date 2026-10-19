@@ -6,7 +6,11 @@
 //!   locked (then Creators only);
 //! - personal views: visible to and editable by their owner only (Editor+ to
 //!   create or change, the owner may always delete);
-//! - a table always keeps at least one collaborative view.
+//! - every table has its default grid (`View::is_default`, made with the table):
+//!   it cannot be deleted, renamed, locked or moved, and keeps no filter, sort,
+//!   grouping or colours (those are each person's own, sent as `transient`). Its
+//!   field order, hidden fields, widths and the like are the layout of the
+//!   table's records, changed by Editors. Every other view may be deleted.
 
 use std::collections::{HashMap, HashSet};
 
@@ -109,6 +113,7 @@ pub fn create(
         config,
         personal: input.personal,
         locked: false,
+        is_default: false,
     };
     let position = schema::next_position(tx, PositionScope::ViewsIn(table_id))?;
     let owner = input.personal.then_some(user_id);
@@ -144,6 +149,9 @@ pub fn update(
 ) -> AppResult<View> {
     let row = live_view(tx, view_id)?;
     ensure_visible(&row, user_id)?;
+    if row.view.is_default {
+        check_default_patch(patch)?;
+    }
     let personal = row.owner_id.is_some();
     if personal {
         need(role, Role::Editor, "changing a personal view")?;
@@ -203,23 +211,44 @@ pub fn update(
     Ok(live_view(tx, view_id)?.view)
 }
 
+/// What the default grid refuses: a new name, a lock, a place among the views,
+/// and a saved filter, sort, grouping or colours (each person's own instead).
+fn check_default_patch(patch: &UpdateView) -> AppResult<()> {
+    if patch.name.is_some() {
+        return Err(AppError::bad_request("the default grid cannot be renamed"));
+    }
+    if patch.locked.is_some() {
+        return Err(AppError::bad_request("the default grid cannot be locked"));
+    }
+    if patch.position.is_some() {
+        return Err(AppError::bad_request(
+            "the default grid is not one of the views and has no position",
+        ));
+    }
+    if let Some(c) = &patch.config {
+        let filtered = c.filter.as_ref().is_some_and(|f| !f.items.is_empty());
+        if filtered || !c.sorts.is_empty() || !c.groups.is_empty() || c.row_color.is_some() {
+            return Err(AppError::bad_request(
+                "the default grid keeps no filter, sort, grouping or colours: each person \
+                 filters and sorts it for themselves (send them as `transient` with the query), \
+                 or make a view for a filtered or sorted list everyone shares",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Move a view to the trash, as deleted by `user_id`.
 pub fn delete(tx: &Transaction, view_id: &str, user_id: &str, role: Role) -> AppResult<()> {
     let row = live_view(tx, view_id)?;
     ensure_visible(&row, user_id)?;
+    if row.view.is_default {
+        return Err(AppError::conflict(
+            "a table's default grid cannot be deleted: it is always there",
+        ));
+    }
     if row.owner_id.is_none() {
         need(role, Role::Creator, "deleting a shared view")?;
-        let shared: i64 = tx.query_row(
-            "SELECT count(*) FROM views
-             WHERE table_id = ?1 AND deleted_at IS NULL AND personal_owner_id IS NULL",
-            [&row.view.table_id],
-            |r| r.get(0),
-        )?;
-        if shared <= 1 {
-            return Err(AppError::conflict(
-                "a table must keep at least one shared view",
-            ));
-        }
     }
     tx.execute(
         "UPDATE views SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1",
@@ -267,6 +296,8 @@ pub fn duplicate(
         config: row.view.config.clone(),
         personal,
         locked: false,
+        // A copy of the default grid is an ordinary view.
+        is_default: false,
     };
     let position = schema::next_position(tx, PositionScope::ViewsIn(&row.view.table_id))?;
     let owner = personal.then_some(user_id);

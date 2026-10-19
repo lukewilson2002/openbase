@@ -126,7 +126,7 @@ async fn exercise(mode: ClientLifecycleMode, expect_era: &str) {
     let q = client
         .call_tool(
             CallToolRequestParams::new("query_view").with_arguments(args(
-                json!({"base_id": r.base, "table": "Orders", "view": "Grid view"}),
+                json!({"base_id": r.base, "table": "Orders", "view": "Default grid"}),
             )),
         )
         .await

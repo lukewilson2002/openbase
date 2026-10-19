@@ -14,7 +14,8 @@
 //! `POST /api/tables/{id}/aggregate` (group-by: count, sum, avg, min, max per group),
 //! `GET /api/views/{id}/aggregations?timezone=&search=&transient=`,
 //! `GET /api/tables/{id}/records/{rid}`,
-//! `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=` (link picker) and
+//! `POST /api/tables/{id}/records/get` (several records by id: linked-record previews),
+//! `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=&fields=` (link picker) and
 //! `GET /api/records/{id}/history?before=&limit=`.
 
 use axum::extract::{Path, State};
@@ -51,6 +52,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/tables/{id}/records/restore", post(restore))
         .route("/api/tables/{id}/records/move", post(move_records))
         .route("/api/tables/{id}/records/lookup", get(lookup))
+        .route("/api/tables/{id}/records/get", post(get_many))
         .route("/api/tables/{id}/records/{rid}", get(get_one))
         .route("/api/tables/{id}/aggregate", post(aggregate))
         .route("/api/views/{id}/query", post(query_view))
@@ -214,6 +216,35 @@ async fn get_one(
     Ok(Json(record))
 }
 
+/// Most records one `POST /api/tables/{id}/records/get` reads.
+pub const MAX_GET_IDS: usize = 100;
+
+/// `POST /api/tables/{id}/records/get`: the records of the table with these ids, in the order
+/// asked (linked-record previews). Ids that are not live records of the table are left out, so a
+/// link to a record deleted a moment ago does not fail the rest.
+async fn get_many(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(table_id): Path<String>,
+    ApiJson(req): ApiJson<RecordIds>,
+) -> AppResult<Json<RecordsResponse>> {
+    if req.ids.len() > MAX_GET_IDS {
+        return Err(AppError::bad_request(format!(
+            "at most {MAX_GET_IDS} ids per request"
+        )));
+    }
+    let records = state
+        .db
+        .read(move |conn| {
+            let base = perm::base_of_table(conn, &table_id)?;
+            perm::require_base(conn, &actor, &base, Role::Viewer)?;
+            let tz = write::user_timezone(conn, &actor.user_id);
+            record_store::load_dtos(conn, &table_id, &req.ids, tz)
+        })
+        .await?;
+    Ok(Json(RecordsResponse { records }))
+}
+
 /// `POST /api/views/{id}/query`.
 async fn query_view(
     State(state): State<AppState>,
@@ -324,6 +355,10 @@ struct LookupParams {
     /// field's picker view).
     #[serde(default)]
     view_id: Option<String>,
+    /// Comma-separated ids of other fields whose text `q` also matches (the fields the picker
+    /// shows under each record's name). Unknown ids are ignored.
+    #[serde(default)]
+    fields: Option<String>,
 }
 
 /// `GET /api/tables/{id}/records/lookup`: link picker candidates.
@@ -354,6 +389,15 @@ async fn lookup(
                 .limit
                 .unwrap_or(query::DEFAULT_LOOKUP_LIMIT)
                 .min(query::MAX_LOOKUP_LIMIT);
+            let also: Vec<String> = params
+                .fields
+                .as_deref()
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .collect();
             query::lookup_candidates(
                 conn,
                 &actor.user_id,
@@ -361,6 +405,7 @@ async fn lookup(
                 params.q.as_deref().unwrap_or_default(),
                 limit,
                 view.as_ref(),
+                &also,
             )
         })
         .await?;

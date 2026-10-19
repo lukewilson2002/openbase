@@ -1,6 +1,9 @@
-/** Attachment editor: list, remove and upload files (button, drag and drop, or paste). */
+/** Attachment editor: list, reorder (by each file's handle), remove and upload files (button, drag and drop, or paste). */
 import { useId, useRef, useState } from "react";
-import { FileText, Upload, X } from "lucide-react";
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Upload, X } from "lucide-react";
 import { attachmentsApi } from "@/api/records";
 import type { AttachmentRef, Field } from "@/api/types";
 import { errorMessage } from "@/api/client";
@@ -9,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { attachmentRefs } from "@/lib/cells/kinds";
+import { FilePreview } from "../FilePreview";
 import { EditorShell } from "./EditorShell";
 import { useEditorEnv, type FieldEditorCallbacks } from "./env";
 
@@ -38,14 +42,43 @@ export async function uploadFiles(baseId: string, files: readonly File[]): Promi
   return { uploaded, errors };
 }
 
+/** `files` with the file `activeId` moved to where `overId` is, or null when nothing moves. */
+export function moveFile(files: readonly AttachmentRef[], activeId: string, overId: string | null): AttachmentRef[] | null {
+  const from = files.findIndex((f) => f.id === activeId);
+  const to = overId === null ? -1 : files.findIndex((f) => f.id === overId);
+  return from >= 0 && to >= 0 && from !== to ? arrayMove([...files], from, to) : null;
+}
+
+/** A file's preview tile (see FilePreview), for a signed-in person. */
 export function AttachmentThumb({ file, size = 40 }: { file: AttachmentRef; size?: number }) {
-  const isImage = file.mime.startsWith("image/");
-  return isImage ? (
-    <img src={attachmentsApi.thumbUrl(file.id)} alt="" width={size} height={size} loading="lazy" className="rounded object-cover" style={{ width: size, height: size }} />
-  ) : (
-    <span className="flex items-center justify-center rounded bg-subtle text-muted" style={{ width: size, height: size }}>
-      <FileText aria-hidden className="size-5" />
-    </span>
+  return <FilePreview file={file} src={attachmentsApi.thumbUrl(file.id)} size={size} />;
+}
+
+/** One file of the editor's list: its handle (drag, or Space and the arrow keys), preview, name and Remove. */
+function FileRow({ file, sortable, onRemove }: { file: AttachmentRef; sortable: boolean; onRemove: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: file.id, disabled: !sortable });
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-2 rounded bg-surface py-1", isDragging && "relative z-10 shadow-pop")}>
+      {sortable && (
+        <button
+          type="button"
+          aria-label={`Drag ${file.filename} to reorder`}
+          className="-mx-1 inline-flex h-10 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:bg-hover hover:text-fg active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical aria-hidden className="size-4" />
+        </button>
+      )}
+      <AttachmentThumb file={file} />
+      <a href={attachmentsApi.downloadUrl(file.id, file.filename)} target="_blank" rel="noopener noreferrer" draggable={false} className="min-w-0 flex-1 truncate text-[0.8125rem]">
+        {file.filename}
+        <span className="ml-2 text-xs text-muted">{formatBytes(file.size)}</span>
+      </a>
+      <button type="button" aria-label={`Remove ${file.filename}`} onClick={onRemove} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
+        <X aria-hidden className="size-4" />
+      </button>
+    </li>
   );
 }
 
@@ -68,6 +101,13 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
   const set = (next: AttachmentRef[]) => {
     setFiles(next);
     onChange?.({ json: next });
+  };
+
+  // Files are put in order by their handles only, so a swipe elsewhere still scrolls the list.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const onSortEnd = (e: DragEndEvent) => {
+    const next = moveFile(filesRef.current, String(e.active.id), e.over ? String(e.over.id) : null);
+    if (next) set(next);
   };
 
   const upload = async (list: readonly File[]) => {
@@ -114,26 +154,21 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
             }}
             className={cn("flex flex-col", dragging && "bg-primary-soft")}
           >
-            <ul aria-label={`Files in ${field.name}`} className="max-h-60 min-h-12 overflow-y-auto overscroll-contain p-2">
-              {files.map((f) => (
-                <li key={f.id} className="flex items-center gap-2 py-1">
-                  <AttachmentThumb file={f} />
-                  <a href={attachmentsApi.downloadUrl(f.id, f.filename)} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate text-[0.8125rem]">
-                    {f.filename}
-                    <span className="ml-2 text-xs text-muted">{formatBytes(f.size)}</span>
-                  </a>
-                  <button type="button" aria-label={`Remove ${f.filename}`} onClick={() => set(files.filter((x) => x.id !== f.id))} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
-                    <X aria-hidden className="size-4" />
-                  </button>
-                </li>
-              ))}
-              {files.length === 0 && busy === 0 && <li className="py-3 text-center text-[0.8125rem] text-muted">Drop files here, paste them, or use Upload.</li>}
-              {busy > 0 && (
-                <li className="flex items-center gap-2 py-2 text-[0.8125rem] text-muted">
-                  <Spinner className="size-3.5" label="Uploading" /> Uploading {busy} file{busy === 1 ? "" : "s"}…
-                </li>
-              )}
-            </ul>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSortEnd}>
+              <SortableContext items={files.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+                <ul aria-label={`Files in ${field.name}`} className="max-h-60 min-h-12 overflow-y-auto overscroll-contain p-2">
+                  {files.map((f) => (
+                    <FileRow key={f.id} file={f} sortable={files.length > 1} onRemove={() => set(files.filter((x) => x.id !== f.id))} />
+                  ))}
+                  {files.length === 0 && busy === 0 && <li className="py-3 text-center text-[0.8125rem] text-muted">Drop files here, paste them, or use Upload.</li>}
+                  {busy > 0 && (
+                    <li className="flex items-center gap-2 py-2 text-[0.8125rem] text-muted">
+                      <Spinner className="size-3.5" label="Uploading" /> Uploading {busy} file{busy === 1 ? "" : "s"}…
+                    </li>
+                  )}
+                </ul>
+              </SortableContext>
+            </DndContext>
             {errors.length > 0 && (
               <ul role="alert" className="border-t border-line px-3 py-2 text-xs text-danger">
                 {errors.map((e) => (

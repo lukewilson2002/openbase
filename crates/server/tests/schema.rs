@@ -26,8 +26,11 @@ async fn create_table_has_primary_name_field_and_grid_view() {
     assert_eq!(fields[0]["name"], "Name");
     assert_eq!(fields[0]["type"], "single_line_text");
     assert_eq!(fields[0]["id"], r.body["primary_field_id"]);
-    assert_eq!(r.body["views"][0]["name"], "Grid view");
-    assert_eq!(r.body["views"][0]["type"], "grid");
+    let views = r.body["views"].as_array().unwrap();
+    assert_eq!(views.len(), 1, "a new table has only its default grid");
+    assert_eq!(views[0]["name"], "Default grid");
+    assert_eq!(views[0]["type"], "grid");
+    assert_eq!(views[0]["is_default"], true);
 
     // it is last in the schema
     let s = f.schema().await;

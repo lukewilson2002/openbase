@@ -357,8 +357,8 @@ export function ViewBar(props: ViewBarProps) {
   const why = view.locked ? "This view is locked. Only a creator can change it." : "You do not have permission to change this view.";
   // Colours are not part of the per-viewer override, so they stay read-only without save rights.
   const colorNote = readOnly ? why : undefined;
-  // Filter, sort and group still work for this viewer alone.
-  const queryNote = readOnly ? `${why} Your filters, sorts and groups apply only to you and are not saved.` : undefined;
+  // Filter, sort and group still work for this viewer alone; in the default grid they always do.
+  const queryNote = view.is_default ? "In the default grid, filters, sorts and groups are only yours, on this device." : readOnly ? `${why} Your filters, sorts and groups apply only to you and are not saved.` : undefined;
   const hiddenCount = config.hidden_fields.filter((id) => id !== table.primary_field_id).length;
   const filterCount = countConditions(config.filter);
   const sortable = table.fields.filter(isSortable);
@@ -366,7 +366,8 @@ export function ViewBar(props: ViewBarProps) {
   const heights: RowHeight[] = ["short", "medium", "tall", "extra_tall"];
   const rowColorActive = !!config.row_color && (config.row_color.mode === "by_select" || config.row_color.rules.length > 0);
   const showSearch = searchOpen || search !== "";
-  const features = { group: true, color: true, rowHeight: true, csv: true, ...props.features };
+  // The default grid is plain: no colours (a view of its own can have them).
+  const features = { group: true, color: true, rowHeight: true, csv: true, ...props.features, ...(view.is_default ? { color: false } : {}) };
   const csv = useExportCsv(view, props.timeZone);
 
   const filterWhat = filterCount > 0 ? fieldsPhrase(table, firstConditionField(config.filter), filterCount) : undefined;
@@ -442,7 +443,8 @@ export function ViewBar(props: ViewBarProps) {
       <Lock aria-hidden className="size-3" /> Locked
     </span>
   );
-  const notSaved = props.hasLocalQuery && !canConfigure && (
+  // In the default grid a filter of one's own is how it works, not a change left unsaved.
+  const notSaved = props.hasLocalQuery && !canConfigure && !view.is_default && (
     <span role="status" className="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs" title="Your filters, sorts and groups are only applied for you">
       Not saved
       <button type="button" className="rounded px-1 font-medium underline hover:bg-hover" onClick={props.onResetLocalQuery}>

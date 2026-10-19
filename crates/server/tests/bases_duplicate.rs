@@ -255,7 +255,12 @@ async fn personal_views_are_copied_only_for_the_person_copying() {
         .iter()
         .map(|v| sid(&v["name"]))
         .collect();
-    assert_eq!(names, ["Grid view", "Board", "Intake", "Mine"]);
+    assert_eq!(
+        names,
+        ["Default grid", "Grid view", "Board", "Intake", "Mine"]
+    );
+    assert_eq!(view(t1, "Default grid")["is_default"], true);
+    assert_eq!(view(t1, "Grid view")["is_default"], false);
     assert_eq!(view(t1, "Mine")["personal"], true);
     assert_eq!(view(t1, "Grid view")["personal"], false);
     // the other user's personal view did not leak into the copy

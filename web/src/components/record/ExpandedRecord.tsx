@@ -8,14 +8,14 @@
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { hashKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CopyPlus, MoreHorizontal, Share2, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Columns3, ChevronLeft, ChevronRight, CopyPlus, MoreHorizontal, Share2, Trash2, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { errorMessage } from "@/api/client";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { BaseSchema, Collaborator, Field, TableRecord, Table, View, ViewConfig } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,6 +28,7 @@ import { personColors } from "@/lib/colors";
 import { copyToClipboard } from "@/lib/format";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { isComputed } from "@/lib/cells/kinds";
+import { LinkedRecordsProvider, type LinkedRecordsHost } from "./linked/LinkedRecords";
 import { jsonEqual, parseText } from "@/lib/cells/parse";
 import { toWire, writableValues } from "@/lib/cells/wire";
 import { CellValue } from "./CellValue";
@@ -57,6 +58,14 @@ export interface ExpandedRecordProps {
   onDuplicateRecord?: (record: TableRecord) => Promise<TableRecord | undefined>;
   /** The record was just added: its primary field starts being edited. */
   justCreated?: boolean;
+  /** Opens a linked record in the panel (its link fields' cards are buttons); without it they only preview. */
+  onOpenLinked?: (tableId: string, recordId: string) => void;
+  /** This record was opened from a link of another one: the header's Back returns there. */
+  onBack?: () => void;
+  /** The title of the record Back returns to. */
+  backLabel?: string;
+  /** Opens the table's default grid, where its fields are arranged ("Edit schema" in the record's menu). */
+  onEditSchema?: () => void;
 }
 
 function useFormat(timeZone: string, collaborators: readonly Collaborator[]): FormatCtx {
@@ -209,13 +218,14 @@ function FieldRow({
   );
 }
 
-export function ExpandedRecord({ schema, table, role, recordId, config, prevId, nextId, onNavigate, onClose, emails, timeZone, currentUserId, collaborators, onDeleteRecord, onDuplicateRecord, justCreated = false }: ExpandedRecordProps) {
+export function ExpandedRecord({ schema, table, role, recordId, config, prevId, nextId, onNavigate, onClose, emails, timeZone, currentUserId, collaborators, onDeleteRecord, onDuplicateRecord, justCreated = false, onOpenLinked, onBack, backLabel, onEditSchema }: ExpandedRecordProps) {
+  const linkedHost = useMemo<LinkedRecordsHost>(() => ({ open: onOpenLinked }), [onOpenLinked]);
   const qc = useQueryClient();
   const toast = useToast();
   const canEdit = atLeast(role, "editor");
   const canComment = atLeast(role, "commenter");
   const format = useFormat(timeZone, collaborators);
-  const env = useMemo<EditorEnv>(() => ({ baseId: schema.id, tableId: table.id, collaborators, timeZone, canCreateOptions: atLeast(role, "creator"), format, currentUserId }), [schema.id, table.id, collaborators, timeZone, role, format, currentUserId]);
+  const env = useMemo<EditorEnv>(() => ({ baseId: schema.id, tableId: table.id, collaborators, timeZone, canCreateOptions: atLeast(role, "creator"), format, currentUserId, schema }), [schema, table.id, collaborators, timeZone, role, format, currentUserId]);
   const recordKey = recordKeys.record(table.id, recordId);
   const record = useQuery({ queryKey: recordKey, queryFn: () => recordsApi.get(table.id, recordId) });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -428,26 +438,28 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
       {/* From md up this column scrolls by itself, inside its padding: editors' toolbars stick to its top edge. */}
       <div className="p-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:[--ob-sticky-top:-1rem]">
         {/* Fields sit close: each is as tall as its value, and a hover tints it, which marks it off enough. */}
-        <div className="flex flex-col gap-2">
-          {visible.map((f) => (
-            <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={justCreated && f.id === table.primary_field_id} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
-          ))}
-          {hidden.length > 0 && (
-            <div className="border-t border-line pt-3">
-              <button type="button" aria-expanded={showHidden} aria-controls="hidden-fields" onClick={() => setShowHidden((s) => !s)} className="flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-fg">
-                <ChevronDown aria-hidden className={cn("size-4 transition-transform", !showHidden && "-rotate-90")} />
-                {showHidden ? "Hide" : "Show"} {hidden.length} hidden field{hidden.length === 1 ? "" : "s"}
-              </button>
-              {showHidden && (
-                <div id="hidden-fields" className="mt-3 flex flex-col gap-2">
-                  {hidden.map((f) => (
-                    <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={false} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <LinkedRecordsProvider value={linkedHost}>
+          <div className="flex flex-col gap-2">
+            {visible.map((f) => (
+              <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={justCreated && f.id === table.primary_field_id} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
+            ))}
+            {hidden.length > 0 && (
+              <div className="border-t border-line pt-3">
+                <button type="button" aria-expanded={showHidden} aria-controls="hidden-fields" onClick={() => setShowHidden((s) => !s)} className="flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-fg">
+                  <ChevronDown aria-hidden className={cn("size-4 transition-transform", !showHidden && "-rotate-90")} />
+                  {showHidden ? "Hide" : "Show"} {hidden.length} hidden field{hidden.length === 1 ? "" : "s"}
+                </button>
+                {showHidden && (
+                  <div id="hidden-fields" className="mt-3 flex flex-col gap-2">
+                    {hidden.map((f) => (
+                      <FieldRow key={f.id} field={f} record={record.data} readOnly={!canEdit} error={errors[f.id]} failed={failed[f.id]} startEditing={false} env={env} emails={emails} lastSaved={lastSaved} unsent={unsent} onSave={onSave} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </LinkedRecordsProvider>
       </div>
       <aside aria-label="Comments and history" className="flex min-h-[18rem] w-full shrink-0 flex-col border-t border-line md:min-h-0 md:w-80 md:border-l md:border-t-0">
         <Tabs defaultValue="comments" className="flex min-h-0 flex-1 flex-col">
@@ -497,12 +509,22 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
             }}
           >
             <header className="flex shrink-0 items-center gap-1 border-b border-line px-3 py-2">
-              <IconButton label="Previous record (Alt+Up)" disabled={!prevId} onClick={() => prevId && onNavigate(prevId)}>
-                <ChevronLeft aria-hidden className="size-4 rotate-90" />
-              </IconButton>
-              <IconButton label="Next record (Alt+Down)" disabled={!nextId} onClick={() => nextId && onNavigate(nextId)}>
-                <ChevronRight aria-hidden className="size-4 rotate-90" />
-              </IconButton>
+              {onBack ? (
+                // A linked record opened from another: Back returns to that one (the view's previous/next do not apply).
+                <button type="button" onClick={onBack} title={backLabel ? `Back to ${backLabel}` : "Back"} className="inline-flex h-8 max-w-[45%] shrink-0 items-center gap-1 rounded-md px-2 text-[0.8125rem] font-medium text-muted hover:bg-hover hover:text-fg pointer-coarse:h-10">
+                  <ArrowLeft aria-hidden className="size-4 shrink-0" />
+                  <span className="truncate">{backLabel ? `Back to ${backLabel}` : "Back"}</span>
+                </button>
+              ) : (
+                <>
+                  <IconButton label="Previous record (Alt+Up)" disabled={!prevId} onClick={() => prevId && onNavigate(prevId)}>
+                    <ChevronLeft aria-hidden className="size-4 rotate-90" />
+                  </IconButton>
+                  <IconButton label="Next record (Alt+Down)" disabled={!nextId} onClick={() => nextId && onNavigate(nextId)}>
+                    <ChevronRight aria-hidden className="size-4 rotate-90" />
+                  </IconButton>
+                </>
+              )}
               <D.Title className="ml-1 min-w-0 flex-1 truncate text-base font-semibold">{title}</D.Title>
               <SaveStatus state={saveState} />
               <IconButton label="Share record" onClick={() => void share()}>
@@ -515,6 +537,14 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
+                  {onEditSchema && (
+                    <>
+                      <DropdownMenuItem onSelect={onEditSchema}>
+                        <Columns3 aria-hidden className="size-4" /> Edit schema
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem disabled={!canEdit || !record.data} onSelect={() => void duplicate()}>
                     <CopyPlus aria-hidden className="size-4" /> Duplicate record
                   </DropdownMenuItem>

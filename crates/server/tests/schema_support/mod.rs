@@ -110,7 +110,8 @@ pub async fn base(app: &TestApp, c: &Client, ws: &str, name: &str) -> Value {
 }
 
 /// A workspace with an owner and one base (starter table "Table 1": Name, plus a long-text
-/// "Notes" this fixture adds).
+/// "Notes" and a shared grid view "Grid view" (`view_id`) this fixture adds, besides the table's
+/// default grid).
 pub struct Fixture {
     pub app: TestApp,
     pub owner: Client,
@@ -145,12 +146,22 @@ impl Fixture {
             )
             .await;
         notes.assert_status(201);
+        // A new table has only its default grid, which keeps no filter or sort: most tests want an
+        // ordinary grid view to configure.
+        let view = app
+            .post(
+                &owner,
+                &format!("/api/tables/{}/views", t["id"].as_str().unwrap()),
+                json!({ "name": "Grid view", "type": "grid" }),
+            )
+            .await;
+        view.assert_status(201);
         Fixture {
             base_id: b["id"].as_str().unwrap().into(),
             table_id: t["id"].as_str().unwrap().into(),
             primary_id: t["primary_field_id"].as_str().unwrap().into(),
             notes_id: notes.body["id"].as_str().unwrap().into(),
-            view_id: t["views"][0]["id"].as_str().unwrap().into(),
+            view_id: view.body["id"].as_str().unwrap().into(),
             app,
             owner,
             ws,

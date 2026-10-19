@@ -62,7 +62,15 @@ describe("canConfigureView", () => {
 describe("gridRecordLayout", () => {
   const config = (field_order: string[], hidden_fields: string[] = []) => ({ ...makeView({ id: "x" }).config, field_order, hidden_fields });
 
-  it("takes the first shared grid's order and hidden fields, over personal grids and other view types", () => {
+  it("takes the default grid's order and hidden fields, over the other grids and view types", () => {
+    const views = [
+      makeView({ id: "viwGrid", config: config(["fldDue", "fldStart"]) }),
+      makeView({ id: "viwDefault", is_default: true, config: config(["fldStart", "fldDue"], ["fldNotes"]) }),
+    ];
+    expect(gridRecordLayout({ views }, "editor")).toEqual({ field_order: ["fldStart", "fldDue"], hidden_fields: ["fldNotes"] });
+  });
+
+  it("without a default grid, takes the first shared grid's, over personal grids and other view types", () => {
     const views = [
       makeView({ id: "viwKanban", type: "kanban", config: config(["fldDue", "fldStart"]) }),
       makeView({ id: "viwMine", personal: true, config: config(["fldDue"]) }),
@@ -168,5 +176,30 @@ describe("useViewConfig for people who can save the view", () => {
 
   it("a creator can still save a locked view", () => {
     expect(setup("creator", makeView({ id: "viw1", locked: true })).hook.result.current.canConfigure).toBe(true);
+  });
+});
+
+describe("useViewConfig on the default grid", () => {
+  it("keeps an editor's filter and sort on this device, and saves only the layout", async () => {
+    const view = makeView({ id: "viwDefault", is_default: true });
+    const api = mockApi({ "PATCH /api/views/viwDefault": (call: { body: unknown }) => ({ ...view, config: (call.body as { config: ViewConfig }).config }) });
+    const { hook } = setup("editor", view);
+    expect(hook.result.current.canConfigure).toBe(true);
+    act(() => hook.result.current.update((c) => setFilter(c, condition)));
+    // The filter is this person's own: sent with queries, never saved to the view.
+    expect(hook.result.current.transient?.filter).toEqual(condition);
+    expect(hook.result.current.config.filter).toEqual(condition);
+    expect(JSON.parse(localStorage.getItem("ob-view-transient:viwDefault") ?? "null")?.filter).toEqual(condition);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(api.callsTo("PATCH /api/views/viwDefault")).toHaveLength(0);
+
+    // A column's width is the grid's layout: saved for everyone, without the filter.
+    act(() => hook.result.current.update((c) => ({ ...c, field_widths: { fld1: 320 } })));
+    await waitFor(() => expect(api.callsTo("PATCH /api/views/viwDefault")).toHaveLength(1));
+    const saved = (api.callsTo("PATCH /api/views/viwDefault")[0]!.body as { config: ViewConfig }).config;
+    expect(saved.field_widths).toEqual({ fld1: 320 });
+    expect(saved.filter).toBeNull();
+    expect(hook.result.current.config.filter).toEqual(condition);
+    localStorage.removeItem("ob-view-transient:viwDefault");
   });
 });

@@ -5,9 +5,10 @@
  * shown from a blob URL (kept in memory only); open links use plain URLs.
  */
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef } from "@/api/types";
+import { FilePreview } from "@/components/record/FilePreview";
+import { hasPreview } from "@/lib/filePreview";
 import { saveBlob } from "@/lib/download";
 import { formatBytes } from "@/lib/format";
 import { useShare } from "./ShareContext";
@@ -47,25 +48,10 @@ export function useThumbSrc(file: AttachmentRef | undefined): string | null {
   return blob?.key === key ? blob.url : null;
 }
 
-export function ShareThumb({ file, size = 40, className }: { file: AttachmentRef; size?: number; className?: string }) {
-  const isImage = file.mime.startsWith("image/");
-  const src = useThumbSrc(isImage ? file : undefined);
-  const [broken, setBroken] = useState(false);
-  // Not every image has a thumbnail (the server answers 404 for those): show the file icon instead.
-  if (!isImage || broken) return <FileIcon size={size} />;
-  return src ? (
-    <img src={src} alt="" width={size} height={size} loading="lazy" onError={() => setBroken(true)} className={className ?? "rounded object-cover"} style={className ? undefined : { width: size, height: size }} />
-  ) : (
-    <span className="inline-block animate-pulse rounded bg-subtle" style={{ width: size, height: size }} aria-hidden />
-  );
-}
-
-function FileIcon({ size }: { size: number }) {
-  return (
-    <span className="flex items-center justify-center rounded bg-subtle text-muted" style={{ width: size, height: size }} aria-hidden>
-      <FileText className="size-5" />
-    </span>
-  );
+/** A file's preview tile (see FilePreview) on a share page; the server answers 404 for a file without one. */
+export function ShareThumb({ file, size = 40 }: { file: AttachmentRef; size?: number }) {
+  const src = useThumbSrc(hasPreview(file) ? file : undefined);
+  return <FilePreview file={file} src={src} size={size} />;
 }
 
 function FileLink({ file }: { file: AttachmentRef }) {
@@ -102,7 +88,7 @@ function FileLink({ file }: { file: AttachmentRef }) {
   );
 }
 
-/** Thumbnails for images, a file icon for the rest, each a link that downloads the file. */
+/** Each file as its preview tile (or its type's), with a link that downloads it. */
 export function PublicAttachments({ files, compact }: { files: readonly AttachmentRef[]; compact?: boolean }) {
   if (files.length === 0) return <span className="text-faint">—</span>;
   if (compact) {

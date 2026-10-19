@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { basePermissions } from "./permissions";
+import { defaultViewPath } from "@/lib/views";
 
 export function EmptyBase({ schema, onImport }: { schema: BaseSchema; onImport: () => void }) {
   const canCreate = basePermissions.manageTables(schema.role);
@@ -55,8 +56,8 @@ function CreateTableForm({ schema }: { schema: BaseSchema }) {
     mutationFn: (n: string) => api.tables.create(schema.id, n, null),
     onSuccess: async (table) => {
       await qc.invalidateQueries({ queryKey: keys.base(schema.id) });
-      const view = table.views?.[0];
-      navigate(`/base/${schema.id}/${table.id}${view ? `/${view.id}` : ""}`);
+      // A new table opens in its default grid, its only view.
+      navigate(defaultViewPath(schema.id, table));
     },
   });
   const submit = (e: FormEvent) => {

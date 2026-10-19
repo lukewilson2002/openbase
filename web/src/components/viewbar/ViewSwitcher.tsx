@@ -1,6 +1,8 @@
 /**
- * The start of the view toolbar: a button per view of the open table (the table itself is named in
- * the top bar). The buttons carry the views' names while all of them fit; else each is just its
+ * The start of the view toolbar: first the table's default grid, an icon of its own (it is not one of
+ * the views: a plain grid of every record, where the fields are arranged), then a divider and a button
+ * per view of the open table (the table itself is named in the top bar). The default grid never shares
+ * a button with grid views. The buttons carry the views' names while all of them fit; else each is just its
  * type's icon, views of one type share one button listing them, and what still does not fit goes
  * into a "…" menu. Personal and locked views wear small badges, and a trailing "+" adds a view for
  * those who may. A right-click (or a held press on a phone) on a view's button opens the view's menu:
@@ -9,7 +11,7 @@
  */
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router";
-import { Check, ChevronDown, Ellipsis, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
@@ -20,6 +22,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
+import { namedViews } from "@/lib/views";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import { ViewMenuItems, hasViewActions } from "./ViewMenuItems";
@@ -94,24 +97,42 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const openDialog = useBaseDialog();
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const canCreateView = !!openDialog && basePermissions.createView(schema.role);
-  const singles: ViewGroup[] = table.views.map((v) => ({ type: v.type, views: [v] }));
+  const views = namedViews(table);
+  const defaultView = table.views.find((v) => v.is_default);
+  const singles: ViewGroup[] = views.map((v) => ({ type: v.type, views: [v] }));
   const to = (v: View) => `/base/${schema.id}/${table.id}/${v.id}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
-  const [fixedRefs] = useState(() => [moreRef]);
+  const defaultRef = useRef<HTMLDivElement>(null);
+  const [fixedRefs] = useState(() => [moreRef, defaultRef]);
   const labelled = useLabelsFit(rootRef, measureRef, fixedRefs, desktop);
   // A right-click or a held press on a view button: the view's own menu, as on its row in the menu.
   const [menu, setMenu] = useState<{ view: View; anchor: MenuAnchor } | null>(null);
   const hasMenu = (v: View) => hasViewActions(schema, v, openDialog);
   const onMenu = (v: View, anchor: MenuAnchor) => setMenu({ view: v, anchor });
   // Names fit: one button per view. Else icons, one per view type, and what does not fit goes into "…".
-  const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(table.views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
+  const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
 
   return (
     <ViewMenuOpen value={menu !== null}>
       <div ref={rootRef} className={cn("relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
-        <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5">
+        {defaultView && (
+          <div ref={defaultRef} className="flex shrink-0 items-center gap-1">
+            <Tooltip content="Default grid: every record, and where fields are arranged">
+              <Link
+                to={to(defaultView)}
+                aria-label="Default grid"
+                aria-current={view.id === defaultView.id ? "page" : undefined}
+                className={cn(buttonClass, "no-underline", view.id === defaultView.id ? "bg-primary-soft text-primary-ink" : "text-muted hover:bg-hover hover:text-fg")}
+              >
+                <Grid3x3 aria-hidden className="size-[1.125rem] shrink-0" />
+              </Link>
+            </Tooltip>
+            <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-line-strong" />
+          </div>
+        )}
+        <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5 empty:hidden">
           {shown.map((g) => (
             <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
           ))}
@@ -162,7 +183,7 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
         </AnchoredMenu>
         {/* The buttons with their names, out of sight: measured to decide whether the names fit. */}
         <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-0.5">
-          {table.views.map((v) => {
+          {views.map((v) => {
             const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
             return (
               <span key={v.id} className={cn(buttonClass, labelledClass)}>

@@ -15,6 +15,7 @@ import { AttachmentThumb } from "./editors/AttachmentEditor";
 import { Pill } from "./editors/ChoiceEditor";
 import { LinkChip } from "./editors/LinkEditor";
 import { UserChip } from "./editors/UserEditor";
+import { LinkedRecordCards, useLinkCards } from "./linked/LinkedRecords";
 
 export interface CellValueProps {
   field: Field;
@@ -34,6 +35,7 @@ const CHIP_ROW_PX = 20;
 
 export function CellValue({ field, value, format, emails, className, markdown = true, linkFiles = false }: CellValueProps) {
   const shape = displayShapeOf(field);
+  const linkCards = useLinkCards();
   const text = displayText(field, value, format);
   const empty = <span className="text-faint">—</span>;
   const wrap = (children: React.ReactNode) => <div className={cn("min-w-0 text-[0.8125rem]", className)}>{children}</div>;
@@ -77,7 +79,10 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     }
     case "link": {
       const chips = chipItems(field, value, format);
-      return chips.length ? chipRow(chips.map((c) => <LinkChip key={c.id ?? c.text} name={c.text} />)) : wrap(empty);
+      if (!chips.length) return wrap(empty);
+      const chipList = chipRow(chips.map((c) => <LinkChip key={c.id ?? c.text} name={c.text} />));
+      // In the record panel a link field's records are cards (title and a few fields) that open them.
+      return linkCards && field.type === "link" ? wrap(<LinkedRecordCards field={field} value={value} format={format} emails={emails} fallback={chipList} />) : chipList;
     }
     case "user": {
       const chips = chipItems(field, value, format);

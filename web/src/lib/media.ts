@@ -59,3 +59,14 @@ export function withShare(src: string, token: string): string {
 export function mediaLabel(src: string, alt: string): string {
   return alt.trim() || embedFilename(src);
 }
+
+/**
+ * The preview address of an embedded file that is shown as a file card but has a picture of its own:
+ * a PDF's first page (see lib/filePreview.ts). Null for the rest. Keeps a `?share=` query.
+ */
+export function embedPreviewSrc(src: string): string | null {
+  const [path, query] = src.split("?", 2) as [string, string | undefined];
+  if (!/\.pdf$/i.test(embedFilename(path))) return null;
+  const thumb = `${path.slice(0, path.lastIndexOf("/") + 1)}thumb`;
+  return query === undefined ? thumb : `${thumb}?${query}`;
+}

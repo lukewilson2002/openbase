@@ -1,13 +1,15 @@
 /**
- * Which fields a card (kanban, gallery, list row) shows and how to find its cover image.
+ * Which fields a card (kanban, gallery, list row) shows and how to find its cover (an image, or the
+ * preview of a PDF or a video).
  * Hiding a field in the toolbar removes it from every card; the primary field is the card title.
  */
 import { attachmentsApi } from "@/api/records";
-import type { Field, TableRecord, ViewConfig } from "@/api/types";
+import type { AttachmentRef, Field, TableRecord, ViewConfig } from "@/api/types";
 import { markdownToText } from "@/components/record/Markdown";
 import { resolveFieldOrder } from "@/components/viewbar/config";
 import { displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
 import { attachmentRefs, displayShapeOf, resultTypeOf, unwrapResult } from "@/lib/cells/kinds";
+import { coverFile } from "@/lib/filePreview";
 
 /** Text of a count line: "1 item", "8 items". */
 export function itemsLabel(n: number): string {
@@ -44,11 +46,16 @@ export function fieldsToShow(fields: readonly Field[], record: TableRecord, form
   return out;
 }
 
-/** Thumbnail URL of the first image in the cover attachment field, if any. */
-export function coverUrl(coverField: Field | undefined, record: TableRecord): string | null {
+/** The file shown as the card's cover (see `coverFile`), if any. */
+export function coverOf(coverField: Field | undefined, record: TableRecord): AttachmentRef | null {
   if (!coverField || coverField.type !== "attachment") return null;
-  const img = attachmentRefs(record.values[coverField.id]).find((a) => a.mime.startsWith("image/"));
-  return img ? attachmentsApi.thumbUrl(img.id) : null;
+  return coverFile(attachmentRefs(record.values[coverField.id])) ?? null;
+}
+
+/** Preview URL of the card's cover file, if any. */
+export function coverUrl(coverField: Field | undefined, record: TableRecord): string | null {
+  const file = coverOf(coverField, record);
+  return file ? attachmentsApi.thumbUrl(file.id) : null;
 }
 
 /** Title of a card: the primary field's text. */

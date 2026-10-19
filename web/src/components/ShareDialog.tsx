@@ -121,7 +121,8 @@ function WorkspaceViews({ bases }: { bases: readonly Pick<BaseSummary, "id" | "n
     if (!schema) continue;
     for (const table of schema.tables) {
       for (const view of table.views) {
-        if (!canShareView(schema.role, view)) continue;
+        // The default grid is each person's own working grid, not something to share.
+        if (view.is_default || !canShareView(schema.role, view)) continue;
         views.push(view);
         // The table is named only when it is not the base's namesake: "Chores › All chores", "Chores › Shopping list › Grid".
         labels.set(view.id, [schema.name, ...(table.name === schema.name ? [] : [table.name]), view.name].join(" › "));

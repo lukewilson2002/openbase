@@ -12,14 +12,14 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Ellipsis, History, Palette, Pencil, Plus, Settings, Shapes, Share2, Trash2, UserPlus, Users, Zap } from "lucide-react";
+import { Copy, Ellipsis, FileUp, History, Palette, Pencil, Plus, Settings, Shapes, Share2, Table2, Trash2, UserPlus, Users, Zap } from "lucide-react";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
 import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
@@ -227,17 +227,20 @@ function ProjectItem({ base, workspaceName, tree }: { base: BaseSummary; workspa
           <EntityTile name={base.name} icon={base.icon} color={base.color} size="xs" />
           <span className="min-w-0 flex-1 truncate">{base.name}</span>
         </button>
-        <ProjectMenu base={base} workspaceName={workspaceName} />
+        <ProjectMenu base={base} workspaceName={workspaceName} open={active} />
       </div>
       {expanded && <ProjectBody id={groupId} base={base} tree={tree} />}
     </li>
   );
 }
 
-function ProjectMenu({ base, workspaceName }: { base: BaseSummary; workspaceName: string }) {
+function ProjectMenu({ base, workspaceName, open }: { base: BaseSummary; workspaceName: string; open: boolean }) {
   const qc = useQueryClient();
   const toast = useToast();
   const openDialog = useNavDialog();
+  // Adding a table uses the project page's dialogs, so it is offered for the open project.
+  const openBaseDialog = useBaseDialog();
+  const addTable = open && openBaseDialog && basePermissions.manageTables(base.role) ? openBaseDialog : null;
   const duplicate = useMutation({
     mutationFn: () => api.bases.duplicate(base.id, { name: `${base.name} copy`, include_records: true }),
     onSuccess: () => {
@@ -249,6 +252,24 @@ function ProjectMenu({ base, workspaceName }: { base: BaseSummary; workspaceName
   const canEdit = basePermissions.editBase(base.role);
   return (
     <RowMenu label={`Project options for ${base.name}`}>
+      {addTable && (
+        <>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Plus aria-hidden className="size-4" /> Add table
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onSelect={() => addTable({ kind: "create-table" })}>
+                <Table2 aria-hidden className="size-4" /> New empty table
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => addTable({ kind: "create-table-csv" })}>
+                <FileUp aria-hidden className="size-4" /> New table from CSV…
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+        </>
+      )}
       {canEdit && (
         <>
           <DropdownMenuItem onSelect={() => openDialog({ kind: "rename-project", base })}>

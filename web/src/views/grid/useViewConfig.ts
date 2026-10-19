@@ -31,13 +31,14 @@ export function canConfigureView(role: string, view: Pick<View, "personal" | "lo
 }
 
 /**
- * The field layout (order and hidden fields) a record opened from any other view type shows: the
- * table's grid view's, as this person sees that grid. The first shared grid wins over personal ones;
- * null when the table has no grid view.
+ * The field layout (order and hidden fields) of the table's records wherever they are shown outside
+ * a grid (the record panel opened from other views, linked records' cards and previews): the
+ * table's default grid's, as this person sees it. A table from before default grids existed uses
+ * its first shared grid, else any grid; null when it has none.
  */
 export function gridRecordLayout(table: Pick<Table, "views">, role: string): Pick<ViewConfig, "field_order" | "hidden_fields"> | null {
   const grids = table.views.filter((v) => v.type === "grid");
-  const grid = grids.find((v) => !v.personal) ?? grids[0];
+  const grid = grids.find((v) => v.is_default) ?? grids.find((v) => !v.personal) ?? grids[0];
   if (!grid) return null;
   const local = canConfigureView(role, grid) ? {} : readLocal(grid.id);
   return { field_order: local.field_order ?? grid.config.field_order, hidden_fields: local.hidden_fields ?? grid.config.hidden_fields };
@@ -154,18 +155,22 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
     pendingRef.current = null;
   }, [view.id]);
 
+  // The default grid's filter, sort and grouping are everyone's own, on their device: the server
+  // keeps none for it (its saved config is the layout of the records, which editors change).
+  const personalQuery = view.is_default;
+
   // Fields that were deleted since the override was made are dropped from it.
   const transient = useMemo<TransientConfig | null>(() => {
-    if (canConfigure || !storedTransient) return null;
+    if ((canConfigure && !personalQuery) || !storedTransient) return null;
     return diffTransient(view.config, sanitizeConfig(applyTransient(view.config, storedTransient), fieldIds));
-  }, [canConfigure, storedTransient, view.config, fieldIds]);
+  }, [canConfigure, personalQuery, storedTransient, view.config, fieldIds]);
 
   const queryConfig = useMemo(() => applyTransient(view.config, transient), [view.config, transient]);
 
   const config = useMemo<ViewConfig>(() => {
-    if (canConfigure) return pending ?? view.config;
+    if (canConfigure) return personalQuery ? applyTransient(pending ?? view.config, transient) : (pending ?? view.config);
     return { ...queryConfig, ...local };
-  }, [pending, view.config, queryConfig, canConfigure, local]);
+  }, [pending, view.config, queryConfig, canConfigure, personalQuery, transient, local]);
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -210,6 +215,20 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
     (mutate: (c: ViewConfig) => ViewConfig) => {
       const prev = configRef.current;
       const next = sanitizeConfig(mutate(prev), fieldIds);
+      if (canConfigure && personalQuery) {
+        // Filter, sort and grouping stay here; the rest (the records' layout) is saved as for any view.
+        const nextTransient = diffTransient(view.config, next);
+        setStoredTransient(nextTransient);
+        writeTransient(view.id, nextTransient);
+        const layout: ViewConfig = { ...next, filter: view.config.filter, sorts: view.config.sorts, groups: view.config.groups, row_color: view.config.row_color };
+        if (JSON.stringify(layout) === JSON.stringify(pendingRef.current ?? view.config)) return;
+        pendingRef.current = layout;
+        setPending(layout);
+        if (timer.current) clearTimeout(timer.current);
+        if (JSON.stringify(prev.summaries) !== JSON.stringify(next.summaries)) void flush();
+        else timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
+        return;
+      }
       if (canConfigure) {
         pendingRef.current = next;
         setPending(next);
@@ -228,7 +247,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
       setStoredTransient(nextTransient);
       writeTransient(view.id, nextTransient);
     },
-    [canConfigure, fieldIds, flush, view.id, view.config],
+    [canConfigure, personalQuery, fieldIds, flush, view.id, view.config],
   );
 
   const resetTransient = useCallback(() => {

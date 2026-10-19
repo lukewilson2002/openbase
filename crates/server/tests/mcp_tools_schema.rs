@@ -1068,7 +1068,7 @@ async fn bad_view_configs_are_explained() {
         .fails("get_view", json!({"base_id": b, "view": "Nope"}))
         .await;
     assert!(
-        e.contains("View 'Nope' not found") && e.contains("Grid view"),
+        e.contains("View 'Nope' not found") && e.contains("Default grid"),
         "{e}"
     );
     let e = a
@@ -1190,7 +1190,7 @@ async fn views_can_be_personal_deleted_and_restored() {
         .iter()
         .map(|v| v["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["Grid view"]);
+    assert_eq!(names, ["Default grid"]);
     // ...and an editor can make personal views but not shared ones.
     mate.call(
         "create_view",
@@ -1248,7 +1248,7 @@ async fn query_view_shows_people_and_choice_names() {
     )
     .await;
     let q = a
-        .call("query_view", json!({"base_id": b, "view": "Grid view"}))
+        .call("query_view", json!({"base_id": b, "view": "Default grid"}))
         .await;
     let row = &q["records"][0]["fields"];
     assert_eq!(row["Tags"], json!(["b"]));

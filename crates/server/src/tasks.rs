@@ -58,6 +58,16 @@ pub fn spawn_all(state: &AppState) {
     // runs and polls every 2 s), so it is started here rather than from `tick`.
     crate::automations::runner::spawn(state);
 
+    // Files stored before they had previews get theirs, once, in the background.
+    let backfill_state = state.clone();
+    tokio::spawn(async move {
+        match crate::previews::backfill(&backfill_state).await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(files = n, "made previews of stored files"),
+            Err(e) => tracing::warn!(error = %e, "could not make previews of stored files"),
+        }
+    });
+
     let state = state.clone();
     tokio::spawn(async move {
         let mut clock = Clock::default();
