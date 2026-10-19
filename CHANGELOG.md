@@ -11,6 +11,51 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Every table has a default grid.** A plain grid of all its records, always there, shown as the
+  first icon of the view toolbar (before a divider) rather than among the views. Its field order
+  and hidden fields are the layout of every record of the table: the record panel, linked-record
+  cards and previews follow them, whatever view a record is opened from. It cannot be deleted,
+  renamed or locked, and keeps no filter, sort, grouping or colours: the ones you set there are
+  yours alone, kept on this device. **Edit schema** in a record's "…" menu and in a table's opens
+  it. A new table starts with only its default grid. Agents see it as `is_default: true` in
+  `get_project_schema` and change the layout with `update_view` on it.
+- **Files show what they hold.** A file's tile is now its preview wherever files are listed (grid
+  cells, the record panel, the file editor, cards, share pages, the Inbox and rich text): an image
+  itself, a PDF's first page, a video's first frame with a play mark. A file without one keeps its
+  type's tile ("DOCX"). A card's cover can be a PDF's first page or a video's frame too. The v1
+  API's `thumbnails` cover PDFs and videos as well.
+- **Put files in order.** Drag a file by its handle in the file editor (or move it with Space and
+  the arrow keys) to reorder an attachment field.
+- **Linked records you can read and open.** In the record panel a link field's records are cards
+  with their title and the first few filled fields of their table's grid. Click one to open it in
+  the panel, with **Back to …** to return (the browser's back works too, step by step). Hover a
+  card, or hold a finger on it, to see the whole linked record, so why it is linked is clear
+  without leaving the record. The link picker shows the same fields under each result and finds
+  records by them, and its results preview the same way. Agents read several records at once
+  with `POST /api/tables/{id}/records/get`; the lookup route takes `fields` to search more than
+  the name.
+
+### Changed
+
+- **Adding is in the menus.** "Add view" moved from the menu's view list into the table's "…"
+  menu, and "Add table" into the open project's "…" menu. Every view but the default grid can now
+  be deleted, the last one included.
+- **A workspace's or project's name in the menu folds it**, like its chevron, instead of opening a
+  page; opening a table no longer unfolds its views.
+- **New views are named after their type** ("Kanban", "Calendar"), without "view".
+- **Tall grid rows** centre their chips and files like their text; file tiles grow with the row
+  and count the files that do not fit ("+2").
+- The top bar's workspace, project and table share one size, weight and colour, and the menu's
+  scroll shadow is lighter.
+- **Upgrading:** the database moves to schema 11, which gives every table its default grid with
+  the layout of its first shared grid view (existing views stay as they are). A snapshot of the
+  old database is written to `backups/` first. Video previews need ffmpeg: the Docker image now
+  includes it (so it is larger); with the plain binary, install ffmpeg (`apt install ffmpeg`) or
+  point `OPENBASE_FFMPEG` at it. PDFs and videos stored before get their previews in the
+  background after the upgrade.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added
