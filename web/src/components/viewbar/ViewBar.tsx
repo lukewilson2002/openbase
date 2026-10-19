@@ -1,9 +1,9 @@
 /**
  * The view toolbar, one row: the table and view picker, then Filter, Sort, Group, Hide fields, Color
  * and Row height (each tinted and naming what it does once in use, "Sorted by Who"), the view type's
- * own settings, and More; search and the base-coloured Add at the end. Tools that do not fit move
- * into More from the right end first; Add field and Download CSV always live there. On a phone the
- * tools fold into one menu behind a sliders button and Add floats at the bottom corner.
+ * own settings, and More; search at the end. Tools that do not fit move into More from the right end
+ * first; Add field and Download CSV always live there. On a phone the tools fold into one menu behind
+ * a sliders button. Add floats at the screen's bottom right corner, on a phone and on a desktop alike.
  *
  * Every change is a pure mutation of the view config (see ./config.ts) applied through `update`,
  * which persists the full config with PATCH /api/views/{id}. People who cannot save the view
@@ -53,6 +53,23 @@ import {
 
 /** Add looks like a secondary button: the toolbar has no colored call to action. */
 const addButtonClass = "border border-line-strong bg-surface text-fg hover:bg-hover";
+
+/** "Add" for a new record, floating at the screen's bottom right: within thumb reach on a phone, clear of the toolbar everywhere. */
+function FloatingAdd({ onAdd }: { onAdd: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Add record"
+      onClick={onAdd}
+      className={cn(
+        "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-pop transition-colors md:bottom-8 md:right-8",
+        addButtonClass,
+      )}
+    >
+      <Plus aria-hidden className="size-5" /> Add
+    </button>
+  );
+}
 
 export interface ViewBarProps {
   schema: BaseSchema;
@@ -511,20 +528,7 @@ export function ViewBar(props: ViewBarProps) {
           }
         />
         {searchBox}
-        {props.onAdd && (
-          // Within thumb reach and clear of the toolbar.
-          <button
-            type="button"
-            aria-label="Add record"
-            onClick={props.onAdd}
-            className={cn(
-              "fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-20 inline-flex h-12 items-center gap-1.5 rounded-full pl-4 pr-[18px] text-[0.9375rem] font-semibold shadow-pop transition-colors",
-              addButtonClass,
-            )}
-          >
-            <Plus aria-hidden className="size-5" /> Add
-          </button>
-        )}
+        {props.onAdd && <FloatingAdd onAdd={props.onAdd} />}
       </div>
     );
   }
@@ -542,16 +546,7 @@ export function ViewBar(props: ViewBarProps) {
       end={
         <>
           {searchBox}
-          {props.onAdd && (
-            <button
-              type="button"
-              aria-label="Add record"
-              onClick={props.onAdd}
-              className={cn("inline-flex h-[38px] items-center gap-1.5 rounded-[10px] pl-3.5 pr-4 text-[0.875rem] font-semibold transition-colors", addButtonClass)}
-            >
-              <Plus aria-hidden className="size-4" /> Add
-            </button>
-          )}
+          {props.onAdd && <FloatingAdd onAdd={props.onAdd} />}
         </>
       }
     />

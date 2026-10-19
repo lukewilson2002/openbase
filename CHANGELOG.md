@@ -45,6 +45,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 - **A workspace's or project's name in the menu folds it**, like its chevron, instead of opening a
   page; opening a table no longer unfolds its views.
 - **New views are named after their type** ("Kanban", "Calendar"), without "view".
+- **Add floats at the bottom right on a desktop too**, as on a phone, leaving the toolbar to the
+  view's tools.
 - **Tall grid rows** centre their chips and files like their text; file tiles grow with the row
   and count the files that do not fit ("+2").
 - The top bar's workspace, project and table share one size, weight and colour, and the menu's
