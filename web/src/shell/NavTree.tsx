@@ -1,10 +1,10 @@
 /**
  * The menu of every signed-in page, below the Inbox: Workspaces, each opening into its projects
  * (what the code calls bases), each project into its tables, each table into its views. The same tree
- * shows on the home pages and inside a project, so getting anywhere is one tap on a row. A tap on a
- * name goes there (a table opens the view last used in it, a project its last table, a workspace its
- * last project); the chevron only folds the row and never navigates, which matters on a phone, where
- * the drawer closes on every navigation. Rows the page is inside start open, the rest closed, and
+ * shows on the home pages and inside a project. A tap on a workspace's or a project's name only folds
+ * it, like its chevron; tables and views are what open pages (a table the view last used in it, without
+ * unfolding its views). The drawer on a phone closes on every navigation, so folding never closes it.
+ * Workspaces and projects the page is inside start open, the rest closed; tables start closed; and
  * hand-made choices are remembered per device. A project's tables are loaded when it is opened,
  * from the same query the project's page uses. The "…" menus hold the workspace's and the project's
  * actions: new project, import, members, history, trash, settings, rename, icon, share, automations, delete.
@@ -23,9 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
-import { lastBaseOf, projectPath } from "@/lib/lastPlace";
 import { atLeast } from "@/lib/roles";
-import { useCloseMenu } from "./AppShell";
 import { useNavDialog } from "./NavDialogs";
 import { NavTables } from "./NavTables";
 import { RowChevron, SidebarHeading, SidebarLink, rowActionClass } from "./Sidebar";
@@ -108,11 +106,8 @@ const rowNameClass =
   "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] pl-1.5 pr-8 text-left text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11 pointer-coarse:pr-10";
 
 function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary; tree: NavTreeProps; expanded: boolean; onToggle: (open: boolean) => void }) {
-  const closeMenu = useCloseMenu();
   const groupId = `ws-${ws.id}-projects`;
   const current = ws.id === tree.workspaceId;
-  // The workspace opens the project last opened in it, if that still exists; else its name just folds it.
-  const last = ws.bases.find((b) => b.id === lastBaseOf(ws.id));
   const name = (
     <>
       <WorkspaceTile ws={ws} size="sm" className="size-[22px] text-xs" />
@@ -123,15 +118,10 @@ function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary;
     <li className="flex flex-col gap-0.5">
       <div className="group/item relative flex items-center">
         <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${ws.name}`} controls={groupId} onClick={() => onToggle(!expanded)} />
-        {last ? (
-          <Link to={projectPath(last.id)} onClick={closeMenu} className={cn(rowNameClass, current && "font-semibold")}>
-            {name}
-          </Link>
-        ) : (
-          <button type="button" onClick={() => onToggle(!expanded)} className={cn(rowNameClass, current && "font-semibold")}>
-            {name}
-          </button>
-        )}
+        {/* The name folds the workspace like its chevron: it goes nowhere. */}
+        <button type="button" onClick={() => onToggle(!expanded)} className={cn(rowNameClass, current && "font-semibold")}>
+          {name}
+        </button>
         <WorkspaceMenu ws={ws} />
       </div>
       {expanded && (
@@ -224,21 +214,19 @@ function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
 }
 
 function ProjectItem({ base, workspaceName, tree }: { base: BaseSummary; workspaceName: string; tree: NavTreeProps }) {
-  const closeMenu = useCloseMenu();
   const [toggled, toggle] = useOpenState("ob-projects-open");
   const active = base.id === tree.baseId;
   const expanded = toggled[base.id] ?? active;
   const groupId = `project-${base.id}-tables`;
-  // The open project keeps the table and view on screen; any other opens where it was left.
-  const to = active && tree.tableId && tree.viewId ? `/base/${base.id}/${tree.tableId}/${tree.viewId}` : projectPath(base.id);
   return (
     <li className="flex flex-col gap-0.5">
       <div className="group/item relative flex items-center">
         <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${base.name}`} controls={groupId} onClick={() => toggle(base.id, !expanded)} />
-        <Link to={to} onClick={closeMenu} className={cn(rowNameClass, active && "font-semibold")}>
+        {/* The name folds the project like its chevron; its tables are what open pages. */}
+        <button type="button" onClick={() => toggle(base.id, !expanded)} className={cn(rowNameClass, active && "font-semibold")}>
           <EntityTile name={base.name} icon={base.icon} color={base.color} size="xs" />
           <span className="min-w-0 flex-1 truncate">{base.name}</span>
-        </Link>
+        </button>
         <ProjectMenu base={base} workspaceName={workspaceName} />
       </div>
       {expanded && <ProjectBody id={groupId} base={base} tree={tree} />}

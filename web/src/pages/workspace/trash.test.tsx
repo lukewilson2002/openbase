@@ -118,7 +118,7 @@ describe("Trash page", () => {
     expect(screen.getByRole("button", { name: "Workspace: Side business" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Project: All projects" })).toBeInTheDocument();
     // The menu opens that workspace, as it does for any page of one.
-    expect(within(await projectsOf("Side business")).getByRole("link", { name: "Clients" })).toBeInTheDocument();
+    expect(within(await projectsOf("Side business")).getByRole("button", { name: "Clients" })).toBeInTheDocument();
   });
 
   it("opens filtered to a base from the base's menu, showing the base's workspace", async () => {
@@ -148,7 +148,7 @@ describe("Trash page", () => {
     await waitFor(() => expect(lastQuery(api).get("workspace_id")).toBe("wsp1"));
     expect(lastQuery(api).get("kind")).toBe("record");
     // The URL now says `?workspace=wsp1`: the menu opens that workspace.
-    expect(within(await projectsOf("Household")).getByRole("link", { name: "Chores" })).toBeInTheDocument();
+    expect(within(await projectsOf("Household")).getByRole("button", { name: "Chores" })).toBeInTheDocument();
 
     // The base list follows the workspace.
     await user.click(screen.getByRole("button", { name: "Project: All projects" }));

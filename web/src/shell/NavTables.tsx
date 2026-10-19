@@ -57,7 +57,8 @@ export function NavTables({ schema, activeTableId, activeViewId, onDialog }: Nav
           table={t}
           active={t.id === activeTableId}
           activeViewId={activeViewId}
-          expanded={toggled[t.id] ?? t.id === activeTableId}
+          // Opening a table leaves its views folded: only its chevron shows them.
+          expanded={toggled[t.id] ?? false}
           onToggle={(open) => toggle(t.id, open)}
           onDialog={onDialog}
         />

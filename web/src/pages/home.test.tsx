@@ -91,7 +91,9 @@ describe("/", () => {
     // The menu is the way to the projects, and the Inbox row is the page being shown.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
     expect(within(menu).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
-    expect(await within(menu).findByRole("link", { name: "Shared with me" })).toBeInTheDocument();
+    // The workspace's name folds it: it does not lead back to its remembered project either.
+    expect(await within(menu).findByRole("button", { name: "Shared with me" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("link", { name: "Shared with me" })).not.toBeInTheDocument();
   });
 
   it("is the Inbox for a workspace without projects too", async () => {
@@ -160,7 +162,10 @@ describe("home menu", () => {
     renderApp({ route: "/workspace/wsp1/settings" });
     const menu = await screen.findByRole("navigation", { name: "Main menu" });
     expect(await within(menu).findByRole("button", { name: "Shared with me" })).toBeInTheDocument();
-    expect(within(await within(menu).findByRole("list", { name: "Projects in Acme" })).getAllByRole("link").map((l) => l.getAttribute("href"))).toEqual(["/base/app1", "/base/app2"]);
+    const acme = await within(menu).findByRole("list", { name: "Projects in Acme" });
+    expect(within(acme).getByRole("button", { name: "Project tracker" })).toBeInTheDocument();
+    expect(within(acme).getByRole("button", { name: "CRM" })).toBeInTheDocument();
+    expect(within(acme).queryAllByRole("link")).toHaveLength(0);
     // The Trash of everything closes the menu; account settings are in the profile menu now.
     expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
     expect(within(menu).getAllByRole("link").some((l) => l.getAttribute("href") === "/account")).toBe(false);

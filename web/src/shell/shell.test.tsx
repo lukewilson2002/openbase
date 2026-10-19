@@ -325,7 +325,9 @@ describe("HomeShell", () => {
     expect(within(section).getByRole("button", { name: "New workspace" })).toBeInTheDocument();
     expect(await within(section).findByRole("button", { name: "Collapse Acme" })).toHaveAttribute("aria-expanded", "true");
     const projects = within(section).getByRole("list", { name: "Projects in Acme" });
-    expect(within(projects).getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([["Chores", "/base/app1"]]);
+    // A project's name only folds it: nothing in the list is a link until its tables show.
+    expect(within(projects).getByRole("button", { name: "Chores" })).toBeInTheDocument();
+    expect(within(projects).queryAllByRole("link")).toHaveLength(0);
     expect(within(section).getByRole("button", { name: "Expand Book club" })).toHaveAttribute("aria-expanded", "false");
     expect(within(section).queryByRole("list", { name: "Projects in Book club" })).not.toBeInTheDocument();
     // A project's tables are fetched when it is opened, not before.
@@ -344,44 +346,40 @@ describe("HomeShell", () => {
     home();
     await user.click(await screen.findByRole("button", { name: "Expand Book club" }));
     const projects = screen.getByRole("list", { name: "Projects in Book club" });
-    expect(within(projects).getByRole("link", { name: "Reading list" })).toHaveAttribute("href", "/base/app2");
+    expect(within(projects).getByRole("button", { name: "Reading list" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Collapse Acme" }));
     expect(screen.queryByRole("list", { name: "Projects in Acme" })).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-workspaces-open")!)).toEqual({ wsp2: true, wsp1: false });
     expect(where()).toBe("/workspace/wsp1");
   });
 
-  it("opens a workspace's last project on a tap, and only folds a workspace without one", async () => {
+  it("folds a workspace on a tap of its name, without going to the project last opened in it", async () => {
     stubDesktop();
     const user = userEvent.setup();
     localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl9: "viw9" }, projects: { app2: "tbl9" }, workspaces: { wsp2: "app2" } }));
     home();
-    // Book club remembers its project: the name is a link to where the person left off.
-    expect(await screen.findByRole("link", { name: "Book club" })).toHaveAttribute("href", "/base/app2/tbl9/viw9");
-    // Acme has none: tapping the name folds it (a link would have navigated).
+    // Book club remembers its project, but its name is still only a fold, not a link there.
+    const club = await screen.findByRole("button", { name: "Book club" });
+    expect(screen.queryByRole("link", { name: "Book club" })).not.toBeInTheDocument();
+    await user.click(club);
+    expect(screen.getByRole("list", { name: "Projects in Book club" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Acme" }));
     expect(screen.queryByRole("list", { name: "Projects in Acme" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Acme" }));
     expect(screen.getByRole("list", { name: "Projects in Acme" })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("ob-workspaces-open")!)).toEqual({ wsp2: true, wsp1: true });
     expect(where()).toBe("/workspace/wsp1");
   });
 
-  it("ignores a remembered project that no longer exists", async () => {
-    stubDesktop();
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: {}, projects: {}, workspaces: { wsp2: "gone" } }));
-    home();
-    expect(await screen.findByRole("button", { name: "Book club" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Book club" })).not.toBeInTheDocument();
-  });
-
-  it("loads a project's tables when it is expanded, and a project opens its last table and view", async () => {
+  it("loads a project's tables when a tap on its name unfolds it, without navigating", async () => {
     stubDesktop();
     const user = userEvent.setup();
     localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl2: "viw4" }, projects: { app1: "tbl2" }, workspaces: {} }));
     const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, { "GET /api/bases/app1": makeSchema("owner", { name: "Chores" }) });
-    const chores = await screen.findByRole("link", { name: "Chores" });
-    expect(chores).toHaveAttribute("href", "/base/app1/tbl2/viw4");
-    await user.click(screen.getByRole("button", { name: "Expand Chores" }));
+    const chores = await screen.findByRole("button", { name: "Chores" });
+    expect(screen.queryByRole("link", { name: "Chores" })).not.toBeInTheDocument();
+    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
+    await user.click(chores);
     const tables = await screen.findByRole("list", { name: "Tables in Chores" });
     // A table without a remembered view opens its first (BaseShell picks it); one with opens that.
     expect(within(tables).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1");

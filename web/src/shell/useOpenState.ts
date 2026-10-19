@@ -7,14 +7,15 @@ function read(key: string): Record<string, boolean> {
       return Object.fromEntries(Object.entries(parsed).filter((e): e is [string, boolean] => typeof e[1] === "boolean"));
     }
   } catch {
-    /* unreadable or blocked storage: every row starts as its default (open only on the way to the page) */
+    /* unreadable or blocked storage: every row starts as its default */
   }
   return {};
 }
 
 /**
  * The menu's rows opened or closed by hand (workspaces, projects, tables), remembered on this device
- * like the menu's width. A row without an entry follows its default: open when the page is inside it.
+ * like the menu's width. A row without an entry follows its default: a workspace or project is open
+ * when the page is inside it, a table is closed.
  */
 export function useOpenState(storageKey: string) {
   const [toggled, setToggled] = useState(() => read(storageKey));
