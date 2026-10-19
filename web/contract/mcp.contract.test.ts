@@ -135,7 +135,7 @@ describe("MCP endpoint", () => {
     expect(tasks?.fields.map((f) => f.name)).toContain("Points");
 
     // A view is queried the way the app shows it.
-    const q = await call(token, "query_view", { base_id: baseId, table: "Tasks", view: "Grid view" });
+    const q = await call(token, "query_view", { base_id: baseId, table: "Tasks", view: "Default grid" });
     expect(q.total).toBe(1);
     expect(q.records[0].fields.Name).toBe("Write tests");
   });

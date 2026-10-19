@@ -348,7 +348,8 @@ describe("querying a view", () => {
       due: await mkf({ name: "Due", type: "date", options: { include_time: false, date_format: "iso", time_format: "h24", timezone: null } }),
       tags: await mkf({ name: "Tags", type: "multiple_select", options: { choices: ["red", "blue"].map((c) => ({ id: "", name: c, color: c })) } }),
     };
-    view = (await tableOf(w.owner, w.baseId, t.id)).views[0]!;
+    // A shared grid of its own to configure: the table's default grid keeps no filter, sort, grouping or colours.
+    view = parse("View", await w.owner.run(() => api.views.create(t.id, { name: "Grid", type: "grid", personal: false, config: null })));
     await w.owner.run(() => recordsApi.create(t.id, { typecast: true, records: rows.map((r) => ({ values: { [nm]: r.n, [f.qty]: r.qty, [f.status]: r.status, [f.due]: r.due, [f.tags]: r.tags } })) }));
     Object.assign(ctx, { t, nm, ...f });
   });
@@ -453,7 +454,7 @@ describe("querying a view", () => {
       expect(grouped.groups).toHaveLength(3);
       // Nothing was saved, and the plain query is unchanged.
       expect(label(await query({}, viewer))).toEqual(["Apple", "Banana", "Cherry", "Date", "Elder berry"]);
-      expect((await tableOf(viewer, w.baseId, ctx.t.id)).views[0]!.config).toEqual(saved);
+      expect((await tableOf(viewer, w.baseId, ctx.t.id)).views.find((v) => v.id === view.id)!.config).toEqual(saved);
     });
 
     it("replaces only the parts it names: the saved filter stays when only sorts are overridden", async () => {
