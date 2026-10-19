@@ -83,8 +83,8 @@ async function seed(page: Page): Promise<Fixture> {
       { values: { [name]: "Charlie", [qty.id]: 5, [salary.id]: "SECRET-300", [status.id]: choice.todo } },
     ],
   });
-  const refreshed = await call<{ tables: TableDto[] }>(req, "get", `/api/bases/${base.id}`);
-  const viewId = refreshed.tables.find((x) => x.id === t.id)!.views[0]!.id;
+  // A shared grid of its own to share and configure: the table's default grid is each person's, not shared.
+  const viewId = (await call<{ id: string }>(req, "post", `/api/tables/${t.id}/views`, { name: "Grid", type: "grid" })).id;
   return { workspaceId: ws.id, baseId: base.id, tableId: t.id, tableName: t.name, viewId, fields: { name, qty: qty.id, salary: salary.id, status: status.id }, choice };
 }
 
@@ -132,9 +132,10 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   let formViewId = "";
   let link = "";
 
-  await test.step("creates a form view from the menu's Add view", async () => {
+  await test.step("creates a form view from the table menu's Add view", async () => {
     await openView(page);
-    await page.getByRole("list", { name: /^Tables in / }).getByRole("button", { name: "Add view" }).click();
+    await page.getByRole("list", { name: /^Tables in / }).getByRole("button", { name: /^Table options for / }).first().click();
+    await page.getByRole("menuitem", { name: "Add view" }).click();
     await page.getByRole("menuitem", { name: /^Form/ }).click();
     const dialog = page.getByRole("dialog", { name: "New form view" });
     await dialog.getByLabel("Name").fill("Contact form");
@@ -330,7 +331,8 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
 
   await test.step("New table from CSV: name from the file, preview, types inferred", async () => {
     await openView(page);
-    await page.getByRole("button", { name: "Add table" }).click();
+    await page.getByRole("button", { name: /^Project options for / }).first().click();
+    await page.getByRole("menuitem", { name: "Add table" }).click();
     await page.getByRole("menuitem", { name: /New table from CSV/ }).click();
     const dialog = page.getByRole("dialog", { name: "New table from CSV" });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "Customers 2026.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Age,Joined,Active\nAnn,30,2024-01-05,yes\nBob,41,2023-12-31,no\nCyd,29,2022-06-30,yes\n") });

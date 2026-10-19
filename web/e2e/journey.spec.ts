@@ -31,7 +31,7 @@ const COLUMNS = [
 type Col = (typeof COLUMNS)[number]["key"];
 
 type Field = { id: string; name: string; type: string; options: Record<string, unknown> };
-type Table = { id: string; name: string; icon?: string | null; primary_field_id: string; fields: Field[]; views: { id: string; config: Record<string, unknown> }[] };
+type Table = { id: string; name: string; icon?: string | null; primary_field_id: string; fields: Field[]; views: { id: string; is_default?: boolean; config: Record<string, unknown> }[] };
 
 async function api<T>(page: Page, path: string, init?: { method?: "GET" | "POST"; data?: unknown }): Promise<T> {
   const res = init?.method === "POST" ? await page.request.post(path, { data: init.data ?? {}, headers: CSRF }) : await page.request.get(path);
@@ -127,8 +127,19 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("textbox", { name: "Table name" }).fill("Table 1");
     await page.getByRole("button", { name: "Create table" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
-    viewId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+    // A new table opens in its default grid, its only view: the toolbar's first icon, not a named view.
+    await expect(page.getByRole("link", { name: "Default grid" })).toHaveAttribute("aria-current", "page");
+    const defaultId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
+    expect((await loadTable()).views.map((v) => [v.id, v.is_default])).toEqual([[defaultId, true]]);
+    // A shared grid of its own, named after its type, keeps the filter and sort the steps below save.
+    await page.getByRole("button", { name: "Add view" }).click();
+    await page.getByRole("menuitem", { name: /^Grid/ }).click();
+    const dialog = page.getByRole("dialog", { name: "New grid view" });
+    await expect(dialog.getByLabel("Name")).toHaveValue("Grid");
+    await dialog.getByRole("button", { name: "Create view" }).click();
+    await expect(page).not.toHaveURL(new RegExp(`/${defaultId}$`));
+    viewId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
     const workspaces = await api<{ name: string; bases: { id: string; name: string }[] }[]>(page, "/api/workspaces");
     expect(workspaces.find((w) => w.name === "Journey workspace")?.bases.map((b) => b.name)).toEqual(["Journey base"]);
   });
@@ -337,7 +348,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
     await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
-    await expect(menu.getByRole("link", { name: "Journey base" }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
+    await expect(menu.getByRole("button", { name: "Journey base", exact: true }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
 
     await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();
     await page.getByRole("menuitem", { name: /Change icon/ }).click();

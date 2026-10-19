@@ -56,15 +56,16 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const inboxMenu = page.getByRole("dialog", { name: "Menu" });
   await expect(inboxMenu.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
-  // No workspace is open on the Inbox: open the only one, then its project, at its first table and view.
+  // No workspace is open on the Inbox: unfold the only one and its project (names only fold), then open its table.
   await inboxMenu.getByRole("button", { name: "Expand Mobile workspace" }).tap();
-  await inboxMenu.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("link", { name: "A base with a fairly long name" }).tap();
+  await inboxMenu.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("button", { name: "A base with a fairly long name", exact: true }).tap();
+  await inboxMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).tap();
   await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
   await expectFits(page, "project");
 
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
-  await expect(drawer.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("link", { name: "A base with a fairly long name" })).toBeVisible();
+  await expect(drawer.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("button", { name: "A base with a fairly long name", exact: true })).toBeVisible();
   await expectFits(page, "menu drawer");
   // Folding a row is not navigating: the drawer stays open.
   await drawer.getByRole("button", { name: "Collapse A base with a fairly long name" }).tap();
@@ -86,13 +87,13 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
   expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
 
-  // The base's menu is the drawer; choosing a view closes it.
+  // The base's menu is the drawer; choosing a table closes it.
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const baseMenu = page.getByRole("dialog", { name: "Menu" });
   await expect(baseMenu.getByRole("list", { name: /^Tables in / })).toBeVisible();
   await expect(baseMenu.getByRole("button", { name: "Collapse Mobile workspace" })).toBeVisible();
   await expectFits(page, "base menu drawer");
-  await baseMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Grid view" }).tap();
+  await baseMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).tap();
   await expect(baseMenu).toBeHidden();
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();

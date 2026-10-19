@@ -78,9 +78,9 @@ async function seed(page: Page): Promise<Fixture> {
     typecast: true,
     records: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((n, i) => ({ values: { [nameField]: n, [qty.id]: (i + 1) * 10, [status.id]: choice[i % 2 ? "Done" : "Todo"] } })),
   });
-  const refreshed = await (await req.get(`/api/bases/${base.id}`)).json();
-  const t = refreshed.tables.find((x: { id: string }) => x.id === table.id);
-  return { baseId: base.id, tableId: table.id, viewId: t.views[0].id, fields: { name: nameField, qty: qty.id, status: status.id, done: done.id } };
+  // A shared grid of its own to filter and sort: the table's default grid keeps neither (they are each person's).
+  const grid = await post<{ id: string }>(req, `/api/tables/${table.id}/views`, { name: "Grid", type: "grid" });
+  return { baseId: base.id, tableId: table.id, viewId: grid.id, fields: { name: nameField, qty: qty.id, status: status.id, done: done.id } };
 }
 
 /** Records as the server has them, in the default view order. */
