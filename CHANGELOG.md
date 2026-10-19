@@ -11,6 +11,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
 ### Added
 
 - **History: what changed lately, across every project.** A new **History** page (in the menu
@@ -426,7 +428,8 @@ stopped at the end-to-end test gate and published nothing. It contains everythin
   and SBOM attestations, and Linux binaries with checksums). It contains everything listed
   under 0.1.0 below. Not recommended for production use yet.
 
-[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/lukewilson2002/openbase/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/lukewilson2002/openbase/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/lukewilson2002/openbase/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lukewilson2002/openbase/compare/v0.3.0...v0.4.0
