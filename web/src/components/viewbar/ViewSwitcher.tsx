@@ -339,19 +339,34 @@ function ViewsDropdown({
         onInteractOutside={stayWhileMenuOpen}
       >
         {views.map((v) => (
-          <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} />
+          <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} still={menuOpen} />
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function ViewMenuItem({ view: v, to, active, onMenu }: { view: View; to: string; active: boolean; onMenu?: (anchor: MenuAnchor) => void }) {
+/**
+ * `still`: a view's menu is open over the list. The pointer crossing the list on its way into that menu
+ * must not take the focus out of it (a list item takes the focus when the pointer moves over it, and the
+ * list when the pointer leaves one), or the menu closes; a prevented event is what tells Radix not to.
+ */
+function ViewMenuItem({ view: v, to, active, onMenu, still }: { view: View; to: string; active: boolean; onMenu?: (anchor: MenuAnchor) => void; still: boolean }) {
   const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
   const gesture = useMenuGesture(onMenu);
+  const keep = (e: React.PointerEvent) => {
+    if (still) e.preventDefault();
+  };
   return (
     <DropdownMenuItem asChild>
-      <Link {...gesture} to={to} aria-current={active ? "page" : undefined} className="[-webkit-touch-callout:none]">
+      <Link
+        {...gesture}
+        onPointerMove={(e) => {
+          gesture.onPointerMove?.(e);
+          keep(e);
+        }}
+        onPointerLeave={keep}
+        to={to} aria-current={active ? "page" : undefined} className="[-webkit-touch-callout:none]">
         <Icon aria-hidden className="size-4 shrink-0 text-muted" />
         <span className="min-w-0 flex-1 truncate">{v.name}</span>
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}

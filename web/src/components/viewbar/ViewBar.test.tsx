@@ -297,6 +297,28 @@ describe("ViewBar view switcher", () => {
     expect(onDialog).toHaveBeenCalledWith({ kind: "rename-view", view: t.views[2] });
   });
 
+  it("keeps a view's menu open while the mouse crosses the list under it on the way in", async () => {
+    const user = userEvent.setup();
+    const onDialog = vi.fn();
+    const schema = makeSchema("creator");
+    const t = schema.tables[0]!;
+    renderBar({ schema, table: t, view: t.views[0]!, config: t.views[0]!.config, role: "creator" }, { phone: true, onDialog });
+    await user.click(screen.getByRole("button", { name: "2 grid views, All tasks open" }));
+    const list = await screen.findByRole("menu", { name: "Grid views of Tasks" });
+    const mine = within(list).getByRole("menuitem", { name: /My tasks/ });
+    fireEvent.contextMenu(mine, { clientX: 60, clientY: 80 });
+    const menu = await screen.findByRole("menu", { name: "Options for My tasks" });
+    // Off the item it was opened from, over the other view, and into the menu.
+    await user.unhover(mine);
+    await user.hover(within(list).getByRole("menuitem", { name: /All tasks/ }));
+    await user.unhover(within(list).getByRole("menuitem", { name: /All tasks/ }));
+    expect(list).not.toContainElement(document.activeElement as HTMLElement);
+    await user.hover(within(menu).getByRole("menuitem", { name: /Delete view/ }));
+    expect(screen.getByRole("menu", { name: "Options for My tasks" })).toBeInTheDocument();
+    await user.click(within(menu).getByRole("menuitem", { name: /Delete view/ }));
+    expect(onDialog).toHaveBeenCalledWith({ kind: "delete-view", table: t, view: t.views[2] });
+  });
+
   it("opens a view's menu on a held press, and the lift does not also open the view", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
