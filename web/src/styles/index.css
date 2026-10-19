@@ -46,7 +46,7 @@
   --overlay: rgb(15 20 30 / 0.45);
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 4px 14px rgb(15 20 30 / 0.08);
   /* The edge of a scrolling list where there is more to scroll (the menu). */
-  --scroll-shade: rgb(15 20 30 / 0.1);
+  --scroll-shade: rgb(15 20 30 / 0.05);
 }
 
 :root[data-theme="dark"] {
@@ -76,7 +76,7 @@
   --ring: #7aa1ff;
   --overlay: rgb(0 0 0 / 0.6);
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.45);
-  --scroll-shade: rgb(0 0 0 / 0.55);
+  --scroll-shade: rgb(0 0 0 / 0.28);
 }
 
 @theme inline {

@@ -17,7 +17,7 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
       data-scroll-shade={edge}
       data-show={show || undefined}
       className={cn(
-        "pointer-events-none absolute inset-x-0 z-10 h-5 from-[var(--scroll-shade)] to-transparent opacity-0 transition-opacity duration-150 data-[show]:opacity-100",
+        "pointer-events-none absolute inset-x-0 z-10 h-3 from-[var(--scroll-shade)] to-transparent opacity-0 transition-opacity duration-150 data-[show]:opacity-100",
         edge === "top" ? "top-0 bg-gradient-to-b" : "bottom-0 bg-gradient-to-t",
       )}
     />
