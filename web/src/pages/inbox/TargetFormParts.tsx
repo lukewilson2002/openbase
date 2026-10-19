@@ -103,7 +103,7 @@ export function NoteChooser({ form }: { form: TargetForm }) {
         <Select id={id} value={form.noteFieldId ?? ""} onChange={(e) => form.setNoteField(e.target.value || null)} className="h-9 pointer-coarse:h-11">
           {fields.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.name}
+              Field: {f.name}
             </option>
           ))}
           <option value={NOTE_AS_COMMENT}>As a comment</option>
@@ -132,7 +132,7 @@ export function FileChooser({ form, count }: { form: TargetForm; count: number }
         <Select id={id} value={form.fileFieldId ?? ""} onChange={(e) => form.setFileField(e.target.value || null)} className="h-9 pointer-coarse:h-11">
           {fields.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.name}
+              Field: {f.name}
             </option>
           ))}
           <option value="">Nowhere (leave out)</option>

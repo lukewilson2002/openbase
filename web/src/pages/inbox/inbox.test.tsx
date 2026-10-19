@@ -405,7 +405,7 @@ describe("saving into a table", () => {
     // The note goes into the first rich long text field, and another can be chosen.
     const chooser = screen.getByRole("combobox", { name: "Note goes into" });
     expect(chooser).toHaveValue("fld_notes");
-    expect(within(chooser).getAllByRole("option").map((o) => o.textContent)).toEqual(["Notes", "Details", "As a comment", "Nowhere (discard on save)"]);
+    expect(within(chooser).getAllByRole("option").map((o) => o.textContent)).toEqual(["Field: Notes", "Field: Details", "As a comment", "Nowhere (discard on save)"]);
     // The other fields (not the title, not the note's field, no attachment fields: the files have their own chooser).
     const others = screen.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby"));
     expect(others).toHaveLength(2);
@@ -457,7 +457,7 @@ describe("saving into a table", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Note" })).toHaveTextContent("Scan of the contract"));
     const title = await pickTasks(user);
     await user.type(title, "Contract");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "Details");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Note goes into" }), "Field: Details");
     expect(screen.getByRole("combobox", { name: "File goes into" })).toHaveValue("fld_files");
     // The chosen field is the note's now, so it is no longer one of the form's fields.
     expect(screen.queryByRole("heading", { name: "Details" })).not.toBeInTheDocument();
