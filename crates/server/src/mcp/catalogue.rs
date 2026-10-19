@@ -121,6 +121,10 @@ pub const AREAS: &[(&str, &str)] = &[
         "search",
         "search names and record text across everything you can open",
     ),
+    (
+        "history",
+        "the activity feed: recent changes and comments across all your projects",
+    ),
     ("trash", "trash listings and restore"),
     ("csv", "CSV import and export"),
     ("attachments", "file uploads and downloads"),
@@ -612,6 +616,17 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "Search everything you can open: workspace, base, table and view names, the text of records (primary field and text, email, URL and phone fields) and comments. Names come before records, records before comments (newest first), text that starts with q before text that contains it. Large instances: records are read up to a budget per request, so very many or very large tables may not all be searched.",
         "query: q (1-200 characters), limit? (default 20, max 50)",
         "SearchResponse {results: [{kind: workspace|base|table|view|record|comment, id, name, workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name, view_id, view_type, record_id, snippet, author_name}]} (a comment: name is its record's, snippet its text around the match)",
+    ),
+    // -------------------------------------------------------------------- history
+    e(
+        GET,
+        "/api/history",
+        "history",
+        "viewer",
+        Read,
+        "The activity feed: what changed and who commented recently on records in every project you can open (all your workspaces), newest first unless order=oldest. One item per history entry (create, update, delete, restore: the old and new value of each changed field) or comment. Trashed workspaces, projects and tables are left out; so are projects a token does not reach. Page with before = the previous page's next (null at the end).",
+        "query: workspace?, base?, table? (ids), user? (the author's user id), kind? (create|update|delete|restore|comment), order? (newest|oldest), before?, limit? (default 50, max 200)",
+        "ActivityPage {items: [{id, kind, created_at, author: {id, name}|null, record: {id, name, deleted}, place: {workspace_id, workspace_name, workspace_color, base_id, base_name, base_icon, base_color, table_id, table_name}, changes: {field_id: {old, new}}, comment: text|null}], next: cursor|null, fields: {field_id: Field}}",
     ),
     // ---------------------------------------------------------------------- trash
     e(

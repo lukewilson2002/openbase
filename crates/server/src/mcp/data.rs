@@ -296,7 +296,7 @@ pub fn definitions() -> Vec<ToolDef> {
             "Look up REST endpoints",
             "Catalogue of every REST endpoint of OpenBase's internal API (what the web app uses): method, path, purpose, minimum role, required token permission and request/response summary. Without `area` it lists the areas; with one it lists that area's endpoints in detail. Use it before api_request.",
             object(
-                json!({ "area": string("Area to list in detail: workspaces, projects, tables, fields, views, records, comments, search, trash, csv, attachments, sharing, automations, invites, notifications, inbox, account, admin, airtable, system.") }),
+                json!({ "area": string("Area to list in detail: workspaces, projects, tables, fields, views, records, comments, search, history, trash, csv, attachments, sharing, automations, invites, notifications, inbox, account, admin, airtable, system.") }),
                 &[],
             ),
             Level::Read,

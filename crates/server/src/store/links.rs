@@ -95,6 +95,9 @@ struct Inner {
     /// record id -> primary text when the record is live, None when it is
     /// trashed, its table is trashed, or it does not exist.
     records: HashMap<String, Option<String>>,
+    /// record id -> (primary text, in the trash) for [`NameCache::record_info`]; None when the
+    /// record or its table does not exist.
+    info: HashMap<String, Option<(String, bool)>>,
     users: HashMap<String, Option<String>>,
     /// primary field id -> definition (None when gone).
     fields: HashMap<String, Option<Field>>,
@@ -123,7 +126,9 @@ impl<'a> NameCache<'a> {
     }
 
     pub fn invalidate(&self, record_id: &str) {
-        self.inner.borrow_mut().records.remove(record_id);
+        let mut inner = self.inner.borrow_mut();
+        inner.records.remove(record_id);
+        inner.info.remove(record_id);
     }
 
     pub fn invalidate_all(&self) {
@@ -157,7 +162,8 @@ impl<'a> NameCache<'a> {
         }
     }
 
-    fn load_chunk(&self, ids: &[String]) -> AppResult<()> {
+    /// The rows of `ids` with their table's primary field id and trash stamp.
+    fn fetch_rows(&self, ids: &[String]) -> AppResult<Vec<(RecordRow, String, Option<i64>)>> {
         let marks = vec!["?"; ids.len()].join(",");
         let sql = format!(
             "SELECT r.id, r.table_id, r.data, r.position, r.autonumber, r.created_at, r.created_by,
@@ -165,11 +171,16 @@ impl<'a> NameCache<'a> {
              FROM records r JOIN tables t ON t.id = r.table_id WHERE r.id IN ({marks})"
         );
         let mut stmt = self.conn.prepare_cached(&sql)?;
-        let rows: Vec<(RecordRow, String, Option<i64>)> = stmt
+        let rows = stmt
             .query_map(params_from_iter(ids.iter()), |r| {
                 Ok((RecordRow::from_sql(r)?, r.get(10)?, r.get(11)?))
             })?
             .collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    fn load_chunk(&self, ids: &[String]) -> AppResult<()> {
+        let rows = self.fetch_rows(ids)?;
         let mut found: HashSet<&str> = HashSet::new();
         for (row, primary_id, table_deleted) in &rows {
             found.insert(row.id.as_str());
@@ -187,6 +198,46 @@ impl<'a> NameCache<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Load the given records for [`NameCache::record_info`] with one query per chunk.
+    pub fn preload_info<'i>(&self, ids: impl IntoIterator<Item = &'i str>) {
+        let missing: Vec<String> = {
+            let inner = self.inner.borrow();
+            let mut seen = HashSet::new();
+            ids.into_iter()
+                .filter(|i| !inner.info.contains_key(*i) && seen.insert(*i))
+                .map(str::to_string)
+                .collect()
+        };
+        for chunk in missing.chunks(IN_CHUNK) {
+            let rows = self.fetch_rows(chunk).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "could not load record names");
+                Vec::new()
+            });
+            let mut found: HashSet<&str> = HashSet::new();
+            for (row, primary_id, _) in &rows {
+                found.insert(row.id.as_str());
+                let info = (self.primary_text(row, primary_id), row.deleted_at.is_some());
+                self.inner
+                    .borrow_mut()
+                    .info
+                    .insert(row.id.clone(), Some(info));
+            }
+            let mut inner = self.inner.borrow_mut();
+            for id in chunk {
+                if !found.contains(id.as_str()) {
+                    inner.info.insert(id.clone(), None);
+                }
+            }
+        }
+    }
+
+    /// Primary text of a record and whether it is in the trash, trashed records included
+    /// (unlike [`NameCache::record_text`]); None when the record does not exist.
+    pub fn record_info(&self, id: &str) -> Option<(String, bool)> {
+        self.preload_info(std::iter::once(id));
+        self.inner.borrow().info.get(id).cloned().flatten()
     }
 
     fn primary_field(&self, field_id: &str) -> Option<Field> {

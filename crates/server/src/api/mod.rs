@@ -1,6 +1,7 @@
 //! HTTP handlers, one module per API area. Each module exposes `router()`;
 //! handlers stay thin and delegate to `store`/`engine` functions.
 
+pub mod activity;
 pub mod admin;
 pub mod admin_email;
 pub mod attachments;
@@ -49,6 +50,7 @@ pub fn router() -> Router<AppState> {
         .merge(views::router())
         .merge(trash::router())
         .merge(search::router())
+        .merge(activity::router())
         .merge(records::router())
         .merge(comments::router())
         .merge(events::router())

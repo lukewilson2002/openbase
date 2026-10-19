@@ -26,6 +26,7 @@ pub mod auth;
 pub mod automations;
 pub mod email;
 pub mod events;
+pub mod history;
 pub mod inbox;
 pub mod oauth;
 pub mod passkeys;

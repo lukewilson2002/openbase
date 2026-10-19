@@ -117,15 +117,33 @@ pub fn resolve_link_names(
     let Some(table_id) = table_id else {
         return Ok(());
     };
-    let link_fields: HashSet<String> = schema::table_fields(conn, &table_id)?
-        .into_iter()
-        .filter(|f| matches!(f.kind, FieldKind::Link(_)))
-        .map(|f| f.id)
-        .collect();
+    let link_fields = link_field_ids(conn, &table_id)?;
     if link_fields.is_empty() {
         return Ok(());
     }
     let names = NameCache::new(conn, tz);
+    for entry in entries.iter_mut() {
+        link_refs(&mut entry.changes, &link_fields, &names);
+    }
+    Ok(())
+}
+
+/// The ids of the link fields of a table.
+pub fn link_field_ids(conn: &Connection, table_id: &str) -> AppResult<HashSet<String>> {
+    Ok(schema::table_fields(conn, table_id)?
+        .into_iter()
+        .filter(|f| matches!(f.kind, FieldKind::Link(_)))
+        .map(|f| f.id)
+        .collect())
+}
+
+/// Turn the ids in the values of `link_fields` among `changes` into `[{id, name}]` (see
+/// [`resolve_link_names`]).
+pub fn link_refs(
+    changes: &mut BTreeMap<String, FieldChange>,
+    link_fields: &HashSet<String>,
+    names: &NameCache,
+) {
     let to_refs = |v: &mut Json| {
         let Json::Array(items) = v else { return };
         for item in items.iter_mut() {
@@ -135,15 +153,12 @@ pub fn resolve_link_names(
             }
         }
     };
-    for entry in entries.iter_mut() {
-        for (field_id, change) in entry.changes.iter_mut() {
-            if link_fields.contains(field_id) {
-                to_refs(&mut change.old);
-                to_refs(&mut change.new);
-            }
+    for (field_id, change) in changes.iter_mut() {
+        if link_fields.contains(field_id) {
+            to_refs(&mut change.old);
+            to_refs(&mut change.new);
         }
     }
-    Ok(())
 }
 
 /// When (and by whom) the latest create/update touching any of `field_ids`
