@@ -123,6 +123,37 @@ async fn drafts_can_be_added_listed_changed_and_deleted() {
 }
 
 #[tokio::test]
+async fn an_edited_draft_goes_to_the_top_even_within_the_same_millisecond() {
+    let f = Fixture::new().await;
+    let first = add(&f.app, &f.owner, "first").await;
+    let second = add(&f.app, &f.owner, "second").await;
+    let (a, b) = (
+        first["id"].as_str().unwrap(),
+        second["id"].as_str().unwrap(),
+    );
+    // Both written "later" than the clock will say at the edit: the clock has not moved on.
+    let later = first["updated_at"].as_i64().unwrap() + 3_600_000;
+    schema_support::sql(&f.app, |tx| {
+        tx.execute(
+            "UPDATE inbox_items SET updated_at = ?1",
+            rusqlite::params![later],
+        )
+    });
+    let r = f
+        .app
+        .patch(
+            &f.owner,
+            &format!("/api/inbox/{a}"),
+            json!({ "body": "edited" }),
+        )
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["updated_at"].as_i64(), Some(later + 1));
+    let list = f.app.get(&f.owner, "/api/inbox").await;
+    assert_eq!(ids(&list), [a.to_string(), b.to_string()]);
+}
+
+#[tokio::test]
 async fn a_draft_has_an_optional_one_line_title() {
     let f = Fixture::new().await;
     // A title alone is a draft; line breaks become spaces and the ends are trimmed.

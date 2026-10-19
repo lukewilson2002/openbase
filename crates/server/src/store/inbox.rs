@@ -307,8 +307,12 @@ pub fn update(
         Some(f) => resolve_attachments(conn, user_id, Some(id), f)?,
         None => current.attachments,
     };
+    // An edited draft goes to the top of the list (newest first) even when the clock has not moved
+    // on since another draft was written: it is then a millisecond past the newest of the others.
     conn.execute(
-        "UPDATE inbox_items SET title = ?1, body = ?2, attachments = ?3, updated_at = ?4
+        "UPDATE inbox_items SET title = ?1, body = ?2, attachments = ?3,
+           updated_at = MAX(?4, (SELECT COALESCE(MAX(o.updated_at) + 1, 0) FROM inbox_items o
+                                 WHERE o.user_id = ?6 AND o.id <> ?5))
          WHERE id = ?5 AND user_id = ?6",
         params![title, body, attachments_json(&refs)?, now_ms(), id, user_id],
     )?;
