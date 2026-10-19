@@ -40,6 +40,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   `> [!NOTE]` syntax), so agents, the API and CSV exports see the same text as before. The button
   at the bottom right of the box opens the editor full screen; plain long text gets the same
   button.
+- **Pictures, video, sound and files in rich text.** Upload, paste or drop a file into a rich text
+  field and it shows as a block of its own, centred, with an optional caption and alt text. The
+  files are as private as the record: only people who can open it can load them. Images from
+  other sites are never embedded (they are kept as links), so opening a record never fetches
+  anything from elsewhere.
+- **Search finds comments too**, below the records, with who wrote each one and on which record;
+  picking one opens the record.
+- **A right-click on a view's button** (or a press held on it, on a phone) opens that view's menu:
+  rename, duplicate, share, lock and delete, as on its row in the menu. It works on views inside a
+  shared button's list and in "…" too.
 - **See who is here.** The faces at the top of a project are the people viewing it right now; the
   others who can open it are one grey "+N". Agents can ask through
   `GET /api/bases/{id}/presence`, and every event stream starts with the current viewers.
@@ -60,6 +70,9 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   device), and reach what the workspace page, the pickers and the menu's footer used to hold from
   each row's "…" menu. The workspace page and the workspace and table pickers in the top bar are
   gone; the top bar names where you are (`Workspace / Project / Table`).
+- **An open record shows its values as they read**, compact, with nothing to type into until you
+  click (or tap) a value; then that one field becomes its editor. Escape ends the edit without
+  closing the record, and tabbing into a rich text field puts the cursor in its text.
 - **Tables open where you left them.** Tapping a table opens the view you last used in it on this
   device, and tapping a project opens its last table.
 - **Views as buttons.** The toolbar shows a button for each view of the table, with its name while
