@@ -23,6 +23,11 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   stay where they are. Agents reorder with `reorder_workspaces`, `reorder_projects`,
   `reorder_tables` and `reorder_views`, or the `POST …/reorder` routes.
 
+### Fixed
+
+- A task list's checkbox sits beside its text again in rich text editors, instead of on a line of
+  its own above it.
+
 ## [0.7.0] - 2026-10-19
 
 ### Added
