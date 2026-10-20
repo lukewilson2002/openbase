@@ -5,11 +5,11 @@
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::{get, patch};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use ob_core::api::events::BaseEvent;
 use ob_core::api::workspaces::{
-    CreateWorkspace, Member, UpdateMember, UpdateWorkspace, WorkspaceSummary,
+    CreateWorkspace, Member, Reorder, UpdateMember, UpdateWorkspace, WorkspaceSummary,
 };
 use rusqlite::Connection;
 
@@ -24,6 +24,7 @@ use crate::store::workspaces;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/workspaces", get(list).post(create))
+        .route("/api/workspaces/reorder", post(reorder))
         .route("/api/workspaces/{id}", patch(rename).delete(remove))
         .route("/api/workspaces/{id}/members", get(list_members))
         .route(
@@ -84,6 +85,27 @@ async fn create(
         .write(move |tx| workspaces::create(tx, &actor.user_id, &body))
         .await?;
     Ok((StatusCode::CREATED, Json(out)))
+}
+
+/// The caller's own order of the workspaces they belong to (not shared with other members): the
+/// listed workspaces take the places they held, in the given order. A token may name only the
+/// workspaces it can see.
+async fn reorder(
+    State(state): State<AppState>,
+    actor: Actor,
+    ApiJson(body): ApiJson<Reorder>,
+) -> AppResult<Json<serde_json::Value>> {
+    state
+        .db
+        .write(move |tx| {
+            let visible = visible_workspaces(tx, &actor)?
+                .into_iter()
+                .map(|w| w.id)
+                .collect();
+            workspaces::reorder_for_user(tx, &actor.user_id, &body.ids, &visible)
+        })
+        .await?;
+    Ok(ok())
 }
 
 async fn rename(

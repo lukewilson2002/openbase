@@ -291,7 +291,7 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
             "SELECT w.id, w.name, w.icon, w.color, m.role, m.all_bases FROM workspace_members m
              JOIN workspaces w ON w.id = m.workspace_id
              WHERE m.user_id = ?1 AND w.deleted_at IS NULL
-             ORDER BY w.created_at, w.id",
+             ORDER BY m.position IS NULL, m.position, w.created_at, w.id",
         )?;
         let rows = stmt.query_map([user_id], |r| {
             Ok((
@@ -334,6 +334,41 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
         });
     }
     Ok(out)
+}
+
+/// Put the workspaces `user_id` belongs to in a new order of their own (the order is per member,
+/// not shared): the `listed` ones take the places they held, in the given order, and every other
+/// workspace of theirs keeps its place. Each listed id must be in `visible` (the workspaces the
+/// caller may name) else not found. Workspaces joined later have no place yet and come last.
+pub fn reorder_for_user(
+    tx: &Connection,
+    user_id: &str,
+    listed: &[String],
+    visible: &HashSet<String>,
+) -> AppResult<()> {
+    schema::check_reorder_list(listed)?;
+    let current: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT w.id FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+             WHERE m.user_id = ?1 AND w.deleted_at IS NULL
+             ORDER BY m.position IS NULL, m.position, w.created_at, w.id",
+        )?;
+        let rows = stmt.query_map([user_id], |r| r.get(0))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    for id in listed {
+        if !visible.contains(id) || !current.contains(id) {
+            return Err(AppError::not_found(format!("workspace '{id}'")));
+        }
+    }
+    for (i, id) in schema::permuted(&current, listed).iter().enumerate() {
+        tx.execute(
+            "UPDATE workspace_members SET position = ?3
+             WHERE workspace_id = ?1 AND user_id = ?2 AND position IS NOT ?3",
+            params![id, user_id, (i + 1) as f64],
+        )?;
+    }
+    Ok(())
 }
 
 /// Colours handed out to new workspaces, in order. Migration 0006 colours the

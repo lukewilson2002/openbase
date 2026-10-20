@@ -139,6 +139,44 @@ fn has_enabled_share(conn: &rusqlite::Connection, view_id: &str) -> AppResult<bo
     )?)
 }
 
+/// Put the views of a table, as the caller sees them, in a new order: the `listed` ones take the
+/// places they held, in the given order; every other view keeps its place. Needs the Creator
+/// role when any listed view is shared, the Editor role for a list of the caller's own personal
+/// views only. The default grid has no place among the views and is refused. Returns whether the
+/// order changed.
+pub fn reorder(
+    tx: &Transaction,
+    table_id: &str,
+    listed: &[String],
+    user_id: &str,
+    role: Role,
+) -> AppResult<bool> {
+    schema::check_reorder_list(listed)?;
+    let visible: HashMap<String, ViewRow> = schema::visible_views(tx, table_id, user_id)?
+        .into_iter()
+        .map(|r| (r.view.id.clone(), r))
+        .collect();
+    let mut shared = false;
+    for id in listed {
+        let Some(row) = visible.get(id) else {
+            return Err(AppError::not_found(format!("view '{id}'")));
+        };
+        if row.view.is_default {
+            return Err(AppError::bad_request(format!(
+                "'{id}' is the table's default grid, which has no place among the views and \
+                 cannot be reordered"
+            )));
+        }
+        shared |= row.owner_id.is_none();
+    }
+    if shared {
+        need(role, Role::Creator, "reordering shared views")?;
+    } else {
+        need(role, Role::Editor, "reordering personal views")?;
+    }
+    schema::reorder_siblings(tx, PositionScope::ViewsIn(table_id), listed, |_| Ok(()))
+}
+
 /// Update name / config / lock / position of a view.
 pub fn update(
     tx: &Transaction,

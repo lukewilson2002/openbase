@@ -12,6 +12,9 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  * not, set OPENBASE_E2E_EMAIL and OPENBASE_E2E_PASSWORD to an existing account). Results are
  * asserted against the server (the records API), not against pixels.
  *
+ * The menu's tree can be put in another order (drag a row with the mouse, or Move up / Move down in its
+ * "…" menu): the "menu order" tests make their own workspace, project, tables and views.
+ *
  * Notifications: mentions and assignments skip their author, so the Notifications test makes an automation
  * ("record created" -> notify) tell the signed-in user about a record they create.
  */
@@ -336,5 +339,110 @@ test.describe("trash and notifications", () => {
     // The shell turns the bare base URL into the view last used there: the list view we were on.
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/${fx.tableId}/${fx.views.list}`));
     await expect.poll(async () => (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread).toBe(unreadBefore - 1);
+  });
+});
+
+test.describe("menu order", () => {
+  /** A workspace with one project of three empty tables (Alpha, Bravo, Charlie) and, in Alpha, three shared views. */
+  async function seedTree(page: Page) {
+    const req = page.request;
+    const ws = await call<{ id: string }>(req, "post", "/api/workspaces", { name: `E2E order ${Date.now()}` });
+    const base = await call<{ id: string }>(req, "post", `/api/workspaces/${ws.id}/bases`, { name: "Order E2E", empty: true });
+    const tables: { id: string; name: string }[] = [];
+    for (const name of ["Alpha", "Bravo", "Charlie"]) tables.push(await call<{ id: string; name: string }>(req, "post", `/api/bases/${base.id}/tables`, { name }));
+    for (const name of ["Rows", "Cards", "Gallery"]) await call(req, "post", `/api/tables/${tables[0]!.id}/views`, { name, type: name === "Gallery" ? "gallery" : "grid" });
+    return { workspaceId: ws.id, baseId: base.id, tables };
+  }
+  const tableNames = async (page: Page, baseId: string) => (await call<{ tables: { name: string }[] }>(page.request, "get", `/api/bases/${baseId}`)).tables.map((t) => t.name);
+
+  test("drags a table below another with the mouse, and the order is still there after a reload", async ({ page }) => {
+    const tree = await seedTree(page);
+    await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
+    const list = page.getByRole("list", { name: "Tables in Order E2E" });
+    await expect(list.getByRole("link")).toHaveText(["Alpha", "Bravo", "Charlie"]);
+
+    // Alpha, picked up by its row, goes below Bravo: a few pixels first (a plain click must not drag), then to the target.
+    const alpha = (await list.getByRole("link", { name: "Alpha" }).boundingBox())!;
+    const bravo = (await list.getByRole("link", { name: "Bravo" }).boundingBox())!;
+    await page.mouse.move(alpha.x + 40, alpha.y + alpha.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(alpha.x + 40, alpha.y + alpha.height / 2 + 8, { steps: 3 });
+    await page.mouse.move(alpha.x + 40, bravo.y + bravo.height * 0.8, { steps: 10 });
+    await page.mouse.up();
+
+    await expect(list.getByRole("link")).toHaveText(["Bravo", "Alpha", "Charlie"]);
+    await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Bravo", "Alpha", "Charlie"]);
+    // The drop did not open the table it ended on.
+    await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[0]!.id}`));
+
+    await page.reload();
+    await expect(page.getByRole("list", { name: "Tables in Order E2E" }).getByRole("link")).toHaveText(["Bravo", "Alpha", "Charlie"]);
+  });
+
+  test("drags a view's button along the toolbar, and the menu follows", async ({ page }) => {
+    const tree = await seedTree(page);
+    const alpha = tree.tables[0]!;
+    await page.goto(`/base/${tree.baseId}/${alpha.id}`);
+    const bar = page.getByRole("navigation", { name: "Views of Alpha" });
+    const names = async () => (await bar.getByRole("link").all()).map((l) => l.getAttribute("aria-label"));
+    await expect(bar.getByRole("link", { name: "Gallery" })).toBeVisible();
+    const before = (await Promise.all(await names())) as string[];
+    expect(before.slice(-3)).toEqual(["Rows", "Cards", "Gallery"]);
+    const url = page.url();
+
+    // Gallery goes in front of Cards: a few pixels first, then across.
+    const gallery = (await bar.getByRole("link", { name: "Gallery" }).boundingBox())!;
+    const cards = (await bar.getByRole("link", { name: "Cards" }).boundingBox())!;
+    await page.mouse.move(gallery.x + gallery.width / 2, gallery.y + gallery.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(gallery.x + gallery.width / 2 - 8, gallery.y + gallery.height / 2, { steps: 3 });
+    await page.mouse.move(cards.x + cards.width * 0.2, cards.y + cards.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    const after = [...before.slice(0, -2), "Gallery", "Cards"];
+    await expect.poll(async () => Promise.all(await names())).toEqual(after);
+    const viewNames = async () =>
+      (await call<{ tables: { id: string; views: { name: string; is_default: boolean }[] }[] }>(page.request, "get", `/api/bases/${tree.baseId}`)).tables
+        .find((t) => t.id === alpha.id)!
+        .views.filter((v) => !v.is_default)
+        .map((v) => v.name);
+    await expect.poll(viewNames).toEqual(after);
+    // The drop opened nothing.
+    expect(page.url()).toBe(url);
+    // The menu shows the same order.
+    await page.getByRole("button", { name: "Show views of Alpha" }).click();
+    await expect(page.getByRole("list", { name: "Shared views" }).getByRole("link")).toHaveText(after);
+  });
+
+  test("a click on a row without moving still opens it", async ({ page }) => {
+    const tree = await seedTree(page);
+    await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
+    await page.getByRole("list", { name: "Tables in Order E2E" }).getByRole("link", { name: "Charlie" }).click();
+    await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[2]!.id}`));
+  });
+
+  test("moves a table and a view with the keyboard through the row menus", async ({ page }) => {
+    const tree = await seedTree(page);
+    await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
+    const list = page.getByRole("list", { name: "Tables in Order E2E" });
+
+    await list.getByRole("button", { name: "Table options for Charlie" }).click();
+    await page.getByRole("menuitem", { name: "Move up" }).click();
+    await expect(list.getByRole("link")).toHaveText(["Alpha", "Charlie", "Bravo"]);
+    await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Alpha", "Charlie", "Bravo"]);
+
+    await page.getByRole("button", { name: "Show views of Alpha" }).click();
+    const shared = page.getByRole("list", { name: "Shared views" });
+    const before = await shared.getByRole("link").allTextContents();
+    // Whatever else a new table starts with, the three views are there, Gallery after Cards.
+    expect(before.indexOf("Gallery")).toBe(before.indexOf("Cards") + 1);
+    const after = [...before];
+    after.splice(before.indexOf("Gallery") - 1, 2, "Gallery", "Cards");
+    await shared.getByRole("button", { name: "Options for Gallery" }).click();
+    await page.getByRole("menuitem", { name: "Move up" }).click();
+    await expect(shared.getByRole("link")).toHaveText(after);
+    // Folded views stay as they were left, so the list is open again after a reload.
+    await page.reload();
+    await expect(page.getByRole("list", { name: "Shared views" }).getByRole("link")).toHaveText(after);
   });
 });

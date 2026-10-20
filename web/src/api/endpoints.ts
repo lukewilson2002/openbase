@@ -227,6 +227,10 @@ export const api = {
     create: (name: string, icon?: string | null, color?: string | null) => http.post<WorkspaceSummary>("/api/workspaces", { name, ...(icon ? { icon } : {}), ...(color ? { color } : {}) }),
     update: (id: string, body: UpdateWorkspace) => http.patch<WorkspaceSummary>(`/api/workspaces/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/workspaces/${enc(id)}`),
+    /** The caller's own order of their workspaces: `ids` take the places they held, in this order. */
+    reorder: (ids: string[]) => http.post<OkResponse>("/api/workspaces/reorder", { ids }),
+    /** A workspace's projects, for everyone in it (creators and up may); `ids` work as in `reorder`. */
+    reorderBases: (id: string, ids: string[]) => http.post<OkResponse>(`/api/workspaces/${enc(id)}/bases/reorder`, { ids }),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
@@ -241,6 +245,8 @@ export const api = {
     update: (id: string, body: UpdateBase) => http.patch<BaseSchema>(`/api/bases/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/bases/${enc(id)}`),
     duplicate: (id: string, body: DuplicateBase) => http.post<BaseSchema>(`/api/bases/${enc(id)}/duplicate`, body),
+    /** The project's tables, in the order of `ids` (those listed take the places they held). */
+    reorderTables: (id: string, ids: string[]) => http.post<OkResponse>(`/api/bases/${enc(id)}/tables/reorder`, { ids }),
     collaborators: (id: string) => http.get<Collaborator[]>(`/api/bases/${enc(id)}/collaborators`),
     members: (id: string) => http.get<Member[]>(`/api/bases/${enc(id)}/members`),
     removeMember: (id: string, userId: string) =>
@@ -257,6 +263,8 @@ export const api = {
     duplicate: (id: string, body: { name?: string | null; include_records?: boolean } = {}) =>
       http.post<Table>(`/api/tables/${enc(id)}/duplicate`, body),
     setPrimaryField: (id: string, fieldId: string) => http.post<Table>(`/api/tables/${enc(id)}/primary-field`, { field_id: fieldId }),
+    /** The table's shared views, or its personal ones, in the order of `ids`; never the default grid. */
+    reorderViews: (id: string, ids: string[]) => http.post<OkResponse>(`/api/tables/${enc(id)}/views/reorder`, { ids }),
   },
 
   views: {

@@ -183,6 +183,17 @@ interface Rec {
   order: number;
 }
 
+/** The reorder endpoints' rule: the listed ids take the places they held, in the order given; the rest stay. */
+function reorderInPlace<T extends { id: string }>(arr: T[], ids: unknown): void {
+  const listed = (Array.isArray(ids) ? ids : []).map(String);
+  const items = listed.map((id) => arr.find((x) => x.id === id)).filter((x): x is T => !!x);
+  const slots = arr.map((x, i) => (items.includes(x) ? i : -1)).filter((i) => i >= 0);
+  const queue = [...new Set(items)];
+  slots.forEach((slot, n) => {
+    arr[slot] = queue[n]!;
+  });
+}
+
 const records = new Map<string, Rec>();
 let autonumber = 0;
 let order = 0;
@@ -382,6 +393,9 @@ function historyPage(q: URLSearchParams): Obj {
 
 // ---- schema -----------------------------------------------------------------------------------
 
+/** The mock's tables, in the order the menu shows them (every mock base serves the same three). */
+const tableOrder: { id: string }[] = [{ id: T_TASKS }, { id: T_PEOPLE }, { id: T_PROJECTS }];
+
 const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fld_p_name", [T_PROJECTS]: "fld_j_name" };
 
 function tableDto(id: string): Obj {
@@ -402,7 +416,7 @@ let roleOverride: string | null = null;
 function baseDto(req: IncomingMessage): Obj {
   const cookie = /ob-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
   const b = ws.bases.find((x) => x.id === BASE_ID) ?? { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null };
-  return { ...b, role: roleOverride ?? cookie ?? "owner", tables: [tableDto(T_TASKS), tableDto(T_PEOPLE), tableDto(T_PROJECTS)], people: basePeople(b), workspace_name: ws.workspaces.find((w) => w.id === b.workspace_id)?.name ?? "Acme" };
+  return { ...b, role: roleOverride ?? cookie ?? "owner", tables: tableOrder.map((t) => tableDto(t.id)), people: basePeople(b), workspace_name: ws.workspaces.find((w) => w.id === b.workspace_id)?.name ?? "Acme" };
 }
 
 function fieldsOf(table: string): Obj[] {
@@ -713,7 +727,7 @@ function basePeople(b: Obj): Obj[] {
 
 function baseSummary(b: Obj, role: string): Obj {
   // Every mock base serves the same three tables (see baseDto).
-  const tables = [T_TASKS, T_PEOPLE, T_PROJECTS].map((id) => ({ id, name: tableDto(id).name, icon: null }));
+  const tables = tableOrder.map(({ id }) => ({ id, name: tableDto(id).name, icon: null }));
   return { ...b, role, people: basePeople(b), tables };
 }
 
@@ -759,6 +773,15 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     return send(res, 200, { ok: true }), true;
   }
   if (p === "/api/workspaces" && m === "GET") return send(res, 200, workspaceList()), true;
+  // The caller's own order (the mock has one user); a workspace's projects in theirs.
+  if (p === "/api/workspaces/reorder" && m === "POST") {
+    reorderInPlace(ws.workspaces as { id: string }[], body.ids);
+    return send(res, 200, { ok: true }), true;
+  }
+  if ((g = /^\/api\/workspaces\/([^/]+)\/bases\/reorder$/.exec(p)) && m === "POST") {
+    reorderInPlace(ws.bases as { id: string }[], body.ids);
+    return send(res, 200, { ok: true }), true;
+  }
   if (p === "/api/workspaces" && m === "POST") {
     const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, ...(body.color ? { color: body.color } : {}), role: "owner" };
     ws.workspaces.push(w);
@@ -906,6 +929,15 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (!rec) return err(res, 404, "not_found", "no record"), true;
     applyValues(rec, { [body.fieldId]: body.value }, "other-client");
     emit({ client_id: "other-client", event: { kind: "records_changed", table_id: rec.table_id, created: [], updated: [rec.id], deleted: [] } });
+    return send(res, 200, { ok: true }), true;
+  }
+  if ((g = /^\/api\/bases\/([^/]+)\/tables\/reorder$/.exec(p)) && m === "POST") {
+    reorderInPlace(tableOrder, body.ids);
+    return send(res, 200, { ok: true }), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/views\/reorder$/.exec(p)) && m === "POST") {
+    // Shared views or personal ones, never the default grid: the listed ids keep to the places they held.
+    reorderInPlace(views as { id: string }[], (Array.isArray(body.ids) ? body.ids : []).filter((id: unknown) => views.some((v) => v.id === id && v.table_id === g![1] && !v.is_default)));
     return send(res, 200, { ok: true }), true;
   }
   if (p === `/api/bases/${BASE_ID}` && m === "GET") return send(res, 200, baseDto(req)), true;

@@ -7,6 +7,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
 use ob_core::api::schema::{CreateTable, DuplicateTable, Table, UpdateTable};
+use ob_core::api::workspaces::Reorder;
 use ob_core::limits;
 
 use crate::api::schema_support::{OptionalJson, ok, publish_schema};
@@ -17,12 +18,13 @@ use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::field_kind::parse_create_field;
 use crate::store::fields;
-use crate::store::schema::Touched;
+use crate::store::schema::{self, PositionScope, Touched};
 use crate::store::tables;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/bases/{id}/tables", post(create))
+        .route("/api/bases/{id}/tables/reorder", post(reorder))
         .route("/api/tables/{id}", patch(update).delete(remove))
         .route("/api/tables/{id}/duplicate", post(duplicate))
 }
@@ -190,4 +192,30 @@ async fn duplicate(
         .await?;
     publish_schema(&state, &headers, &who, &base, &touched);
     Ok((StatusCode::CREATED, Json(table)))
+}
+
+/// Reorder the tables of a base: the listed tables take the places they held, in the given
+/// order; every other table keeps its place.
+async fn reorder(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(base_id): Path<String>,
+    ApiJson(body): ApiJson<Reorder>,
+) -> AppResult<Json<serde_json::Value>> {
+    let who = actor.clone();
+    let id = base_id.clone();
+    let changed = state
+        .db
+        .write(move |tx| {
+            perm::require_base(tx, &actor, &id, Role::Creator)?;
+            schema::reorder_siblings(tx, PositionScope::TablesIn(&id), &body.ids, |_| Ok(()))
+                .map(|changed| changed.then_some(body.ids))
+        })
+        .await?;
+    if let Some(ids) = changed {
+        // Several tables changed place: subscribers refetch the whole base.
+        publish_schema(&state, &headers, &who, &base_id, &Touched(ids));
+    }
+    Ok(ok())
 }

@@ -13,7 +13,9 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::McpCtx;
-use super::resolve::{field_options_to_ids, find_field, find_table, load_schema, type_name};
+use super::resolve::{
+    field_options_to_ids, find_field, find_table, load_schema, pick_many, type_name,
+};
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
 use super::views::{NEW_TABLE_VIEWS, new_field_views_note, views_using};
@@ -136,6 +138,20 @@ pub fn definitions() -> Vec<ToolDef> {
                     "icon": icon_schema("table"),
                 }),
                 &["project_id", "table"],
+            ),
+        )
+        .write()
+        .idempotent(),
+        ToolDef::new(
+            "reorder_tables",
+            "Reorder a project's tables",
+            "Put some of a project's tables in a new order, as in the sidebar. List tables (by name or id) in the order you want them: the listed tables take the places they now hold, in that order, and every table you leave out stays where it is. So listing two tables swaps them and listing all of them sets the whole order. Listing the same tables again changes nothing. The result is the project's resulting table order. Needs the creator role.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "tables": string_list("Table names or ids in the order they should appear; at least one, none twice."),
+                }),
+                &["project_id", "tables"],
             ),
         )
         .write()
@@ -291,6 +307,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
         "delete_project" => with_args!(BaseArg, delete_project),
         "create_table" => with_args!(CreateTable, create_table),
         "rename_table" => with_args!(RenameTable, rename_table),
+        "reorder_tables" => with_args!(ReorderTables, reorder_tables),
         "duplicate_table" => with_args!(DuplicateTable, duplicate_table),
         "delete_table" => with_args!(TableArg, delete_table),
         "create_field" => with_args!(CreateField, create_field),
@@ -727,6 +744,46 @@ async fn rename_table(ctx: &McpCtx, a: RenameTable) -> ToolResult {
         Ok(v) => ToolResult::ok(with_note(json!({ "table": table_out(&v) }), note)),
         Err(e) => e,
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReorderTables {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    tables: Vec<String>,
+}
+
+async fn reorder_tables(ctx: &McpCtx, a: ReorderTables) -> ToolResult {
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let scope = format!(" in project '{}'", schema.name);
+    let picked = match pick_many(
+        &schema.tables,
+        &a.tables,
+        "table",
+        &scope,
+        |t| &t.id,
+        |t| &t.name,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let ids: Vec<&str> = picked.iter().map(|t| t.id.as_str()).collect();
+    let path = base_path(&a.base_id, "/tables/reorder");
+    if let Err(e) = fetch(ctx, "POST", &path, None, Some(json!({ "ids": ids }))).await {
+        return e;
+    }
+    let after = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    ToolResult::ok(json!({
+        "project": { "id": after.id, "name": after.name },
+        "tables": after.tables.iter().map(|t| json!({ "id": t.id, "name": t.name })).collect::<Vec<_>>(),
+    }))
 }
 
 #[derive(Deserialize)]

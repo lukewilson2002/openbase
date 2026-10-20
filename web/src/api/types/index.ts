@@ -139,6 +139,7 @@ export type { RatingOptions } from "./RatingOptions";
 export type { RecordIds } from "./RecordIds";
 export type { RecordPatch } from "./RecordPatch";
 export type { RecordsResponse } from "./RecordsResponse";
+export type { Reorder } from "./Reorder";
 export type { ResetLink } from "./ResetLink";
 export type { RestoreRequest } from "./RestoreRequest";
 export type { RestoreResponse } from "./RestoreResponse";

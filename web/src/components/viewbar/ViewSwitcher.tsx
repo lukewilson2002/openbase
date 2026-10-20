@@ -8,9 +8,17 @@
  * those who may. A right-click (or a held press on a phone) on a view's button opens the view's menu:
  * rename, duplicate, share, lock, delete, as on its row in the menu. Which table to open is the
  * menu's job, not the toolbar's.
+ *
+ * While every view has a button with its name, the buttons can be dragged along the toolbar with a
+ * mouse to put the views in order (the same order as in the menu, which follows at once): by those who
+ * may reorder every view shown, so creators, or an editor whose views are all personal. A finger's
+ * held press stays the view's menu; on a phone the menu's rows are where views are reordered.
  */
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router";
+import { DndContext, MouseSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type Modifier } from "@dnd-kit/core";
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Check, ChevronDown, Ellipsis, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
@@ -24,6 +32,8 @@ import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { namedViews } from "@/lib/views";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
+import { holdClicks } from "@/shell/sortable";
+import { applyOrder, useReorder } from "@/shell/useReorder";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import { ViewMenuItems, hasViewActions } from "./ViewMenuItems";
 
@@ -34,6 +44,49 @@ const SHOWN_ON_PHONE = 4;
 const LONG_PRESS_MS = 500;
 /** On a desktop the tools share the row: names show only while all of them fit in this much of it. */
 const DESKTOP_SHARE = 0.45;
+
+const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 });
+
+/**
+ * Dragging the view buttons into a new order. `views` is shown in the order of a drop until its request
+ * is answered (the cache changes at once but reaches the toolbar a moment later), so nothing steps back.
+ */
+function useViewOrder(schema: BaseSchema, table: Table, named: View[], enabled: boolean) {
+  const reorder = useReorder();
+  const [pending, setPending] = useState<string[] | null>(null);
+  const views = pending ? applyOrder(named, pending, (v) => v.id) : named;
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 5 } }));
+  const release = useRef<(() => void) | null>(null);
+  const done = () => {
+    release.current?.();
+    release.current = null;
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    done();
+    if (!over || active.id === over.id) return;
+    const ids = views.map((v) => v.id);
+    const a = ids.indexOf(String(active.id));
+    const b = ids.indexOf(String(over.id));
+    if (a < 0 || b < 0) return;
+    const next = arrayMove(ids, a, b);
+    setPending(next);
+    void reorder({ kind: "views", baseId: schema.id, tableId: table.id, ids: next }).finally(() => setPending(null));
+  };
+  const context = {
+    sensors,
+    collisionDetection: closestCenter,
+    modifiers: [horizontalOnly],
+    // The click that ends a drag must not open the view it dropped.
+    onDragStart: () => {
+      done();
+      release.current = holdClicks();
+    },
+    onDragEnd,
+    onDragCancel: done,
+    accessibility: { screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the view's options in the menu." } },
+  };
+  return { views, sortable: enabled && views.length > 1, context };
+}
 
 const buttonClass = "relative inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] text-[0.875rem] font-medium transition-colors pointer-coarse:h-11 pointer-coarse:min-w-11";
 const labelledClass = "px-2.5";
@@ -97,9 +150,8 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const openDialog = useBaseDialog();
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const canCreateView = !!openDialog && basePermissions.createView(schema.role);
-  const views = namedViews(table);
+  const named = namedViews(table);
   const defaultView = table.views.find((v) => v.is_default);
-  const singles: ViewGroup[] = views.map((v) => ({ type: v.type, views: [v] }));
   const to = (v: View) => `/base/${schema.id}/${table.id}/${v.id}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -107,11 +159,16 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
   const defaultRef = useRef<HTMLDivElement>(null);
   const [fixedRefs] = useState(() => [moreRef, defaultRef]);
   const labelled = useLabelsFit(rootRef, measureRef, fixedRefs, desktop);
+  // Only one button per view can be moved, and only by someone who may reorder all of them.
+  const mayReorder = basePermissions.createSharedView(schema.role) || (basePermissions.createView(schema.role) && named.every((v) => v.personal));
+  const order = useViewOrder(schema, table, named, labelled && mayReorder);
+  const views = order.views;
   // A right-click or a held press on a view button: the view's own menu, as on its row in the menu.
   const [menu, setMenu] = useState<{ view: View; anchor: MenuAnchor } | null>(null);
   const hasMenu = (v: View) => hasViewActions(schema, v, openDialog);
   const onMenu = (v: View, anchor: MenuAnchor) => setMenu({ view: v, anchor });
   // Names fit: one button per view. Else icons, one per view type, and what does not fit goes into "…".
+  const singles: ViewGroup[] = views.map((v) => ({ type: v.type, views: [v] }));
   const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
 
   return (
@@ -132,11 +189,25 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
             <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-line-strong" />
           </div>
         )}
-        <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5 empty:hidden">
-          {shown.map((g) => (
-            <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
-          ))}
-        </nav>
+        {(() => {
+          const nav = (
+            <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5 empty:hidden">
+              {shown.map((g) => (
+                <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} sortable={order.sortable} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
+              ))}
+            </nav>
+          );
+          // The drag context (and its screen reader live region) only where there is something to drag.
+          return order.sortable ? (
+            <DndContext {...order.context}>
+              <SortableContext items={shown.map((g) => g.views[0]!.id)} strategy={horizontalListSortingStrategy}>
+                {nav}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            nav
+          );
+        })()}
         <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
           {hidden.length > 0 && (
             <ViewsDropdown
@@ -258,6 +329,7 @@ function GroupButton({
   group,
   activeId,
   labelled,
+  sortable = false,
   to,
   tableName,
   onMenu,
@@ -266,6 +338,8 @@ function GroupButton({
   group: ViewGroup;
   activeId: string;
   labelled: boolean;
+  /** The buttons can be dragged into a new order (one per view, inside the switcher's `SortableContext`). */
+  sortable?: boolean;
   to: (v: View) => string;
   tableName: string;
   onMenu?: (view: View, anchor: MenuAnchor) => void;
@@ -279,15 +353,24 @@ function GroupButton({
   const gesture = useMenuGesture(single && onMenu && hasMenu?.(single) ? (anchor) => onMenu(single, anchor) : undefined);
   if (single) {
     const v = single;
-    const link = (
+    const link = (drag: DragProps = {}, dragging = false) => (
       // `-webkit-touch-callout: none`: a held press opens the view's menu, not iOS's link preview.
-      <Link {...gesture} to={to(v)} aria-label={v.name} aria-current={active ? "page" : undefined} className={cn(buttonClass, labelled && labelledClass, "no-underline select-none [-webkit-touch-callout:none]", tone)}>
+      <Link
+        {...gesture}
+        {...drag}
+        to={to(v)}
+        aria-label={v.name}
+        aria-current={active ? "page" : undefined}
+        data-dragging={dragging || undefined}
+        className={cn(buttonClass, labelled && labelledClass, "no-underline select-none [-webkit-touch-callout:none] motion-reduce:transition-none!", tone, dragging && "z-20 cursor-grabbing bg-surface shadow-pop")}
+      >
         <Icon aria-hidden className="size-[1.125rem] shrink-0" />
         {labelled && <span aria-hidden>{v.name}</span>}
         <ViewBadges view={v} />
       </Link>
     );
-    return labelled ? link : <Tooltip content={v.name}>{link}</Tooltip>;
+    if (sortable) return <SortableButton id={v.id}>{link}</SortableButton>;
+    return labelled ? link() : <Tooltip content={v.name}>{link()}</Tooltip>;
   }
   const typeLabel = VIEW_TYPE_META[group.type]?.label ?? group.type;
   const open = group.views.find((v) => v.id === activeId);
@@ -312,6 +395,15 @@ function GroupButton({
       }
     />
   );
+}
+
+type DragProps = React.HTMLAttributes<HTMLAnchorElement> & { ref?: (el: HTMLElement | null) => void; "data-sortable"?: string };
+
+/** A view's button that can be dragged along the toolbar (inside the switcher's `SortableContext`). */
+function SortableButton({ id, children }: { id: string; children: (drag: DragProps, dragging: boolean) => React.ReactElement }) {
+  // No attributes from dnd-kit (role="button", tabIndex): the link stays a link for the keyboard.
+  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id });
+  return children({ ref: setNodeRef, ...(listeners as React.HTMLAttributes<HTMLAnchorElement> | undefined), style: { transform: CSS.Translate.toString(transform), transition }, "data-sortable": "" }, isDragging);
 }
 
 /** Whether a view's own menu is open (from the toolbar): a list of views it came from stays open under it. */

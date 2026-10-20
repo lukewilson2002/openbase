@@ -7,6 +7,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
 use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
+use ob_core::api::workspaces::Reorder;
 
 use crate::api::schema_support::{OptionalJson, ok, publish_schema};
 use crate::auth::Actor;
@@ -20,6 +21,7 @@ use crate::store::views;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/tables/{id}/views", post(create))
+        .route("/api/tables/{id}/views/reorder", post(reorder))
         .route("/api/views/{id}", patch(update).delete(remove))
         .route("/api/views/{id}/duplicate", post(duplicate))
 }
@@ -109,4 +111,32 @@ async fn duplicate(
         .await?;
     publish_schema(&state, &headers, &who, &base, &Touched::of(&view.table_id));
     Ok((StatusCode::CREATED, Json(view)))
+}
+
+/// Reorder the views of a table that the caller can see (shared views and their own personal
+/// ones): the listed views take the places they held, in the given order.
+async fn reorder(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(table_id): Path<String>,
+    ApiJson(body): ApiJson<Reorder>,
+) -> AppResult<Json<serde_json::Value>> {
+    let who = actor.clone();
+    let (base, table, changed) = {
+        let table_id = table_id.clone();
+        state
+            .db
+            .write(move |tx| {
+                let base = perm::base_of_table(tx, &table_id)?;
+                let role = perm::require_base(tx, &actor, &base, Role::Viewer)?;
+                let changed = views::reorder(tx, &table_id, &body.ids, &actor.user_id, role)?;
+                Ok((base, table_id, changed))
+            })
+            .await?
+    };
+    if changed {
+        publish_schema(&state, &headers, &who, &base, &Touched::of(&table));
+    }
+    Ok(ok())
 }

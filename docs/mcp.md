@@ -344,6 +344,7 @@ are names or ids.
 | `create_workspace` | manage | New workspace, optionally with a `color` (a colour name such as `blue`, checked like a project's colour; the next default colour otherwise) and an `icon`; you become its owner |
 | `rename_workspace` | manage | Rename and/or change the `color` and/or change or remove the `icon` (owner role) |
 | `delete_workspace` | manage | To the trash (owner role) |
+| `reorder_workspaces` | write | Your own order of your workspaces in the menu: list them (names or ids) in the new order; any you leave out keep their places. Nobody else's order changes |
 | `list_members` | manage | Members of a workspace with their role and projects (`all_projects` or `project_ids`), or the workspace members who can open one project |
 | `set_member_role` | manage | Change a workspace member's `role`, and/or their projects: `all_projects: true` or a `project_ids` list (owner role; owners always have every project; a workspace always keeps an owner). Scope `project` is refused: there are no per-project roles |
 | `remove_member` | manage | Remove someone from a workspace (they lose all its projects), or take one project off a limited member's list (not their last) |
@@ -357,8 +358,10 @@ are names or ids.
 |---|---|---|
 | `create_project` / `rename_project` | write | (aliases `create_base` / `rename_base`) Create a project in a workspace (it starts with the table "Table 1", which has just the primary field "Name" like any table added later; if you are limited to some bases, the new one is added to your list); rename or restyle it (name, colour, `icon`) |
 | `duplicate_project` / `delete_project` | manage | (aliases `duplicate_base` / `delete_base`) Copy a project (records optional; the copy keeps the icons); delete to the trash (owner role) |
+| `reorder_projects` | write | Order of the projects in a workspace's menu, for everyone: the listed ones take their own places in the new order, the rest stay (creator role on each) |
 | `create_table` / `rename_table` | write | Add a table, optionally with its `icon` and a `fields` list (each entry is the arguments of `create_field` without `project_id` and `table`), so a table is set up in one call; rename it or change its description or `icon`. A new table always starts with just the primary text field "Name" and a grid view (the same as the first table of a new project): `fields` adds exactly what it lists, never anything extra. All or nothing: every field is checked first and if one is invalid nothing is created and the error names it (`fields[2] 'Status'`). A lookup, rollup or count may use a link field listed before it, and a link may point to any table of the project; to link a table to itself, create it first and add the field with `create_field` |
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
+| `reorder_tables` | write | Order of a project's tables, for everyone: the listed ones take their own places in the new order, the rest stay (creator role) |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
 | `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |
 | `delete_field` | write | Delete a field and its dependants to the trash |
@@ -395,6 +398,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration |
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
+| `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |
 | `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters |
 
 A view configuration is the REST API's `ViewConfig`; wherever it wants a field id you

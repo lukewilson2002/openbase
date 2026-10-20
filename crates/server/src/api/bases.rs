@@ -7,19 +7,23 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use ob_core::api::events::BaseEvent;
 use ob_core::api::schema::BaseSchema;
-use ob_core::api::workspaces::{Collaborator, CreateBase, DuplicateBase, Member, UpdateBase};
+use ob_core::api::workspaces::{
+    Collaborator, CreateBase, DuplicateBase, Member, Reorder, UpdateBase,
+};
 
 use crate::api::schema_support::{OptionalJson, ok, publish};
 use crate::auth::{Actor, Capability};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::bases;
+use crate::store::schema::{self, PositionScope};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/workspaces/{id}/bases", post(create))
+        .route("/api/workspaces/{id}/bases/reorder", post(reorder))
         .route("/api/bases/{id}", get(schema).patch(update).delete(remove))
         .route("/api/bases/{id}/duplicate", post(duplicate))
         .route("/api/bases/{id}/collaborators", get(collaborators))
@@ -59,6 +63,46 @@ async fn schema(
         })
         .await?;
     Ok(Json(out))
+}
+
+/// Reorder the bases of a workspace (the order is shared): the listed bases take the places
+/// they held, in the given order; every other base keeps its place. Needs the Creator role on
+/// every listed base.
+async fn reorder(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(workspace_id): Path<String>,
+    ApiJson(body): ApiJson<Reorder>,
+) -> AppResult<Json<serde_json::Value>> {
+    let who = actor.clone();
+    let changed = state
+        .db
+        .write(move |tx| {
+            if perm::workspace_role(tx, &actor.user_id, &workspace_id)?.is_none() {
+                return Err(AppError::not_found("workspace"));
+            }
+            let changed = schema::reorder_siblings(
+                tx,
+                PositionScope::BasesIn(&workspace_id),
+                &body.ids,
+                |base| {
+                    // A base the caller cannot open is named like one that is not there.
+                    perm::require_base(tx, &actor, base, Role::Creator)
+                        .map(|_| ())
+                        .map_err(|e| match e {
+                            AppError::NotFound(_) => AppError::not_found(format!("base '{base}'")),
+                            e => e,
+                        })
+                },
+            )?;
+            Ok(changed.then_some(body.ids))
+        })
+        .await?;
+    for base in changed.into_iter().flatten() {
+        publish(&state, &headers, &who, &base, BaseEvent::BaseChanged);
+    }
+    Ok(ok())
 }
 
 async fn update(

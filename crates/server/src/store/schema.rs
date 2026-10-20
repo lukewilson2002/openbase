@@ -456,6 +456,114 @@ pub fn next_position(conn: &Connection, scope: PositionScope) -> AppResult<f64> 
     Ok(conn.query_row(sql, [id], |r| r.get(0))?)
 }
 
+/// What a [`PositionScope`] lists, for error messages.
+fn scope_noun(scope: &PositionScope) -> &'static str {
+    match scope {
+        PositionScope::BasesIn(_) => "base",
+        PositionScope::TablesIn(_) => "table",
+        PositionScope::FieldsIn(_) => "field",
+        PositionScope::ViewsIn(_) => "view",
+    }
+}
+
+/// Ids of the live siblings of a scope in display order. A table's default grid is not a
+/// sibling: it has no place among the views.
+pub fn live_sibling_ids(conn: &Connection, scope: &PositionScope) -> AppResult<Vec<String>> {
+    let (sql, id) = match scope {
+        PositionScope::BasesIn(id) => (
+            "SELECT id FROM bases WHERE workspace_id = ?1 AND deleted_at IS NULL
+             ORDER BY position, created_at, id",
+            id,
+        ),
+        PositionScope::TablesIn(id) => (
+            "SELECT id FROM tables WHERE base_id = ?1 AND deleted_at IS NULL
+             ORDER BY position, created_at, id",
+            id,
+        ),
+        PositionScope::FieldsIn(id) => (
+            "SELECT id FROM fields WHERE table_id = ?1 AND deleted_at IS NULL
+             ORDER BY position, created_at, id",
+            id,
+        ),
+        PositionScope::ViewsIn(id) => (
+            "SELECT id FROM views WHERE table_id = ?1 AND deleted_at IS NULL AND is_default = 0
+             ORDER BY position, created_at, id",
+            id,
+        ),
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map([id], |r| r.get(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// A reorder request's list: at least one id, none twice.
+pub fn check_reorder_list(ids: &[String]) -> AppResult<()> {
+    if ids.is_empty() {
+        return Err(AppError::bad_request("ids must list at least one item"));
+    }
+    let mut seen = HashSet::new();
+    for id in ids {
+        if !seen.insert(id.as_str()) {
+            return Err(AppError::bad_request(format!("'{id}' is listed twice")));
+        }
+    }
+    Ok(())
+}
+
+/// `current` with the `listed` items permuted into the places they held, in the listed order;
+/// every other item stays put. `listed` must be duplicate-free and all in `current`.
+pub fn permuted(current: &[String], listed: &[String]) -> Vec<String> {
+    let in_list: HashSet<&str> = listed.iter().map(String::as_str).collect();
+    let mut next = listed.iter();
+    current
+        .iter()
+        .map(|id| {
+            if in_list.contains(id.as_str()) {
+                next.next().unwrap_or(id).clone()
+            } else {
+                id.clone()
+            }
+        })
+        .collect()
+}
+
+/// Put the siblings of `scope` in a new order: the `listed` ones take the places they held, in
+/// the given order, and every other live sibling keeps its place. Positions are then rewritten
+/// as 1..n for the whole live list. Each listed id must be a live sibling (else not found,
+/// naming it); `check` may refuse it further (permissions). Returns whether the order changed.
+pub fn reorder_siblings(
+    tx: &Connection,
+    scope: PositionScope,
+    listed: &[String],
+    mut check: impl FnMut(&str) -> AppResult<()>,
+) -> AppResult<bool> {
+    check_reorder_list(listed)?;
+    let current = live_sibling_ids(tx, &scope)?;
+    let known: HashSet<&str> = current.iter().map(String::as_str).collect();
+    for id in listed {
+        if !known.contains(id.as_str()) {
+            return Err(AppError::not_found(format!(
+                "{} '{id}'",
+                scope_noun(&scope)
+            )));
+        }
+        check(id)?;
+    }
+    let order = permuted(&current, listed);
+    let table = match scope {
+        PositionScope::BasesIn(_) => "bases",
+        PositionScope::TablesIn(_) => "tables",
+        PositionScope::FieldsIn(_) => "fields",
+        PositionScope::ViewsIn(_) => "views",
+    };
+    // Only rows whose place differs are written (`IS NOT` also catches a NULL).
+    let sql = format!("UPDATE {table} SET position = ?2 WHERE id = ?1 AND position IS NOT ?2");
+    for (i, id) in order.iter().enumerate() {
+        tx.execute(&sql, params![id, (i + 1) as f64])?;
+    }
+    Ok(order != current)
+}
+
 /// Validate a client-supplied position.
 pub fn validate_position(p: f64) -> AppResult<f64> {
     if p.is_finite() && p.abs() < 1e15 {
@@ -742,6 +850,26 @@ mod tests {
         assert_eq!(parse_kind(&ty, &opts).unwrap(), kind);
         let (ty, opts) = kind_columns(&FieldKind::Email(ob_core::field::Empty {})).unwrap();
         assert_eq!((ty.as_str(), opts.as_str()), ("email", "{}"));
+    }
+
+    #[test]
+    fn reorder_permutes_listed_items_into_their_own_places() {
+        let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let cur = ids(&["a", "b", "c", "d", "e"]);
+        assert_eq!(
+            permuted(&cur, &ids(&["e", "d", "c", "b", "a"])),
+            ids(&["e", "d", "c", "b", "a"])
+        );
+        // b and d swap; a, c, e keep their places
+        assert_eq!(
+            permuted(&cur, &ids(&["d", "b"])),
+            ids(&["a", "d", "c", "b", "e"])
+        );
+        assert_eq!(permuted(&cur, &ids(&["c"])), cur);
+        assert_eq!(permuted(&cur, &ids(&["b", "d"])), cur);
+        assert!(check_reorder_list(&[]).is_err());
+        assert!(check_reorder_list(&ids(&["a", "b", "a"])).is_err());
+        assert!(check_reorder_list(&ids(&["a", "b"])).is_ok());
     }
 
     #[test]

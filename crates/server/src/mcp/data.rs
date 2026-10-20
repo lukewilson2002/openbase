@@ -15,6 +15,7 @@ use serde_json::{Map, Value, json};
 use super::McpCtx;
 use super::api::{self, ApiCall};
 use super::catalogue;
+use super::resolve::pick_many;
 use super::support::*;
 use super::tools::{Level, ToolDef, ToolResult};
 use crate::error::AppError;
@@ -339,6 +340,31 @@ pub fn definitions() -> Vec<ToolDef> {
             false,
             false,
         ),
+        ToolDef::new(
+            "reorder_workspaces",
+            "Reorder your workspaces",
+            "Put some of your workspaces in a new order of your own, as in your sidebar (the order is yours alone; other members keep theirs). List workspaces (by name or id) in the order you want them: the listed workspaces take the places they now hold, in that order, and every workspace you leave out stays where it is. So listing two workspaces swaps them and listing all of them sets the whole order. Listing the same ones again changes nothing. Any member may do it (viewer role is enough); new workspaces appear last. The result is your resulting workspace order.",
+            object(
+                json!({ "workspaces": string_list("Workspace names or ids in the order they should appear; at least one, none twice.") }),
+                &["workspaces"],
+            ),
+        )
+        .write()
+        .idempotent(),
+        ToolDef::new(
+            "reorder_projects",
+            "Reorder a workspace's projects",
+            "Put some of a workspace's projects in a new order, as in the sidebar (the order is shared by everyone in the workspace). List projects (by name or id) in the order you want them: the listed projects take the places they now hold, in that order, and every project you leave out stays where it is. So listing two projects swaps them and listing all of them sets the whole order. Listing the same projects again changes nothing. Needs the creator role. The result is the workspace's resulting project order, as far as you can see it.",
+            object(
+                json!({
+                    "workspace": string("Workspace name or id (from list_projects)."),
+                    "projects": string_list("Project names or ids in the order they should appear; at least one, none twice."),
+                }),
+                &["workspace", "projects"],
+            ),
+        )
+        .write()
+        .idempotent(),
         tool(
             "list_members",
             "List members",
@@ -431,6 +457,8 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
         "api_reference" => with_args!(ReferenceArgs, api_reference),
         "api_request" => with_args!(RequestArgs, api_request),
         "create_workspace" => with_args!(WorkspaceArgs, create_workspace),
+        "reorder_workspaces" => with_args!(ReorderWorkspacesArgs, reorder_workspaces),
+        "reorder_projects" => with_args!(ReorderProjectsArgs, reorder_projects),
         "list_members" => with_args!(ScopeArgs, list_members),
         "set_member_role" => with_args!(MemberRoleArgs, set_member_role),
         "create_invite" => with_args!(InviteArgs, create_invite),
@@ -1163,6 +1191,107 @@ async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
         Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }
+}
+
+/// The workspaces the caller can see, in their own order.
+async fn load_workspaces(
+    ctx: &McpCtx,
+) -> Result<Vec<ob_core::api::workspaces::WorkspaceSummary>, ToolResult> {
+    let actor = ctx.actor.clone();
+    ctx.state
+        .db
+        .read(move |c| crate::api::workspaces::visible_workspaces(c, &actor))
+        .await
+        .map_err(|e| app_error(&e))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReorderWorkspacesArgs {
+    workspaces: Vec<String>,
+}
+
+async fn reorder_workspaces(ctx: &McpCtx, a: ReorderWorkspacesArgs) -> ToolResult {
+    let all = match load_workspaces(ctx).await {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+    let picked = match pick_many(&all, &a.workspaces, "workspace", "", |w| &w.id, |w| &w.name) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let ids: Vec<&str> = picked.iter().map(|w| w.id.as_str()).collect();
+    if let Err(e) = fetch(
+        ctx,
+        "POST",
+        "/api/workspaces/reorder",
+        None,
+        Some(json!({ "ids": ids })),
+    )
+    .await
+    {
+        return e;
+    }
+    let after = match load_workspaces(ctx).await {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+    ToolResult::ok(json!({
+        "workspaces": after.iter().map(|w| json!({ "id": w.id, "name": w.name })).collect::<Vec<_>>(),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReorderProjectsArgs {
+    workspace: String,
+    projects: Vec<String>,
+}
+
+async fn reorder_projects(ctx: &McpCtx, a: ReorderProjectsArgs) -> ToolResult {
+    let all = match load_workspaces(ctx).await {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+    let ws = match pick_many(
+        &all,
+        std::slice::from_ref(&a.workspace),
+        "workspace",
+        "",
+        |w| &w.id,
+        |w| &w.name,
+    ) {
+        Ok(p) => p[0],
+        Err(e) => return e,
+    };
+    let scope = format!(" in workspace '{}'", ws.name);
+    let picked = match pick_many(
+        &ws.bases,
+        &a.projects,
+        "project",
+        &scope,
+        |b| &b.id,
+        |b| &b.name,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let ids: Vec<&str> = picked.iter().map(|b| b.id.as_str()).collect();
+    let path = format!("/api/workspaces/{}/bases/reorder", encode_segment(&ws.id));
+    if let Err(e) = fetch(ctx, "POST", &path, None, Some(json!({ "ids": ids }))).await {
+        return e;
+    }
+    let after = match load_workspaces(ctx).await {
+        Ok(w) => w,
+        Err(e) => return e,
+    };
+    let Some(after) = after.iter().find(|w| w.id == ws.id) else {
+        return ToolResult::error("The workspace disappeared while reordering.");
+    };
+    ToolResult::ok(json!({
+        "workspace": { "id": after.id, "name": after.name },
+        "projects": after.bases.iter().map(|b| json!({ "id": b.id, "name": b.name })).collect::<Vec<_>>(),
+    }))
 }
 
 #[derive(Deserialize, Clone, Copy)]

@@ -3,6 +3,7 @@
  * for those who may. The menu's "…" on a view row and the toolbar's right-click menu on a view button
  * show the same items from here.
  */
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Lock, LockOpen, Pencil, Share2, Trash2 } from "lucide-react";
@@ -21,7 +22,8 @@ export function hasViewActions(schema: BaseSchema, view: View, onDialog: ((dialo
   return basePermissions.configureView(role, view) || basePermissions.lockView(role, view) || (!!onDialog && canShareView(role, view));
 }
 
-export function ViewMenuItems({ schema, table, view: v, onDialog }: { schema: BaseSchema; table: Table; view: View; onDialog: ((dialog: BaseDialog) => void) | null }) {
+/** `extra` is more items for the menu of a place that has its own (the menu's reordering), before Delete. */
+export function ViewMenuItems({ schema, table, view: v, onDialog, extra }: { schema: BaseSchema; table: Table; view: View; onDialog: ((dialog: BaseDialog) => void) | null; extra?: ReactNode }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -69,6 +71,7 @@ export function ViewMenuItems({ schema, table, view: v, onDialog }: { schema: Ba
           {v.locked ? "Unlock view" : "Lock view"}
         </DropdownMenuItem>
       )}
+      {extra}
       {canConfigure && onDialog && (
         <>
           <DropdownMenuSeparator />

@@ -8,6 +8,11 @@
  * hand-made choices are remembered per device. A project's tables are loaded when it is opened,
  * from the same query the project's page uses. The "…" menus hold the workspace's and the project's
  * actions: new project, import, members, history, trash, settings, rename, icon, share, automations, delete.
+ *
+ * Workspaces and, inside a workspace, projects can be put in another order: drag a row, or "Move up"
+ * and "Move down" in its "…" menu (see `sortable.tsx`). A person's workspace order is their own; the
+ * projects' is the workspace's, so only those who may edit projects can change it. The tables and views
+ * below are ordered in `NavTables`.
  */
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -27,7 +32,9 @@ import { atLeast } from "@/lib/roles";
 import { useNavDialog } from "./NavDialogs";
 import { NavTables } from "./NavTables";
 import { RowChevron, SidebarHeading, SidebarLink, rowActionClass } from "./Sidebar";
+import { MoveItems, NO_DRAG, ReorderRoot, SortableGroup, SortableRow } from "./sortable";
 import { useOpenState } from "./useOpenState";
+import { useReorder } from "./useReorder";
 
 export interface NavTreeProps {
   /** The workspace the page belongs to: open by default. */
@@ -44,6 +51,7 @@ export function NavTree(props: NavTreeProps) {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
   const openDialog = useNavDialog();
   const [toggled, toggle] = useOpenState("ob-workspaces-open");
+  const reorder = useReorder();
 
   return (
     <section aria-label="Workspaces" className="flex flex-col gap-0.5">
@@ -56,18 +64,24 @@ export function NavTree(props: NavTreeProps) {
       >
         Workspaces
       </SidebarHeading>
-      <ul className="flex flex-col gap-0.5">
-        {(workspaces.data ?? []).map((ws) => (
-          <WorkspaceItem
-            key={ws.id}
-            ws={ws}
-            tree={props}
-            // The open workspace is expanded unless it was closed by hand.
-            expanded={toggled[ws.id] ?? ws.id === props.workspaceId}
-            onToggle={(open) => toggle(ws.id, open)}
-          />
-        ))}
-      </ul>
+      <ReorderRoot>
+        <SortableGroup group="workspaces" items={workspaces.data ?? []} idOf={(ws) => ws.id} enabled onReorder={(ids) => reorder({ kind: "workspaces", ids })}>
+          {(list) => (
+            <ul className="flex flex-col gap-0.5">
+              {list.map((ws) => (
+                <WorkspaceItem
+                  key={ws.id}
+                  ws={ws}
+                  tree={props}
+                  // The open workspace is expanded unless it was closed by hand.
+                  expanded={toggled[ws.id] ?? ws.id === props.workspaceId}
+                  onToggle={(open) => toggle(ws.id, open)}
+                />
+              ))}
+            </ul>
+          )}
+        </SortableGroup>
+      </ReorderRoot>
       {workspaces.isSuccess && workspaces.data.length === 0 && <p className="px-3 py-1 text-xs text-muted">No workspaces yet.</p>}
     </section>
   );
@@ -107,6 +121,7 @@ const rowNameClass =
 
 function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary; tree: NavTreeProps; expanded: boolean; onToggle: (open: boolean) => void }) {
   const groupId = `ws-${ws.id}-projects`;
+  const reorder = useReorder();
   const current = ws.id === tree.workspaceId;
   const name = (
     <>
@@ -115,24 +130,35 @@ function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary;
     </>
   );
   return (
-    <li className="flex flex-col gap-0.5">
-      <div className="group/item relative flex items-center">
-        <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${ws.name}`} controls={groupId} onClick={() => onToggle(!expanded)} />
-        {/* The name folds the workspace like its chevron: it goes nowhere. */}
-        <button type="button" onClick={() => onToggle(!expanded)} className={cn(rowNameClass, current && "font-semibold")}>
-          {name}
-        </button>
-        <WorkspaceMenu ws={ws} />
-      </div>
+    <SortableRow
+      id={ws.id}
+      label={ws.name}
+      className="flex flex-col gap-0.5"
+      rowClassName="group/item relative flex items-center"
+      row={
+        <>
+          <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${ws.name}`} controls={groupId} onClick={() => onToggle(!expanded)} />
+          {/* The name folds the workspace like its chevron: it goes nowhere. */}
+          <button type="button" onClick={() => onToggle(!expanded)} className={cn(rowNameClass, current && "font-semibold")}>
+            {name}
+          </button>
+          <WorkspaceMenu ws={ws} />
+        </>
+      }
+    >
       {expanded && (
-        <ul id={groupId} aria-label={`Projects in ${ws.name}`} className="flex flex-col gap-0.5 pb-1 pl-3.5">
-          {ws.bases.map((b) => (
-            <ProjectItem key={b.id} base={b} workspaceName={ws.name} tree={tree} />
-          ))}
-          {ws.bases.length === 0 && <li className="py-1 pl-[42px] text-xs text-muted">No projects yet.</li>}
-        </ul>
+        <SortableGroup group={`projects-${ws.id}`} items={ws.bases} idOf={(b) => b.id} enabled={ws.bases.every((b) => basePermissions.editBase(b.role))} onReorder={(ids) => reorder({ kind: "projects", workspaceId: ws.id, ids })}>
+          {(bases) => (
+            <ul id={groupId} aria-label={`Projects in ${ws.name}`} className="flex flex-col gap-0.5 pb-1 pl-3.5">
+              {bases.map((b) => (
+                <ProjectItem key={b.id} base={b} workspaceName={ws.name} tree={tree} />
+              ))}
+              {bases.length === 0 && <li className="py-1 pl-[42px] text-xs text-muted">No projects yet.</li>}
+            </ul>
+          )}
+        </SortableGroup>
       )}
-    </li>
+    </SortableRow>
   );
 }
 
@@ -141,7 +167,7 @@ function RowMenu({ label, children }: { label: string; children: ReactNode }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label={label} size="sm" noTooltip className={rowActionClass}>
+        <IconButton label={label} size="sm" noTooltip className={rowActionClass} {...NO_DRAG}>
           <Ellipsis aria-hidden className="size-4" />
         </IconButton>
       </DropdownMenuTrigger>
@@ -203,6 +229,12 @@ function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
           <DropdownMenuItem onSelect={() => openDialog({ kind: "workspace", ws, dialog: "color" })}>
             <Palette aria-hidden className="size-4" /> Change color…
           </DropdownMenuItem>
+        </>
+      )}
+      {/* Everyone orders their own workspaces. */}
+      <MoveItems separator="before" />
+      {isOwner && (
+        <>
           <DropdownMenuSeparator />
           <DropdownMenuItem danger onSelect={() => openDialog({ kind: "workspace", ws, dialog: "delete" })}>
             <Trash2 aria-hidden className="size-4" /> Delete workspace
@@ -219,18 +251,25 @@ function ProjectItem({ base, workspaceName, tree }: { base: BaseSummary; workspa
   const expanded = toggled[base.id] ?? active;
   const groupId = `project-${base.id}-tables`;
   return (
-    <li className="flex flex-col gap-0.5">
-      <div className="group/item relative flex items-center">
-        <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${base.name}`} controls={groupId} onClick={() => toggle(base.id, !expanded)} />
-        {/* The name folds the project like its chevron; its tables are what open pages. */}
-        <button type="button" onClick={() => toggle(base.id, !expanded)} className={cn(rowNameClass, active && "font-semibold")}>
-          <EntityTile name={base.name} icon={base.icon} color={base.color} size="xs" />
-          <span className="min-w-0 flex-1 truncate">{base.name}</span>
-        </button>
-        <ProjectMenu base={base} workspaceName={workspaceName} open={active} />
-      </div>
+    <SortableRow
+      id={base.id}
+      label={base.name}
+      className="flex flex-col gap-0.5"
+      rowClassName="group/item relative flex items-center"
+      row={
+        <>
+          <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${base.name}`} controls={groupId} onClick={() => toggle(base.id, !expanded)} />
+          {/* The name folds the project like its chevron; its tables are what open pages. */}
+          <button type="button" onClick={() => toggle(base.id, !expanded)} className={cn(rowNameClass, active && "font-semibold")}>
+            <EntityTile name={base.name} icon={base.icon} color={base.color} size="xs" />
+            <span className="min-w-0 flex-1 truncate">{base.name}</span>
+          </button>
+          <ProjectMenu base={base} workspaceName={workspaceName} open={active} />
+        </>
+      }
+    >
       {expanded && <ProjectBody id={groupId} base={base} tree={tree} />}
-    </li>
+    </SortableRow>
   );
 }
 
@@ -284,6 +323,7 @@ function ProjectMenu({ base, workspaceName, open }: { base: BaseSummary; workspa
           <DropdownMenuItem onSelect={() => duplicate.mutate()}>
             <Copy aria-hidden className="size-4" /> Duplicate project
           </DropdownMenuItem>
+          <MoveItems separator="before" />
           <DropdownMenuSeparator />
         </>
       )}

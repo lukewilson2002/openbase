@@ -12,7 +12,8 @@ use serde_json::{Map, Value, json};
 
 use super::McpCtx;
 use super::resolve::{
-    Mode, Xlate, find_view, load_people, load_schema, merge_config, value_for_model, view_for_model,
+    Mode, Xlate, find_table, find_view, load_people, load_schema, merge_config, pick_many,
+    value_for_model, view_for_model,
 };
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
@@ -78,6 +79,21 @@ pub fn definitions() -> Vec<ToolDef> {
         .write()
         .idempotent(),
         ToolDef::new(
+            "reorder_views",
+            "Reorder a table's views",
+            "Put some of a table's views in a new order, as in the view list of the app. List views (by name or id) in the order you want them: the listed views take the places they now hold, in that order, and every view you leave out stays where it is. So listing two views swaps them and listing all of them sets the whole order. Listing the same views again changes nothing. You see the shared views and your own personal views: the shared views' order is the same for everyone and needs the creator role; a list of only your personal views needs the editor role (they are ordered among the shared ones in the same one list). The table's default grid (is_default in get_project_schema) is not one of the views: it always comes first, has no place to change and is refused here. The result is the resulting view order.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "views": string_list("View names or ids in the order they should appear; at least one, none twice, no default grid."),
+                }),
+                &["project_id", "table", "views"],
+            ),
+        )
+        .write()
+        .idempotent(),
+        ToolDef::new(
             "delete_view",
             "Delete a view",
             "Delete a view (it moves to the trash and can be restored with restore_from_trash, kind 'view'). Share links of the view stop working. Shared views need the creator role. A table's default grid cannot be deleted.",
@@ -126,6 +142,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
         "get_view" => with_args!(ViewArg, get_view),
         "create_view" => with_args!(CreateView, create_view),
         "update_view" => with_args!(UpdateView, update_view),
+        "reorder_views" => with_args!(ReorderViews, reorder_views),
         "delete_view" => with_args!(ViewArg, delete_view),
         "query_view" => with_args!(QueryView, query_view),
         _ => None,
@@ -273,6 +290,66 @@ async fn update_view(ctx: &McpCtx, a: UpdateView) -> ToolResult {
         Ok(updated) => ToolResult::ok(json!({ "view": present(table, &updated) })),
         Err(e) => e,
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReorderViews {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    table: String,
+    views: Vec<String>,
+}
+
+async fn reorder_views(ctx: &McpCtx, a: ReorderViews) -> ToolResult {
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let table = match find_table(&schema, &a.table) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    let scope = format!(" in table '{}'", table.name);
+    let picked = match pick_many(
+        &table.views,
+        &a.views,
+        "view",
+        &scope,
+        |v| &v.id,
+        |v| &v.name,
+    ) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    if let Some(default) = picked.iter().find(|v| v.is_default) {
+        return ToolResult::error(format!(
+            "'{}' is the table's default grid, not a view you can place: it always comes first. Leave it out and list the other views.",
+            default.name
+        ));
+    }
+    let ids: Vec<&str> = picked.iter().map(|v| v.id.as_str()).collect();
+    let path = table_path(&table.id, "/views/reorder");
+    if let Err(e) = fetch(ctx, "POST", &path, None, Some(json!({ "ids": ids }))).await {
+        return e;
+    }
+    let after = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let Some(after) = after.tables.iter().find(|t| t.id == table.id) else {
+        return ToolResult::error("The table disappeared while reordering.");
+    };
+    ToolResult::ok(json!({
+        "table": { "id": after.id, "name": after.name },
+        "views": after.views.iter().filter(|v| !v.is_default).map(|v| json!({
+            "id": v.id,
+            "name": v.name,
+            "type": v.view_type,
+            "personal": v.personal,
+        })).collect::<Vec<_>>(),
+        "note": "The table's default grid is not listed: it always comes first.",
+    }))
 }
 
 async fn delete_view(ctx: &McpCtx, a: ViewArg) -> ToolResult {

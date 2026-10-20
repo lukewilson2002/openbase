@@ -116,6 +116,15 @@ pub struct CreateBase {
     pub empty: Option<bool>,
 }
 
+/// The new order of some siblings (workspaces, bases of a workspace, tables of a base, views of a
+/// table): the listed items take the places they held, in this order; every other sibling keeps
+/// its place.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct Reorder {
+    pub ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct UpdateBase {

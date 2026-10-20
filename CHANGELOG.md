@@ -11,6 +11,18 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Put the menu in order.** Drag workspaces, projects, tables and views in the menu to reorder
+  them (on a phone, hold a finger on a row first). Each moves among its own siblings: a project
+  stays in its workspace, a view in its table and in its Shared or Personal list. The "…" menu of
+  each row has **Move up** and **Move down** too. A table's views can also be dragged along the
+  view toolbar with a mouse, while each has a button with its name. The order of workspaces is your own; the order
+  of projects, tables and views is everyone's, and changing it takes the role that renames them
+  (an editor orders their personal views). Inbox, Notifications, Automations, History and Trash
+  stay where they are. Agents reorder with `reorder_workspaces`, `reorder_projects`,
+  `reorder_tables` and `reorder_views`, or the `POST …/reorder` routes.
+
 ## [0.7.0] - 2026-10-19
 
 ### Added

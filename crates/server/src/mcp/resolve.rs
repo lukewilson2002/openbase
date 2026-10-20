@@ -87,6 +87,37 @@ pub fn pick<'a, T>(
     }
 }
 
+/// Resolve a list of names or ids to the items of `items`, in the order given (the arguments
+/// of the reorder tools). `what` names the kind ("table"), `scope` where they are looked up
+/// ("in project 'Sales'"); an unknown or ambiguous entry says which ones exist.
+pub fn pick_many<'a, T>(
+    items: &'a [T],
+    keys: &[String],
+    what: &str,
+    scope: &str,
+    id: impl Fn(&T) -> &str,
+    name: impl Fn(&T) -> &str,
+) -> Result<Vec<&'a T>, ToolResult> {
+    if keys.is_empty() {
+        return Err(ToolResult::error(format!(
+            "List at least one {what} (by name or id)."
+        )));
+    }
+    keys.iter()
+        .map(|key| {
+            pick(items, key, &id, &name).map_err(|why| {
+                let all = list_names(items.iter().map(|x| format!("'{}' ({})", name(x), id(x))));
+                ToolResult::error(match why {
+                    Some(_) => format!(
+                        "Several {what}s are named '{key}'; use the {what} id. {what}s{scope}: {all}."
+                    ),
+                    None => format!("{what} '{key}' not found{scope}. {what}s{scope}: {all}."),
+                })
+            })
+        })
+        .collect()
+}
+
 pub fn find_table<'a>(schema: &'a BaseSchema, key: &str) -> Result<&'a Table, ToolResult> {
     pick(&schema.tables, key, |t| &t.id, |t| &t.name).map_err(|why| {
         let tables = list_names(
