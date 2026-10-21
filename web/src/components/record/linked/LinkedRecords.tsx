@@ -146,6 +146,68 @@ export function RecordPeekBody({ table, record, format, emails, role, onOpen }: 
   );
 }
 
+/** The preview's panel, beside what it previews: shared by `RecordPeek` and `FloatingRecordPeek`. */
+function PeekContent({
+  side,
+  sideOffset,
+  table,
+  record,
+  format,
+  emails,
+  role,
+  onOpen,
+  onClose,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  side: "top" | "right" | "bottom" | "left";
+  sideOffset: number;
+  table: Table;
+  record: TableRecord | undefined;
+  format: FormatCtx;
+  emails?: ReadonlyMap<string, string>;
+  role: string;
+  onOpen?: () => void;
+  onClose: () => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
+}) {
+  return (
+    <HoverCard.Portal>
+      <HoverCard.Content
+        side={side}
+        align="start"
+        sideOffset={sideOffset}
+        collisionPadding={12}
+        data-record-peek=""
+        onEscapeKeyDown={onClose}
+        onPointerDownOutside={onClose}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
+        // Clicks inside stay inside: the field around the trigger must not start an edit.
+        onClick={(e) => e.stopPropagation()}
+        className="ob-fade-in z-[70] flex max-h-[min(28rem,70dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2.5 overflow-y-auto rounded-lg border border-line bg-surface p-3 text-fg shadow-pop"
+      >
+        <RecordPeekBody
+          table={table}
+          record={record}
+          format={format}
+          emails={emails}
+          role={role}
+          onOpen={
+            onOpen
+              ? () => {
+                  onClose();
+                  onOpen();
+                }
+              : undefined
+          }
+        />
+      </HoverCard.Content>
+    </HoverCard.Portal>
+  );
+}
+
 export interface RecordPeekProps {
   table: Table;
   recordId: string;
@@ -172,8 +234,9 @@ export function RecordPeek({ table, recordId, record, format, emails, role, onOp
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const opened = useRef(false);
   // Cards scrolling past a still pointer are not being pointed at: a preview asked for while a list
-  // scrolls waits for it to stop, and opens then if the pointer is still on this card.
-  const hovered = useRef(false);
+  // scrolls waits for it to stop, and opens then if the card is still pointed at (the mouse is on it,
+  // or the keyboard's focus is in it).
+  const pointedAt = useRef({ mouse: false, focus: false });
   const settle = useRef(() => {});
   useEffect(() => {
     watchScrolling();
@@ -195,7 +258,7 @@ export function RecordPeek({ table, recordId, record, format, emails, role, onOp
   const onOpenChange = (next: boolean) => {
     settle.current();
     if (next && scrolledRecently()) {
-      settle.current = whenScrollSettles(() => hovered.current && setOpen(true));
+      settle.current = whenScrollSettles(() => (pointedAt.current.mouse || pointedAt.current.focus) && setOpen(true));
       return;
     }
     setOpen(next);
@@ -211,10 +274,16 @@ export function RecordPeek({ table, recordId, record, format, emails, role, onOp
         <div
           className={cn("select-none [-webkit-touch-callout:none]", className)}
           onPointerEnter={(e) => {
-            if (e.pointerType === "mouse") hovered.current = true;
+            if (e.pointerType === "mouse") pointedAt.current.mouse = true;
           }}
           onPointerLeave={() => {
-            hovered.current = false;
+            pointedAt.current.mouse = false;
+          }}
+          onFocus={() => {
+            pointedAt.current.focus = true;
+          }}
+          onBlur={() => {
+            pointedAt.current.focus = false;
           }}
           onPointerDown={(e) => {
             opened.current = false;
@@ -248,35 +317,7 @@ export function RecordPeek({ table, recordId, record, format, emails, role, onOp
           {children}
         </div>
       </HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side={side}
-          align="start"
-          sideOffset={8}
-          collisionPadding={12}
-          data-record-peek=""
-          onPointerDownOutside={() => setOpen(false)}
-          // Clicks inside stay inside: the field around the trigger must not start an edit.
-          onClick={(e) => e.stopPropagation()}
-          className="ob-fade-in z-[70] flex max-h-[min(28rem,70dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2.5 overflow-y-auto rounded-lg border border-line bg-surface p-3 text-fg shadow-pop"
-        >
-          <RecordPeekBody
-            table={table}
-            record={record ?? fetched.data}
-            format={format}
-            emails={emails}
-            role={role}
-            onOpen={
-              onOpen
-                ? () => {
-                    setOpen(false);
-                    onOpen();
-                  }
-                : undefined
-            }
-          />
-        </HoverCard.Content>
-      </HoverCard.Portal>
+      <PeekContent side={side} sideOffset={8} table={table} record={record ?? fetched.data} format={format} emails={emails} role={role} onOpen={onOpen} onClose={() => setOpen(false)} />
     </HoverCard.Root>
   );
 }
@@ -319,6 +360,8 @@ export function LinkedRecordCards({ field, value, format, emails, fallback, onCh
 const SWITCH_MS = 300;
 
 export interface FloatingPeekTarget {
+  /** Which chip this is (its cell and record): the preview moves to another chip, even of the same record. */
+  key: string;
   table: Table;
   recordId: string;
   rect: { x: number; y: number; width: number; height: number };
@@ -336,7 +379,7 @@ export function FloatingRecordPeek({ at, format, emails, role }: { at: FloatingP
     clearTimeout(timer.current);
     settle.current();
     if (over.current) return;
-    if (at && shown && at.recordId === shown.recordId) return;
+    if (at && shown && at.key === shown.key) return;
     // The pointer on its way to the preview crosses the cells under the chip: what it passes over only
     // takes the preview's place (or closes it) after a moment there, so it can get to the preview first.
     // Chips scrolling past a still pointer wait for the scrolling to stop.
@@ -351,7 +394,7 @@ export function FloatingRecordPeek({ at, format, emails, role }: { at: FloatingP
     };
     // `shown` is read, not followed: it only says whether to wait.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [at?.recordId, at?.rect.x, at?.rect.y]);
+  }, [at?.key]);
   useEffect(() => {
     // A closed preview is not under the pointer (it may have closed from inside: Open, Escape).
     if (!shown) over.current = false;
@@ -377,42 +420,25 @@ export function FloatingRecordPeek({ at, format, emails, role }: { at: FloatingP
       <HoverCard.Trigger asChild>
         <span aria-hidden className="pointer-events-none fixed" style={{ left: r.x, top: r.y, width: r.width, height: r.height }} />
       </HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side="bottom"
-          align="start"
-          sideOffset={2}
-          collisionPadding={12}
-          data-record-peek=""
-          onEscapeKeyDown={() => setShown(null)}
-          onPointerDownOutside={() => setShown(null)}
-          onPointerEnter={() => {
-            over.current = true;
-            clearTimeout(timer.current);
-          }}
-          onPointerLeave={() => {
-            over.current = false;
-            timer.current = setTimeout(() => setShown(null), SWITCH_MS);
-          }}
-          className="ob-fade-in z-[70] flex max-h-[min(28rem,70dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2.5 overflow-y-auto rounded-lg border border-line bg-surface p-3 text-fg shadow-pop"
-        >
-          <RecordPeekBody
-            table={table}
-            record={fetched.data}
-            format={format}
-            emails={emails}
-            role={role}
-            onOpen={
-              open
-                ? () => {
-                    setShown(null);
-                    open();
-                  }
-                : undefined
-            }
-          />
-        </HoverCard.Content>
-      </HoverCard.Portal>
+      <PeekContent
+        side="bottom"
+        sideOffset={2}
+        table={table}
+        record={fetched.data}
+        format={format}
+        emails={emails}
+        role={role}
+        onOpen={open}
+        onClose={() => setShown(null)}
+        onPointerEnter={() => {
+          over.current = true;
+          clearTimeout(timer.current);
+        }}
+        onPointerLeave={() => {
+          over.current = false;
+          timer.current = setTimeout(() => setShown(null), SWITCH_MS);
+        }}
+      />
     </HoverCard.Root>
   );
 }

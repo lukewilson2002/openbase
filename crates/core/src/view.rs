@@ -282,7 +282,7 @@ pub struct TimelineConfig {
     /// Optional link-to-self field drawn as dependency arrows (Gantt).
     pub dependency_field_id: Option<FieldId>,
     pub scale: TimelineScale,
-    /// Width in pixels of the lane labels on the left, as dragged by its divider (80 to 800;
+    /// Width in pixels of the lane labels on the left, as dragged by its divider (80 to 480;
     /// absent = the default).
     pub label_width: Option<u32>,
 }

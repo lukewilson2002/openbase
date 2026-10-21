@@ -11,7 +11,7 @@ group_field_id?: string | null,
  */
 dependency_field_id?: string | null, scale: TimelineScale, 
 /**
- * Width in pixels of the lane labels on the left, as dragged by its divider (80 to 800;
+ * Width in pixels of the lane labels on the left, as dragged by its divider (80 to 480;
  * absent = the default).
  */
 label_width?: number | null, };

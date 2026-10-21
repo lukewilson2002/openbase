@@ -31,7 +31,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo, ScreenRect } from "../adapter";
 import { isFormulaError } from "@/lib/cells/format";
 import { displayShapeOf } from "@/lib/cells/kinds";
-import { layoutChips } from "./draw";
+import { layoutChips, type PlacedChip } from "./draw";
 import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
 import { ADD_ICON, headerIcons } from "./icons";
 import { cn } from "@/lib/cn";
@@ -104,17 +104,24 @@ function toInfo(sel: GridSelection): GridSelectionInfo {
 }
 
 let measuring: CanvasRenderingContext2D | null = null;
+/** The chips of the cell the pointer was last over, laid out once: a move within the cell reuses them. */
+let lastLayout: { key: string; placed: PlacedChip[] } | null = null;
 
 /** The linked record whose chip is at a point of a cell, laid out as the renderer draws it. */
 function linkChipAt(props: GridAdapterProps, [col, row]: Item, bounds: Rectangle, x: number, y: number): { point: { col: number; row: number }; recordId: string; rect: ScreenRect } | null {
   const m = props.getCell(col, row);
   if (m.kind !== "cell" || displayShapeOf(m.field) !== "link" || isFormulaError(m.value)) return null;
-  measuring ??= document.createElement("canvas").getContext("2d");
-  if (!measuring) return null;
-  const base = gridTheme(props.dark, props.accent);
-  const theme = { cellHorizontalPadding: base.cellHorizontalPadding ?? 14, baseFontFull: `${base.baseFontStyle} ${base.fontFamily}` };
-  const chips = m.chips.map((c) => ({ text: c.text, color: c.color, kind: "link" as const }));
-  const hit = layoutChips(measuring, theme, { x: 0, y: 0, width: bounds.width, height: bounds.height }, chips).placed.find((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h);
+  // The cell's models are rebuilt when `version` changes, and its look with the theme and its size.
+  const key = `${col}:${row}:${bounds.width}:${bounds.height}:${props.version}:${props.dark}:${props.accent}`;
+  if (lastLayout?.key !== key) {
+    measuring ??= document.createElement("canvas").getContext("2d");
+    if (!measuring) return null;
+    const base = gridTheme(props.dark, props.accent);
+    const theme = { cellHorizontalPadding: base.cellHorizontalPadding ?? 14, baseFontFull: `${base.baseFontStyle} ${base.fontFamily}` };
+    const chips = m.chips.map((c) => ({ text: c.text, color: c.color, kind: "link" as const }));
+    lastLayout = { key, placed: layoutChips(measuring, theme, { x: 0, y: 0, width: bounds.width, height: bounds.height }, chips).placed };
+  }
+  const hit = lastLayout.placed.find((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h);
   const id = hit && m.chips[hit.index]?.id;
   if (!hit || !id) return null;
   return { point: { col, row }, recordId: id, rect: { x: bounds.x + hit.x, y: bounds.y + hit.y, width: hit.w, height: hit.h } };

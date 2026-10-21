@@ -85,7 +85,7 @@ function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
   const fits = Math.max(1, Math.floor(room / (size + gap)));
   // The files that do not fit are counted after the last tile that does, as plain text ("+3"): room is
   // kept for the count, a tile giving way to it when needed.
-  const countFont = `${theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`)}`;
+  const countFont = chipFont(theme.baseFontFull, "plain");
   ctx.font = countFont;
   let shown = Math.min(files.length, fits);
   while (shown > 1 && shown < files.length && shown * (size + gap) + ctx.measureText(`+${files.length - shown}`).width > room) shown--;
@@ -259,8 +259,8 @@ function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
   ctx.fillStyle = theme.borderColor;
   ctx.fillRect(rect.x, rect.y, rect.width, 1);
-  const small = theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
-  ctx.font = small;
+  // The chips' smaller font, as the cells above use for their values.
+  ctx.font = chipFont(theme.baseFontFull, "plain");
   ctx.textBaseline = "middle";
   const y = rect.y + rect.height / 2 + 0.5;
   if (!m.label) {

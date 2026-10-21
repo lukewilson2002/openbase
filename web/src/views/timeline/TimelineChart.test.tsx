@@ -133,6 +133,13 @@ describe("TimelineChart", () => {
     expect(props.onOpen).toHaveBeenLastCalledWith("r2");
   });
 
+  it("opens a bar it may not change on a click: there is nothing to select it for", async () => {
+    const user = userEvent.setup();
+    const { props } = chart({}, [{ lane: { key: "a", label: "A", records: [] }, bars: [bar("r1", "Locked", span(ms(2026, 3, 10), ms(2026, 3, 14)), { canMove: false, canResize: false })] }]);
+    await user.click(screen.getByRole("button", { name: /^Locked/ }));
+    expect(props.onOpen).toHaveBeenCalledWith("r1");
+  });
+
   it("takes a selected bar off the timeline with Delete or Backspace, if it may move", async () => {
     const user = userEvent.setup();
     const onUnschedule = vi.fn();

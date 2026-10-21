@@ -182,7 +182,7 @@ export function SortableGroup<T>({
 }
 
 /** The row's own place in its group, for its menu: `null` when it cannot be moved. */
-function useRowMove() {
+function useRowMove(): RowMove | null {
   const group = useContext(GroupContext);
   const id = useContext(RowContext);
   if (!group?.sortable || id === null) return null;
@@ -198,9 +198,20 @@ function useRowMove() {
   };
 }
 
-/** "Move up" and "Move down" for a "…" menu: nothing when the row cannot be moved; disabled at the ends. */
-export function MoveItems({ separator }: { separator?: "before" | "after" }) {
-  const row = useRowMove();
+/** Where a row can move and how: what `MoveItems` acts on. */
+export interface RowMove {
+  canUp: boolean;
+  canDown: boolean;
+  move: (delta: -1 | 1) => void;
+}
+
+/**
+ * "Move up" and "Move down" for a "…" menu: nothing when the row cannot be moved; disabled at the ends.
+ * The row is the menu's own sortable row, or `row` for a list that is not one (the view list's views).
+ */
+export function MoveItems({ separator, row: given }: { separator?: "before" | "after"; row?: RowMove | null }) {
+  const own = useRowMove();
+  const row = given === undefined ? own : given;
   if (!row) return null;
   return (
     <>

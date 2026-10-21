@@ -400,11 +400,12 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
     for id in config.summaries.keys() {
         check(id, "summaries")?;
     }
+    // The range the web app's divider allows, so a saved width is always the one shown.
     if let Some(w) = config.timeline.label_width
-        && !(80..=800).contains(&w)
+        && !(80..=480).contains(&w)
     {
         return Err(AppError::bad_request(
-            "timeline label_width must be between 80 and 800 pixels",
+            "timeline label_width must be between 80 and 480 pixels",
         ));
     }
     match &config.row_color {

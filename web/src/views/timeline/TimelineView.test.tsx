@@ -225,12 +225,20 @@ describe("TimelineView", () => {
     expect(screen.queryByRole("button", { name: /Add record/ })).not.toBeInTheDocument();
   });
 
-  it("opens the record when a bar is double-clicked (a click selects it)", async () => {
+  it("opens a viewer's bar on a click: they cannot move it, so there is nothing to select", async () => {
     const u = user();
     setup("viewer", tl(), { "GET /api/tables/tbl1/records/r1": records[0]! });
+    await u.click(await screen.findByRole("button", { name: /^R1, / }));
+    expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
+  });
+
+  it("selects an editor's bar on a click and opens it on a double-click", async () => {
+    const u = user();
+    setup("editor", tl(), { "GET /api/tables/tbl1/records/r1": records[0]! });
     const bar = await screen.findByRole("button", { name: /^R1, / });
     await u.click(bar);
     expect(screen.getByTestId("where")).not.toHaveTextContent("?record=r1");
+    expect(bar).toHaveFocus();
     await u.dblClick(bar);
     expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
   });

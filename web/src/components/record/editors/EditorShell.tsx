@@ -66,9 +66,11 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
       }}
       onInteractOutside={(e) => {
         // Glide decides what an outside click means in the grid; the caller's anchor is part of the editor.
-        // (A press in the anchor is noted as it starts: what it pressed may be gone by now, such as a removed card's ✕.)
-        const inAnchor = pressInAnchor.current || !!anchorRef.current?.contains(e.target as Node);
+        // A press in the anchor is noted as it starts (what it pressed may be gone by now, such as a removed
+        // card's ✕); the note only answers for that press, never for focus leaving later (Tab out).
+        const pressed = e.type === "dismissableLayer.pointerDownOutside" && pressInAnchor.current;
         pressInAnchor.current = false;
+        const inAnchor = pressed || !!anchorRef.current?.contains(e.target as Node);
         if (variant === "cell" || inAnchor) e.preventDefault();
       }}
       onOpenAutoFocus={(e) => {

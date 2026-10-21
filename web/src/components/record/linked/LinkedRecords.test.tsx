@@ -6,6 +6,7 @@ import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
 import { makeSchema, makeView, mockApi } from "@/test/utils";
 import { formatTrail, parseTrail } from "@/views/common/RecordPanel";
 import { ExpandedRecord, type ExpandedRecordProps } from "../ExpandedRecord";
+import { FloatingRecordPeek, RecordPeek, type FloatingPeekTarget } from "./LinkedRecords";
 import { EditorEnvProvider } from "../editors/env";
 import { LinkEditor } from "../editors/LinkEditor";
 
@@ -187,6 +188,27 @@ describe("the link picker", () => {
   });
 });
 
+describe("the link picker under a field's cards", () => {
+  it("still closes when the focus leaves by keyboard after the cards were pressed", async () => {
+    mockApi({ "GET /api/tables/tbl2/records/lookup": { records: [] }, "POST /api/tables/tbl2/records/get": { records: [domain] } } as never);
+    const env = { baseId: "app1", tableId: "tbl1", collaborators: PEOPLE, timeZone: "UTC", canCreateOptions: false, format: { timeZone: "UTC", userName: () => undefined }, currentUserId: "usr1", schema };
+    render(
+      <Providers client={createQueryClient()}>
+        <EditorEnvProvider value={env}>
+          <LinkEditor field={requires} value={[{ id: "recD", name: "Buy the domain" }]} variant="form" onChange={vi.fn()} onCommit={vi.fn()} onCancel={vi.fn()} />
+        </EditorEnvProvider>
+        <button type="button">Elsewhere</button>
+      </Providers>,
+    );
+    // Opening it is a press on the cards: that press keeps it open, and no more than that...
+    await userEvent.click(screen.getByRole("button", { name: "Requires" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    // ...so the focus leaving the editor later still closes it.
+    act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+});
+
 describe("linked records in the record panel, edited in place", () => {
   it("removes a record with its card's ✕ and saves it at once, without opening the picker", async () => {
     const { api } = setup();
@@ -195,5 +217,60 @@ describe("linked records in the record panel, edited in place", () => {
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "rec1", values: { fld_requires: null } }] });
     expect(screen.queryByRole("combobox", { name: "Search Requires" })).toBeNull();
+  });
+});
+
+describe("the grid's floating record preview", () => {
+  const at = (key: string, x: number, open = vi.fn()): FloatingPeekTarget => ({ key, table: setupTable, recordId: "recD", rect: { x, y: 40, width: 80, height: 20 }, open });
+  const anchor = () => document.querySelector<HTMLElement>("span.fixed[aria-hidden]");
+
+  it("moves to another chip of the same record, and opens the record of the chip it is on", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApi({ "GET /api/tables/tbl2/records/recD": domain } as never);
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <Providers client={createQueryClient()}>
+        <FloatingRecordPeek at={at("row1", 10, first)} format={{ timeZone: "UTC", userName: () => undefined }} role="owner" />
+      </Providers>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(450));
+    expect(anchor()).toHaveStyle({ left: "10px" });
+    // The same record linked from the next row: the preview follows the pointer there.
+    rerender(
+      <Providers client={createQueryClient()}>
+        <FloatingRecordPeek at={at("row2", 200, second)} format={{ timeZone: "UTC", userName: () => undefined }} role="owner" />
+      </Providers>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(350));
+    expect(anchor()).toHaveStyle({ left: "200px" });
+    vi.useRealTimers();
+    const peek = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>("[data-record-peek]");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    await userEvent.click(await within(peek).findByRole("button", { name: /Open/ }));
+    expect(second).toHaveBeenCalled();
+    expect(first).not.toHaveBeenCalled();
+  });
+});
+
+describe("a record's preview while a list scrolls", () => {
+  it("opens for a card the keyboard's focus is on once the scrolling stops", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApi({ "GET /api/tables/tbl2/records/recD": domain } as never);
+    render(
+      <Providers client={createQueryClient()}>
+        <RecordPeek table={setupTable} recordId="recD" record={domain} format={{ timeZone: "UTC", userName: () => undefined }} role="owner">
+          <button type="button">Buy the domain</button>
+        </RecordPeek>
+      </Providers>,
+    );
+    window.dispatchEvent(new Event("scroll"));
+    act(() => screen.getByRole("button", { name: "Buy the domain" }).focus());
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(document.querySelector("[data-record-peek]")).not.toBeNull();
+    vi.useRealTimers();
   });
 });

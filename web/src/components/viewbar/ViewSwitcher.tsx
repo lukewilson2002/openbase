@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { Link, useNavigate } from "react-router";
-import { ArrowDown, ArrowUp, Check, ChevronDown, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
+import { Check, ChevronDown, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { namedViews } from "@/lib/views";
+import { MoveItems, type RowMove } from "@/shell/sortable";
 import { moveId, useReorder } from "@/shell/useReorder";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import { ViewMenuItems, hasViewActions } from "./ViewMenuItems";
@@ -90,22 +91,16 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
     const siblings = named.filter((x) => !!x.personal === !!v.personal).map((x) => x.id);
     const may = v.personal ? basePermissions.createView(schema.role) : basePermissions.createSharedView(schema.role);
     if (!may || siblings.length < 2) return null;
-    const move = (delta: -1 | 1) => {
-      const ids = moveId(siblings, v.id, delta);
-      if (ids) void reorder({ kind: "views", baseId: schema.id, tableId: table.id, ids });
-    };
     const at = siblings.indexOf(v.id);
-    return (
-      <>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={at <= 0} onSelect={() => move(-1)}>
-          <ArrowUp aria-hidden className="size-4" /> Move up
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={at >= siblings.length - 1} onSelect={() => move(1)}>
-          <ArrowDown aria-hidden className="size-4" /> Move down
-        </DropdownMenuItem>
-      </>
-    );
+    const row: RowMove = {
+      canUp: at > 0,
+      canDown: at < siblings.length - 1,
+      move: (delta) => {
+        const ids = moveId(siblings, v.id, delta);
+        if (ids) void reorder({ kind: "views", baseId: schema.id, tableId: table.id, ids });
+      },
+    };
+    return <MoveItems separator="before" row={row} />;
   };
   const isDefault = !!view.is_default;
   const Icon = isDefault ? Grid3x3 : (VIEW_TYPE_META[view.type]?.icon ?? Table2);

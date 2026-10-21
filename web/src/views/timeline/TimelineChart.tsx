@@ -54,7 +54,7 @@ export const HEADER_HEIGHT = MAJOR_ROW + MINOR_ROW;
 /** The left column: wide enough for a record's name and who it is for; narrower on a phone. */
 export const LABEL_WIDTH = 216;
 const LABEL_WIDTH_PHONE = 132;
-/** How far the left column's divider can be dragged (the server keeps 80 to 800). */
+/** How far the left column's divider can be dragged (the server keeps the same 80 to 480). */
 export const LABEL_WIDTH_MIN = 80;
 export const LABEL_WIDTH_MAX = 480;
 const LABEL_KEY_STEP = 16;
@@ -395,7 +395,8 @@ export function TimelineChart(props: TimelineChartProps) {
     if (e.button !== 0) return;
     const handle = (e.target as HTMLElement).dataset.handle as "start" | "end" | undefined;
     const allowed = (handle ?? "move") === "move" ? bar.canMove : bar.canResize;
-    // A bar that cannot change still takes the press, so that releasing it opens the record.
+    // A bar that cannot change still takes the press, so that releasing it opens the record (one that
+    // can is selected instead: see the bar's pointer up).
     const mode: DragMode = allowed ? (handle ?? "move") : "move";
     const { currentTarget: el, pointerId, clientX: startX, clientY: startY } = e;
     barGate.press(e, () => {
@@ -726,12 +727,13 @@ export function TimelineChart(props: TimelineChartProps) {
                 onPointerMove={(e) => barGate.move(e) && moveBar(bar, e)}
                 onPointerUp={(e) => {
                   const r = barGate.release(e);
-                  // A click selects the bar (for the keys); a double-click or Enter opens it. A finger has no keys: a tap opens it.
-                  const mouse = e.pointerType === "mouse";
+                  // A mouse selects a bar it may move, for its keys (Delete); a bar it may not change has nothing
+                  // to select for, and opens as before. A finger has no keys: a tap opens it.
+                  const select = e.pointerType === "mouse" && bar.canMove;
                   if (r === "tap") {
-                    if (mouse) e.currentTarget.focus();
+                    if (select) e.currentTarget.focus();
                     else props.onOpen(bar.id);
-                  } else if (r === "drag") endBar(bar, false, mouse ? e.currentTarget : undefined);
+                  } else if (r === "drag") endBar(bar, false, select ? e.currentTarget : undefined);
                 }}
                 onDoubleClick={() => props.onOpen(bar.id)}
                 onPointerCancel={(e) => barGate.release(e, true) === "drag" && endBar(bar, true)}

@@ -464,18 +464,17 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // A linked record's chip under the pointer: its preview floats over it, with Open (the cell's record
   // in the panel, and the linked one on top of it, a step back away).
   const [linkHover, setLinkHover] = useState<FloatingPeekTarget | null>(null);
+  /** Opens `cellRecordId` in the panel with the linked record on top of it (a step back away). */
   const openLinkedFromCell = useCallback(
-    (row: number, tableId: string, recordId: string) => {
-      const rec = recordAtRow(row);
-      if (!rec) return;
+    (cellRecordId: string, tableId: string, recordId: string) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
-        next.set("record", rec.id);
+        next.set("record", cellRecordId);
         next.set(LINKED_PARAM, formatTrail([{ tableId, recordId }]));
         return next;
       });
     },
-    [recordAtRow, setSearchParams],
+    [setSearchParams],
   );
 
   /** Neighbouring record ids in grid order (for prev/next in the expanded record). */
@@ -709,7 +708,13 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     onLinkHover: (hit) => {
       const field = hit ? columns[hit.point.col]?.field : undefined;
       const linked = field ? linkedTableOf(schema, field) : undefined;
-      setLinkHover(hit && linked ? { table: linked, recordId: hit.recordId, rect: hit.rect, open: () => openLinkedFromCell(hit.point.row, linked.id, hit.recordId) } : null);
+      // The cell's record is taken now: rows can move under an open preview (a live update, a refetch).
+      const cellRecord = hit ? recordAtRow(hit.point.row) : undefined;
+      setLinkHover(
+        hit && linked && cellRecord
+          ? { key: `${cellRecord.id}:${hit.point.col}:${hit.recordId}`, table: linked, recordId: hit.recordId, rect: hit.rect, open: () => openLinkedFromCell(cellRecord.id, linked.id, hit.recordId) }
+          : null,
+      );
     },
     renderEditor,
   };

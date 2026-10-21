@@ -1084,7 +1084,8 @@ async fn a_timeline_keeps_its_label_width_within_bounds() {
     saved.assert_status(200);
     assert_eq!(saved.body["config"]["timeline"]["label_width"], json!(300));
 
-    for bad in [79, 801] {
+    // 480 is the most the web app shows; a wider width would be stored but never seen.
+    for bad in [79, 481, 801] {
         config["timeline"]["label_width"] = json!(bad);
         f.app
             .patch(&f.owner, &view_path(&id), json!({ "config": config }))
