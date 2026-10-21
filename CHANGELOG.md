@@ -11,6 +11,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-21
+
 ### Added
 
 - **Search from every page.** "Search everything" is now in the top bar everywhere, including
@@ -640,7 +642,8 @@ stopped at the end-to-end test gate and published nothing. It contains everythin
   and SBOM attestations, and Linux binaries with checksums). It contains everything listed
   under 0.1.0 below. Not recommended for production use yet.
 
-[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lukewilson2002/openbase/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/lukewilson2002/openbase/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/lukewilson2002/openbase/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lukewilson2002/openbase/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/lukewilson2002/openbase/compare/v0.5.0...v0.5.1
