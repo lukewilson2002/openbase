@@ -87,6 +87,41 @@ async fn intro_seen_starts_false_and_round_trips() {
 }
 
 #[tokio::test]
+async fn accent_starts_unset_and_round_trips() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "Ann");
+    assert_eq!(
+        app.get(&user, "/api/auth/me").await.body["accent"],
+        serde_json::Value::Null
+    );
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"accent": "teal"}))
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["accent"], "teal");
+    // Other updates leave it alone; it follows the account to a new session.
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"name": "Annie"}))
+        .await;
+    assert_eq!(res.body["accent"], "teal");
+    let (_, other_device) = app.login("a@example.com", PW).await;
+    assert_eq!(
+        app.get(&other_device, "/api/auth/me").await.body["accent"],
+        "teal"
+    );
+    // Only the palette's hues; the empty string goes back to the default.
+    for bad in ["teal_dark", "chartreuse", "#ff0000"] {
+        app.patch(&user, "/api/auth/me", json!({"accent": bad}))
+            .await
+            .assert_status(400);
+    }
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"accent": ""}))
+        .await;
+    assert_eq!(res.body["accent"], serde_json::Value::Null);
+}
+
+#[tokio::test]
 async fn password_change_requires_current_and_revokes_other_sessions() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");

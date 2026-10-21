@@ -93,7 +93,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_collaborators",
             "List collaborators",
-            "List the people who can see a project (id, name, email): the values for user fields and the ids for @mentions in comments. Any role can read this.",
+            "List the people who can see a project (id, name, email): the values for user fields and the ids for @mentions (@[Name](usrXXXX)) in comments and rich text fields. Any role can read this.",
             object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
         ),
     ]

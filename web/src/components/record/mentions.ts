@@ -1,38 +1,50 @@
-/** Comment bodies are plain text; mentions are written `@[Name](usrXXXX)` (ob_core::api::records::Comment). */
+/**
+ * @mentions in Markdown, as comments and rich text store them: `@[Name](usrXXXX)`, an `@` right
+ * before a link to a user id (the server reads them the same way, store/mentions.rs). The name is only
+ * a label; the id counts. The rich text editor makes them a node (richtext/mention.ts) and Markdown.tsx
+ * shows them as chips.
+ */
 
 export interface Mention {
   userId: string;
   name: string;
 }
 
-export type CommentPart = { kind: "text"; text: string } | { kind: "mention"; userId: string; name: string };
+export type MentionPart = { kind: "text"; text: string } | { kind: "mention"; userId: string; name: string };
 
-const MENTION = /@\[([^\]\n]{1,200})\]\((usr[A-Za-z0-9]{1,40})\)/g;
+const SOURCE = String.raw`@\[([^\]\n]{1,200})\]\((usr[A-Za-z0-9]{1,40})\)`;
+const MENTION = new RegExp(SOURCE, "g");
 
-/** Split a comment body into text and mention parts (everything else stays plain text). */
-export function parseComment(body: string): CommentPart[] {
-  const parts: CommentPart[] = [];
+/** A mention at the very start of `src`: the label in [1], the user id in [2]. */
+export const MENTION_AT_START = new RegExp(`^${SOURCE}`);
+
+/** Split a text into plain parts and mention parts (no Markdown is read, only the mention markup). */
+export function parseMentions(text: string): MentionPart[] {
+  const parts: MentionPart[] = [];
   let last = 0;
-  for (const m of body.matchAll(MENTION)) {
+  for (const m of text.matchAll(MENTION)) {
     const start = m.index ?? 0;
-    if (start > last) parts.push({ kind: "text", text: body.slice(last, start) });
+    if (start > last) parts.push({ kind: "text", text: text.slice(last, start) });
     parts.push({ kind: "mention", userId: m[2]!, name: m[1]! });
     last = start + m[0].length;
   }
-  if (last < body.length) parts.push({ kind: "text", text: body.slice(last) });
+  if (last < text.length) parts.push({ kind: "text", text: text.slice(last) });
   return parts;
 }
 
-/** Ids of everyone mentioned in a body (deduplicated, in order). */
-export function mentionedUserIds(body: string): string[] {
+/** Ids of everyone mentioned in a text (deduplicated, in order). */
+export function mentionedUserIds(text: string): string[] {
   const out: string[] = [];
-  for (const p of parseComment(body)) if (p.kind === "mention" && !out.includes(p.userId)) out.push(p.userId);
+  for (const p of parseMentions(text)) if (p.kind === "mention" && !out.includes(p.userId)) out.push(p.userId);
   return out;
 }
 
-/** The markup that inserts a mention. Square brackets in names are removed so the markup stays parseable. */
+/**
+ * The markup of a mention. Brackets, backslashes and line breaks are removed from the name, so the
+ * markup stays one link to Markdown (a `\]` would escape the bracket that closes it).
+ */
 export function mentionMarkup(m: Mention): string {
-  return `@[${m.name.replace(/[[\]\n]/g, "")}](${m.userId})`;
+  return `@[${m.name.replace(/[[\]\\\n]/g, "").trim() || "someone"}](${m.userId})`;
 }
 
 export interface OpenMention {
@@ -52,16 +64,8 @@ export function openMention(text: string, caret: number): OpenMention | null {
   return { start: at, query };
 }
 
-/** Replace the open `@query` with a mention and a trailing space; returns the new text and caret. */
-export function insertMention(text: string, caret: number, open: OpenMention, m: Mention): { text: string; caret: number } {
-  const markup = `${mentionMarkup(m)} `;
-  const next = `${text.slice(0, open.start)}${markup}${text.slice(caret)}`;
-  return { text: next, caret: open.start + markup.length };
-}
-
-/** Plain-text form of a body ("@Name" instead of the markup), for notifications and previews. */
-export function plainComment(body: string): string {
-  return parseComment(body)
-    .map((p) => (p.kind === "text" ? p.text : `@${p.name}`))
-    .join("");
+/** The people whose name contains `query` or whose email starts with it, at most `max`. */
+export function matchPeople<P extends { name: string; email: string }>(people: readonly P[], query: string, max = 6): P[] {
+  const q = query.toLowerCase();
+  return people.filter((p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().startsWith(q)).slice(0, max);
 }

@@ -185,7 +185,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_records",
             "Create records",
-            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. Long text is Markdown: it can embed an uploaded file of the same project with the `markdown` line upload_attachment returns (other projects' files are refused; external images are never shown). With typecast (default true) values are converted leniently and new select choices are created.",
+            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. Rich text is Markdown: it can embed an uploaded file of the same project with the `markdown` line upload_attachment returns (other projects' files are refused; external images are never shown). To mention someone write @[Name](usrXXXX) with their user id from list_collaborators: they get a notification once the text is saved on a record (only people newly mentioned in that cell, never you, only people who can see the project; a mention inside `code` is just text). With typecast (default true) values are converted leniently and new select choices are created.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -279,11 +279,11 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "add_comment",
             "Add a comment",
-            "Comment on a record as the token's user. To mention someone write @[Name](usrXXXX) with their user id (see get_project_schema / the collaborators endpoint in api_reference).",
+            "Comment on a record as the token's user. The text is Markdown, like a rich text field (up to 10,000 characters). To mention someone write @[Name](usrXXXX) with their user id from list_collaborators: they get a notification (people newly mentioned when you edit, never you, only people who can see the project; a mention inside `code` is just text).",
             object(
                 json!({
                     "record_id": string("Record id."),
-                    "body": string("Comment text (plain text)."),
+                    "body": string("Comment text in Markdown; mentions as @[Name](usrXXXX)."),
                 }),
                 &["record_id", "body"],
             ),

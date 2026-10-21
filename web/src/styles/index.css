@@ -22,6 +22,8 @@
   color-scheme: light;
   --bg: #f6f7f9;
   --surface: #ffffff;
+  /* The menu and the top bar: the surface by default; accents tint it (styles/accents.css). */
+  --chrome: #ffffff;
   --subtle: #f0f2f5;
   --hover: #e8ebf0;
   --line: #dfe3ea;
@@ -32,6 +34,8 @@
   --primary: #1f5ae0;
   --primary-hover: #1848b8;
   --primary-fg: #ffffff;
+  /* The accent as text on a page (links, active labels); styles/accents.css keeps it readable. */
+  --primary-text: #1f5ae0;
   --primary-soft: #e4ecff;
   --primary-soft-line: #c9d8ff;
   --primary-ink: #12358a;
@@ -53,6 +57,7 @@
   color-scheme: dark;
   --bg: #12151b;
   --surface: #1a1e26;
+  --chrome: #1a1e26;
   --subtle: #232833;
   --hover: #2c3240;
   --line: #2f3542;
@@ -63,6 +68,7 @@
   --primary: #6b97ff;
   --primary-hover: #86a9ff;
   --primary-fg: #0b1220;
+  --primary-text: #6b97ff;
   --primary-soft: #1f2d52;
   --primary-soft-line: #2f4475;
   --primary-ink: #b9ccff;
@@ -79,9 +85,26 @@
   --scroll-shade: rgb(0 0 0 / 0.28);
 }
 
+/*
+ * A tool that is on (the view toolbar's "Sorted by Name", "2 hidden fields"): a plain grey made of the
+ * text colour over the surface, so it holds no tint of the accent and stands off the bar in either theme.
+ */
+:root {
+  --tool-on: color-mix(in srgb, var(--fg) 9%, var(--surface));
+  --tool-on-hover: color-mix(in srgb, var(--fg) 13%, var(--surface));
+}
+/* Dark surfaces need more of the text colour for the same step. */
+:root[data-theme="dark"] {
+  --tool-on: color-mix(in srgb, var(--fg) 16%, var(--surface));
+  --tool-on-hover: color-mix(in srgb, var(--fg) 22%, var(--surface));
+}
+
 @theme inline {
+  --color-tool-on: var(--tool-on);
+  --color-tool-on-hover: var(--tool-on-hover);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-chrome: var(--chrome);
   --color-subtle: var(--subtle);
   --color-hover: var(--hover);
   --color-line: var(--line);
@@ -92,6 +115,7 @@
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-fg: var(--primary-fg);
+  --color-primary-text: var(--primary-text);
   --color-primary-soft: var(--primary-soft);
   --color-primary-soft-line: var(--primary-soft-line);
   --color-primary-ink: var(--primary-ink);
@@ -143,7 +167,7 @@
     letter-spacing: -0.01em;
   }
   a {
-    color: var(--primary);
+    color: var(--primary-text);
   }
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -341,6 +365,8 @@
  *   .ob-tint         soft tile (a base's tile, its icon in the strong shade)
  *   .ob-solid        strong tile with white text (a workspace's tile)
  *   .ob-tint-button  soft button with a thin line and dark text
+ *   .ob-fill         a soft fill (a kanban stack, a list group's heading, a swim lane's name)
+ *   .ob-lane         a faint, see-through wash (a timeline swim lane behind its bars)
  */
 .ob-hue-blue {
   --accent: #1f5ae0;
@@ -394,6 +420,32 @@
 .ob-dot {
   background: var(--accent);
 }
+/*
+ * A soft fill of a choice's colour (a kanban stack, a list group's heading), light enough that what is
+ * on it reads as usual; `.ob-fill-hover` deepens it a little under the pointer, keeping the colour.
+ */
+.ob-fill {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+}
+:root[data-theme="dark"] .ob-fill {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg));
+}
+/*
+ * A timeline swim lane behind its bars: a faint, see-through wash of its colour, so the weekends and
+ * grid lines under it still show and the bars' own colours stay in front.
+ */
+.ob-lane {
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+}
+:root[data-theme="dark"] .ob-lane {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.ob-fill-hover:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+}
+:root[data-theme="dark"] .ob-fill-hover:hover {
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg));
+}
 .ob-solid {
   background: var(--accent);
   color: #fff;
@@ -415,6 +467,7 @@
  *   .ob-callout      a GitHub alert (> [!NOTE] ...), with data-callout="note|tip|important|warning|caution"
  *   .ob-check        a task-list box in the read-only rendering (the editor draws a real checkbox)
  *   .ob-media        an embedded file (image, video, audio, or a .ob-file card) with its caption
+ *   .ob-mention      an @mention of a person (data-mention="usr...")
  */
 [data-callout="note"] {
   --co: #1f5ae0;
@@ -477,7 +530,7 @@
     color: var(--muted);
   }
   .ob-prose :where(a) {
-    color: var(--primary);
+    color: var(--primary-text);
     text-decoration: underline;
   }
   .ob-prose :where(ul) {
@@ -549,6 +602,18 @@
   }
   .ob-prose :where(td > p, th > p) {
     margin-block: 0;
+  }
+  .ob-mention {
+    border-radius: 0.25rem;
+    background: var(--primary-soft);
+    padding-inline: 0.25rem;
+    color: var(--primary-ink);
+    font-weight: 500;
+    white-space: nowrap;
+    box-decoration-break: clone;
+  }
+  .ob-editor .ob-mention.ProseMirror-selectednode {
+    outline: 2px solid var(--ring);
   }
   .ob-prose .ob-callout {
     margin-block: 0.5rem;

@@ -25,13 +25,15 @@ export const viewFooterClass =
   "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))] max-md:pl-5 max-md:pr-36 md:border-t-0 md:bg-transparent md:px-5";
 
 /**
- * A card as tall as its content (a short list or grid ends where its rows end, with the count right
- * under it), shrinking to the space left and scrolling inside once it is longer. On a phone it fills
- * the screen like `viewBodyClass`, with the count as a bar at the bottom.
+ * A list or grid edge to edge under the toolbar, with no frame around it, as tall as its content (a
+ * short one ends where its rows end, with the count right under it), shrinking to the space left and
+ * scrolling inside once it is longer. On a phone it fills the screen like `viewBodyClass`, with the
+ * count as a bar at the bottom.
  */
-export const viewHugAreaClass = "flex min-h-0 flex-1 flex-col md:p-4 md:pb-3";
-export const viewHugCardClass = "relative flex min-h-0 flex-col border-t border-line bg-surface max-md:flex-1 md:overflow-hidden md:rounded-xl md:border";
-export const viewHugFooterClass = cn(viewFooterClass, "md:min-h-0 md:px-1 md:pt-2.5");
+export const viewHugAreaClass = "flex min-h-0 flex-1 flex-col";
+// On a desktop the toolbar's own bottom line is the top edge.
+export const viewHugCardClass = "relative flex min-h-0 flex-col border-t border-line bg-surface max-md:flex-1 md:overflow-hidden md:border-t-0 md:border-b";
+export const viewHugFooterClass = cn(viewFooterClass, "md:min-h-0 md:px-4 md:py-2");
 
 export type ViewLayout = "fill" | "hug" | "bare";
 

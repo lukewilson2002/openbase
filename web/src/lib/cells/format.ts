@@ -262,7 +262,7 @@ export function displayText(field: Field, stored: CellJson, ctx: FormatCtx = DEF
     case "button":
       return field.type === "button" && typeof stored === "string" && stored ? field.options.label : "";
     case "text":
-    case "long_text":
+    case "multiline":
     case "url":
     case "email":
     case "phone":

@@ -847,7 +847,7 @@ async fn converting_a_field_to_long_text_refuses_references_to_foreign_files() {
     let tag = f
         .add_field(
             &f.table_id,
-            json!({ "name": "Tag", "type": "single_line_text", "options": {} }),
+            json!({ "name": "Tag", "type": "text", "options": {} }),
         )
         .await;
     let tag_id = id_str(&tag["id"]).to_string();
@@ -872,7 +872,7 @@ async fn converting_a_field_to_long_text_refuses_references_to_foreign_files() {
     let url = format!("/api/fields/{tag_id}");
     let convert = || {
         f.app
-            .patch(&bob, &url, json!({ "type": "long_text", "options": {} }))
+            .patch(&bob, &url, json!({ "type": "rich_text", "options": {} }))
     };
     let r = convert().await;
     r.assert_status(400);
@@ -891,7 +891,7 @@ async fn converting_a_field_to_long_text_refuses_references_to_foreign_files() {
         .find(|x| x["id"] == tag_id.as_str())
         .unwrap()["type"]
         .clone();
-    assert_eq!(kind, "single_line_text");
+    assert_eq!(kind, "text");
 
     // Once the stray reference is gone the conversion goes through.
     f.patch_as(&bob, &f.table_id, &their_id, json!({ &tag_id: "plain" }))
@@ -950,7 +950,7 @@ async fn a_share_opens_only_files_embedded_in_what_the_shared_view_shows() {
     let secret_field = f
         .add_field(
             &f.table_id,
-            json!({ "name": "Secret", "type": "long_text", "options": {} }),
+            json!({ "name": "Secret", "type": "rich_text", "options": {} }),
         )
         .await;
     let secret_id = id_str(&secret_field["id"]).to_string();

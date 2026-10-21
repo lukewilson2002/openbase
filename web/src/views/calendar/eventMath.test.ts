@@ -4,7 +4,7 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
 import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, unscheduledTransient, visibleRange, type EventContext } from "./eventMath";
 
-const name = ALL_FIELDS.single_line_text!;
+const name = ALL_FIELDS.text!;
 const day = (id: string): Field => field("date", { include_time: false, date_format: "iso", time_format: "h24", timezone: null }, { id, name: id });
 const timed = (id: string, timezone: string | null = null): Field => field("date", { include_time: true, date_format: "iso", time_format: "h24", timezone }, { id, name: id });
 

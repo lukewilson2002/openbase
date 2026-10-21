@@ -14,7 +14,7 @@
  * links and buttons): each reorderable row's "…" menu has "Move up" and "Move down" instead
  * (`MoveItems`), which go through the same path as a drop.
  */
-import { createContext, useContext, useId, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { createContext, useContext, useId, useRef, useState, type HTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { DndContext, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type Announcements, type CollisionDetection, type DragEndEvent, type Modifier } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -225,8 +225,26 @@ interface RowProps {
   /** The row proper (what the drag takes hold of): chevron, name and "…". */
   rowClassName?: string;
   row: ReactNode;
+  /** A right-click on the row (`useRowMenu`). */
+  onContextMenu?: (e: MouseEvent<HTMLDivElement>) => void;
   /** What hangs under the row (its open children): lifted along with it. */
   children?: ReactNode;
+}
+
+/**
+ * A row's "…" menu opened by a right-click on the row as well (or the keyboard's menu key): spread
+ * `menu` on the row's `DropdownMenu` and give the row `onContextMenu`. The menu opens at its "…" button.
+ * A finger's long press is left alone: it picks the row up to drag, and the "…" is always shown on a
+ * touch screen.
+ */
+export function useRowMenu() {
+  const [open, setOpen] = useState(false);
+  const onContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if ((e.nativeEvent as PointerEvent).pointerType === "touch") return;
+    setOpen(true);
+  };
+  return { menu: { open, onOpenChange: setOpen }, onContextMenu };
 }
 
 /** A tree row: a plain `li` unless its group can be reordered. */
@@ -235,16 +253,18 @@ export function SortableRow(props: RowProps) {
   return <RowContext.Provider value={props.id}>{group?.sortable ? <DraggableRow {...props} group={group} /> : <PlainRow {...props} />}</RowContext.Provider>;
 }
 
-function PlainRow({ className, rowClassName, row, children }: RowProps) {
+function PlainRow({ className, rowClassName, row, onContextMenu, children }: RowProps) {
   return (
     <li className={className}>
-      <div className={rowClassName}>{row}</div>
+      <div className={rowClassName} onContextMenu={onContextMenu}>
+        {row}
+      </div>
       {children}
     </li>
   );
 }
 
-function DraggableRow({ id, label, className, rowClassName, row, children, group }: RowProps & { group: GroupState }) {
+function DraggableRow({ id, label, className, rowClassName, row, onContextMenu, children, group }: RowProps & { group: GroupState }) {
   const data: RowData = { group: group.group, label, ids: group.ids, commit: group.commit };
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id, data });
   const rowEvents = listeners as HTMLAttributes<HTMLDivElement> | undefined;
@@ -257,7 +277,7 @@ function DraggableRow({ id, label, className, rowClassName, row, children, group
       className={cn(className, "motion-reduce:transition-none!", isDragging && "relative z-20 rounded-[10px] bg-surface shadow-pop")}
     >
       {/* No attributes from dnd-kit: its role="button" and tabIndex would turn the row into a control around the controls inside it. */}
-      <div {...rowEvents} data-drag-handle="" className={cn(rowClassName, "select-none [-webkit-touch-callout:none]", isDragging && "cursor-grabbing")}>
+      <div {...rowEvents} onContextMenu={onContextMenu} data-drag-handle="" className={cn(rowClassName, "select-none [-webkit-touch-callout:none]", isDragging && "cursor-grabbing")}>
         {row}
       </div>
       {children}

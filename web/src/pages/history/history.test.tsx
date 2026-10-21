@@ -43,9 +43,9 @@ const MEMBERS: Record<string, Member[]> = {
 };
 
 const STATUS: Field = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
-const NOTES: Field = field("long_text", { rich: false }, { id: "fld_notes", name: "Notes" });
-const DUE: Field = field("single_line_text", {}, { id: "fld_due", name: "Due" });
-const OWNER: Field = field("single_line_text", {}, { id: "fld_owner", name: "Owner" });
+const NOTES: Field = field("text", { multiline: true }, { id: "fld_notes", name: "Notes" });
+const DUE: Field = field("text", { multiline: false }, { id: "fld_due", name: "Due" });
+const OWNER: Field = field("text", { multiline: false }, { id: "fld_owner", name: "Owner" });
 const FIELDS = Object.fromEntries([STATUS, NOTES, DUE, OWNER].map((f) => [f.id, f]));
 
 const ADA = { id: "usr1", name: "Ada Lovelace" };
@@ -127,8 +127,8 @@ describe("History page", () => {
     expect(within(deal).getByRole("link", { name: "Big deal" })).toHaveAttribute("href", "/base/app1/tbl1?record=rec1");
     expect(card("Sprint 1", 0)).toHaveTextContent(/Acme.*›.*Ops.*›.*Sprints/);
     expect(within(card("Sprint 1", 0)).getByRole("link", { name: "Sprint 1" })).toHaveAttribute("href", "/base/app2/tbl2?record=rec2");
-    // A tile for the workspace and one for the project, like the Trash page.
-    expect(deal.querySelectorAll("[data-entity-tile]")).toHaveLength(2);
+    // The place is plain text: no tiles for the workspace or the project.
+    expect(deal.querySelectorAll("[data-entity-tile]")).toHaveLength(0);
     // A deleted record is struck through and cannot be opened.
     const gone = card("Old plan");
     expect(gone).toHaveTextContent("Old plan (deleted)");

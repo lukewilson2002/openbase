@@ -43,7 +43,10 @@
 //! 7. `record_history` gets one row per create/update/delete/restore with the
 //!    old/new JSON of the changed *editable* fields.
 //! 8. Users newly added to a user field with `notify` get an "assigned"
-//!    notification (not for assigning yourself).
+//!    notification (not for assigning yourself), and people newly mentioned
+//!    (`@[Name](usrXXXX)`) in a rich text cell get a "mention" notification
+//!    ([`crate::store::mentions`]; not the author, and not for writes
+//!    without an actor, such as anonymous form submissions).
 //! 9. [`crate::automations::on_records_changed`] is called per table with the
 //!    created records and the directly edited records (with the editable
 //!    fields that changed). Records that only had computed values recomputed
@@ -80,7 +83,7 @@ use crate::ids::new_id;
 use crate::store::links::{self, dedupe, ids_json, ids_of, link_ids};
 use crate::store::records::{self, Place, RecordRow};
 use crate::store::schema::{self, TableRow};
-use crate::store::{attachments, history, notifications};
+use crate::store::{attachments, history, mentions, notifications};
 
 // ------------------------------------------------------------------ context
 
@@ -372,6 +375,14 @@ struct Notice {
     field_id: String,
 }
 
+/// People newly mentioned in a rich text cell.
+struct MentionNotice {
+    record_id: String,
+    field_id: String,
+    text: String,
+    mentioned: Vec<mentions::Mention>,
+}
+
 struct Writer<'a> {
     tx: &'a Transaction<'a>,
     ctx: &'a WriteCtx,
@@ -380,13 +391,14 @@ struct Writer<'a> {
     out: WriteOutcome,
     collaborators: Option<HashSet<String>>,
     notices: Vec<Notice>,
+    mention_notices: Vec<MentionNotice>,
     /// `records.data` of each directly edited record as it was before this
     /// write touched it (first edit wins), per table. Feeds the `before`
     /// snapshot of [`RecordChanges`].
     before: HashMap<(String, String), Map<String, Json>>,
 }
 
-/// The message for a long-text reference to a file that is not the project's.
+/// The message for a rich-text reference to a file that is not the project's.
 pub fn not_a_project_file(id: &str) -> String {
     format!(
         "attachment {id} is not a file of this project; upload the file to this project to \
@@ -418,6 +430,7 @@ impl<'a> Writer<'a> {
             out,
             collaborators: None,
             notices: Vec::new(),
+            mention_notices: Vec::new(),
             before: HashMap::new(),
         })
     }
@@ -644,7 +657,7 @@ impl<'a> Writer<'a> {
                 }
                 Ok((!refs.is_empty()).then_some(Json::Array(refs)))
             }
-            FieldKind::LongText(_) => {
+            FieldKind::RichText(_) => {
                 // Files embedded or linked in the text (`/api/attachments/<id>/...`) must be
                 // files of this project, like the files of an attachment cell. A reference
                 // the cell already holds is left alone.
@@ -690,7 +703,7 @@ impl<'a> Writer<'a> {
                 continue;
             }
             let default = match &f.kind {
-                FieldKind::SingleLineText(o) => o.default.clone().map(Json::String),
+                FieldKind::Text(o) => o.default.clone().map(Json::String),
                 FieldKind::Number(o) | FieldKind::Percent(o) => o.default.map(|d| json!(d)),
                 _ => None,
             };
@@ -822,6 +835,31 @@ impl<'a> Writer<'a> {
         }
     }
 
+    /// Remember who a rich text cell newly mentions, to notify them once the
+    /// write is done. Without an actor there is no author to name, so nobody is.
+    fn note_new_mentions(
+        &mut self,
+        field: &Field,
+        record_id: &str,
+        old: Option<&Json>,
+        new: Option<&Json>,
+    ) {
+        let (FieldKind::RichText(_), Some(text), Some(_)) =
+            (&field.kind, new.and_then(Json::as_str), &self.ctx.actor)
+        else {
+            return;
+        };
+        let mentioned = mentions::added(old.and_then(Json::as_str), text);
+        if !mentioned.is_empty() {
+            self.mention_notices.push(MentionNotice {
+                record_id: record_id.to_string(),
+                field_id: field.id.clone(),
+                text: text.to_string(),
+                mentioned,
+            });
+        }
+    }
+
     // ---- loading
 
     fn live_row(&mut self, id: &str) -> AppResult<std::sync::Arc<RecordRow>> {
@@ -848,6 +886,32 @@ impl<'a> Writer<'a> {
     }
 
     fn send_notifications(&mut self) -> AppResult<()> {
+        if let Some(author) = self.ctx.actor.clone() {
+            // One notification per person and record, however many cells mention them.
+            let mut told: HashSet<(String, String)> = HashSet::new();
+            for mut n in std::mem::take(&mut self.mention_notices) {
+                n.mentioned
+                    .retain(|m| told.insert((m.user_id.clone(), n.record_id.clone())));
+                let field_name = self
+                    .sess
+                    .schema
+                    .fields
+                    .get(&n.field_id)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default();
+                mentions::notify(
+                    self.conn(),
+                    &n.record_id,
+                    &author,
+                    &n.text,
+                    &n.mentioned,
+                    mentions::Place::Field {
+                        id: &n.field_id,
+                        name: &field_name,
+                    },
+                )?;
+            }
+        }
         if self.notices.is_empty() {
             return Ok(());
         }
@@ -1044,6 +1108,7 @@ pub fn create_records(
         w.out.table_mut(table_id).created.push(&id);
         for (field, cell) in &cells {
             w.note_new_users(field, &id, None, cell.as_ref());
+            w.note_new_mentions(field, &id, None, cell.as_ref());
             if let (FieldKind::Link(_), Some(v)) = (&field.kind, cell) {
                 let ids = ids_of(v);
                 w.sync_inverse(&id, field, &ids, &[])?;
@@ -1086,6 +1151,7 @@ pub fn update_records(
         let mut changed = Vec::new();
         let mut link_changes: Vec<(Field, Vec<String>, Vec<String>)> = Vec::new();
         let mut user_changes: Vec<(Field, Option<Json>, Option<Json>)> = Vec::new();
+        let mut text_changes: Vec<(Field, Option<Json>, Option<Json>)> = Vec::new();
         for (fid, input) in &patch.values {
             let field = w.editable(fid)?;
             let old = data.get(fid).cloned();
@@ -1107,6 +1173,7 @@ pub fn update_records(
                     link_changes.push((field, added, removed));
                 }
                 FieldKind::User(_) => user_changes.push((field, old, new)),
+                FieldKind::RichText(_) => text_changes.push((field, old, new)),
                 _ => {}
             }
         }
@@ -1116,6 +1183,9 @@ pub fn update_records(
         w.commit_edit(&row, data, &changes, &changed)?;
         for (field, old, new) in user_changes {
             w.note_new_users(&field, &row.id, old.as_ref(), new.as_ref());
+        }
+        for (field, old, new) in text_changes {
+            w.note_new_mentions(&field, &row.id, old.as_ref(), new.as_ref());
         }
         for (field, added, removed) in link_changes {
             w.sync_inverse(&row.id, &field, &added, &removed)?;

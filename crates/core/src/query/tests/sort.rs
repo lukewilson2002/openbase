@@ -8,10 +8,10 @@ use serde_json::{Value as Json, json};
 use super::*;
 use crate::limits::{MAX_GROUPS, MAX_SORTS};
 use crate::query::{
-    EMPTY_GROUP_LABEL, OwnedRow, Row, compare, group_key, group_spans, sort_rows,
-    sort_rows_with_groups, validate_groups, validate_sorts,
+    EMPTY_GROUP_LABEL, NO_DATE_GROUP_LABEL, OwnedRow, Row, compare, group_key, group_spans,
+    period_start, sort_rows, sort_rows_with_groups, validate_groups, validate_sorts,
 };
-use crate::view::{Direction, Sort};
+use crate::view::{DateGranularity, Direction, Group, Sort};
 
 fn asc(field: &str) -> Sort {
     Sort {
@@ -25,6 +25,22 @@ fn desc(field: &str) -> Sort {
         field_id: field.into(),
         direction: Direction::Desc,
     }
+}
+
+fn group(field: &str, direction: Direction, granularity: Option<DateGranularity>) -> Group {
+    Group {
+        field_id: field.into(),
+        direction,
+        granularity,
+    }
+}
+
+fn gasc(field: &str) -> Group {
+    group(field, Direction::Asc, None)
+}
+
+fn gdesc(field: &str) -> Group {
+    group(field, Direction::Desc, None)
 }
 
 /// Rows `r0..rN` with `field` set to each value (null = absent).
@@ -320,7 +336,7 @@ fn sort_in_viewer_zone_uses_display_for_text_kinds() {
 fn gk(field: &str, v: Json) -> crate::query::GroupKey {
     let t = table();
     let stored = (!v.is_null()).then_some(&v);
-    group_key(&t[field], stored, &names(), Tz::UTC)
+    group_key(&t[field], stored, &names(), Tz::UTC, None)
 }
 
 #[test]
@@ -372,13 +388,14 @@ fn group_keys() {
     let d2 = gk("fldDt", json!("2026-10-12T23:00:00.000Z"));
     assert_eq!(d1.key, "2026-10-12");
     assert_eq!(d1.key, d2.key);
-    assert_eq!(d1.label, "10/12/2026");
+    assert_eq!(d1.label, "October 12, 2026");
     let t = table();
     let akl = group_key(
         &t["fldDt"],
         Some(&json!("2026-10-12T23:00:00.000Z")),
         &names(),
         "Pacific/Auckland".parse().unwrap(),
+        None,
     );
     assert_eq!(akl.key, "2026-10-13");
     // Links and users: by ids in stored order, labelled with names.
@@ -418,7 +435,7 @@ fn grouped_sort_and_spans() {
             json!({"fldSel": "selBlue", "fldCheck": true, "fldNum": 7}),
         ),
     ];
-    let groups = [asc("fldSel"), desc("fldCheck")];
+    let groups = [gasc("fldSel"), gdesc("fldCheck")];
     let t = table();
     sort_rows_with_groups(&mut rows, &groups, &[asc("fldNum")], &t, &names(), Tz::UTC);
     assert_eq!(ids(&rows), ["r2", "r4", "r1", "r0", "r5", "r3"]);
@@ -446,8 +463,8 @@ fn grouped_sort_and_spans() {
     );
     // Descending group direction puts the empty group last.
     let mut rows2 = rows.clone();
-    sort_rows_with_groups(&mut rows2, &[desc("fldSel")], &[], &t, &names(), Tz::UTC);
-    let spans = group_spans(&rows2, &[desc("fldSel")], &t, &names(), Tz::UTC);
+    sort_rows_with_groups(&mut rows2, &[gdesc("fldSel")], &[], &t, &names(), Tz::UTC);
+    let spans = group_spans(&rows2, &[gdesc("fldSel")], &t, &names(), Tz::UTC);
     let labels: Vec<&str> = spans.iter().map(|s| s.key.label.as_str()).collect();
     assert_eq!(labels, ["Blue", "Red", EMPTY_GROUP_LABEL]);
     assert_eq!(spans.iter().map(|s| s.count).sum::<usize>(), rows2.len());
@@ -470,19 +487,264 @@ fn grouping_datetimes_by_day_then_sorting_within() {
     let t = table();
     sort_rows_with_groups(
         &mut rows,
-        &[asc("fldDt")],
+        &[gasc("fldDt")],
         &[desc("fldDt")],
         &t,
         &names(),
         Tz::UTC,
     );
     assert_eq!(ids(&rows), ["r1", "r0", "r2"]);
-    let spans = group_spans(&rows, &[asc("fldDt")], &t, &names(), Tz::UTC);
+    let spans = group_spans(&rows, &[gasc("fldDt")], &t, &names(), Tz::UTC);
     assert_eq!(spans.len(), 2);
     assert_eq!(
         (spans[1].key.key.as_str(), spans[1].count),
         ("2026-10-12", 2)
     );
+}
+
+#[test]
+fn period_starts() {
+    let d = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let day = d("2026-10-21"); // a Wednesday
+    let cases = [
+        (DateGranularity::Day, "2026-10-21"),
+        (DateGranularity::Week, "2026-10-19"),
+        (DateGranularity::Month, "2026-10-01"),
+        (DateGranularity::Quarter, "2026-10-01"),
+        (DateGranularity::Year, "2026-01-01"),
+    ];
+    for (g, want) in cases {
+        assert_eq!(period_start(day, g), d(want), "{g:?}");
+    }
+    // A Monday starts its own week; a Sunday belongs to the week before.
+    assert_eq!(
+        period_start(d("2026-10-19"), DateGranularity::Week),
+        d("2026-10-19")
+    );
+    assert_eq!(
+        period_start(d("2026-10-25"), DateGranularity::Week),
+        d("2026-10-19")
+    );
+    // Weeks cross month and year boundaries.
+    assert_eq!(
+        period_start(d("2027-01-01"), DateGranularity::Week),
+        d("2026-12-28")
+    );
+    assert_eq!(
+        period_start(d("2026-05-31"), DateGranularity::Quarter),
+        d("2026-04-01")
+    );
+}
+
+fn gk_at(field: &str, v: Json, g: DateGranularity, tz: Tz) -> (String, String) {
+    let t = table();
+    let k = group_key(&t[field], Some(&v), &names(), tz, Some(g));
+    (k.key, k.label)
+}
+
+#[test]
+fn date_group_keys_by_granularity() {
+    let v = json!("2026-10-21");
+    let cases = [
+        (DateGranularity::Day, "2026-10-21", "October 21, 2026"),
+        (
+            DateGranularity::Week,
+            "2026-W43",
+            "Week of October 19, 2026",
+        ),
+        (DateGranularity::Month, "2026-10", "October 2026"),
+        (DateGranularity::Quarter, "2026-Q4", "Q4 2026"),
+        (DateGranularity::Year, "2026", "2026"),
+    ];
+    for (g, key, label) in cases {
+        assert_eq!(
+            gk_at("fldDate", v.clone(), g, Tz::UTC),
+            (key.to_string(), label.to_string())
+        );
+    }
+    // The ISO week year of a week starting in December is the next year's.
+    assert_eq!(
+        gk_at(
+            "fldDate",
+            json!("2026-12-30"),
+            DateGranularity::Week,
+            Tz::UTC
+        )
+        .0,
+        "2026-W53"
+    );
+    assert_eq!(
+        gk_at(
+            "fldDate",
+            json!("2025-12-30"),
+            DateGranularity::Week,
+            Tz::UTC
+        )
+        .0,
+        "2026-W01"
+    );
+    // Date-times bucket in the viewer's zone: 31 Dec 23:00 UTC is already the
+    // new year in Auckland.
+    let late = json!("2026-12-31T23:00:00.000Z");
+    let akl: Tz = "Pacific/Auckland".parse().unwrap();
+    assert_eq!(
+        gk_at("fldDt", late.clone(), DateGranularity::Year, Tz::UTC).0,
+        "2026"
+    );
+    assert_eq!(
+        gk_at("fldDt", late.clone(), DateGranularity::Year, akl).0,
+        "2027"
+    );
+    assert_eq!(
+        gk_at("fldDt", late, DateGranularity::Month, akl).1,
+        "January 2027"
+    );
+    // ...and in the field's own zone when it has one (Tokyo is UTC+9).
+    assert_eq!(
+        gk_at(
+            "fldDtTokyo",
+            json!("2026-09-30T16:00:00.000Z"),
+            DateGranularity::Month,
+            Tz::UTC
+        )
+        .1,
+        "October 2026"
+    );
+    // Created time and date formulas are dates too.
+    assert_eq!(
+        gk_at(
+            "fldCreated",
+            json!("2026-03-05T10:00:00.000Z"),
+            DateGranularity::Quarter,
+            Tz::UTC
+        )
+        .1,
+        "Q1 2026"
+    );
+    assert_eq!(
+        gk_at(
+            "fldFDate",
+            json!("2026-03-05"),
+            DateGranularity::Month,
+            Tz::UTC
+        )
+        .1,
+        "March 2026"
+    );
+    // Records without a date form one "No date" group.
+    let t = table();
+    let none = group_key(
+        &t["fldDate"],
+        None,
+        &names(),
+        Tz::UTC,
+        Some(DateGranularity::Month),
+    );
+    assert!(none.empty);
+    assert_eq!(
+        (none.key.as_str(), none.label.as_str()),
+        ("", NO_DATE_GROUP_LABEL)
+    );
+    // A granularity on a field that is not a date is ignored.
+    let txt = group_key(
+        &t["fldText"],
+        Some(&json!("2026-10-21")),
+        &names(),
+        Tz::UTC,
+        Some(DateGranularity::Year),
+    );
+    assert_eq!(txt.key, "2026-10-21");
+    assert_eq!(gk("fldText", Json::Null).label, EMPTY_GROUP_LABEL);
+}
+
+#[test]
+fn grouping_dates_by_month_orders_chronologically() {
+    let values = [
+        json!("2026-11-02"),
+        json!("2025-12-31"),
+        Json::Null,
+        json!("2026-10-21"),
+        json!("2026-11-30"),
+        json!("2026-10-01"),
+    ];
+    let t = table();
+    for (direction, want) in [
+        (
+            Direction::Asc,
+            vec![
+                (NO_DATE_GROUP_LABEL, 1),
+                ("December 2025", 1),
+                ("October 2026", 2),
+                ("November 2026", 2),
+            ],
+        ),
+        (
+            Direction::Desc,
+            vec![
+                ("November 2026", 2),
+                ("October 2026", 2),
+                ("December 2025", 1),
+                (NO_DATE_GROUP_LABEL, 1),
+            ],
+        ),
+    ] {
+        let groups = [group("fldDate", direction, Some(DateGranularity::Month))];
+        let mut rows = rows_of("fldDate", &values);
+        // Within a month, records follow the view's sort (newest first here).
+        sort_rows_with_groups(
+            &mut rows,
+            &groups,
+            &[desc("fldDate")],
+            &t,
+            &names(),
+            Tz::UTC,
+        );
+        let spans = group_spans(&rows, &groups, &t, &names(), Tz::UTC);
+        let got: Vec<(&str, usize)> = spans
+            .iter()
+            .map(|s| (s.key.label.as_str(), s.count))
+            .collect();
+        assert_eq!(got, want, "{direction:?}");
+        if direction == Direction::Asc {
+            assert_eq!(ids(&rows), ["r2", "r1", "r3", "r5", "r4", "r0"]);
+        }
+    }
+    // A year level over a month level nests the months.
+    let groups = [
+        group("fldDate", Direction::Asc, Some(DateGranularity::Year)),
+        group("fldDt", Direction::Asc, Some(DateGranularity::Month)),
+    ];
+    let mut rows = vec![
+        row(
+            "a",
+            json!({"fldDate": "2026-01-01", "fldDt": "2026-02-10T00:00:00.000Z"}),
+        ),
+        row(
+            "b",
+            json!({"fldDate": "2026-07-07", "fldDt": "2026-01-10T00:00:00.000Z"}),
+        ),
+        row(
+            "c",
+            json!({"fldDate": "2025-07-07", "fldDt": "2026-02-11T00:00:00.000Z"}),
+        ),
+    ];
+    sort_rows_with_groups(&mut rows, &groups, &[], &t, &names(), Tz::UTC);
+    let spans = group_spans(&rows, &groups, &t, &names(), Tz::UTC);
+    let got: Vec<(usize, &str)> = spans
+        .iter()
+        .map(|s| (s.level, s.key.label.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            (0, "2025"),
+            (1, "February 2026"),
+            (0, "2026"),
+            (1, "January 2026"),
+            (1, "February 2026"),
+        ]
+    );
+    assert_eq!(spans[4].path, ["2026", "2026-02"]);
 }
 
 #[test]
@@ -513,21 +775,35 @@ fn validate_sorts_and_groups() {
         .collect();
     assert!(validate_sorts(&many[..MAX_SORTS], &t).is_ok());
     assert!(validate_sorts(&many, &t).unwrap_err().contains("at most"));
-    assert!(validate_groups(&[asc("fldSel"), asc("fldCheck"), asc("fldDate")], &t).is_ok());
-    let over: Vec<Sort> = many[..MAX_GROUPS + 1].to_vec();
+    assert!(validate_groups(&[gasc("fldSel"), gasc("fldCheck"), gasc("fldDate")], &t).is_ok());
+    let over: Vec<Group> = many[..MAX_GROUPS + 1]
+        .iter()
+        .map(|s| gasc(&s.field_id))
+        .collect();
     assert!(
         validate_groups(&over, &t)
             .unwrap_err()
             .contains("at most 3 groups")
     );
     assert!(
-        validate_groups(&[asc("fldButton")], &t)
+        validate_groups(&[gasc("fldButton")], &t)
             .unwrap_err()
             .contains("cannot group")
     );
     assert!(
-        validate_groups(&[asc("x")], &t)
+        validate_groups(&[gasc("x")], &t)
             .unwrap_err()
             .contains("unknown field x")
     );
+    // A granularity only on date fields.
+    for f in ["fldDate", "fldDt", "fldCreated", "fldFDate"] {
+        let g = group(f, Direction::Desc, Some(DateGranularity::Quarter));
+        assert!(validate_groups(&[g], &t).is_ok(), "{f}");
+    }
+    let err = validate_groups(
+        &[group("fldNum", Direction::Asc, Some(DateGranularity::Year))],
+        &t,
+    )
+    .unwrap_err();
+    assert!(err.contains("needs a date field"), "{err}");
 }

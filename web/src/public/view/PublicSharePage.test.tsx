@@ -18,7 +18,7 @@ afterEach(() => {
 
 const dateOpts = { include_time: false, date_format: "iso", time_format: "h24", timezone: null };
 const FIELDS: PublicField[] = [
-  { id: "f_name", name: "Name", type: "single_line_text", options: {}, description: null },
+  { id: "f_name", name: "Name", type: "text", options: { multiline: false }, description: null },
   { id: "f_status", name: "Status", type: "single_select", options: { choices: [{ id: "s1", name: "Todo", color: "gray" }, { id: "s2", name: "Done", color: "green" }] }, description: null },
   { id: "f_owner", name: "Owner", type: "user", options: { multiple: false, notify: false }, description: null },
   { id: "f_start", name: "Start", type: "date", options: dateOpts, description: null },
@@ -240,7 +240,7 @@ describe("shared views of other types", () => {
   });
 
   it("shows a board's description under the card title instead of as a row", async () => {
-    const notes: PublicField = { id: "f_notes", name: "Notes", type: "long_text", options: { rich: true }, description: null };
+    const notes: PublicField = { id: "f_notes", name: "Notes", type: "rich_text", options: {}, description: null };
     const records = [record(1, { f_status: "s1", f_notes: "**Call** the\n\nsupplier   first" }), record(2, { f_status: "s1" })];
     open(view("kanban", { kanban_stack_field_id: "f_status", description_field_id: "f_notes" }, [...FIELDS, notes]), { "POST /api/public/shares/tok_s/query": queryHandler(records) });
     const card = await screen.findByRole("article", { name: "Task 1" });

@@ -98,7 +98,7 @@ export function DockedSidebar({
   };
 
   return (
-    <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-14 flex h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-line bg-surface">
+    <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-14 flex h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-line bg-chrome">
       <SidebarBody topRows={topRows} footer={footer}>
         {children}
       </SidebarBody>
@@ -158,19 +158,19 @@ export function SidebarDrawer({
             e.preventDefault();
             returnFocus.current?.focus();
           }}
-          className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
+          className="ob-drawer-in fixed inset-y-0 left-0 z-40 flex w-[min(19.5rem,calc(100vw-3rem))] flex-col bg-chrome pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] shadow-pop focus-visible:outline-none"
         >
           {/* With the notifications open, the way back takes the title's place, beside the close button. */}
           <div className="mx-2.5 flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line py-1.5">
             {notificationsPanel ? (
               <>
                 <D.Title className="sr-only">Menu</D.Title>
-                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-11 min-w-0 flex-1 items-center gap-1 self-center rounded-[10px] px-1.5 text-left text-[0.9375rem] font-semibold text-fg hover:bg-hover">
+                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-11 min-w-0 flex-1 items-center gap-1 self-center rounded-[10px] px-1.5 text-left text-[0.9375rem] text-fg hover:bg-hover">
                   <ChevronLeft aria-hidden className="size-4 shrink-0 text-muted" /> <span className="truncate">Back to the menu</span>
                 </button>
               </>
             ) : (
-              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-semibold">Menu</D.Title>
+              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-normal">Menu</D.Title>
             )}
             <D.Close aria-label="Close menu" className="inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-muted hover:bg-hover hover:text-fg">
               <X aria-hidden className="size-5" />
@@ -206,7 +206,7 @@ export function SidebarSection({ title, action, children, className }: { title?:
 export function SidebarHeading({ children, action }: { children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex h-9 items-center justify-between gap-2 pl-3 pr-1">
-      {children && <h2 className="text-[0.8125rem] font-semibold tracking-normal text-muted">{children}</h2>}
+      {children && <h2 className="text-[0.8125rem] font-normal tracking-normal text-fg">{children}</h2>}
       {action}
     </div>
   );
@@ -214,7 +214,8 @@ export function SidebarHeading({ children, action }: { children?: ReactNode; act
 
 export const sidebarItemClass =
   "flex h-9 min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11";
-export const sidebarActiveClass = "bg-primary-soft font-semibold text-primary-ink hover:bg-primary-soft";
+/** The current page's row: the accent itself, its icon (often muted elsewhere) in the row's text colour. */
+export const sidebarActiveClass = "bg-primary text-primary-fg hover:bg-primary-hover [&_svg]:text-primary-fg";
 
 /** A menu link; it is highlighted (and `aria-current`) on its own page. */
 export function SidebarLink({
@@ -261,6 +262,14 @@ export function SidebarButton({ icon, children, onClick, className }: { icon?: R
     </button>
   );
 }
+
+/**
+ * The right padding of a tree row's name, where its "…" button sits: with a mouse on a wide screen
+ * the button shows only on hover, focus or while its menu is open, so the name has the whole row
+ * until then; on a phone or a touch screen the button is always there and keeps its room.
+ */
+export const rowNamePadClass =
+  "pr-8 pointer-coarse:pr-10 md:pointer-fine:pr-2 md:pointer-fine:group-hover/item:pr-8 md:pointer-fine:group-focus-within/item:pr-8 md:pointer-fine:group-has-[[data-state=open]]/item:pr-8";
 
 /** A tree row's "…" button: hidden until the row is hovered or the button focused, with a mouse; always there for a finger. */
 export const rowActionClass =

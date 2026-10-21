@@ -73,7 +73,7 @@ async fn an_agent_captures_edits_files_and_deletes_drafts() {
 
     // Filing: choose the table by name, the values by field name.
     let t = r.table("Shopping").await;
-    r.field("Shopping", "Notes", "long_text", json!({})).await;
+    r.field("Shopping", "Notes", "rich_text", json!({})).await;
     r.field("Shopping", "Receipt", "attachment", json!({}))
         .await;
     let filed = a
@@ -286,8 +286,7 @@ async fn an_agent_embeds_an_inbox_upload_in_a_note_and_files_it() {
         .await;
     let id = added["item"]["id"].as_str().unwrap().to_string();
     r.table("Visits").await;
-    r.field("Visits", "Notes", "long_text", json!({"rich": true}))
-        .await;
+    r.field("Visits", "Notes", "rich_text", json!({})).await;
     let filed = a
         .call(
             "file_inbox_item",

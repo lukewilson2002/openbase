@@ -107,9 +107,9 @@ pub fn view_type(t: ViewType) -> &'static str {
 /// Airtable's name of a field's type.
 pub fn airtable_type(field: &Field) -> &'static str {
     match &field.kind {
-        FieldKind::SingleLineText(_) => "singleLineText",
-        FieldKind::LongText(o) if o.rich => "richText",
-        FieldKind::LongText(_) => "multilineText",
+        FieldKind::Text(o) if o.multiline => "multilineText",
+        FieldKind::Text(_) => "singleLineText",
+        FieldKind::RichText(_) => "richText",
         FieldKind::Number(_) => "number",
         FieldKind::Currency(_) => "currency",
         FieldKind::Percent(_) => "percent",
@@ -307,7 +307,7 @@ pub fn field_meta(field: &Field) -> V1Field {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ob_core::field::{DateOptions, Empty, LongTextOptions, UserOptions};
+    use ob_core::field::{DateOptions, Empty, TextOptions, UserOptions};
 
     fn f(kind: FieldKind) -> Field {
         Field {
@@ -354,7 +354,11 @@ mod tests {
             "barcode",
             "button",
         ];
-        let rich = f(FieldKind::LongText(LongTextOptions { rich: true }));
+        let rich = f(FieldKind::RichText(Empty {}));
+        let multiline = f(FieldKind::Text(TextOptions {
+            multiline: true,
+            default: None,
+        }));
         let dt = f(FieldKind::Date(DateOptions {
             include_time: true,
             ..Default::default()
@@ -366,6 +370,7 @@ mod tests {
         let single = f(FieldKind::User(UserOptions::default()));
         let mut seen: Vec<&str> = vec![
             airtable_type(&rich),
+            airtable_type(&multiline),
             airtable_type(&dt),
             airtable_type(&multi),
             airtable_type(&single),

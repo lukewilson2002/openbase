@@ -8,9 +8,9 @@ import { makeSchema, mockApi } from "@/test/utils";
 import { FieldDialog, type FieldDialogState } from "./FieldDialog";
 
 const link = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_link", name: "Owner" });
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const table = makeTable([name, link]);
-const people = makeTable([field("single_line_text", {}, { id: "fld_p", name: "Person" }), field("email", {}, { id: "fld_pe", name: "Email" })], { id: "tbl2", name: "People" });
+const people = makeTable([field("text", { multiline: false }, { id: "fld_p", name: "Person" }), field("email", {}, { id: "fld_pe", name: "Email" })], { id: "tbl2", name: "People" });
 const schema = { ...makeSchema("owner"), tables: [table, people] };
 
 function setup(state: FieldDialogState = { mode: "create" }) {
@@ -52,13 +52,29 @@ describe("FieldDialog: create", () => {
     expect(body(api)).toMatchObject({ name: "Due", type: "date" });
   });
 
-  it("creates a single line text field with empty options", async () => {
+  it("creates a one-line text field by default", async () => {
     const { api, onSaved, onOpenChange } = setup();
     await userEvent.type(screen.getByLabelText("Field name"), "Title");
     await userEvent.click(screen.getByRole("button", { name: "Create field" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(body(api)).toEqual({ name: "Title", description: null, type: "single_line_text", options: {} });
+    expect(body(api)).toEqual({ name: "Title", description: null, type: "text", options: { multiline: false } });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("creates multiline text when Multiline is ticked", async () => {
+    const { api, onSaved } = setup();
+    await userEvent.type(screen.getByLabelText("Field name"), "Address");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Multiline/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Create field" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(body(api)).toEqual({ name: "Address", description: null, type: "text", options: { multiline: true } });
+  });
+
+  it("tells plain text from Markdown rich text in the type picker", async () => {
+    setup();
+    await openTypePicker();
+    expect(screen.getByRole("option", { name: /^Text/ })).toHaveTextContent("Names, titles, codes");
+    expect(screen.getByRole("option", { name: /^Rich text/ })).toHaveTextContent("Markdown: text formatting, tables, lists, images and more");
   });
 
   it("validates before sending", async () => {
@@ -231,7 +247,7 @@ describe("FieldDialog: create", () => {
   });
 
   it.each([
-    ["Long text", "long_text", { rich: false }],
+    ["Rich text", "rich_text", {}],
     ["Duration", "duration", { format: "h_mm" }],
     ["Checkbox", "checkbox", { icon: "check", color: "green" }],
     ["Email", "email", {}],
@@ -284,7 +300,7 @@ describe("FieldDialog: edit", () => {
   });
 
   it("warns before a lossy type change and requires confirmation", async () => {
-    const text = field("single_line_text", {}, { id: "fld_n", name: "Qty" });
+    const text = field("text", { multiline: false }, { id: "fld_n", name: "Qty" });
     const { api } = setup({ mode: "edit", field: text });
     await pick("Number");
     expect(screen.getByRole("status")).toHaveTextContent(/cleared/);
@@ -297,9 +313,35 @@ describe("FieldDialog: edit", () => {
     expect(api.callsTo("PATCH /api/fields/fld_n")[0]!.body).toMatchObject({ type: "number", options: { precision: 0, allow_negative: true } });
   });
 
+  it("warns that turning Multiline off joins lines", async () => {
+    const address = field("text", { multiline: true }, { id: "fld_a", name: "Address" });
+    const { api } = setup({ mode: "edit", field: address });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Multiline/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("Line breaks in existing values become spaces.");
+    await userEvent.click(screen.getByRole("checkbox", { name: /existing values may be lost/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/fields/fld_a")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/fields/fld_a")[0]!.body).toEqual({ type: "text", options: { multiline: false } });
+  });
+
+  it("says what rich text keeps when it becomes text, and the other way", async () => {
+    const notes = field("rich_text", {}, { id: "fld_r", name: "Notes" });
+    setup({ mode: "edit", field: notes });
+    await pick("Text");
+    expect(screen.getByRole("status")).toHaveTextContent(/Formatting is removed.*Line breaks/);
+    await userEvent.click(screen.getByRole("checkbox", { name: /Multiline/ }));
+    expect(screen.getByRole("status")).not.toHaveTextContent(/Line breaks/);
+    cleanup();
+    setup({ mode: "edit", field: field("text", { multiline: false }, { id: "fld_t", name: "Title" }) });
+    await pick("Rich text");
+    expect(screen.getByRole("status")).toHaveTextContent(/keep the text they show/);
+    expect(screen.queryByRole("checkbox", { name: /may be lost/ })).not.toBeInTheDocument();
+  });
+
   it("does not warn for a safe conversion", async () => {
     setup({ mode: "edit", field: qty });
-    await pick("Single line text");
+    await pick("Text");
     expect(screen.getByRole("status")).toHaveTextContent(/converted/);
     expect(screen.queryByRole("checkbox", { name: /may be lost/ })).not.toBeInTheDocument();
   });
@@ -314,7 +356,7 @@ describe("FieldDialog: edit", () => {
 
   it("round-trips existing options of every editable type without changes", async () => {
     // Opening a field and saving without edits must not send a PATCH (the options survive the editor).
-    for (const type of ["number", "currency", "percent", "duration", "rating", "checkbox", "single_select", "multiple_select", "date", "user", "long_text", "single_line_text"] as const) {
+    for (const type of ["number", "currency", "percent", "duration", "rating", "checkbox", "single_select", "multiple_select", "date", "user", "rich_text", "text"] as const) {
       const f = { ...ALL_FIELDS[type], id: "fld_n", name: "N" } as Field;
       const { api, onOpenChange } = setup({ mode: "edit", field: f });
       await userEvent.click(screen.getByRole("button", { name: "Save" }));

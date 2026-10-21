@@ -41,8 +41,10 @@ export function ratingMaxOfInput(f: Pick<PublicFormField, "options">): number {
 /** Which control a public form field is filled in with. */
 export function controlKindOf(f: Pick<PublicFormField, "type" | "options">): ControlKind {
   switch (f.type) {
-    case "long_text":
+    case "rich_text":
       return "textarea";
+    case "text":
+      return obj(f.options)["multiline"] === true ? "textarea" : "text";
     case "number":
     case "currency":
     case "percent":

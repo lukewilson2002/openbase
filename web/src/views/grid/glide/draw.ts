@@ -130,25 +130,55 @@ export interface ChipDraw {
 }
 
 /** Flow chips left to right, wrapping into further lines when the row is tall enough. Returns the x extents drawn per chip. */
-export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect: Rect, chips: readonly ChipDraw[], dark: boolean, highlight?: string): { x: number; y: number; w: number; h: number }[] {
+/**
+ * The font of a chip: the cell's a pixel smaller; a linked record's title is medium weight, as on its
+ * card elsewhere (see RecordSummary).
+ */
+export function chipFont(baseFontFull: string, kind: ChipDraw["kind"]): string {
+  const smaller = baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
+  return kind === "link" ? `500 ${smaller.replace(/^\s*(?:normal|bold|bolder|lighter|[1-9]00)\s+/, "")}` : smaller;
+}
+
+/** Room around a chip's text (and a person's face): the horizontal padding `drawChips` gives it. */
+export function chipPadding(kind: ChipDraw["kind"]): number {
+  return kind === "link" ? 14 : kind === "user" ? 12 + 18 : 12;
+}
+
+/** Where `drawChips` puts each chip that fits in `rect` (the first ones, in order: `index` into the chips). */
+export interface PlacedChip {
+  index: number;
+  chip: ChipDraw;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  avatar: number;
+}
+
+/**
+ * Lays chips out in a cell: left to right, onto more lines in a taller row, the lines filled centred
+ * in it. Shared by drawing and by finding the chip under the pointer (a linked record's preview).
+ */
+export interface ChipLayout {
+  placed: PlacedChip[];
+  /** The chips that did not fit, counted at the end of the last line ("+3"). */
+  more: { count: number; x: number; y: number; w: number; h: number } | null;
+}
+
+export function layoutChips(ctx: CanvasRenderingContext2D, theme: Pick<DrawTheme, "baseFontFull" | "cellHorizontalPadding">, rect: Rect, chips: readonly ChipDraw[]): ChipLayout {
   const padX = theme.cellHorizontalPadding;
-  const chipH = 20;
-  const gap = 4;
-  const lines = Math.max(1, Math.floor((rect.height - 6) / (chipH + gap)));
-  const boxes: { x: number; y: number; w: number; h: number }[] = [];
-  const chipFont = theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
-  ctx.font = chipFont;
-  ctx.textBaseline = "middle";
+  const lines = Math.max(1, Math.floor((rect.height - 6) / (CHIP_H + CHIP_GAP)));
   // Lay the chips out first, then centre the lines they fill: in a tall row one line of chips sits in
   // the middle, level with a line of text in the next cell, rather than at the top.
-  const placed: { chip: ChipDraw; x: number; line: number; w: number; avatar: number }[] = [];
+  const placed: { index: number; chip: ChipDraw; x: number; line: number; w: number; avatar: number }[] = [];
   let x = rect.x + padX;
   let line = 0;
   const right = rect.x + rect.width - padX;
-  for (const chip of chips) {
+  for (const [index, chip] of chips.entries()) {
     const avatar = chip.kind === "user" ? 16 : 0;
+    ctx.font = chipFont(theme.baseFontFull, chip.kind);
     const textW = ctx.measureText(chip.text).width;
-    let w = Math.min(textW + 12 + (avatar ? avatar + 2 : 0), right - rect.x - padX);
+    let w = Math.min(textW + chipPadding(chip.kind), right - rect.x - padX);
     if (x + w > right && x > rect.x + padX) {
       line++;
       x = rect.x + padX;
@@ -156,23 +186,76 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     }
     if (x >= right) break;
     w = Math.min(w, right - x);
-    placed.push({ chip, x, line, w, avatar });
-    x += w + gap;
+    placed.push({ index, chip, x, line, w, avatar });
+    x += w + CHIP_GAP;
+  }
+  // Those that do not fit are counted at the end of the last line: the last chips give way to the
+  // count (or are shortened, while they keep a readable width) until it fits.
+  let more: { count: number; x: number; line: number; w: number } | null = null;
+  if (placed.length < chips.length) {
+    ctx.font = chipFont(theme.baseFontFull, "plain");
+    const widthOf = (n: number) => ctx.measureText(`+${n}`).width + 2;
+    let count = chips.length - placed.length;
+    for (;;) {
+      const last = placed[placed.length - 1];
+      const w = widthOf(count);
+      const start = last ? last.x + last.w + CHIP_GAP : rect.x + padX;
+      if (!last || start + w <= right) {
+        more = { count, x: start, line: last?.line ?? 0, w: Math.min(w, right - start) };
+        break;
+      }
+      const room = right - CHIP_GAP - w - last.x;
+      if (room >= 48) {
+        last.w = room;
+        more = { count, x: last.x + room + CHIP_GAP, line: last.line, w };
+        break;
+      }
+      placed.pop();
+      count++;
+    }
   }
   const used = placed.length > 0 ? placed[placed.length - 1]!.line + 1 : 1;
-  const blockH = used * chipH + (used - 1) * gap;
+  const blockH = used * CHIP_H + (used - 1) * CHIP_GAP;
   const startY = rect.y + Math.max(lines > 1 ? 5 : 0, (rect.height - blockH) / 2);
-  for (const { chip, x, line, w, avatar } of placed) {
-    const y = startY + line * (chipH + gap);
-    // Choices and people carry their own colour, the same pill in both themes; links are blue, the rest grey.
-    const own = chip.kind === "select" || chip.kind === "user";
-    const pal = own ? paletteColor(chip.color) : chip.kind === "link" ? paletteColor("blue") : paletteColor("gray");
-    const bg = dark && !own ? mixColors("#1a1e26", pal.bg, 0.55) : pal.bg;
-    const fg = dark && !own ? "#e8ebf1" : pal.fg;
-    ctx.fillStyle = bg;
-    roundRectPath(ctx, x, y, w, chipH, chip.kind === "link" ? 4 : chipH / 2);
-    ctx.fill();
-    let tx = x + 6;
+  const yOf = (l: number) => startY + l * (CHIP_H + CHIP_GAP);
+  return {
+    placed: placed.map(({ line: l, ...p }) => ({ ...p, y: yOf(l), h: CHIP_H })),
+    more: more && { count: more.count, x: more.x, y: yOf(more.line), w: more.w, h: CHIP_H },
+  };
+}
+
+const CHIP_H = 20;
+const CHIP_GAP = 4;
+
+export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect: Rect, chips: readonly ChipDraw[], dark: boolean, highlight?: string): { x: number; y: number; w: number; h: number }[] {
+  const chipH = CHIP_H;
+  const boxes: { x: number; y: number; w: number; h: number }[] = [];
+  const { placed, more } = layoutChips(ctx, theme, rect, chips);
+  ctx.textBaseline = "middle";
+  for (const { chip, x, y, w, avatar } of placed) {
+    const font = chipFont(theme.baseFontFull, chip.kind);
+    ctx.font = font;
+    let fg: string;
+    if (chip.kind === "link") {
+      // A linked record is a small card, as everywhere else records are listed: the cell's own surface
+      // (lifted a touch on a dark page), a hairline border, and its title in the accent's text colour.
+      ctx.fillStyle = dark ? mixColors(theme.bgCell, theme.textDark, 0.05) : theme.bgCell;
+      roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, chipH - 1, 4);
+      ctx.fill();
+      ctx.strokeStyle = theme.borderColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      fg = theme.linkColor;
+    } else {
+      // Choices and people carry their own colour, the same pill in both themes; the rest are grey.
+      const own = chip.kind === "select" || chip.kind === "user";
+      const pal = own ? paletteColor(chip.color) : paletteColor("gray");
+      ctx.fillStyle = dark && !own ? mixColors(theme.bgCell, pal.bg, 0.55) : pal.bg;
+      fg = dark && !own ? theme.textDark : pal.fg;
+      roundRectPath(ctx, x, y, w, chipH, chipH / 2);
+      ctx.fill();
+    }
+    let tx = x + (chip.kind === "link" ? 7 : 6);
     if (avatar) {
       // Solid face with white initials, the same as <Avatar> outside the grid.
       ctx.fillStyle = accentShade(chip.color);
@@ -185,7 +268,7 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
       ctx.textAlign = "center";
       ctx.fillText(initials, x + 2 + avatar / 2, y + chipH / 2 + 0.5);
       ctx.textAlign = "left";
-      ctx.font = chipFont;
+      ctx.font = font;
       tx = x + avatar + 6;
     }
     ctx.fillStyle = fg;
@@ -202,6 +285,12 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     }
     ctx.fillText(label, tx, y + chipH / 2 + 0.5);
     boxes.push({ x, y, w, h: chipH });
+  }
+  if (more) {
+    // How many more there are, as plain text (no pill): double-click the cell to see them all.
+    ctx.font = chipFont(theme.baseFontFull, "plain");
+    ctx.fillStyle = theme.textLight;
+    ctx.fillText(`+${more.count}`, more.x + 1, more.y + chipH / 2 + 0.5);
   }
   return boxes;
 }

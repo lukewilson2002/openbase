@@ -3,12 +3,17 @@ import { Navigate, useLocation } from "react-router";
 import { PageSpinner } from "@/components/ui/spinner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ShieldAlert } from "lucide-react";
+import { useAccountAccent } from "@/theme/useAccent";
 import { useMe } from "./useAuth";
 
-/** Renders children only for a signed-in user; otherwise sends the visitor to /login. */
+/**
+ * Renders children only for a signed-in user; otherwise sends the visitor to /login. Also paints the
+ * account's accent colour, which may have been changed on another device.
+ */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { data: user, isPending, isError, error } = useMe();
   const location = useLocation();
+  useAccountAccent(user);
   if (isPending) return <PageSpinner label="Loading your account" />;
   if (isError) {
     return (

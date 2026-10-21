@@ -172,7 +172,7 @@ async fn form_definition_lists_only_collectable_visible_fields() {
         (name["required"].clone(), name["label"].clone()),
         (json!(true), json!("Name"))
     );
-    assert_eq!(name["type"], "single_line_text");
+    assert_eq!(name["type"], "text");
     let notes = by_id(&fm.notes);
     assert_eq!(notes["label"], "Comments");
     assert_eq!(notes["help"], "Anything else?");

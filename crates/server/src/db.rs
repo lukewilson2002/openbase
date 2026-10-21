@@ -27,7 +27,19 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0010_comments_created.sql"),
     include_str!("../migrations/0011_default_views.sql"),
     include_str!("../migrations/0012_workspace_order.sql"),
+    include_str!("../migrations/0013_rich_comments.sql"),
+    include_str!("../migrations/0014_text_types.sql"),
+    include_str!("../migrations/0015_user_accent.sql"),
 ];
+
+/// Data changes a migration needs beyond its SQL, run in the same transaction
+/// right after the SQL of `version`.
+fn after_migration(conn: &Connection, version: i64) -> rusqlite::Result<()> {
+    match version {
+        13 => crate::store::comments::plain_bodies_to_markdown(conn),
+        _ => Ok(()),
+    }
+}
 
 pub fn schema_version() -> i64 {
     MIGRATIONS.len() as i64
@@ -242,6 +254,7 @@ fn migrate_with(
             .map_err(AppError::internal)?;
         let res = conn
             .execute_batch(sql)
+            .and_then(|_| after_migration(conn, version))
             .and_then(|_| conn.execute_batch(&format!("PRAGMA user_version = {version}")));
         match res {
             Ok(()) => conn.execute_batch("COMMIT").map_err(AppError::internal)?,
@@ -346,7 +359,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 12);
+        assert_eq!(schema_version(), 15);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -569,7 +582,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 12);
+        assert_eq!(schema_version(), 15);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -740,7 +753,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 12);
+        assert_eq!(schema_version(), 15);
         let flag = |id: &str| -> bool {
             conn.query_row(
                 "SELECT may_raise_roles FROM invites WHERE id = ?1",
@@ -891,5 +904,88 @@ mod tests {
             serde_json::json!({"kanban": {"stack_field_id": "f2"}})
         );
         assert_eq!(config("v3"), serde_json::json!({}));
+    }
+
+    #[test]
+    fn plain_comments_become_markdown_at_v13() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        v1_database(&conn, None);
+        migrate_with(&conn, &MIGRATIONS[..12], None).unwrap();
+        conn.execute_batch(
+            "INSERT INTO records (id, table_id, position, autonumber, created_at, updated_at)
+                 VALUES ('r1', 't1', 1, 1, 1, 1);
+             INSERT INTO comments (id, record_id, body, created_at, updated_at) VALUES
+                 ('c1', 'r1', '# not a heading, @[Ann](usrA1) said *wow*', 1, 1),
+                 ('c2', 'r1', 'nothing to escape', 1, 1);",
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let body = |id: &str| -> String {
+            conn.query_row("SELECT body FROM comments WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        assert_eq!(
+            body("c1"),
+            "\\# not a heading, @[Ann](usrA1) said \\*wow\\*"
+        );
+        assert_eq!(body("c2"), "nothing to escape");
+    }
+
+    #[test]
+    fn text_types_are_renamed_at_v14() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        v1_database(&conn, None);
+        migrate_with(&conn, &MIGRATIONS[..13], None).unwrap();
+        conn.execute_batch(
+            r#"INSERT INTO fields (id, table_id, name, type, options, created_at) VALUES
+                 ('s1', 't1', 'Title', 'single_line_text', '{}', 1),
+                 ('s2', 't1', 'Code', 'single_line_text', '{"default":"A-1"}', 1),
+                 ('l1', 't1', 'Address', 'long_text', '{"rich":false}', 1),
+                 ('l2', 't1', 'Memo', 'long_text', '{}', 1),
+                 ('l3', 't1', 'Post', 'long_text', '{"rich":true}', 1),
+                 ('n1', 't1', 'Qty', 'number', '{"precision":2}', 1);"#,
+        )
+        .unwrap();
+        migrate(&conn).unwrap();
+        let field = |id: &str| -> (String, serde_json::Value) {
+            let (ty, raw): (String, String) = conn
+                .query_row(
+                    "SELECT type, options FROM fields WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            (ty, serde_json::from_str(&raw).unwrap())
+        };
+        use serde_json::json;
+        assert_eq!(field("s1"), ("text".into(), json!({"multiline": false})));
+        assert_eq!(
+            field("s2"),
+            ("text".into(), json!({"multiline": false, "default": "A-1"}))
+        );
+        // Plain long text keeps showing its text as typed.
+        assert_eq!(field("l1"), ("text".into(), json!({"multiline": true})));
+        assert_eq!(field("l2"), ("text".into(), json!({"multiline": true})));
+        assert_eq!(field("l3"), ("rich_text".into(), json!({})));
+        assert_eq!(field("n1"), ("number".into(), json!({"precision": 2})));
+        // Every row still reads as a field definition.
+        let kinds: Vec<(String, String)> = conn
+            .prepare("SELECT type, options FROM fields")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        for (ty, options) in kinds {
+            let options: serde_json::Value = serde_json::from_str(&options).unwrap();
+            serde_json::from_value::<ob_core::field::FieldKind>(
+                json!({"type": ty, "options": options}),
+            )
+            .unwrap();
+        }
     }
 }

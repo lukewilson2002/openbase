@@ -69,7 +69,7 @@ pub fn aggregate(agg: Aggregation, field: &Field, values: &[Option<&Json>], tz: 
         let keys: HashSet<String> = values
             .iter()
             .filter(|v| !is_cell_empty(field, **v))
-            .map(|v| super::group_key(field, *v, &NoNames, tz).key)
+            .map(|v| super::group_key(field, *v, &NoNames, tz, None).key)
             .collect();
         keys.len()
     };

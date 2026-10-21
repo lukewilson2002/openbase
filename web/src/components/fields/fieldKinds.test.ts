@@ -4,8 +4,8 @@ import { ALL_FIELDS, field, makeTable } from "@/test/fields";
 import { FIELD_TYPES, FIELD_TYPE_GROUPS, conversionRisk, conversionWarning, defaultKind, draftFromField, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
 
 const link = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_link", name: "Owner" });
-const table = makeTable([field("single_line_text", {}, { id: "fld_name", name: "Name" }), link]);
-const other = makeTable([field("single_line_text", {}, { id: "fld_p", name: "Person" })], { id: "tbl2", name: "People" });
+const table = makeTable([field("text", { multiline: false }, { id: "fld_name", name: "Name" }), link]);
+const other = makeTable([field("text", { multiline: false }, { id: "fld_p", name: "Person" })], { id: "tbl2", name: "People" });
 const ctx: KindContext = { table, tables: [table, other] };
 
 const draft = (type: FieldType, name = "New field"): FieldDraft => ({ name, description: "", kind: defaultKind(type, ctx), inverseName: "" });
@@ -29,7 +29,7 @@ describe("defaultKind and the CreateField payload", () => {
   });
 
   it("matches the server defaults for simple types", () => {
-    expect(defaultKind("single_line_text", ctx)).toEqual({ type: "single_line_text", options: {} });
+    expect(defaultKind("text", ctx)).toEqual({ type: "text", options: { multiline: false } });
     expect(defaultKind("currency", ctx)).toEqual({ type: "currency", options: { precision: 2, symbol: "$", allow_negative: true } });
     expect(defaultKind("rating", ctx)).toEqual({ type: "rating", options: { max: 5, icon: "star", color: "yellow" } });
     expect(defaultKind("duration", ctx)).toEqual({ type: "duration", options: { format: "h_mm" } });
@@ -86,7 +86,7 @@ describe("validateDraft", () => {
     expect(validateDraft({ ...draft("button") }, ctx).map((i) => i.message)).toEqual(["Enter a formula that produces the URL."]);
     expect(validateDraft({ ...draft("lookup") }, ctx)[0]?.message).toMatch(/look up/);
     expect(validateDraft({ ...draft("count"), kind: { type: "count", options: { link_field_id: "" } } }, ctx)[0]?.message).toMatch(/link field/);
-    expect(validateDraft(draft("single_line_text"), ctx)).toEqual([]);
+    expect(validateDraft(draft("text"), ctx)).toEqual([]);
   });
 });
 
@@ -109,19 +109,19 @@ describe("toUpdateField", () => {
 describe("type change warnings", () => {
   it("classifies conversions", () => {
     expect(conversionRisk("number", "number")).toBe("none");
-    expect(conversionRisk("number", "single_line_text")).toBe("safe");
+    expect(conversionRisk("number", "text")).toBe("safe");
     expect(conversionRisk("single_select", "multiple_select")).toBe("safe");
     expect(conversionRisk("multiple_select", "single_select")).toBe("lossy");
-    expect(conversionRisk("single_line_text", "number")).toBe("lossy");
-    expect(conversionRisk("long_text", "single_line_text")).toBe("lossy");
+    expect(conversionRisk("text", "number")).toBe("lossy");
+    expect(conversionRisk("rich_text", "text")).toBe("lossy");
     expect(conversionRisk("number", "formula")).toBe("lossy");
     expect(conversionRisk("formula", "number")).toBe("safe");
     expect(conversionRisk("attachment", "checkbox")).toBe("lossy");
   });
   it("explains the risk", () => {
     expect(conversionWarning("number", "number")).toBeNull();
-    expect(conversionWarning("single_line_text", "number")).toMatch(/cleared/);
+    expect(conversionWarning("text", "number")).toMatch(/cleared/);
     expect(conversionWarning("number", "formula")).toMatch(/discarded/);
-    expect(conversionWarning("number", "single_line_text")).toMatch(/converted/);
+    expect(conversionWarning("number", "text")).toMatch(/converted/);
   });
 });

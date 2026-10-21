@@ -88,7 +88,7 @@ async fn build(n_orders: usize, n_customers: usize) -> Orders {
     let region = f
         .add_field(
             &customers,
-            json!({ "name": "Region", "type": "single_line_text", "options": {} }),
+            json!({ "name": "Region", "type": "text", "options": {} }),
         )
         .await;
     let link = f.add_link(&orders, "Customer", &customers).await;
@@ -96,7 +96,7 @@ async fn build(n_orders: usize, n_customers: usize) -> Orders {
     let notes = id_of(
         &f.add_field(
             &orders,
-            json!({ "name": "Notes", "type": "long_text", "options": {} }),
+            json!({ "name": "Notes", "type": "rich_text", "options": {} }),
         )
         .await,
     );

@@ -6,8 +6,8 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { field } from "@/test/fields";
 import { DescriptionHover } from "./description";
 
-const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
-const brief = field("long_text", { rich: true }, { id: "f_brief", name: "Brief" });
+const notes = field("text", { multiline: true }, { id: "f_notes", name: "Notes" });
+const brief = field("rich_text", {}, { id: "f_brief", name: "Brief" });
 const record = (values: TableRecord["values"]): TableRecord => ({ id: "rec1", values, created_at: 0, updated_at: 0 }) as unknown as TableRecord;
 
 /** A screen whose primary pointer can (or cannot) hover. */

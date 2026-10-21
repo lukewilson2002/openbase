@@ -83,15 +83,15 @@ export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm"
     `${watching.length} ${watching.length === 1 ? "person" : "people"} viewing now` +
     (away.length > 0 ? `, ${away.length} more can open this project` : "") +
     (watching.length > 0 ? `: ${peopleLabel(watching, meId)}` : "");
-  const chipSize = size === "md" ? "size-8 text-xs" : "size-6 text-[0.625rem]";
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
-      <span role="img" aria-label={label} title={label} className={cn("flex shrink-0", size === "md" ? "-space-x-2" : "-space-x-1.5")}>
-        {/* Leftmost on top, each face tucked under the one before it: the first face (you) reads whole. */}
+      {/* Side by side in a desktop's header, where there is room; tucked under one another on a phone. */}
+      <span role="img" aria-label={label} title={label} className={cn("flex shrink-0", size === "md" ? "gap-1" : "-space-x-1.5")}>
+        {/* Leftmost on top, each face (on a phone) tucked under the one before it: the first face (you) reads whole. */}
         {faces.map((p, i) => (
           <span key={p.user_id ?? i} aria-hidden data-face className="relative inline-flex rounded-full ring-2 ring-surface" style={{ zIndex: faces.length - i + 1 }}>
-            <Avatar name={p.name} email={p.email} size={size} />
+            <Avatar name={p.name} email={p.email} size={size} own={!!meId && p.user_id === meId} />
           </span>
         ))}
         {rest > 0 && (
@@ -99,7 +99,8 @@ export function BaseAvatars({ people, viewers = [], max = MAX_FACES, size = "sm"
             aria-hidden
             data-away
             title={away.length > 0 ? `Can open this project, not viewing now: ${peopleLabel(away, meId)}` : undefined}
-            className={cn("relative z-0 inline-flex shrink-0 items-center justify-center rounded-full bg-subtle font-semibold text-muted ring-2 ring-surface", chipSize)}
+            // A count as plain text beside the faces, not a face of its own.
+            className={cn("relative z-0 inline-flex shrink-0 items-center pl-2 font-medium text-muted", size === "md" ? "h-8 text-xs" : "h-6 text-[0.6875rem]")}
           >
             +{rest}
           </span>

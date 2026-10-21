@@ -1,5 +1,5 @@
 /**
- * Text-like editors: single line text, long text, numbers, currency, percent, duration,
+ * Text-like editors: text, rich text, numbers, currency, percent, duration,
  * email, URL, phone, barcode, and the text half of date editing. The editor reports the typed
  * text; the host parses it with `parseText` (so grid and expanded record validate identically).
  */
@@ -8,6 +8,7 @@ import { Maximize2 } from "lucide-react";
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { editText } from "@/lib/cells/format";
+import { isMultilineText } from "@/lib/cells/kinds";
 import { parseText } from "@/lib/cells/parse";
 import { useEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
 import { FullScreen } from "./FullScreen";
@@ -28,7 +29,7 @@ export interface TextEditorProps extends FieldEditorCallbacks {
   labelledBy?: string;
   label?: string;
   /**
-   * Long text: shows an expand button in the corner of the box that opens this full screen, given the
+   * Multiline text: shows an expand button in the corner of the box that opens this full screen, given the
    * text so far and a way to change it. The text area and the full-screen view are one value.
    */
   renderFullScreen?: (p: { value: string; onChange: (text: string) => void }) => ReactNode;
@@ -44,7 +45,7 @@ const HINTS: Partial<Record<Field["type"], string>> = {
 
 export function TextEditor({ field, value, initialText, variant, autoFocus, trailing, seedText, className, labelledBy, label, renderFullScreen, onChange, onCommit, onCancel }: TextEditorProps) {
   const env = useEditorEnv();
-  const isLong = field.type === "long_text";
+  const isLong = isMultilineText(field);
   const [fullScreen, setFullScreen] = useState(false);
   const seed = useMemo(() => initialText ?? seedText ?? (typeof value === "string" || typeof value === "number" ? editText(field, value, env.format) : ""), [initialText, seedText, value, field, env.format]);
   const [text, setText] = useState(seed);
@@ -53,7 +54,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const errorId = useId();
   const doneRef = useRef(false);
-  // Long text in the expanded record saves while typing (once typing pauses) and on blur, so the
+  // Multiline text in the expanded record saves while typing (once typing pauses) and on blur, so the
   // record's save status follows it. Everything else commits on blur or Enter.
   const autosaves = isLong && variant === "form";
   const autosave = useAutosave(seed, (t) => onCommit({ text: t }));
@@ -91,7 +92,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    // Escape in the record's long text ends the edit (EditableValue) and keeps what was typed: it is saved as it is typed.
+    // Escape in the record's multiline text ends the edit (EditableValue) and keeps what was typed: it is saved as it is typed.
     if (e.key === "Escape" && !autosaves) {
       e.preventDefault();
       doneRef.current = true;
@@ -135,7 +136,7 @@ export function TextEditor({ field, value, initialText, variant, autoFocus, trai
     "aria-labelledby": labelledBy,
     "aria-label": label ?? field.name,
     placeholder: HINTS[field.type],
-    spellCheck: field.type === "single_line_text" || isLong,
+    spellCheck: field.type === "text" || isLong,
   };
 
   const box = cn(

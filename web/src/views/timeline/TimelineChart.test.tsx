@@ -119,14 +119,54 @@ describe("TimelineChart", () => {
     expect(arrows[0]!.getAttribute("d")).toMatch(/^M \d/);
   });
 
-  it("opens a bar on click and on Enter", async () => {
+  it("selects a bar on a click, and opens it on a double-click or Enter", async () => {
     const user = userEvent.setup();
     const { props } = chart();
-    await user.click(screen.getByRole("button", { name: /^Launch/ }));
+    const launch = screen.getByRole("button", { name: /^Launch/ });
+    await user.click(launch);
+    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(launch).toHaveFocus();
+    await user.dblClick(launch);
     expect(props.onOpen).toHaveBeenCalledWith("r3");
     screen.getByRole("button", { name: /^Ship it/ }).focus();
     await user.keyboard("{Enter}");
     expect(props.onOpen).toHaveBeenLastCalledWith("r2");
+  });
+
+  it("takes a selected bar off the timeline with Delete or Backspace, if it may move", async () => {
+    const user = userEvent.setup();
+    const onUnschedule = vi.fn();
+    const { unmount } = chart({ onUnschedule });
+    screen.getByRole("button", { name: /^Launch/ }).focus();
+    await user.keyboard("{Delete}");
+    expect(onUnschedule).toHaveBeenCalledWith("r3");
+    screen.getByRole("button", { name: /^Ship it/ }).focus();
+    await user.keyboard("{Backspace}");
+    expect(onUnschedule).toHaveBeenLastCalledWith("r2");
+    unmount();
+    onUnschedule.mockClear();
+    chart({ onUnschedule }, [{ lane: { key: "a", label: "A", records: [] }, bars: [bar("r1", "Locked", span(ms(2026, 3, 10), ms(2026, 3, 14)), { canMove: false, canResize: false })] }]);
+    screen.getByRole("button", { name: /^Locked/ }).focus();
+    await user.keyboard("{Delete}");
+    expect(onUnschedule).not.toHaveBeenCalled();
+  });
+
+  it("takes a bar dropped on the unscheduled column off the timeline", () => {
+    const zone = document.createElement("div");
+    vi.spyOn(zone, "getBoundingClientRect").mockReturnValue({ x: 500, y: 0, left: 500, top: 0, right: 700, bottom: 400, width: 200, height: 400, toJSON: () => ({}) } as DOMRect);
+    const onUnschedule = vi.fn();
+    const onOverUnschedule = vi.fn();
+    const { props } = chart({ onUnschedule, onOverUnschedule, unscheduleZone: { current: zone } });
+    const b = screen.getByRole("button", { name: /^Design review/ });
+    fireEvent.pointerDown(b, { button: 0, clientX: 100, clientY: 20, pointerId: 1 });
+    fireEvent.pointerMove(b, { clientX: 300, clientY: 20, pointerId: 1 });
+    expect(onOverUnschedule).not.toHaveBeenCalled();
+    fireEvent.pointerMove(b, { clientX: 600, clientY: 20, pointerId: 1 });
+    expect(onOverUnschedule).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerUp(b, { clientX: 600, clientY: 20, pointerId: 1 });
+    expect(onUnschedule).toHaveBeenCalledWith("r1");
+    expect(onOverUnschedule).toHaveBeenLastCalledWith(false);
+    expect(props.onCommit).not.toHaveBeenCalled();
   });
 
   it("moves a bar by whole days when dragged and reports the commit", () => {

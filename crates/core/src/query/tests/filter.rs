@@ -111,8 +111,8 @@ fn operator_lists_per_type() {
         IsNotEmpty,
     ];
     for t in [
-        FieldType::SingleLineText,
-        FieldType::LongText,
+        FieldType::Text,
+        FieldType::RichText,
         FieldType::Email,
         FieldType::Url,
         FieldType::Phone,

@@ -35,7 +35,7 @@ describe("groupIntoLanes", () => {
     const link = ALL_FIELDS.link!;
     const l1 = groupIntoLanes([rec("a", { [link.id]: [{ id: "x", name: "Beta" }] }), rec("b", { [link.id]: [{ id: "y", name: "Alpha" }] })], link, DEFAULT_CTX);
     expect(l1.map((l) => l.label)).toEqual(["Alpha", "Beta"]);
-    const text = ALL_FIELDS.single_line_text!;
+    const text = ALL_FIELDS.text!;
     const l2 = groupIntoLanes([rec("a", { [text.id]: "Team 10" }), rec("b", { [text.id]: "Team 2" })], text, DEFAULT_CTX);
     expect(l2.map((l) => l.label)).toEqual(["Team 2", "Team 10"]);
     expect(l2[0]!.value).toBe("Team 2");

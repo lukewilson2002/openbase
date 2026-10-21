@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Providers, createQueryClient } from "./providers";
 import "./styles/index.css";
+import "./styles/accents.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element missing from index.html");

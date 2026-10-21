@@ -8,8 +8,8 @@ import { MAX_SHARES_PER_VIEW, ShareViewDialog, canShareView, shareKindOf } from 
 
 afterEach(() => vi.unstubAllGlobals());
 
-const name = field("single_line_text", {}, { id: "f_name", name: "Name" });
-const secret = field("single_line_text", {}, { id: "f_secret", name: "Salary" });
+const name = field("text", { multiline: false }, { id: "f_name", name: "Name" });
+const secret = field("text", { multiline: false }, { id: "f_secret", name: "Salary" });
 const owner = field("user", { multiple: false, notify: false }, { id: "f_owner", name: "Owner" });
 const table = makeTable([name, secret, owner, ALL_FIELDS.attachment!]);
 

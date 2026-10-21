@@ -89,7 +89,7 @@ function ListInner(props: ViewProps) {
       layout="hug"
       features={{ rowHeight: false }}
       toolbarSetting={
-        <ViewSettings label={descriptionField ? `Description: ${descriptionField.name}` : "Description"} active={!!descriptionField} note={cfg.canConfigure ? undefined : "You do not have permission to change this view."}>
+        <ViewSettings note={cfg.canConfigure ? undefined : "You do not have permission to change this view."}>
           <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
         </ViewSettings>
       }

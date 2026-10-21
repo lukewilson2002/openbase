@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
-use crate::view::{Direction, Filter, Sort};
+use crate::view::{Direction, Filter, Group, Sort};
 
 /// A record as returned by the API.
 ///
@@ -98,7 +98,7 @@ pub struct TransientConfig {
     #[serde(default)]
     pub sorts: Option<Vec<Sort>>,
     #[serde(default)]
-    pub groups: Option<Vec<Sort>>,
+    pub groups: Option<Vec<Group>>,
 }
 
 /// One group header in a grouped view. Groups are listed in display order,

@@ -12,7 +12,7 @@ import { UndoStack } from "./undo";
 import type { GridData } from "./useGridData";
 import { useRecordOps } from "./useRecordOps";
 
-const name = { ...ALL_FIELDS.single_line_text, id: "fld_name", name: "Name" };
+const name = { ...ALL_FIELDS.text, id: "fld_name", name: "Name" };
 
 function fakeData(): GridData & { upserted: TableRecord[][] } {
   const upserted: TableRecord[][] = [];

@@ -21,7 +21,7 @@ export function IconCell({ name, index, selected, tabbable, onPick }: { name: st
       className={cn(
         "flex size-[1.875rem] items-center justify-center justify-self-center rounded-md text-fg transition-colors hover:bg-hover",
         "focus-visible:outline-2 focus-visible:outline-ring",
-        selected && "bg-primary-soft text-primary ring-1 ring-primary",
+        selected && "bg-primary-soft text-primary-text ring-1 ring-primary",
       )}
     >
       <EntityIcon name={name} className="size-[1.125rem]" />

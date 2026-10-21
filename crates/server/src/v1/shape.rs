@@ -157,8 +157,8 @@ fn cell(cx: &mut Cx, field: &Field, v: &Json) -> Option<Json> {
         return None;
     }
     match &field.kind {
-        FieldKind::SingleLineText(_)
-        | FieldKind::LongText(_)
+        FieldKind::Text(_)
+        | FieldKind::RichText(_)
         | FieldKind::Email(_)
         | FieldKind::Url(_)
         | FieldKind::Phone(_) => non_empty_str(v),

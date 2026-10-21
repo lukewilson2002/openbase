@@ -19,6 +19,8 @@ export interface AvatarProps {
   size?: "sm" | "md" | "lg";
   /** The person's colour when the caller knows their base's assignment (`personColors`); else hashed from the email. */
   color?: string | null;
+  /** The signed-in person's own face: in the colour they picked for the app (the primary), on their screen only. */
+  own?: boolean;
   className?: string;
 }
 
@@ -28,14 +30,14 @@ const sizes = { sm: "size-6 text-[0.625rem]", md: "size-8 text-xs", lg: "size-12
  * A person's face: white initials on a solid circle of their colour, in the accent shades the
  * workspace tiles use, which keep white text readable in both themes.
  */
-export function Avatar({ name, email, size = "md", color, className }: AvatarProps) {
+export function Avatar({ name, email, size = "md", color, own, className }: AvatarProps) {
   const label = (name ?? "").trim() || email || "User";
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
-      className={cn("inline-flex shrink-0 select-none items-center justify-center rounded-full font-bold", accentClass(color ?? avatarColor(email || label), "solid"), sizes[size], className)}
+      className={cn("inline-flex shrink-0 select-none items-center justify-center rounded-full font-bold", own ? "bg-primary text-primary-fg" : accentClass(color ?? avatarColor(email || label), "solid"), sizes[size], className)}
     >
       {initials(name, email)}
     </span>

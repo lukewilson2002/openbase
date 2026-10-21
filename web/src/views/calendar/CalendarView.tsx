@@ -7,7 +7,7 @@
  * FullCalendar runs in its UTC mode on wall times (see ../common/wallTime.ts), so the
  * viewer's and the fields' time zones, not the browser's, decide where events sit.
  *
- * FullCalendar's own toolbar is off: the card's header (‹ Today › title, Month | Week | List)
+ * FullCalendar's own toolbar is off: the card's header (Today, ‹ title ›, Month | Week | List)
  * drives it through its API, so it looks like the rest of the app's views.
  */
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -15,7 +15,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import listPlugin from "@fullcalendar/list";
-import interactionPlugin, { type DateClickArg, type DropArg } from "@fullcalendar/interaction";
+import interactionPlugin, { Draggable, type DateClickArg, type DropArg } from "@fullcalendar/interaction";
 import type { DatesSetArg, DayCellContentArg, EventClickArg, EventContentArg, EventDropArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -25,7 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { choiceClass, colorDotClass } from "@/lib/colors";
+import { choiceClass } from "@/lib/colors";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cardFields } from "../common/cardFields";
 import { DescriptionHover, DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
@@ -41,10 +41,19 @@ import type { ViewProps } from "../types";
 import "./calendar.css";
 import { removeIconFont } from "./iconFont";
 import { dateClickValues, eventWrites, recordsToEvents, resolveCalendarFields, unscheduledRecords, unscheduledTransient, visibleRange } from "./eventMath";
-import { UnscheduledList } from "./UnscheduledList";
+import { UnscheduledList } from "../common/UnscheduledList";
 
 export default function CalendarView(props: ViewProps) {
   return <CalendarInner key={props.view.id} {...props} />;
+}
+
+/** FullCalendar's helper makes the unscheduled column's items droppable onto a day. */
+function attachCalendarDrag(list: HTMLUListElement): () => void {
+  const d = new Draggable(list, {
+    itemSelector: "[data-unscheduled]",
+    eventData: (item) => ({ title: item.getAttribute("data-title") ?? "", create: false }),
+  });
+  return () => d.destroy();
 }
 
 function setCalendar(c: ViewConfig, patch: Partial<ViewConfig["calendar"]>): ViewConfig {
@@ -89,7 +98,6 @@ function EventChip({ arg, description }: { arg: EventContentArg; description: Ch
   const color = arg.event.extendedProps.color as string | undefined;
   const chip = (
     <span className={cn("ob-cal-chip", color ? choiceClass(color) : "ob-cal-chip-plain")}>
-      <span aria-hidden className={cn("ob-cal-dot", color ? colorDotClass(color) : "bg-primary")} />
       {arg.timeText && !arg.event.allDay && <span className="shrink-0 font-medium opacity-80">{arg.timeText}</span>}
       <span className="ob-cal-title">{arg.event.title}</span>
     </span>
@@ -207,7 +215,7 @@ function CalendarInner(props: ViewProps) {
   const chooseDate = (id: string | null) => cfg.update((c) => setCalendar(c, { date_field_id: id }));
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const settings = (
-    <ViewSettings label={fields ? `Dates from ${fields.start.field.name}` : "Date field"} active={!!fields} note={note}>
+    <ViewSettings note={note}>
       <FieldSelect label="Date field" fields={dateFields} value={fields?.start.field.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseDate} />
       <FieldSelect
         label="End date field"
@@ -251,20 +259,21 @@ function CalendarInner(props: ViewProps) {
       <div className="absolute inset-0 flex">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
+            <button type="button" onClick={() => api()?.today()} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+              Today
+            </button>
+            {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
             <div className="flex items-center gap-0.5">
               <IconButton label={rangeType === "timeGridWeek" ? "Previous week" : "Previous month"} size="sm" onClick={() => api()?.prev()}>
                 <ChevronLeft aria-hidden className="size-4" />
               </IconButton>
-              <button type="button" onClick={() => api()?.today()} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
-                Today
-              </button>
+              <h3 aria-live="polite" className="min-w-[10.5rem] text-center text-base font-bold tabular-nums">
+                {title}
+              </h3>
               <IconButton label={rangeType === "timeGridWeek" ? "Next week" : "Next month"} size="sm" onClick={() => api()?.next()}>
                 <ChevronRight aria-hidden className="size-4" />
               </IconButton>
             </div>
-            <h3 aria-live="polite" className="text-base font-bold">
-              {title}
-            </h3>
             {records.fetching && <Spinner className="size-4" label="Loading records" />}
             <SegmentedSwitch label="Calendar range" className="ml-auto" value={rangeType} options={RANGES} onChange={(v) => api()?.changeView(v)} />
           </div>
@@ -313,11 +322,14 @@ function CalendarInner(props: ViewProps) {
           primary={primary}
           fields={cardFieldList}
           descriptionField={descriptionField}
+          table={table}
+          role={setup.role}
           format={setup.format}
           emails={setup.emails}
           loading={all.loading}
           truncated={!!all.data?.truncated}
           draggable={startWritable}
+          attachDrag={attachCalendarDrag}
           onOpen={setup.openRecord}
         />
       </div>

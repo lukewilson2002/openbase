@@ -70,10 +70,10 @@ export function PublicTable({ fields, widths, records, offset, groups, colors, s
                   style={{ width: widths[f.id] ?? DEFAULT_WIDTH, minWidth: widths[f.id] ?? DEFAULT_WIDTH }}
                 >
                   {isSortable(f) ? (
-                    <button type="button" onClick={() => onSort(nextSort(sort, f.id))} className="flex w-full items-center gap-1.5 text-left hover:text-primary" title={`Sort by ${f.name}`}>
+                    <button type="button" onClick={() => onSort(nextSort(sort, f.id))} className="flex w-full items-center gap-1.5 text-left hover:text-primary-text" title={`Sort by ${f.name}`}>
                       <FieldTypeIcon type={f.type} />
                       <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                      <Icon aria-hidden className={cn("size-3.5 shrink-0", active ? "text-primary" : "text-faint")} />
+                      <Icon aria-hidden className={cn("size-3.5 shrink-0", active ? "text-primary-text" : "text-faint")} />
                     </button>
                   ) : (
                     <span className="flex items-center gap-1.5">

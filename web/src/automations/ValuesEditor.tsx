@@ -13,7 +13,7 @@ import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
-import { isComputed, selectChoicesOf, stringItems } from "@/lib/cells/kinds";
+import { isComputed, isMultilineText, selectChoicesOf, stringItems } from "@/lib/cells/kinds";
 import { parseText } from "@/lib/cells/parse";
 import { toWire } from "@/lib/cells/wire";
 import { atLeast } from "@/lib/roles";
@@ -22,7 +22,7 @@ import { TemplateInput } from "./TemplateInput";
 import { hasTemplate, type TemplateContext } from "./templates";
 
 /** Types whose natural editor is a text box, so a template fits directly. */
-const TEXT_TYPES = new Set<Field["type"]>(["single_line_text", "long_text", "email", "url", "phone", "barcode"]);
+const TEXT_TYPES = new Set<Field["type"]>(["text", "rich_text", "email", "url", "phone", "barcode"]);
 
 /** Fields an action may set: no computed fields, and no attachments (they need an upload). */
 export function writableFields(table: Table | undefined): Field[] {
@@ -175,7 +175,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
       </div>
       <div className="min-w-0">
         {mode === "template" ? (
-          <TemplateInput value={templateText(value)} onChange={(v) => onChange(v)} ctx={ctx} label={field.name} multiline={field.type === "long_text"} rows={3} placeholder={templatePlaceholder(field)} />
+          <TemplateInput value={templateText(value)} onChange={(v) => onChange(v)} ctx={ctx} label={field.name} multiline={isMultilineText(field)} rows={3} placeholder={templatePlaceholder(field)} />
         ) : (
           <FieldEditor key={`${field.id}:${JSON.stringify(value)}`} field={field} value={value} variant="form" labelledBy={labelId} onCommit={commit} onCancel={() => {}} />
         )}
@@ -192,7 +192,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => pick(m)}
-                className={cn("rounded px-1.5 py-0.5", mode === m ? "bg-primary-soft text-primary" : "text-muted hover:bg-hover")}
+                className={cn("rounded px-1.5 py-0.5", mode === m ? "bg-primary-soft text-primary-text" : "text-muted hover:bg-hover")}
               >
                 {m === "value" ? "Fixed value" : "Template"}
               </button>
@@ -209,8 +209,8 @@ type AutomationEnvCollaborators = ReturnType<typeof useAutomationEnv>["collabora
 
 function templatePlaceholder(field: Field): string | undefined {
   switch (field.type) {
-    case "single_line_text":
-    case "long_text":
+    case "text":
+    case "rich_text":
       return "Text, with {{placeholders}}";
     case "email":
       return "name@example.com or a placeholder";

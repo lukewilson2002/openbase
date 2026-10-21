@@ -21,7 +21,8 @@ import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDia
 import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/env";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { uploadFiles } from "@/components/record/editors/AttachmentEditor";
-import { LINKED_PARAM, RecordPanel } from "@/views/common/RecordPanel";
+import { FloatingRecordPeek, linkedTableOf, type FloatingPeekTarget } from "@/components/record/linked/LinkedRecords";
+import { LINKED_PARAM, RecordPanel, formatTrail } from "@/views/common/RecordPanel";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -65,7 +66,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const toast = useToast();
   const qc = useQueryClient();
   const me = useMe();
-  const { resolved } = useTheme();
+  const { resolved, accent } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const timeZone = me.data?.timezone || browserTimeZone();
   const canEdit = atLeast(role, "editor");
@@ -174,13 +175,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
 
-  const getRowColor = useCallback((row: number): string | undefined => {
-    const ri = rowMapRef.current.recordIndexAt(row);
-    if (ri < 0) return undefined;
-    const rec = dataRef.current.getRecord(ri);
-    return rec ? dataRef.current.rowColor(rec.id) : undefined;
-  }, []);
-
   const recordAtRow = useCallback((row: number): TableRecord | undefined => dataRef.current.getRecord(rowMapRef.current.recordIndexAt(row)), []);
 
   const reader = useMemo<GridReader>(
@@ -211,10 +205,20 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     if (range) await dataRef.current.loadRange(range[0], range[1]);
   }, []);
 
+  const visibleRows = useRef<[number, number] | null>(null);
   const onVisibleRowsChange = useCallback((first: number, last: number) => {
+    visibleRows.current = [first, last];
     const range = rowMapRef.current.recordRange(first, last);
     if (range) dataRef.current.ensureRange(range[0], range[1]);
   }, []);
+  // Folding or unfolding a group moves other records into the rows on screen without a scroll: those
+  // rows now show records that may not be loaded yet, so the same rows are asked for again.
+  useEffect(() => {
+    const rows = visibleRows.current;
+    if (!rows) return;
+    const range = rowMap.recordRange(rows[0], rows[1]);
+    if (range) dataRef.current.ensureRange(range[0], range[1]);
+  }, [rowMap]);
 
   const onCommitEdits = useCallback(
     (edits: readonly CellEdit[]) => {
@@ -457,6 +461,23 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [recordAtRow, openRecord],
   );
 
+  // A linked record's chip under the pointer: its preview floats over it, with Open (the cell's record
+  // in the panel, and the linked one on top of it, a step back away).
+  const [linkHover, setLinkHover] = useState<FloatingPeekTarget | null>(null);
+  const openLinkedFromCell = useCallback(
+    (row: number, tableId: string, recordId: string) => {
+      const rec = recordAtRow(row);
+      if (!rec) return;
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("record", rec.id);
+        next.set(LINKED_PARAM, formatTrail([{ tableId, recordId }]));
+        return next;
+      });
+    },
+    [recordAtRow, setSearchParams],
+  );
+
   /** Neighbouring record ids in grid order (for prev/next in the expanded record). */
   const neighbours = useMemo(() => {
     if (!openRecordId) return { prev: null as string | null, next: null as string | null };
@@ -647,6 +668,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const empty = !data.loading && total === 0 && !data.error;
   const gridProps: GridAdapterProps = {
     columns,
+    fitColumns: !data.loading,
     rowCount: rowCountForGrid,
     rowHeight,
     freezeColumns,
@@ -655,12 +677,12 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     rowNumber,
     searchTerm: debouncedSearch,
     dark,
+    accent,
     canEdit,
     canReorderRows: reorderable,
     canReorderColumns: true,
     version: data.version + (collapsed.size > 0 ? 1 : 0) + (hasSummary ? (aggregations.dataUpdatedAt % 1000) : 0),
     getCell,
-    getRowColor,
     onVisibleRowsChange,
     onCommitEdits,
     onPaste,
@@ -684,6 +706,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     canAddField: canManageFields,
     onAddField: () => setFieldDialog({ mode: "create" }),
     onDropFiles: (point, files) => void attach(files, point),
+    onLinkHover: (hit) => {
+      const field = hit ? columns[hit.point.col]?.field : undefined;
+      const linked = field ? linkedTableOf(schema, field) : undefined;
+      setLinkHover(hit && linked ? { table: linked, recordId: hit.recordId, rect: hit.rect, open: () => openLinkedFromCell(hit.point.row, linked.id, hit.recordId) } : null);
+    },
     renderEditor,
   };
 
@@ -841,6 +868,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           if (confirmDelete) await opsRef.current.deleteRecords(confirmDelete.ids);
         }}
       />
+      <FloatingRecordPeek at={linkHover} format={format} emails={emails} role={role} />
       {openRecordId && (
         <RecordPanel
           schema={schema}

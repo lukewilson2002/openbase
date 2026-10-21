@@ -131,7 +131,7 @@ function Steps({ children }: { children: ReactNode }) {
 
 function ExternalDocLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary-text underline-offset-2 hover:underline">
       {children}
       <ExternalLink aria-hidden className="size-3" />
     </a>
@@ -155,7 +155,7 @@ function CreateTokenLine() {
   return (
     <p className="text-xs text-muted">
       Replace YOUR_TOKEN with one from{" "}
-      <Link to="/account?tab=tokens" className="text-primary underline-offset-2 hover:underline">
+      <Link to="/account?tab=tokens" className="text-primary-text underline-offset-2 hover:underline">
         API tokens
       </Link>
       .

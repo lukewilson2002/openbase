@@ -12,8 +12,13 @@ import { isGroupable } from "@/components/viewbar/config";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { displayText } from "@/lib/cells/format";
+import { cn } from "@/lib/cn";
 import { resolveDateFields } from "../common/dateFields";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { unscheduledTransient } from "../calendar/eventMath";
+import { UnscheduledList } from "../common/UnscheduledList";
+import { usePersistedSet } from "../common/usePersistedSet";
 import { SegmentedSwitch } from "../common/SegmentedSwitch";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
@@ -82,11 +87,30 @@ function TimelineInner(props: ViewProps) {
   }, [fields, axis.fromDay, axis.toDay]);
   const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, range, transient: setup.transient, enabled: !!range });
   const data = records.data;
-  // Two one-record queries for the footer: how many records the view has, and how many of them
-  // have no start date (they can never show on the timeline, so the footer says so).
+  // A one-record query for the footer's count of the view's records.
   const counted = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, transient: setup.transient, cap: 1, variant: "count", enabled: !!fields });
+  // The records without a start date, listed in the unscheduled column to drag onto the timeline
+  // (loaded even while it is folded: the folded strip says how many there are).
   const undatedTransient = useMemo(() => (fields ? { ...setup.transient, ...unscheduledTransient(cfg.queryConfig.filter, fields.start.field.id) } : null), [fields, setup.transient, cfg.queryConfig.filter]);
-  const undated = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, transient: undatedTransient, cap: 1, variant: "undated", enabled: !!fields });
+  const undated = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone, transient: undatedTransient, variant: "undated", enabled: !!fields });
+  // Records dropped on the timeline leave the list at once, before the refetch lands (and a record
+  // the list still has once it has a date is left out too); an id is forgotten once the list no longer has it.
+  const [placedIds, setPlacedIds] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const present = new Set((undated.data?.records ?? []).map((r) => r.id));
+    setPlacedIds((s) => {
+      const kept = [...s].filter((id) => present.has(id));
+      return kept.length === s.size ? s : new Set(kept);
+    });
+  }, [undated.data]);
+  const startId = fields?.start.field.id;
+  const unscheduled = useMemo(() => (undated.data?.records ?? []).filter((r) => !placedIds.has(r.id) && (!startId || r.values[startId] == null || r.values[startId] === "")), [undated.data, placedIds, startId]);
+  // Like the calendar's: remembered per view on a desktop (open until folded); a phone opens it when asked.
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const [folded, toggleFolded] = usePersistedSet("ob-timeline-unscheduled-folded");
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const unscheduledOpen = desktop ? !folded.has(view.id) : phoneOpen;
+  const toggleUnscheduled = () => (desktop ? toggleFolded(view.id) : setPhoneOpen((o) => !o));
 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const canEditDates = setup.canEdit && isWritableDate(fields?.start.field);
@@ -191,13 +215,25 @@ function TimelineInner(props: ViewProps) {
 
   // ---- writes ------------------------------------------------------------------------------------
   const onCommit = useCallback(
-    (recordId: string, mode: DragMode, days: number) => {
+    (recordId: string, mode: DragMode, days: number, toLane?: string) => {
       const span = spans.get(recordId);
       if (!span || !fields) return;
-      const values = dragWrites(span, dragSpan(span, mode, days), mode, fields, timeZone);
+      const values: Record<string, unknown> = days !== 0 ? dragWrites(span, dragSpan(span, mode, days), mode, fields, timeZone) : {};
+      // Into another swim lane: the lane's value. A field with several values keeps the others; only
+      // the one that drew it in its old lane (its first) becomes the new lane's.
+      const lane = toLane !== undefined ? laneModels.find((l) => l.key === toLane) : undefined;
+      const record = recordById.get(recordId);
+      if (lane?.fieldId && lane.value !== undefined && record) {
+        const cur = record.values[lane.fieldId];
+        const idOf = (x: unknown) => (x && typeof x === "object" ? (x as { id?: unknown }).id : x);
+        if (Array.isArray(cur) && Array.isArray(lane.value) && cur.length > 1) {
+          const target = lane.value[0];
+          values[lane.fieldId] = [target, ...cur.slice(1).filter((x) => idOf(x) !== idOf(target))];
+        } else values[lane.fieldId] = lane.value;
+      }
       if (Object.keys(values).length > 0) void writes.update(recordId, values);
     },
-    [spans, fields, timeZone, writes],
+    [spans, fields, timeZone, writes, laneModels, recordById],
   );
   const create = useCallback(
     async (values: Record<string, unknown>) => {
@@ -217,11 +253,43 @@ function TimelineInner(props: ViewProps) {
     [fields, timeZone, laneModels, create],
   );
 
+  // A record dragged in from the unscheduled column: dated on that day (its end the same day), and
+  // moved into the lane it was dropped on when lanes come from a field.
+  const onDropRecord = useCallback(
+    (recordId: string, laneKey: string, day: number) => {
+      if (!fields) return;
+      const values: Record<string, unknown> = createWrites(day, day, fields, timeZone);
+      const lane = laneModels.find((l) => l.key === laneKey);
+      if (lane?.fieldId && lane.value !== undefined && !(lane.fieldId in values)) values[lane.fieldId] = lane.value;
+      setPlacedIds((s) => new Set(s).add(recordId));
+      void writes.update(recordId, values);
+    },
+    [fields, timeZone, laneModels, writes],
+  );
+
+  // A bar taken off the timeline (Delete, or dropped on the unscheduled column): its dates cleared, it
+  // goes back to the unscheduled records.
+  const onUnschedule = useCallback(
+    (recordId: string) => {
+      if (!fields) return;
+      const values: Record<string, unknown> = { [fields.start.field.id]: null };
+      if (fields.end) values[fields.end.field.id] = null;
+      setPlacedIds((s) => {
+        const next = new Set(s);
+        next.delete(recordId);
+        return next;
+      });
+      void writes.update(recordId, values);
+    },
+    [fields, writes],
+  );
+  const unscheduleZone = useRef<HTMLDivElement>(null);
+  const [overUnscheduled, setOverUnscheduled] = useState(false);
+
   // ---- toolbar -------------------------------------------------------------------------------------
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
-  const settingLabel = fields ? (fields.end ? `Dates: ${fields.start.field.name} → ${fields.end.field.name}` : `Dates: ${fields.start.field.name}`) : "Dates";
   const settings = (
-    <ViewSettings label={settingLabel} active={!!fields} note={note}>
+    <ViewSettings note={note}>
       <FieldSelect label="Start date field" fields={dateFields} value={fields?.start.field.id ?? ""} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
       <FieldSelect
         label="End date field"
@@ -280,20 +348,22 @@ function TimelineInner(props: ViewProps) {
     // A view with no dated records still needs a row to drag a new one across.
     const lanesToDraw = chartLanes.length > 0 ? chartLanes : [{ lane: { ...NO_LANE }, bars: [] }];
     body = (
-      <>
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
+          <button type="button" onClick={goToday} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+            Today
+          </button>
+          {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
           <div className="flex items-center gap-0.5">
             <IconButton label={`Earlier ${pageLabel}s`} size="sm" onClick={() => chart.current?.page(-1)}>
               <ChevronLeft aria-hidden className="size-4" />
             </IconButton>
-            <button type="button" onClick={goToday} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
-              Today
-            </button>
+            <h3 className="min-w-[10.5rem] text-center text-base font-bold tabular-nums">{shown ? rangeTitle(shown.from, shown.last) : ""}</h3>
             <IconButton label={`Later ${pageLabel}s`} size="sm" onClick={() => chart.current?.page(1)}>
               <ChevronRight aria-hidden className="size-4" />
             </IconButton>
           </div>
-          <h3 className="text-base font-bold">{shown ? rangeTitle(shown.from, shown.last) : ""}</h3>
           {records.fetching && <Spinner className="size-4" label="Loading records" />}
           <SegmentedSwitch label="Timeline scale" className="ml-auto" value={scale} options={SCALE_OPTIONS} onChange={changeScale} />
         </div>
@@ -306,6 +376,8 @@ function TimelineInner(props: ViewProps) {
           nowMs={wallNow(timeZone)}
           showLabels={showLabels}
           labelHeading={grouped ? (groupField?.name ?? table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name) : primary?.name}
+          labelWidth={tl.label_width}
+          onLabelWidth={cfg.canConfigure ? (w) => cfg.update((c) => setTimeline(c, { label_width: w })) : undefined}
           canCreate={canEditDates && endWritable}
           focus={focus}
           loading={records.loading}
@@ -321,13 +393,41 @@ function TimelineInner(props: ViewProps) {
             centerDay.current = d;
           }}
           onVisibleDays={onVisibleDays}
+          onDropRecord={canEditDates && endWritable ? onDropRecord : undefined}
+          onUnschedule={canEditDates && endWritable ? onUnschedule : undefined}
+          unscheduleZone={unscheduleZone}
+          onOverUnschedule={setOverUnscheduled}
         />
-      </>
+        </div>
+        {/* No height of its own: as tall as the timeline beside it, scrolling inside. */}
+        <div ref={unscheduleZone} className={cn("relative shrink-0", unscheduledOpen ? "w-52" : "w-11")}>
+          <div className="absolute inset-0 flex">
+            <UnscheduledList
+              open={unscheduledOpen}
+              onToggle={toggleUnscheduled}
+              records={unscheduled}
+              primary={primary}
+              fields={sideFields}
+              descriptionField={descriptionField}
+              table={table}
+              role={setup.role}
+              format={setup.format}
+              emails={setup.emails}
+              loading={undated.loading}
+              truncated={!!undated.data?.truncated}
+              draggable={canEditDates && endWritable}
+              nativeDrag
+              dropActive={overUnscheduled}
+              hint="Drag a record onto the timeline to give it a date, or a bar here to clear its dates."
+              onOpen={setup.openRecord}
+            />
+          </div>
+        </div>
+      </div>
     );
   }
 
   const total = counted.data?.total;
-  const undatedCount = undated.data?.total ?? 0;
   return (
     <ViewFrame
       setup={setup}
@@ -342,7 +442,6 @@ function TimelineInner(props: ViewProps) {
             {total !== undefined && (
               <span aria-live="polite">
                 {itemsLabel(total)}
-                {undatedCount > 0 && ` · ${undatedCount.toLocaleString()} without a date ${undatedCount === 1 ? "isn’t" : "aren’t"} shown`}
               </span>
             )}
             {depField && edges.some((e) => e.violated) && <span className="text-danger">{edges.filter((e) => e.violated).length} dependencies overlap</span>}

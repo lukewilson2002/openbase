@@ -32,7 +32,7 @@ async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view(
     let fields = t["fields"].as_array().unwrap();
     assert_eq!(fields.len(), 2, "Name, plus the Notes the fixture added");
     assert_eq!(fields[0]["name"], "Name");
-    assert_eq!(fields[0]["type"], "single_line_text");
+    assert_eq!(fields[0]["type"], "text");
     assert_eq!(fields[0]["id"], t["primary_field_id"]);
     let views = t["views"].as_array().unwrap();
     assert_eq!(

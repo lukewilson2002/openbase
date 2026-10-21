@@ -41,8 +41,9 @@ pub use filter::{
 };
 pub use search::{matches_search, search_needle};
 pub use sort::{
-    Chunk, EMPTY_GROUP_LABEL, GroupKey, GroupSpan, SortKey, compare, group_key, group_spans,
-    sort_key, sort_rows, sort_rows_with_groups, validate_groups, validate_sorts,
+    Chunk, EMPTY_GROUP_LABEL, GroupKey, GroupSpan, NO_DATE_GROUP_LABEL, SortKey, compare,
+    group_day, group_key, group_spans, period_start, sort_key, sort_rows, sort_rows_with_groups,
+    validate_groups, validate_sorts,
 };
 
 /// A record as seen by the query functions.
@@ -189,8 +190,8 @@ pub(crate) enum Kind {
 
 pub(crate) fn kind_of(field: &Field) -> Kind {
     match &field.kind {
-        FieldKind::SingleLineText(_)
-        | FieldKind::LongText(_)
+        FieldKind::Text(_)
+        | FieldKind::RichText(_)
         | FieldKind::Email(_)
         | FieldKind::Url(_)
         | FieldKind::Phone(_)

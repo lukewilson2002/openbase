@@ -562,7 +562,7 @@ mod tests {
                     table_id: "tbl1".into(),
                     name: "Name".into(),
                     description: None,
-                    kind: FieldKind::SingleLineText(TextOptions::default()),
+                    kind: FieldKind::Text(TextOptions::default()),
                 }],
                 views: vec![],
             }],

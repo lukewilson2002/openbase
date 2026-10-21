@@ -78,7 +78,7 @@ describe("column names as the server derives them", () => {
 });
 
 describe("matching columns to fields", () => {
-  const name = field("single_line_text", {}, { id: "f_name", name: "Name" });
+  const name = field("text", { multiline: false }, { id: "f_name", name: "Name" });
   const qty = field("number", { precision: 0, allow_negative: true }, { id: "f_qty", name: "Qty" });
   const owner = field("user", { multiple: false, notify: false }, { id: "f_owner", name: "Owner" });
   const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });

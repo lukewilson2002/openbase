@@ -68,6 +68,14 @@ describe("KanbanView", () => {
     expect(screen.queryByText("4 items")).not.toBeInTheDocument();
   });
 
+  it("fills each coloured stack with its choice's colour instead of a dot; Uncategorized stays neutral", async () => {
+    setup();
+    const doing = await screen.findByRole("listitem", { name: "Stack: Doing" });
+    expect(doing).toHaveClass("ob-hue-blue", "ob-fill");
+    expect(doing.querySelector(".ob-dot")).toBeNull();
+    expect(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).not.toHaveClass("ob-fill");
+  });
+
   it("shows the setup prompt when no stack field is chosen and saves the choice", async () => {
     const user = userEvent.setup();
     const view = viewWithConfig("viw1", "kanban", {});
@@ -82,20 +90,21 @@ describe("KanbanView", () => {
     expect(saved.config.kanban.stack_field_id).toBe("f_status");
   });
 
-  it("names the stack field in the toolbar, tinted, and keeps the stack and cover choices behind it", async () => {
+  it("keeps the stack and cover choices behind the toolbar's View button", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    const tool = screen.getAllByRole("button", { name: "Stacked by Status" })[0]!;
-    expect(tool.className).toContain("bg-primary-soft");
+    const tool = screen.getAllByRole("button", { name: "View" })[0]!;
+    // A plain tool: the view's own settings are always there, so it is never "on".
+    expect(tool).not.toHaveClass("bg-tool-on");
     await user.click(tool);
     expect(await screen.findByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
     expect(screen.getByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
   });
 
   describe("description", () => {
-    const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
-    const brief = field("long_text", { rich: true }, { id: "f_brief", name: "Brief" });
+    const notes = field("text", { multiline: true }, { id: "f_notes", name: "Notes" });
+    const brief = field("rich_text", {}, { id: "f_brief", name: "Brief" });
     const label = field("formula", { expression: "{Name}", result_type: "text" }, { id: "f_label", name: "Label" });
     const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });
     // The description is the view's, not the board's: it sits beside `kanban` in the config.
@@ -117,9 +126,9 @@ describe("KanbanView", () => {
       const user = userEvent.setup();
       const { api } = setupNotes(board());
       await screen.findByRole("listitem", { name: "Stack: Todo" });
-      await user.click(screen.getAllByRole("button", { name: "Stacked by Status" })[0]!);
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
       const select = await screen.findByRole("combobox", { name: "Description" });
-      // Nothing is picked for the view, even though the table has exactly one plain long text.
+      // Nothing is picked for the view, even though the table has exactly one multiline text.
       expect(select).toHaveValue("");
       const options = within(select).getAllByRole("option").map((o) => o.textContent);
       expect(options).toEqual(["No description", "Notes", "Brief", "Label"]);

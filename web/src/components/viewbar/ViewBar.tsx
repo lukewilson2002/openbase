@@ -103,7 +103,7 @@ export interface ViewBarProps {
   /** Label of the hide-fields menu ("Hide fields" in the grid, "Card fields" on card views). */
   hideFieldsNoun?: string;
   /**
-   * The view type's main setting ("Stacked by How often", "Dates from Last done"), shown first: it
+   * The view type's own settings (the "View" tool: what a kanban stacks by, a calendar's dates), shown first: it
    * decides what the view is, so it reads before the tools that narrow it down.
    */
   setting?: ReactNode;
@@ -127,7 +127,8 @@ export interface MoreToggle {
 
 const toolClass =
   "inline-flex h-9 items-center gap-1.5 rounded-[9px] px-2.5 text-[0.875rem] text-fg transition-colors hover:bg-hover data-[state=open]:bg-hover pointer-coarse:h-11";
-const toolActiveClass = "bg-primary-soft text-primary-ink hover:bg-primary-soft data-[state=open]:bg-primary-soft";
+// Neutral, not the accent: several tools are often on at once, and the accent marks what is selected.
+const toolActiveClass = "bg-tool-on hover:bg-tool-on-hover data-[state=open]:bg-tool-on-hover";
 
 /** Classes of a toolbar tool, tinted while it is in use; views use it for their own settings. */
 export function toolButtonClass(active?: boolean): string {
@@ -227,13 +228,13 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
                   }}
                   className={cn(
                     "flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[0.875rem] text-fg outline-none hover:bg-hover focus-visible:bg-hover disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:text-[0.9375rem]",
-                    e.kind === "panel" && e.active && "bg-primary-soft font-semibold text-primary-ink hover:bg-primary-soft",
+                    e.kind === "panel" && e.active && "bg-tool-on hover:bg-tool-on-hover",
                   )}
                 >
                   <span className="flex shrink-0 items-center [&>svg]:size-4">{e.kind === "action" && e.busy ? <Spinner className="size-4" label="Working" /> : e.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{e.label}</span>
-                  {e.kind === "panel" && e.value && <span className="max-w-[45%] truncate text-[0.8125rem] font-semibold text-primary">{e.value}</span>}
-                  {e.kind === "toggle" && e.checked && <Check aria-hidden className="size-4 shrink-0 text-primary" />}
+                  {e.kind === "panel" && e.value && <span className={cn("max-w-[45%] truncate text-[0.8125rem] font-semibold", !e.active && "text-primary-text")}>{e.value}</span>}
+                  {e.kind === "toggle" && e.checked && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
                 </button>
               ),
             )}
@@ -390,6 +391,10 @@ export function ViewBar(props: ViewBarProps) {
   const filterWhat = filterCount > 0 ? fieldsPhrase(table, firstConditionField(config.filter), filterCount) : undefined;
   const sortWhat = config.sorts.length > 0 ? fieldsPhrase(table, config.sorts[0]!.field_id, config.sorts.length) : undefined;
   const groupWhat = config.groups.length > 0 ? fieldsPhrase(table, config.groups[0]!.field_id, config.groups.length) : undefined;
+  const rc = config.row_color;
+  const colorWhat = !rowColorActive || !rc ? undefined : rc.mode === "by_select" ? (table.fields.find((f) => f.id === rc.field_id)?.name ?? "a field") : "conditions";
+  // Short is how every view starts: any other height is a choice, named like the others ("Tall rows").
+  const heightWhat = config.row_height !== "short" ? `${ROW_HEIGHT_LABELS[config.row_height]} rows` : undefined;
   const hideNoun = props.hideFieldsNoun ?? "Hide fields";
   const hiddenLabel = hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : hideNoun;
 
@@ -438,8 +443,8 @@ export function ViewBar(props: ViewBarProps) {
     { id: "sort", label: sortWhat ? `Sorted by ${sortWhat}` : "Sort", menuLabel: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, note: queryNote, wide: true, panel: sortPanel },
     ...(features.group ? [{ id: "group", label: groupWhat ? `Grouped by ${groupWhat}` : "Group", menuLabel: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, note: queryNote, wide: true, panel: groupPanel }] : []),
     { id: "hide", label: hiddenLabel, menuLabel: hideNoun, icon: <EyeOff aria-hidden />, value: hiddenCount > 0 ? `${hiddenCount} hidden` : undefined, active: hiddenCount > 0, panel: <HideFields table={table} config={config} update={update} /> },
-    ...(features.color ? [{ id: "color", label: "Color", menuLabel: "Color", icon: <PaintBucket aria-hidden />, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> }] : []),
-    ...(features.rowHeight ? [{ id: "row-height", label: "Row height", menuLabel: "Row height", icon: <Rows3 aria-hidden />, panel: rowHeightPanel }] : []),
+    ...(features.color ? [{ id: "color", label: colorWhat ? `Color by ${colorWhat}` : "Color", menuLabel: "Color", icon: <PaintBucket aria-hidden />, value: colorWhat, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> }] : []),
+    ...(features.rowHeight ? [{ id: "row-height", label: heightWhat ?? "Row height", menuLabel: "Row height", icon: <Rows3 aria-hidden />, value: heightWhat ? ROW_HEIGHT_LABELS[config.row_height] : undefined, active: !!heightWhat, panel: rowHeightPanel }] : []),
   ];
   const toolEntry = (t: ToolDef): ToolEntry => ({ kind: "panel", id: t.id, label: t.menuLabel, icon: t.icon, value: t.value, active: t.active, note: t.note, wide: t.wide, panel: t.panel });
   // Always in More, however wide the window: the view type's switches, Add field and Download CSV.
@@ -521,7 +526,7 @@ export function ViewBar(props: ViewBarProps) {
             <button
               type="button"
               aria-label={activeTools > 0 ? `Tools: filter, sort and more (${activeTools} on)` : "Tools: filter, sort and more"}
-              className={cn("inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] hover:bg-hover data-[state=open]:bg-hover", activeTools > 0 ? "text-primary" : "text-muted")}
+              className={cn("inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] hover:bg-hover data-[state=open]:bg-hover", activeTools > 0 ? "text-primary-text" : "text-muted")}
             >
               <SlidersHorizontal aria-hidden className="size-5" />
             </button>
@@ -537,7 +542,6 @@ export function ViewBar(props: ViewBarProps) {
     <DesktopBar
       toolDefs={toolDefs}
       moreEntries={moreEntries}
-      moreActive={toolDefs.some((t) => t.id === "color" && t.active)}
       switcher={<ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink" />}
       locked={locked}
       notSaved={notSaved}
@@ -578,7 +582,6 @@ const TOOL_GAP = 2;
 function DesktopBar({
   toolDefs,
   moreEntries,
-  moreActive,
   switcher,
   locked,
   notSaved,
@@ -588,7 +591,6 @@ function DesktopBar({
 }: {
   toolDefs: ToolDef[];
   moreEntries: (overflow: ToolDef[]) => ToolEntry[];
-  moreActive: boolean;
   switcher: ReactNode;
   locked: ReactNode;
   notSaved: ReactNode;
@@ -654,7 +656,7 @@ function DesktopBar({
             label="More view tools"
             entries={entries}
             trigger={
-              <button type="button" className={cn(toolClass, "shrink-0 gap-1 pr-2", (moreActive || overflow.some((t) => t.active)) && toolActiveClass)}>
+              <button type="button" className={cn(toolClass, "shrink-0 gap-1 pr-2", overflow.some((t) => t.active) && toolActiveClass)}>
                 More <ChevronDown aria-hidden className="size-3.5" />
               </button>
             }

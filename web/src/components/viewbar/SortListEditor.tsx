@@ -1,7 +1,10 @@
-/** Editor for an ordered list of {field, direction} pairs: view sorts (up to 10) and groups (up to 3). */
+/**
+ * Editor for an ordered list of {field, direction} pairs: view sorts (up to 10) and groups (up to 3).
+ * A group level on a date field also picks how much time each group spans.
+ */
 import { useState } from "react";
 import { ArrowDown, ArrowUp, GripVertical, Plus, X } from "lucide-react";
-import type { Direction, Field, Sort } from "@/api/types";
+import type { DateGranularity, Direction, Field, Group } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InlineSelect } from "./InlineSelect";
@@ -10,15 +13,24 @@ import { kindClassOf } from "@/lib/cells/kinds";
 export interface SortListEditorProps {
   /** Noun used in labels: "sort" or "group". */
   noun: "sort" | "group";
-  items: readonly Sort[];
+  /** Sorts or group levels (a sort is a group level without a granularity). */
+  items: readonly Group[];
   fields: readonly Field[];
   max: number;
   readOnly?: boolean;
   onAdd: (fieldId: string) => void;
-  onUpdate: (index: number, patch: Partial<Sort>) => void;
+  onUpdate: (index: number, patch: Partial<Group>) => void;
   onRemove: (index: number) => void;
   onMove: (from: number, to: number) => void;
 }
+
+export const GRANULARITY_LABELS: Record<DateGranularity, string> = {
+  day: "by day",
+  week: "by week",
+  month: "by month",
+  quarter: "by quarter",
+  year: "by year",
+};
 
 function directionLabels(field: Field | undefined): [string, string] {
   switch (field ? kindClassOf(field) : "text") {
@@ -77,6 +89,15 @@ export function SortListEditor({ noun, items, fields, max, readOnly, onAdd, onUp
                   </option>
                 ))}
               </InlineSelect>
+              {noun === "group" && field && kindClassOf(field) === "date" && (
+                <InlineSelect aria-label={`Granularity for group ${i + 1}`} width="w-32" disabled={readOnly} value={s.granularity ?? "day"} onChange={(e) => onUpdate(i, { granularity: e.target.value as DateGranularity })}>
+                  {(Object.keys(GRANULARITY_LABELS) as DateGranularity[]).map((g) => (
+                    <option key={g} value={g}>
+                      {GRANULARITY_LABELS[g]}
+                    </option>
+                  ))}
+                </InlineSelect>
+              )}
               <InlineSelect aria-label={`Direction for ${noun} ${i + 1}`} width="w-44" disabled={readOnly} value={s.direction} onChange={(e) => onUpdate(i, { direction: e.target.value as Direction })}>
                 <option value="asc">{asc}</option>
                 <option value="desc">{desc}</option>

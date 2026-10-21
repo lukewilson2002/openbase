@@ -12,7 +12,7 @@ import { attachmentsApi } from "@/api/records";
 import { fileExt, hasPreview, isVideo, previewAlignTop } from "@/lib/filePreview";
 import type { RecordCellModel } from "../adapter";
 import { isObCell, withPending, type ObCell } from "./cells";
-import { DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fitText, roundRectPath, type ChipDraw } from "./draw";
+import { chipFont, chipPadding, DANGER, drawCellText, drawChevron, drawChips, drawExpandIcon, drawHeart, drawStar, fitText, roundRectPath, type ChipDraw } from "./draw";
 import { mixColors, paletteColor, ratingColor } from "@/lib/cells/palette";
 
 export interface RendererContext {
@@ -81,9 +81,15 @@ function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
   const gap = 4;
   let x = rect.x + theme.cellHorizontalPadding;
   const y = rect.y + (rect.height - size) / 2;
-  const fits = Math.max(1, Math.floor((rect.x + rect.width - 4 - x + gap) / (size + gap)));
-  const shown = Math.min(files.length, fits);
-  for (const [i, f] of files.slice(0, shown).entries()) {
+  const room = rect.x + rect.width - 4 - x + gap;
+  const fits = Math.max(1, Math.floor(room / (size + gap)));
+  // The files that do not fit are counted after the last tile that does, as plain text ("+3"): room is
+  // kept for the count, a tile giving way to it when needed.
+  const countFont = `${theme.baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`)}`;
+  ctx.font = countFont;
+  let shown = Math.min(files.length, fits);
+  while (shown > 1 && shown < files.length && shown * (size + gap) + ctx.measureText(`+${files.length - shown}`).width > room) shown--;
+  for (const f of files.slice(0, shown)) {
     ctx.save();
     roundRectPath(ctx, x, y, size, size, 4);
     ctx.clip();
@@ -107,29 +113,15 @@ function drawAttachments(args: DrawArgs<ObCell>, m: RecordCellModel): void {
       ctx.fillText(fileExt(f.filename), x + size / 2, y + size / 2);
       ctx.textAlign = "left";
     }
-    // The files that do not fit are counted on the last tile that does.
-    if (i === shown - 1 && files.length > shown) drawMoreBadge(ctx, x, y, size, files.length - shown);
     ctx.restore();
     x += size + gap;
   }
-}
-
-/** "+3" in a tile's bottom-right corner. */
-function drawMoreBadge(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, more: number): void {
-  const label = `+${more}`;
-  ctx.font = `600 ${Math.max(10, Math.round(size / 7))}px system-ui, sans-serif`;
-  const h = Math.max(14, Math.round(size / 5));
-  const w = ctx.measureText(label).width + h * 0.6;
-  const bx = x + size - w - 3;
-  const by = y + size - h - 3;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-  roundRectPath(ctx, bx, by, w, h, h / 2);
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, bx + w / 2, by + h / 2 + 0.5);
-  ctx.textAlign = "left";
+  if (files.length > shown) {
+    ctx.font = countFont;
+    ctx.fillStyle = theme.textLight;
+    ctx.textBaseline = "middle";
+    ctx.fillText(`+${files.length - shown}`, x, y + size / 2 + 0.5);
+  }
 }
 
 /** A small play mark in a preview's corner, so a video's first frame reads as a video. */
@@ -177,7 +169,7 @@ function drawRecordCell(args: DrawArgs<ObCell>, m: RecordCellModel, rc: Renderer
   const textColor = theme.textDark;
   switch (shape) {
     case "text":
-    case "long_text":
+    case "multiline":
     case "date":
       drawCellText(ctx, theme, rect, m.display, { color: isFormulaError(m.value) ? DANGER : textColor, highlight: hl });
       break;
@@ -239,7 +231,8 @@ function drawGroup(args: DrawArgs<ObCell>, rc: RendererContext): void {
   const data = args.cell.data;
   if (data.ob !== "group") return;
   const m = data.model;
-  ctx.fillStyle = rc.dark ? "#232833" : "#eef1f6";
+  // The theme's own greys, so the band follows the accent theme (glide/theme.ts) like the cells do.
+  ctx.fillStyle = rc.dark ? theme.bgCellMedium : theme.bgHeaderHovered;
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
   const indent = m.depth * 14;
   drawChevron(ctx, rect.x + 14 + indent, rect.y + rect.height / 2, !m.collapsed, theme.textMedium);
@@ -260,7 +253,9 @@ function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   const data = args.cell.data;
   if (data.ob !== "summary") return;
   const m = data.model;
-  ctx.fillStyle = rc.dark ? "#1f242d" : "#f6f7f9";
+  const hovering = args.hoverAmount > 0.01;
+  // The same surface as the cells above; under the pointer, a light wash of the app's colour (it opens a menu).
+  ctx.fillStyle = hovering ? mixColors(theme.bgCell, theme.accentColor, rc.dark ? 0.18 : 0.1) : theme.bgCell;
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
   ctx.fillStyle = theme.borderColor;
   ctx.fillRect(rect.x, rect.y, rect.width, 1);
@@ -268,7 +263,6 @@ function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   ctx.font = small;
   ctx.textBaseline = "middle";
   const y = rect.y + rect.height / 2 + 0.5;
-  const hovering = args.hoverAmount > 0.01;
   if (!m.label) {
     if (hovering) {
       ctx.fillStyle = theme.textLight;
@@ -284,10 +278,62 @@ function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   ctx.fillText(text, rect.x + rect.width - theme.cellHorizontalPadding - ctx.measureText(text).width, y);
 }
 
+/**
+ * How wide a cell needs to be to show all of it on one line, as `drawRecordCell` lays it out: Glide
+ * fits a column (on a double-click of its edge, or a column without a width) to the widest of these,
+ * up to the grid's cap for a fitted column.
+ */
+export function measureRecordCell(ctx: CanvasRenderingContext2D, m: RecordCellModel, theme: { cellHorizontalPadding: number; baseFontFull: string }): number {
+  const pad = theme.cellHorizontalPadding * 2;
+  const text = (s: string) => {
+    ctx.font = theme.baseFontFull;
+    // A multi-line value is as wide as its longest line.
+    return Math.max(0, ...s.split("\n").map((line) => ctx.measureText(line).width));
+  };
+  // The primary field keeps room for its expand icon, which shows over the end of the cell on hover.
+  const extra = m.isPrimary ? EXPAND_SIZE + 6 : 0;
+  if (isFormulaError(m.value)) return Math.ceil(text(m.display) + pad + extra);
+  switch (displayShapeOf(m.field)) {
+    case "select":
+    case "multi_select":
+    case "link":
+    case "user":
+    case "list": {
+      const chips = chipsFor(m);
+      if (chips.length === 0) return pad;
+      // As `drawChips`: each chip's font and padding, 4 px apart.
+      const widths = chips.map((c) => {
+        ctx.font = chipFont(theme.baseFontFull, c.kind);
+        return ctx.measureText(c.text).width + chipPadding(c.kind);
+      });
+      return Math.ceil(widths.reduce((a, b) => a + b, 0) + 4 * (chips.length - 1) + pad + extra);
+    }
+    case "attachment": {
+      // Tiles grow with the row; a short row's are about 28 px, 4 px apart.
+      const files = attachmentRefs(m.value).length;
+      return Math.ceil(files * 32 + pad + extra);
+    }
+    case "rating":
+      return m.field.type === "rating" ? Math.ceil(m.field.options.max * 17 + pad) : pad;
+    case "url":
+    case "email":
+    case "phone":
+      return Math.ceil(text(m.display) + pad + (openTargetOf(m) ? OPEN_SIZE + 6 : 0) + extra);
+    case "button":
+      return Math.ceil(text(m.display) + 16 + pad);
+    default:
+      return Math.ceil(text(m.display) + pad + extra);
+  }
+}
+
 export function createRenderer(getContext: () => RendererContext): CustomRenderer<ObCell> {
   return {
     kind: GridCellKind.Custom,
     isMatch: (cell): cell is ObCell => isObCell(cell),
+    measure(ctx, cell, theme) {
+      const data = cell.data;
+      return data.ob === "cell" ? measureRecordCell(ctx, data.model, theme) : 0;
+    },
     needsHover: true,
     needsHoverPosition: true,
     draw(args, cell) {

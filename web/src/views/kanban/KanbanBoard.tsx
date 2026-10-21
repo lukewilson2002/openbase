@@ -34,7 +34,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import type { FormatCtx } from "@/lib/cells/format";
-import { colorDotClass } from "@/lib/colors";
+import { accentHue } from "@/lib/colors";
 import { CardBody } from "../common/CardBody";
 import { cardTitle, itemsLabel } from "../common/cardFields";
 import { planDrop, type DropPlan, type Stack } from "./stacks";
@@ -230,7 +230,6 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
 
   const header = (
     <div className="flex min-h-8 items-center gap-2 pl-1.5 pr-0.5">
-      {stack.color && <span aria-hidden className={cn("size-2 shrink-0 rounded-full", colorDotClass(stack.color))} />}
       <h2 className="min-w-0 flex-1 truncate text-[0.875rem] font-[650]">{stack.label}</h2>
       {isCollapsed && (
         <button
@@ -293,7 +292,9 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       aria-label={`Stack: ${stack.label}`}
       data-stack-key={stack.key}
       className={cn(
-        "flex max-h-full shrink-0 flex-col gap-2 rounded-xl bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))] p-2 outline-2 -outline-offset-2 transition-[outline-color]",
+        "flex max-h-full shrink-0 flex-col gap-2 rounded-xl p-2 outline-2 -outline-offset-2 transition-[outline-color]",
+        // A coloured choice fills its stack with its colour (no dot needed); the rest stay neutral.
+        stack.color ? `ob-hue-${accentHue(stack.color)} ob-fill` : "bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))]",
         isCollapsed ? "w-48" : "w-[min(280px,85vw)]",
         isOver ? "outline-primary" : "outline-transparent",
       )}
@@ -402,7 +403,7 @@ function KanbanCard({ record, ...p }: { record: TableRecord } & KanbanBoardProps
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-[10px] border border-line bg-surface text-left shadow-[0_1px_2px_rgb(15_20_30/0.04)] outline-none transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
+        "relative shrink-0 overflow-hidden rounded-[10px] border border-line bg-surface text-left shadow-[0_1px_2px_rgb(15_20_30/0.04)] outline-none transition-[border-color,box-shadow] hover:border-primary-soft-line hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
         // Press and hold starts a drag on touch screens: no text selection or iOS callout on the way.
         p.canEdit ? "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none]" : "cursor-pointer",
         isDragging && "opacity-40",

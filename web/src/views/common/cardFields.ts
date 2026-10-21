@@ -64,20 +64,20 @@ export function cardTitle(primary: Field | undefined, record: TableRecord, forma
   return displayText(primary, record.values[primary.id], format).trim() || "Untitled";
 }
 
-/** Fields that can be a card's description: text, long text, and formulas, rollups or lookups giving text. */
+/** Fields that can be a card's description: text, rich text, and formulas, rollups or lookups giving text. */
 export function isDescriptionField(field: Field): boolean {
-  if (field.type === "single_line_text" || field.type === "long_text") return true;
+  if (field.type === "text" || field.type === "rich_text") return true;
   const rt = resultTypeOf(field);
   return rt !== null && unwrapResult(rt).item === "text";
 }
 
 /**
- * A card's description as one run of plain text (the card clamps it): rich long text loses its
+ * A card's description as one run of plain text (the card clamps it): rich text loses its
  * markdown, and line breaks and runs of spaces collapse so three lines hold as many words as they can.
  */
 export function descriptionText(field: Field | undefined, value: TableRecord["values"][string] | undefined, format: FormatCtx): string {
   if (!field) return "";
   if (value === null || value === undefined || isFormulaError(value)) return "";
-  const text = field.type === "long_text" && field.options.rich && typeof value === "string" ? markdownToText(value) : displayText(field, value, format);
+  const text = field.type === "rich_text" && typeof value === "string" ? markdownToText(value) : displayText(field, value, format);
   return text.replace(/\s+/g, " ").trim();
 }

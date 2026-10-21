@@ -4,7 +4,7 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
-use chrono::NaiveDate;
+use chrono::{Datelike, Days, NaiveDate};
 use chrono_tz::Tz;
 use serde_json::Value as Json;
 
@@ -14,7 +14,7 @@ use crate::cell::{NameResolver, display_text, format_general_number, string_item
 use crate::field::{DateOptions, Field, FieldKind};
 use crate::limits::{MAX_GROUPS, MAX_SORTS};
 use crate::value::Value;
-use crate::view::{Direction, Sort};
+use crate::view::{DateGranularity, Direction, Group, Sort};
 
 /// A precomputed sort key for one cell. Keys of the same field compare with
 /// [`Ord`]: `Blank` first, then values by type. Text uses a case-insensitive
@@ -285,7 +285,7 @@ impl Eq for RowKey {}
 
 enum Level<'a> {
     Sort(&'a Field, bool),
-    Group(&'a Field, bool),
+    Group(&'a Field, bool, Option<DateGranularity>),
 }
 
 fn sort_by_levels<R: Row>(rows: &mut [R], levels: &[Level<'_>], names: &dyn NameResolver, tz: Tz) {
@@ -298,30 +298,57 @@ fn sort_by_levels<R: Row>(rows: &mut [R], levels: &[Level<'_>], names: &dyn Name
                 .iter()
                 .map(|level| match level {
                     Level::Sort(f, desc) => (sort_key(f, row.get(&f.id), names, tz), *desc),
-                    Level::Group(f, desc) => (group_key(f, row.get(&f.id), names, tz).sort, *desc),
+                    Level::Group(f, desc, g) => {
+                        (group_key(f, row.get(&f.id), names, tz, *g).sort, *desc)
+                    }
                 })
                 .collect(),
         )
     });
 }
 
-fn levels<'a, F: FieldLookup + ?Sized>(
-    specs: &[Sort],
-    fields: &'a F,
-    group: bool,
-) -> Vec<Level<'a>> {
+fn sort_levels<'a, F: FieldLookup + ?Sized>(specs: &[Sort], fields: &'a F) -> Vec<Level<'a>> {
     specs
         .iter()
-        .filter_map(|s| {
-            let f = fields.field(&s.field_id)?;
-            let desc = s.direction == Direction::Desc;
-            Some(if group {
-                Level::Group(f, desc)
-            } else {
-                Level::Sort(f, desc)
-            })
+        .filter_map(|s| Some(Level::Sort(fields.field(&s.field_id)?, s.desc())))
+        .collect()
+}
+
+fn group_levels<'a, F: FieldLookup + ?Sized>(specs: &[Group], fields: &'a F) -> Vec<Level<'a>> {
+    specs
+        .iter()
+        .filter_map(|g| {
+            Some(Level::Group(
+                fields.field(&g.field_id)?,
+                g.desc(),
+                g.granularity,
+            ))
         })
         .collect()
+}
+
+/// A sort or group level: its field and direction.
+trait Spec {
+    fn field_id(&self) -> &str;
+    fn desc(&self) -> bool;
+}
+
+impl Spec for Sort {
+    fn field_id(&self) -> &str {
+        &self.field_id
+    }
+    fn desc(&self) -> bool {
+        self.direction == Direction::Desc
+    }
+}
+
+impl Spec for Group {
+    fn field_id(&self) -> &str {
+        &self.field_id
+    }
+    fn desc(&self) -> bool {
+        self.direction == Direction::Desc
+    }
 }
 
 /// Sort rows by `sorts` (first sort is the primary key). The sort is stable:
@@ -335,7 +362,7 @@ pub fn sort_rows<R: Row, F: FieldLookup + ?Sized>(
     names: &dyn NameResolver,
     tz: Tz,
 ) {
-    sort_by_levels(rows, &levels(sorts, fields, false), names, tz);
+    sort_by_levels(rows, &sort_levels(sorts, fields), names, tz);
 }
 
 /// Sort rows for a grouped view: by each group level's [`GroupKey`] (in the
@@ -343,25 +370,26 @@ pub fn sort_rows<R: Row, F: FieldLookup + ?Sized>(
 /// [`group_spans`].
 pub fn sort_rows_with_groups<R: Row, F: FieldLookup + ?Sized>(
     rows: &mut [R],
-    groups: &[Sort],
+    groups: &[Group],
     sorts: &[Sort],
     fields: &F,
     names: &dyn NameResolver,
     tz: Tz,
 ) {
-    let mut all = levels(groups, fields, true);
-    all.extend(levels(sorts, fields, false));
+    let mut all = group_levels(groups, fields);
+    all.extend(sort_levels(sorts, fields));
     sort_by_levels(rows, &all, names, tz);
 }
 
 /// Identity, label and ordering of the group a cell falls into.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroupKey {
-    /// Stable identity: choice id(s), record/user ids, `YYYY-MM-DD` day,
-    /// canonical number, `"true"`/`"false"`, exact text, or `""` for the
-    /// empty group.
+    /// Stable identity: choice id(s), record/user ids, the date period
+    /// (`YYYY-MM-DD`, `YYYY-Www`, `YYYY-MM`, `YYYY-Qn` or `YYYY`), canonical
+    /// number, `"true"`/`"false"`, exact text, or `""` for the empty group.
     pub key: String,
-    /// Human label (`"(Empty)"` for the empty group).
+    /// Human label (`"(Empty)"`, or `"No date"` on a date field, for the
+    /// empty group).
     pub label: String,
     /// Single select choice colour, when grouping by a single select.
     pub color: Option<String>,
@@ -373,16 +401,87 @@ pub struct GroupKey {
 /// Label of the empty group.
 pub const EMPTY_GROUP_LABEL: &str = "(Empty)";
 
+/// Label of the empty group of a date field.
+pub const NO_DATE_GROUP_LABEL: &str = "No date";
+
+/// The first day of the `granularity` period that holds `day`.
+pub fn period_start(day: NaiveDate, granularity: DateGranularity) -> NaiveDate {
+    let first_of = |month: u32| NaiveDate::from_ymd_opt(day.year(), month, 1).unwrap_or(day);
+    match granularity {
+        DateGranularity::Day => day,
+        DateGranularity::Week => day
+            .checked_sub_days(Days::new(u64::from(day.weekday().num_days_from_monday())))
+            .unwrap_or(day),
+        DateGranularity::Month => first_of(day.month()),
+        DateGranularity::Quarter => first_of(day.month0() / 3 * 3 + 1),
+        DateGranularity::Year => first_of(1),
+    }
+}
+
+/// The first day of the period a date cell is grouped under, or `None` when
+/// the cell holds no date (or the field is not a date).
+pub fn group_day(
+    field: &Field,
+    stored: Option<&Json>,
+    tz: Tz,
+    granularity: Option<DateGranularity>,
+) -> Option<NaiveDate> {
+    if kind_of(field) != Kind::Date {
+        return None;
+    }
+    let day = cell_day(field, stored.filter(|j| !j.is_null()), tz)?;
+    Some(period_start(day, granularity.unwrap_or_default()))
+}
+
+/// Key and label of the date group starting on `start`.
+fn date_group(start: NaiveDate, granularity: DateGranularity) -> GroupKey {
+    let (key, label) = match granularity {
+        DateGranularity::Day => (
+            start.format("%Y-%m-%d").to_string(),
+            start.format("%B %-d, %Y").to_string(),
+        ),
+        DateGranularity::Week => {
+            let week = start.iso_week();
+            (
+                format!("{}-W{:02}", week.year(), week.week()),
+                format!("Week of {}", start.format("%B %-d, %Y")),
+            )
+        }
+        DateGranularity::Month => (
+            start.format("%Y-%m").to_string(),
+            start.format("%B %Y").to_string(),
+        ),
+        DateGranularity::Quarter => {
+            let q = start.month0() / 3 + 1;
+            (
+                format!("{}-Q{q}", start.year()),
+                format!("Q{q} {}", start.year()),
+            )
+        }
+        DateGranularity::Year => (start.year().to_string(), start.year().to_string()),
+    };
+    GroupKey {
+        key,
+        label,
+        color: None,
+        empty: false,
+        sort: SortKey::Instant(day_millis(start)),
+    }
+}
+
 /// The group of one cell. Multi-valued fields group by their exact
 /// combination (multiple selects order-insensitively, by choice order;
-/// links/users/attachments in stored order); date-times group by calendar
-/// day in the field zone (else `tz`); empty cells form one `(Empty)` group
-/// (checkboxes group as Checked/Unchecked instead).
+/// links/users/attachments in stored order); dates group by the
+/// `granularity` period (default day) in the field zone (else `tz`); empty
+/// cells form one `(Empty)` group, `No date` on a date field (checkboxes
+/// group as Checked/Unchecked instead). `granularity` is ignored on fields
+/// that are not dates.
 pub fn group_key(
     field: &Field,
     stored: Option<&Json>,
     names: &dyn NameResolver,
     tz: Tz,
+    granularity: Option<DateGranularity>,
 ) -> GroupKey {
     let stored = stored.filter(|j| !j.is_null());
     let kind = kind_of(field);
@@ -398,7 +497,12 @@ pub fn group_key(
     }
     let empty = GroupKey {
         key: String::new(),
-        label: EMPTY_GROUP_LABEL.into(),
+        label: if kind == Kind::Date {
+            NO_DATE_GROUP_LABEL
+        } else {
+            EMPTY_GROUP_LABEL
+        }
+        .into(),
         color: None,
         empty: true,
         sort: SortKey::Blank,
@@ -440,20 +544,8 @@ pub fn group_key(
                 sort: SortKey::Choices(pos),
             }
         }
-        (_, Kind::Date) => match cell_day(field, stored, tz) {
-            Some(day) => {
-                let opts = DateOptions {
-                    include_time: false,
-                    ..crate::cell::date_options_of(field).unwrap_or_default()
-                };
-                GroupKey {
-                    key: day.format("%Y-%m-%d").to_string(),
-                    label: crate::cell::format_date_value(&Value::Date(day), &opts, tz),
-                    color: None,
-                    empty: false,
-                    sort: SortKey::Instant(day_millis(day)),
-                }
-            }
+        (_, Kind::Date) => match group_day(field, stored, tz, granularity) {
+            Some(start) => date_group(start, granularity.unwrap_or_default()),
             None => GroupKey {
                 key: "#error".into(),
                 label: label(),
@@ -544,14 +636,14 @@ pub struct GroupSpan {
 /// the same `groups`. Group levels on unknown fields are skipped.
 pub fn group_spans<R: Row, F: FieldLookup + ?Sized>(
     rows: &[R],
-    groups: &[Sort],
+    groups: &[Group],
     fields: &F,
     names: &dyn NameResolver,
     tz: Tz,
 ) -> Vec<GroupSpan> {
-    let group_fields: Vec<&Field> = groups
+    let group_fields: Vec<(&Field, Option<DateGranularity>)> = groups
         .iter()
-        .filter_map(|g| fields.field(&g.field_id))
+        .filter_map(|g| Some((fields.field(&g.field_id)?, g.granularity)))
         .collect();
     let mut spans: Vec<GroupSpan> = Vec::new();
     // Index into `spans` of the open group at each level.
@@ -559,7 +651,7 @@ pub fn group_spans<R: Row, F: FieldLookup + ?Sized>(
     for (i, row) in rows.iter().enumerate() {
         let keys: Vec<GroupKey> = group_fields
             .iter()
-            .map(|f| group_key(f, row.get(&f.id), names, tz))
+            .map(|(f, g)| group_key(f, row.get(&f.id), names, tz, *g))
             .collect();
         // First level whose key differs from the open group's.
         let first_change = (0..keys.len())
@@ -585,8 +677,8 @@ pub fn group_spans<R: Row, F: FieldLookup + ?Sized>(
     spans
 }
 
-fn validate_levels<F: FieldLookup + ?Sized>(
-    specs: &[Sort],
+fn validate_levels<S: Spec, F: FieldLookup + ?Sized>(
+    specs: &[S],
     fields: &F,
     max: usize,
     what: &str,
@@ -597,8 +689,8 @@ fn validate_levels<F: FieldLookup + ?Sized>(
     let mut seen = HashSet::new();
     for s in specs {
         let field = fields
-            .field(&s.field_id)
-            .ok_or_else(|| format!("{what} refers to unknown field {}", s.field_id))?;
+            .field(s.field_id())
+            .ok_or_else(|| format!("{what} refers to unknown field {}", s.field_id()))?;
         if kind_of(field) == Kind::Inert {
             return Err(format!(
                 "cannot {what} by \"{}\" ({})",
@@ -606,7 +698,7 @@ fn validate_levels<F: FieldLookup + ?Sized>(
                 field.field_type().label()
             ));
         }
-        if !seen.insert(s.field_id.as_str()) {
+        if !seen.insert(s.field_id()) {
             return Err(format!(
                 "\"{}\" is used in more than one {what}",
                 field.name
@@ -623,7 +715,21 @@ pub fn validate_sorts<F: FieldLookup + ?Sized>(sorts: &[Sort], fields: &F) -> Re
 }
 
 /// Validate view groups: at most `limits::MAX_GROUPS` levels, existing
-/// groupable fields, each field at most once.
-pub fn validate_groups<F: FieldLookup + ?Sized>(groups: &[Sort], fields: &F) -> Result<(), String> {
-    validate_levels(groups, fields, MAX_GROUPS, "group")
+/// groupable fields, each field at most once, a granularity only on dates.
+pub fn validate_groups<F: FieldLookup + ?Sized>(
+    groups: &[Group],
+    fields: &F,
+) -> Result<(), String> {
+    validate_levels(groups, fields, MAX_GROUPS, "group")?;
+    for g in groups {
+        let field = fields.field(&g.field_id);
+        if let Some(f) = field.filter(|f| g.granularity.is_some() && kind_of(f) != Kind::Date) {
+            return Err(format!(
+                "a group granularity needs a date field; \"{}\" is {}",
+                f.name,
+                f.field_type().label()
+            ));
+        }
+    }
+    Ok(())
 }

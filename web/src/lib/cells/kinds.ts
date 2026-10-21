@@ -59,8 +59,8 @@ export type FieldKindClass = "text" | "number" | "bool" | "select" | "multi_sele
 
 export function kindClassOf(field: Field): FieldKindClass {
   switch (field.type) {
-    case "single_line_text":
-    case "long_text":
+    case "text":
+    case "rich_text":
     case "email":
     case "url":
     case "phone":
@@ -116,10 +116,15 @@ export function kindClassOf(field: Field): FieldKindClass {
   }
 }
 
+/** Text that keeps line breaks: rich text, or text with Multiline on. */
+export function isMultilineText(field: Field): boolean {
+  return field.type === "rich_text" || (field.type === "text" && field.options.multiline);
+}
+
 /** Shape used to draw and edit a cell. */
 export type DisplayShape =
   | "text"
-  | "long_text"
+  | "multiline"
   | "number"
   | "rating"
   | "checkbox"
@@ -137,11 +142,12 @@ export type DisplayShape =
 
 export function displayShapeOf(field: Field): DisplayShape {
   switch (field.type) {
-    case "single_line_text":
+    case "text":
+      return field.options.multiline ? "multiline" : "text";
     case "barcode":
       return "text";
-    case "long_text":
-      return "long_text";
+    case "rich_text":
+      return "multiline";
     case "number":
     case "currency":
     case "percent":

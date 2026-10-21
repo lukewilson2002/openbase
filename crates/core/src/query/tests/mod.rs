@@ -17,8 +17,8 @@ use crate::view::{Conjunction, Filter, FilterItem, FilterOp};
 /// A table with one field of every interesting shape, keyed by id.
 pub(crate) fn table() -> FieldMap {
     let fields = vec![
-        field_id("fldText", FieldKind::SingleLineText(TextOptions::default())),
-        field_id("fldLong", FieldKind::LongText(LongTextOptions::default())),
+        field_id("fldText", FieldKind::Text(TextOptions::default())),
+        field_id("fldLong", FieldKind::RichText(Empty {})),
         field_id(
             "fldNum",
             FieldKind::Number(NumberOptions {

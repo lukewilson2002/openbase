@@ -62,7 +62,7 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
             </DescriptionHover>
           )}
           {shown.length > 0 && (
-            <dl className="mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[0.8125rem]">
+            <dl className="mt-2 grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[0.8125rem]">
               {shown.map((f) => (
                 <div key={f.id} className="contents">
                   <dt className="truncate text-faint">{f.name}</dt>

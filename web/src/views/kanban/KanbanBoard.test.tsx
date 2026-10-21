@@ -9,7 +9,7 @@ import { KanbanBoard, type KanbanBoardProps } from "./KanbanBoard";
 import { installBoardLayout, type BoardLayout } from "./boardLayout";
 
 const status = ALL_FIELDS.single_select!;
-const name = ALL_FIELDS.single_line_text!;
+const name = ALL_FIELDS.text!;
 
 const records: TableRecord[] = [
   makeRecord({ [name.id]: "Write docs", [status.id]: "chs1" }, "r1"),

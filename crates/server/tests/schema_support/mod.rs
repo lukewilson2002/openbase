@@ -142,7 +142,7 @@ impl Fixture {
             .post(
                 &owner,
                 &format!("/api/tables/{}/fields", t["id"].as_str().unwrap()),
-                json!({ "name": "Notes", "type": "long_text", "options": {} }),
+                json!({ "name": "Notes", "type": "rich_text", "options": {} }),
             )
             .await;
         notes.assert_status(201);

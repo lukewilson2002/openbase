@@ -13,9 +13,9 @@ const NOW = Date.now();
 const item = (id: string, body: string, attachments: AttachmentRef[] = [], ago = 60_000, title = ""): InboxItem => ({ id, title, body, attachments, created_at: NOW - ago, updated_at: NOW - ago });
 const att = (id: string, filename: string, size = 2048): AttachmentRef => ({ id, filename, mime: "application/pdf", size });
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
-const notes = field("long_text", { rich: true }, { id: "fld_notes", name: "Notes" });
-const details = field("long_text", { rich: true }, { id: "fld_details", name: "Details" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
+const notes = field("rich_text", {}, { id: "fld_notes", name: "Notes" });
+const details = field("rich_text", {}, { id: "fld_details", name: "Details" });
 const status = field("single_select", { choices: [{ id: "chs1", name: "Todo", color: "gray" }] }, { id: "fld_status", name: "Status" });
 const files = field("attachment", {}, { id: "fld_files", name: "Files" });
 const tasks = makeTable([name, notes, details, status, files], { name: "Tasks" });
@@ -393,7 +393,7 @@ describe("saving into a table", () => {
     return screen.findByRole("textbox", { name: "Name" });
   }
 
-  it("turns the box into the table's form: the primary field as the title, the other fields below, the note in a long text field", async () => {
+  it("turns the box into the table's form: the primary field as the title, the other fields below, the note in a rich or multiline text field", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes();
@@ -402,7 +402,7 @@ describe("saving into a table", () => {
     // The draft's own title box is the primary field now, named after it.
     expect(title).toHaveAttribute("placeholder", "Name");
     expect(screen.getByText("Project tracker › Tasks")).toBeInTheDocument();
-    // The note goes into the first rich long text field, and another can be chosen.
+    // The note goes into the first rich text field, and another can be chosen.
     const chooser = screen.getByRole("combobox", { name: "Note goes into" });
     expect(chooser).toHaveValue("fld_notes");
     expect(within(chooser).getAllByRole("option").map((o) => o.textContent)).toEqual(["Field: Notes", "Field: Details", "As a comment", "Nowhere (discard on save)"]);

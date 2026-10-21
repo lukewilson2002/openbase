@@ -1,37 +1,34 @@
-//! Record comments and @mentions.
+//! Record comments.
 //!
-//! A comment is plain text up to `limits::MAX_COMMENT_LEN` characters.
-//! Mentions are written `@[Name](usrXXXX)`; the name is only a label (the
-//! client fills it in), the id is what counts. Posting (or editing a comment
-//! to add) a mention creates a `mention` notification for each mentioned
-//! user who may read the base, except the author. Everything here runs inside
-//! the caller's write transaction, so a comment and its notifications are
-//! stored together or not at all.
+//! A comment is Markdown (the rich text of rich text fields) up to
+//! `limits::MAX_COMMENT_LEN` characters, with mentions written
+//! `@[Name](usrXXXX)` (see [`mentions`]). Posting (or editing a comment to
+//! add) a mention notifies the mentioned users who may read the base, except
+//! the author. Everything here runs inside the caller's write transaction, so
+//! a comment and its notifications are stored together or not at all.
+//!
+//! Comments were plain text before schema version 13; that migration turned
+//! the stored bodies into Markdown that reads the same ([`plain_to_markdown`]).
 //!
 //! Comments are deleted for real (their text may be sensitive); the schema's
 //! `deleted_at` column is unused.
 
-use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use ob_core::api::records::Comment;
 use ob_core::limits;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::json;
 
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm;
-use crate::store::links::NameCache;
-use crate::store::{attachments, notifications, schema};
+use crate::store::attachments;
+use crate::store::mentions::{self, Place};
 
-/// Characters of a comment shown in a notification.
-const SNIPPET_LEN: usize = 140;
-
-static MENTION: LazyLock<Regex> = LazyLock::new(|| {
-    // The id alternation is deliberately strict: user ids are `usr` + base62.
-    Regex::new(r"@\[([^\]\n]{0,255})\]\((usr[0-9A-Za-z]{1,40})\)").expect("valid mention regex")
+/// A mention as plain-text comments wrote it (the Markdown form is the same).
+static PLAIN_MENTION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"@\[[^\]\n]{0,255}\]\(usr[0-9A-Za-z]{1,40}\)").expect("valid mention regex")
 });
 
 /// A comment with the context needed for permission checks.
@@ -56,31 +53,6 @@ pub fn validate_body(raw: &str) -> AppResult<String> {
         )));
     }
     Ok(body.to_string())
-}
-
-/// The distinct user ids mentioned in a body, in order of first appearance.
-pub fn mentioned_user_ids(body: &str) -> Vec<String> {
-    let mut seen = BTreeSet::new();
-    let mut out = Vec::new();
-    for cap in MENTION.captures_iter(body) {
-        let id = cap[2].to_string();
-        if seen.insert(id.clone()) {
-            out.push(id);
-        }
-    }
-    out
-}
-
-/// The body as plain text for a notification: mentions become `@Name`,
-/// whitespace is collapsed and the result is cut at [`SNIPPET_LEN`] characters.
-pub fn snippet(body: &str) -> String {
-    let plain = MENTION.replace_all(body, "@$1");
-    let collapsed = plain.split_whitespace().collect::<Vec<_>>().join(" ");
-    if collapsed.chars().count() <= SNIPPET_LEN {
-        return collapsed;
-    }
-    let cut: String = collapsed.chars().take(SNIPPET_LEN - 1).collect();
-    format!("{}…", cut.trim_end())
 }
 
 fn row_to_comment(r: &rusqlite::Row) -> rusqlite::Result<Comment> {
@@ -134,7 +106,7 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<CommentRow> {
 }
 
 /// Files embedded or linked in a comment (`/api/attachments/<id>/...`) must be files of the
-/// record's project, as in long text cells; `held` is the body being replaced.
+/// record's project, as in rich text cells; `held` is the body being replaced.
 fn require_project_files(
     conn: &Connection,
     base_id: &str,
@@ -165,7 +137,15 @@ pub fn create(
          VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
         params![id, record_id, author, body, now],
     )?;
-    notify_mentions(tx, record_id, &id, author, &body, &[])?;
+    let mentioned = mentions::mentions(&body);
+    mentions::notify(
+        tx,
+        record_id,
+        author,
+        &body,
+        &mentioned,
+        Place::Comment { id: &id },
+    )?;
     Ok(get(tx, &id)?.comment)
 }
 
@@ -180,8 +160,15 @@ pub fn update(tx: &Connection, id: &str, body: &str, now: i64) -> AppResult<Comm
         params![id, body, now],
     )?;
     if let Some(author) = &current.comment.user_id {
-        let already = mentioned_user_ids(&current.comment.body);
-        notify_mentions(tx, &current.comment.record_id, id, author, &body, &already)?;
+        let added = mentions::added(Some(&current.comment.body), &body);
+        mentions::notify(
+            tx,
+            &current.comment.record_id,
+            author,
+            &body,
+            &added,
+            Place::Comment { id },
+        )?;
     }
     Ok(get(tx, id)?.comment)
 }
@@ -191,79 +178,111 @@ pub fn delete(tx: &Connection, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Create a `mention` notification for every user mentioned in `body` (except
-/// `skip` and the author) who is an active user with access to the record's
-/// base.
-fn notify_mentions(
-    conn: &Connection,
-    record_id: &str,
-    comment_id: &str,
-    author_id: &str,
-    body: &str,
-    skip: &[String],
-) -> AppResult<()> {
-    let mentioned: Vec<String> = mentioned_user_ids(body)
-        .into_iter()
-        .filter(|u| u != author_id && !skip.contains(u))
-        .collect();
-    if mentioned.is_empty() {
-        return Ok(());
-    }
-    let base_id = perm::base_of_record(conn, record_id)?;
-    let table_id: String = conn.query_row(
-        "SELECT table_id FROM records WHERE id = ?1",
-        [record_id],
-        |r| r.get(0),
-    )?;
-    let table = schema::live_table(conn, &table_id)?;
-    let (base_name, base_icon): (String, Option<String>) = conn
-        .query_row(
-            "SELECT name, icon FROM bases WHERE id = ?1",
-            [&base_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .unwrap_or_default();
-    let names = NameCache::new(conn, chrono_tz::Tz::UTC);
-    let record_name = names.record_text(record_id).unwrap_or_default();
-    let author_name: String = conn
-        .query_row("SELECT name FROM users WHERE id = ?1", [author_id], |r| {
-            r.get(0)
-        })
-        .unwrap_or_default();
-    let text = snippet(body);
-    for user_id in mentioned {
-        let active: bool = conn
-            .query_row(
-                "SELECT is_active FROM users WHERE id = ?1",
-                [&user_id],
-                |r| r.get(0),
-            )
-            .optional()?
-            .unwrap_or(false);
-        if !active || perm::base_role(conn, &user_id, &base_id)?.is_none() {
-            continue;
+/// Rewrite every stored comment as Markdown that shows the text it had as
+/// plain text (schema version 13).
+pub fn plain_bodies_to_markdown(conn: &Connection) -> rusqlite::Result<()> {
+    let bodies: Vec<(String, String)> = conn
+        .prepare("SELECT id, body FROM comments")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut update = conn.prepare("UPDATE comments SET body = ?2 WHERE id = ?1")?;
+    for (id, body) in bodies {
+        let md = plain_to_markdown(&body);
+        if md != body {
+            update.execute(params![id, md])?;
         }
-        notifications::create(
-            conn,
-            &user_id,
-            "mention",
-            &json!({
-                "base_id": base_id,
-                "base_name": base_name,
-                "base_icon": base_icon,
-                "table_id": table.id,
-                "table_name": table.name,
-                "table_icon": table.icon,
-                "record_id": record_id,
-                "record_name": record_name,
-                "comment_id": comment_id,
-                "snippet": text,
-                "author_id": author_id,
-                "author_name": author_name,
-            }),
-        )?;
     }
     Ok(())
+}
+
+/// A plain-text comment as Markdown that reads the same: characters Markdown
+/// would take as formatting are escaped where they could be (as the editor
+/// escapes typed text), a line that would start a heading, list, quote or
+/// rule is escaped at its start, and indentation, which would make a code
+/// block, is dropped. Mentions stay as they are.
+pub fn plain_to_markdown(body: &str) -> String {
+    body.split('\n')
+        .map(|line| escape_line_start(&escape_line(line.trim_start())))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Escape the characters of one line of plain text, outside its mentions.
+fn escape_line(line: &str) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    // Char index of each byte offset where a mention starts or ends.
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for m in PLAIN_MENTION.find_iter(line) {
+        spans.push((
+            line[..m.start()].chars().count(),
+            line[..m.end()].chars().count(),
+        ));
+    }
+    let is_space = |c: Option<&char>| c.is_some_and(|c| c.is_whitespace());
+    let is_word = |c: Option<&char>| c.is_some_and(|c| c.is_alphanumeric());
+    let mut out = String::with_capacity(line.len() + 8);
+    let mut i = 0;
+    while i < chars.len() {
+        if let Some(&(_, end)) = spans.iter().find(|(s, _)| *s == i) {
+            out.extend(&chars[i..end]);
+            i = end;
+            continue;
+        }
+        let c = chars[i];
+        let prev = i.checked_sub(1).and_then(|p| chars.get(p));
+        let next = chars.get(i + 1);
+        match c {
+            '\\' if next.is_none_or(|n| n.is_ascii_punctuation()) => out.push_str("\\\\"),
+            '`' | '[' | ']' | '~' | '|' | '<' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '*' if !(is_space(prev) && is_space(next)) => out.push_str("\\*"),
+            '_' if !((is_word(prev) && is_word(next)) || (is_space(prev) && is_space(next))) => {
+                out.push_str("\\_")
+            }
+            '&' if ENTITY.is_match(&line[line.char_indices().nth(i).map_or(0, |(b, _)| b)..]) => {
+                out.push_str("\\&")
+            }
+            _ => out.push(c),
+        }
+        i += 1;
+    }
+    out
+}
+
+static ENTITY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^&(?:#\d+|#x[\da-f]+|[a-z][\da-z]*);").expect("valid entity regex")
+});
+
+/// Escape the start of an (escaped, unindented) line that would otherwise
+/// begin a heading, a list item, a quote or a rule.
+fn escape_line_start(line: &str) -> String {
+    let ends_or_space = |rest: &str| rest.is_empty() || rest.starts_with(char::is_whitespace);
+    let hashes = line.chars().take_while(|&c| c == '#').count();
+    if (1..=6).contains(&hashes) && ends_or_space(&line[hashes..]) {
+        return format!("\\{line}");
+    }
+    if (line.starts_with('-') || line.starts_with('+') || line.starts_with('>'))
+        && (line.starts_with('>') || ends_or_space(&line[1..]))
+    {
+        return format!("\\{line}");
+    }
+    if (line.starts_with('-') || line.starts_with('='))
+        && line
+            .chars()
+            .all(|c| c == '-' || c == '=' || c.is_whitespace())
+    {
+        return format!("\\{line}");
+    }
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    if (1..=9).contains(&digits)
+        && line[digits..].starts_with(['.', ')'])
+        && ends_or_space(&line[digits + 1..])
+    {
+        return format!("{}\\{}", &line[..digits], &line[digits..]);
+    }
+    line.to_string()
 }
 
 #[cfg(test)]
@@ -281,22 +300,33 @@ mod tests {
     }
 
     #[test]
-    fn mentions_are_extracted_once_each() {
-        let body = "hey @[Ann](usrAAA111) and @[Bob B](usrBBB222), again @[Ann](usrAAA111)";
-        assert_eq!(mentioned_user_ids(body), vec!["usrAAA111", "usrBBB222"]);
-        // Not a mention: wrong id prefix, missing parts, plain @name.
-        assert!(mentioned_user_ids("@[X](recAAA) @Ann @[Y]() @[Z](usr)").is_empty());
-    }
-
-    #[test]
-    fn snippets_are_plain_and_short() {
-        assert_eq!(
-            snippet("  ping @[Ann](usrAAA111)\n  please\treview "),
-            "ping @Ann please review"
-        );
-        let long = format!("{} end", "word ".repeat(100));
-        let s = snippet(&long);
-        assert!(s.chars().count() <= SNIPPET_LEN);
-        assert!(s.ends_with('…'));
+    fn plain_comments_become_markdown_that_reads_the_same() {
+        let cases = [
+            (
+                "ping @[Ann](usrAAA111) please",
+                "ping @[Ann](usrAAA111) please",
+            ),
+            ("snake_case and 2 * 3", "snake_case and 2 * 3"),
+            (
+                "*bold* _it_ `code` [x](y) ~s~ a|b <b>",
+                "\\*bold\\* \\_it\\_ \\`code\\` \\[x\\](y) \\~s\\~ a\\|b \\<b>",
+            ),
+            (
+                "# not a heading\n- not a list\n+ nor\n> not a quote\n1. not numbered\n2) either\n---\n===",
+                "\\# not a heading\n\\- not a list\n\\+ nor\n\\> not a quote\n1\\. not numbered\n2\\) either\n\\---\n\\===",
+            ),
+            ("    indented\n\ta tab", "indented\na tab"),
+            ("a \\ b \\* end\\", "a \\ b \\\\\\* end\\\\"),
+            ("&amp; stays &; R&D", "\\&amp; stays &; R&D"),
+            ("#hashtag 3.14 -1", "#hashtag 3.14 -1"),
+        ];
+        for (plain, md) in cases {
+            assert_eq!(plain_to_markdown(plain), md, "{plain:?}");
+            // Rendered, the Markdown shows the plain text again (spacing aside).
+            if !plain.contains("@[") {
+                let words = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+                assert_eq!(mentions::plain_text(md), words, "{plain:?}");
+            }
+        }
     }
 }

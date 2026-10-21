@@ -107,7 +107,7 @@ function KanbanInner(props: ViewProps) {
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [] }));
   const settings = (
-    <ViewSettings label={stackField ? `Stacked by ${stackField.name}` : "Stack by"} active={!!stackField} note={note}>
+    <ViewSettings note={note}>
       <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseStack} hint="A single select, single user or checkbox field." />
       <FieldSelect label="Cover image" fields={attachmentFields} value={coverField?.id ?? ""} noneLabel="No cover" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setKanban(c, { cover_field_id: id }))} />
       <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />

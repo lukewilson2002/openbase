@@ -24,7 +24,7 @@ async fn create_table_has_primary_name_field_and_grid_view() {
     let fields = r.body["fields"].as_array().unwrap();
     assert_eq!(fields.len(), 1);
     assert_eq!(fields[0]["name"], "Name");
-    assert_eq!(fields[0]["type"], "single_line_text");
+    assert_eq!(fields[0]["type"], "text");
     assert_eq!(fields[0]["id"], r.body["primary_field_id"]);
     let views = r.body["views"].as_array().unwrap();
     assert_eq!(views.len(), 1, "a new table has only its default grid");

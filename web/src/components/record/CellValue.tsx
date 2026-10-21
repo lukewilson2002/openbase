@@ -13,9 +13,8 @@ import { ratingColor } from "@/lib/cells/palette";
 import { Markdown } from "./Markdown";
 import { AttachmentThumb } from "./editors/AttachmentEditor";
 import { Pill } from "./editors/ChoiceEditor";
-import { LinkChip } from "./editors/LinkEditor";
 import { UserChip } from "./editors/UserEditor";
-import { LinkedRecordCards, useLinkCards } from "./linked/LinkedRecords";
+import { LinkChipList, LinkedRecordCards, useLinkCards } from "./linked/LinkedRecords";
 
 export interface CellValueProps {
   field: Field;
@@ -24,7 +23,7 @@ export interface CellValueProps {
   /** Collaborator emails for avatars, by user id. */
   emails?: ReadonlyMap<string, string>;
   className?: string;
-  /** Render rich long text as markdown (default true). */
+  /** Render rich text as markdown (default true). */
   markdown?: boolean;
   /** Attachments open their file (in a new tab) when clicked, instead of being pictures only. */
   linkFiles?: boolean;
@@ -80,8 +79,9 @@ export function CellValue({ field, value, format, emails, className, markdown = 
     case "link": {
       const chips = chipItems(field, value, format);
       if (!chips.length) return wrap(empty);
-      const chipList = chipRow(chips.map((c) => <LinkChip key={c.id ?? c.text} name={c.text} />));
-      // In the record panel a link field's records are cards (title and a few fields) that open them.
+      const chipList = <LinkChipList field={field} chips={chips} format={format} emails={emails} className={(className ?? "").replace(/\b(line-clamp-\d|truncate)\b/g, "")} />;
+      // In the record panel a link field's own records are cards; anywhere else (a card, a record's
+      // summary inside one of those) they are small chips, the first few and "+N more".
       return linkCards && field.type === "link" ? wrap(<LinkedRecordCards field={field} value={value} format={format} emails={emails} fallback={chipList} />) : chipList;
     }
     case "user": {
@@ -142,9 +142,9 @@ export function CellValue({ field, value, format, emails, className, markdown = 
         ),
       );
     }
-    case "long_text":
+    case "multiline":
       if (!text) return wrap(empty);
-      return wrap(field.type === "long_text" && field.options.rich && markdown ? <Markdown source={text} /> : <p className="whitespace-pre-wrap break-words">{text}</p>);
+      return wrap(field.type === "rich_text" && markdown ? <Markdown source={text} /> : <p className="whitespace-pre-wrap break-words">{text}</p>);
     default:
       return wrap(text ? <span className={cn("break-words", shape === "number" && "tabular-nums")}>{text}</span> : empty);
   }

@@ -437,8 +437,11 @@ fn ensure_transient_visible(t: &TransientConfig, visible: &HashSet<&str>) -> App
     if let Some(f) = &t.filter {
         filter_field_ids(f, &mut used);
     }
-    for s in t.sorts.iter().chain(t.groups.iter()).flatten() {
+    for s in t.sorts.iter().flatten() {
         used.push(s.field_id.as_str());
+    }
+    for g in t.groups.iter().flatten() {
+        used.push(g.field_id.as_str());
     }
     if used.iter().any(|id| !visible.contains(id)) {
         return Err(AppError::bad_request(

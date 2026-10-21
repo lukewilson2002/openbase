@@ -86,6 +86,18 @@ some projects who creates or duplicates a project gets it added to their list.
   may give a link field listed earlier (or "Name") as `options.link_field_id` by name;
   everything else refers to ids as in `POST /api/tables/{id}/fields`. The answer is the
   table with all its fields.
+- Text comes in two field types. `text` is plain text for names, titles, codes and other
+  short values: `options` `{multiline, default?}`; with `multiline` off (the default) a line
+  break becomes a space, with it on line breaks are kept, and either way the text is shown
+  as typed. `rich_text` is Markdown, always multiline, with no options: text formatting,
+  tables, lists, images and other files, mentions of people (below) and more, for notes,
+  summaries, descriptions and articles. Changing a field
+  between them converts its values to show the same words: rich text becomes the plain
+  text it shows (a mention reads `@Name`, a link its text, lines and list items kept), and
+  plain text becomes Markdown with the characters that would be formatting escaped.
+  Turning `multiline` off joins each value's lines with spaces. Before v0.8 these types
+  were `single_line_text` and `long_text` (with a `rich` option); both names are still
+  accepted on input, and `long_text` always means `rich_text` now.
 
 ### Token permissions
 
@@ -199,6 +211,30 @@ Empty values count as absent. The answer is `{items, next, fields}`:
 Records whose history is gone are gone from the feed too: purging a trashed record, table or project
 removes its history, and with it its entries here.
 
+### Search everything (internal API)
+
+`GET /api/search` is the web app's search box: workspace, project, table and view names, record
+text (the primary field and text, rich text, email, URL and phone fields) and comments, in
+everything the caller can open (the same access as opening each one; a token limited to some
+projects searches only those). Matching ignores case and finds the text anywhere in a word.
+Names come first, then records, then comments (newest first); text that starts with `q` before
+text that only contains it.
+
+| Query | Meaning |
+|---|---|
+| `q` | The text, 1-200 characters after trimming; `400` otherwise. |
+| `limit` | Default 20, at most 50. |
+| `workspace`, `base` | Only what is inside this workspace or project (ids), not the workspace or project itself. One that does not exist or that the caller cannot open finds nothing. Empty values count as absent. |
+
+The answer is `{results}`, each a `SearchResult` with the ids and names of where it is (see the
+TypeScript type). Where `q` matched: `name_matches` in `name`, and for a record found by another
+field than its primary one, or a comment, a `snippet`: about 120 characters of plain text around
+the first match (rich text and comments without their Markdown, a mention as `@Name`; `…` where it
+was cut, between words when one ends close by) with `snippet_matches` and the `field_id` and
+`field_name` it came from. A match is `{start, end}`: the code points from `start` up to, not
+including, `end` (`Array.from(text)` in JavaScript). The server finds them because it knows which
+field matched and folds case the way it searched.
+
 ### Inbox (internal API)
 
 The inbox holds a person's private quick-capture drafts: Markdown text plus uploaded files, not yet in
@@ -216,14 +252,14 @@ per minute per person (`429`).
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/inbox` | Your drafts, most recently changed first: `[{id, body, attachments, created_at, updated_at}]`. |
-| `POST /api/inbox` | Body `{title?, body?, attachments?}`; `201` with the draft. `title` is one line (line breaks become spaces, at most 1,000 characters) and may be empty, like `body`. `attachments` must be your own unfiled uploads that no other draft holds. `body` may embed or link your own unfiled uploads by address (see [Files in long text](#files-in-long-text-internal-api)); a reference to anything else (someone else's upload, a project's file, a missing file) is a `400` naming the id, and so is a file another draft already holds, in its file list or its text. References a draft's current text already has are left alone when you edit it. |
+| `POST /api/inbox` | Body `{title?, body?, attachments?}`; `201` with the draft. `title` is one line (line breaks become spaces, at most 1,000 characters) and may be empty, like `body`. `attachments` must be your own unfiled uploads that no other draft holds. `body` may embed or link your own unfiled uploads by address (see [Files in rich text](#files-in-rich-text-internal-api)); a reference to anything else (someone else's upload, a project's file, a missing file) is a `400` naming the id, and so is a file another draft already holds, in its file list or its text. References a draft's current text already has are left alone when you edit it. |
 | `PATCH /api/inbox/{id}` | Body `{title?, body?, attachments?}`: what is given changes, `attachments` replaces the whole list. |
 | `DELETE /api/inbox/{id}` | `204`. Permanent: drafts have no trash. |
 | `POST /api/inbox/attachments` | Multipart field `file` (the upload limit applies, and so does your inbox quota). Answers the attachment reference `{id, filename, mime, size, ...}` to put in a draft's `attachments`. The file belongs to no project yet: only its uploader can download it (`GET /api/attachments/{id}/{filename}`). Files no draft or record refers to are cleaned up like any unreferenced upload. |
-| `POST /api/inbox/{id}/file` | Body `{table_id, fields, note_as_comment?}`; `201` with the created record. `fields` is keyed by field name or id and read like the Airtable-compatible API (typecast on). Needs the Editor role on the table's project (`403`; `404` when you cannot see it). It goes through the normal record write path, so validation, history, live-update events and automations apply. To keep the draft's files, put them (`{"id": "att..."}` is enough) in an attachment field: they move into the table's project (a bare id mentioned in a text field does not move anything). Your unfiled uploads that a long text value in `fields` embeds or links by address (`/api/attachments/{id}/...`), or that the draft's text embeds when `note_as_comment` is set, move into the project too, even when they are not in the draft's file list; the record and its comment are then written with the ordinary ownership rule, so a reference to someone else's upload, a file of another project, a missing file or a file another draft's text embeds (`already in another draft`) fails the whole filing with `400`. The draft's text is not copied anywhere by itself: put it in a long text field, or send `note_as_comment: true` to add it as the record's first comment, by you (at most 10,000 characters, else `400`). Creating the record, adding the comment, moving the files and deleting the draft are one transaction: if anything fails, the draft and its files stay as they were. |
-### Files in long text (internal API)
+| `POST /api/inbox/{id}/file` | Body `{table_id, fields, note_as_comment?}`; `201` with the created record. `fields` is keyed by field name or id and read like the Airtable-compatible API (typecast on). Needs the Editor role on the table's project (`403`; `404` when you cannot see it). It goes through the normal record write path, so validation, history, live-update events and automations apply. To keep the draft's files, put them (`{"id": "att..."}` is enough) in an attachment field: they move into the table's project (a bare id mentioned in a text field does not move anything). Your unfiled uploads that a rich text value in `fields` embeds or links by address (`/api/attachments/{id}/...`), or that the draft's text embeds when `note_as_comment` is set, move into the project too, even when they are not in the draft's file list; the record and its comment are then written with the ordinary ownership rule, so a reference to someone else's upload, a file of another project, a missing file or a file another draft's text embeds (`already in another draft`) fails the whole filing with `400`. The draft's text is not copied anywhere by itself: put it in a rich text field, or send `note_as_comment: true` to add it as the record's first comment, by you (at most 10,000 characters, else `400`). Creating the record, adding the comment, moving the files and deleting the draft are one transaction: if anything fails, the draft and its files stay as they were. |
+### Files in rich text (internal API)
 
-Long text (Markdown) can embed and link uploaded files by their download address. An **embed** is Markdown
+Rich text (Markdown) can embed and link uploaded files by their download address. An **embed** is Markdown
 image syntax on a line of its own, a **link** the usual link syntax; the address is relative (no host) and the
 file name is percent-encoded:
 
@@ -238,22 +274,22 @@ in the exact `/api/attachments/{id}/` form count; an id written bare in prose is
 /api/bases/{id}/attachments` answers the reference to build the address from (`id`, `filename`); the
 MCP tool `upload_attachment` also returns the finished line as `markdown`.
 
-**Ownership on save.** Every `/api/attachments/{id}/` reference inside a **long text** value written to a
+**Ownership on save.** Every `/api/attachments/{id}/` reference inside a **rich text** value written to a
 record must name a file of the record's project, exactly like attachment cells. Otherwise the write fails
 with `400` (`422` in `/api/v1`) and `field "Notes": attachment attXXX is not a file of this project; upload
 the file to this project to embed or link it`. The rule covers every write path: the app, `/api/v1`, CSV import,
 automations, MCP and the inbox filing, and a file that does not exist is refused like another project's file.
 References are found the way a browser would read them, so an address written with HTML character references (`&#47;api&#47;attachments/...`) or Markdown backslash escapes (`/api\/attachments/...`) counts and is checked too. A reference the value being replaced already contains is not checked again, so editing other text of an old
 value never fails. Comments follow the same rule (`400`, `attachment attXXX is not a file of this project; ...`).
-Changing a field of another type to long text is refused with `400` (`field "Tag" cannot become long text:
+Changing a field of another type to rich text is refused with `400` (`field "Tag" cannot become rich text:
 N record(s) refer to files that are not files of this project: rec... (att...)`, naming up to five records,
 trashed ones included) while any of its values carries such a reference; remove the references first.
-Duplicating a project copies the files its attachment cells and long text embed and points the copy at them,
+Duplicating a project copies the files its attachment cells and rich text embed and points the copy at them,
 but only files of the source project: a reference to any other file (another project's, an inbox upload) is
-never copied, so a copy cannot be used to read it. In an attachment cell it is dropped, in long text it is left
+never copied, so a copy cannot be used to read it. In an attachment cell it is dropped, in rich text it is left
 as written and does not load in the copy.
 
-**Cleanup.** Files referenced only from long text, a comment, record history or an inbox draft's text stay: the
+**Cleanup.** Files referenced only from rich text, a comment, record history or an inbox draft's text stay: the
 cleanup looks for attachment ids in all record data, in comments and in the draft text, not just in attachment fields.
 
 **Serving.** `GET /api/attachments/{id}/{filename}` is allowed for Viewers of the file's project (session or
@@ -272,6 +308,24 @@ whole file is sent. Bodies are streamed. Thumbnails support `Range` too.
 is shown by the web app as an ordinary link and never fetched by the browser; the editor does not create one. Raw HTML in the text never produces `<img>`, `<video>` or `<audio>` either: media only comes from plainly written Markdown image syntax.
 
 ---
+
+### Comments and mentions (internal API)
+
+`GET|POST /api/records/{id}/comments` and `PATCH|DELETE /api/comments/{id}`. A comment's `body` is
+Markdown, like a rich text field (at most 10,000 characters, trimmed, not empty);
+it may embed files of the record's project like rich text does. Comments written before schema version
+13 were plain text: that upgrade rewrote them as Markdown that shows the same text.
+
+Comments and rich text values mention people as `@[Name](usrXXXX)`: an `@` right before a Markdown link
+whose address is a user id (the name is a label; the id counts). A mention notifies (`kind: "mention"`)
+once the text is on a record: when a comment is posted or edited, and when a record is created or
+updated with the rich text value through any write path (this API, `/api/v1`, CSV import,
+automations, which write as their creator, and filing an inbox draft). An inbox draft notifies nobody,
+and neither does a public form submission (it has no author). Only
+mentions the text did not have before count, never the author, and only active people who can open
+the project. A mention in code or with escaped brackets (`@\[Name\](usr…)`) is text. The payload has
+`base_id`, `base_name`, `base_icon`, `table_id`, `table_name`, `table_icon`, `record_id`, `record_name`,
+`author_id`, `author_name`, `snippet` (plain text) and either `comment_id` or `field_id` and `field_name`.
 
 ## 2. Airtable-compatible API (`/api/v1`)
 
@@ -350,8 +404,9 @@ Field `type` names and options:
 
 | Airtable type | OpenBase field | `options` |
 |---|---|---|
-| `singleLineText`, `email`, `url`, `phoneNumber`, `barcode` | single line text, email, URL, phone, barcode | none |
-| `multilineText` / `richText` | long text / long text with markdown on | none |
+| `singleLineText`, `email`, `url`, `phoneNumber`, `barcode` | text, email, URL, phone, barcode | none |
+| `multilineText` | text with `multiline` on (plain text with line breaks) | none |
+| `richText` | rich text (Markdown) | none |
 | `number`, `percent` | number, percent | `{precision}` |
 | `currency` | currency | `{precision, symbol}` |
 | `duration` | duration | `{durationFormat}` (`h:mm`, `h:mm:ss`, `h:mm:ss.S`, …) |
@@ -507,8 +562,8 @@ are clamped, and **missing select options are created**.
   project with `POST /api/bases/{id}/attachments` (session or token with write
   access). OpenBase does **not** fetch `url`s on a client's behalf (SSRF), so
   `[{"url": …}]` is a 422;
-- long text may embed or link files of the same project as `/api/attachments/{id}/{filename}` addresses
-  (see [Files in long text](#files-in-long-text-internal-api)); a file of another project, or one that
+- rich text may embed or link files of the same project as `/api/attachments/{id}/{filename}` addresses
+  (see [Files in rich text](#files-in-rich-text-internal-api)); a file of another project, or one that
   does not exist, is a 422;
 - barcode takes `{"text"}` or a string;
 - computed fields (formula, lookup, rollup, count, created/modified time/by,
@@ -566,7 +621,7 @@ length). Unattached public-form uploads are deleted after 2 hours.
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
 | `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
-| `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible long text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
+| `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
 | `POST /api/public/forms/{token}/attachments` | multipart `file` for an attachment field of the form (at most 25 MB, further capped by the upload limit) |

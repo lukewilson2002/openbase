@@ -111,7 +111,7 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
 
   await page.goto(`/base/${base.id}/${table.id}?record=${recordId}`);
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Write a comment" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Write a comment" })).toBeVisible();
   await expectFits(page, "record panel");
 });
 

@@ -1,103 +1,53 @@
 /**
- * The start of the view toolbar: first the table's default grid, an icon of its own (it is not one of
- * the views: a plain grid of every record, where the fields are arranged), then a divider and a button
- * per view of the open table (the table itself is named in the top bar). The default grid never shares
- * a button with grid views. The buttons carry the views' names while all of them fit; else each is just its
- * type's icon, views of one type share one button listing them, and what still does not fit goes
- * into a "…" menu. Personal and locked views wear small badges, and a trailing "+" adds a view for
- * those who may. A right-click (or a held press on a phone) on a view's button opens the view's menu:
- * rename, duplicate, share, lock, delete, as on its row in the menu. Which table to open is the
- * menu's job, not the toolbar's.
- *
- * While every view has a button with its name, the buttons can be dragged along the toolbar with a
- * mouse to put the views in order (the same order as in the menu, which follows at once): by those who
- * may reorder every view shown, so creators, or an editor whose views are all personal. A finger's
- * held press stays the view's menu; on a phone the menu's rows are where views are reordered.
+ * The start of the view toolbar: one button naming the open view (its type's icon, its name, a chevron),
+ * which opens the list of the table's views. The table's default grid comes first (it is not one of the
+ * views: a plain grid of every record, where the fields are arranged), then a line, then the views in
+ * their order; when a type has several views they share one row, named after the open one (or the
+ * first) with how many more there are ("Board +2"): the row opens the view it names, and its "+2 ›"
+ * end, a hover or → opens a submenu of them all. Personal
+ * and locked views wear small marks, and "Add view" at the end of the list adds one, for those who may.
+ * A right-click (or a held press on a phone) on a view in the list opens the view's menu over it:
+ * rename, duplicate, share, lock, delete; a right-click on the button does so
+ * for the open view; that menu also moves a view up or down among the table's views (the side menu
+ * lists tables only). Which table to open is the menu's job, not the toolbar's.
  */
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Link } from "react-router";
-import { DndContext, MouseSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type Modifier } from "@dnd-kit/core";
-import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Check, ChevronDown, Ellipsis, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
+import { Link, useNavigate } from "react-router";
+import { ArrowDown, ArrowUp, Check, ChevronDown, Grid3x3, Lock, Plus, Table2, User as UserIcon } from "lucide-react";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useBaseDialog } from "@/base/BaseDialogs";
 import { basePermissions } from "@/base/permissions";
 import { AnchoredMenu, type MenuAnchor } from "@/components/ui/anchored-menu";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { IconButton } from "@/components/ui/icon-button";
-import { Tooltip } from "@/components/ui/tooltip";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { namedViews } from "@/lib/views";
-import { DESKTOP_QUERY } from "@/shell/AppShell";
-import { holdClicks } from "@/shell/sortable";
-import { applyOrder, useReorder } from "@/shell/useReorder";
+import { moveId, useReorder } from "@/shell/useReorder";
 import { VIEW_TYPES, VIEW_TYPE_META } from "@/views/meta";
 import { ViewMenuItems, hasViewActions } from "./ViewMenuItems";
 
-/** How many view buttons show before the rest go into "…": the toolbar shares its row with the tools. */
-const SHOWN_ON_DESKTOP = 8;
-const SHOWN_ON_PHONE = 4;
-/** How long a finger rests on a view button before its menu opens (as a long press elsewhere on a phone). */
+/** How long a finger rests on a view in the list before its menu opens (as a long press elsewhere on a phone). */
 const LONG_PRESS_MS = 500;
-/** On a desktop the tools share the row: names show only while all of them fit in this much of it. */
-const DESKTOP_SHARE = 0.45;
-
-const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 });
-
-/**
- * Dragging the view buttons into a new order. `views` is shown in the order of a drop until its request
- * is answered (the cache changes at once but reaches the toolbar a moment later), so nothing steps back.
- */
-function useViewOrder(schema: BaseSchema, table: Table, named: View[], enabled: boolean) {
-  const reorder = useReorder();
-  const [pending, setPending] = useState<string[] | null>(null);
-  const views = pending ? applyOrder(named, pending, (v) => v.id) : named;
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 5 } }));
-  const release = useRef<(() => void) | null>(null);
-  const done = () => {
-    release.current?.();
-    release.current = null;
-  };
-  const onDragEnd = ({ active, over }: DragEndEvent) => {
-    done();
-    if (!over || active.id === over.id) return;
-    const ids = views.map((v) => v.id);
-    const a = ids.indexOf(String(active.id));
-    const b = ids.indexOf(String(over.id));
-    if (a < 0 || b < 0) return;
-    const next = arrayMove(ids, a, b);
-    setPending(next);
-    void reorder({ kind: "views", baseId: schema.id, tableId: table.id, ids: next }).finally(() => setPending(null));
-  };
-  const context = {
-    sensors,
-    collisionDetection: closestCenter,
-    modifiers: [horizontalOnly],
-    // The click that ends a drag must not open the view it dropped.
-    onDragStart: () => {
-      done();
-      release.current = holdClicks();
-    },
-    onDragEnd,
-    onDragCancel: done,
-    accessibility: { screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the view's options in the menu." } },
-  };
-  return { views, sortable: enabled && views.length > 1, context };
-}
 
 const buttonClass = "relative inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] text-[0.875rem] font-medium transition-colors pointer-coarse:h-11 pointer-coarse:min-w-11";
-const labelledClass = "px-2.5";
 
-/** One button: a view on its own, or (once only icons fit) every view of one type when there are several. */
+/** The views of one type, in order. */
 export interface ViewGroup {
   type: View["type"];
   views: View[];
 }
 
-/** The views as icon buttons, in order: views of the same type share the button of the first. */
+/** The views grouped by type, the types in the order of their first view. */
 export function groupViews(views: readonly View[]): ViewGroup[] {
   const groups: ViewGroup[] = [];
   for (const v of views) {
@@ -108,175 +58,183 @@ export function groupViews(views: readonly View[]): ViewGroup[] {
   return groups;
 }
 
-/** Which buttons show: the first few, but never leaving the open view's out of sight. */
-export function splitGroups(groups: readonly ViewGroup[], activeId: string, limit: number): { shown: ViewGroup[]; hidden: ViewGroup[] } {
-  let shown = groups.slice(0, limit);
-  const active = groups.find((g) => g.views.some((v) => v.id === activeId));
-  if (active && !shown.includes(active)) shown = [...groups.slice(0, Math.max(0, limit - 1)), active];
-  return { shown, hidden: groups.filter((g) => !shown.includes(g)) };
-}
-
-/**
- * Whether every view can have a button with its name: yes when all of them fit in full, else every
- * button is just an icon (and views of one type share one). A hidden copy with the names is measured
- * against the room the switcher has, so showing or hiding the names never changes the answer.
- */
-function useLabelsFit(rootRef: RefObject<HTMLDivElement | null>, measureRef: RefObject<HTMLDivElement | null>, fixedRef: RefObject<HTMLElement | null>[], desktop: boolean): boolean {
-  const [fit, setFit] = useState(false);
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const measure = measureRef.current;
-    if (!root || !measure || typeof ResizeObserver === "undefined") return;
-    const check = () => {
-      const fixed = fixedRef.reduce((sum, r) => sum + (r.current?.offsetWidth ?? 0), 0);
-      const style = getComputedStyle(root);
-      const gaps = 4 * (fixedRef.length + 1);
-      const room = desktop
-        ? Math.min(parseFloat(style.maxWidth) || Infinity, (root.parentElement?.clientWidth ?? 0) * DESKTOP_SHARE)
-        : root.clientWidth;
-      setFit(measure.scrollWidth > 0 && measure.scrollWidth <= room - fixed - gaps);
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(root);
-    ro.observe(measure);
-    if (root.parentElement) ro.observe(root.parentElement);
-    return () => ro.disconnect();
-  }, [rootRef, measureRef, fixedRef, desktop]);
-  return fit;
-}
-
 export function ViewSwitcher({ schema, table, view, className }: { schema: BaseSchema; table: Table; view: View; className?: string }) {
   const openDialog = useBaseDialog();
-  const desktop = useMediaQuery(DESKTOP_QUERY);
   const canCreateView = !!openDialog && basePermissions.createView(schema.role);
   const named = namedViews(table);
   const defaultView = table.views.find((v) => v.is_default);
   const to = (v: View) => `/base/${schema.id}/${table.id}/${v.id}`;
-  const rootRef = useRef<HTMLDivElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
-  const moreRef = useRef<HTMLDivElement>(null);
-  const defaultRef = useRef<HTMLDivElement>(null);
-  const [fixedRefs] = useState(() => [moreRef, defaultRef]);
-  const labelled = useLabelsFit(rootRef, measureRef, fixedRefs, desktop);
-  // Only one button per view can be moved, and only by someone who may reorder all of them.
-  const mayReorder = basePermissions.createSharedView(schema.role) || (basePermissions.createView(schema.role) && named.every((v) => v.personal));
-  const order = useViewOrder(schema, table, named, labelled && mayReorder);
-  const views = order.views;
-  // A right-click or a held press on a view button: the view's own menu, as on its row in the menu.
+  // A right-click or a held press on a view: the view's own menu, as on its row in the menu.
   const [menu, setMenu] = useState<{ view: View; anchor: MenuAnchor } | null>(null);
   const hasMenu = (v: View) => hasViewActions(schema, v, openDialog);
-  const onMenu = (v: View, anchor: MenuAnchor) => setMenu({ view: v, anchor });
-  // Names fit: one button per view. Else icons, one per view type, and what does not fit goes into "…".
-  const singles: ViewGroup[] = views.map((v) => ({ type: v.type, views: [v] }));
-  const { shown, hidden } = labelled ? { shown: singles, hidden: [] } : splitGroups(groupViews(views), view.id, desktop ? SHOWN_ON_DESKTOP : SHOWN_ON_PHONE);
+  const menuFor = (v: View) => (hasMenu(v) ? (anchor: MenuAnchor) => setMenu({ view: v, anchor }) : undefined);
+  // The list stays open under a view's menu (it is not modal, so the menu can take the focus and the pointer).
+  const menuOpenRef = useRef(false);
+  menuOpenRef.current = menu !== null;
+  const stayWhileMenuOpen = (e: Event) => {
+    if (menuOpenRef.current) e.preventDefault();
+  };
+  const keepStill = (e: React.PointerEvent) => {
+    if (menu !== null) e.preventDefault();
+  };
+  const [listOpen, setListOpen] = useState(false);
+  const navigate = useNavigate();
+  const openView = (v: View) => {
+    setListOpen(false);
+    void navigate(to(v));
+  };
+  // Views are put in order here (the menu lists tables only): a view moves among the shared ones or
+  // among the personal ones, for those who may reorder them (as for creating them).
+  const reorder = useReorder();
+  const moveItems = (v: View) => {
+    const siblings = named.filter((x) => !!x.personal === !!v.personal).map((x) => x.id);
+    const may = v.personal ? basePermissions.createView(schema.role) : basePermissions.createSharedView(schema.role);
+    if (!may || siblings.length < 2) return null;
+    const move = (delta: -1 | 1) => {
+      const ids = moveId(siblings, v.id, delta);
+      if (ids) void reorder({ kind: "views", baseId: schema.id, tableId: table.id, ids });
+    };
+    const at = siblings.indexOf(v.id);
+    return (
+      <>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={at <= 0} onSelect={() => move(-1)}>
+          <ArrowUp aria-hidden className="size-4" /> Move up
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={at >= siblings.length - 1} onSelect={() => move(1)}>
+          <ArrowDown aria-hidden className="size-4" /> Move down
+        </DropdownMenuItem>
+      </>
+    );
+  };
+  const isDefault = !!view.is_default;
+  const Icon = isDefault ? Grid3x3 : (VIEW_TYPE_META[view.type]?.icon ?? Table2);
+  const name = isDefault ? "Default grid" : view.name;
+  const openMenu = isDefault ? undefined : menuFor(view);
 
   return (
-    <ViewMenuOpen value={menu !== null}>
-      <div ref={rootRef} className={cn("relative flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5", className)}>
-        {defaultView && (
-          <div ref={defaultRef} className="flex shrink-0 items-center gap-1">
-            <Tooltip content="Default grid: every record, and where fields are arranged">
-              <Link
-                to={to(defaultView)}
-                aria-label="Default grid"
-                aria-current={view.id === defaultView.id ? "page" : undefined}
-                className={cn(buttonClass, "no-underline", view.id === defaultView.id ? "bg-primary-soft text-primary-ink" : "text-muted hover:bg-hover hover:text-fg")}
-              >
-                <Grid3x3 aria-hidden className="size-[1.125rem] shrink-0" />
-              </Link>
-            </Tooltip>
-            <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-line-strong" />
-          </div>
-        )}
-        {(() => {
-          const nav = (
-            <nav aria-label={`Views of ${table.name}`} className="flex items-center gap-0.5 empty:hidden">
-              {shown.map((g) => (
-                <GroupButton key={g.views[0]!.id} group={g} activeId={view.id} labelled={labelled} sortable={order.sortable} to={to} tableName={table.name} onMenu={onMenu} hasMenu={hasMenu} />
-              ))}
-            </nav>
-          );
-          // The drag context (and its screen reader live region) only where there is something to drag.
-          return order.sortable ? (
-            <DndContext {...order.context}>
-              <SortableContext items={shown.map((g) => g.views[0]!.id)} strategy={horizontalListSortingStrategy}>
-                {nav}
-              </SortableContext>
-            </DndContext>
-          ) : (
-            nav
-          );
-        })()}
-        <div ref={moreRef} className="flex items-center gap-0.5 empty:hidden">
-          {hidden.length > 0 && (
-            <ViewsDropdown
-              label={`More views of ${table.name}`}
-              views={hidden.flatMap((g) => g.views)}
-              activeId={view.id}
-              to={to}
-              onMenu={onMenu}
-              hasMenu={hasMenu}
-              trigger={
-                <IconButton label={`${count(hidden)} more ${count(hidden) === 1 ? "view" : "views"}`} noTooltip className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
-                  <Ellipsis aria-hidden className="size-[1.125rem]" />
-                </IconButton>
+    <div className={cn("flex min-w-0 items-center gap-1", className)}>
+        <DropdownMenu modal={false} open={listOpen} onOpenChange={setListOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`View: ${name}`}
+              onContextMenu={
+                openMenu &&
+                ((e) => {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openMenu(e.clientX || e.clientY ? { x: e.clientX, y: e.clientY, width: 1, height: 1 } : { x: r.left, y: r.bottom, width: r.width, height: 1 });
+                })
               }
-            />
-          )}
-          {canCreateView && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label="Add view" className={cn(buttonClass, "rounded-[9px] data-[state=open]:bg-hover")}>
-                  <Plus aria-hidden className="size-[1.125rem]" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-72">
-                {!basePermissions.createSharedView(schema.role) && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
-                {VIEW_TYPES.map((type) => {
-                  const meta = VIEW_TYPE_META[type];
-                  return (
-                    <DropdownMenuItem key={type} onSelect={() => openDialog({ kind: "create-view", table, type })} className="items-start gap-2.5 rounded-lg px-2.5 py-2">
-                      <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
-                      <span className="min-w-0">
-                        <span className="block font-medium">{meta.label}</span>
-                        <span className="block text-xs text-muted">{meta.description}</span>
-                      </span>
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+              className={cn(buttonClass, "min-w-0 shrink justify-start bg-primary pl-2.5 pr-2 text-primary-fg hover:bg-primary-hover data-[state=open]:bg-primary-hover")}
+            >
+              <Icon aria-hidden className="size-[1.125rem] shrink-0" />
+              <span className="min-w-0 truncate">{name}</span>
+              {view.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 opacity-80" />}
+              {view.locked && <Lock aria-label="Locked view" role="img" className="size-3.5 shrink-0 opacity-80" />}
+              <ChevronDown aria-hidden className="size-4 shrink-0 opacity-80" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            aria-label={`Views of ${table.name}`}
+            aria-labelledby={undefined}
+            className="w-64"
+            onFocusOutside={stayWhileMenuOpen}
+            onPointerDownOutside={stayWhileMenuOpen}
+            onInteractOutside={stayWhileMenuOpen}
+          >
+            {defaultView && <ViewMenuItem view={defaultView} name="Default grid" icon={Grid3x3} to={to(defaultView)} active={isDefault} still={menu !== null} />}
+            {defaultView && named.length > 0 && <DropdownMenuSeparator />}
+            {groupViews(named).map((g) => {
+              const props = (v: View) => ({ view: v, to: to(v), active: v.id === view.id, onMenu: menuFor(v), still: menu !== null });
+              if (g.views.length === 1) return <ViewMenuItem key={g.type} {...props(g.views[0]!)} />;
+              // Several of one type: one row, named like any other (the open one, or the first) with how
+              // many more there are, opening a submenu of them all.
+              const meta = VIEW_TYPE_META[g.type];
+              const TypeIcon = meta?.icon ?? Table2;
+              const heading = `${meta?.label ?? g.type} views`;
+              const shown = g.views.find((v) => v.id === view.id) ?? g.views[0]!;
+              const more = g.views.length - 1;
+              return (
+                <DropdownMenuSub key={g.type}>
+                  <DropdownMenuSubTrigger
+                    aria-label={`${heading}: ${shown.name} and ${more} more`}
+                    // Crossed on the way into a view's menu, it neither opens its views nor takes the focus.
+                    onPointerMove={keepStill}
+                    onPointerLeave={keepStill}
+                    // The row opens the view it names; its "+2 ›" end (or hovering, or →) opens the others.
+                    onClick={(e) => {
+                      const end = e.currentTarget.querySelector("[data-more]")?.getBoundingClientRect();
+                      if (end && end.width > 0 && e.clientX >= end.left) return;
+                      e.preventDefault();
+                      openView(shown);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      openView(shown);
+                    }}
+                    onContextMenu={(e) => {
+                      const open = menuFor(shown);
+                      if (!open) return;
+                      e.preventDefault();
+                      open({ x: e.clientX, y: e.clientY, width: 1, height: 1 });
+                    }}
+                    className={cn(shown.id === view.id && "font-medium")}
+                  >
+                    <TypeIcon aria-hidden className="size-4 shrink-0 text-muted" />
+                    <span className="min-w-0 flex-1 truncate">{shown.name}</span>
+                    <span aria-hidden data-more="" className="shrink-0 text-xs text-muted">+{more}</span>
+                    {shown.id === view.id && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent aria-label={heading} aria-labelledby={undefined} className="w-60" onFocusOutside={stayWhileMenuOpen} onPointerDownOutside={stayWhileMenuOpen} onInteractOutside={stayWhileMenuOpen}>
+                    {g.views.map((v) => (
+                      <ViewMenuItem key={v.id} {...props(v)} />
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              );
+            })}
+            {canCreateView && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Plus aria-hidden className="size-4 shrink-0 text-muted" />
+                    Add view
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent aria-label="Add view" className="w-72">
+                    {!basePermissions.createSharedView(schema.role) && <DropdownMenuLabel>Editors can create personal views.</DropdownMenuLabel>}
+                    {VIEW_TYPES.map((type) => {
+                      const meta = VIEW_TYPE_META[type];
+                      return (
+                        <DropdownMenuItem key={type} onSelect={() => openDialog({ kind: "create-view", table, type })} className="items-start gap-2.5 rounded-lg px-2.5 py-2">
+                          <meta.icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
+                          <span className="min-w-0">
+                            <span className="block font-medium">{meta.label}</span>
+                            <span className="block text-xs text-muted">{meta.description}</span>
+                          </span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <AnchoredMenu anchor={menu?.anchor ?? null} onClose={() => setMenu(null)} label={menu ? `Options for ${menu.view.name}` : "View options"}>
-          {menu && <ViewMenuItems schema={schema} table={table} view={menu.view} onDialog={openDialog} />}
+          {menu && <ViewMenuItems schema={schema} table={table} view={menu.view} onDialog={openDialog} extra={moveItems(menu.view)} />}
         </AnchoredMenu>
-        {/* The buttons with their names, out of sight: measured to decide whether the names fit. */}
-        <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-0.5">
-          {views.map((v) => {
-            const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
-            return (
-              <span key={v.id} className={cn(buttonClass, labelledClass)}>
-                <Icon className="size-[1.125rem]" />
-                {v.name}
-              </span>
-            );
-          })}
-        </div>
-      </div>
-    </ViewMenuOpen>
+    </div>
   );
 }
 
-function count(groups: readonly ViewGroup[]): number {
-  return groups.reduce((n, g) => n + g.views.length, 0);
-}
-
-/** A view on its own is a link (with its name when names fit); several views of one type are one icon opening their names. */
 /**
  * Opens a view's menu like a context menu: a right-click (or the keyboard's menu key, Shift+F10) at the
- * pointer, or under the button when there is no pointer; on a touch screen a press held without
+ * pointer, or under the item when there is no pointer; on a touch screen a press held without
  * moving, after which the lift does not also follow the link.
  */
 function useMenuGesture(onMenu: ((anchor: MenuAnchor) => void) | undefined) {
@@ -325,147 +283,29 @@ function useMenuGesture(onMenu: ((anchor: MenuAnchor) => void) | undefined) {
   };
 }
 
-function GroupButton({
-  group,
-  activeId,
-  labelled,
-  sortable = false,
-  to,
-  tableName,
-  onMenu,
-  hasMenu,
-}: {
-  group: ViewGroup;
-  activeId: string;
-  labelled: boolean;
-  /** The buttons can be dragged into a new order (one per view, inside the switcher's `SortableContext`). */
-  sortable?: boolean;
-  to: (v: View) => string;
-  tableName: string;
-  onMenu?: (view: View, anchor: MenuAnchor) => void;
-  hasMenu?: (view: View) => boolean;
-}) {
-  const Icon = VIEW_TYPE_META[group.type]?.icon ?? Table2;
-  const active = group.views.some((v) => v.id === activeId);
-  const tone = active ? "bg-primary-soft text-primary-ink" : "text-muted hover:bg-hover hover:text-fg";
-  const single = group.views.length === 1 ? group.views[0]! : null;
-  // Only a view with something to do takes the gesture; for the others the browser's own menu stays.
-  const gesture = useMenuGesture(single && onMenu && hasMenu?.(single) ? (anchor) => onMenu(single, anchor) : undefined);
-  if (single) {
-    const v = single;
-    const link = (drag: DragProps = {}, dragging = false) => (
-      // `-webkit-touch-callout: none`: a held press opens the view's menu, not iOS's link preview.
-      <Link
-        {...gesture}
-        {...drag}
-        to={to(v)}
-        aria-label={v.name}
-        aria-current={active ? "page" : undefined}
-        data-dragging={dragging || undefined}
-        className={cn(buttonClass, labelled && labelledClass, "no-underline select-none [-webkit-touch-callout:none] motion-reduce:transition-none!", tone, dragging && "z-20 cursor-grabbing bg-surface shadow-pop")}
-      >
-        <Icon aria-hidden className="size-[1.125rem] shrink-0" />
-        {labelled && <span aria-hidden>{v.name}</span>}
-        <ViewBadges view={v} />
-      </Link>
-    );
-    if (sortable) return <SortableButton id={v.id}>{link}</SortableButton>;
-    return labelled ? link() : <Tooltip content={v.name}>{link()}</Tooltip>;
-  }
-  const typeLabel = VIEW_TYPE_META[group.type]?.label ?? group.type;
-  const open = group.views.find((v) => v.id === activeId);
-  return (
-    <ViewsDropdown
-      label={`${typeLabel} views of ${tableName}`}
-      views={group.views}
-      activeId={activeId}
-      to={to}
-      onMenu={onMenu}
-      hasMenu={hasMenu}
-      trigger={
-        <button
-          type="button"
-          aria-label={`${group.views.length} ${typeLabel.toLowerCase()} views${open ? `, ${open.name} open` : ""}`}
-          title={open?.name ?? `${typeLabel} views`}
-          className={cn(buttonClass, "gap-0.5 pl-1.5 pr-1", tone, "data-[state=open]:bg-hover")}
-        >
-          <Icon aria-hidden className="size-[1.125rem] shrink-0" />
-          <ChevronDown aria-hidden className="size-3.5 shrink-0 opacity-70" />
-        </button>
-      }
-    />
-  );
-}
-
-type DragProps = React.HTMLAttributes<HTMLAnchorElement> & { ref?: (el: HTMLElement | null) => void; "data-sortable"?: string };
-
-/** A view's button that can be dragged along the toolbar (inside the switcher's `SortableContext`). */
-function SortableButton({ id, children }: { id: string; children: (drag: DragProps, dragging: boolean) => React.ReactElement }) {
-  // No attributes from dnd-kit (role="button", tabIndex): the link stays a link for the keyboard.
-  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id });
-  return children({ ref: setNodeRef, ...(listeners as React.HTMLAttributes<HTMLAnchorElement> | undefined), style: { transform: CSS.Translate.toString(transform), transition }, "data-sortable": "" }, isDragging);
-}
-
-/** Whether a view's own menu is open (from the toolbar): a list of views it came from stays open under it. */
-const ViewMenuOpen = createContext(false);
-
-/**
- * A dropdown of views (the views of one type sharing a button, or those that did not fit). A
- * right-click or a held press on one of them opens that view's own menu over it; the list stays
- * open underneath (it is not modal, so the new menu can take the focus and the pointer, and what
- * happens in that menu does not count as leaving the list).
- */
-function ViewsDropdown({
-  label,
-  views,
-  activeId,
-  to,
-  trigger,
-  onMenu,
-  hasMenu,
-}: {
-  label: string;
-  views: readonly View[];
-  activeId: string;
-  to: (v: View) => string;
-  trigger: React.ReactElement;
-  onMenu?: (view: View, anchor: MenuAnchor) => void;
-  hasMenu?: (view: View) => boolean;
-}) {
-  const menuOpen = useContext(ViewMenuOpen);
-  const menuOpenRef = useRef(menuOpen);
-  menuOpenRef.current = menuOpen;
-  const stayWhileMenuOpen = (e: Event) => {
-    if (menuOpenRef.current) e.preventDefault();
-  };
-  const menuFor = (v: View) => (onMenu && hasMenu?.(v) ? (anchor: MenuAnchor) => onMenu(v, anchor) : undefined);
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        aria-label={label}
-        aria-labelledby={undefined}
-        className="w-60"
-        onFocusOutside={stayWhileMenuOpen}
-        onPointerDownOutside={stayWhileMenuOpen}
-        onInteractOutside={stayWhileMenuOpen}
-      >
-        {views.map((v) => (
-          <ViewMenuItem key={v.id} view={v} to={to(v)} active={v.id === activeId} onMenu={menuFor(v)} still={menuOpen} />
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 /**
  * `still`: a view's menu is open over the list. The pointer crossing the list on its way into that menu
  * must not take the focus out of it (a list item takes the focus when the pointer moves over it, and the
  * list when the pointer leaves one), or the menu closes; a prevented event is what tells Radix not to.
  */
-function ViewMenuItem({ view: v, to, active, onMenu, still }: { view: View; to: string; active: boolean; onMenu?: (anchor: MenuAnchor) => void; still: boolean }) {
-  const Icon = VIEW_TYPE_META[v.type]?.icon ?? Table2;
+function ViewMenuItem({
+  view: v,
+  name = v.name,
+  icon,
+  to,
+  active,
+  onMenu,
+  still,
+}: {
+  view: View;
+  name?: string;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  to: string;
+  active: boolean;
+  onMenu?: (anchor: MenuAnchor) => void;
+  still: boolean;
+}) {
+  const Icon = icon ?? VIEW_TYPE_META[v.type]?.icon ?? Table2;
   const gesture = useMenuGesture(onMenu);
   const keep = (e: React.PointerEvent) => {
     if (still) e.preventDefault();
@@ -479,24 +319,17 @@ function ViewMenuItem({ view: v, to, active, onMenu, still }: { view: View; to: 
           keep(e);
         }}
         onPointerLeave={keep}
-        to={to} aria-current={active ? "page" : undefined} className="[-webkit-touch-callout:none]">
+        to={to}
+        aria-current={active ? "page" : undefined}
+        className={cn("[-webkit-touch-callout:none]", active && "font-medium")}
+      >
         <Icon aria-hidden className="size-4 shrink-0 text-muted" />
-        <span className="min-w-0 flex-1 truncate">{v.name}</span>
+        <span className="min-w-0 flex-1 truncate">{name}</span>
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}
         {v.locked && <Lock aria-label="Locked view" role="img" className="size-3.5 shrink-0 text-muted" />}
-        {active && <Check aria-hidden className="size-4 shrink-0 text-primary" />}
+        {active && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
       </Link>
     </DropdownMenuItem>
   );
 }
 
-/** Personal and locked views carry a tiny mark in the corner of their button. */
-function ViewBadges({ view }: { view: View }) {
-  const badge = "absolute size-3 rounded-full bg-surface p-px text-muted";
-  return (
-    <>
-      {view.personal && <UserIcon aria-label="Personal view" role="img" className={cn(badge, "-bottom-px -right-px")} />}
-      {view.locked && <Lock aria-label="Locked view" role="img" className={cn(badge, "-right-px -top-px")} />}
-    </>
-  );
-}

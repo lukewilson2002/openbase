@@ -274,6 +274,45 @@ test.describe("timeline", () => {
     await expect(page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("lists undated records beside the chart and dates one dropped on a lane", async ({ page }) => {
+    await open(page, "timeline");
+    const column = page.getByRole("complementary", { name: "Unscheduled records" });
+    const echo = column.getByRole("listitem").filter({ hasText: "Echo" });
+    await expect(echo).toBeVisible();
+    // The footer no longer counts them: the column lists them.
+    await expect(page.getByText(/without a date/)).toHaveCount(0);
+    const view = (await page.getByTestId("timeline-scroller").boundingBox())!;
+    const lane = (await page.locator("[data-lane]").first().boundingBox())!;
+    // Inside the visible chart, right of the record names, below the lane's bar.
+    await echo.dragTo(page.locator("[data-lane]").first(), { targetPosition: { x: view.x - lane.x + view.width / 2, y: lane.height - 6 } });
+    await expect.poll(async () => (await record(page, fx.records.echo)).values[fx.fields.start] ?? null).not.toBeNull();
+    const values = (await record(page, fx.records.echo)).values;
+    expect(values[fx.fields.end]).toBe(values[fx.fields.start]);
+    await expect(echo).toHaveCount(0);
+    // Unschedule Echo again: the timeline tests count the dated records.
+    await call(page.request, "patch", `/api/tables/${fx.tableId}/records`, { records: [{ id: fx.records.echo, values: { [fx.fields.start]: null, [fx.fields.end]: null } }] });
+  });
+
+  test("drags a bar into another swim lane and saves the lane's value", async ({ page }) => {
+    const lanes = (await call<{ id: string }>(page.request, "post", `/api/tables/${fx.tableId}/views`, { name: "Lanes", type: "timeline", config: { timeline: { start_field_id: fx.fields.start, end_field_id: fx.fields.end, group_field_id: fx.fields.status, scale: "week" } } })).id;
+    await page.goto(`/base/${fx.baseId}/${fx.tableId}/${lanes}`);
+    const bar = page.getByRole("button", { name: /^Charlie, / });
+    await expect(bar).toBeVisible();
+    const from = (await bar.boundingBox())!;
+    const todo = (await page.locator(`[data-lane="${fx.choice.todo}"]`).boundingBox())!;
+    // Near its start: the bar can run on under the Unscheduled column, depending on today's date.
+    const x = from.x + 16;
+    await page.mouse.move(x, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, from.y + from.height / 2 - 10, { steps: 3 });
+    await page.mouse.move(x, todo.y + todo.height - 12, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(async () => (await record(page, fx.records.charlie)).values[fx.fields.status]).toBe(fx.choice.todo);
+    // Put Charlie back and remove the view: other tests count on both.
+    await call(page.request, "patch", `/api/tables/${fx.tableId}/records`, { records: [{ id: fx.records.charlie, values: { [fx.fields.status]: fx.choice.doing } }] });
+    await call(page.request, "delete", `/api/views/${lanes}`);
+  });
+
   test("creates a record by dragging across empty lane space", async ({ page }) => {
     await open(page, "timeline");
     await expect(page.locator("[data-bar]").first()).toBeVisible();
@@ -379,41 +418,6 @@ test.describe("menu order", () => {
     await expect(page.getByRole("list", { name: "Tables in Order E2E" }).getByRole("link")).toHaveText(["Bravo", "Alpha", "Charlie"]);
   });
 
-  test("drags a view's button along the toolbar, and the menu follows", async ({ page }) => {
-    const tree = await seedTree(page);
-    const alpha = tree.tables[0]!;
-    await page.goto(`/base/${tree.baseId}/${alpha.id}`);
-    const bar = page.getByRole("navigation", { name: "Views of Alpha" });
-    const names = async () => (await bar.getByRole("link").all()).map((l) => l.getAttribute("aria-label"));
-    await expect(bar.getByRole("link", { name: "Gallery" })).toBeVisible();
-    const before = (await Promise.all(await names())) as string[];
-    expect(before.slice(-3)).toEqual(["Rows", "Cards", "Gallery"]);
-    const url = page.url();
-
-    // Gallery goes in front of Cards: a few pixels first, then across.
-    const gallery = (await bar.getByRole("link", { name: "Gallery" }).boundingBox())!;
-    const cards = (await bar.getByRole("link", { name: "Cards" }).boundingBox())!;
-    await page.mouse.move(gallery.x + gallery.width / 2, gallery.y + gallery.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(gallery.x + gallery.width / 2 - 8, gallery.y + gallery.height / 2, { steps: 3 });
-    await page.mouse.move(cards.x + cards.width * 0.2, cards.y + cards.height / 2, { steps: 10 });
-    await page.mouse.up();
-
-    const after = [...before.slice(0, -2), "Gallery", "Cards"];
-    await expect.poll(async () => Promise.all(await names())).toEqual(after);
-    const viewNames = async () =>
-      (await call<{ tables: { id: string; views: { name: string; is_default: boolean }[] }[] }>(page.request, "get", `/api/bases/${tree.baseId}`)).tables
-        .find((t) => t.id === alpha.id)!
-        .views.filter((v) => !v.is_default)
-        .map((v) => v.name);
-    await expect.poll(viewNames).toEqual(after);
-    // The drop opened nothing.
-    expect(page.url()).toBe(url);
-    // The menu shows the same order.
-    await page.getByRole("button", { name: "Show views of Alpha" }).click();
-    await expect(page.getByRole("list", { name: "Shared views" }).getByRole("link")).toHaveText(after);
-  });
-
   test("a click on a row without moving still opens it", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
@@ -421,7 +425,7 @@ test.describe("menu order", () => {
     await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[2]!.id}`));
   });
 
-  test("moves a table and a view with the keyboard through the row menus", async ({ page }) => {
+  test("moves a table with the keyboard through its row menu, and a view through the view switcher's options", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
     const list = page.getByRole("list", { name: "Tables in Order E2E" });
@@ -431,18 +435,26 @@ test.describe("menu order", () => {
     await expect(list.getByRole("link")).toHaveText(["Alpha", "Charlie", "Bravo"]);
     await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Alpha", "Charlie", "Bravo"]);
 
-    await page.getByRole("button", { name: "Show views of Alpha" }).click();
-    const shared = page.getByRole("list", { name: "Shared views" });
-    const before = await shared.getByRole("link").allTextContents();
+    // The menu lists tables only: the views are in the toolbar's list, where they are also put in order.
+    await expect(page.getByRole("button", { name: /^Show views of/ })).toHaveCount(0);
+    const viewNames = async () =>
+      (await call<{ tables: { id: string; views: { name: string; is_default?: boolean }[] }[] }>(page.request, "get", `/api/bases/${tree.baseId}`)).tables
+        .find((t) => t.id === tree.tables[0]!.id)!
+        .views.filter((v) => !v.is_default)
+        .map((v) => v.name);
+    const before = await viewNames();
     // Whatever else a new table starts with, the three views are there, Gallery after Cards.
     expect(before.indexOf("Gallery")).toBe(before.indexOf("Cards") + 1);
     const after = [...before];
     after.splice(before.indexOf("Gallery") - 1, 2, "Gallery", "Cards");
-    await shared.getByRole("button", { name: "Options for Gallery" }).click();
-    await page.getByRole("menuitem", { name: "Move up" }).click();
-    await expect(shared.getByRole("link")).toHaveText(after);
-    // Folded views stay as they were left, so the list is open again after a reload.
+
+    await page.getByRole("button", { name: /^View: / }).click();
+    const views = page.getByRole("menu", { name: "Views of Alpha" });
+    await views.getByRole("menuitem", { name: "Gallery" }).click({ button: "right" });
+    await page.getByRole("menu", { name: "Options for Gallery" }).getByRole("menuitem", { name: "Move up" }).click();
+    await expect.poll(viewNames).toEqual(after);
+    // Still so once the page is loaded again.
     await page.reload();
-    await expect(page.getByRole("list", { name: "Shared views" }).getByRole("link")).toHaveText(after);
+    expect(await viewNames()).toEqual(after);
   });
 });

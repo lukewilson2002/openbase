@@ -54,7 +54,7 @@ async fn same_type_option_changes_keep_values_and_type_changes_convert_them() {
         .patch(
             &f.owner,
             &format!("/api/fields/{nid}"),
-            json!({ "type": "single_line_text", "options": {} }),
+            json!({ "type": "text", "options": {} }),
         )
         .await
         .assert_status(200);

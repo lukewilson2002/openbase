@@ -5,7 +5,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import type { ActivityItem, ActivityPlace, Field } from "@/api/types";
-import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
 import { CommentBody } from "@/components/record/CommentsPanel";
 import { historyValueText } from "@/components/record/HistoryPanel";
 import { Avatar } from "@/components/ui/avatar";
@@ -63,15 +62,9 @@ function Place({ place }: { place: ActivityPlace }) {
   return (
     <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.8125rem] text-muted">
       <span>Record in</span>
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <WorkspaceTile ws={{ name: place.workspace_name, color: place.workspace_color }} size="xs" />
-        <span className="truncate">{place.workspace_name}</span>
-      </span>
+      <span className="truncate">{place.workspace_name}</span>
       <span aria-hidden>›</span>
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <EntityTile name={place.base_name} icon={place.base_icon} color={place.base_color} size="xs" />
-        <span className="truncate">{place.base_name}</span>
-      </span>
+      <span className="truncate">{place.base_name}</span>
       <span aria-hidden>›</span>
       <span className="truncate">{place.table_name}</span>
     </p>
@@ -193,7 +186,7 @@ function Value({ text, tone }: { text: string; tone: "old" | "new" }) {
     <>
       <Tag className={cn("break-words rounded px-1.5 py-0.5 text-[0.8125rem] no-underline", tone === "old" ? "bg-danger-soft line-through decoration-danger/60" : "bg-success-soft")}>{text ? shown : "(empty)"}</Tag>
       {long && (
-        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-xs font-medium text-primary hover:underline">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-xs font-medium text-primary-text hover:underline">
           {open ? "less" : "more"}
         </button>
       )}
@@ -216,7 +209,7 @@ function CommentText({ body }: { body: string }) {
 
 function Toggle({ expanded, onClick, more, less }: { expanded: boolean; onClick: () => void; more: string; less: string }) {
   return (
-    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-xs font-medium text-primary hover:underline">
+    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-xs font-medium text-primary-text hover:underline">
       {expanded ? less : more}
     </button>
   );

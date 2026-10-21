@@ -42,8 +42,8 @@ pub async fn everything(v: &V1) -> Everything {
     let mut ids = BTreeMap::new();
     ids.insert("Title".to_string(), primary);
     let specs = [
-        json!({ "name": "Long", "type": "long_text", "options": {} }),
-        json!({ "name": "Rich", "type": "long_text", "options": { "rich": true } }),
+        json!({ "name": "Long", "type": "text", "options": { "multiline": true } }),
+        json!({ "name": "Rich", "type": "rich_text", "options": {} }),
         json!({ "name": "Num", "type": "number", "options": { "precision": 2 } }),
         json!({ "name": "Cur", "type": "currency", "options": { "precision": 2, "symbol": "EUR" } }),
         json!({ "name": "Pct", "type": "percent", "options": { "precision": 1 } }),

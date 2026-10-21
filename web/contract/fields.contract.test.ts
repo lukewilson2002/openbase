@@ -237,7 +237,7 @@ describe("changing a field", () => {
     const t = await tableOf(w.owner, w.baseId, table().id);
     const fresh = parseFieldResult(await w.owner.run(() => schemaApi.createField(table().id, { name: "Amount", type: "number", options: { precision: 2, allow_negative: true } }))).field;
     const rec = (await w.owner.run(() => recordsApi.create(table().id, { records: [{ values: { [fresh.id]: 12.5, [t.primary_field_id]: "row" } }] }))).records[0]!;
-    parseFieldResult(await w.owner.run(() => schemaApi.updateField(fresh.id, { type: "single_line_text", options: {} })));
+    parseFieldResult(await w.owner.run(() => schemaApi.updateField(fresh.id, { type: "text", options: { multiline: false } })));
     const after = parse("TableRecord", await w.owner.run(() => recordsApi.get(table().id, rec.id)));
     expect(after.values[fresh.id]).toBe("12.50");
     expect(after.values[t.primary_field_id]).toBe("row");

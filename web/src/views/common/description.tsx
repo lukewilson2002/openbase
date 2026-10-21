@@ -37,14 +37,14 @@ export function DescriptionSelect({ candidates, field, disabled, onChange, hint 
       noneLabel="No description"
       disabled={disabled}
       onChange={onChange}
-      hint={hint ?? (candidates.length === 0 ? "Add a text field to show a description under each title." : "A text field read under each record's title. Point at it to read all of it.")}
+      hint={hint ?? (candidates.length === 0 ? "Add a text field to show a description under each title." : "A text field read under each record's title.")}
     />
   );
 }
 
-/** The whole description: rich long text as markdown, anything else as text with its line breaks. */
+/** The whole description: rich text as markdown, anything else as text with its line breaks. */
 function FullDescription({ field, value, format }: { field: Field; value: TableRecord["values"][string]; format: FormatCtx }) {
-  if (field.type === "long_text" && field.options.rich && typeof value === "string") return <Markdown source={value} className="text-[0.8125rem]" />;
+  if (field.type === "rich_text" && typeof value === "string") return <Markdown source={value} className="text-[0.8125rem]" />;
   return <p className="whitespace-pre-wrap break-words text-[0.8125rem] leading-[1.5]">{displayText(field, value, format)}</p>;
 }
 

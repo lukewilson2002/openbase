@@ -146,11 +146,10 @@ async fn bases_and_tables_can_be_renamed_duplicated_deleted_and_restored() {
 async fn every_field_type(r: &Rig) -> &'static str {
     r.table("Everything").await;
     r.table("Friends").await;
-    r.field("Friends", "Mood", "single_line_text", json!({}))
-        .await;
+    r.field("Friends", "Mood", "text", json!({})).await;
     let cases: Vec<(&str, &str, Value)> = vec![
-        ("Text", "single_line_text", json!({"default": "n/a"})),
-        ("Memo", "long_text", json!({"rich": true})),
+        ("Text", "text", json!({"default": "n/a"})),
+        ("Memo", "rich_text", json!({})),
         (
             "Amount",
             "number",
@@ -346,6 +345,64 @@ async fn field_types_help_documents_every_type() {
     );
 }
 
+/// The overview says what each type is for, and steers prose to rich text.
+#[tokio::test]
+async fn field_types_say_when_to_choose_text_or_rich_text() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let overview = a.call("field_types", json!({})).await;
+    let use_for = |ty: &str| -> String {
+        overview["types"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["type"] == ty)
+            .unwrap()["use_for"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    for ty in ["text", "rich_text", "number", "link"] {
+        assert!(!use_for(ty).is_empty(), "{ty}");
+    }
+    let rich = use_for("rich_text");
+    assert!(
+        ["notes", "summaries", "articles", "blog posts"]
+            .iter()
+            .all(|w| rich.contains(w)),
+        "{rich}"
+    );
+    assert!(use_for("text").contains("use rich_text"));
+    // The names before v0.8 still work, for help and for creating fields.
+    let d = a.call("field_types", json!({"type": "long_text"})).await;
+    assert_eq!(d["type"], "rich_text");
+    r.table("T").await;
+    let b = r.base.as_str();
+    for (old, new) in [("single_line_text", "text"), ("long_text", "rich_text")] {
+        let made = a
+            .call(
+                "create_field",
+                json!({"base_id": b, "table": "T", "name": old, "type": old}),
+            )
+            .await;
+        assert_eq!(made["field"]["type"], new, "{made}");
+    }
+    // Turning multiline off joins lines, so it asks first, like a type change.
+    r.field("T", "Address", "text", json!({"multiline": true}))
+        .await;
+    let change =
+        json!({"base_id": b, "table": "T", "field": "Address", "options": {"multiline": false}});
+    let e = a.fails("update_field", change.clone()).await;
+    assert!(
+        e.contains("joins the lines") && e.contains("confirm_conversion"),
+        "{e}"
+    );
+    let mut confirmed = change;
+    confirmed["confirm_conversion"] = json!(true);
+    let done = a.call("update_field", confirmed).await;
+    assert_eq!(done["field"]["options"]["multiline"], false, "{done}");
+}
+
 #[tokio::test]
 async fn select_choices_take_colors_or_get_meaningful_defaults() {
     let r = Rig::new().await;
@@ -436,7 +493,7 @@ async fn field_creation_errors_say_what_to_fix() {
     let r = Rig::new().await;
     let a = &r.agent;
     r.table("T").await;
-    r.field("T", "Plain", "single_line_text", json!({})).await;
+    r.field("T", "Plain", "text", json!({})).await;
     let b = r.base.as_str();
     let e = a
         .fails(
@@ -728,7 +785,7 @@ async fn changing_a_field_type_warns_first_then_converts() {
     let a = &r.agent;
     let b = r.base.as_str();
     r.table("T").await;
-    r.field("T", "Value", "single_line_text", json!({})).await;
+    r.field("T", "Value", "text", json!({})).await;
     let rows = r
         .records(
             "T",
@@ -748,7 +805,7 @@ async fn changing_a_field_type_warns_first_then_converts() {
         )
         .await;
     assert!(
-        warning.contains("single_line_text to number")
+        warning.contains("text to number")
             && warning.contains("converts every existing value")
             && warning.contains("confirm_conversion=true"),
         "{warning}"
@@ -761,10 +818,7 @@ async fn changing_a_field_type_warns_first_then_converts() {
         .find(|f| f["name"] == "Value")
         .unwrap()
         .clone();
-    assert_eq!(
-        value_field["type"], "single_line_text",
-        "nothing changed yet"
-    );
+    assert_eq!(value_field["type"], "text", "nothing changed yet");
 
     // Confirmed: converted, with a note in the result.
     let done = a
@@ -775,7 +829,7 @@ async fn changing_a_field_type_warns_first_then_converts() {
         )
         .await;
     assert_eq!(done["field"]["type"], "number");
-    assert_eq!(done["conversion"]["from"], "single_line_text");
+    assert_eq!(done["conversion"]["from"], "text");
     assert_eq!(done["conversion"]["to"], "number");
     let ra = a
         .call(
@@ -805,7 +859,7 @@ async fn fields_can_be_deleted_restored_and_made_primary() {
     let a = &r.agent;
     let b = r.base.as_str();
     r.table("T").await;
-    r.field("T", "Code", "single_line_text", json!({})).await;
+    r.field("T", "Code", "text", json!({})).await;
     r.field("T", "Qty", "number", json!({})).await;
     r.field("T", "Double", "formula", json!({"expression": "{Qty} * 2"}))
         .await;
@@ -889,7 +943,7 @@ async fn views_of_every_type_accept_names_in_their_config() {
     r.field("Tasks", "Points", "number", json!({})).await;
     r.field("Tasks", "Needs", "link", json!({"linked_table": "Tasks"}))
         .await;
-    r.field("Tasks", "Notes", "long_text", json!({})).await;
+    r.field("Tasks", "Notes", "rich_text", json!({})).await;
 
     let configs = [
         (
@@ -913,7 +967,7 @@ async fn views_of_every_type_accept_names_in_their_config() {
         (
             "timeline",
             json!({"timeline": {"start_field_id": "Start", "end_field_id": "End", "group_field_id": "Status",
-                                         "dependency_field_id": "Needs", "scale": "month"}}),
+                                         "dependency_field_id": "Needs", "scale": "month", "label_width": 180}}),
         ),
         (
             "list",
@@ -944,6 +998,12 @@ async fn views_of_every_type_accept_names_in_their_config() {
             "{ty} reads back as written"
         );
     }
+
+    // A timeline keeps the width of its left column as an agent set it.
+    let timeline = a
+        .call("get_view", json!({"base_id": b, "view": "timeline view"}))
+        .await;
+    assert_eq!(timeline["view"]["config"]["timeline"]["label_width"], 180);
 
     // Spot checks of the translation in both directions.
     let kanban = a

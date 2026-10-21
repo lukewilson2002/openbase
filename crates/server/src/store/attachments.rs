@@ -280,7 +280,7 @@ fn ids_in(text: &str, out: &mut HashSet<String>) {
     }
 }
 
-/// The prefix of the address an embedded or linked file has in long text.
+/// The prefix of the address an embedded or linked file has in rich text.
 pub const REF_PREFIX: &str = "/api/attachments/";
 
 /// SQL condition on a text column `col`: it may name a file by address, plainly or in disguise
@@ -448,7 +448,7 @@ pub fn first_foreign_ref(
 /// Delete attachment rows that nothing references: created before
 /// `cutoff_ms`, or (uploads without a user, i.e. from public forms) before
 /// `anonymous_cutoff_ms`. "Referenced" means mentioned in the data of any
-/// record (live or trashed), in a comment or in the retained record history, in any field including long text: removing a
+/// record (live or trashed), in a comment or in the retained record history, in any field including rich text: removing a
 /// file from a cell must stay undoable (client-side undo, copying from the
 /// history panel) for as long as that history exists. Returns the hashes of
 /// the deleted rows. Files of inbox drafts (list and embedded in the text) count as referenced too.

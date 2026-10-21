@@ -48,7 +48,7 @@ pub struct KindCtx<'a> {
 /// Validate `kind` and return the normalized options to store.
 pub fn normalize_kind(ctx: &KindCtx, mut kind: FieldKind) -> AppResult<FieldKind> {
     match &mut kind {
-        FieldKind::SingleLineText(o) => {
+        FieldKind::Text(o) => {
             if o.default.as_deref().map_or(0, |d| d.chars().count()) > limits::MAX_TEXT_CELL_LEN {
                 return Err(AppError::bad_request("default text is too long"));
             }
@@ -114,7 +114,7 @@ pub fn normalize_kind(ctx: &KindCtx, mut kind: FieldKind) -> AppResult<FieldKind
             let (stored, _) = fields_engine::prepare_formula(ctx.siblings, &o.url_formula)?;
             o.url_formula = stored;
         }
-        FieldKind::LongText(_)
+        FieldKind::RichText(_)
         | FieldKind::Duration(_)
         | FieldKind::User(_)
         | FieldKind::Email(_)

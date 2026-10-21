@@ -13,20 +13,166 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
-- **Put the menu in order.** Drag workspaces, projects, tables and views in the menu to reorder
-  them (on a phone, hold a finger on a row first). Each moves among its own siblings: a project
-  stays in its workspace, a view in its table and in its Shared or Personal list. The "…" menu of
-  each row has **Move up** and **Move down** too. A table's views can also be dragged along the
-  view toolbar with a mouse, while each has a button with its name. The order of workspaces is your own; the order
+- **Search from every page.** "Search everything" is now in the top bar everywhere, including
+  inside a project, its automations and on every settings page; ⌘K / Ctrl+K jumps to it. When the bar
+  has no room for the box (a phone, or a project with a long path) it is a search button at the
+  bar's right end that opens the same search. Once you type, chips narrow the results to **This
+  project** or **This workspace** (or any other one, from the picker). Each result shows where your
+  text matched: the match is highlighted in names, and a record found by another field shows that
+  field's name and the words around the match ("…Steven will be in charge of **mark**eting. That
+  may…"), as plain text: rich text and comments without their Markdown, a mention as @Name.
+  `GET /api/search` takes `workspace` and `base`, and returns `name_matches`, `snippet_matches`
+  and the matching field; agents get the same with the new MCP tool `search_everything`.
+- **Put things in order.** Drag workspaces, projects and tables in the menu to reorder them (on a
+  phone, hold a finger on a row first). Each moves among its own siblings: a project stays in its
+  workspace. The "…" menu of each row has **Move up** and **Move down** too, and so does a view's
+  menu in the view list (a view moves among the shared ones, or among the personal ones). The
+  order of workspaces is your own; the order
   of projects, tables and views is everyone's, and changing it takes the role that renames them
   (an editor orders their personal views). Inbox, Notifications, Automations, History and Trash
   stay where they are. Agents reorder with `reorder_workspaces`, `reorder_projects`,
   `reorder_tables` and `reorder_views`, or the `POST …/reorder` routes.
+- **@mention people in rich text.** Type `@` in a rich text field, an Inbox draft or a comment to
+  pick someone who can see the project; the mention shows as a chip. They get a notification
+  ("… mentioned you in …", opening the record) once the text is on a record they can see: when the
+  cell is saved or the comment posted, or when the draft is filed. A draft notifies nobody, saving
+  again notifies nobody twice, and you are never notified of your own mentions. Mentions written by
+  agents, the API, imports and automations (`@[Name](usrXXXX)` in rich text) notify the same way.
+- **Pick the app's colour.** The account menu's **Appearance** now has a **Color** row with the
+  ten colours projects and workspaces come in. The one you pick becomes the app's own colour in
+  light and dark mode alike: buttons, the selected row in the menu, the active view, switches and
+  checkboxes, badges, the grid's selection and your own avatar are filled with it, always with
+  white text (the lighter colours are deepened just enough for that), and pink is a true pink.
+  Hovers are a light wash of it, short of a selection's fill, and a card's border takes it under
+  the pointer. Links and other coloured text use it too, a shade darker on a light page (or
+  lighter on a dark one) only where the colour itself would be hard to read. The page, cards, the
+  menu and the top bar are plain greys in both themes. Every colour keeps text readable (WCAG AA
+  contrast). The choice is saved on your account, so it follows you to
+  other devices and is there from the first moment a page loads. Blue is the default. Agents set
+  it with `api_request PATCH /api/auth/me {"accent": "teal"}` (`""` for blue).
+
+- **Send feedback** from the account menu: it opens the project's GitHub Discussions in a new tab.
+- **Take a bar off the timeline.** A click now selects a timeline bar (a double-click or Enter opens
+  its record; on a phone a tap still opens it). **Delete** or **Backspace** clears a selected bar's
+  dates, and so does dragging a bar onto the **Unscheduled** column, which lights up to take it; the
+  record goes back to the unscheduled list.
+- **Undated records beside the timeline.** Like the calendar, the timeline has an
+  **Unscheduled** column on the right (open on a desktop, folded or opened as you like, remembered
+  per view) listing the records without a start date; drag one onto a lane and a day to date it
+  there, in that lane. The footer no longer counts them.
+- **A timeline's left column fits its names.** It starts just wide enough for the longest lane or
+  record name, and its divider can be dragged (or moved with the arrow keys) to widen or narrow it,
+  saved with the view; a double-click fits it to the names again. Agents set it as
+  `timeline.label_width` with `update_view`.
+- **Group by day, week, month, quarter or year.** A group level on a date (a date field, created
+  or last modified time, or a formula or lookup that gives a date) has a granularity in the Group
+  tool, by day unless you pick another. Headers read "October 21, 2026", "Week of October 19,
+  2026" (weeks start on Monday), "October 2026", "Q4 2026" or "2026", follow the level's oldest or
+  newest first, and records without a date share one "No date" group. Date-times fall into the
+  period of the viewer's time zone, or the field's own zone when it has one. The grid and the list
+  view group this way; a record added inside a group starts on the period's first day. Agents set
+  `granularity` on a level of `groups` with `update_view` or `PATCH /api/views/{id}`.
+
+### Changed
+
+- **Colours where they mean something.** A kanban stack, a list group's heading and a timeline
+  swim lane's name are filled with their choice's colour instead of carrying a dot, and a swim lane
+  takes a faint wash of it behind its bars. Coloured timeline bars lose their dot too; bars without
+  a colour are plain grey rather than the app's colour. In the grid, **Color by** marks each row
+  with the bar at its start only; its cells keep the grid's own background instead of a tint.
+- **The toolbar says what is on.** Each view type's own settings (what a kanban stacks by, a
+  calendar's dates, the cards' cover and description) are behind one **View** button. Tools that
+  are on name what they do, as Sort and Filter did: **Color by Team**, **Tall rows**, with a plain
+  grey fill rather than the app's colour, in the normal weight (not bold); **More** is marked only when a tool that is on has moved
+  into it. The search box shows its shortcut, ⌘K or Ctrl K.
+- **Tighter layout.** Grid, list and timeline views run edge to edge under the toolbar, without a
+  frame around them; values sit closer to their names in the record panel and on cards; the top
+  bar's path is plain text, the open table's name in bold and the app's colour. The calendar's
+  and the timeline's arrows sit either side of the dates they step through.
+- **One button for the views.** The view toolbar starts with a single button, filled with the
+  app's colour, showing the open view's icon and name; it opens a list of the table's views with the
+  default grid at the top, a line, then the views, and **Add view** at the end. Several views of
+  one type share a row named after the open one (or the first) with how many more there are
+  ("Board +2"): a click opens that view, and the "+2 ›" (or hovering) opens a submenu of them all. A right-click on the button, or on a view
+  in the list, opens that view's menu, where **Move up** and **Move down** put the views in order.
+- **The menu lists tables only.** A project's tables no longer unfold into their views: each is one
+  row (with its icon, or a table's), opening the view last used in it, and the open table is
+  highlighted; tables sit indented under their project. Views are in the toolbar's view list.
+- **Records look the same wherever they are listed.** A linked record in the record panel, the
+  records picked in a link field, and the undated records beside the calendar and the timeline are
+  all one compact card: the title, a line of description (the view's description field, or else the
+  record's first filled text field) and its labels (its filled selects), or a couple of its other
+  fields when it has no labels, each on a line after its name ("Tasks", then its chips). Hovering a
+  card shows all of the record's fields, with **Open**.
+  In the record panel a linked record's card is no longer a button: a click on it edits the field.
+  A link field's records stay the same cards while it is edited: drag a card by its grip (or move
+  it with the keyboard) to put them in order, and remove one with its ✕ (saved at once, or with the
+  rest of an edit in progress); the
+  pop-over under them only searches for records to add. In the grid, where the pop-over is the only
+  place they show, it lists them the same way above its search. In grid cells, linked records are
+  small cards too (a hairline border and the title in the app's colour) instead of grey pills;
+  hovering one shows the record's preview, which the pointer can move into to scroll it or press
+  **Open**. Record previews wait while a list or the grid is scrolling (cards passing under a still
+  pointer no longer pop them up), and one already open goes when the list under it scrolls. Editing a link cell opens it out into a
+  scrollable box of its records as cards (reorder, remove) with the search under it.
+- **Linked records among other values are small chips,** as in the grid: on cards, in lists and
+  inside a record's card in the record panel (a person's tasks under their name), the first three
+  and then "+17 more", which shows them all ("Show less" folds them again). Hovering one shows its
+  preview. Only a record's own link fields in the record panel are full cards.
+- **History says where a record is in plain text** ("Record in Acme › Project tracker › Tasks"),
+  without the workspace's and project's icons.
+- **"+3" for what does not fit.** A grid cell of chips (links, choices, people) that runs out of
+  room ends with how many more there are, instead of cutting off silently. Counts like this are
+  plain text everywhere, never a bubble: after a cell's chips or files (no longer a badge on the last
+  file), beside the faces in the top bar, and on a shared row of the view list.
+- **The summary row looks like the rest of the grid,** without a grey band; a summary cell takes a
+  light wash of the app's colour under the pointer. While picking
+  records for a link field, each result shows a little more (two lines of description and a few more
+  fields) to be sure it is the right one. The records already picked are no longer cut off when
+  there are many: they scroll.
+- **Click a field's name to edit it** in the record panel, as with a form's label, and linked
+  records and attachments leave room under their cards to click into the field.
+- **A plainer side menu.** Only the open table's name is bold: the open project, workspace and
+  view, the headings ("Workspaces", "Tables", "Personal") and your name are in the normal weight,
+  and the headings in the normal text colour.
+- **A project's automations are in its menu,** rather than a row under the project, and a
+  right-click on any row of the menu (a workspace, project, table or view) opens its "…" menu.
+- **Text and Rich text.** The two text field types are now **Text** and **Rich text**. Text is
+  plain text for names, titles, codes and other short values, shown exactly as typed; tick
+  **Multiline** to keep line breaks (an address). Rich text is what was "Long text" with
+  formatting on: Markdown with headings, lists, links, tables, files and @mentions, always
+  multiline, with no options. Their descriptions in the field picker, and in the tools agents use
+  to choose a type, now point notes, summaries, descriptions, articles and posts to Rich text.
+  Changing a field between the two keeps what it shows: rich text becomes the plain text it reads
+  as (formatting removed, mentions as @Name, lines kept), and plain text becomes rich text without
+  turning `*` or `#` into formatting. Turning Multiline off joins each value's lines with spaces
+  (the field dialog warns first, and agents must confirm). CSV import gives long or multi-line
+  columns a multiline Text field.
+  **Upgrading** (schema version 14) renames the stored types: single line text becomes Text, long
+  text with formatting on becomes Rich text, and long text with formatting off becomes Text with
+  Multiline on, so every field shows its values as before. **API:** the type names are now
+  `text` (options `{multiline, default?}`) and `rich_text` (options `{}`); the old names
+  `single_line_text` and `long_text` are still accepted on input (REST, MCP), and `long_text`
+  always means `rich_text` now. Responses use the new names. In `/api/v1`, Text is
+  `singleLineText` or `multilineText` and Rich text is `richText`.
+- **Comments are rich text.** The comment box is the rich text editor of rich text fields:
+  headings, lists, links, code, tables and @mentions, and files for those who may upload them.
+  Existing comments are converted once on upgrade (schema version 13) so they read as before.
+  Agents and the API write comments in Markdown.
+- Date group headers read as full dates ("October 21, 2026") whatever the field's date format,
+  and the empty group of a date field is called "No date" instead of "(Empty)".
 
 ### Fixed
 
+- **A list view shows every field you show.** A row listed only its first three filled fields, so
+  turning more on in **Hide fields** seemed to do nothing; now it shows each visible field that has
+  a value (empty ones are left out to keep rows short).
+- **Folding a group in the grid** no longer leaves the rows that move up blank until a scroll: the
+  records now shown there are loaded straight away.
 - A task list's checkbox sits beside its text again in rich text editors, instead of on a line of
   its own above it.
+- A click on the edge between two grid columns no longer shrinks the column to its narrowest; only
+  a drag resizes it, and a double-click still fits it to its contents.
 
 ## [0.7.0] - 2026-10-19
 

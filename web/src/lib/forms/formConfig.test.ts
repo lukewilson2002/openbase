@@ -20,8 +20,8 @@ import {
   updateFormSettings,
 } from "./formConfig";
 
-const name = field("single_line_text", {}, { id: "f_name", name: "Name" });
-const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
+const name = field("text", { multiline: false }, { id: "f_name", name: "Name" });
+const notes = field("text", { multiline: true }, { id: "f_notes", name: "Notes" });
 const owner = field("user", { multiple: false, notify: false }, { id: "f_owner", name: "Owner" });
 const parent = field("link", { linked_table_id: "tbl1", inverse_field_id: "f_kids", single: true }, { id: "f_parent", name: "Parent" });
 const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });

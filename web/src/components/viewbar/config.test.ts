@@ -25,7 +25,7 @@ import {
   updateSortLike,
 } from "./config";
 
-const f = (n: number) => ({ ...ALL_FIELDS.single_line_text, id: `f${n}`, name: `F${n}` });
+const f = (n: number) => ({ ...ALL_FIELDS.text, id: `f${n}`, name: `F${n}` });
 const table = makeTable([f(1), f(2), f(3), f(4)], { primary_field_id: "f1" });
 const empty = (): ViewConfig => makeView({ id: "v" }).config;
 const ids = (fs: { id: string }[]) => fs.map((x) => x.id);
@@ -96,6 +96,17 @@ describe("sorts and groups", () => {
     expect(moveSortLike(c, "sorts", 0, 9)).toBe(c);
     c = removeSortLike(c, "sorts", 1);
     expect(c.sorts.map((s) => s.field_id)).toEqual(["f3", "f2"]);
+  });
+  it("keeps a group's granularity until its field changes", () => {
+    let c = addSortLike(empty(), "groups", "f1");
+    c = updateSortLike(c, "groups", 0, { granularity: "month" });
+    expect(c.groups[0]).toEqual({ field_id: "f1", direction: "asc", granularity: "month" });
+    c = updateSortLike(c, "groups", 0, { direction: "desc" });
+    expect(c.groups[0]).toEqual({ field_id: "f1", direction: "desc", granularity: "month" });
+    // Another field starts again by day: a granularity only suits a date field.
+    c = updateSortLike(c, "groups", 0, { field_id: "f2" });
+    expect(c.groups[0]).toEqual({ field_id: "f2", direction: "desc" });
+    expect(queryRelevantKey(updateSortLike(c, "groups", 0, { granularity: "year" }))).not.toBe(queryRelevantKey(c));
   });
   it("sortOnly replaces every sort", () => {
     expect(sortOnly(addSortLike(empty(), "sorts", "f1"), "f2", "desc").sorts).toEqual([{ field_id: "f2", direction: "desc" }]);

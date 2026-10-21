@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import type { Editor } from "@tiptap/core";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Comment, HistoryEntry } from "@/api/types";
@@ -7,11 +8,11 @@ import { ALL_FIELDS, CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/tes
 import { makeSchema, mockApi } from "@/test/utils";
 import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
 const budget = field("currency", { precision: 2, symbol: "$", allow_negative: true }, { id: "fld_budget", name: "Budget" });
 const owner = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_owner", name: "Owner" });
-const secret = field("single_line_text", {}, { id: "fld_secret", name: "Secret" });
+const secret = field("text", { multiline: false }, { id: "fld_secret", name: "Secret" });
 const score = { ...ALL_FIELDS.formula, id: "fld_score", name: "Score" };
 const table = makeTable([name, status, budget, owner, secret, score]);
 const schema = { ...makeSchema("owner"), tables: [table] };
@@ -20,7 +21,7 @@ const config = { ...schema.tables[0]!.views[0]!.config, hidden_fields: ["fld_sec
 
 const comments: Comment[] = [
   { id: "cmt1", record_id: "rec1", user_id: "usr2", user_name: "Grace Hopper", body: "Looks good @[Ada Lovelace](usr1)", created_at: 1_700_000_000_000, updated_at: 1_700_000_000_000 },
-  { id: "cmt2", record_id: "rec1", user_id: "usr1", user_name: "Ada Lovelace", body: "Thanks!", created_at: 1_700_000_100_000, updated_at: 1_700_000_100_000 },
+  { id: "cmt2", record_id: "rec1", user_id: "usr1", user_name: "Ada Lovelace", body: "**Thanks!**", created_at: 1_700_000_100_000, updated_at: 1_700_000_100_000 },
 ];
 
 const history: HistoryEntry[] = [
@@ -124,6 +125,13 @@ describe("ExpandedRecord", () => {
     expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(0);
   });
 
+  it("edits a field from a click on its name, as a form's label does", async () => {
+    setup();
+    await screen.findByRole("button", { name: "Edit Budget" });
+    await userEvent.click(screen.getByRole("heading", { name: "Budget" }));
+    expect(await screen.findByRole("textbox", { name: "Budget" })).toBeInTheDocument();
+  });
+
   it("navigates between records and closes", async () => {
     const { props } = setup();
     await screen.findByRole("button", { name: "Edit Name" });
@@ -156,7 +164,7 @@ describe("ExpandedRecord", () => {
     expect(screen.queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
     expect(nameRow.innerHTML).not.toContain("hover:bg-hover");
     expect(screen.getByText(/You can read comments but not write them/)).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Write a comment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Write a comment" })).not.toBeInTheDocument();
   });
 
   it("shows a message when the record cannot be loaded", async () => {
@@ -165,41 +173,85 @@ describe("ExpandedRecord", () => {
   });
 });
 
+/** The Tiptap editor behind a rich text box. */
+const editorIn = (box: HTMLElement) => (box as HTMLElement & { editor: Editor }).editor;
+
 describe("ExpandedRecord: comments", () => {
   it("lists comments with mentions rendered and marks your own", async () => {
     setup();
     const list = await screen.findByRole("list", { name: "", hidden: false }).catch(() => null);
     void list;
     expect(await screen.findByText("Looks good")).toBeInTheDocument();
-    expect(screen.getByText("@Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("@Ada Lovelace")).toHaveClass("ob-mention");
+    // Comments are Markdown.
+    expect(screen.getByText("Thanks!").tagName).toBe("STRONG");
     expect(screen.getByLabelText("Comment by Grace Hopper")).toBeInTheDocument();
     const mine = screen.getByLabelText("Comment by Ada Lovelace");
     expect(within(mine).getByRole("button", { name: "Edit comment" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Comment by Grace Hopper")).queryByRole("button", { name: "Edit comment" })).not.toBeInTheDocument();
   });
 
-  it("posts a comment with an @mention inserted as @[Name](usrXXX)", async () => {
+  it("posts a rich text comment with an @mention picked after typing @", async () => {
     const { api } = setup();
-    const box = await screen.findByRole("combobox", { name: "Write a comment" });
-    await userEvent.type(box, "Ping @gra");
+    const box = await screen.findByRole("textbox", { name: "Write a comment" });
+    const editor = editorIn(box);
+    act(() => box.focus());
+    act(() => {
+      editor.commands.insertContent("Ping @gra");
+    });
     const options = await screen.findByRole("listbox", { name: "People to mention" });
     expect(within(options).getAllByRole("option").map((o) => o.textContent)).toEqual([expect.stringContaining("Grace Hopper")]);
+    expect(box).toHaveAttribute("aria-activedescendant", within(options).getByRole("option").id);
     await userEvent.keyboard("{Enter}");
-    expect(box).toHaveValue("Ping @[Grace Hopper](usr2) ");
-    await userEvent.type(box, "please review");
+    expect(screen.queryByRole("listbox", { name: "People to mention" })).not.toBeInTheDocument();
+    expect(box.querySelector(".ob-mention")).toHaveTextContent("@Grace Hopper");
+    act(() => {
+      editor.commands.insertContent("please review");
+    });
     await userEvent.click(screen.getByRole("button", { name: "Comment" }));
     await waitFor(() => expect(api.callsTo("POST /api/records/rec1/comments")).toHaveLength(1));
     expect(api.callsTo("POST /api/records/rec1/comments")[0]!.body).toEqual({ body: "Ping @[Grace Hopper](usr2) please review" });
-    await waitFor(() => expect(box).toHaveValue(""));
+    await waitFor(() => expect(box).toHaveTextContent(""));
+  });
+
+  it("closes the people list on Escape and keeps the record open", async () => {
+    const { props } = setup();
+    const box = await screen.findByRole("textbox", { name: "Write a comment" });
+    act(() => box.focus());
+    act(() => {
+      editorIn(box).commands.insertContent("@gr");
+    });
+    expect(await screen.findByRole("listbox", { name: "People to mention" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "People to mention" })).not.toBeInTheDocument();
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(box).toHaveTextContent("@gr");
+    // With the list closed, Escape is the record's again.
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(props.onClose).toHaveBeenCalled());
+  });
+
+  it("sends with Ctrl+Enter", async () => {
+    const { api } = setup();
+    const box = await screen.findByRole("textbox", { name: "Write a comment" });
+    act(() => box.focus());
+    act(() => {
+      editorIn(box).commands.insertContent("Done");
+    });
+    expect(box).toHaveFocus();
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(api.callsTo("POST /api/records/rec1/comments")).toHaveLength(1));
+    expect(api.callsTo("POST /api/records/rec1/comments")[0]!.body).toEqual({ body: "Done" });
   });
 
   it("edits and deletes your own comment", async () => {
     const { api } = setup();
     const mine = await screen.findByLabelText("Comment by Ada Lovelace");
     await userEvent.click(within(mine).getByRole("button", { name: "Edit comment" }));
-    const editor = within(mine).getByRole("combobox", { name: "Edit comment" });
-    await userEvent.clear(editor);
-    await userEvent.type(editor, "Thanks a lot");
+    const box = await within(mine).findByRole("textbox", { name: "Edit comment" });
+    act(() => {
+      editorIn(box).commands.setContent("Thanks a lot", { emitUpdate: true });
+    });
     await userEvent.click(within(mine).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/comments/cmt2")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/comments/cmt2")[0]!.body).toEqual({ body: "Thanks a lot" });
@@ -212,7 +264,7 @@ describe("ExpandedRecord: comments", () => {
 
   it("does not post an empty comment", async () => {
     setup();
-    await screen.findByRole("combobox", { name: "Write a comment" });
+    await screen.findByRole("textbox", { name: "Write a comment" });
     expect(screen.getByRole("button", { name: "Comment" })).toBeDisabled();
   });
 });

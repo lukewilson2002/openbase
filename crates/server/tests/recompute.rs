@@ -932,7 +932,7 @@ async fn changing_a_source_fields_type_re_infers_and_recomputes_dependents() {
         .patch(
             &f.owner,
             &format!("/api/fields/{nid}"),
-            json!({ "type": "single_line_text", "options": {} }),
+            json!({ "type": "text", "options": {} }),
         )
         .await
         .assert_status(200);

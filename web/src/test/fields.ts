@@ -18,8 +18,8 @@ export const CHOICES = [
 
 /** One field of every one of the 28 types, keyed by type. */
 export const ALL_FIELDS: Record<FieldType, Field> = {
-  single_line_text: field("single_line_text", {}),
-  long_text: field("long_text", { rich: true }),
+  text: field("text", { multiline: false }),
+  rich_text: field("rich_text", {}),
   number: field("number", { precision: 2, allow_negative: true }),
   currency: field("currency", { precision: 2, symbol: "$", allow_negative: true }),
   percent: field("percent", { precision: 1, allow_negative: true }),

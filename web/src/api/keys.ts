@@ -54,7 +54,7 @@ export const keys = {
   /** The caller's inbox drafts (`api.inbox.list`). */
   inbox: ["inbox"] as const,
   /** "Search everything" results for `q` (`api.search.everything`). */
-  search: (q: string, limit?: number) => ["search", q, limit ?? null] as const,
+  search: (q: string, limit?: number, scope?: { workspace?: string; base?: string }) => ["search", q, limit ?? null, scope?.workspace ?? null, scope?.base ?? null] as const,
   /** Share links of one view (Creators). */
   shares: (viewId: string) => ["shares", viewId] as const,
   /** Automations of a base, and (under the same prefix) each one's run pages. */

@@ -17,7 +17,7 @@ const form: PublicForm = {
   redirect_url: null,
   show_submit_another: true,
   fields: [
-    { id: "f_name", label: "Your name", help: "As on your ID", required: true, type: "single_line_text", options: {} },
+    { id: "f_name", label: "Your name", help: "As on your ID", required: true, type: "text", options: { multiline: false } },
     { id: "f_mail", label: "Email", help: null, required: false, type: "email", options: {} },
     { id: "f_size", label: "Team size", help: null, required: false, type: "number", options: { precision: 0, allow_negative: false } },
     { id: "f_plan", label: "Plan", help: null, required: false, type: "single_select", options: { choices: [{ id: "c1", name: "Free", color: "gray" }, { id: "c2", name: "Pro", color: "blue" }] } },

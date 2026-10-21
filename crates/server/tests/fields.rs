@@ -140,7 +140,7 @@ async fn field_names_are_validated_and_unique_ignoring_case() {
         .post(
             &f.owner,
             &url,
-            json!({ "name": "Total", "type": "text", "options": {} }),
+            json!({ "name": "Total", "type": "textarea", "options": {} }),
         )
         .await
         .assert_status(400);
@@ -259,7 +259,7 @@ async fn option_validation() {
             400,
         ),
         (
-            json!({ "type": "single_line_text", "options": { "default": "x" } }),
+            json!({ "type": "text", "options": { "default": "x" } }),
             201,
         ),
     ];

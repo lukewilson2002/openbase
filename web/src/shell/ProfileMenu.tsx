@@ -1,7 +1,7 @@
 import { Link } from "react-router";
-import { Bot, ChevronsUpDown, LogOut, Palette, PlayCircle, Settings, Shield } from "lucide-react";
+import { Bot, ChevronsUpDown, LogOut, MessageSquare, Palette, PlayCircle, Settings, Shield } from "lucide-react";
 import { useMe } from "@/auth/useAuth";
-import { ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
+import { AccentSwatchItems, ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
 import { Avatar } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,11 +18,14 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 const MODE_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
 const item = "px-3 py-2.5 text-[0.875rem] rounded-lg";
+/** Where feedback goes: the project's GitHub Discussions, in a new tab. */
+export const FEEDBACK_URL = "https://github.com/lukewilson2002/openbase/discussions";
 
 /**
  * The signed-in person at the bottom of the menu, opening their account actions upwards: the
- * account settings (the menu's only way there), connecting an assistant, the intro, the theme,
- * administration for administrators, and signing out.
+ * account settings (the menu's only way there), connecting an assistant, the intro, sending feedback
+ * (the project's GitHub Discussions), the theme and accent colour, administration for
+ * administrators, and signing out.
  */
 export function ProfileMenu() {
   const { data: user } = useMe();
@@ -40,9 +43,9 @@ export function ProfileMenu() {
           aria-label="Account menu"
           className="flex w-full min-w-0 items-center gap-2.5 rounded-[10px] p-1.5 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover"
         >
-          <Avatar name={user.name} email={user.email} />
+          <Avatar name={user.name} email={user.email} own />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[0.875rem] font-semibold text-fg">{user.name}</span>
+            <span className="block truncate text-[0.875rem] text-fg">{user.name}</span>
             <span className="block truncate text-xs text-muted">{user.email}</span>
           </span>
           <ChevronsUpDown aria-hidden className="size-4 shrink-0 text-muted" />
@@ -62,12 +65,19 @@ export function ProfileMenu() {
         <DropdownMenuItem onSelect={openIntro} className={item}>
           <PlayCircle aria-hidden className="size-4" /> Replay the intro
         </DropdownMenuItem>
+        <DropdownMenuItem asChild className={item}>
+          <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
+            <MessageSquare aria-hidden className="size-4" /> Send feedback
+          </a>
+        </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className={item}>
             <Palette aria-hidden className="size-4" /> Appearance: {MODE_LABEL[mode]}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <ThemeRadioItems />
+            <DropdownMenuSeparator />
+            <AccentSwatchItems />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {user.is_admin && (

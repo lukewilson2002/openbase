@@ -279,10 +279,11 @@ export const api = {
     /**
      * Everything the caller can open whose name (or, for records, text) contains `q`: names
      * first, text that starts with `q` before text that contains it. `q` is 1–200 characters
-     * (blank is a 400); `limit` defaults to 20, at most 50.
+     * (blank is a 400); `limit` defaults to 20, at most 50. `workspace` or `base` (ids) narrow it
+     * to what is inside them. Each result says where `q` matched (`name_matches`, `snippet_matches`).
      */
-    everything: (q: string, opts: { limit?: number; signal?: AbortSignal } = {}) =>
-      http.get<SearchResponse>("/api/search", { query: { q, limit: opts.limit }, signal: opts.signal }),
+    everything: (q: string, opts: { limit?: number; workspace?: string; base?: string; signal?: AbortSignal } = {}) =>
+      http.get<SearchResponse>("/api/search", { query: { q, limit: opts.limit, workspace: opts.workspace, base: opts.base }, signal: opts.signal }),
   },
 
   notifications: {

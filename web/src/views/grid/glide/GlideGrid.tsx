@@ -18,6 +18,7 @@ import {
   type EditListItem,
   type GridCell,
   type GridColumn,
+  type GridMouseEventArgs,
   type GridSelection,
   type Item,
   type ProvideEditorCallbackResult,
@@ -27,15 +28,17 @@ import {
 } from "@glideapps/glide-data-grid";
 import { Pin } from "lucide-react";
 import "@glideapps/glide-data-grid/dist/index.css";
-import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo } from "../adapter";
+import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo, ScreenRect } from "../adapter";
+import { isFormulaError } from "@/lib/cells/format";
+import { displayShapeOf } from "@/lib/cells/kinds";
+import { layoutChips } from "./draw";
 import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
 import { ADD_ICON, headerIcons } from "./icons";
 import { cn } from "@/lib/cn";
-import { mixColors, paletteColor } from "@/lib/cells/palette";
 import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./marker";
-import { createRenderer } from "./renderers";
+import { createRenderer, measureRecordCell } from "./renderers";
 import { isFocusSelectAfterPress, type Press } from "./focusSelect";
-import { DARK_THEME, LIGHT_THEME } from "./theme";
+import { gridTheme } from "./theme";
 
 installMarkerNumbering();
 
@@ -51,10 +54,29 @@ const KEYBINDINGS = {
 
 const BLANK_MODEL: CellModel = { kind: "blank" };
 const ROW_MARKER_WIDTH = 56;
+/** A column waiting to be fitted (its rows are not loaded yet). */
+const FIT_PLACEHOLDER_WIDTH = 150;
+/** The widest a column grows to fit its content: a longer text says the rest in its cell's preview. */
+const FIT_MAX_WIDTH = 360;
+/** How many loaded rows a column is fitted to. */
+const FIT_ROWS = 200;
+/** How far the row numbers' column can be dragged, and where this device keeps its width. */
+const MARKER_MIN = 32;
+const MARKER_MAX = 120;
+const MARKER_KEY = "ob-grid-marker-width";
+const clampMarker = (w: number) => Math.round(Math.min(MARKER_MAX, Math.max(MARKER_MIN, w)));
+function storedMarkerWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(MARKER_KEY));
+    return n > 0 ? clampMarker(n) : ROW_MARKER_WIDTH;
+  } catch {
+    return ROW_MARKER_WIDTH;
+  }
+}
 const ADD_COLUMN_ID = "__add_field__";
 export const GRID_HEADER_HEIGHT = 44;
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
-const ROW_MARKERS = { kind: "both", width: ROW_MARKER_WIDTH, startIndex: MARKER_START_INDEX } as const;
+const rowMarkers = (width: number) => ({ kind: "both", width, startIndex: MARKER_START_INDEX }) as const;
 /** Glide's header menu button, at the right end of a header (its `menuButtonSize`). */
 const HEADER_MENU_WIDTH = 30;
 /** The primary field's pin button, just left of the header menu button. */
@@ -81,6 +103,23 @@ function toInfo(sel: GridSelection): GridSelectionInfo {
   };
 }
 
+let measuring: CanvasRenderingContext2D | null = null;
+
+/** The linked record whose chip is at a point of a cell, laid out as the renderer draws it. */
+function linkChipAt(props: GridAdapterProps, [col, row]: Item, bounds: Rectangle, x: number, y: number): { point: { col: number; row: number }; recordId: string; rect: ScreenRect } | null {
+  const m = props.getCell(col, row);
+  if (m.kind !== "cell" || displayShapeOf(m.field) !== "link" || isFormulaError(m.value)) return null;
+  measuring ??= document.createElement("canvas").getContext("2d");
+  if (!measuring) return null;
+  const base = gridTheme(props.dark, props.accent);
+  const theme = { cellHorizontalPadding: base.cellHorizontalPadding ?? 14, baseFontFull: `${base.baseFontStyle} ${base.fontFamily}` };
+  const chips = m.chips.map((c) => ({ text: c.text, color: c.color, kind: "link" as const }));
+  const hit = layoutChips(measuring, theme, { x: 0, y: 0, width: bounds.width, height: bounds.height }, chips).placed.find((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h);
+  const id = hit && m.chips[hit.index]?.id;
+  if (!hit || !id) return null;
+  return { point: { col, row }, recordId: id, rect: { x: bounds.x + hit.x, y: bounds.y + hit.y, width: hit.w, height: hit.h } };
+}
+
 function screenRect(b: Rectangle): { x: number; y: number; width: number; height: number } {
   return { x: b.x, y: b.y, width: b.width, height: b.height };
 }
@@ -89,6 +128,8 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   const pr = useRef(props);
   pr.current = props;
   const gridRef = useRef<DataEditorRef>(null);
+  /** Whether the column resize under way has been dragged (see onColumnResizeEnd). */
+  const resizeMoved = useRef(false);
   const [selection, setSelection] = useState<GridSelection>(EMPTY_SELECTION);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -147,12 +188,43 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     [],
   );
 
+  // Columns without a width of their own, fitted once to their header and the first loaded rows, as
+  // a double-click on a column's edge does (but over more rows, and keeping every value: nothing is
+  // cut until the column reaches FIT_MAX_WIDTH). A width is fitted once per column; a drag or a
+  // double-click then gives it a saved one.
+  const [fitted, setFitted] = useState<Readonly<Record<string, number>>>({});
+  useEffect(() => {
+    if (props.fitColumns === false) return;
+    const todo = props.columns.filter((c) => c.width === undefined && fitted[c.id] === undefined);
+    if (todo.length === 0) return;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    const base = gridTheme(props.dark, props.accent);
+    const cellTheme = { cellHorizontalPadding: base.cellHorizontalPadding ?? 14, baseFontFull: `${base.baseFontStyle} ${base.fontFamily}` };
+    const rows = Math.min(props.rowCount, FIT_ROWS);
+    const next = { ...fitted };
+    for (const c of todo) {
+      const col = props.columns.indexOf(c);
+      // The header: its icon, title and menu button (and the primary field's pin).
+      ctx.font = `${base.headerFontStyle} ${base.fontFamily}`;
+      let w = 14 + 16 + 8 + ctx.measureText(c.title).width + 8 + HEADER_MENU_WIDTH + (col === 0 && props.primaryPin ? PIN_BUTTON_SIZE : 0);
+      for (let row = 0; row < rows; row++) {
+        const m = pr.current.getCell(col, row);
+        if (m.kind === "cell") w = Math.max(w, measureRecordCell(ctx, m, cellTheme));
+      }
+      next[c.id] = Math.max(60, Math.min(FIT_MAX_WIDTH, Math.ceil(w)));
+    }
+    setFitted(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.fitColumns, props.columns, props.rowCount, props.version]);
+
   const columns = useMemo<GridColumn[]>(() => {
-    const cols: GridColumn[] = props.columns.map((c) => ({ id: c.id, title: c.title, width: c.width, icon: c.field.type, hasMenu: true }));
+    // A column without a width of its own is as wide as its content (`fitted`, below).
+    const cols: GridColumn[] = props.columns.map((c) => ({ id: c.id, title: c.title, width: c.width ?? fitted[c.id] ?? FIT_PLACEHOLDER_WIDTH, icon: c.field.type, hasMenu: true }));
     // An "Add field" column after the last field adds a field when its header is clicked.
     if (props.canAddField) cols.push({ id: ADD_COLUMN_ID, title: "Add field", icon: ADD_ICON, width: 130 });
     return cols;
-  }, [props.columns, props.canAddField]);
+  }, [props.columns, props.canAddField, fitted]);
 
   // A new function identity makes Glide redraw every visible cell.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -236,9 +308,17 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     return false;
   }, []);
 
+  // Glide copies these cells' `copyData`, and fits a column to them (`measure`): so they are the grid's own
+  // cells, as drawn, carrying the copy text, once the rows are loaded.
   const getCellsForSelection = useCallback((rect: Rectangle) => async (): Promise<readonly (readonly GridCell[])[]> => {
     const text = await pr.current.getCopyText({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
-    return text.map((row) => row.map((t): GridCell => ({ kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: t, displayData: t, copyData: t })));
+    return text.map((row, j) =>
+      row.map((t, i): GridCell => {
+        const col = rect.x + i;
+        const own = col < pr.current.columns.length ? toGridCell(pr.current.getCell(col, rect.y + j)) : null;
+        return own && own.kind === GridCellKind.Custom ? { ...own, copyData: t } : { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: t, displayData: t, copyData: t };
+      }),
+    );
   }, []);
 
   const ObEditor = useMemo<ProvideEditorComponent<ObCell>>(
@@ -271,27 +351,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     [ObEditor],
   );
 
-  const theme = props.dark ? DARK_THEME : LIGHT_THEME;
-  const tintCache = useRef(new Map<string, string>());
-  useEffect(() => {
-    tintCache.current.clear();
-  }, [props.dark]);
-  const getRowThemeOverride = useCallback(
-    (row: number) => {
-      const c = pr.current.getRowColor(row);
-      if (!c) return undefined;
-      const key = `${c}:${pr.current.dark ? 1 : 0}`;
-      let tint = tintCache.current.get(key);
-      if (!tint) {
-        const pal = paletteColor(c);
-        tint = mixColors(pr.current.dark ? "#1a1e26" : "#ffffff", pal.bg, pr.current.dark ? 0.16 : 0.4);
-        tintCache.current.set(key, tint);
-      }
-      return { bgCell: tint };
-    },
-    [],
-  );
-
+  const theme = gridTheme(props.dark, props.accent);
   // Where the pointer last pressed over the grid, to tell Glide's select-on-focus from a real tap.
   const lastPress = useRef<Press | null>(null);
   useEffect(() => {
@@ -315,6 +375,18 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     pr.current.onSelectionChange(toInfo(sel));
   }, []);
 
+  // Which linked record's chip the pointer is over, if any: the host shows its preview.
+  const hoveredLink = useRef<string | null>(null);
+  const onMouseMove = useCallback((args: GridMouseEventArgs) => {
+    const report = pr.current.onLinkHover;
+    if (!report) return;
+    const hit = args.kind === "cell" ? linkChipAt(pr.current, args.location, args.bounds, args.localEventX, args.localEventY) : null;
+    const key = hit ? `${hit.point.col}:${hit.point.row}:${hit.recordId}` : null;
+    if (key === hoveredLink.current) return;
+    hoveredLink.current = key;
+    report(hit);
+  }, []);
+
   const onCellClicked = useCallback((cell: Item, ev: { bounds: Rectangle; isDoubleClick?: boolean }) => {
     const model = pr.current.getCell(cell[0], cell[1]);
     if (model.kind === "group") pr.current.onGroupToggle(model.headerIndex);
@@ -323,10 +395,34 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
 
 
   const primary = props.columns[0];
-  const pinLeft = primary ? primary.width - HEADER_MENU_WIDTH - PIN_BUTTON_SIZE - (pin?.pinned ? 0 : scrollLeft) : 0;
+  const primaryWidth = primary ? (primary.width ?? fitted[primary.id] ?? FIT_PLACEHOLDER_WIDTH) : 0;
+  const pinLeft = primary ? primaryWidth - HEADER_MENU_WIDTH - PIN_BUTTON_SIZE - (pin?.pinned ? 0 : scrollLeft) : 0;
+
+  // The row numbers' column: as wide as this device last made it, by dragging its edge in the header
+  // (Glide cannot resize it itself) or with the arrow keys; a double-click sets it back.
+  const [markerWidth, setMarkerWidth] = useState(storedMarkerWidth);
+  const markers = useMemo(() => rowMarkers(markerWidth), [markerWidth]);
+  const markerDrag = useRef<{ x: number; width: number } | null>(null);
+  const keepMarker = (w: number) => {
+    setMarkerWidth(w);
+    try {
+      localStorage.setItem(MARKER_KEY, String(w));
+    } catch {
+      /* not kept: it still holds for this page */
+    }
+  };
 
   return (
-    <div ref={wrapRef} className="relative h-full w-full">
+    <div
+      ref={wrapRef}
+      className="relative h-full w-full"
+      onPointerLeave={() => {
+        // Off the grid altogether, the canvas reports no more moves.
+        if (hoveredLink.current === null) return;
+        hoveredLink.current = null;
+        pr.current.onLinkHover?.(null);
+      }}
+    >
     <DataEditor
       ref={gridRef}
       className="ob-glide"
@@ -344,7 +440,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       theme={theme}
       headerIcons={headerIcons()}
       drawHeader={drawHeader}
-      rowMarkers={ROW_MARKERS}
+      rowMarkers={markers}
       // Rows read as lines of a list, as in the rest of the app; the header still shows where columns
       // meet, and that is where they resize.
       verticalBorder={false}
@@ -369,8 +465,19 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       editOnType={props.canEdit}
       smoothScrollX
       smoothScrollY
-      onColumnResize={(_c, w, idx) => pr.current.onColumnResize(idx, w, false)}
-      onColumnResizeEnd={(_c, w, idx) => pr.current.onColumnResize(idx, w, true)}
+      onColumnResizeStart={() => {
+        resizeMoved.current = false;
+      }}
+      onColumnResize={(_c, w, idx) => {
+        resizeMoved.current = true;
+        pr.current.onColumnResize(idx, w, false);
+      }}
+      // A press on a column's edge without a drag ends with Glide's "no width yet", which it clamps to the
+      // narrowest column: a click would collapse it. Only a drag resizes; a double-click fits the column
+      // (Glide measures it after the second release and reports it through onColumnResize).
+      onColumnResizeEnd={(_c, w, idx) => {
+        if (resizeMoved.current) pr.current.onColumnResize(idx, w, true);
+      }}
       onColumnMoved={props.canReorderColumns ? (from, to) => pr.current.onColumnMove(from, to) : undefined}
       onRowMoved={props.canReorderRows ? (from, to) => pr.current.onRowMove(from, to) : undefined}
       onHeaderMenuClick={(col, bounds) => pr.current.onHeaderMenu(col, screenRect(bounds))}
@@ -378,6 +485,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         ev.preventDefault();
         pr.current.onHeaderMenu(col, screenRect(ev.bounds));
       }}
+      onMouseMove={onMouseMove}
       onCellContextMenu={(cell, ev) => {
         ev.preventDefault();
         pr.current.onCellContextMenu({ col: cell[0], row: cell[1] }, { x: ev.bounds.x + ev.localEventX, y: ev.bounds.y + ev.localEventY, width: 1, height: 1 });
@@ -395,13 +503,14 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         const files = dt ? [...dt.files] : [];
         if (files.length > 0) pr.current.onDropFiles({ col: cell[0], row: cell[1] }, files);
       }}
-      getRowThemeOverride={getRowThemeOverride}
       maxColumnWidth={800}
+      // A column fitted with a double-click on its edge stops where an unsized one does.
+      maxColumnAutoWidth={FIT_MAX_WIDTH}
       minColumnWidth={60}
     />
     {pin && primary && (
       // Clipped to the columns, so an unpinned primary field's button slides out under the row numbers.
-      <div className="pointer-events-none absolute top-0 right-0 overflow-hidden" style={{ left: ROW_MARKER_WIDTH, height: GRID_HEADER_HEIGHT }}>
+      <div className="pointer-events-none absolute top-0 right-0 overflow-hidden" style={{ left: markerWidth, height: GRID_HEADER_HEIGHT }}>
         <button
           type="button"
           onClick={pin.onToggle}
@@ -410,7 +519,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
           title={pin.pinned ? `Unpin the ${primary.title} column` : `Pin the ${primary.title} column`}
           className={cn(
             "pointer-events-auto absolute flex items-center justify-center rounded-lg hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring",
-            pin.pinned ? "text-primary" : "text-muted",
+            pin.pinned ? "text-primary-text" : "text-muted",
           )}
           style={{ left: pinLeft, top: (GRID_HEADER_HEIGHT - PIN_BUTTON_SIZE) / 2, width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}
         >
@@ -418,6 +527,48 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         </button>
       </div>
     )}
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the row numbers"
+      aria-valuenow={markerWidth}
+      aria-valuemin={MARKER_MIN}
+      aria-valuemax={MARKER_MAX}
+      tabIndex={0}
+      title="Drag to resize; double-click to reset"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        markerDrag.current = { x: e.clientX, width: markerWidth };
+      }}
+      onPointerMove={(e) => {
+        const d = markerDrag.current;
+        if (d) setMarkerWidth(clampMarker(d.width + e.clientX - d.x));
+      }}
+      onPointerUp={(e) => {
+        const d = markerDrag.current;
+        if (!d) return;
+        markerDrag.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        // A press without a drag changes nothing.
+        if (e.clientX !== d.x) keepMarker(clampMarker(d.width + e.clientX - d.x));
+      }}
+      onPointerCancel={() => {
+        markerDrag.current = null;
+      }}
+      onDoubleClick={() => keepMarker(ROW_MARKER_WIDTH)}
+      onKeyDown={(e) => {
+        const next = e.key === "ArrowLeft" ? markerWidth - 8 : e.key === "ArrowRight" ? markerWidth + 8 : null;
+        if (next === null) return;
+        e.preventDefault();
+        keepMarker(clampMarker(next));
+      }}
+      className="group absolute top-0 z-10 flex w-2 cursor-col-resize touch-none justify-center focus-visible:outline-none"
+      style={{ left: markerWidth - 4, height: GRID_HEADER_HEIGHT }}
+    >
+      <span aria-hidden className="h-full w-0.5 bg-transparent transition-colors group-hover:bg-primary group-focus-visible:bg-ring group-active:bg-primary" />
+    </div>
     </div>
   );
 });

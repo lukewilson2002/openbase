@@ -158,6 +158,34 @@ pub struct Sort {
     pub direction: Direction,
 }
 
+/// One group level of a view: the field, the order of its groups and, for a
+/// date field, how much time each group spans.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct Group {
+    pub field_id: FieldId,
+    #[serde(default)]
+    pub direction: Direction,
+    /// Date fields only (dates, created/modified times, date formulas and
+    /// lookups): the period each group covers. Absent means day.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granularity: Option<DateGranularity>,
+}
+
+/// The period a date group level buckets its records by, in the field's
+/// time zone (else the viewer's). Weeks start on Monday.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(rename_all = "snake_case")]
+pub enum DateGranularity {
+    #[default]
+    Day,
+    Week,
+    Month,
+    Quarter,
+    Year,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
@@ -254,6 +282,9 @@ pub struct TimelineConfig {
     /// Optional link-to-self field drawn as dependency arrows (Gantt).
     pub dependency_field_id: Option<FieldId>,
     pub scale: TimelineScale,
+    /// Width in pixels of the lane labels on the left, as dragged by its divider (80 to 800;
+    /// absent = the default).
+    pub label_width: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -302,7 +333,7 @@ pub struct ViewConfig {
     pub filter: Option<Filter>,
     pub sorts: Vec<Sort>,
     /// Up to 3 levels.
-    pub groups: Vec<Sort>,
+    pub groups: Vec<Group>,
     pub hidden_fields: Vec<FieldId>,
     /// Display order; fields not listed follow in table order.
     pub field_order: Vec<FieldId>,

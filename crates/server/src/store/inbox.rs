@@ -351,8 +351,8 @@ fn attachment_ids_in(fields: &[Field], given: &Map<String, Value>) -> HashSet<St
         .collect()
 }
 
-/// The files `given` references in long text fields of `fields`: any `/api/attachments/<id>/`
-/// address inside a long text value.
+/// The files `given` references in rich text fields of `fields`: any `/api/attachments/<id>/`
+/// address inside a rich text value.
 fn text_refs_in(fields: &[Field], given: &Map<String, Value>) -> Vec<String> {
     let index = FieldIndex::new(fields);
     given
@@ -360,7 +360,7 @@ fn text_refs_in(fields: &[Field], given: &Map<String, Value>) -> Vec<String> {
         .filter(|(key, _)| {
             index
                 .resolve(key)
-                .is_some_and(|f| matches!(f.kind, FieldKind::LongText(_)))
+                .is_some_and(|f| matches!(f.kind, FieldKind::RichText(_)))
         })
         .filter_map(|(_, v)| v.as_str())
         .flat_map(attachments::referenced_ids)
@@ -370,7 +370,7 @@ fn text_refs_in(fields: &[Field], given: &Map<String, Value>) -> Vec<String> {
 /// Hand the draft's files that the attachment fields of `given` use over to `base_id`, so a
 /// record of that base can hold them, and take them out of the user's other drafts (a file
 /// lives in one draft only, but a stale reference must never outlive the move). Also moves
-/// every unattached upload of the user that long text values in `given`, or the `note`
+/// every unattached upload of the user that rich text values in `given`, or the `note`
 /// (the draft text about to become a comment), embed or link by address; one that another
 /// draft's text embeds is refused (`400`). Returns how many files moved.
 pub fn move_files_to_base(

@@ -409,7 +409,7 @@ function InviteRow({
   const basesGone = !invite.all_bases && liveBaseIds(invite, ws).length === 0;
   const editorId = `access-${invite.id}`;
   const owner = invite.role === "owner";
-  const link = "text-primary underline underline-offset-2 hover:text-primary-hover disabled:opacity-50 disabled:no-underline";
+  const link = "text-primary-text underline underline-offset-2 hover:text-primary-hover disabled:opacity-50 disabled:no-underline";
   return (
     <li aria-label={`${who}, invited`} className={cn("px-4 py-4 sm:px-[18px]", open && "bg-[color-mix(in_srgb,var(--bg)_60%,var(--surface))]")}>
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">

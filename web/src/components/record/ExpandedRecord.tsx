@@ -6,12 +6,12 @@
  * editor when clicked (EditableValue). Fields save by themselves; the header says whether that is going
  * on ("Saving…", "Saved", "Couldn't save"). Reusable by every view type.
  */
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { hashKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronDown, Columns3, ChevronLeft, ChevronRight, CopyPlus, MoreHorizontal, Share2, Trash2, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
 import { errorMessage } from "@/api/client";
-import { recordKeys, recordsApi } from "@/api/records";
+import { attachmentsApi, recordKeys, recordsApi } from "@/api/records";
 import type { BaseSchema, Collaborator, Field, TableRecord, Table, View, ViewConfig } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -27,7 +27,7 @@ import { atLeast } from "@/lib/roles";
 import { personColors } from "@/lib/colors";
 import { copyToClipboard } from "@/lib/format";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
-import { isComputed } from "@/lib/cells/kinds";
+import { isComputed, isMultilineText } from "@/lib/cells/kinds";
 import { LinkedRecordsProvider, type LinkedRecordsHost } from "./linked/LinkedRecords";
 import { jsonEqual, parseText } from "@/lib/cells/parse";
 import { toWire, writableValues } from "@/lib/cells/wire";
@@ -101,7 +101,7 @@ function SaveStatus({ state }: { state: SaveState }) {
 }
 
 /**
- * The long text of this record that has not reached the server: typed (waiting for typing to pause) or
+ * The multiline text of this record that has not reached the server: typed (waiting for typing to pause) or
  * sent (waiting for the answer), by `recordId:fieldId`.
  */
 class Unsent {
@@ -149,7 +149,7 @@ function FieldRow({
   emails: ReadonlyMap<string, string>;
   /** What this record's fields were last saved as, by field id. */
   lastSaved: RefObject<Map<string, unknown>>;
-  /** Which long text fields have text of ours that is typed but not sent yet, or sent and not answered yet. */
+  /** Which multiline text fields have text of ours that is typed but not sent yet, or sent and not answered yet. */
   unsent: RefObject<Unsent>;
   /** The value of this field that could not be saved, kept for the person to correct. */
   failed?: { value: unknown };
@@ -168,17 +168,22 @@ function FieldRow({
   // (the text being typed would be replaced by it, and the next keystroke would save the stale text).
   const textKey = `${record.id}:${field.id}`;
   const rebuilds = useRef({ json: JSON.stringify(value), n: 0 });
-  if (field.type === "long_text") {
+  const typedIn = isMultilineText(field);
+  if (typedIn) {
     const json = JSON.stringify(value);
     if (json !== rebuilds.current.json) {
       rebuilds.current.json = json;
       if (!jsonEqual(value, lastSaved.current.get(textKey) ?? null) && !unsent.current.isWaiting(textKey)) rebuilds.current.n++;
     }
   }
-  const editorKey = field.type === "long_text" ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
+  const editorKey = typedIn ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
   return (
-    <div className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-3" role="group" aria-labelledby={labelId}>
-      <div className="flex min-w-0 items-start gap-1.5 pt-1.5">
+    <div className="grid gap-1 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-3" role="group" aria-labelledby={labelId}>
+      {/* The field's name edits it too (the value's own box, or its checkbox or stars), as a form's label does. */}
+      <div
+        className={cn("flex min-w-0 items-start gap-1.5 pt-1.5", !(readOnly || computed) && "cursor-pointer")}
+        onClick={readOnly || computed ? undefined : (e) => e.currentTarget.parentElement?.querySelector<HTMLElement>("[data-edit-field]")?.click()}
+      >
         <FieldTypeIcon type={field.type} className="mt-0.5" />
         <div className="min-w-0">
           <h3 id={labelId} className="truncate text-[0.8125rem] font-medium" title={field.description ?? undefined}>
@@ -204,7 +209,7 @@ function FieldRow({
             emails={emails}
             editorKey={editorKey}
             startEditing={startEditing}
-            onChange={field.type === "long_text" ? (edit) => unsent.current.typed(textKey, edit.text !== undefined && edit.text !== (typeof value === "string" ? value : "")) : undefined}
+            onChange={typedIn ? (edit) => unsent.current.typed(textKey, edit.text !== undefined && edit.text !== (typeof value === "string" ? value : "")) : undefined}
             onCommit={(edit) => onSave(field, edit)}
           />
         )}
@@ -226,6 +231,8 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
   const canComment = atLeast(role, "commenter");
   const format = useFormat(timeZone, collaborators);
   const env = useMemo<EditorEnv>(() => ({ baseId: schema.id, tableId: table.id, collaborators, timeZone, canCreateOptions: atLeast(role, "creator"), format, currentUserId, schema }), [schema, table.id, collaborators, timeZone, role, format, currentUserId]);
+  // Files in comments go to the project, like files in its rich text (uploading takes the editor role).
+  const uploadToProject = useCallback((file: File) => attachmentsApi.upload(schema.id, file), [schema.id]);
   const recordKey = recordKeys.record(table.id, recordId);
   const record = useQuery({ queryKey: recordKey, queryFn: () => recordsApi.get(table.id, recordId) });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -274,7 +281,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     return () => document.removeEventListener("keydown", onKey);
   }, [prevId, nextId, onNavigate]);
 
-  // Everything a save needs travels in its variables: long text saves when the editor goes away (the
+  // Everything a save needs travels in its variables: multiline text saves when the editor goes away (the
   // record is closed or navigated), which is after `recordId` has already moved on.
   const save = useMutation({
     // One save at a time per table, in the order they were made, so a slow earlier save of a text
@@ -468,7 +475,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
           <TabsContent value="comments" className="min-h-0 flex-1 pt-0">
-            <CommentsPanel recordId={recordId} collaborators={collaborators} currentUserId={currentUserId} canComment={canComment} timeZone={timeZone} />
+            <CommentsPanel recordId={recordId} collaborators={collaborators} currentUserId={currentUserId} canComment={canComment} timeZone={timeZone} upload={canEdit ? uploadToProject : undefined} />
           </TabsContent>
           <TabsContent value="history" className="min-h-0 flex-1 pt-0 md:overflow-y-auto">
             <HistoryPanel tableId={table.id} recordId={recordId} fields={table.fields} format={format} />

@@ -690,7 +690,7 @@ fn build_table(
                 &UpdateField {
                     name: Some(csv.header[0].clone()),
                     description: None,
-                    kind: (!matches!(kind, FieldKind::SingleLineText(_))).then_some(kind),
+                    kind: (kind != FieldKind::Text(Default::default())).then_some(kind),
                     position: None,
                 },
                 &actor.user_id,

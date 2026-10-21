@@ -21,7 +21,6 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 
 // Grid geometry (see grid.spec.ts): the Name column of a fresh table starts after the row marker.
 const MARKER_W = 56;
-const NAME_W = 220;
 const HEADER_H = 44;
 const ROW_H = 42;
 
@@ -103,8 +102,9 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    // Exact: the workspace (in the top bar's picker) is named after this spec too.
-    await page.getByRole("link", { name: "Automations", exact: true }).click();
+    // In the project's menu, which a right-click on its row opens too.
+    await page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: "Automations E2E", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Automations", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/automations$`));
     await expect(page.getByText("No automations yet")).toBeVisible();
     await expect(page.getByText("docs/automations.md").first()).toBeVisible();
@@ -162,7 +162,8 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     // Name it, as a person would.
     const canvas = page.locator("canvas[data-testid='data-grid-canvas']").first();
     const box = (await canvas.boundingBox())!;
-    const x = box.x + MARKER_W + NAME_W / 2;
+    // Just inside the name column: it is fitted to its content, so only its header's width is sure.
+    const x = box.x + MARKER_W + 24;
     const y = box.y + HEADER_H + ROW_H / 2;
     await clickGrid(page, x, y);
     await typeToEdit(page, "Alpha");

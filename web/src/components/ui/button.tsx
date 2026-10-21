@@ -9,11 +9,11 @@ export type ButtonSize = "sm" | "md" | "lg";
 const variants: Record<ButtonVariant, string> = {
   primary: "bg-primary text-primary-fg hover:bg-primary-hover",
   // A creating action next to secondary buttons that should stand out less than solid primary.
-  soft: "border border-primary/25 bg-primary-soft text-primary hover:bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface))]",
+  soft: "border border-primary/25 bg-primary-soft text-primary-text hover:bg-[color-mix(in_srgb,var(--primary)_18%,var(--surface))]",
   secondary: "border border-line-strong bg-surface text-fg hover:bg-hover",
   ghost: "text-fg hover:bg-hover",
   danger: "bg-danger text-danger-fg hover:bg-danger-hover",
-  link: "text-primary underline-offset-2 hover:underline px-0",
+  link: "text-primary-text underline-offset-2 hover:underline px-0",
 };
 
 const sizes: Record<ButtonSize, string> = {

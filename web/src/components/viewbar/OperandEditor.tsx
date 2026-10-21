@@ -57,7 +57,7 @@ function MultiPicker({ label, options, selected, onChange, disabled, search }: {
               <li key={o.id} role="option" aria-selected={on}>
                 <button type="button" onClick={() => onChange(on ? selected.filter((x) => x !== o.id) : [...selected, o.id])} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.8125rem] hover:bg-hover">
                   <span className="truncate">{o.label}</span>
-                  {on && <Check aria-hidden className="size-4 text-primary" />}
+                  {on && <Check aria-hidden className="size-4 text-primary-text" />}
                 </button>
               </li>
             );

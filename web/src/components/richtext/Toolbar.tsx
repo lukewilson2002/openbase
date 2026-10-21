@@ -41,7 +41,7 @@ const KEEP_GRID_EDITOR = "click-outside-ignore";
 
 const btn =
   "inline-flex size-8 pointer-coarse:size-10 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg " +
-  "disabled:pointer-events-none disabled:opacity-40 aria-pressed:bg-primary-soft aria-pressed:text-primary data-[state=open]:bg-hover";
+  "disabled:pointer-events-none disabled:opacity-40 aria-pressed:bg-primary-soft aria-pressed:text-primary-text data-[state=open]:bg-hover";
 
 /** Keeps the editor's selection and keyboard when a toolbar control is pressed. */
 const keepFocus = (e: React.MouseEvent) => e.preventDefault();
@@ -322,7 +322,7 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
       <ToolButton label="Quote" active={s.quote} onClick={() => run().toggleBlockquote().run()}>
         <Quote aria-hidden className="size-4" />
       </ToolButton>
-      <ToolMenu editor={editor} label="Callout" trigger={<TriangleAlert aria-hidden className={cn("size-4", s.callout && "text-primary")} />}>
+      <ToolMenu editor={editor} label="Callout" trigger={<TriangleAlert aria-hidden className={cn("size-4", s.callout && "text-primary-text")} />}>
         {CALLOUT_KINDS.map((kind) => (
           <DropdownMenuItem key={kind} onSelect={() => run().setCallout(kind).run()} className={s.callout === kind ? "bg-hover" : undefined}>
             <span aria-hidden className="ob-callout-dot size-2.5 rounded-full" data-callout={kind} />
@@ -339,7 +339,7 @@ export function Toolbar({ editor, canUpload }: { editor: Editor; canUpload?: boo
       <ToolButton label="Code block" active={s.codeBlock} onClick={() => run().toggleCodeBlock().run()}>
         <Code2 aria-hidden className="size-4" />
       </ToolButton>
-      <ToolMenu editor={editor} label="Table" trigger={<Table2 aria-hidden className={cn("size-4", s.table && "text-primary")} />}>
+      <ToolMenu editor={editor} label="Table" trigger={<Table2 aria-hidden className={cn("size-4", s.table && "text-primary-text")} />}>
         {!s.table ? (
           <DropdownMenuItem onSelect={() => run().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Insert table (3 × 3)</DropdownMenuItem>
         ) : (

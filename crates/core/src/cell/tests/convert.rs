@@ -68,8 +68,8 @@ fn matrix_same_type_is_identity() {
 /// Every type converts to text as its display text, in every zone.
 #[test]
 fn matrix_anything_to_text_is_display_text() {
-    let text = sample_field(FieldType::SingleLineText);
-    let long = sample_field(FieldType::LongText);
+    let text = sample_field(FieldType::Text);
+    let long = sample_field(FieldType::RichText);
     for t in FieldType::ALL {
         let f = sample_field(t);
         for v in sample_values(t) {
@@ -111,36 +111,26 @@ fn meaningful_pairs() {
         (Checkbox, Number, json!(true), Some(json!(1))),
         (Number, Checkbox, json!(42), Some(json!(true))),
         (Number, Checkbox, json!(0), None),
-        (SingleLineText, Checkbox, json!("yes"), Some(json!(true))),
-        (SingleLineText, Checkbox, json!("hello"), None),
-        (
-            Checkbox,
-            SingleLineText,
-            json!(true),
-            Some(json!("checked")),
-        ),
+        (Text, Checkbox, json!("yes"), Some(json!(true))),
+        (Text, Checkbox, json!("hello"), None),
+        (Checkbox, Text, json!(true), Some(json!("checked"))),
         // text -> typed
-        (SingleLineText, Number, json!("42"), Some(json!(42))),
-        (SingleLineText, Number, json!("hello"), None),
-        (LongText, Number, json!("3.5"), Some(json!(3.5))),
-        (
-            SingleLineText,
-            SingleSelect,
-            json!("Red"),
-            Some(json!("selRed")),
-        ),
-        (SingleLineText, SingleSelect, json!("hello"), None),
-        (SingleLineText, Email, json!("hello"), None),
+        (Text, Number, json!("42"), Some(json!(42))),
+        (Text, Number, json!("hello"), None),
+        (RichText, Number, json!("3.5"), Some(json!(3.5))),
+        (Text, SingleSelect, json!("Red"), Some(json!("selRed"))),
+        (Text, SingleSelect, json!("hello"), None),
+        (Text, Email, json!("hello"), None),
         (
             Email,
-            SingleLineText,
+            Text,
             json!("ada@example.com"),
             Some(json!("ada@example.com")),
         ),
         (Email, Url, json!("ada@example.com"), None),
         (
             Url,
-            SingleLineText,
+            Text,
             json!("https://example.com/a?b=c"),
             Some(json!("https://example.com/a?b=c")),
         ),
@@ -151,17 +141,12 @@ fn meaningful_pairs() {
             Some(json!(12345678905_i64)),
         ),
         (Number, Barcode, json!(42), Some(json!("42.00"))),
-        (Number, SingleLineText, json!(42), Some(json!("42.00"))),
-        (
-            Currency,
-            SingleLineText,
-            json!(1234.5),
-            Some(json!("$1,234.50")),
-        ),
+        (Number, Text, json!(42), Some(json!("42.00"))),
+        (Currency, Text, json!(1234.5), Some(json!("$1,234.50"))),
         (Currency, Percent, json!(1234.5), Some(json!(1234.5))),
-        (Percent, SingleLineText, json!(0.5), Some(json!("50%"))),
-        (Duration, SingleLineText, json!(5400), Some(json!("1:30"))),
-        (SingleLineText, Phone, json!("42"), None),
+        (Percent, Text, json!(0.5), Some(json!("50%"))),
+        (Duration, Text, json!(5400), Some(json!("1:30"))),
+        (Text, Phone, json!("42"), None),
         // selects
         (
             SingleSelect,
@@ -177,24 +162,19 @@ fn meaningful_pairs() {
         ),
         (
             MultipleSelect,
-            SingleLineText,
+            Text,
             json!(["selRed", "selBlue"]),
             Some(json!("Red, Blue")),
         ),
         (
             SingleSelect,
-            SingleLineText,
+            Text,
             json!("selDark"),
             Some(json!("Red, dark")),
         ),
         (SingleSelect, Number, json!("selRed"), None),
         // dates
-        (
-            Date,
-            SingleLineText,
-            json!("2026-10-12"),
-            Some(json!("10/12/2026")),
-        ),
+        (Date, Text, json!("2026-10-12"), Some(json!("10/12/2026"))),
         (
             CreatedTime,
             Date,
@@ -209,7 +189,7 @@ fn meaningful_pairs() {
         ),
         (
             CreatedTime,
-            SingleLineText,
+            Text,
             json!("2026-10-12T14:30:00.000Z"),
             Some(json!("10/12/2026 2:30pm")),
         ),
@@ -218,49 +198,44 @@ fn meaningful_pairs() {
         // links / users / attachments
         (
             Link,
-            SingleLineText,
+            Text,
             json!(["recA", "recB"]),
             Some(json!("Alpha, Beta")),
         ),
         (Link, MultipleSelect, json!(["recA"]), None),
-        (SingleLineText, Link, json!("recA"), None),
+        (Text, Link, json!("recA"), None),
         (
             User,
-            SingleLineText,
+            Text,
             json!(["usr1", "usr2"]),
             Some(json!("Ada Lovelace, Grace Hopper")),
         ),
         (CreatedBy, User, json!("usr1"), Some(json!(["usr1"]))),
         (LastModifiedBy, User, json!("usr2"), Some(json!(["usr2"]))),
-        (
-            CreatedBy,
-            SingleLineText,
-            json!("usr1"),
-            Some(json!("Ada Lovelace")),
-        ),
+        (CreatedBy, Text, json!("usr1"), Some(json!("Ada Lovelace"))),
         (
             Attachment,
-            SingleLineText,
+            Text,
             sample_values(Attachment)[0].clone(),
             Some(json!("photo.png, notes.txt")),
         ),
-        (SingleLineText, Attachment, json!("photo.png"), None),
+        (Text, Attachment, json!("photo.png"), None),
         (
             Lookup,
-            SingleLineText,
+            Text,
             json!(["Alpha", "Beta"]),
             Some(json!("Alpha, Beta")),
         ),
         (
             Button,
-            SingleLineText,
+            Text,
             json!("https://example.com"),
             Some(json!("Open")),
         ),
         (Button, Url, json!("https://example.com"), None),
         // anything into computed
         (Number, Formula, json!(42), None),
-        (SingleLineText, Autonumber, json!("1"), None),
+        (Text, Autonumber, json!("1"), None),
     ];
     for (from_t, to_t, input, want) in cases {
         assert_eq!(
@@ -273,7 +248,7 @@ fn meaningful_pairs() {
 
 #[test]
 fn text_to_date_and_back() {
-    let text = sample_field(FieldType::SingleLineText);
+    let text = sample_field(FieldType::Text);
     let date = date_field(false, DateFormat::Us, None);
     assert_eq!(
         conv(&text, &date, json!("10/12/2026")),
@@ -395,9 +370,9 @@ fn select_conversions_match_by_name() {
 }
 
 #[test]
-fn long_text_to_single_line_is_truncated_not_rejected() {
-    let long = sample_field(FieldType::LongText);
-    let single = sample_field(FieldType::SingleLineText);
+fn rich_text_to_text_is_truncated_not_rejected() {
+    let long = sample_field(FieldType::RichText);
+    let single = sample_field(FieldType::Text);
     let huge = "a\n".repeat(MAX_TEXT_CELL_LEN);
     let out = conv(&long, &single, json!(huge)).unwrap();
     let s = out.as_str().unwrap();
@@ -406,9 +381,31 @@ fn long_text_to_single_line_is_truncated_not_rejected() {
 }
 
 #[test]
+fn text_losing_multiline_joins_its_lines() {
+    let multi = field(FieldKind::Text(TextOptions {
+        multiline: true,
+        default: None,
+    }));
+    let single = sample_field(FieldType::Text);
+    assert_eq!(
+        conv(&multi, &single, json!("12 High St\n\n  Springfield \nUSA")),
+        Some(json!("12 High St Springfield USA"))
+    );
+    // And back: nothing to undo, nothing lost.
+    assert_eq!(
+        conv(&single, &multi, json!("one line")),
+        Some(json!("one line"))
+    );
+    assert_eq!(
+        conv(&multi, &sample_field(FieldType::RichText), json!("a\nb")),
+        Some(json!("a\nb"))
+    );
+}
+
+#[test]
 fn convert_with_ctx_zone_for_text() {
     let dt = date_field(true, DateFormat::Iso, None);
-    let text = sample_field(FieldType::SingleLineText);
+    let text = sample_field(FieldType::Text);
     let v = json!("2026-10-12T23:30:00.000Z");
     assert_eq!(
         convert(&dt, &text, Some(&v), &ctx_in("Asia/Tokyo"), &Names),
@@ -419,7 +416,7 @@ fn convert_with_ctx_zone_for_text() {
 #[test]
 fn choices_needed() {
     use FieldType::*;
-    let text = sample_field(SingleLineText);
+    let text = sample_field(Text);
     let target_single = single_select();
     let target_multi = multi_select();
     let values = [
@@ -495,7 +492,7 @@ fn choices_needed() {
 
 #[test]
 fn choices_needed_then_convert_round_trip() {
-    let text = sample_field(FieldType::SingleLineText);
+    let text = sample_field(FieldType::Text);
     let mut target = field(FieldKind::MultipleSelect(SelectOptions::default()));
     let values = [json!("a, b"), json!("B, c"), json!("\"d, e\"")];
     let names =
@@ -522,7 +519,7 @@ fn choices_needed_then_convert_round_trip() {
 
 #[test]
 fn choices_needed_respects_limits() {
-    let text = sample_field(FieldType::SingleLineText);
+    let text = sample_field(FieldType::Text);
     let target = field(FieldKind::SingleSelect(SelectOptions::default()));
     let values: Vec<Json> = (0..MAX_CHOICES_PER_FIELD + 50)
         .map(|i| json!(format!("v{i}")))

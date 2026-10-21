@@ -55,7 +55,17 @@ pub struct User {
     /// Whether the user has seen (or skipped) the introduction.
     #[serde(default)]
     pub intro_seen: bool,
+    /// The app's accent colour for this person, one of [`ACCENTS`]; none = the default, blue.
+    #[serde(default)]
+    pub accent: Option<String>,
 }
+
+/// The accent colours a person can give the app: the hues of the palette that projects and
+/// workspaces are coloured with ([`crate::field::COLORS`] without the `_dark` twins, which share
+/// their hue's shade on a project's tile).
+pub const ACCENTS: [&str; 10] = [
+    "blue", "cyan", "teal", "green", "yellow", "orange", "red", "pink", "purple", "gray",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
@@ -101,6 +111,9 @@ pub struct UpdateMeRequest {
     pub timezone: Option<String>,
     #[serde(default)]
     pub intro_seen: Option<bool>,
+    /// One of [`ACCENTS`], or empty string for the default (blue).
+    #[serde(default)]
+    pub accent: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -415,4 +428,25 @@ pub struct BackupInfo {
     pub name: String,
     pub size: u64,
     pub created_at: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ACCENTS;
+    use crate::field::COLORS;
+
+    #[test]
+    fn accents_are_the_palette_hues() {
+        let hues: Vec<&str> = COLORS
+            .iter()
+            .filter(|c| !c.ends_with("_dark"))
+            .copied()
+            .collect();
+        assert_eq!(ACCENTS.to_vec(), hues);
+        assert!(
+            COLORS
+                .iter()
+                .all(|c| ACCENTS.contains(&c.trim_end_matches("_dark")))
+        );
+    }
 }

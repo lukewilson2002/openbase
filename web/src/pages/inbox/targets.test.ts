@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Field, WorkspaceSummary } from "@/api/types";
 import { field, makeTable } from "@/test/fields";
-import { attachmentFields, captureTargets, defaultNoteField, draftPreview, fileFields, formFields, isBlank, noteFields } from "./targets";
+import { attachmentFields, captureTargets, everyoneInProjects, defaultNoteField, draftPreview, fileFields, formFields, isBlank, noteFields } from "./targets";
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
-const plain = field("long_text", { rich: false }, { id: "fld_plain", name: "Plain" });
-const rich = field("long_text", { rich: true }, { id: "fld_rich", name: "Rich" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
+const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain" });
+const rich = field("rich_text", {}, { id: "fld_rich", name: "Rich" });
 const stage = field("single_select", { choices: [{ id: "chs1", name: "Todo", color: "gray" }] }, { id: "fld_stage", name: "Stage" });
 const done = field("checkbox", { icon: "check", color: "green" }, { id: "fld_done", name: "Done" });
 const files = field("attachment", {}, { id: "fld_files", name: "Files" });
@@ -13,7 +13,7 @@ const total = field("formula", { expression: "1", result_type: "number", format:
 const table = makeTable([name, plain, rich, stage, done, files, total]);
 
 describe("fields of a table", () => {
-  it("offers rich long text first for the note, and defaults to the first rich one", () => {
+  it("offers rich text first for the note, and defaults to the first rich one", () => {
     expect(noteFields(table).map((f) => f.id)).toEqual(["fld_rich", "fld_plain"]);
     expect(defaultNoteField(table)?.id).toBe("fld_rich");
     expect(defaultNoteField(makeTable([name]))).toBeUndefined();
@@ -82,5 +82,25 @@ describe("captureTargets", () => {
     expect(captureTargets([ws("commenter", 1)])).toHaveLength(0);
     expect(captureTargets([ws("viewer", 1)])).toHaveLength(0);
     expect(captureTargets([ws("editor", 0)])).toHaveLength(0);
+  });
+});
+
+describe("everyoneInProjects", () => {
+  it("lists the people of every project once, by name, without pending invites", () => {
+    const person = (user_id: string | null, name: string, pending = false) => ({ user_id, name, email: `${name.toLowerCase()}@example.com`, pending, role: "editor" });
+    const base = (id: string, people: ReturnType<typeof person>[]) => ({ id, workspace_id: "w", name: id, color: "blue", role: "editor", people, tables: [] });
+    const ws: WorkspaceSummary = {
+      id: "w",
+      name: "W",
+      color: "green",
+      role: "owner",
+      member_count: 3,
+      pending_invite_count: 1,
+      bases: [base("b1", [person("usr2", "Grace"), person("usr1", "Ada")]), base("b2", [person("usr2", "Grace"), person(null, "invitee", true)])],
+    };
+    expect(everyoneInProjects([ws])).toEqual([
+      { id: "usr1", name: "Ada", email: "ada@example.com" },
+      { id: "usr2", name: "Grace", email: "grace@example.com" },
+    ]);
   });
 });

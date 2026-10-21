@@ -7,13 +7,13 @@ import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
 import { apiError, makeSchema, mockApi } from "@/test/utils";
 import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
-const empty = field("single_line_text", {}, { id: "fld_empty", name: "Nickname" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
+const empty = field("text", { multiline: false }, { id: "fld_empty", name: "Nickname" });
 const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
 const tags = field("multiple_select", { choices: CHOICES }, { id: "fld_tags", name: "Tags" });
 const done = field("checkbox", { icon: "check", color: "green" }, { id: "fld_done", name: "Done" });
-const notes = field("long_text", { rich: true }, { id: "fld_notes", name: "Notes" });
-const plain = field("long_text", { rich: false }, { id: "fld_plain", name: "Plain notes" });
+const notes = field("rich_text", {}, { id: "fld_notes", name: "Notes" });
+const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain notes" });
 const stamp = field("created_time", { include_time: true, date_format: "iso", time_format: "h24", timezone: null }, { id: "fld_stamp", name: "Created" });
 const budget = field("currency", { precision: 2, symbol: "$", allow_negative: true }, { id: "fld_budget", name: "Budget" });
 const table = makeTable([name, empty, status, tags, done, notes, plain, stamp, budget]);
@@ -191,40 +191,40 @@ describe("ExpandedRecord: view mode", () => {
     expect(screen.queryByRole("button", { name: "Edit Done" })).not.toBeInTheDocument();
   });
 
-  it("opens a link in rendered long text without starting an edit", async () => {
+  it("opens a link in rendered multiline text without starting an edit", async () => {
     setup();
     const link = within(await screen.findByRole("group", { name: "Notes" })).getByRole("link", { name: "docs" });
     // jsdom does not navigate; the click must simply not be taken for a click on the value.
     link.addEventListener("click", (e) => e.preventDefault());
     await userEvent.click(link);
     expect(link).toHaveAttribute("target", "_blank");
-    expect(screen.queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument();
+    expect(within(row("Notes")).queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit Notes" })).toBeInTheDocument();
     // The text around the link does start one.
     await userEvent.click(within(row("Notes")).getByText(/first\./));
-    expect(await screen.findByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
+    expect(await within(row("Notes")).findByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
   });
 
   it("leaves the rich text editor on blur, back to the rendered text", async () => {
     setup();
     await userEvent.click(await area("Notes"));
-    expect(await screen.findByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
-    await waitFor(() => expect(document.querySelector(".ProseMirror")).toHaveFocus());
+    expect(await within(row("Notes")).findByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
+    await waitFor(() => expect(row("Notes").querySelector(".ProseMirror")).toHaveFocus());
     await userEvent.click(screen.getByRole("button", { name: "Edit Name" }));
-    await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(row("Notes")).queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
   });
 
-  it("Escape in long text ends the edit, keeps the text and leaves the record open", async () => {
+  it("Escape in multiline text ends the edit, keeps the text and leaves the record open", async () => {
     const { props } = setup();
     // Rich text: the editor gives way to the rendered text.
     await userEvent.click(await area("Notes"));
-    await waitFor(() => expect(document.querySelector(".ProseMirror")).toHaveFocus());
+    await waitFor(() => expect(row("Notes").querySelector(".ProseMirror")).toHaveFocus());
     await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(row("Notes")).queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
     expect(await area("Notes")).toHaveFocus();
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
-    // Plain long text: the same, and what was typed stays.
+    // Multiline text: the same, and what was typed stays.
     await userEvent.click(await area("Plain notes"));
     await userEvent.type(await screen.findByRole("textbox", { name: "Plain notes" }), " and two");
     await userEvent.keyboard("{Escape}");

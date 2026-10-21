@@ -1,5 +1,5 @@
 /**
- * A long text field opened across the whole screen: a title (the field's name), a Done button, and
+ * A multiline text field opened across the whole screen: a title (the field's name), a Done button, and
  * the editor filling the rest. It is a Radix dialog, so Escape and Done both close it and focus
  * returns to the field. The editor inside owns its scrolling (one scroll container), the dialog
  * pads for the notch and the home indicator.
@@ -32,6 +32,10 @@ export function FullScreen({ title, onClose, children }: { title: string; onClos
           aria-describedby={undefined}
           // Keys typed here are not for the cell editor or the record that host this one (Escape is Radix's own).
           onKeyDown={(e) => e.stopPropagation()}
+          // An Escape that closes something inside first (the people list of a rich text editor) keeps it open.
+          onEscapeKeyDown={(e) => {
+            if (e.target instanceof Element && e.target.closest("[data-escape-cancels]")) e.preventDefault();
+          }}
           onOpenAutoFocus={(e) => e.preventDefault()}
           className="click-outside-ignore fixed inset-0 z-50 flex h-dvh flex-col bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]"
         >

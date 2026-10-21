@@ -21,7 +21,7 @@ describe("aggregationsFor (mirror of query::aggregations_for)", () => {
   });
   it("attachments have no unique counts; text types have no statistics", () => {
     expect(aggregationsFor(ALL_FIELDS.attachment)).toEqual(["none", "empty", "filled", "percent_empty", "percent_filled"]);
-    expect(aggregationsFor(ALL_FIELDS.single_line_text)).toEqual(["none", "empty", "filled", "percent_empty", "percent_filled", "unique", "percent_unique"]);
+    expect(aggregationsFor(ALL_FIELDS.text)).toEqual(["none", "empty", "filled", "percent_empty", "percent_filled", "unique", "percent_unique"]);
     expect(aggregationsFor(ALL_FIELDS.single_select)).not.toContain("sum");
   });
   it("buttons offer nothing", () => expect(aggregationsFor(ALL_FIELDS.button)).toEqual(["none"]));

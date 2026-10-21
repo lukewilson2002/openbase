@@ -563,7 +563,7 @@ async function seed(api, password) {
   // ---------- Trash: one of each kind, deleted by different people
   const oldView = await api.post(`/api/tables/${products.id}/views`, { name: "Summer price list", type: "grid", config: structuredCloneConfig(tableOf(products.id).views[0].config) });
   await api.del(`/api/views/${oldView.id}`);
-  const sku = await mkField(products.id, { name: "Old SKU", type: "single_line_text", options: {} });
+  const sku = await mkField(products.id, { name: "Old SKU", type: "text", options: {} });
   await sam.api.del(`/api/fields/${sku.id}`);
   const lead = await api.post(`/api/tables/${customers.id}/records`, { records: [{ values: { [customers.primary_field_id]: "Corner Bistro" } }] });
   await sam.api.del(`/api/tables/${customers.id}/records`, { ids: [lead.records[0].id] });

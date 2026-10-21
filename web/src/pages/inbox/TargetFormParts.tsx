@@ -81,7 +81,7 @@ export function TitleField({ form }: { form: TargetForm }) {
 }
 
 /**
- * Where the note goes: a long text field of the table, a comment on the new record, or nowhere. A curved
+ * Where the note goes: a rich or multiline text field of the table, a comment on the new record, or nowhere. A curved
  * arrow from the note box above points at the choice; "Note goes into" is its name for screen readers.
  */
 export function NoteChooser({ form }: { form: TargetForm }) {
@@ -195,7 +195,7 @@ function FieldRow({ field, form }: { field: Field; form: TargetForm }) {
 }
 
 /** Fields typed into with a keyboard: they report every keystroke, so a quick Save never misses the last one. */
-const TYPED_SHAPES: ReadonlySet<DisplayShape> = new Set<DisplayShape>(["text", "long_text", "number", "email", "url", "phone"]);
+const TYPED_SHAPES: ReadonlySet<DisplayShape> = new Set<DisplayShape>(["text", "multiline", "number", "email", "url", "phone"]);
 
 /**
  * One field's editor, reporting into the form. Like the expanded record, a picker is rebuilt when its

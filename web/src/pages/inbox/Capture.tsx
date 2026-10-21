@@ -1,11 +1,11 @@
 /**
  * The capture box of the Inbox: a rich text box with Attach files and Save to… under it. With no
  * table picked what is written is a draft, saved as it is typed. With a table picked the box
- * becomes that table's form (its primary field as the title, the note in a long text field, the
+ * becomes that table's form (its primary field as the title, the note in a rich or multiline text field, the
  * other fields below, the files in an attachment field) and Save files it as a new record.
  * Cmd/Ctrl+Enter is Save (or, for a plain note, "save the draft now").
  */
-import { Suspense, lazy, useRef, useState, type KeyboardEvent } from "react";
+import { Suspense, lazy, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderInput, Paperclip, X } from "lucide-react";
@@ -26,7 +26,7 @@ import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { AttachmentChips } from "./AttachmentChips";
 import { FileChooser, FormStatus, NoteChooser, OtherFields, TargetBar, TitleField } from "./TargetFormParts";
 import { TargetPicker } from "./TargetPicker";
-import { NOTE_AS_COMMENT, fileFields, hasContent, isBlank, isTextTitle, primaryField, type TargetRef } from "./targets";
+import { NOTE_AS_COMMENT, everyoneInProjects, fileFields, hasContent, isBlank, isTextTitle, primaryField, type TargetRef } from "./targets";
 import { DraftsList } from "./DraftsList";
 import { useDraft, type Draft } from "./useDraft";
 import { useTargetForm } from "./useTargetForm";
@@ -42,6 +42,8 @@ interface Filed {
   recordId: string;
   tableName: string;
 }
+
+const NOBODY: readonly never[] = [];
 
 /** Files embedded in the note go up as inbox files (no project yet; only the uploader can read them). */
 const uploadToInbox = (file: File) => api.inbox.upload(file);
@@ -60,6 +62,10 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
   const [fileError, setFileError] = useState<string | null>(null);
   const [filed, setFiled] = useState<Filed | null>(null);
   const uploads = useUploads(draft.attachments.length, draft.addAttachment, draft.key);
+  // Who the note can mention: the picked project's people, or anyone in your projects until one is
+  // picked. Nobody hears of it while it is a draft; filing notifies those who can see the record.
+  const everyone = useMemo(() => everyoneInProjects(workspaces), [workspaces]);
+  const people = target ? (form.env?.collaborators ?? NOBODY) : everyone;
   const input = useRef<HTMLInputElement>(null);
 
   // The draft's title is the record's: a text primary field takes it, any other primary has its own
@@ -179,7 +185,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
           }
         >
           {/* Files embedded in the note stay in the note: the server moves them into the project when the draft is filed. */}
-          <RichTextEditor key={draft.key} value={draft.body} onChange={draft.setBody} onBlur={() => void draft.save()} autoFocus={desktop} placeholder="Write something…" upload={uploadToInbox} aria-label="Note" />
+          <RichTextEditor key={draft.key} value={draft.body} onChange={draft.setBody} onBlur={() => void draft.save()} autoFocus={desktop} placeholder="Write something…" upload={uploadToInbox} people={people} aria-label="Note" />
         </Suspense>
         {target && <NoteChooser form={form} />}
         <AttachmentChips files={draft.attachments} uploading={uploads.uploading} onRemove={draft.removeAttachment} />

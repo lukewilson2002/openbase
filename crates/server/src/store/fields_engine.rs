@@ -19,13 +19,13 @@ use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use chrono_tz::Tz;
 use ob_core::cell::{CellCtx, choices_needed_for_conversion, convert};
-use ob_core::field::{Field, FieldKind, SelectChoice, default_choice_color};
+use ob_core::field::{Field, FieldKind, SelectChoice, TextOptions, default_choice_color};
 use ob_core::formula::{self, FormulaError, TypeEnv};
 use ob_core::ids;
 use ob_core::limits;
 use ob_core::query::{compile_filter, compile_row_color, validate_groups, validate_sorts};
 use ob_core::value::ResultType;
-use ob_core::view::{Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
+use ob_core::view::{Condition, Filter, FilterItem, RowColor, ViewConfig};
 use rusqlite::Transaction;
 use serde_json::Value as Json;
 
@@ -33,8 +33,8 @@ use crate::engine::recompute;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::store::field_kind::element_result_type;
-use crate::store::fields;
 use crate::store::links::NameCache;
+use crate::store::{comments, fields, markdown};
 
 fn formula_error(e: FormulaError) -> AppError {
     AppError::bad_request(format!("Invalid formula: {e}"))
@@ -46,8 +46,8 @@ pub fn field_result_type(f: &Field) -> ResultType {
     use FieldKind as K;
     let text_list = || ResultType::Array(Box::new(ResultType::Text));
     match &f.kind {
-        K::SingleLineText(_)
-        | K::LongText(_)
+        K::Text(_)
+        | K::RichText(_)
         | K::Email(_)
         | K::Url(_)
         | K::Phone(_)
@@ -199,17 +199,53 @@ pub fn convert_column(tx: &Transaction, table_id: &str, old: &Field, new: &Field
     let names = NameCache::new(tx, Tz::UTC);
     let ctx = CellCtx::utc(Utc::now());
     let from_link = matches!(old.kind, FieldKind::Link(_));
+    let (from, unrich) = read_rich_as_plain(old, new);
+    let to_rich =
+        matches!(new.kind, FieldKind::RichText(_)) && !matches!(old.kind, FieldKind::RichText(_));
     fields::map_cells(tx, table_id, &old.id, |cell| {
-        if from_link {
+        let converted = if from_link {
             let live = names.live_ids(cell);
             if live.is_empty() {
                 return None;
             }
             let live = crate::store::links::ids_json(&live);
-            return convert(old, new, Some(&live), &ctx, &names);
+            convert(old, new, Some(&live), &ctx, &names)?
+        } else {
+            convert(&from, new, Some(&unrich(cell)), &ctx, &names)?
+        };
+        if !to_rich {
+            return Some(converted);
         }
-        convert(old, new, Some(cell), &ctx, &names)
+        // Plain text becomes Markdown that shows the same text.
+        let md = comments::plain_to_markdown(converted.as_str()?);
+        Some(Json::String(
+            md.chars().take(limits::MAX_TEXT_CELL_LEN).collect(),
+        ))
     })
+}
+
+/// Rich text is Markdown: when it becomes another type its cells are read as
+/// the plain text they show (`markdown::to_plain`), as if `old` were
+/// multiline Text. Returns the field to convert from and how to read a cell.
+fn read_rich_as_plain(old: &Field, new: &Field) -> (Field, impl Fn(&Json) -> Json) {
+    let unrich =
+        matches!(old.kind, FieldKind::RichText(_)) && !matches!(new.kind, FieldKind::RichText(_));
+    let from = if unrich {
+        Field {
+            kind: FieldKind::Text(TextOptions {
+                multiline: true,
+                default: None,
+            }),
+            ..old.clone()
+        }
+    } else {
+        old.clone()
+    };
+    let read = move |cell: &Json| match cell.as_str() {
+        Some(md) if unrich => Json::String(markdown::to_plain(md)),
+        _ => cell.clone(),
+    };
+    (from, read)
 }
 
 /// Before a type change converts values into a select field, add the choices
@@ -238,7 +274,9 @@ pub fn add_conversion_choices(
         .filter_map(|mut data| data.get_mut(&old.id).map(Json::take))
         .collect();
     let names = NameCache::new(tx, Tz::UTC);
-    let needed = choices_needed_for_conversion(old, new, cells.iter().map(Some), &names, Tz::UTC);
+    let (from, unrich) = read_rich_as_plain(old, new);
+    let cells: Vec<Json> = cells.iter().map(unrich).collect();
+    let needed = choices_needed_for_conversion(&from, new, cells.iter().map(Some), &names, Tz::UTC);
     if needed.is_empty() {
         return Ok(());
     }
@@ -443,19 +481,20 @@ fn prune_filter(filter: &Filter, fields: &[Field], stale: &Stale) -> Filter {
     }
 }
 
-fn prune_levels(
+fn prune_levels<T: Clone>(
     slot: &str,
-    levels: &[Sort],
+    levels: &[T],
+    field_id: fn(&T) -> &str,
     fields: &[Field],
     stale: &Stale,
-    validate: fn(&[Sort], &[Field]) -> Result<(), String>,
-) -> Vec<Sort> {
+    validate: fn(&[T], &[Field]) -> Result<(), String>,
+) -> Vec<T> {
     levels
         .iter()
         .filter(|s| {
-            fields.iter().any(|f| f.id == s.field_id)
-                && (!stale.field(slot, &s.field_id)
-                    || validate(std::slice::from_ref(s), fields).is_ok())
+            let id = field_id(s);
+            fields.iter().any(|f| f.id == id)
+                && (!stale.field(slot, id) || validate(std::slice::from_ref(s), fields).is_ok())
         })
         .cloned()
         .collect()
@@ -484,11 +523,23 @@ pub fn validate_view_config_semantics(
         let pruned = prune_filter(filter, fields, stale);
         compile_filter(&pruned, fields).map_err(bad)?;
     }
-    let sorts = prune_levels("sort", &config.sorts, fields, stale, validate_sorts);
+    let sorts = prune_levels(
+        "sort",
+        &config.sorts,
+        |s| &s.field_id,
+        fields,
+        stale,
+        validate_sorts,
+    );
     validate_sorts(&sorts, fields).map_err(bad)?;
-    let groups = prune_levels("group", &config.groups, fields, stale, |s, f| {
-        validate_groups(s, f)
-    });
+    let groups = prune_levels(
+        "group",
+        &config.groups,
+        |g| &g.field_id,
+        fields,
+        stale,
+        validate_groups,
+    );
     validate_groups(&groups, fields).map_err(bad)?;
     match &config.row_color {
         Some(RowColor::BySelect { field_id }) => {
@@ -537,11 +588,7 @@ mod tests {
 
     fn fields() -> Vec<Field> {
         vec![
-            f(
-                "fldA",
-                "Name",
-                FieldKind::SingleLineText(TextOptions::default()),
-            ),
+            f("fldA", "Name", FieldKind::Text(TextOptions::default())),
             f("fldB", "Price", FieldKind::Number(NumberOptions::default())),
             f("fldC", "price", FieldKind::Number(NumberOptions::default())),
             f(

@@ -5,7 +5,7 @@ import { actionSummary, actionsPayload, canonicalJson, draftFromAutomation, form
 
 const schema = makeSchema("creator");
 schema.tables[0]!.fields = [
-  { id: "fld1", table_id: "tbl1", name: "Name", type: "single_line_text", options: {} },
+  { id: "fld1", table_id: "tbl1", name: "Name", type: "text", options: { multiline: false } },
   { id: "fld2", table_id: "tbl1", name: "Qty", type: "number", options: { precision: 0, allow_negative: true } },
 ];
 schema.tables[1]!.views.push(makeView({ id: "viw9", name: "Signup form", type: "form" }));

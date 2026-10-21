@@ -423,9 +423,14 @@ fn text_kind(values: &[&str]) -> FieldKind {
         .iter()
         .any(|v| v.chars().count() > 255 || v.contains(['\n', '\r']))
     {
-        FieldKind::LongText(Default::default())
+        // CSV holds plain text: multiline Text keeps it exactly as it was (as
+        // Rich text, Markdown characters in it would turn into formatting).
+        FieldKind::Text(TextOptions {
+            multiline: true,
+            default: None,
+        })
     } else {
-        FieldKind::SingleLineText(TextOptions::default())
+        FieldKind::Text(TextOptions::default())
     }
 }
 
@@ -438,7 +443,7 @@ pub fn infer_kind(cells: &[&str], primary: bool) -> FieldKind {
         .filter(|c| !c.is_empty())
         .collect();
     if values.is_empty() {
-        return FieldKind::SingleLineText(TextOptions::default());
+        return FieldKind::Text(TextOptions::default());
     }
     let candidate = || -> Option<FieldKind> {
         if !primary
@@ -733,8 +738,9 @@ mod tests {
 
     fn kind_of(values: &[&str]) -> &'static str {
         match infer_kind(values, false) {
-            FieldKind::SingleLineText(_) => "text",
-            FieldKind::LongText(_) => "long_text",
+            FieldKind::Text(o) if o.multiline => "multiline_text",
+            FieldKind::Text(_) => "text",
+            FieldKind::RichText(_) => "rich_text",
             FieldKind::Number(_) => "number",
             FieldKind::Currency(_) => "currency",
             FieldKind::Percent(_) => "percent",
@@ -866,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn infers_selects_for_repeating_few_values_and_long_text() {
+    fn infers_selects_for_repeating_few_values_and_multiline_text() {
         let col = [
             "Todo", "Done", "todo", "Todo", "Done", "Doing", "Doing", "Done",
         ];
@@ -880,8 +886,8 @@ mod tests {
         // All distinct: free text.
         assert_eq!(kind_of(&["a b", "c d", "e f"]), "text");
         let long = "x".repeat(300);
-        assert_eq!(kind_of(&[long.as_str(), "short"]), "long_text");
-        assert_eq!(kind_of(&["line1\nline2", "b"]), "long_text");
+        assert_eq!(kind_of(&[long.as_str(), "short"]), "multiline_text");
+        assert_eq!(kind_of(&["line1\nline2", "b"]), "multiline_text");
         // Checkbox words as primary stay text/select, never checkbox.
         assert!(!matches!(
             infer_kind(&["yes", "no", "yes", "no"], true),
@@ -916,7 +922,7 @@ mod tests {
             kind,
         };
         let fields = vec![
-            mk("fa", FieldKind::SingleLineText(TextOptions::default())),
+            mk("fa", FieldKind::Text(TextOptions::default())),
             mk("fb", FieldKind::Number(NumberOptions::default())),
             mk("auto", FieldKind::Autonumber(Default::default())),
         ];

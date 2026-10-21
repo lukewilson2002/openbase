@@ -400,6 +400,13 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
     for id in config.summaries.keys() {
         check(id, "summaries")?;
     }
+    if let Some(w) = config.timeline.label_width
+        && !(80..=800).contains(&w)
+    {
+        return Err(AppError::bad_request(
+            "timeline label_width must be between 80 and 800 pixels",
+        ));
+    }
     match &config.row_color {
         Some(ob_core::view::RowColor::BySelect { field_id }) => check(field_id, "row color")?,
         Some(ob_core::view::RowColor::ByConditions { rules }) => {
@@ -526,7 +533,7 @@ mod tests {
 
     fn fields() -> Vec<Field> {
         vec![
-            field("a", FieldKind::SingleLineText(Default::default())),
+            field("a", FieldKind::Text(Default::default())),
             field("b", FieldKind::Number(Default::default())),
             field("c", FieldKind::Autonumber(ob_core::field::Empty {})),
         ]
@@ -587,7 +594,13 @@ mod tests {
         };
         assert!(validate_config(&f, &c).is_err());
         let c = ViewConfig {
-            groups: (0..limits::MAX_GROUPS + 1).map(sort).collect(),
+            groups: (0..limits::MAX_GROUPS + 1)
+                .map(|i| ob_core::view::Group {
+                    field_id: sort(i).field_id,
+                    direction: Direction::Desc,
+                    granularity: None,
+                })
+                .collect(),
             ..Default::default()
         };
         assert!(validate_config(&f, &c).is_err());

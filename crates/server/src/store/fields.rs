@@ -379,7 +379,12 @@ fn rewrite_for_new_kind(
     }
     let clear =
         new.field_type().is_computed() || *plan == LinkPlan::Create || *plan == LinkPlan::Relink;
-    if old.field_type() == new.field_type() && !clear {
+    // Text losing its line breaks is converted like a change of type.
+    let joins_lines = matches!(
+        (&old.kind, &new.kind),
+        (FieldKind::Text(a), FieldKind::Text(b)) if a.multiline && !b.multiline
+    );
+    if old.field_type() == new.field_type() && !clear && !joins_lines {
         strip_removed_choices(tx, &table.id, old, new)?;
     } else {
         let mode = if clear {
@@ -387,7 +392,7 @@ fn rewrite_for_new_kind(
         } else {
             RewriteMode::Convert
         };
-        if mode == RewriteMode::Convert && matches!(new.kind, FieldKind::LongText(_)) {
+        if mode == RewriteMode::Convert && matches!(new.kind, FieldKind::RichText(_)) {
             refuse_foreign_file_refs(tx, table, old)?;
         }
         rewrite_cells(tx, &table.id, old, new, mode)?;
@@ -432,8 +437,8 @@ fn tear_down_pair(
     })
 }
 
-/// Long text may only name files of its project (`/api/attachments/<id>/...`). Other kinds of
-/// text have no such check, so turning one into long text must not carry such references
+/// Rich text may only name files of its project (`/api/attachments/<id>/...`). Other kinds of
+/// text have no such check, so turning one into rich text must not carry such references
 /// across: the records (live and trashed) that hold one are listed and the change is refused.
 fn refuse_foreign_file_refs(tx: &Transaction, table: &TableRow, old: &Field) -> AppResult<()> {
     use crate::store::attachments;
@@ -471,7 +476,7 @@ fn refuse_foreign_file_refs(tx: &Transaction, table: &TableRow, old: &Field) -> 
         .collect();
     let more = bad.len().saturating_sub(LISTED);
     Err(AppError::bad_request(format!(
-        "field \"{}\" cannot become long text: {} record(s) refer to files that are not files \
+        "field \"{}\" cannot become rich text: {} record(s) refer to files that are not files \
          of this project: {}{}. Remove those references first.",
         old.name,
         bad.len(),

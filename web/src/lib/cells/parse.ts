@@ -5,7 +5,7 @@
 import type { Field } from "@/api/types";
 import { fieldZone } from "./dates";
 import { parseDate, storeParsedDate } from "./dates";
-import { isComputed, selectChoicesOf } from "./kinds";
+import { isComputed, isMultilineText, selectChoicesOf } from "./kinds";
 import { roundTo } from "./format";
 import { canonicalUrl, cleanText, isValidEmail, isValidPhone, parseBoolWord, parseDuration, parseNumber, splitList } from "./text";
 
@@ -97,10 +97,10 @@ export function parseText(field: Field, text: string, ctx: ParseCtx): ParseResul
   if (isComputed(field)) return fail("This field is computed and cannot be edited");
   const blank = text.trim() === "";
   switch (field.type) {
-    case "single_line_text":
-    case "long_text":
+    case "text":
+    case "rich_text":
     case "barcode": {
-      const cleaned = cleanText(text, field.type === "long_text");
+      const cleaned = cleanText(text, isMultilineText(field));
       if (cleaned.trim() === "") return CLEAR;
       if ([...cleaned].length > MAX_TEXT) return fail("Text is too long");
       return ok(cleaned);

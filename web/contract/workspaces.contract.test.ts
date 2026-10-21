@@ -213,7 +213,7 @@ describe("tables", () => {
   });
 
   it("changes the primary field", async () => {
-    const created = await w.owner.run(() => schemaApi.createField(tableId, { name: "Code", type: "single_line_text", options: {} }));
+    const created = await w.owner.run(() => schemaApi.createField(tableId, { name: "Code", type: "text", options: { multiline: false } }));
     const t = parse("Table", await w.owner.run(() => api.tables.setPrimaryField(tableId, created.id)));
     expect(w.owner.status).toBe(200);
     expect(t.primary_field_id).toBe(created.id);

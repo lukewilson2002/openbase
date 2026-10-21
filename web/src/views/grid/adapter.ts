@@ -10,11 +10,13 @@
 import type { ReactNode } from "react";
 import type { Field } from "@/api/types";
 import type { ChipItem } from "@/lib/cells/format";
+import type { Accent } from "@/theme/accents";
 
 export interface GridColumnSpec {
   id: string;
   title: string;
-  width: number;
+  /** Saved or being dragged; absent, the column is fitted to its content (Glide measures it, as a double-click on its edge does). */
+  width?: number;
   field: Field;
   isPrimary: boolean;
   /** Computed fields cannot be edited. */
@@ -106,6 +108,11 @@ export interface GridHandle {
 }
 
 export interface GridAdapterProps {
+  /**
+   * The first rows are in: columns without a width can be fitted to their content now (Glide measures
+   * a column once, so before this they keep a placeholder width rather than fitting empty cells).
+   */
+  fitColumns?: boolean;
   columns: readonly GridColumnSpec[];
   rowCount: number;
   rowHeight: number;
@@ -126,6 +133,8 @@ export interface GridAdapterProps {
   /** Highlight this text inside cells (search). */
   searchTerm: string;
   dark: boolean;
+  /** The accent colour the grid draws its selection, links and header in. */
+  accent: Accent;
   /** Whether cells can be edited, filled, pasted into and cleared. */
   canEdit: boolean;
   /** Whether rows can be reordered by dragging. */
@@ -136,7 +145,6 @@ export interface GridAdapterProps {
 
   /** O(1) lookup. Must never allocate per call for already-seen cells. */
   getCell(col: number, row: number): CellModel;
-  getRowColor(row: number): string | undefined;
 
   onVisibleRowsChange(first: number, last: number): void;
   onCommitEdits(edits: readonly CellEdit[]): void;
@@ -160,6 +168,11 @@ export interface GridAdapterProps {
   /** Add-field column ("+") at the end of the header; hidden when not allowed. */
   canAddField: boolean;
   onAddField(): void;
+  /**
+   * The pointer is over a linked record's chip in a cell (its record and where the chip is on screen),
+   * or no longer over one (`null`): the host shows the record's preview.
+   */
+  onLinkHover?(hit: { point: GridPoint; recordId: string; rect: ScreenRect } | null): void;
   /** Files were dropped onto a cell (attachments). */
   onDropFiles(point: GridPoint, files: File[]): void;
 

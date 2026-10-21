@@ -10,16 +10,16 @@
  * window or the scale changes. A bar that runs past the visible edge gets a square end and an
  * arrow there, and its label stays in view while it is scrolled.
  */
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type Ref } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type Ref, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useHoldToDrag } from "@/lib/holdToDrag";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cn } from "@/lib/cn";
-import { choiceClass, colorDotClass } from "@/lib/colors";
+import { RECORD_DRAG_TYPE } from "../common/UnscheduledList";
+import { accentHue, choiceClass } from "@/lib/colors";
 import { DescriptionHover, hasDescription, type DescriptionSource } from "../common/description";
-import { swatchColor } from "@/lib/cells/palette";
 import {
   BAR_HEIGHT,
   LANE_PAD,
@@ -54,6 +54,11 @@ export const HEADER_HEIGHT = MAJOR_ROW + MINOR_ROW;
 /** The left column: wide enough for a record's name and who it is for; narrower on a phone. */
 export const LABEL_WIDTH = 216;
 const LABEL_WIDTH_PHONE = 132;
+/** How far the left column's divider can be dragged (the server keeps 80 to 800). */
+export const LABEL_WIDTH_MIN = 80;
+export const LABEL_WIDTH_MAX = 480;
+const LABEL_KEY_STEP = 16;
+const clampLabel = (w: number) => Math.round(Math.min(LABEL_WIDTH_MAX, Math.max(LABEL_WIDTH_MIN, w)));
 const ADD_ROW = 40;
 const EDGE_PX = 240;
 
@@ -77,7 +82,7 @@ export interface ChartLane {
   recordId?: string;
 }
 
-/** Imperative controls for the host's own ‹ Today › buttons. */
+/** Imperative controls for the host's own Today and ‹ › buttons. */
 export interface TimelineChartHandle {
   /** Scroll one screen earlier or later. */
   page(dir: -1 | 1): void;
@@ -94,6 +99,10 @@ export interface TimelineChartProps {
   showLabels: boolean;
   /** Heading of the left column ("Chore", or the field the lanes group by). */
   labelHeading?: string;
+  /** The left column's width on a desktop, as saved on the view (else just wide enough for its labels). */
+  labelWidth?: number | null;
+  /** Saves a width dragged on the column's divider (`null`: back to fitting the labels); without it a drag holds only until the page changes. */
+  onLabelWidth?: (width: number | null) => void;
   canCreate: boolean;
   /**
    * Bring this day into view when `nonce` changes: centred, or (`start`) at the start of its period
@@ -108,8 +117,17 @@ export interface TimelineChartProps {
   onOpen(recordId: string): void;
   /** The record behind a bar and the view's description field, to read in full on hover. */
   describe?(recordId: string): DescriptionSource | null;
-  onCommit(recordId: string, mode: DragMode, days: number): void;
+  /** A drag or arrow key changed a bar: by `days`, and (a moved bar) into the swim lane `toLane`. */
+  onCommit(recordId: string, mode: DragMode, days: number, toLane?: string): void;
   onCreate(laneKey: string, fromDay: number, toDay: number): void;
+  /** A record dragged in from the unscheduled list (`RECORD_DRAG_TYPE`) and dropped on a lane's day. */
+  onDropRecord?(recordId: string, laneKey: string, day: number): void;
+  /** Takes a bar off the timeline (clears its dates): Delete on a selected bar, or a bar dropped on `unscheduleZone`. */
+  onUnschedule?(recordId: string): void;
+  /** Where a dragged bar can be dropped to unschedule it (the unscheduled column). */
+  unscheduleZone?: RefObject<HTMLElement | null>;
+  /** A dragged bar is over `unscheduleZone` (or no longer is), for the column to show it takes the drop. */
+  onOverUnschedule?(over: boolean): void;
   onNeedMore(side: "start" | "end"): void;
   onZoom(dir: "in" | "out"): void;
   /** The day at the centre of the visible chart, reported after scrolling and layout changes. */
@@ -123,8 +141,13 @@ interface DragState {
   id: string;
   mode: DragMode;
   startX: number;
+  startY: number;
   days: number;
   moved: boolean;
+  /** The swim lane a moved bar is over, when it is another lane it can go to. */
+  toLane?: string;
+  /** Over the unscheduled column: dropping it there clears its dates. */
+  unschedule?: boolean;
 }
 
 interface CreateState {
@@ -142,7 +165,78 @@ const weekendHead = "bg-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
 export function TimelineChart(props: TimelineChartProps) {
   const { axis, scale, lanes, edges, nowMs, showLabels, canCreate, focus, loading } = props;
   const wide = useMediaQuery(DESKTOP_QUERY);
-  const labelW = showLabels ? (wide ? LABEL_WIDTH : LABEL_WIDTH_PHONE) : 0;
+  // The width while its divider is dragged (or dragged by someone who cannot save it), else the view's.
+  const [liveLabelW, setLiveLabelW] = useState<number | null>(null);
+  // Without a saved width the column is as narrow as its longest label allows (measured below).
+  const [fitLabelW, setFitLabelW] = useState<number | null>(null);
+  const labelW = showLabels ? (wide ? (liveLabelW ?? clampLabel(props.labelWidth ?? fitLabelW ?? LABEL_WIDTH)) : LABEL_WIDTH_PHONE) : 0;
+  const labelDrag = useRef<{ x: number; width: number; last: number } | null>(null);
+  const saveLabel = (w: number | null) => {
+    if (props.onLabelWidth) {
+      props.onLabelWidth(w);
+      setLiveLabelW(null);
+    } else setLiveLabelW(w);
+  };
+  const onLabelPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    labelDrag.current = { x: e.clientX, width: labelW, last: labelW };
+  };
+  const onLabelPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = labelDrag.current;
+    if (!d) return;
+    d.last = clampLabel(d.width + e.clientX - d.x);
+    setLiveLabelW(d.last);
+  };
+  const onLabelPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    const d = labelDrag.current;
+    if (!d) return;
+    labelDrag.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    // A press without a drag changes nothing.
+    if (d.last !== d.width) saveLabel(d.last);
+    else setLiveLabelW(null);
+  };
+  // The widest label as drawn (name, its colour dot or second text, and the heading), plus the cell's
+  // padding (14 px each side) and its line: the column's width until one is chosen. Measured with the
+  // page's font on a canvas, so the labels are not drawn twice.
+  useLayoutEffect(() => {
+    if (!showLabels || !wide) return;
+    const ctx = document.createElement("canvas").getContext("2d");
+    const el = scroller.current;
+    if (!ctx || !el) return;
+    let live = true;
+    const measure = () => {
+      if (!live) return;
+      const family = getComputedStyle(el).fontFamily;
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const text = (t: string, size: number, weight: number) => {
+        ctx.font = `${weight} ${size * rem}px ${family}`;
+        return ctx.measureText(t).width;
+      };
+      let widest = props.labelHeading ? text(props.labelHeading, 0.875, 600) : 0;
+      for (const cl of lanes) {
+        const name = text(cl.lane.label, 0.875, 500);
+        const count = `${cl.bars.length} bar${cl.bars.length === 1 ? "" : "s"}`;
+        const row = cl.recordId ? name + (cl.sublabel ? 8 + text(cl.sublabel, 0.8125, 400) : 0) : Math.max(name, text(count, 0.75, 400));
+        widest = Math.max(widest, row);
+      }
+      setFitLabelW(widest > 0 ? clampLabel(Math.ceil(widest) + 29) : null);
+    };
+    measure();
+    // Again once the page's font has loaded: a fallback font measures differently.
+    void document.fonts?.ready.then(measure);
+    return () => {
+      live = false;
+    };
+  }, [lanes, props.labelHeading, showLabels, wide]);
+  const onLabelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const next = e.key === "ArrowLeft" ? labelW - LABEL_KEY_STEP : e.key === "ArrowRight" ? labelW + LABEL_KEY_STEP : e.key === "Home" ? LABEL_WIDTH_MIN : e.key === "End" ? LABEL_WIDTH_MAX : null;
+    if (next === null) return;
+    e.preventDefault();
+    saveLabel(clampLabel(next));
+  };
   const scroller = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   // Pointer handlers read the gesture from refs (events can arrive faster than React re-renders);
@@ -151,6 +245,8 @@ export function TimelineChart(props: TimelineChartProps) {
   const creatingRef = useRef<CreateState | null>(null);
   const [drag, setDragState] = useState<DragState | null>(null);
   const [creating, setCreatingState] = useState<CreateState | null>(null);
+  // Where a record dragged in from the unscheduled list would land, while it is over a lane.
+  const [dropAt, setDropAt] = useState<{ laneKey: string; day: number } | null>(null);
   // The visible part of the axis (chart x), for the square ends of bars that run past it.
   const [view, setView] = useState({ left: 0, right: 0 });
   const setDrag = (d: DragState | null) => {
@@ -257,14 +353,31 @@ export function TimelineChart(props: TimelineChartProps) {
     for (const lane of placed) for (const p of lane.bars) m.set(p.bar.id, { x: p.x, y: p.y, width: p.width, milestone: p.milestone });
     return m;
   }, [placed]);
+  // The swim lane each bar is drawn in (a chart with one row per record has none to move between).
+  const laneOfBar = useMemo(() => {
+    const m = new Map<string, ChartLane>();
+    for (const l of lanes) if (!l.recordId) for (const b of l.bars) m.set(b.id, l);
+    return m;
+  }, [lanes]);
+  /** The lane under a point of the bars' layer that the bar may move into (its field can be set), if any. */
+  const laneAt = (barId: string, y: number): string | undefined => {
+    const from = laneOfBar.get(barId);
+    if (!from?.lane.fieldId) return undefined;
+    const p = placed.find((q) => y >= q.top && y < q.top + q.height);
+    const to = p && lanes.find((l) => l.lane.key === p.key);
+    if (!to || to.recordId || to.lane.key === from.lane.key || to.lane.value === undefined || to.lane.fieldId !== from.lane.fieldId) return undefined;
+    return to.lane.key;
+  };
   const live = (id: string) => {
     const base = rects.get(id);
     if (!base) return undefined;
-    if (!drag || drag.id !== id || drag.days === 0) return base;
+    if (!drag || drag.id !== id || (drag.days === 0 && !drag.toLane)) return base;
     const bar = lanes.flatMap((l) => l.bars).find((b) => b.id === id);
     if (!bar) return base;
     const r = barRect(dragSpan(bar.span, drag.mode, drag.days), axis);
-    return { ...base, x: r.x, width: r.width };
+    // Over another lane, the bar is drawn on that lane's first row.
+    const into = drag.toLane !== undefined ? placed.find((p) => p.key === drag.toLane) : undefined;
+    return { ...base, x: r.x, width: r.width, y: into ? into.top + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2 : base.y };
   };
 
   // A finger holds a bar (or a lane) for a moment before it drags; a swipe scrolls the chart.
@@ -284,30 +397,66 @@ export function TimelineChart(props: TimelineChartProps) {
     const allowed = (handle ?? "move") === "move" ? bar.canMove : bar.canResize;
     // A bar that cannot change still takes the press, so that releasing it opens the record.
     const mode: DragMode = allowed ? (handle ?? "move") : "move";
-    const { currentTarget: el, pointerId, clientX: startX } = e;
+    const { currentTarget: el, pointerId, clientX: startX, clientY: startY } = e;
     barGate.press(e, () => {
       capture(el, pointerId);
-      setDrag({ id: bar.id, mode, startX, days: 0, moved: false });
+      setDrag({ id: bar.id, mode, startX, startY, days: 0, moved: false });
     });
   };
   const moveBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d || d.id !== bar.id) return;
     const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
     const allowed = d.mode === "move" ? bar.canMove : bar.canResize;
-    setDrag({ ...d, days: allowed ? dragDays(dx, axis) : 0, moved: d.moved || Math.abs(dx) > 3 });
+    const moved = d.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
+    // Over the unscheduled column, a moved bar goes back to it (it stays drawn where it was until dropped).
+    const zone = allowed && d.mode === "move" && props.onUnschedule ? props.unscheduleZone?.current?.getBoundingClientRect() : undefined;
+    const unschedule = !!zone && e.clientX >= zone.left && e.clientX < zone.right && e.clientY >= zone.top && e.clientY < zone.bottom;
+    if (unschedule !== !!d.unschedule) props.onOverUnschedule?.(unschedule);
+    if (unschedule) return setDrag({ ...d, days: 0, toLane: undefined, unschedule, moved });
+    // A moved bar can also go up or down into another swim lane.
+    const toLane = allowed && d.mode === "move" ? laneAt(bar.id, e.clientY - (layer.current?.getBoundingClientRect().top ?? 0)) : undefined;
+    setDrag({ ...d, days: allowed ? dragDays(dx, axis) : 0, toLane, unschedule: false, moved });
   };
-  const endBar = (bar: TimelineBar, cancel = false) => {
+  /** `select`: the bar a mouse released without moving, selected rather than opened (see the bar's pointer up). */
+  const endBar = (bar: TimelineBar, cancel = false, select?: HTMLElement) => {
     const d = dragRef.current;
     setDrag(null);
+    if (d?.unschedule) props.onOverUnschedule?.(false);
     if (!d || d.id !== bar.id || cancel) return;
-    if (!d.moved) props.onOpen(bar.id);
+    if (!d.moved) {
+      if (select) select.focus();
+      else props.onOpen(bar.id);
+    } else if (d.unschedule) props.onUnschedule?.(bar.id);
+    else if (d.toLane !== undefined) props.onCommit(bar.id, d.mode, d.days, d.toLane);
     else if (d.days !== 0) props.onCommit(bar.id, d.mode, d.days);
   };
   const barKey = (bar: TimelineBar, e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
       props.onOpen(bar.id);
+      return;
+    }
+    // Delete takes a selected bar off the timeline, back to the unscheduled records.
+    if ((e.key === "Delete" || e.key === "Backspace") && bar.canMove && props.onUnschedule) {
+      e.preventDefault();
+      props.onUnschedule(bar.id);
+      return;
+    }
+    // Up and down move a bar into the swim lane above or below (one it can go to).
+    const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    if (step && bar.canMove) {
+      const from = laneOfBar.get(bar.id);
+      const order = placed.map((p) => p.key);
+      for (let i = order.indexOf(from?.lane.key ?? "\u0000") + step; from && i >= 0 && i < order.length; i += step) {
+        const to = laneAt(bar.id, placed[i]!.top + 1);
+        if (to !== undefined) {
+          e.preventDefault();
+          props.onCommit(bar.id, "move", 0, to);
+          return;
+        }
+      }
       return;
     }
     const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -366,6 +515,32 @@ export function TimelineChart(props: TimelineChartProps) {
       data-testid="timeline-scroller"
     >
       <div className="relative" style={{ width: labelW + width, minHeight: HEADER_HEIGHT + Math.max(bodyHeight, 1) }}>
+        {/* The left column's divider, the whole height and pinned with the column: drag it (or use the arrow keys) to widen or narrow the column. */}
+        {showLabels && wide && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-50" style={{ width: labelW + width }}>
+            <div className="pointer-events-none sticky left-0 h-full" style={{ width: labelW }}>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize the left column"
+                aria-valuenow={labelW}
+                aria-valuemin={LABEL_WIDTH_MIN}
+                aria-valuemax={LABEL_WIDTH_MAX}
+                tabIndex={0}
+                onPointerDown={onLabelPointerDown}
+                onPointerMove={onLabelPointerMove}
+                onPointerUp={onLabelPointerUp}
+                onPointerCancel={onLabelPointerUp}
+                onKeyDown={onLabelKeyDown}
+                onDoubleClick={() => saveLabel(null)}
+                title="Drag to resize; double-click to fit the labels"
+                className="group pointer-events-auto absolute inset-y-0 -right-1.5 flex w-3 cursor-col-resize touch-none justify-center focus-visible:outline-none"
+              >
+                <span aria-hidden className="h-full w-0.5 bg-transparent transition-colors group-hover:bg-primary group-focus-visible:bg-ring group-active:bg-primary" />
+              </div>
+            </div>
+          </div>
+        )}
         {/* Header: the coarse row over the fine row, pinned to the top. */}
         <div className="sticky top-0 z-30 flex border-b border-line bg-[color-mix(in_srgb,var(--bg)_70%,var(--surface))]" style={{ height: HEADER_HEIGHT }}>
           {showLabels && (
@@ -439,7 +614,25 @@ export function TimelineChart(props: TimelineChartProps) {
               onPointerMove={(e) => laneGate.move(e) && moveCreate(e)}
               onPointerUp={(e) => laneGate.release(e) === "drag" && endCreate()}
               onPointerCancel={(e) => laneGate.release(e, true) === "drag" && endCreate(true)}
-              className={cn("absolute left-0 border-b", gridLine, canCreate && "cursor-crosshair")}
+              onDragOver={(e) => {
+                if (!props.onDropRecord || !e.dataTransfer.types.includes(RECORD_DRAG_TYPE)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const day = dayUnder(e.clientX);
+                if (Number.isFinite(day)) setDropAt((cur) => (cur?.laneKey === lane.key && cur.day === day ? cur : { laneKey: lane.key, day }));
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropAt(null);
+              }}
+              onDrop={(e) => {
+                setDropAt(null);
+                const id = e.dataTransfer.getData(RECORD_DRAG_TYPE);
+                const day = dayUnder(e.clientX);
+                if (!id || !props.onDropRecord || !Number.isFinite(day)) return;
+                e.preventDefault();
+                props.onDropRecord(id, lane.key, day);
+              }}
+              className={cn("absolute left-0 border-b", gridLine, canCreate && "cursor-crosshair", !cl.recordId && lane.color && `ob-hue-${accentHue(lane.color)} ob-lane`)}
               style={{ top: HEADER_HEIGHT + p.top, height: p.height, width: labelW + width }}
             >
               {showLabels &&
@@ -451,9 +644,9 @@ export function TimelineChart(props: TimelineChartProps) {
                     {cl.sublabel && <span className="max-w-[45%] shrink-0 truncate text-[0.8125rem] text-muted">{cl.sublabel}</span>}
                   </div>
                 ) : (
-                  <div className="pointer-events-none sticky left-0 z-20 flex h-full flex-col justify-center gap-0.5 border-r border-line bg-surface px-3.5" style={{ width: labelW }}>
+                  // A coloured lane's name sits on its colour (no dot), like a kanban stack's.
+                  <div className={cn("pointer-events-none sticky left-0 z-20 flex h-full flex-col justify-center gap-0.5 border-r border-line px-3.5", lane.color ? `ob-hue-${accentHue(lane.color)} ob-fill` : "bg-surface")} style={{ width: labelW }}>
                     <span className="flex items-center gap-2 text-[0.875rem] font-medium">
-                      {lane.color && <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: swatchColor(lane.color) }} />}
                       <span className="truncate" title={lane.label}>
                         {lane.label}
                       </span>
@@ -533,15 +726,22 @@ export function TimelineChart(props: TimelineChartProps) {
                 onPointerMove={(e) => barGate.move(e) && moveBar(bar, e)}
                 onPointerUp={(e) => {
                   const r = barGate.release(e);
-                  if (r === "tap") props.onOpen(bar.id);
-                  else if (r === "drag") endBar(bar);
+                  // A click selects the bar (for the keys); a double-click or Enter opens it. A finger has no keys: a tap opens it.
+                  const mouse = e.pointerType === "mouse";
+                  if (r === "tap") {
+                    if (mouse) e.currentTarget.focus();
+                    else props.onOpen(bar.id);
+                  } else if (r === "drag") endBar(bar, false, mouse ? e.currentTarget : undefined);
                 }}
+                onDoubleClick={() => props.onOpen(bar.id)}
                 onPointerCancel={(e) => barGate.release(e, true) === "drag" && endBar(bar, true)}
                 onKeyDown={(e) => barKey(bar, e)}
                 className={cn(
-                  "pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                  // Selected (focused, by a click or the keyboard), it is outlined.
+                  "pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus:outline-2 focus:outline-offset-2 focus:outline-ring",
                   bar.canMove ? "cursor-grab" : "cursor-pointer",
                   dragging && "z-20 cursor-grabbing shadow-pop",
+                  dragging && drag?.unschedule && "opacity-50",
                   !r.milestone &&
                     cn(
                       "ob-tl-bar rounded-[7px] border text-xs font-semibold transition-shadow hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)]",
@@ -570,7 +770,6 @@ export function TimelineChart(props: TimelineChartProps) {
                     {/* Sticky, so the start of a bar scrolled past the left column still says what it is. */}
                     <span className="pointer-events-none sticky flex min-w-0 items-center gap-1.5 overflow-hidden px-2.5" style={{ left: labelW }}>
                       {offLeft && <ChevronLeft aria-hidden className="-ml-1 size-3.5 shrink-0" />}
-                      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", bar.color ? colorDotClass(bar.color) : "bg-primary")} />
                       <span className="truncate">{bar.label ?? bar.title}</span>
                     </span>
                     {offRight && (
@@ -599,6 +798,13 @@ export function TimelineChart(props: TimelineChartProps) {
           })}
           {creating?.moved && (
             <GhostBar creating={creating} axis={axis} top={(placed.find((p) => p.key === creating.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2} />
+          )}
+          {dropAt && (
+            <GhostBar
+              creating={{ laneKey: dropAt.laneKey, fromDay: dropAt.day, toDay: dropAt.day, startX: 0, moved: true }}
+              axis={axis}
+              top={(placed.find((p) => p.key === dropAt.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2}
+            />
           )}
         </div>
 

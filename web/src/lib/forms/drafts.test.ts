@@ -3,7 +3,7 @@ import { ALL_FIELDS, CHOICES, field } from "@/test/fields";
 import { resolveForm } from "./drafts";
 
 const ctx = { timeZone: "UTC", users: [{ id: "usr1", name: "Ada Lovelace", email: "ada@example.com" }] };
-const text = field("single_line_text", {}, { id: "f_text", name: "Name" });
+const text = field("text", { multiline: false }, { id: "f_text", name: "Name" });
 const qty = field("number", { precision: 0, allow_negative: false }, { id: "f_qty", name: "Qty" });
 const status = field("single_select", { choices: CHOICES }, { id: "f_status", name: "Status" });
 const done = field("checkbox", { icon: "check", color: "green" }, { id: "f_done", name: "Done" });

@@ -45,7 +45,7 @@ TJSON=$(api POST "/api/bases/$BASE/tables" '{"name":"Orders"}')
 TABLE=$(jq -r .id <<<"$TJSON"); PRIMARY=$(jq -r .primary_field_id <<<"$TJSON"); VIEW=$(jq -r '.views[0].id' <<<"$TJSON")
 mkfield() { api POST "/api/tables/$TABLE/fields" "$1" | jq -r .id; }
 AMOUNT=$(mkfield '{"name":"Amount","type":"number","options":{}}')
-NOTES=$(mkfield '{"name":"Notes","type":"long_text","options":{}}')
+NOTES=$(mkfield '{"name":"Notes","type":"rich_text","options":{}}')
 QTY=$(mkfield '{"name":"Qty","type":"number","options":{}}')
 STATUS=$(mkfield '{"name":"Status","type":"single_select","options":{"choices":[{"name":"New"},{"name":"Packed"},{"name":"Shipped"},{"name":"Delivered"},{"name":"Returned"}]}}')
 TAGS=$(mkfield '{"name":"Tags","type":"multiple_select","options":{"choices":[{"name":"rush"},{"name":"gift"},{"name":"fragile"}]}}')

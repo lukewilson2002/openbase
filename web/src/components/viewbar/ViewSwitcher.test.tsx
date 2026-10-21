@@ -1,99 +1,99 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router";
+import { describe, expect, it, vi } from "vitest";
 import type { View } from "@/api/types";
 import { Providers, createQueryClient } from "@/providers";
-import { makeSchema, makeView, mockApi } from "@/test/utils";
-import { ViewSwitcher } from "./ViewSwitcher";
+import { makeSchema, makeView } from "@/test/utils";
+import { ViewSwitcher, groupViews } from "./ViewSwitcher";
+
+/** Where the switcher has taken the page. */
+function Location() {
+  return <output aria-label="Location">{useLocation().pathname}</output>;
+}
 
 function setup(activeId: string, { role = "creator", views }: { role?: string; views?: View[] } = {}) {
   const schema = makeSchema(role);
   const t = schema.tables[0]!;
-  const table = { ...t, views: views ?? [makeView({ id: "viwD", name: "Default grid", is_default: true }), makeView({ id: "viwA", name: "All tasks" }), makeView({ id: "viwB", name: "Board", type: "kanban" })] };
+  const table = { ...t, views: views ?? [makeView({ id: "viwD", name: "Grid", is_default: true }), makeView({ id: "viwA", name: "All tasks" }), makeView({ id: "viwB", name: "Board", type: "kanban" })] };
   render(
     <Providers client={createQueryClient()}>
       <MemoryRouter>
         <ViewSwitcher schema={{ ...schema, tables: [table] }} table={table} view={table.views.find((v) => v.id === activeId)!} />
+        <Location />
       </MemoryRouter>
     </Providers>,
   );
 }
 
 describe("ViewSwitcher", () => {
-  it("puts the default grid first, on its own, and lists the views after it without it", () => {
+  it("lists the default grid first, then a line, then the views without it", async () => {
     setup("viwA");
-    const defaultGrid = screen.getByRole("link", { name: "Default grid" });
-    expect(defaultGrid).toHaveAttribute("href", "/base/app1/tbl1/viwD");
-    expect(defaultGrid).not.toHaveAttribute("aria-current");
-    const views = screen.getByRole("navigation", { name: "Views of Tasks" });
-    // Not grouped with the grid views, nor listed among them.
-    expect(within(views).queryByRole("link", { name: "Default grid" })).toBeNull();
-    expect(within(views).getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
-    // It comes before the views in the toolbar.
-    expect(defaultGrid.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "View: All tasks" }));
+    const menu = await screen.findByRole("menu", { name: "Views of Tasks" });
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items.map((i) => [i.textContent, i.getAttribute("href")])).toEqual([
+      ["Default grid", "/base/app1/tbl1/viwD"],
+      ["All tasks", "/base/app1/tbl1/viwA"],
+      ["Board", "/base/app1/tbl1/viwB"],
+    ]);
+    expect(items[0]).not.toHaveAttribute("aria-current");
+    expect(items[1]).toHaveAttribute("aria-current", "page");
+    // The line sits between the default grid and the views.
+    const line = within(menu).getByRole("separator");
+    expect(items[0]!.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(items[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("marks the default grid when it is open", () => {
+  it("names the default grid on the button when it is open", async () => {
     setup("viwD");
-    expect(screen.getByRole("link", { name: "Default grid" })).toHaveAttribute("aria-current", "page");
+    await userEvent.click(screen.getByRole("button", { name: "View: Default grid" }));
+    expect(within(await screen.findByRole("menu", { name: "Views of Tasks" })).getByRole("menuitem", { name: "Default grid" })).toHaveAttribute("aria-current", "page");
   });
 
-  describe("putting the views in order", () => {
-    afterEach(() => vi.restoreAllMocks());
+  it("has no line when the table has no views but its default grid", async () => {
+    setup("viwD", { views: [makeView({ id: "viwD", name: "Grid", is_default: true })] });
+    await userEvent.click(screen.getByRole("button", { name: "View: Default grid" }));
+    expect(within(await screen.findByRole("menu", { name: "Views of Tasks" })).queryByRole("separator")).not.toBeInTheDocument();
+  });
 
-    /** Room for every name (jsdom has no layout; with no media query the toolbar is a phone's). */
-    const namesFit = () => {
-      vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
-      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
+  it("groups views by type, the types in the order of their first view", () => {
+    const views = [makeView({ id: "a", type: "kanban" }), makeView({ id: "b" }), makeView({ id: "c", type: "kanban" })];
+    expect(groupViews(views).map((g) => [g.type, g.views.map((v) => v.id)])).toEqual([
+      ["kanban", ["a", "c"]],
+      ["grid", ["b"]],
+    ]);
+  });
+
+  describe("a row shared by several views of one type", () => {
+    const views = [makeView({ id: "viwD", name: "Grid", is_default: true }), makeView({ id: "viwA", name: "All tasks" }), makeView({ id: "viwB", name: "Board", type: "kanban" }), makeView({ id: "viwC", name: "Mine" })];
+    const openRow = async () => {
+      setup("viwB", { views });
+      await userEvent.click(screen.getByRole("button", { name: "View: Board" }));
+      return within(await screen.findByRole("menu", { name: "Views of Tasks" })).getByRole("menuitem", { name: "Grid views: All tasks and 1 more" });
     };
-    const names = () => within(screen.getByRole("navigation", { name: "Views of Tasks" })).getAllByRole("link").map((l) => l.getAttribute("aria-label"));
 
-    it("drags a view's button along the toolbar: the new order is sent and shown, and the drop opens nothing", async () => {
-      namesFit();
-      // The buttons side by side, 100px apart.
-      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-        const i = Array.from(document.querySelectorAll("a[data-sortable]")).indexOf(this as HTMLAnchorElement);
-        const left = i < 0 ? 0 : i * 100;
-        return { x: left, y: 0, left, top: 0, width: 100, height: 36, right: left + 100, bottom: 36, toJSON: () => ({}) } as DOMRect;
-      });
-      const api = mockApi({ "POST /api/tables/tbl1/views/reorder": { ok: true }, "GET /api/bases/app1": { status: 500 } });
-      setup("viwA");
-      expect(names()).toEqual(["All tasks", "Board"]);
-      const board = screen.getByRole("link", { name: "Board" });
-      expect(board).toHaveAttribute("data-sortable");
-      fireEvent.mouseDown(board, { button: 0, clientX: 150, clientY: 18 });
-      for (const x of [140, 100, 60, 40]) {
-        fireEvent.mouseMove(document, { clientX: x, clientY: 18 });
-        await act(async () => {});
-      }
-      expect(board).toHaveAttribute("data-dragging");
-      fireEvent.mouseUp(document, { clientX: 40, clientY: 18 });
-      // Shown in the new order at once (the app's schema then follows from the cache).
-      expect(names()).toEqual(["Board", "All tasks"]);
-      // The click a browser sends after the release would otherwise follow the link.
-      expect(fireEvent.click(board)).toBe(false);
-      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/views/reorder")).toHaveLength(1));
-      expect(api.callsTo("POST /api/tables/tbl1/views/reorder")[0]?.body).toEqual({ ids: ["viwB", "viwA"] });
+    it("opens the view it names on a click, and closes the list", async () => {
+      await userEvent.click(await openRow());
+      expect(screen.getByRole("status", { name: "Location" })).toHaveTextContent("/base/app1/tbl1/viwA");
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
     });
 
-    it("cannot be dragged by an editor while shared views are shown, nor once the buttons are icons", () => {
-      namesFit();
-      setup("viwA", { role: "editor" });
-      expect(document.querySelector("[data-sortable]")).toBeNull();
+    it("opens the view it names on Enter", async () => {
+      (await openRow()).focus();
+      await userEvent.keyboard("{Enter}");
+      expect(screen.getByRole("status", { name: "Location" })).toHaveTextContent("/base/app1/tbl1/viwA");
     });
 
-    it("can be dragged by an editor whose views are all personal", () => {
-      namesFit();
-      setup("viwA", {
-        role: "editor",
-        views: [makeView({ id: "viwD", name: "Default grid", is_default: true }), makeView({ id: "viwA", name: "Mine", personal: true }), makeView({ id: "viwB", name: "Also mine", personal: true })],
-      });
-      expect(document.querySelectorAll("a[data-sortable]")).toHaveLength(2);
-    });
-
-    it("has no drag while views of one type share an icon", () => {
-      setup("viwA");
-      expect(document.querySelector("[data-sortable]")).toBeNull();
+    it("opens its views from its +1 end, staying where it is", async () => {
+      const row = await openRow();
+      const more = row.querySelector<HTMLElement>("[data-more]")!;
+      vi.spyOn(more, "getBoundingClientRect").mockReturnValue({ x: 200, y: 0, left: 200, top: 0, width: 24, height: 18, right: 224, bottom: 18, toJSON: () => ({}) } as DOMRect);
+      fireEvent.click(more, { clientX: 210, clientY: 9 });
+      const sub = await screen.findByRole("menu", { name: "Grid views" });
+      expect(within(sub).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["All tasks", "Mine"]);
+      expect(screen.getByRole("status", { name: "Location" })).toHaveTextContent("/");
+      expect(screen.getByRole("status", { name: "Location" })).not.toHaveTextContent("viwA");
     });
   });
 });

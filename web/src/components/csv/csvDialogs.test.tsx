@@ -8,7 +8,7 @@ import { NewTableFromCsvDialog } from "./NewTableFromCsvDialog";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const name = field("single_line_text", {}, { id: "f_name", name: "Name" });
+const name = field("text", { multiline: false }, { id: "f_name", name: "Name" });
 const qty = field("number", { precision: 0, allow_negative: true }, { id: "f_qty", name: "Qty" });
 const status = field("single_select", { choices: [{ id: "c1", name: "Todo", color: "gray" }] }, { id: "f_status", name: "Status" });
 const owner = field("user", { multiple: false, notify: false }, { id: "f_owner", name: "Owner" });
@@ -175,7 +175,7 @@ describe("a new table from a CSV", () => {
 
   it("suggests the file name, previews the rows and creates the table", async () => {
     const user = userEvent.setup();
-    const api = creator({ "POST /api/bases/app1/import": { status: 200, json: { table_id: "tbl9", created: 2, fields: [{ id: "f1", name: "Name", type: "single_line_text" }, { id: "f2", name: "Qty", type: "number" }] } } });
+    const api = creator({ "POST /api/bases/app1/import": { status: 200, json: { table_id: "tbl9", created: 2, fields: [{ id: "f1", name: "Name", type: "text" }, { id: "f2", name: "Qty", type: "number" }] } } });
     await choose(user, csv(CSV, "People 2026.csv"));
     expect(await screen.findByLabelText("Table name")).toHaveValue("People 2026");
     const preview = screen.getByRole("region", { name: "Preview" });

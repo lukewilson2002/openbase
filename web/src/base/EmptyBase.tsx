@@ -33,7 +33,7 @@ export function EmptyBase({ schema, onImport }: { schema: BaseSchema; onImport: 
             <CreateTableForm schema={schema} />
             <p className="text-sm text-muted">
               Have a spreadsheet already?{" "}
-              <button type="button" onClick={onImport} className="text-primary underline underline-offset-2 hover:text-primary-hover">
+              <button type="button" onClick={onImport} className="text-primary-text underline underline-offset-2 hover:text-primary-hover">
                 Import a CSV
               </button>
             </p>

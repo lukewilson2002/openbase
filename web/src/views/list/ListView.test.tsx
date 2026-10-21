@@ -105,7 +105,7 @@ describe("ListView", () => {
   });
 
   describe("description", () => {
-    const notes = field("long_text", { rich: false }, { id: "f_notes", name: "Notes" });
+    const notes = field("text", { multiline: true }, { id: "f_notes", name: "Notes" });
     const long = "Runs entirely on local models:\n- A system one model\n- A local LLM";
 
     function setupNotes(config: Record<string, unknown>) {
@@ -126,7 +126,7 @@ describe("ListView", () => {
       await screen.findByRole("button", { name: "R1" });
       // Nothing is a description until the view picks one: Notes is an ordinary field.
       expect(screen.getByRole("button", { name: "R1" }).querySelector("[data-row-description]")).toBeNull();
-      await user.click(screen.getAllByRole("button", { name: "Description" })[0]!);
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
       const select = await screen.findByRole("combobox", { name: "Description" });
       expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No description", "Notes"]);
       await user.selectOptions(select, "f_notes");

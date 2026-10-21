@@ -6,7 +6,7 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
 import { ListOutline, ROWS_PER_GROUP, type ListOutlineProps } from "./ListOutline";
 
-const name = ALL_FIELDS.single_line_text!;
+const name = ALL_FIELDS.text!;
 const status = ALL_FIELDS.single_select!;
 const num = ALL_FIELDS.number!;
 
@@ -36,7 +36,7 @@ function outline(over: Partial<ListOutlineProps> = {}) {
 }
 
 describe("ListOutline", () => {
-  it("shows group headers with counts and each group's records, plus a few fields per row", () => {
+  it("shows group headers with counts and each group's records, with their fields", () => {
     outline();
     const tree = screen.getByRole("tree", { name: "Grouped records" });
     const headers = within(tree).getAllByRole("treeitem");
@@ -51,9 +51,20 @@ describe("ListOutline", () => {
     expect(screen.getAllByRole("button", { name: /^(Write docs|Fix bug|Ship it|Idea)$/ })).toHaveLength(4);
   });
 
-  it("marks a choice group with its colour's dot and shows select values as bare pills", () => {
+  it("shows every field the view shows that has a value, not just the first few, and leaves empty ones out", () => {
+    const extra = [ALL_FIELDS.email!, ALL_FIELDS.url!, ALL_FIELDS.percent!, ALL_FIELDS.currency!];
+    const full = rec("r9", "Everything", { [num.id]: 3, [extra[0]!.id]: "a@b.co", [extra[1]!.id]: "https://example.com", [extra[2]!.id]: 0.5, [extra[3]!.id]: null });
+    outline({ records: [full], groups: [], fields: [num, ...extra] });
+    const row = screen.getByRole("button", { name: "Everything" });
+    for (const f of [num, extra[0]!, extra[1]!, extra[2]!]) expect(within(row).getByText(f.name)).toBeInTheDocument();
+    expect(within(row).queryByText(extra[3]!.name)).not.toBeInTheDocument();
+  });
+
+  it("fills a choice group's heading with its colour (no dot) and shows select values as bare pills", () => {
     outline({ fields: [status, num] });
-    expect(screen.getAllByRole("treeitem")[0]!.querySelector(".ob-dot")).not.toBeNull();
+    const heading = within(screen.getAllByRole("treeitem")[0]!).getByRole("button");
+    expect(heading).toHaveClass("ob-fill");
+    expect(heading.querySelector(".ob-dot")).toBeNull();
     const row = screen.getByRole("button", { name: "Write docs" });
     expect(within(row).queryByText(status.name)).not.toBeInTheDocument();
     expect(within(row).getByText("number")).toBeInTheDocument();

@@ -79,15 +79,15 @@ export function NotificationsRow({ open, className, ...props }: { open: boolean 
       aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
       className={cn(
         "flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-left text-[0.875rem] text-fg transition-colors hover:bg-hover pointer-coarse:h-11",
-        open && "bg-primary-soft hover:bg-primary-soft",
+        open && "bg-primary text-primary-fg hover:bg-primary-hover",
         className,
       )}
       {...props}
     >
-      <Bell aria-hidden className="size-[1.125rem] shrink-0 text-muted" />
+      <Bell aria-hidden className={cn("size-[1.125rem] shrink-0", !open && "text-muted")} />
       <span className="min-w-0 flex-1 truncate">Notifications</span>
       {unread > 0 && (
-        <span aria-hidden data-testid="notifications-badge" className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-fg">
+        <span aria-hidden data-testid="notifications-badge" className={cn("flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold", open ? "bg-primary-fg text-primary" : "bg-primary text-primary-fg")}>
           {unreadBadge(unread)}
         </span>
       )}

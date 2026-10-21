@@ -1,5 +1,5 @@
 /**
- * Media embeds in rich long text. An embed is Markdown image syntax whose address is one of our own
+ * Media embeds in rich text. An embed is Markdown image syntax whose address is one of our own
  * files (`![Alt](/api/attachments/{id}/{file name} "Caption")`); nothing else is shown as media.
  * The rich text editor and the read-only renderer both decide with the functions here, so what is
  * editable as a block is exactly what is displayed as one.

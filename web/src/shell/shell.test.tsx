@@ -176,11 +176,16 @@ describe("ProfileMenu", () => {
     expect(trigger).toHaveTextContent("ada@example.com");
     await user.click(trigger);
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Settings", "Connect an assistant", "Replay the intro", "Appearance: System", "Sign out"]);
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Settings", "Connect an assistant", "Replay the intro", "Send feedback", "Appearance: System", "Sign out"]);
     // Every row leads with an icon, like the other menus.
     for (const item of within(menu).getAllByRole("menuitem")) expect(item.querySelector("svg[aria-hidden='true']"), item.textContent ?? "").not.toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/account");
     expect(within(menu).getByRole("menuitem", { name: "Connect an assistant" })).toHaveAttribute("href", "/account?tab=assistants");
+    // Feedback goes to the project's GitHub Discussions, in a new tab.
+    const feedback = within(menu).getByRole("menuitem", { name: "Send feedback" });
+    expect(feedback).toHaveAttribute("href", "https://github.com/lukewilson2002/openbase/discussions");
+    expect(feedback).toHaveAttribute("target", "_blank");
+    expect(feedback).toHaveAttribute("rel", "noopener noreferrer");
     // The theme is one row that opens its choices, by keyboard as by pointer.
     within(menu).getByRole("menuitem", { name: "Appearance: System" }).focus();
     await user.keyboard("{ArrowRight}");
@@ -200,6 +205,45 @@ describe("ProfileMenu", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(api.callsTo("POST /api/auth/logout")).toHaveLength(1));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+  });
+
+  it("paints a picked accent colour at once and saves it on the account", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes();
+    api.set("PATCH /api/auth/me", (call) => ({ ...USER, accent: (call.body as { accent: string }).accent || null }));
+    renderWithProviders(<Shell />);
+    await user.click(await screen.findByRole("button", { name: "Account menu" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Appearance: System" }));
+    const colors = await screen.findByRole("group", { name: "Color" });
+    expect(within(colors).getAllByRole("menuitemradio").map((s) => s.getAttribute("aria-label"))).toEqual(["Blue", "Cyan", "Teal", "Green", "Yellow", "Orange", "Red", "Pink", "Purple", "Gray"]);
+    expect(within(colors).getByRole("menuitemradio", { name: "Blue" })).toHaveAttribute("aria-checked", "true");
+
+    // A click, not user.click: jsdom has no layout, so a pointer moving into the submenu closes it.
+    fireEvent.click(within(colors).getByRole("menuitemradio", { name: "Teal" }));
+    expect(document.documentElement).toHaveAttribute("data-accent", "teal");
+    expect(localStorage.getItem("ob-accent")).toBe("teal");
+    // The menu stays open to try another.
+    expect(within(colors).getByRole("menuitemradio", { name: "Teal" })).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect(api.callsTo("PATCH /api/auth/me").map((c) => c.body)).toEqual([{ accent: "teal" }]));
+
+    // Blue, the default, is saved as no colour.
+    fireEvent.click(within(colors).getByRole("menuitemradio", { name: "Blue" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/auth/me").map((c) => c.body)).toEqual([{ accent: "teal" }, { accent: "" }]));
+    expect(document.documentElement).toHaveAttribute("data-accent", "blue");
+  });
+
+  it("goes back to the account's colour when saving one fails", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const api = routes({ ...USER, accent: "purple" });
+    api.set("PATCH /api/auth/me", { status: 500, json: { error: { code: "internal", message: "boom" } } });
+    renderWithProviders(<Shell />);
+    await user.click(await screen.findByRole("button", { name: "Account menu" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Appearance/ }));
+    fireEvent.click(within(await screen.findByRole("group", { name: "Color" })).getByRole("menuitemradio", { name: "Red" }));
+    expect(await screen.findByText("Could not save the colour")).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("data-accent", "purple");
   });
 
   it("shows Administration to administrators", async () => {
@@ -232,7 +276,9 @@ describe("BaseAvatars", () => {
     // The invite that is not accepted yet counts in the +N, with a name in its tooltip.
     expect(group).toHaveTextContent("+2");
     expect(container.querySelector("[data-away]")).toHaveAttribute("title", "Can open this project, not viewing now: Alex Kim and jordan@example.com (invited, not joined yet)");
-    expect(container.querySelector("[data-away]")).toHaveClass("bg-subtle");
+    // A count in plain text, not a bubble of its own.
+    expect(container.querySelector("[data-away]")).not.toHaveClass("bg-subtle");
+    expect(container.querySelector("[data-away]")).not.toHaveClass("rounded-full");
     expect(container.querySelector("[data-pending]")).toBeNull();
   });
 
@@ -622,8 +668,7 @@ describe("HomeShell", () => {
       });
     });
 
-    describe("tables and views", () => {
-      const viewNames = (list: HTMLElement) => within(list).getAllByRole("link").map((a) => a.textContent);
+    describe("tables", () => {
       const setup = async (role = "owner", extra: Record<string, unknown> = {}) => {
         stubDesktop();
         const user = userEvent.setup();
@@ -634,11 +679,6 @@ describe("HomeShell", () => {
           "POST /api/bases/app1/tables/reorder": (call: { body: unknown }) => {
             const ids = (call.body as { ids: string[] }).ids;
             current = { ...current, tables: ids.map((id) => current.tables.find((t) => t.id === id)!) };
-            return { ok: true };
-          },
-          "POST /api/tables/tbl1/views/reorder": (call: { body: unknown }) => {
-            const ids = (call.body as { ids: string[] }).ids;
-            current = { ...current, tables: current.tables.map((t) => (t.id !== "tbl1" ? t : { ...t, views: ids.map((id) => t.views.find((v) => v.id === id)!).concat(t.views.filter((v) => !ids.includes(v.id))) })) };
             return { ok: true };
           },
           ...extra,
@@ -660,40 +700,21 @@ describe("HomeShell", () => {
         expect(await screen.findByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
       });
 
-      it("moves a shared view among the shared views only, and a lone personal view has no Move", async () => {
-        const { user, api } = await setup();
-        await user.click(screen.getByRole("button", { name: "Show views of Tasks" }));
-        const shared = screen.getByRole("list", { name: "Shared views" });
-        expect(viewNames(shared)).toEqual(["All tasks", "Board"]);
-        await move(user, "Options for All tasks", "Move down");
-        await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/views/reorder")).toHaveLength(1));
-        // The personal view is not in the list sent, and neither is any default grid.
-        expect(api.callsTo("POST /api/tables/tbl1/views/reorder")[0]?.body).toEqual({ ids: ["viw2", "viw1"] });
-        await waitFor(() => expect(viewNames(screen.getByRole("list", { name: "Shared views" }))).toEqual(["Board", "All tasks"]));
-        expect(viewNames(screen.getByRole("list", { name: "Personal views" }))).toEqual(["My tasks"]);
-
-        await user.click(screen.getByRole("button", { name: "Options for My tasks" }));
-        expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-      });
-
-      it("adds the Move items to the view's own actions", async () => {
-        const { user } = await setup();
-        await user.click(screen.getByRole("button", { name: "Show views of Tasks" }));
-        await user.click(screen.getByRole("button", { name: "Options for All tasks" }));
-        // This is not the open project, so the dialogs' items (rename, share, delete) are not offered.
-        expect(within(await screen.findByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Duplicate view", "Lock view", "Move up", "Move down"]);
+      it("lists tables only, with no views under them or chevron to show them", async () => {
+        await setup();
+        const tables = screen.getByRole("list", { name: "Tables in Chores" });
+        expect(within(tables).getAllByRole("link").map((a) => a.textContent)).toEqual(["Tasks", "People"]);
+        expect(screen.queryByRole("button", { name: /^(Show|Hide) views of/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole("list", { name: /^(Shared|Personal) views$/ })).not.toBeInTheDocument();
       });
 
       it("makes rows draggable only where the person may reorder them", async () => {
         const { user } = await setup("editor");
         const tables = screen.getByRole("list", { name: "Tables in Chores" });
-        // An editor cannot arrange tables or shared views.
+        // An editor cannot arrange tables.
         expect(tables.querySelector("[data-sortable]")).toBeNull();
         await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
         expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-        await user.keyboard("{Escape}");
-        await user.click(screen.getByRole("button", { name: "Show views of Tasks" }));
-        expect(screen.getByRole("list", { name: "Shared views" }).querySelector("[data-sortable]")).toBeNull();
       });
 
       it("keeps the rows the menu has of its own out of the sortable ones", async () => {
@@ -702,7 +723,7 @@ describe("HomeShell", () => {
         // The sortable rows are the tree's: workspaces, projects, tables.
         const handles = Array.from(menu.querySelectorAll("[data-drag-handle]"));
         expect(handles.length).toBeGreaterThan(0);
-        for (const name of ["Inbox", "History", "Trash", "Automations"]) {
+        for (const name of ["Inbox", "History", "Trash"]) {
           for (const link of within(menu).getAllByRole("link", { name })) expect(link.closest("[data-drag-handle]"), name).toBeNull();
         }
         expect(within(menu).getByRole("button", { name: /^Notifications/ }).closest("[data-drag-handle]")).toBeNull();

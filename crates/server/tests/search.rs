@@ -401,3 +401,188 @@ async fn comments_are_found_below_records_by_those_who_can_open_them() {
         Vec::<(String, String)>::new()
     );
 }
+
+/// The text of each `{start, end}` range of `matches` in `text` (code point offsets).
+fn marked(text: &Value, matches: &Value) -> Vec<String> {
+    let chars: Vec<char> = sid(text).chars().collect();
+    matches
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| {
+            let (s, e) = (m["start"].as_u64().unwrap(), m["end"].as_u64().unwrap());
+            chars[s as usize..e as usize].iter().collect()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn scopes_narrow_to_a_workspace_or_project_and_never_widen_access() {
+    let f = Fixture::new().await;
+    let secret = base(&f.app, &f.owner, &f.ws, "Dish secrets").await;
+    let secret_id = sid(&secret["id"]).to_string();
+    insert_record(
+        &f.app,
+        sid(&secret["tables"][0]["id"]),
+        json!({ sid(&secret["tables"][0]["primary_field_id"]): "Dish in Secrets" }),
+    );
+    f.insert_record(&f.table_id, json!({ &f.primary_id: "Dish in CRM" }));
+    let club = workspace(&f.app, &f.owner, "Dish club").await;
+    let club_base = base(&f.app, &f.owner, &club, "Dish base").await;
+    insert_record(
+        &f.app,
+        sid(&club_base["tables"][0]["id"]),
+        json!({ sid(&club_base["tables"][0]["primary_field_id"]): "Dish in club" }),
+    );
+    let (ws, crm) = (f.ws.clone(), f.base_id.clone());
+    let q = |scope: String| format!("q=dish&{scope}");
+
+    // Only what is inside the workspace or project, not the place itself.
+    assert_eq!(
+        found(&search(&f.app, &f.owner, &q(format!("workspace={ws}"))).await),
+        [
+            hit("base", "Dish secrets"),
+            hit("record", "Dish in CRM"),
+            hit("record", "Dish in Secrets"),
+        ]
+    );
+    assert_eq!(
+        found(&search(&f.app, &f.owner, &q(format!("workspace={club}"))).await),
+        [hit("base", "Dish base"), hit("record", "Dish in club")]
+    );
+    assert_eq!(
+        found(&search(&f.app, &f.owner, &q(format!("base={secret_id}"))).await),
+        [hit("record", "Dish in Secrets")]
+    );
+    let in_table = search(&f.app, &f.owner, &format!("q=table&base={crm}")).await;
+    assert_eq!(found(&in_table), [hit("table", "Table 1")]);
+    // Both: the project must be in the workspace.
+    assert_eq!(
+        found(&search(&f.app, &f.owner, &q(format!("workspace={ws}&base={crm}"))).await),
+        [hit("record", "Dish in CRM")]
+    );
+    assert!(
+        found(&search(&f.app, &f.owner, &q(format!("workspace={club}&base={crm}"))).await)
+            .is_empty()
+    );
+    // Empty values count as absent; unknown ids find nothing, like ones the caller cannot open.
+    assert_eq!(
+        found(&search(&f.app, &f.owner, "q=dish&workspace=&base=").await).len(),
+        6
+    );
+    for scope in ["workspace=wspNope", "base=appNope"] {
+        assert!(found(&search(&f.app, &f.owner, &q(scope.into())).await).is_empty());
+    }
+
+    // A member limited to CRM: the other project finds nothing, even when named.
+    let guest = f.base_guest("guest@example.com", Role::Viewer);
+    assert!(found(&search(&f.app, &guest, &q(format!("base={secret_id}"))).await).is_empty());
+    assert_eq!(
+        found(&search(&f.app, &guest, &q(format!("workspace={ws}"))).await),
+        [hit("record", "Dish in CRM")]
+    );
+    assert!(found(&search(&f.app, &guest, &q(format!("workspace={club}"))).await).is_empty());
+    // A stranger, and a token limited to CRM.
+    let stranger = f.app.user("s@example.com", "S");
+    assert!(found(&search(&f.app, &stranger, &q(format!("workspace={ws}"))).await).is_empty());
+    assert!(found(&search(&f.app, &stranger, &q(format!("base={crm}"))).await).is_empty());
+    let limited = f
+        .app
+        .raw_token(&f.owner, json!({ "write": false, "base_ids": [f.base_id] }));
+    assert!(found(&search(&f.app, &limited, &q(format!("base={secret_id}"))).await).is_empty());
+    assert_eq!(
+        found(&search(&f.app, &limited, &q(format!("workspace={ws}"))).await),
+        [hit("record", "Dish in CRM")]
+    );
+    // A trashed project is not searched, even by name.
+    f.app
+        .delete(&f.owner, &format!("/api/bases/{secret_id}"))
+        .await
+        .assert_status(200);
+    assert!(found(&search(&f.app, &f.owner, &q(format!("base={secret_id}"))).await).is_empty());
+}
+
+#[tokio::test]
+async fn results_say_where_they_matched_in_plain_text() {
+    let f = Fixture::new().await;
+    let launch = f.insert_record(
+        &f.table_id,
+        json!({
+            &f.primary_id: "Launch plan",
+            &f.notes_id: "**Kickoff** with @[Ann Lee](usr123abc) on Monday, then a long stretch of \
+                planning, booking and writing.\n\nSteven will be in charge of [marketing](https://example.com/promo). \
+                That may mean late nights before the *end* of March, so plan ahead for them all.",
+        }),
+    );
+
+    // A match in another field: plain text around it, where in it, and which field.
+    let r = search(&f.app, &f.owner, "q=mark").await;
+    assert_eq!(found(&r), [hit("record", "Launch plan")]);
+    let rec = &r.body["results"][0];
+    assert_eq!(rec["record_id"], launch.as_str());
+    assert_eq!(rec["field_id"], f.notes_id.as_str());
+    assert_eq!(rec["field_name"], "Notes");
+    let snippet = sid(&rec["snippet"]);
+    assert!(
+        snippet.starts_with('…') && snippet.ends_with('…'),
+        "cut at both ends: {snippet}"
+    );
+    assert!(
+        snippet.contains("Steven will be in charge of marketing. That may mean late nights"),
+        "{snippet}"
+    );
+    for markup in ["**", "](", "https", "*end*", "usr123abc"] {
+        assert!(!snippet.contains(markup), "{markup} in {snippet}");
+    }
+    assert_eq!(marked(&rec["snippet"], &rec["snippet_matches"]), ["mark"]);
+    assert_eq!(rec["name_matches"], json!([]));
+
+    // A match in the name: where in the name; no snippet.
+    let r = search(&f.app, &f.owner, "q=PLAN").await;
+    let rec = &r.body["results"][0];
+    assert_eq!(rec["name"], "Launch plan");
+    assert_eq!(marked(&rec["name"], &rec["name_matches"]), ["plan"]);
+    assert!(rec["snippet"].is_null() && rec["field_name"].is_null());
+
+    // A mention reads as @Name: found by the name, never by the user id or the link's address.
+    let r = search(&f.app, &f.owner, "q=%40ann%20lee").await;
+    assert_eq!(found(&r), [hit("record", "Launch plan")]);
+    assert!(sid(&r.body["results"][0]["snippet"]).starts_with("Kickoff with @Ann Lee on Monday"));
+    for hidden in ["usr123abc", "example.com", "promo"] {
+        assert!(
+            found(&search(&f.app, &f.owner, &format!("q={hidden}")).await).is_empty(),
+            "{hidden}"
+        );
+    }
+
+    // Comments: the same, without their Markdown.
+    let pantry = f.insert_record(&f.table_id, json!({ &f.primary_id: "Pantry" }));
+    f.app
+        .post(
+            &f.owner,
+            &format!("/api/records/{pantry}/comments"),
+            json!({ "body": "Please **review** the `copy` for @[Ann Lee](usr123abc)" }),
+        )
+        .await
+        .assert_status(201);
+    let r = search(&f.app, &f.owner, "q=review%20the").await;
+    assert_eq!(found(&r), [hit("comment", "Pantry")]);
+    let c = &r.body["results"][0];
+    assert_eq!(c["snippet"], "Please review the copy for @Ann Lee");
+    assert_eq!(marked(&c["snippet"], &c["snippet_matches"]), ["review the"]);
+
+    // Unicode and case: offsets are code points of the text as written.
+    f.insert_record(&f.table_id, json!({ &f.primary_id: "🎉 Ünïcödé CAFÉ" }));
+    let r = search(&f.app, &f.owner, "q=caf%C3%A9").await;
+    let rec = &r.body["results"][0];
+    assert_eq!(rec["name_matches"], json!([{ "start": 10, "end": 14 }]));
+    assert_eq!(marked(&rec["name"], &rec["name_matches"]), ["CAFÉ"]);
+    let r = search(&f.app, &f.owner, "q=%C3%BCn%C3%AF").await;
+    assert_eq!(
+        marked(
+            &r.body["results"][0]["name"],
+            &r.body["results"][0]["name_matches"]
+        ),
+        ["Ünï"]
+    );
+}

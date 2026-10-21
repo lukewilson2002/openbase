@@ -103,39 +103,11 @@ export function toColumnSpecs(
   return fields.map((f) => ({
     id: f.id,
     title: f.name,
-    width: overrides[f.id] ?? widths[f.id] ?? defaultWidth(f),
+    // Without a width of its own a column fits its content.
+    width: overrides[f.id] ?? widths[f.id],
     field: f,
     isPrimary: f.id === primaryId,
     readOnly: isComputed(f),
   }));
 }
 
-/** Default column width by field type. */
-export function defaultWidth(field: Field): number {
-  switch (field.type) {
-    case "single_line_text":
-      return 220;
-    case "long_text":
-      return 260;
-    case "checkbox":
-    case "rating":
-    case "autonumber":
-    case "count":
-      return 110;
-    case "date":
-    case "created_time":
-    case "last_modified_time":
-    case "currency":
-    case "percent":
-    case "duration":
-    case "number":
-      return 140;
-    case "multiple_select":
-    case "link":
-    case "attachment":
-    case "lookup":
-      return 200;
-    default:
-      return 170;
-  }
-}

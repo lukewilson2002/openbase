@@ -1028,9 +1028,7 @@ async fn aggregate_records_errors_name_the_problem_and_the_valid_fields() {
     .await;
     let m = t.err();
     assert!(
-        m.contains("Cannot sum \"Name\"")
-            && m.contains("single_line_text")
-            && m.contains("\"Age\""),
+        m.contains("Cannot sum \"Name\"") && m.contains("text") && m.contains("\"Age\""),
         "{m}"
     );
     let t = aggregate(&r, json!({"aggregates": [{"function": "sum"}]})).await;

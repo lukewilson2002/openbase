@@ -13,7 +13,7 @@ export function automationSchema(role = "creator"): BaseSchema {
   const schema = makeSchema(role);
   const tasks = schema.tables[0]!;
   tasks.fields = [
-    field("single_line_text", {}, { id: "fld1", name: "Name" }),
+    field("text", { multiline: false }, { id: "fld1", name: "Name" }),
     field("number", { precision: 0, allow_negative: true }, { id: "fld2", name: "Qty" }),
     field("single_select", { choices: CHOICES }, { id: "fld3", name: "Status" }),
     field("checkbox", { icon: "check", color: "green" }, { id: "fld4", name: "Done" }),
@@ -23,7 +23,7 @@ export function automationSchema(role = "creator"): BaseSchema {
   tasks.views = [makeView({ id: "viw1", name: "All tasks" }), makeView({ id: "viw9", name: "Signup form", type: "form" })];
   const people = schema.tables[1]!;
   people.fields = [
-    { ...field("single_line_text", {}, { id: "fld5", name: "Name" }), table_id: "tbl2" },
+    { ...field("text", { multiline: false }, { id: "fld5", name: "Name" }), table_id: "tbl2" },
     { ...field("number", { precision: 0, allow_negative: true }, { id: "fld6", name: "Score" }), table_id: "tbl2" },
     { ...field("checkbox", { icon: "check", color: "green" }, { id: "fld7", name: "Active" }), table_id: "tbl2" },
   ];

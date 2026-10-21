@@ -410,7 +410,7 @@ mod tests {
             field(
                 "fldName",
                 "Customer Name",
-                FieldKind::SingleLineText(TextOptions::default()),
+                FieldKind::Text(TextOptions::default()),
             ),
             field("fldDone", "Done", FieldKind::Checkbox(Default::default())),
             field("fldFiles", "Files", FieldKind::Attachment(Empty {})),

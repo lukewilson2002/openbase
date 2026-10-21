@@ -162,7 +162,7 @@ export function makeSchema(role: string, over: Partial<BaseSchema> = {}): BaseSc
         name: "Tasks",
         description: null,
         primary_field_id: "fld1",
-        fields: [{ id: "fld1", table_id: "tbl1", name: "Name", type: "single_line_text", options: {} }],
+        fields: [{ id: "fld1", table_id: "tbl1", name: "Name", type: "text", options: { multiline: false } }],
         views: [makeView({ id: "viw1", name: "All tasks" }), makeView({ id: "viw2", name: "Board", type: "kanban" }), makeView({ id: "viw3", name: "My tasks", personal: true })],
       },
       { id: "tbl2", base_id: "app1", name: "People", description: null, primary_field_id: "fld2", fields: [], views: [makeView({ id: "viw4", name: "Everyone" })] },

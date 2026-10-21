@@ -54,7 +54,7 @@ fn offered_aggregations_per_type() {
         Unique,
         PercentUnique,
     ];
-    assert_eq!(offered(FieldType::SingleLineText), counts.to_vec());
+    assert_eq!(offered(FieldType::Text), counts.to_vec());
     let mut num = counts.to_vec();
     num.extend([Sum, Average, Median, Min, Max, Range, StdDev]);
     for t in [

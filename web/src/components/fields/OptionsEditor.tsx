@@ -188,10 +188,16 @@ function WatchedFields({ ctx, existing, value, onChange }: { ctx: KindContext; e
 export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onInverseName, creating }: OptionsEditorProps) {
   const otherTables = ctx.tables;
   switch (kind.type) {
-    case "single_line_text":
-      return <FormField label="Default value (optional)">{(c) => <Input {...c} value={kind.options.default ?? ""} onChange={(e) => onChange({ type: kind.type, options: { default: e.target.value || undefined } })} />}</FormField>;
-    case "long_text":
-      return <Checkbox label="Enable rich text formatting (markdown)" checked={kind.options.rich} onCheckedChange={(rich) => onChange({ type: kind.type, options: { rich } })} />;
+    case "text":
+      return (
+        <div className="flex flex-col gap-3">
+          <Checkbox label="Multiline (keep line breaks)" checked={kind.options.multiline} onCheckedChange={(multiline) => onChange({ type: kind.type, options: { ...kind.options, multiline } })} />
+          <FormField label="Default value (optional)">{(c) => <Input {...c} value={kind.options.default ?? ""} onChange={(e) => onChange({ type: kind.type, options: { ...kind.options, default: e.target.value || undefined } })} />}</FormField>
+          <p className="text-xs text-muted">Plain text, shown as typed. For notes, summaries or anything formatted, use Rich text.</p>
+        </div>
+      );
+    case "rich_text":
+      return <p className="text-[0.8125rem] text-muted">Markdown, always multiline: text formatting (bold, italics, headings, links), tables, lists, images and other files, @mentions and more. For notes, summaries, articles and posts.</p>;
     case "number":
     case "percent":
       return (

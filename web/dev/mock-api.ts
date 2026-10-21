@@ -55,8 +55,8 @@ function field(id: string, name: string, type: string, options: Obj = {}, table 
 }
 
 const taskFields: Obj[] = [
-  field("fld_name", "Name", "single_line_text"),
-  field("fld_notes", "Notes", "long_text", { rich: true }),
+  field("fld_name", "Name", "text", { multiline: false }),
+  field("fld_notes", "Notes", "rich_text", {}),
   field("fld_status", "Status", "single_select", { choices: STATUS }),
   field("fld_tags", "Tags", "multiple_select", { choices: TAGS }),
   field("fld_due", "Due", "date", dateOpts),
@@ -87,8 +87,9 @@ const taskFields: Obj[] = [
 ];
 
 const peopleFields: Obj[] = [
-  field("fld_p_name", "Name", "single_line_text", {}, T_PEOPLE),
+  field("fld_p_name", "Name", "text", { multiline: false }, T_PEOPLE),
   field("fld_p_email", "Email", "email", {}, T_PEOPLE),
+  field("fld_p_address", "Address", "text", { multiline: true }, T_PEOPLE),
   field("fld_p_tasks", "Tasks", "link", { linked_table_id: T_TASKS, inverse_field_id: "fld_owner", single: false }, T_PEOPLE),
 ];
 
@@ -107,7 +108,7 @@ const TEAMS = [
 const dateTimeOpts = { include_time: true, date_format: "friendly", time_format: "h12", timezone: "America/New_York" };
 
 const projectFields: Obj[] = [
-  field("fld_j_name", "Project", "single_line_text", {}, T_PROJECTS),
+  field("fld_j_name", "Project", "text", { multiline: false }, T_PROJECTS),
   field("fld_j_status", "Status", "single_select", { choices: PROJECT_STATUS }, T_PROJECTS),
   field("fld_j_team", "Team", "single_select", { choices: TEAMS }, T_PROJECTS),
   field("fld_j_owner", "Owner", "user", { multiple: false, notify: false }, T_PROJECTS),
@@ -120,7 +121,7 @@ const projectFields: Obj[] = [
   field("fld_j_deps", "Depends on", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_blocks", single: false }, T_PROJECTS),
   field("fld_j_blocks", "Blocks", "link", { linked_table_id: T_PROJECTS, inverse_field_id: "fld_j_deps", single: false }, T_PROJECTS),
   field("fld_j_done", "Shipped", "checkbox", { icon: "check", color: "green" }, T_PROJECTS),
-  field("fld_j_summary", "Summary", "long_text", { rich: false }, T_PROJECTS),
+  field("fld_j_summary", "Summary", "rich_text", {}, T_PROJECTS),
 ];
 
 function emptyConfig(): Obj {
@@ -213,7 +214,7 @@ const OBJECTS = ["login page", "billing", "search index", "onboarding", "API doc
 function seedData(): void {
   const peopleIds: string[] = [];
   for (const u of USERS.concat([{ id: "x1", name: "Linus Torvalds", email: "linus@example.com" }, { id: "x2", name: "Margaret Hamilton", email: "margaret@example.com" }])) {
-    peopleIds.push(addRecord(T_PEOPLE, { fld_p_name: u.name, fld_p_email: u.email }).id);
+    peopleIds.push(addRecord(T_PEOPLE, { fld_p_name: u.name, fld_p_email: u.email, fld_p_address: `${12 + peopleIds.length} High Street\nCambridge CB2 1TN\nUnited Kingdom` }).id);
   }
   for (let i = 0; i < 3000; i++) {
     const effort = Math.round(rnd() * 80) / 10;
@@ -242,6 +243,14 @@ function seedData(): void {
   }
 }
 seedData();
+// A few long notes for the search's snippets.
+for (const [i, note] of [
+  [4, "Kickoff is booked for Monday with @[Grace Hopper](usr2), and Steven will be in charge of **marketing**. That may mean a few late nights before the launch, so plan ahead and keep Friday free."],
+  [11, "The marketing site needs new screenshots before the release train leaves; ask design for the dark versions too."],
+] as const) {
+  const rec = [...records.values()].filter((r) => r.table_id === T_TASKS)[i];
+  if (rec) rec.values.fld_notes = note;
+}
 
 const PROJECT_WORDS = ["Onboarding revamp", "Billing v2", "Search relevance", "Mobile beta", "Webhook retries", "Audit log", "SSO pilot", "Data export", "Dark mode", "Invoice templates", "Rate limiting", "Admin console", "Import wizard", "Usage dashboard", "Email digests", "Accessibility pass", "Perf budget", "Backup restore drill", "Docs site", "Partner API", "Notifications inbox", "Role editor", "Offline cache", "Release train", "Customer portal", "Referral program", "Pricing page", "Status page", "Load testing", "Security review", "Brand refresh", "Help center", "Roadmap board", "Churn survey", "Cohort reports", "Launch checklist", "Sandbox accounts", "Changelog", "Keyboard shortcuts", "Calendar sync"];
 
@@ -306,6 +315,7 @@ function seedNotifications(): void {
   const now = Date.now();
   notifications.push(
     { id: "ntf1", kind: "mention", payload: { base_id: BASE_ID, table_id: T_PROJECTS, record_id: project.id, base_name: "Project tracker", table_name: "Projects", record_name: String(project.values.fld_j_name), comment_id: "cmt_demo", snippet: "@Ada can you confirm the launch date?", author_id: "usr2", author_name: "Grace Hopper" }, read_at: null, created_at: now - 12 * 60_000 },
+    { id: "ntf5", kind: "mention", payload: { base_id: BASE_ID, table_id: T_TASKS, record_id: firstTask.id, base_name: "Project tracker", table_name: "Tasks", record_name: String(firstTask.values.fld_name), field_id: "fld_notes", field_name: "Notes", snippet: "…the export still times out, @Ada Lovelace could you take a look before Friday?", author_id: "usr3", author_name: "Alan Turing" }, read_at: null, created_at: now - 40 * 60_000 },
     { id: "ntf2", kind: "assigned", payload: { base_id: BASE_ID, table_id: T_TASKS, record_id: firstTask.id, base_name: "Project tracker", table_name: "Tasks", record_name: String(firstTask.values.fld_name), field_id: "fld_owner", field_name: "Owner", assigned_by: "usr3" }, read_at: null, created_at: now - 3 * 3_600_000 },
     { id: "ntf3", kind: "automation", payload: { automation_name: "Weekly digest", message: "Sent the digest to 4 people", base_id: BASE_ID }, read_at: null, created_at: now - 26 * 3_600_000 },
     { id: "ntf4", kind: "invite", payload: { actor_name: "Margaret Hamilton", base_name: "Roadmap", token: "demo-token" }, read_at: now - 86_400_000, created_at: now - 2 * 86_400_000 },
@@ -411,6 +421,8 @@ function tableDto(id: string): Obj {
 }
 
 let introSeen = true;
+/** The account's accent colour (PATCH /api/auth/me {accent}); null = blue. */
+let accent: string | null = null;
 let roleOverride: string | null = null;
 
 function baseDto(req: IncomingMessage): Obj {
@@ -450,7 +462,10 @@ function shape(rec: Rec): Obj {
   } else if (rec.table_id === T_PROJECTS) {
     const deps: string[] = rec.values.fld_j_deps ?? [];
     if (deps.length) values.fld_j_deps = deps.filter((id) => records.get(id) && !records.get(id)!.deleted).map((id) => ({ id, name: nameOf(id) }));
-    const blocks = [...records.values()].filter((r) => !r.deleted && r.table_id === T_PROJECTS && (r.values.fld_j_deps ?? []).includes(rec.id));
+    // Blocks is the other side of Depends on, in the order last saved on this record (then any others).
+    const order: string[] = rec.values.fld_j_blocks ?? [];
+    const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length);
+    const blocks = [...records.values()].filter((r) => !r.deleted && r.table_id === T_PROJECTS && (r.values.fld_j_deps ?? []).includes(rec.id)).sort((a, b) => rank(a.id) - rank(b.id));
     if (blocks.length) values.fld_j_blocks = blocks.map((r) => ({ id: r.id, name: nameOf(r.id) }));
   } else {
     const tasks = [...records.values()].filter((r) => !r.deleted && r.table_id === T_TASKS && (r.values.fld_owner ?? []).includes(rec.id));
@@ -668,6 +683,17 @@ function applyValues(rec: Rec, patch: Obj, clientId: string | undefined, kind = 
     const old = rec.values[fid] ?? null;
     if (value === null || value === "" || value === false || (Array.isArray(value) && value.length === 0)) delete rec.values[fid];
     else rec.values[fid] = f.type === "link" ? (value as any[]).map((x) => x?.id ?? x) : value;
+    // Blocks is stored as the other records' Depends on (see the computed values): keep those in step.
+    if (fid === "fld_j_blocks") {
+      const ids: string[] = rec.values.fld_j_blocks ?? [];
+      for (const r of records.values()) {
+        if (r.table_id !== rec.table_id || r.id === rec.id) continue;
+        const deps: string[] = r.values.fld_j_deps ?? [];
+        const has = deps.includes(rec.id);
+        if (ids.includes(r.id) && !has) r.values.fld_j_deps = [...deps, rec.id];
+        else if (!ids.includes(r.id) && has) r.values.fld_j_deps = deps.filter((d) => d !== rec.id);
+      }
+    }
     changes[fid] = { old, new: rec.values[fid] ?? null };
   }
   rec.updated_at = Date.now();
@@ -857,6 +883,10 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     return send(res, 200, { ok: true }), true;
   }
   if (p === "/api/history" && m === "GET") return send(res, 200, historyPage(url.searchParams)), true;
+  if (p === "/api/search" && m === "GET") {
+    if (!(url.searchParams.get("q") ?? "").trim()) return err(res, 400, "bad_request", "type something to search for (q)"), true;
+    return send(res, 200, searchMock(url.searchParams)), true;
+  }
   if (p === "/api/trash/workspaces" && m === "GET") return send(res, 200, { items: ws.deleted }), true;
   if (p === "/api/trash" && m === "GET") {
     const q = url.searchParams;
@@ -903,6 +933,126 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
   return false;
 }
 
+// ---- search everything ------------------------------------------------------------------------
+
+/** Markdown's words, roughly as the server's plain text reads them: a mention as @Name, a link as its text. */
+function plainText(md: string): string {
+  return md
+    .replace(/@\[([^\]]*)\]\(usr[0-9A-Za-z]+\)/g, "@$1")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`~#>]+/g, "")
+    .replace(/^\s*[-+] /gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Every match of `q` (lower-cased) in `text`, as code point offsets like the server's. */
+function textMatches(text: string, q: string): { start: number; end: number }[] {
+  const chars = Array.from(text);
+  const lower = chars.map((c) => c.toLowerCase());
+  const needle = Array.from(q);
+  const out: { start: number; end: number }[] = [];
+  for (let i = 0; i + needle.length <= lower.length; ) {
+    if (needle.every((c, k) => lower[i + k] === c)) {
+      out.push({ start: i, end: i + needle.length });
+      i += needle.length;
+    } else i++;
+  }
+  return out;
+}
+
+/** ~120 characters around the first match, cut between words, with where the matches are in it. */
+function snippetOf(text: string, q: string): { snippet: string; snippet_matches: { start: number; end: number }[] } {
+  const chars = Array.from(text.replace(/\s+/g, " ").trim());
+  const at = textMatches(chars.join(""), q)[0]?.start ?? 0;
+  let end = Math.min(Math.max(0, at - 40) + 120, chars.length);
+  let start = Math.max(0, end - 120);
+  if (start > 0) {
+    const sp = chars.slice(start, Math.min(at, start + 15)).indexOf(" ");
+    if (sp >= 0) start += sp + 1;
+  }
+  if (end < chars.length) {
+    const from = Math.max(at + q.length, end - 15);
+    const sp = chars.slice(from, end).lastIndexOf(" ");
+    if (sp >= 0) end = from + sp;
+  }
+  const snippet = (start > 0 ? "…" : "") + chars.slice(start, end).join("") + (end < chars.length ? "…" : "");
+  return { snippet, snippet_matches: textMatches(snippet, q) };
+}
+
+function searchMock(params: URLSearchParams): Obj {
+  const q = (params.get("q") ?? "").trim().toLowerCase();
+  const limit = Math.min(Number(params.get("limit") ?? 20), 50);
+  const inWs = params.get("workspace") || null;
+  const inBase = params.get("base") || null;
+  const out: Obj[] = [];
+  const wsList = workspaceList().filter((w) => !inWs || w.id === inWs);
+  const place = (w: Obj, b?: Obj) => ({
+    workspace_id: w.id,
+    workspace_name: w.name,
+    workspace_color: w.color ?? "blue",
+    base_id: b?.id ?? null,
+    base_name: b?.name ?? null,
+    base_icon: b?.icon ?? null,
+    base_color: b?.color ?? null,
+    name_matches: [],
+    snippet_matches: [],
+  });
+  for (const w of wsList) {
+    if (!inWs && !inBase && w.name.toLowerCase().includes(q)) out.push({ kind: "workspace", id: w.id, name: w.name, ...place(w) });
+    for (const b of w.bases as Obj[]) {
+      if (inBase && b.id !== inBase) continue;
+      if (!inBase && b.name.toLowerCase().includes(q)) out.push({ kind: "base", id: b.id, name: b.name, ...place(w, b) });
+      // Only the tracker has tables of its own; the other mock projects share its schema but not its records.
+      if (b.id !== BASE_ID) continue;
+      for (const { id } of tableOrder) {
+        const t = tableDto(id);
+        const first = (t.views as Obj[])[0];
+        const inTable = { ...place(w, b), table_id: t.id, table_name: t.name, view_id: first?.id ?? null, view_type: first?.type ?? null };
+        if (t.name.toLowerCase().includes(q)) out.push({ kind: "table", id: t.id, name: t.name, ...inTable });
+        for (const v of t.views as Obj[]) if (v.name.toLowerCase().includes(q)) out.push({ kind: "view", id: v.id, name: v.name, ...inTable, view_id: v.id, view_type: v.type });
+      }
+    }
+  }
+  const names = out.length;
+  const tracker = ws.bases.find((b) => b.id === BASE_ID);
+  const trackerWs = wsList.find((w) => w.id === tracker?.workspace_id);
+  if (trackerWs && (!inBase || inBase === BASE_ID)) {
+    const starts: Obj[] = [];
+    const contains: Obj[] = [];
+    const elsewhere: Obj[] = [];
+    for (const r of records.values()) {
+      if (r.deleted || starts.length >= limit) continue;
+      const t = tableDto(r.table_id);
+      const name = nameOf(r.id);
+      const hit = { kind: "record", id: r.id, name, ...place(trackerWs, tracker), table_id: t.id, table_name: t.name, view_id: (t.views as Obj[])[0]?.id ?? null, view_type: (t.views as Obj[])[0]?.type ?? null, record_id: r.id };
+      if (name.toLowerCase().startsWith(q)) starts.push(hit);
+      else if (name.toLowerCase().includes(q)) contains.push(hit);
+      else if (elsewhere.length < limit) {
+        for (const f of fieldsOf(r.table_id)) {
+          if (f.id === t.primary_field_id || !["text", "rich_text", "email", "url", "phone"].includes(f.type)) continue;
+          const raw = r.values[f.id];
+          if (typeof raw !== "string") continue;
+          const text = f.type === "rich_text" ? plainText(raw) : raw;
+          if (!text.toLowerCase().includes(q)) continue;
+          elsewhere.push({ ...hit, ...snippetOf(text, q), field_id: f.id, field_name: f.name });
+          break;
+        }
+      }
+    }
+    out.push(...[...starts, ...contains, ...elsewhere].slice(0, Math.max(0, limit - names)));
+    for (const c of [...comments].reverse()) {
+      const rec = records.get(c.record_id);
+      const text = plainText(String(c.body ?? ""));
+      if (!rec || rec.deleted || !text.toLowerCase().includes(q)) continue;
+      const t = tableDto(rec.table_id);
+      out.push({ kind: "comment", id: c.id, name: nameOf(rec.id), ...place(trackerWs, tracker), table_id: t.id, table_name: t.name, view_id: (t.views as Obj[])[0]?.id ?? null, record_id: rec.id, ...snippetOf(text, q), author_name: c.user_name ?? null });
+    }
+  }
+  const results = out.slice(0, limit).map((r) => ({ ...r, name_matches: textMatches(r.name, q) }));
+  return { results };
+}
+
 function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): boolean {
   const m = req.method ?? "GET";
   const p = url.pathname;
@@ -912,7 +1062,8 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === "/api/setup") return send(res, 200, { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://openbase.example.com" }), true;
   if (p === "/api/auth/me") {
     if (m === "PATCH" && typeof body.intro_seen === "boolean") introSeen = body.intro_seen;
-    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false, intro_seen: introSeen }), true;
+    if (m === "PATCH" && typeof body.accent === "string") accent = body.accent || null;
+    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false, intro_seen: introSeen, accent }), true;
   }
   // GET /api/__mock/intro/unseen brings the first-run intro back on the next page load.
   if ((g = /^\/api\/__mock\/intro\/(seen|unseen)$/.exec(p))) {
@@ -1089,6 +1240,10 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     }
     emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: [], updated: body.ids, deleted: [] } });
     return send(res, 200, { records: (body.ids as string[]).map((id) => records.get(id)).filter((r): r is Rec => !!r).map(shape) }), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/records\/get$/.exec(p)) && m === "POST") {
+    const list = ((body.ids ?? []) as string[]).map((id) => records.get(id)).filter((r): r is Rec => !!r && !r.deleted && r.table_id === g![1]);
+    return send(res, 200, { records: list.map(shape) }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/lookup$/.exec(p))) {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();

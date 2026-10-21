@@ -314,7 +314,7 @@ pub fn run(
         record_count += 1;
         let keys: Vec<GroupKey> = group_fields
             .iter()
-            .map(|f| group_key(f, row.get(&f.id), &names, tz))
+            .map(|f| group_key(f, row.get(&f.id), &names, tz, None))
             .collect();
         let path = keys
             .iter()

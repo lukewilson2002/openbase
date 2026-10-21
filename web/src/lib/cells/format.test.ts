@@ -40,8 +40,8 @@ describe("number formatting", () => {
 
 describe("displayText for every field type", () => {
   it("text-like types", () => {
-    expect(text("single_line_text", "hello")).toBe("hello");
-    expect(text("long_text", "a\nb")).toBe("a\nb");
+    expect(text("text", "hello")).toBe("hello");
+    expect(text("rich_text", "a\nb")).toBe("a\nb");
     expect(text("email", "a@b.co")).toBe("a@b.co");
     expect(text("url", "https://x.y")).toBe("https://x.y");
     expect(text("phone", "+1 555")).toBe("+1 555");
@@ -117,6 +117,6 @@ describe("chips and edit text", () => {
     expect(editText(ALL_FIELDS.currency, 1234.5, ctx)).toBe("1234.5");
     expect(editText(ALL_FIELDS.percent, 0.125, ctx)).toBe("12.5%");
     expect(editText(ALL_FIELDS.duration, 5400, ctx)).toBe("1:30:00");
-    expect(editText(ALL_FIELDS.single_line_text, "x", ctx)).toBe("x");
+    expect(editText(ALL_FIELDS.text, "x", ctx)).toBe("x");
   });
 });

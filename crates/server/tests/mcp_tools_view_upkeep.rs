@@ -91,7 +91,7 @@ async fn deleting_a_field_lists_the_views_that_used_it() {
     let b = r.base.as_str();
     r.table("Tasks").await;
     r.field("Tasks", "Due", "date", json!({})).await;
-    r.field("Tasks", "Notes", "long_text", json!({})).await;
+    r.field("Tasks", "Notes", "rich_text", json!({})).await;
     a.call(
         "create_view",
         json!({"base_id": b, "table": "Tasks", "name": "Schedule", "type": "calendar",
@@ -168,7 +168,7 @@ async fn a_type_change_lists_the_views_that_use_the_field() {
         .call(
             "update_field",
             json!({"base_id": b, "table": "Tasks", "field": "Status",
-                   "type": "single_line_text", "confirm_conversion": true}),
+                   "type": "text", "confirm_conversion": true}),
         )
         .await;
     assert_eq!(
@@ -200,9 +200,8 @@ async fn a_description_field_given_inside_a_view_type_moves_to_the_view() {
         json!({"choices": ["Idea", "Draft"]}),
     )
     .await;
-    r.field("Posts", "Summary", "long_text", json!({})).await;
-    r.field("Posts", "Hook", "single_line_text", json!({}))
-        .await;
+    r.field("Posts", "Summary", "rich_text", json!({})).await;
+    r.field("Posts", "Hook", "text", json!({})).await;
 
     // Where 0.4.0 kept it, and where the app shows it: under the board's settings.
     let v = a

@@ -63,3 +63,22 @@ describe("Markdown", () => {
     expect(markdownToText("> [!TIP]\n> Try this\n\n| A | B |\n| - | - |\n| 1 | 2 |")).toMatch(/Try this/);
   });
 });
+
+describe("Markdown mentions", () => {
+  it("renders @[Name](usrXXXX) as a chip, not a link", () => {
+    const html = renderMarkdown("Hi @[Ada <b>](usr1) and [a link](https://x.test)");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const chip = doc.querySelector(".ob-mention")!;
+    expect(chip.tagName).toBe("SPAN");
+    expect(chip.textContent).toBe("@Ada <b>");
+    expect(chip.getAttribute("data-mention")).toBe("usr1");
+    expect(doc.querySelectorAll("a")).toHaveLength(1);
+    expect(markdownToText("Hi @[Ada](usr1)!").trim()).toBe("Hi @Ada!");
+  });
+
+  it("leaves look-alikes alone: code, escaped brackets, other ids", () => {
+    const doc = new DOMParser().parseFromString(renderMarkdown("`@[Ada](usr1)` @\\[Ada\\](usr1) @[Rec](rec1)"), "text/html");
+    expect(doc.querySelector(".ob-mention")).toBeNull();
+    expect(doc.querySelector("code")?.textContent).toBe("@[Ada](usr1)");
+  });
+});

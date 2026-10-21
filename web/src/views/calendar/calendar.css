@@ -122,19 +122,16 @@
   background: color-mix(in srgb, var(--c-bg) 22%, var(--surface));
   color: var(--c-bg);
 }
+/* Without colours an event is a plain grey, never the accent (it marks selection), like a timeline bar. */
 .ob-cal-chip-plain {
-  background: var(--primary-soft);
-  color: var(--primary-ink);
+  background: color-mix(in srgb, var(--fg) 9%, var(--surface));
+  color: var(--fg);
+}
+:root[data-theme="dark"] .ob-cal-chip-plain {
+  background: color-mix(in srgb, var(--fg) 14%, var(--surface));
 }
 .fc-event:hover .ob-cal-chip {
   box-shadow: 0 2px 8px rgb(15 20 30 / 0.12);
-}
-.ob-cal-dot {
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  margin-top: 5px;
-  border-radius: 999px;
 }
 .ob-cal-title {
   min-width: 0;

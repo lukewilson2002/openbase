@@ -16,7 +16,7 @@ describe("kanban stack fields", () => {
     expect(stackKind(ALL_FIELDS.checkbox)).toBe("checkbox");
     expect(isStackField(ALL_FIELDS.user!)).toBe(false); // multiple
     expect(isStackField(ALL_FIELDS.multiple_select!)).toBe(false);
-    expect(isStackField(ALL_FIELDS.single_line_text!)).toBe(false);
+    expect(isStackField(ALL_FIELDS.text!)).toBe(false);
     expect(stackKind(undefined)).toBeNull();
   });
 

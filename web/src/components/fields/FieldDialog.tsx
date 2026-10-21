@@ -18,7 +18,7 @@ import { FIELD_TYPE_ICONS, FIELD_TYPE_LABELS } from "@/components/ui/field-type-
 import { Field as FormField, Input, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { OptionsEditor } from "./OptionsEditor";
-import { FIELD_TYPE_GROUPS, canBePrimary, conversionRisk, conversionWarning, defaultKind, draftFromField, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
+import { FIELD_TYPE_GROUPS, canBePrimary, defaultKind, kindChange, draftFromField, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
 
 export type FieldDialogState =
   /** `type` starts the new field as that type ("Add a date field" from a calendar that has none). */
@@ -35,8 +35,8 @@ export interface FieldDialogProps {
 }
 
 const TYPE_DESCRIPTIONS: Partial<Record<FieldType, string>> = {
-  single_line_text: "A short piece of text",
-  long_text: "Paragraphs, optionally with markdown",
+  text: "Names, titles, codes: plain text",
+  rich_text: "Markdown: text formatting, tables, lists, images and more",
   number: "Whole or decimal numbers",
   currency: "Money, with a symbol",
   percent: "A percentage",
@@ -102,6 +102,7 @@ function TypePicker({ value, onChange, primary, initiallyOpen }: { value: FieldT
                         type="button"
                         role="option"
                         aria-selected={t === value}
+                        title={TYPE_DESCRIPTIONS[t]}
                         onClick={() => {
                           onChange(t);
                           setOpen(false);
@@ -111,7 +112,7 @@ function TypePicker({ value, onChange, primary, initiallyOpen }: { value: FieldT
                         <I aria-hidden className="size-4 shrink-0 text-muted" />
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{FIELD_TYPE_LABELS[t]}</span>
-                          <span className="block truncate text-xs text-muted">{TYPE_DESCRIPTIONS[t]}</span>
+                          <span className="line-clamp-2 text-xs text-muted">{TYPE_DESCRIPTIONS[t]}</span>
                         </span>
                       </button>
                     );
@@ -129,7 +130,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
   const qc = useQueryClient();
   const existing = state.mode === "edit" ? state.field : undefined;
   const ctx = useMemo<KindContext>(() => ({ table, tables: schema.tables }), [table, schema.tables]);
-  const [draft, setDraft] = useState<FieldDraft>(() => (existing ? draftFromField(existing) : { name: "", description: "", kind: defaultKind((state.mode === "create" && state.type) || "single_line_text", ctx), inverseName: "" }));
+  const [draft, setDraft] = useState<FieldDraft>(() => (existing ? draftFromField(existing) : { name: "", description: "", kind: defaultKind((state.mode === "create" && state.type) || "text", ctx), inverseName: "" }));
   const [showDescription, setShowDescription] = useState(!!draft.description);
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -140,8 +141,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
   const issues = useMemo(() => validateDraft(draft, ctx, existing), [draft, ctx, existing]);
   const nameIssue = issues.find((i) => i.field === "name");
   const optionIssues = issues.filter((i) => i.field === "options");
-  const risk = existing ? conversionRisk(existing.type, draft.kind.type) : "none";
-  const warning = existing ? conversionWarning(existing.type, draft.kind.type) : null;
+  const { risk, warning } = existing ? kindChange(existing, draft.kind) : { risk: "none", warning: null };
   const needsConfirm = risk === "lossy";
   const title = existing ? "Edit field" : "Add a field";
 
@@ -206,7 +206,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
         {showDescription ? (
           <FormField label="Description (optional)">{(c) => <Textarea {...c} rows={2} maxLength={20000} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />}</FormField>
         ) : (
-          <button type="button" className="self-start text-[0.8125rem] text-primary hover:underline" onClick={() => setShowDescription(true)}>
+          <button type="button" className="self-start text-[0.8125rem] text-primary-text hover:underline" onClick={() => setShowDescription(true)}>
             Add a description
           </button>
         )}

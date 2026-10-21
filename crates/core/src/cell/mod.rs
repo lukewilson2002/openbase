@@ -40,8 +40,7 @@ pub use present::{display_text, to_value};
 
 pub(crate) use normalize::{field_zone, num_json};
 pub(crate) use present::{
-    date_options_of, format_date_value, format_general_number, number_format_of, string_items,
-    value_text,
+    date_options_of, format_general_number, number_format_of, string_items, value_text,
 };
 
 /// Context for interpreting client input.

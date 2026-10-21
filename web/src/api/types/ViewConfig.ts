@@ -4,6 +4,7 @@ import type { CalendarConfig } from "./CalendarConfig";
 import type { Filter } from "./Filter";
 import type { FormConfig } from "./FormConfig";
 import type { GalleryConfig } from "./GalleryConfig";
+import type { Group } from "./Group";
 import type { KanbanConfig } from "./KanbanConfig";
 import type { RowColor } from "./RowColor";
 import type { RowHeight } from "./RowHeight";
@@ -14,7 +15,7 @@ export type ViewConfig = { filter?: Filter | null, sorts: Array<Sort>,
 /**
  * Up to 3 levels.
  */
-groups: Array<Sort>, hidden_fields: Array<string>, 
+groups: Array<Group>, hidden_fields: Array<string>, 
 /**
  * Display order; fields not listed follow in table order.
  */

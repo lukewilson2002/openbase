@@ -33,8 +33,8 @@ pub fn normalize(field: &Field, input: &Json, ctx: &CellCtx) -> Result<Option<Js
     }
     let tc = ctx.typecast;
     match &field.kind {
-        FieldKind::SingleLineText(_) => text(input, tc, false, false),
-        FieldKind::LongText(_) => text(input, tc, true, false),
+        FieldKind::Text(o) => text(input, tc, o.multiline, false),
+        FieldKind::RichText(_) => text(input, tc, true, false),
         FieldKind::Barcode(_) => text(input, tc, false, true),
         FieldKind::Number(o) => {
             let Some(v) = read_number(input, tc, None, false)? else {

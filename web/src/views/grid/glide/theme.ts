@@ -1,5 +1,6 @@
 /** Glide themes mirroring the CSS tokens in styles/index.css (canvas cannot read CSS variables reliably at theme-switch time). */
 import type { Theme } from "@glideapps/glide-data-grid";
+import { ACCENT_THEMES, ACCENT_TOKENS, BLUE, turnNeutral, type Accent, type AccentToken } from "@/theme/accents";
 
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
@@ -68,3 +69,44 @@ export const DARK_THEME: Partial<Theme> = {
   drilldownBorder: "#444c5c",
   linkColor: "#7aa1ff",
 };
+
+/** The blue token each colour of the themes above stands for (the first one, where two share a value). */
+const TOKEN_OF = {
+  light: tokenLookup("light"),
+  dark: tokenLookup("dark"),
+};
+
+function tokenLookup(mode: "light" | "dark"): Map<string, AccentToken> {
+  const map = new Map<string, AccentToken>();
+  for (const token of ACCENT_TOKENS) if (!map.has(BLUE[mode][token])) map.set(BLUE[mode][token], token);
+  return map;
+}
+
+const cache = new Map<string, Partial<Theme>>();
+
+/**
+ * The grid's theme in an accent colour: each colour of the blue theme becomes the same token of the
+ * accent's (theme/accents.ts), and the in-between greys become plain greys like the page's.
+ * The selection is the accent's swatch with its own text colour; links take the readable text shade.
+ */
+export function gridTheme(dark: boolean, accent: Accent): Partial<Theme> {
+  const base = dark ? DARK_THEME : LIGHT_THEME;
+  const key = `${accent}:${dark ? 1 : 0}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const mode = dark ? "dark" : "light";
+  const tokens = ACCENT_THEMES[accent][mode];
+  const out: Record<string, unknown> = { ...base };
+  for (const [name, value] of Object.entries(base)) {
+    if (name in common || typeof value !== "string" || !value.startsWith("#")) continue;
+    const token = TOKEN_OF[mode].get(value);
+    out[name] = token ? tokens[token] : turnNeutral(value);
+  }
+  // The fill and the text on it are a pair; links are the accent's readable text shade.
+  out.accentColor = tokens.primary;
+  out.accentFg = tokens["primary-fg"];
+  out.textHeaderSelected = tokens["primary-fg"];
+  out.linkColor = tokens["primary-text"];
+  cache.set(key, out as Partial<Theme>);
+  return out as Partial<Theme>;
+}

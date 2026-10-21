@@ -1,7 +1,6 @@
 /**
  * What can be done with a view, as menu items: rename, duplicate, share, lock or unlock, delete, each
- * for those who may. The menu's "…" on a view row and the toolbar's right-click menu on a view button
- * show the same items from here.
+ * for those who may. The view switcher's menu of a view shows them (with its own Move up and down).
  */
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -22,7 +21,7 @@ export function hasViewActions(schema: BaseSchema, view: View, onDialog: ((dialo
   return basePermissions.configureView(role, view) || basePermissions.lockView(role, view) || (!!onDialog && canShareView(role, view));
 }
 
-/** `extra` is more items for the menu of a place that has its own (the menu's reordering), before Delete. */
+/** `extra` is more items for the menu of a place that has its own (reordering), before Delete. */
 export function ViewMenuItems({ schema, table, view: v, onDialog, extra }: { schema: BaseSchema; table: Table; view: View; onDialog: ((dialog: BaseDialog) => void) | null; extra?: ReactNode }) {
   const qc = useQueryClient();
   const navigate = useNavigate();

@@ -32,8 +32,8 @@ import type { FieldType } from "@/api/types";
 import { cn } from "@/lib/cn";
 
 export const FIELD_TYPE_ICONS: Record<FieldType, LucideIcon> = {
-  single_line_text: Type,
-  long_text: AlignLeft,
+  text: Type,
+  rich_text: AlignLeft,
   number: Hash,
   currency: DollarSign,
   percent: Percent,
@@ -64,8 +64,8 @@ export const FIELD_TYPE_ICONS: Record<FieldType, LucideIcon> = {
 
 /** Labels mirror `FieldType::label()` in crates/core/src/field.rs. */
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
-  single_line_text: "Single line text",
-  long_text: "Long text",
+  text: "Text",
+  rich_text: "Rich text",
   number: "Number",
   currency: "Currency",
   percent: "Percent",

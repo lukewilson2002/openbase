@@ -1,6 +1,6 @@
 /**
  * The shell of the home pages (a workspace's members and settings, account, admin, history, trash):
- * the logo and "Search everything" in the top bar, and the menu with the Inbox, the navigation tree
+ * the logo and "Search everything" (in the middle) in the top bar, and the menu with the Inbox, the navigation tree
  * and the History and Trash of everything.
  */
 import type { ReactNode } from "react";
@@ -12,7 +12,7 @@ import { WorkspaceTile } from "@/components/icons/EntityIcon";
 import { AppShell, useOpenMenu } from "./AppShell";
 import { NavDialogsProvider } from "./NavDialogs";
 import { NavGlobalLinks, NavTree } from "./NavTree";
-import { SearchEverything } from "./SearchEverything";
+import { SearchSlot } from "./SearchEverything";
 
 export { useCreateWorkspace } from "./useCreateWorkspace";
 
@@ -39,10 +39,11 @@ export function HomeShell({ workspaceId: pageWorkspace, topBar, children }: Home
           <>
             {workspaceId && <PhoneWorkspaceTitle workspaceId={workspaceId} />}
             {topBar}
-            <SearchEverything />
+            <SearchSlot />
           </>
         }
         hidePhoneLogo={!!workspaceId}
+        searchHere={workspaceId ? { workspaceId } : undefined}
         sidebar={<NavTree workspaceId={workspaceId} />}
         sidebarFooter={<NavGlobalLinks page={globalPage} />}
       >

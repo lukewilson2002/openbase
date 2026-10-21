@@ -6,15 +6,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toolButtonClass } from "@/components/viewbar/ViewBar";
 
 /**
- * The view's own setting as a toolbar tool. Worded like the other tools and tinted once it is set
- * ("Stacked by How often"), the way "Sorted by Who" is; in the phone's tools menu it sits under them.
+ * The view's own settings (what a kanban stacks by, a calendar's dates, the cards' cover and
+ * description) as one toolbar tool named "View", in every type of view; in the phone's tools menu it
+ * sits under the others.
  */
-export function ViewSettings({ label = "Settings", active, note, children }: { label?: string; active?: boolean; note?: string; children: ReactNode }) {
+export function ViewSettings({ note, children }: { note?: string; children: ReactNode }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className={toolButtonClass(active)}>
-          {label}
+        <button type="button" className={toolButtonClass()}>
+          View
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex max-h-[min(34rem,var(--ob-avail))] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-3 overflow-y-auto p-3">

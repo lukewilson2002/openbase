@@ -8,8 +8,8 @@ import { canBePrimary, isComputedType } from "@/lib/cells/kinds";
 import { jsonEqual } from "@/lib/cells/parse";
 
 export const FIELD_TYPES: readonly FieldType[] = [
-  "single_line_text",
-  "long_text",
+  "text",
+  "rich_text",
   "number",
   "currency",
   "percent",
@@ -39,7 +39,7 @@ export const FIELD_TYPES: readonly FieldType[] = [
 ];
 
 export const FIELD_TYPE_GROUPS: readonly { label: string; types: readonly FieldType[] }[] = [
-  { label: "Text", types: ["single_line_text", "long_text", "email", "url", "phone", "barcode"] },
+  { label: "Text", types: ["text", "rich_text", "email", "url", "phone", "barcode"] },
   { label: "Numbers", types: ["number", "currency", "percent", "duration", "rating", "autonumber"] },
   { label: "Choices", types: ["single_select", "multiple_select", "checkbox"] },
   { label: "Dates and people", types: ["date", "user", "created_time", "last_modified_time", "created_by", "last_modified_by"] },
@@ -67,10 +67,10 @@ function defaultLinkTarget(ctx: KindContext): string {
 /** Default `{type, options}` for a freshly chosen type (options `{}` where the server fills defaults). */
 export function defaultKind(type: FieldType, ctx: KindContext): FieldKind {
   switch (type) {
-    case "single_line_text":
+    case "text":
+      return { type, options: { multiline: false } };
+    case "rich_text":
       return { type, options: {} };
-    case "long_text":
-      return { type, options: { rich: false } };
     case "number":
     case "percent":
       return { type, options: { precision: 0, allow_negative: true } };
@@ -207,8 +207,8 @@ export function cleanKind(kind: FieldKind): FieldKind {
     case "single_select":
     case "multiple_select":
       return { ...kind, options: { choices: kind.options.choices.map((c) => ({ ...c, name: c.name.trim() })) } };
-    case "single_line_text":
-      return { type: kind.type, options: kind.options.default ? { default: kind.options.default } : {} };
+    case "text":
+      return { type: kind.type, options: kind.options.default ? { multiline: kind.options.multiline, default: kind.options.default } : { multiline: kind.options.multiline } };
     case "date":
     case "created_time":
       return { ...kind, options: { ...kind.options, timezone: kind.options.timezone || null } };
@@ -233,7 +233,7 @@ export function toUpdateField(existing: Field, draft: FieldDraft): UpdateField |
 
 export type ConversionRisk = "none" | "safe" | "lossy";
 
-const TEXTY: ReadonlySet<FieldType> = new Set(["single_line_text", "long_text", "email", "url", "phone", "barcode"]);
+const TEXTY: ReadonlySet<FieldType> = new Set(["text", "rich_text", "email", "url", "phone", "barcode"]);
 const NUMBERY: ReadonlySet<FieldType> = new Set(["number", "currency", "percent", "duration", "rating"]);
 const SELECTY: ReadonlySet<FieldType> = new Set(["single_select", "multiple_select"]);
 
@@ -246,7 +246,7 @@ export function conversionRisk(from: FieldType, to: FieldType): ConversionRisk {
   if (from === to) return "none";
   if (isComputedType(to)) return "lossy";
   if (isComputedType(from)) return "safe"; // computed values are not stored; nothing to lose
-  if (TEXTY.has(to) && (TEXTY.has(from) || NUMBERY.has(from) || SELECTY.has(from) || from === "date" || from === "checkbox")) return from === "long_text" && to !== "long_text" ? "lossy" : "safe";
+  if (TEXTY.has(to) && (TEXTY.has(from) || NUMBERY.has(from) || SELECTY.has(from) || from === "date" || from === "checkbox")) return from === "rich_text" && to !== "rich_text" ? "lossy" : "safe";
   if (SELECTY.has(from) && SELECTY.has(to)) return from === "multiple_select" && to === "single_select" ? "lossy" : "safe";
   if (NUMBERY.has(from) && NUMBERY.has(to)) return "lossy";
   if (from === "single_select" && to === "multiple_select") return "safe";
@@ -265,6 +265,28 @@ export function conversionWarning(from: FieldType, to: FieldType): string | null
         ? "Computed fields are calculated, not typed in: the values stored in this field will be discarded."
         : "Values that do not fit the new type are cleared, and some may change meaning. This cannot be undone automatically.";
   }
+}
+
+/** Whether changing `existing` to `kind` turns a multiline text field into a one-line one. */
+function joinsLines(existing: Field, kind: FieldKind): boolean {
+  return existing.type === "text" && existing.options.multiline && kind.type === "text" && !kind.options.multiline;
+}
+
+/**
+ * The risk and explanation of changing `existing` to `kind`: the type's (see `conversionRisk`),
+ * said more exactly for text, and for turning Multiline off, which changes values without a new type.
+ */
+export function kindChange(existing: Field, kind: FieldKind): { risk: ConversionRisk; warning: string | null } {
+  const lines = "Line breaks in existing values become spaces.";
+  if (joinsLines(existing, kind)) return { risk: "lossy", warning: lines };
+  if (existing.type === "rich_text" && kind.type === "text") {
+    const words = "Formatting is removed: each value keeps the text it shows (a mention as @Name, a link as its text).";
+    return { risk: "lossy", warning: kind.options.multiline ? words : `${words} ${lines}` };
+  }
+  if (kind.type === "rich_text" && (existing.type === "text" || existing.type === "barcode")) {
+    return { risk: "safe", warning: "Values keep the text they show: characters that would be formatting are kept as typed." };
+  }
+  return { risk: conversionRisk(existing.type, kind.type), warning: conversionWarning(existing.type, kind.type) };
 }
 
 export { canBePrimary };

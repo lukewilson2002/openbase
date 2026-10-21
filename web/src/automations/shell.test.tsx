@@ -34,10 +34,12 @@ describe("automations in the base shell", () => {
     open("creator", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
     const menu = screen.getByRole("navigation", { name: "Main menu" });
-    await user.click(within(menu).getByRole("link", { name: "Automations" }));
+    // In the project's menu, not a row of its own.
+    expect(within(menu).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
+    await user.click(within(menu).getByRole("button", { name: "Project options for Project tracker" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Automations" }));
     expect(await screen.findByRole("list", { name: "Automations" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Automations" })).toBeInTheDocument();
-    expect(within(menu).getByRole("link", { name: "Automations" })).toHaveAttribute("aria-current", "page");
     // The tables stay in the menu, as a way back.
     const tabs = within(menu).getByRole("list", { name: "Tables in Project tracker" });
     expect(within(tabs).getByRole("link", { name: "Tasks" })).not.toHaveAttribute("aria-current");
@@ -51,14 +53,20 @@ describe("automations in the base shell", () => {
   });
 
   it("is not offered to editors, and the URL explains why", async () => {
+    const user = userEvent.setup();
     open("editor", "/base/app1/automations");
     expect(await screen.findByText("Automations are for creators")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Project options for Project tracker" }));
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Automations" })).not.toBeInTheDocument();
   });
 
   it("is not offered to viewers either", async () => {
+    const user = userEvent.setup();
     open("viewer", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
-    expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Project options for Project tracker" }));
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Automations" })).not.toBeInTheDocument();
   });
 });

@@ -2,8 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// `GET /api/search?q=&limit=`: matches in workspace, base, table and view
-/// names, in record text and in comments, best first.
+/// `GET /api/search?q=&limit=&workspace=&base=`: matches in workspace, base,
+/// table and view names, in record text and in comments, best first;
+/// `workspace` or `base` narrows them to what is inside it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SearchResponse {
@@ -46,11 +47,35 @@ pub struct SearchResult {
     pub view_type: Option<String>,
     #[serde(default)]
     pub record_id: Option<String>,
+    /// Where the search text is in `name`, in order.
+    #[serde(default)]
+    pub name_matches: Vec<TextMatch>,
     /// For a record found by another field than its primary one, or a
-    /// comment: the text around the match.
+    /// comment: the text around the match, as plain text (rich text and
+    /// comments without their Markdown; a mention reads `@Name`), with `…`
+    /// where it was cut.
     #[serde(default)]
     pub snippet: Option<String>,
+    /// Where the search text is in `snippet`, in order.
+    #[serde(default)]
+    pub snippet_matches: Vec<TextMatch>,
+    /// For a record found by another field than its primary one: that field.
+    #[serde(default)]
+    pub field_id: Option<String>,
+    #[serde(default)]
+    pub field_name: Option<String>,
     /// For a comment: who wrote it (absent when that account is gone).
     #[serde(default)]
     pub author_name: Option<String>,
+}
+
+/// Where the search text matched in a piece of text: the characters from
+/// `start` up to (not including) `end`, counted in Unicode code points (not
+/// bytes, and not UTF-16 units: `Array.from(text)` in JavaScript). Matches are
+/// found ignoring case and never overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct TextMatch {
+    pub start: u32,
+    pub end: u32,
 }

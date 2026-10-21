@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_FIELDS, PEOPLE, field } from "@/test/fields";
+import { displayShapeOf, isMultilineText } from "./kinds";
 import { jsonEqual, linkNames, missingChoiceNames, parseText, parseTsv, toTsv, type ParseCtx } from "./parse";
 
 const ctx: ParseCtx = { timeZone: "UTC", users: PEOPLE, linkIds: new Map([["alpha", "recA"], ["beta", "recB"]]) };
@@ -10,10 +11,19 @@ const parse = (type: keyof typeof ALL_FIELDS, text: string, c: ParseCtx = ctx) =
 
 describe("parseText per field type", () => {
   it("text", () => {
-    expect(parse("single_line_text", " hello\nworld ")).toBe(" hello world ");
-    expect(parse("single_line_text", "   ")).toBeNull();
-    expect(parse("long_text", "a\r\nb")).toBe("a\nb");
+    expect(parse("text", " hello\nworld ")).toBe(" hello world ");
+    expect(parse("text", "   ")).toBeNull();
+    expect(parse("rich_text", "a\r\nb")).toBe("a\nb");
     expect(parse("barcode", "123")).toBe("123");
+  });
+
+  it("multiline text keeps its line breaks and is plain, like rich text", () => {
+    const address = field("text", { multiline: true });
+    expect(parseText(address, "12 High St\r\nSpringfield", ctx)).toEqual({ ok: true, value: "12 High St\nSpringfield" });
+    expect(displayShapeOf(address)).toBe("multiline");
+    expect(displayShapeOf(ALL_FIELDS.text)).toBe("text");
+    expect(displayShapeOf(ALL_FIELDS.rich_text)).toBe("multiline");
+    expect([address, ALL_FIELDS.rich_text, ALL_FIELDS.text].map(isMultilineText)).toEqual([true, true, false]);
   });
 
   it("numbers", () => {

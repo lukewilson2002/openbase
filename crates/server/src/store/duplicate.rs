@@ -60,8 +60,8 @@ enum CellPlan {
     Plain,
     Select,
     Attachment,
-    /// Long text: files it embeds are copied with an attachment copy.
-    LongText,
+    /// Rich text: files it embeds are copied with an attachment copy.
+    RichText,
     Computed,
     /// Link to a table that is also being copied.
     InternalLink,
@@ -418,7 +418,7 @@ fn plan_for(
         },
         FieldKind::SingleSelect(_) | FieldKind::MultipleSelect(_) => CellPlan::Select,
         FieldKind::Attachment(_) => CellPlan::Attachment,
-        FieldKind::LongText(_) => CellPlan::LongText,
+        FieldKind::RichText(_) => CellPlan::RichText,
         _ if f.field_type().is_computed() => CellPlan::Computed,
         _ => CellPlan::Plain,
     }
@@ -617,7 +617,7 @@ fn transform_data(
                     Json::Array(kept.into_iter().map(|r| Json::String(r.into())).collect())
                 })
             }
-            CellPlan::LongText => match (attachment_copy, value.as_str()) {
+            CellPlan::RichText => match (attachment_copy, value.as_str()) {
                 (Some(copy), Some(text)) => Some(Json::String(copy_text_files(
                     tx,
                     text,
@@ -716,7 +716,7 @@ fn copy_attachment(
     Ok(result)
 }
 
-/// Long text embeds files by address (`/api/attachments/<id>/...`): copying into another base
+/// Rich text embeds files by address (`/api/attachments/<id>/...`): copying into another base
 /// copies those files too and re-points the text at the copies. References to files that
 /// are gone or that belong to another base stay as they are (they will not load in the copy).
 fn copy_text_files(

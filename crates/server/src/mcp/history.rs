@@ -312,7 +312,7 @@ struct ActivityArgs {
 
 /// The id of the single item of `items` that `key` names (an id or a name), or a tool error
 /// listing the valid names.
-fn resolve_one<T>(
+pub(super) fn resolve_one<T>(
     what: &str,
     key: &str,
     items: &[T],

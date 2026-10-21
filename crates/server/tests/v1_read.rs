@@ -102,7 +102,7 @@ async fn meta_tables_describes_tables_fields_and_views() {
         types,
         [
             ("Name", "singleLineText"),
-            ("Notes", "multilineText"),
+            ("Notes", "richText"),
             ("Age", "number"),
             ("Status", "singleSelect"),
             ("Tags", "multipleSelects"),

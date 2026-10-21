@@ -52,7 +52,7 @@ export function ShareViewTab({
         )}
       </Field>
       <div className="flex gap-2.5 rounded-[10px] bg-primary-soft px-3.5 py-3 text-sm leading-normal text-fg">
-        <Eye aria-hidden className="mt-0.5 size-[18px] shrink-0 text-primary" />
+        <Eye aria-hidden className="mt-0.5 size-[18px] shrink-0 text-primary-text" />
         <p>
           {kind === "form"
             ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the project."

@@ -27,7 +27,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "upload_attachment",
             "Upload a file",
-            "Upload a file to a project from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. The result also has `markdown`: a line that embeds the file in a long text field (an image, video, audio player or file card), e.g. ![](/api/attachments/att.../photo.png), to put on a line of its own in the field's text; the file must be in the same project, and an https:// image address is never shown. Leave project_id out to upload for your inbox instead: only you can read the file until you file the draft (add_to_inbox / update_inbox_item attachments); not available to tokens limited to specific projects, and the inbox holds 200 MB per person by default. The size limit is the server's upload limit (5 MB by default). Needs the editor role on the project.",
+            "Upload a file to a project from base64 content or a public URL (the server fetches it, public http(s) addresses only) and get back an attachment reference. Put the reference into an attachment field with create_records/update_records, e.g. {\"Files\": [<reference>]}. The result also has `markdown`: a line that embeds the file in a rich text field (an image, video, audio player or file card), e.g. ![](/api/attachments/att.../photo.png), to put on a line of its own in the field's text; the file must be in the same project, and an https:// image address is never shown. Leave project_id out to upload for your inbox instead: only you can read the file until you file the draft (add_to_inbox / update_inbox_item attachments); not available to tokens limited to specific projects, and the inbox holds 200 MB per person by default. The size limit is the server's upload limit (5 MB by default). Needs the editor role on the project.",
             object(
                 json!({
                     "project_id": string("Project id (see list_projects). Leave out to upload a file for your inbox."),
@@ -131,7 +131,7 @@ fn clean_filename(name: &str) -> String {
     }
 }
 
-/// The Markdown line that embeds an uploaded file in long text: image syntax with an empty alt
+/// The Markdown line that embeds an uploaded file in rich text: image syntax with an empty alt
 /// text and the file's download address (relative, the filename percent-encoded).
 fn embed_markdown(reference: &Value) -> String {
     let id = reference
@@ -233,7 +233,7 @@ async fn upload_attachment(ctx: &McpCtx, a: UploadArgs) -> ToolResult {
             ToolResult::ok(json!({
                 "attachment": reference,
                 "markdown": markdown,
-                "usage": "Write it into an attachment field: create_records / update_records with {\"<field name>\": [{\"id\": \"<attachment id>\"}]}, or put `markdown` on its own line in a long text field (it must be a file of the record's project).",
+                "usage": "Write it into an attachment field: create_records / update_records with {\"<field name>\": [{\"id\": \"<attachment id>\"}]}, or put `markdown` on its own line in a rich text field (it must be a file of the record's project).",
             }))
         }
         Err(e) => e,

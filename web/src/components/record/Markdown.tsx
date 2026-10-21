@@ -1,5 +1,5 @@
 /**
- * Sanitized markdown for rich long-text fields: `marked` renders, DOMPurify sanitizes (no
+ * Sanitized markdown for rich-text fields: `marked` renders, DOMPurify sanitizes (no
  * scripts, no inline event handlers, links forced to open safely). The HTML never reaches the
  * DOM unsanitized, and only http(s)/mailto/tel links and relative anchors survive.
  *
@@ -15,11 +15,14 @@
  * neither does an address that only becomes ours after Markdown unescapes it (`/api\/attachments/...`).
  * On a shared page (ShareContext) the embeds carry the share token, or, for a link with a password,
  * are loaded with it (public/view/ShareEmbeds.ts).
+ *
+ * Mentions (`@[Name](usrXXXX)`, record/mentions.ts) show as chips (`.ob-mention`), as in the editor.
  */
 import { useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { cn } from "@/lib/cn";
+import { MENTION_AT_START } from "./mentions";
 import { embedFilename, embedPreviewSrc, isEmbedSrc, mediaKind, mediaLabel, withShare } from "@/lib/media";
 import { useShareOrNull } from "@/public/view/ShareContext";
 import { protectedDownload, useProtectedEmbeds } from "@/public/view/ShareEmbeds";
@@ -127,6 +130,25 @@ renderer.paragraph = (text: string) => {
     .join("");
 };
 renderer.checkbox = (checked: boolean) => `<span class="ob-check" role="checkbox" aria-checked="${checked}" aria-disabled="true"></span> `;
+
+// A mention is read before links (extensions come first), so `@[Name](usr…)` never becomes a link.
+marked.use({
+  extensions: [
+    {
+      name: "mention",
+      level: "inline",
+      start: (src: string) => {
+        const at = src.indexOf("@[");
+        return at < 0 ? undefined : at;
+      },
+      tokenizer: (src: string) => {
+        const m = MENTION_AT_START.exec(src);
+        return m ? { type: "mention", raw: m[0], label: m[1]!, id: m[2]! } : undefined;
+      },
+      renderer: (token) => `<span class="ob-mention" data-mention="${esc(String(token.id))}">@${esc(String(token.label))}</span>`,
+    },
+  ],
+});
 
 /**
  * An image whose address is ours only after Markdown has unescaped it (`/api\\/attachments/...`) is no

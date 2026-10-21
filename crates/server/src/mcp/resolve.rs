@@ -351,6 +351,7 @@ const TIMELINE_KEYS: &[&str] = &[
     "group_field_id",
     "dependency_field_id",
     "scale",
+    "label_width",
 ];
 const FORM_KEYS: &[&str] = &[
     "title",
@@ -547,7 +548,12 @@ impl Xlate<'_> {
                             "each entry of {what} must be {{field_id, direction}}"
                         ));
                     };
-                    check_keys(o, &["field_id", "field", "direction"], what)?;
+                    let keys: &[&str] = if what == "groups" {
+                        &["field_id", "field", "direction", "granularity"]
+                    } else {
+                        &["field_id", "field", "direction"]
+                    };
+                    check_keys(o, keys, what)?;
                     self.field_ref(o, what)?;
                 }
                 Ok(())
@@ -1009,11 +1015,7 @@ mod tests {
             description: None,
             primary_field_id: "fld1".into(),
             fields: vec![
-                field(
-                    "fld1",
-                    "Name",
-                    FieldKind::SingleLineText(TextOptions::default()),
-                ),
+                field("fld1", "Name", FieldKind::Text(TextOptions::default())),
                 field(
                     "fld2",
                     "Status",

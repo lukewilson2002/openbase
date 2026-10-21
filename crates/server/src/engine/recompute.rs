@@ -1182,11 +1182,7 @@ mod tests {
     #[test]
     fn names_edges_connect_a_primary_field_to_what_shows_link_names() {
         let fields = vec![
-            field(
-                "fldP",
-                "B",
-                FieldKind::SingleLineText(TextOptions::default()),
-            ),
+            field("fldP", "B", FieldKind::Text(TextOptions::default())),
             link("fldL", "A", "B", "fldInv"),
             link("fldInv", "B", "A", "fldL"),
             formula("fldShows", "A", "{fldL}"),
@@ -1228,11 +1224,7 @@ mod tests {
 
         // a link nothing reads by name gets no names node
         let quiet = vec![
-            field(
-                "fldP",
-                "B",
-                FieldKind::SingleLineText(TextOptions::default()),
-            ),
+            field("fldP", "B", FieldKind::Text(TextOptions::default())),
             link("fldL", "A", "B", "fldInv"),
             link("fldInv", "B", "A", "fldL"),
             field(

@@ -14,8 +14,8 @@ describe("writableFields", () => {
 
 describe("valueMode", () => {
   it("text-like fields and links are templates, numbers and checkboxes are typed", () => {
-    expect(valueMode(ALL_FIELDS.single_line_text, "x")).toBe("template");
-    expect(valueMode(ALL_FIELDS.long_text, "")).toBe("template");
+    expect(valueMode(ALL_FIELDS.text, "x")).toBe("template");
+    expect(valueMode(ALL_FIELDS.rich_text, "")).toBe("template");
     expect(valueMode(ALL_FIELDS.email, null)).toBe("template");
     expect(valueMode(ALL_FIELDS.link, [])).toBe("template");
     expect(valueMode(ALL_FIELDS.number, 4)).toBe("value");
@@ -40,7 +40,7 @@ describe("valueMode", () => {
 
 describe("emptyValue / templateText", () => {
   it("starts text-like fields and links as empty text, everything else as null", () => {
-    expect(emptyValue(ALL_FIELDS.single_line_text)).toBe("");
+    expect(emptyValue(ALL_FIELDS.text)).toBe("");
     expect(emptyValue(ALL_FIELDS.link)).toBe("");
     expect(emptyValue(ALL_FIELDS.number)).toBeNull();
     expect(emptyValue(ALL_FIELDS.checkbox)).toBeNull();

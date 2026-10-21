@@ -524,8 +524,7 @@ async fn attachments_upload_from_base64_and_from_urls() {
         .await;
     assert_eq!(rec[0]["fields"]["File"][0]["filename"], "dot.png");
     // ...and its `markdown` line is accepted in a long text field of the same project.
-    r.field("Docs", "Notes", "long_text", json!({"rich": true}))
-        .await;
+    r.field("Docs", "Notes", "rich_text", json!({})).await;
     let note = format!("Look:\n\n{}", up["markdown"].as_str().unwrap());
     let rec = r
         .records("Docs", json!([{"fields": {"Name": "e", "Notes": note}}]))
@@ -920,6 +919,122 @@ async fn csv_imports_are_all_or_nothing_and_say_which_rows_failed() {
         .fails("import_csv", args(json!({"table": "People"})))
         .await;
     assert!(e.contains("editor role"), "{e}");
+}
+
+// ------------------------------------------------------------------------- search
+
+#[tokio::test]
+async fn search_everything_finds_names_records_and_comments_with_where_they_matched() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Campaigns").await;
+    r.field("Campaigns", "Brief", "rich_text", json!({})).await;
+    let rec = r
+        .records(
+            "Campaigns",
+            json!([{"fields": {"Name": "Spring launch", "Brief": "Steven will be in charge of **marketing**."}}]),
+        )
+        .await[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    a.call(
+        "add_comment",
+        json!({"record_id": rec, "body": "The *marketing* copy is late"}),
+    )
+    .await;
+    let other = a
+        .call(
+            "create_project",
+            json!({"workspace_id": r.ws, "name": "Marketing site"}),
+        )
+        .await["base"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Everywhere: the project's name, the record by its brief, then the comment.
+    let all = a.call("search_everything", json!({"query": "MARK"})).await;
+    assert_eq!(all["count"], 3);
+    let res = all["results"].as_array().unwrap();
+    assert_eq!(res[0]["kind"], "project");
+    assert_eq!(res[0]["name"], "Marketing site");
+    assert_eq!(res[0]["name_matches"], json!([[0, 4]]));
+    assert_eq!(res[1]["kind"], "record");
+    assert_eq!(res[1]["record_id"], rec.as_str());
+    assert_eq!(res[1]["project_id"], b);
+    assert_eq!(res[1]["table"], "Campaigns");
+    assert_eq!(res[1]["field"], "Brief");
+    assert_eq!(res[1]["snippet"], "Steven will be in charge of marketing.");
+    assert_eq!(res[1]["snippet_matches"], json!([[28, 32]]));
+    assert!(
+        res[1].get("name_matches").is_none(),
+        "nothing empty is listed"
+    );
+    assert_eq!(res[2]["kind"], "comment");
+    assert_eq!(res[2]["snippet"], "The marketing copy is late");
+    assert_eq!(res[2]["author"], "Test User");
+
+    // Narrowed to a project or a workspace, by name or id.
+    let in_base = a
+        .call(
+            "search_everything",
+            json!({"query": "mark", "project": "base"}),
+        )
+        .await;
+    assert_eq!(in_base["count"], 2);
+    assert!(
+        in_base["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|x| x["project_id"] == b)
+    );
+    let in_other = a
+        .call(
+            "search_everything",
+            json!({"query": "spring", "project": other}),
+        )
+        .await;
+    assert_eq!(in_other["count"], 0);
+    let in_ws = a
+        .call(
+            "search_everything",
+            json!({"query": "mark", "workspace": "Workspace", "limit": 1}),
+        )
+        .await;
+    assert_eq!(in_ws["count"], 1);
+    assert!(in_ws["hint"].is_string(), "there may be more");
+
+    // A token limited to the other project finds nothing of this one, even by its id.
+    let limited = r
+        .agent_with(json!({"write": false, "base_ids": [other]}))
+        .await;
+    let e = limited
+        .fails(
+            "search_everything",
+            json!({"query": "spring", "project": b}),
+        )
+        .await;
+    assert!(e.contains("Project") && e.contains("not found"), "{e}");
+    assert_eq!(
+        limited
+            .call("search_everything", json!({"query": "spring"}))
+            .await["count"],
+        0
+    );
+
+    // Bad input says what to fix.
+    let e = a.fails("search_everything", json!({"query": "  "})).await;
+    assert!(e.contains("empty"), "{e}");
+    let e = a
+        .fails(
+            "search_everything",
+            json!({"query": "x", "workspace": "Nope"}),
+        )
+        .await;
+    assert!(e.contains("Workspace 'Nope' not found"), "{e}");
 }
 
 // ------------------------------------------------------------- history and notifications

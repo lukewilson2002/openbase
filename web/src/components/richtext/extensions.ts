@@ -5,6 +5,7 @@
  * Markdown cannot store them.
  *
  * Embedded files (media.ts) are Markdown images of our own files; any other image is read as a link.
+ * Mentions (mention.ts) are `@[Name](usrXXXX)`.
  *
  * Three small departures from the library's own Markdown writer, each covered in markdown.test.ts:
  * a table is written without the blank lines it pads itself with, a line break is a plain newline
@@ -22,6 +23,7 @@ import { Placeholder } from "@tiptap/extensions";
 import StarterKit from "@tiptap/starter-kit";
 import { Callout, QuoteOrCallout } from "./callout";
 import { ImageAsLink, Media, parseParagraph, type MediaOptions } from "./media";
+import { Mention, MentionSuggest, type MentionSuggestOptions } from "./mention";
 
 const ASCII_PUNCT = /[!-/:-@[-`{-~]/;
 const isSpace = (c: string | undefined) => c !== undefined && /\s/.test(c);
@@ -99,8 +101,11 @@ const ListTabStays = Extension.create({
   },
 });
 
-/** `media` gives the editor its way to add files (the `upload` of RichTextEditor); without it files cannot be added, only shown. */
-export function richTextExtensions(placeholder?: string, media: MediaOptions = {}): AnyExtension[] {
+/**
+ * `media` gives the editor its way to add files (the `upload` of RichTextEditor); without it files cannot
+ * be added, only shown. `mentions` turns on the people picker after `@`; without it mentions are only shown.
+ */
+export function richTextExtensions(placeholder?: string, media: MediaOptions = {}, mentions?: MentionSuggestOptions): AnyExtension[] {
   return [
     StarterKit.configure({
       blockquote: false,
@@ -120,6 +125,8 @@ export function richTextExtensions(placeholder?: string, media: MediaOptions = {
     }),
     Media.configure(media),
     ImageAsLink,
+    Mention,
+    ...(mentions ? [MentionSuggest.configure(mentions)] : []),
     QuoteOrCallout,
     Callout,
     TaskList,

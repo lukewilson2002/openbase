@@ -38,13 +38,9 @@ async fn numbers_become_text_and_text_becomes_numbers() {
     let id = sid(&price["id"]).to_string();
     let a = f.create(&t, json!({ &id: 1200.5 })).await;
     let aid = sid(&a["id"]).to_string();
-    convert(
-        &f,
-        &price,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &price, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(
         f.stored(&aid, &id),
         "$1,200.50",
@@ -64,13 +60,9 @@ async fn numbers_become_text_and_text_becomes_numbers() {
 
     // values that are not numbers are dropped
     let text_again = f.field(&t, "Price").await;
-    convert(
-        &f,
-        &text_again,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &text_again, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     f.set(&t, &aid, json!({ &id: "twelve" })).await;
     let n = f.field(&t, "Price").await;
     convert(&f, &n, json!({ "type": "number", "options": {} }))
@@ -86,7 +78,7 @@ async fn text_becomes_a_select_with_choices_created_from_the_values() {
     let col = f
         .add_field(
             &t,
-            json!({ "name": "Stage", "type": "single_line_text", "options": {} }),
+            json!({ "name": "Stage", "type": "text", "options": {} }),
         )
         .await;
     let id = sid(&col["id"]).to_string();
@@ -158,13 +150,9 @@ async fn existing_choices_are_kept_and_matched_by_name_when_converting_between_s
     // multiple -> text joins the names
     let multi_again = f.field(&t, "Tags").await;
     f.set(&t, &aid, json!({ &id: ["red", "blue"] })).await;
-    convert(
-        &f,
-        &multi_again,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &multi_again, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(f.stored(&aid, &id), "red, blue");
     // text -> multiple splits on commas and creates what is missing
     let text = f.field(&t, "Tags").await;
@@ -186,7 +174,7 @@ async fn existing_choices_are_kept_and_matched_by_name_when_converting_between_s
 }
 
 #[tokio::test]
-async fn booleans_dates_and_long_text() {
+async fn booleans_dates_and_rich_text() {
     let f = Fixture::new().await;
     let t = f.table_id.clone();
     let flag = f
@@ -217,13 +205,9 @@ async fn booleans_dates_and_long_text() {
     assert_eq!(f.stored(&rid, &fid), 1, "checked becomes 1");
     assert!(f.record_data(sid(&off["id"])).get(&fid).is_none());
 
-    convert(
-        &f,
-        &day,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &day, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(f.stored(&rid, &did), "2026-03-04");
     let text = f.field(&t, "Day").await;
     convert(
@@ -239,15 +223,11 @@ async fn booleans_dates_and_long_text() {
         f.stored(&rid, &did)
     );
 
-    // long text keeps its newlines; single line text collapses them
+    // rich text keeps its newlines; one-line text collapses them
     let notes = f.field(&t, "Notes").await;
-    convert(
-        &f,
-        &notes,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &notes, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(f.stored(&rid, &f.notes_id), "a b");
 }
 
@@ -262,7 +242,7 @@ async fn links_become_text_with_the_linked_primary_names() {
     let lid = sid(&l.link["id"]).to_string();
     let c = sid(&f.create(&l.t1, json!({ &lid: [o1, o2, o3] })).await["id"]).to_string();
     f.delete_records(&l.t2, &[&o2]).await.assert_status(204);
-    let r = convert(f, &l.link, json!({ "type": "long_text", "options": {} })).await;
+    let r = convert(f, &l.link, json!({ "type": "rich_text", "options": {} })).await;
     r.assert_status(200);
     assert_eq!(
         f.stored(&c, &lid),
@@ -338,20 +318,12 @@ async fn users_and_attachments_convert_to_text() {
         )
         .await;
     let rid = sid(&rec["id"]).to_string();
-    convert(
-        &f,
-        &user,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
-    convert(
-        &f,
-        &files,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(&f, &user, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
+    convert(&f, &files, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(f.stored(&rid, &uid), "Alice Smith, Owner");
     assert_eq!(f.stored(&rid, &fid), "plan.pdf");
 }
@@ -369,13 +341,9 @@ async fn converting_a_source_field_updates_formulas_lookups_and_rollups_built_on
     let c = sid(&f.create(&l.t1, json!({ sid(&l.link["id"]): [o] })).await["id"]).to_string();
     assert_eq!(f.stored(&c, sid(&lookup["id"])), json!([12]));
     // number -> text: lookups now carry text and the rollup is re-inferred
-    convert(
-        f,
-        &l.price,
-        json!({ "type": "single_line_text", "options": {} }),
-    )
-    .await
-    .assert_status(200);
+    convert(f, &l.price, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
     assert_eq!(f.stored(&c, sid(&lookup["id"])), json!(["12"]));
     let lookup_now = f.field(&l.t1, "Prices").await;
     assert_eq!(
@@ -404,4 +372,111 @@ async fn a_rejected_formula_update_changes_nothing() {
         f.field(&l.t2, "Calc").await["options"]["expression"],
         "{Price} * 2"
     );
+}
+
+#[tokio::test]
+async fn rich_text_and_text_convert_both_ways_showing_the_same_words() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let notes = f.field(&t, "Notes").await;
+    assert_eq!(notes["type"], "rich_text");
+    let id = f.notes_id.clone();
+    let md = "# Plan\n\nAsk @[Ann](usrA1) about **the spec**:\n\n- milk\n- [x] eggs";
+    let rec = f.create(&t, json!({ &id: md })).await;
+    let rid = sid(&rec["id"]).to_string();
+
+    // Rich text becomes the plain text it shows, lines kept.
+    convert(
+        &f,
+        &notes,
+        json!({ "type": "text", "options": { "multiline": true } }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(
+        f.stored(&rid, &id),
+        "Plan\n\nAsk @Ann about the spec:\n\n- milk\n- [x] eggs"
+    );
+
+    // Plain text becomes rich text that shows the same text: nothing in it
+    // turns into formatting.
+    f.set(&t, &rid, json!({ &id: "a *b* c\n# not a heading" }))
+        .await;
+    let plain = f.field(&t, "Notes").await;
+    convert(&f, &plain, json!({ "type": "rich_text", "options": {} }))
+        .await
+        .assert_status(200);
+    assert_eq!(f.stored(&rid, &id), "a \\*b\\* c\n\\# not a heading");
+
+    // Into one-line text, the lines are joined.
+    let rich = f.field(&t, "Notes").await;
+    convert(&f, &rich, json!({ "type": "text", "options": {} }))
+        .await
+        .assert_status(200);
+    assert_eq!(f.stored(&rid, &id), "a *b* c # not a heading");
+}
+
+#[tokio::test]
+async fn turning_multiline_off_joins_the_lines() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let address = f
+        .add_field(
+            &t,
+            json!({ "name": "Address", "type": "text", "options": { "multiline": true } }),
+        )
+        .await;
+    let id = sid(&address["id"]).to_string();
+    let rec = f
+        .create(&t, json!({ &id: "12 High St\nSpringfield\n\nUSA" }))
+        .await;
+    let rid = sid(&rec["id"]).to_string();
+    assert_eq!(f.stored(&rid, &id), "12 High St\nSpringfield\n\nUSA");
+
+    // Other option changes leave the values alone.
+    convert(
+        &f,
+        &address,
+        json!({ "type": "text", "options": { "multiline": true, "default": "n/a" } }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(f.stored(&rid, &id), "12 High St\nSpringfield\n\nUSA");
+
+    convert(
+        &f,
+        &address,
+        json!({ "type": "text", "options": { "multiline": false } }),
+    )
+    .await
+    .assert_status(200);
+    assert_eq!(f.stored(&rid, &id), "12 High St Springfield USA");
+    // From now on a line break typed in becomes a space.
+    f.set(&t, &rid, json!({ &id: "a\nb" })).await;
+    assert_eq!(f.stored(&rid, &id), "a b");
+}
+
+#[tokio::test]
+async fn the_old_text_type_names_are_still_accepted() {
+    let f = Fixture::new().await;
+    let t = f.table_id.clone();
+    let title = f
+        .add_field(
+            &t,
+            json!({ "name": "Title", "type": "single_line_text", "options": { "default": "x" } }),
+        )
+        .await;
+    assert_eq!(title["type"], "text");
+    assert_eq!(
+        title["options"],
+        json!({ "multiline": false, "default": "x" })
+    );
+    let body = f
+        .add_field(
+            &t,
+            json!({ "name": "Body", "type": "long_text", "options": { "rich": false } }),
+        )
+        .await;
+    assert_eq!(body["type"], "rich_text");
+    assert_eq!(body["options"], json!({}));
 }

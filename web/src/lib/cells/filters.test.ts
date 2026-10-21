@@ -7,7 +7,7 @@ const ops = (t: FieldType) => filterOpsFor(ALL_FIELDS[t]);
 
 describe("operator tables (mirror of ob_core::query::filter_ops_for)", () => {
   it("text types", () => {
-    for (const t of ["single_line_text", "long_text", "email", "url", "phone", "barcode"] as const) {
+    for (const t of ["text", "rich_text", "email", "url", "phone", "barcode"] as const) {
       expect(ops(t)).toEqual(["contains", "does_not_contain", "is", "is_not", "starts_with", "ends_with", "is_empty", "is_not_empty"]);
     }
   });
@@ -39,7 +39,7 @@ describe("operator tables (mirror of ob_core::query::filter_ops_for)", () => {
   });
   it("computed fields filter by result type", () => {
     expect(ops("formula")).toEqual(ops("number")); // number result
-    expect(filterOpsFor(field("formula", { expression: "", result_type: "text" }))).toEqual(ops("single_line_text"));
+    expect(filterOpsFor(field("formula", { expression: "", result_type: "text" }))).toEqual(ops("text"));
     expect(filterOpsFor(field("formula", { expression: "", result_type: "bool" }))).toEqual(["is"]);
     expect(filterOpsFor(field("formula", { expression: "", result_type: "date_time" }))).toEqual(ops("date"));
     expect(ops("rollup")).toEqual(ops("number"));
@@ -58,11 +58,11 @@ describe("labels and operands", () => {
   it("numbers use = and ≠", () => {
     expect(opLabel("is", ALL_FIELDS.number)).toBe("=");
     expect(opLabel("is_not", ALL_FIELDS.number)).toBe("≠");
-    expect(opLabel("is", ALL_FIELDS.single_line_text)).toBe("is");
+    expect(opLabel("is", ALL_FIELDS.text)).toBe("is");
     expect(opLabel("lte", ALL_FIELDS.number)).toBe("≤");
   });
   it("operand editors per kind", () => {
-    expect(operandKindFor(ALL_FIELDS.single_line_text, "contains")).toBe("text");
+    expect(operandKindFor(ALL_FIELDS.text, "contains")).toBe("text");
     expect(operandKindFor(ALL_FIELDS.number, "gt")).toBe("number");
     expect(operandKindFor(ALL_FIELDS.checkbox, "is")).toBe("bool");
     expect(operandKindFor(ALL_FIELDS.single_select, "is")).toBe("choice_one");
@@ -91,20 +91,20 @@ describe("labels and operands", () => {
 
 describe("conditions", () => {
   it("new conditions use the first operator with an empty operand", () => {
-    expect(newCondition(ALL_FIELDS.single_line_text)).toEqual({ field_id: "fld_single_line_text", op: "contains", value: "" });
+    expect(newCondition(ALL_FIELDS.text)).toEqual({ field_id: "fld_text", op: "contains", value: "" });
     expect(newCondition(ALL_FIELDS.date).value).toEqual({ mode: "today" });
     expect(newCondition(ALL_FIELDS.checkbox).value).toBe(true);
     expect(newCondition(ALL_FIELDS.multiple_select).value).toEqual([]);
   });
   it("switching operators keeps the operand only when its shape stays valid", () => {
     const c = { field_id: "x", op: "contains" as const, value: "hello" };
-    expect(withOp(c, ALL_FIELDS.single_line_text, "starts_with").value).toBe("hello");
+    expect(withOp(c, ALL_FIELDS.text, "starts_with").value).toBe("hello");
     expect(withOp({ field_id: "x", op: "is" as const, value: "chs1" }, ALL_FIELDS.single_select, "is_any_of").value).toEqual([]);
     expect(withOp({ field_id: "x", op: "is_before" as const, value: { mode: "today" } }, ALL_FIELDS.date, "is_within").value).toEqual({ mode: "past_week" });
     expect(defaultOperand(ALL_FIELDS.date, "is_empty")).toBeNull();
   });
   it("detects incomplete conditions (ignored by the server)", () => {
-    const f = ALL_FIELDS.single_line_text;
+    const f = ALL_FIELDS.text;
     expect(isIncomplete({ field_id: f.id, op: "contains", value: "" }, f)).toBe(true);
     expect(isIncomplete({ field_id: f.id, op: "contains", value: "x" }, f)).toBe(false);
     expect(isIncomplete({ field_id: f.id, op: "is_empty", value: null }, f)).toBe(false);

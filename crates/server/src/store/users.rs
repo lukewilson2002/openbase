@@ -1,6 +1,6 @@
 //! Users, profiles, admin user management and password-reset tokens.
 
-use ob_core::api::auth::{AdminUpdateUser, AdminUser, User};
+use ob_core::api::auth::{ACCENTS, AdminUpdateUser, AdminUser, User};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::{Map, Value, json};
 
@@ -67,6 +67,22 @@ pub fn validate_timezone(tz: &str) -> AppResult<Option<String>> {
     Ok(Some(tz.to_string()))
 }
 
+/// An accent colour from `PATCH /api/auth/me`: one of [`ACCENTS`], or empty for the default
+/// (stored as NULL).
+pub fn validate_accent(accent: &str) -> AppResult<Option<String>> {
+    let accent = accent.trim();
+    if accent.is_empty() {
+        return Ok(None);
+    }
+    if !ACCENTS.contains(&accent) {
+        return Err(AppError::bad_request(format!(
+            "unknown accent '{accent}'; use one of {}",
+            ACCENTS.join(", ")
+        )));
+    }
+    Ok(Some(accent.to_string()))
+}
+
 /// A full `users` row.
 #[derive(Debug, Clone)]
 pub struct UserRow {
@@ -82,10 +98,11 @@ pub struct UserRow {
     pub created_at: i64,
     pub last_login_at: Option<i64>,
     pub intro_seen: bool,
+    pub accent: Option<String>,
 }
 
 const COLUMNS: &str = "id, email, name, password_hash, is_admin, is_active, timezone, \
-                       totp_secret, totp_enabled, created_at, last_login_at, intro_seen";
+                       totp_secret, totp_enabled, created_at, last_login_at, intro_seen, accent";
 
 impl UserRow {
     fn from_row(r: &Row) -> rusqlite::Result<UserRow> {
@@ -102,6 +119,7 @@ impl UserRow {
             created_at: r.get(9)?,
             last_login_at: r.get(10)?,
             intro_seen: r.get(11)?,
+            accent: r.get(12)?,
         })
     }
 
@@ -114,6 +132,7 @@ impl UserRow {
             timezone: self.timezone.clone(),
             totp_enabled: self.totp_enabled,
             intro_seen: self.intro_seen,
+            accent: self.accent.clone(),
         }
     }
 
@@ -218,6 +237,15 @@ pub fn update_profile(
             params![tz, now, id],
         )?;
     }
+    Ok(())
+}
+
+/// Set the accent colour (`None` = the default).
+pub fn set_accent(conn: &Connection, id: &str, accent: Option<&str>) -> AppResult<()> {
+    conn.execute(
+        "UPDATE users SET accent = ?1, updated_at = ?2 WHERE id = ?3",
+        params![accent, now_ms(), id],
+    )?;
     Ok(())
 }
 

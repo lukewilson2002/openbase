@@ -65,7 +65,7 @@ async function seed(page: Page): Promise<Fixture> {
   const table = base.tables[0] ?? (await post<TableDto>(req, `/api/bases/${base.id}/tables`, { name: "Tasks" }));
   const nameField = table.fields[0]!.id;
   // A new table has only its primary field; the grid tests expect a Notes column after Name.
-  await post(req, `/api/tables/${table.id}/fields`, { name: "Notes", type: "long_text", options: {} });
+  const notes = await post<{ id: string }>(req, `/api/tables/${table.id}/fields`, { name: "Notes", type: "rich_text", options: {} });
   const qty = await post<{ id: string }>(req, `/api/tables/${table.id}/fields`, { name: "Qty", type: "number", options: { precision: 0, allow_negative: true } });
   const status = await post<{ id: string; options: { choices: { id: string; name: string }[] } }>(req, `/api/tables/${table.id}/fields`, {
     name: "Status",
@@ -79,7 +79,9 @@ async function seed(page: Page): Promise<Fixture> {
     records: ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((n, i) => ({ values: { [nameField]: n, [qty.id]: (i + 1) * 10, [status.id]: choice[i % 2 ? "Done" : "Todo"] } })),
   });
   // A shared grid of its own to filter and sort: the table's default grid keeps neither (they are each person's).
-  const grid = await post<{ id: string }>(req, `/api/tables/${table.id}/views`, { name: "Grid", type: "grid" });
+  // With saved widths: a column without one fits its content, and these tests click by position.
+  const field_widths = { [nameField]: WIDTHS.name, [notes.id]: WIDTHS.notes, [qty.id]: WIDTHS.qty, [status.id]: WIDTHS.status, [done.id]: WIDTHS.done };
+  const grid = await post<{ id: string }>(req, `/api/tables/${table.id}/views`, { name: "Grid", type: "grid", config: { field_widths } });
   return { baseId: base.id, tableId: table.id, viewId: grid.id, fields: { name: nameField, qty: qty.id, status: status.id, done: done.id } };
 }
 
@@ -217,6 +219,54 @@ test("searches with Ctrl+F", async ({ page }) => {
   await expect(page.getByText("5 items")).toBeVisible();
 });
 
+test("a click on a column's edge leaves its width alone; a drag resizes it and is saved", async ({ page }) => {
+  await gotoGrid(page);
+  const box = (await canvas(page).boundingBox())!;
+  const viewConfig = async () => {
+    const res = await page.request.get(`/api/bases/${fx.baseId}`);
+    const schema = (await res.json()) as { tables: { id: string; views: { id: string; config: { field_widths: Record<string, number> } }[] }[] };
+    return schema.tables.find((t) => t.id === fx.tableId)!.views.find((v) => v.id === fx.viewId)!.config;
+  };
+  const before = await viewConfig();
+  // The last column's right edge, in the header.
+  const edge = { x: box.x + MARKER_W + WIDTHS.name + WIDTHS.notes + WIDTHS.qty + WIDTHS.status + WIDTHS.done - 1, y: box.y + HEADER_H / 2 };
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  // Past the save delay of a resize: nothing was changed.
+  await page.waitForTimeout(900);
+  expect((await viewConfig()).field_widths[fx.fields.done]).toBe(before.field_widths[fx.fields.done]);
+
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + 30, edge.y, { steps: 5 });
+  await page.mouse.move(edge.x + 60, edge.y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await viewConfig()).field_widths[fx.fields.done] ?? 0).toBeGreaterThan(WIDTHS.done + 40);
+
+  // Put it back for the tests that click by column position.
+  const after = await viewConfig();
+  const { [fx.fields.done]: _drop, ...widths } = after.field_widths;
+  const res = await page.request.patch(`/api/views/${fx.viewId}`, { data: { config: { ...after, field_widths: { ...widths, ...(before.field_widths[fx.fields.done] ? { [fx.fields.done]: before.field_widths[fx.fields.done] } : {}) } } }, headers: CSRF });
+  expect(res.ok()).toBe(true);
+});
+
+test("the row numbers' column is resized from its edge, kept on this device, and reset with a double-click", async ({ page }) => {
+  await gotoGrid(page);
+  const edge = page.getByRole("separator", { name: "Resize the row numbers" });
+  await expect(edge).toHaveAttribute("aria-valuenow", String(MARKER_W));
+  const box = (await edge.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(edge).toHaveAttribute("aria-valuenow", String(MARKER_W + 20));
+  await page.reload();
+  await expect(page.getByRole("separator", { name: "Resize the row numbers" })).toHaveAttribute("aria-valuenow", String(MARKER_W + 20));
+  await page.getByRole("separator", { name: "Resize the row numbers" }).dblclick();
+  await expect(page.getByRole("separator", { name: "Resize the row numbers" })).toHaveAttribute("aria-valuenow", String(MARKER_W));
+});
+
 test("hides a field and shows it again", async ({ page }) => {
   await gotoGrid(page);
   await page.getByRole("button", { name: /Hide fields/ }).click();
@@ -234,12 +284,13 @@ test("adds a field from the dialog", async ({ page }) => {
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Add field" }).click();
   await page.getByLabel("Field name").fill("Remarks");
-  await page.getByRole("option", { name: /Long text/ }).click();
+  await page.getByRole("option", { name: /^Rich text/ }).click();
   await page.getByRole("button", { name: "Create field" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   const base = await (await page.request.get(`/api/bases/${fx.baseId}`)).json();
-  const names = base.tables.find((t: { id: string }) => t.id === fx.tableId).fields.map((f: { name: string }) => f.name);
-  expect(names).toContain("Notes");
+  const fields = base.tables.find((t: { id: string }) => t.id === fx.tableId).fields as { name: string; type: string }[];
+  expect(fields.map((f) => f.name)).toContain("Notes");
+  expect(fields.find((f) => f.name === "Remarks")?.type).toBe("rich_text");
 });
 
 test("opens the expanded record with Shift+Space, comments, and the link is shareable", async ({ page }) => {
@@ -249,9 +300,20 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
   await expect(page).toHaveURL(/[?&]record=rec/);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Bravo" })).toBeVisible();
-  await dialog.getByRole("combobox", { name: "Write a comment" }).fill("Hello from the e2e test");
+  // The comment box is rich text: typing @ offers the project's people, Enter picks one as a chip.
+  const box = dialog.getByRole("textbox", { name: "Write a comment" });
+  await box.click();
+  await page.keyboard.type("Hello from the e2e test, @");
+  await expect(dialog.getByRole("listbox", { name: "People to mention" }).getByRole("option").first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(box.locator(".ob-mention")).toBeVisible();
   await dialog.getByRole("button", { name: "Comment" }).click();
-  await expect(dialog.getByText("Hello from the e2e test")).toBeVisible();
+  const posted = dialog.getByRole("listitem").filter({ hasText: "Hello from the e2e test" });
+  await expect(posted.locator(".ob-mention")).toBeVisible();
+  await expect(box).toHaveText("");
+  const recordId = new URL(page.url()).searchParams.get("record")!;
+  const comments = await (await page.request.get(`/api/records/${recordId}/comments`)).json();
+  expect(comments.map((c: { body: string }) => c.body)).toEqual([expect.stringMatching(/^Hello from the e2e test, @\[[^\]]+\]\(usr[0-9A-Za-z]+\)$/)]);
   await dialog.getByRole("tab", { name: "History" }).click();
   await expect(dialog.getByRole("list", { name: "Revision history" })).toBeVisible();
   const url = page.url();

@@ -96,7 +96,7 @@ pub fn create(
         table_id: table_id.clone(),
         name: PRIMARY_FIELD_NAME.to_string(),
         description: None,
-        kind: FieldKind::SingleLineText(TextOptions::default()),
+        kind: FieldKind::Text(TextOptions::default()),
     };
     schema::insert_field(tx, &primary, 1.0, now)?;
     let view = View {

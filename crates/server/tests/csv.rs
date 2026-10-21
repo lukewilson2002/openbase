@@ -1073,7 +1073,7 @@ async fn import_into_a_new_table_infers_field_types() {
         })
         .collect();
     let expect = [
-        ("Name", "single_line_text"),
+        ("Name", "text"),
         ("Age", "number"),
         ("Price", "currency"),
         ("Share", "percent"),
@@ -1082,8 +1082,8 @@ async fn import_into_a_new_table_infers_field_types() {
         ("Email", "email"),
         ("Site", "url"),
         ("Status", "single_select"),
-        ("Notes", "long_text"),
-        ("Zip", "single_line_text"),
+        ("Notes", "text"),
+        ("Zip", "text"),
     ];
     let expect: Vec<(String, String)> = expect
         .iter()
@@ -1093,6 +1093,14 @@ async fn import_into_a_new_table_infers_field_types() {
 
     // The table exists with a grid view; the first column is the primary field.
     let table = f.table(&table_id).await;
+    // Long or multi-line CSV text stays plain text, with its line breaks.
+    let notes = table["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["name"] == "Notes")
+        .unwrap();
+    assert_eq!(notes["options"]["multiline"], true);
     assert_eq!(table["name"], "People 2026");
     assert_eq!(table["primary_field_id"], r.body["fields"][0]["id"]);
     assert_eq!(table["fields"].as_array().unwrap().len(), 11);
@@ -1231,7 +1239,7 @@ async fn new_table_names_headers_and_primary_rules() {
     )
     .await;
     r.assert_status(201);
-    assert_eq!(r.body["fields"][0]["type"], "single_line_text");
+    assert_eq!(r.body["fields"][0]["type"], "text");
     assert_eq!(r.body["fields"][1]["type"], "number");
     // Header only: a table with fields and no records.
     let r = import_base(

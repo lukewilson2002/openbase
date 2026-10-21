@@ -756,6 +756,7 @@ async fn tools_listed_depend_on_the_token() {
         "get_project_schema",
         "list_records",
         "search_records",
+        "search_everything",
         "aggregate_records",
         "get_record",
         "list_comments",

@@ -13,7 +13,7 @@ import { TextEditor } from "./TextEditor";
 import { UserEditor } from "./UserEditor";
 import { useAutosave } from "./useAutosave";
 import { useProjectUpload } from "./useProjectUpload";
-import type { FieldEditorCallbacks } from "./env";
+import { useEditorEnv, type FieldEditorCallbacks } from "./env";
 
 // Tiptap and its extensions are a chunk of their own, fetched the first time a rich text field is edited.
 const RichTextEditor = lazy(() => import("@/components/richtext/RichTextEditor").then((m) => ({ default: m.RichTextEditor })));
@@ -58,8 +58,8 @@ export function FieldEditor(props: FieldEditorProps) {
       return <RatingEditor field={field} value={value} variant={variant} bare={bare} onCommit={onCommit} onCancel={onCancel} />;
     case "checkbox":
       return <CheckboxEditor field={field} value={value} onCommit={onCommit} onCancel={onCancel} />;
-    case "long_text": {
-      const rich = field.type === "long_text" && field.options.rich;
+    case "multiline": {
+      const rich = field.type === "rich_text";
       // The record form edits rich text visually; the grid's cell stays a text area (Markdown) that can open the visual editor full screen.
       if (rich && variant === "form") return <RichFormEditor field={field} value={value} autoFocus={autoFocus} onChange={onChange} onCommit={onCommit} />;
       return (
@@ -93,7 +93,8 @@ export function FieldEditor(props: FieldEditorProps) {
 /** The rich text editor of a grid cell, full screen: files go to the project of the table. */
 function RichFullScreenEditor({ value, onChange, label }: { value: string; onChange: (md: string) => void; label: string }) {
   const upload = useProjectUpload();
-  return <RichTextEditor value={value} onChange={onChange} autoFocus fullScreen placeholder="Write something…" upload={upload} aria-label={label} />;
+  const { collaborators } = useEditorEnv();
+  return <RichTextEditor value={value} onChange={onChange} autoFocus fullScreen placeholder="Write something…" upload={upload} people={collaborators} aria-label={label} />;
 }
 
 function FullScreenLoading() {
@@ -105,11 +106,12 @@ function FullScreenLoading() {
 }
 
 /**
- * Rich long text in the expanded record: the WYSIWYG editor, saving while typing (once typing
+ * Rich text in the expanded record: the WYSIWYG editor, saving while typing (once typing
  * pauses) and when focus leaves it, so the record's save status follows along.
  */
 function RichFormEditor({ field, value, autoFocus, onChange, onCommit }: Pick<FieldEditorProps, "field" | "value" | "autoFocus" | "onChange" | "onCommit">) {
   const upload = useProjectUpload();
+  const { collaborators } = useEditorEnv();
   const seed = typeof value === "string" ? value : "";
   const [draft, setDraft] = useState(seed);
   const autosave = useAutosave(seed, (text) => onCommit({ text }));
@@ -132,6 +134,7 @@ function RichFormEditor({ field, value, autoFocus, onChange, onCommit }: Pick<Fi
         autoFocus={autoFocus}
         placeholder="Write something…"
         upload={upload}
+        people={collaborators}
         aria-label={field.name}
       />
     </Suspense>

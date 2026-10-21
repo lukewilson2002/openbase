@@ -8,8 +8,8 @@
 //!
 //! | type               | stored JSON                                         |
 //! |--------------------|-----------------------------------------------------|
-//! | single_line_text   | string                                              |
-//! | long_text          | string (markdown when `rich`)                       |
+//! | text               | string (line breaks only when `multiline`)          |
+//! | rich_text          | string of Markdown                                  |
 //! | number/currency/percent/rating | number (percent stored as fraction: 0.5 = 50%) |
 //! | duration           | number of seconds                                   |
 //! | checkbox           | `true` (unchecked is absent/null)                   |
@@ -55,8 +55,12 @@ impl Field {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
-    SingleLineText,
-    LongText,
+    /// Plain text. Named `single_line_text` before v0.8, still accepted.
+    #[serde(alias = "single_line_text")]
+    Text,
+    /// Markdown. Named `long_text` before v0.8, still accepted.
+    #[serde(alias = "long_text")]
+    RichText,
     Number,
     Currency,
     Percent,
@@ -87,8 +91,8 @@ pub enum FieldType {
 
 impl FieldType {
     pub const ALL: [FieldType; 28] = [
-        FieldType::SingleLineText,
-        FieldType::LongText,
+        FieldType::Text,
+        FieldType::RichText,
         FieldType::Number,
         FieldType::Currency,
         FieldType::Percent,
@@ -152,8 +156,8 @@ impl FieldType {
 
     pub fn label(self) -> &'static str {
         match self {
-            FieldType::SingleLineText => "Single line text",
-            FieldType::LongText => "Long text",
+            FieldType::Text => "Text",
+            FieldType::RichText => "Rich text",
             FieldType::Number => "Number",
             FieldType::Currency => "Currency",
             FieldType::Percent => "Percent",
@@ -188,8 +192,12 @@ impl FieldType {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(tag = "type", content = "options", rename_all = "snake_case")]
 pub enum FieldKind {
-    SingleLineText(#[serde(default)] TextOptions),
-    LongText(#[serde(default)] LongTextOptions),
+    /// Accepts `single_line_text` (its name before v0.8).
+    #[serde(alias = "single_line_text")]
+    Text(#[serde(default)] TextOptions),
+    /// Accepts `long_text` (its name before v0.8); its old `rich` option is ignored.
+    #[serde(alias = "long_text")]
+    RichText(#[serde(default)] Empty),
     Number(#[serde(default)] NumberOptions),
     Currency(#[serde(default)] CurrencyOptions),
     Percent(#[serde(default)] NumberOptions),
@@ -221,8 +229,8 @@ pub enum FieldKind {
 impl FieldKind {
     pub fn field_type(&self) -> FieldType {
         match self {
-            FieldKind::SingleLineText(_) => FieldType::SingleLineText,
-            FieldKind::LongText(_) => FieldType::LongText,
+            FieldKind::Text(_) => FieldType::Text,
+            FieldKind::RichText(_) => FieldType::RichText,
             FieldKind::Number(_) => FieldType::Number,
             FieldKind::Currency(_) => FieldType::Currency,
             FieldKind::Percent(_) => FieldType::Percent,
@@ -257,8 +265,8 @@ impl FieldKind {
     /// return `None`: the client must supply options.
     pub fn default_for(t: FieldType) -> Option<FieldKind> {
         Some(match t {
-            FieldType::SingleLineText => FieldKind::SingleLineText(Default::default()),
-            FieldType::LongText => FieldKind::LongText(Default::default()),
+            FieldType::Text => FieldKind::Text(Default::default()),
+            FieldType::RichText => FieldKind::RichText(Empty {}),
             FieldType::Number => FieldKind::Number(Default::default()),
             FieldType::Currency => FieldKind::Currency(Default::default()),
             FieldType::Percent => FieldKind::Percent(Default::default()),
@@ -301,16 +309,11 @@ pub struct Empty {}
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TextOptions {
+    /// Keep line breaks. Off, a line break becomes a space (titles, names).
+    #[serde(default)]
+    pub multiline: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
-pub struct LongTextOptions {
-    /// Render and edit as markdown ("rich text").
-    #[serde(default)]
-    pub rich: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -678,6 +681,40 @@ mod tests {
                 assert_eq!(j["type"], tag);
             }
         }
+    }
+
+    #[test]
+    fn text_types_accept_their_old_names() {
+        let kind = |j: serde_json::Value| serde_json::from_value::<FieldKind>(j).unwrap();
+        assert_eq!(
+            kind(serde_json::json!({"type": "single_line_text", "options": {"default": "x"}})),
+            FieldKind::Text(TextOptions {
+                multiline: false,
+                default: Some("x".into()),
+            })
+        );
+        // Long text is Rich text now; its old `rich` option means nothing.
+        for options in [
+            serde_json::json!({}),
+            serde_json::json!({"rich": true}),
+            serde_json::json!({"rich": false}),
+        ] {
+            assert_eq!(
+                kind(serde_json::json!({"type": "long_text", "options": options})),
+                FieldKind::RichText(Empty {})
+            );
+        }
+        let t: FieldType = serde_json::from_value(serde_json::json!("long_text")).unwrap();
+        assert_eq!(t, FieldType::RichText);
+        // Written under the new names only.
+        assert_eq!(
+            serde_json::to_value(FieldKind::Text(TextOptions::default())).unwrap(),
+            serde_json::json!({"type": "text", "options": {"multiline": false}})
+        );
+        assert_eq!(
+            serde_json::to_value(FieldKind::RichText(Empty {})).unwrap(),
+            serde_json::json!({"type": "rich_text", "options": {}})
+        );
     }
 
     #[test]

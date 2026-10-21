@@ -329,12 +329,13 @@ are names or ids.
 | `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
 | `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
+| `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
 | `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
 | `get_record` | any | One record; takes `include_empty` like `list_records` |
 | `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices |
 | `update_records` | write | 1-10 records; only the given fields change; `null` clears |
 | `delete_records` | write | 1-10 records, to the trash |
-| `list_comments` / `add_comment` | any / write | Comments on a record; `@[Name](usrXXXX)` mentions notify people |
+| `list_comments` / `add_comment` | any / write | Comments on a record, in Markdown like rich text; `@[Name](usrXXXX)` mentions notify people (see [Mentioning people](#mentioning-people)) |
 
 ### Workspaces and people
 
@@ -363,11 +364,11 @@ are names or ids.
 | `duplicate_table` / `delete_table` | write | Copy a table (records optional; the copy keeps the icon); delete to the trash |
 | `reorder_tables` | write | Order of a project's tables, for everyone: the listed ones take their own places in the new order, the rest stay (creator role) |
 | `create_field` | write | Add a field of any of the 28 types with options; link fields create their inverse |
-| `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first) |
+| `update_field` | write | Rename, change description or options (merged into the current ones), or change type (asks for `confirm_conversion` first, as does turning a text field's `multiline` off) |
 | `delete_field` | write | Delete a field and its dependants to the trash |
 | `set_primary_field` | write | Choose the table's primary field |
 | `check_formula` | write | Parse and type-check a formula and preview it on a record |
-| `field_types` | any | Options and value shape of each field type, with an example |
+| `field_types` | any | What each field type is for (`use_for`), its options and value shape, with an example. Text is two types: `rich_text` (Markdown) for notes, summaries, descriptions, articles and anything longer than a sentence, and `text` (plain, `multiline` optional) for names, titles and codes; the names before v0.8, `single_line_text` and `long_text`, are still accepted |
 | `list_icons` | any | Search the Lucide icon names (`query`, `limit`) that `icon` accepts |
 
 #### Icons
@@ -435,7 +436,7 @@ tools or `upload_attachment` without `project_id`: they fail with a message sayi
 | `list_inbox` | any | Your drafts, most recently changed first |
 | `add_to_inbox` | write | Save a note (`title`, one line; `body`, Markdown) and/or files (`attachments: [{id}]` from `upload_attachment` without `project_id`) |
 | `update_inbox_item` | write | Change a draft's `title`, `body` and/or replace its `attachments` |
-| `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them, or embed them in a long-text value (uploads the long-text `fields` or the `note_as_comment` text embed move into the project with the record); the text is not copied automatically (put it in a long-text field, or set `note_as_comment` to add it as the record's first comment). Needs the editor role there; on any failure the draft stays |
+| `file_inbox_item` | write | Turn a draft into a record of `table` in `project_id` with `fields` (names, like `create_records`), then remove the draft. Put the draft's files in an attachment field to keep them, or embed them in a long-text value (uploads the long-text `fields` or the `note_as_comment` text embed move into the project with the record); the text is not copied automatically (put it in a rich text field, or set `note_as_comment` to add it as the record's first comment). Needs the editor role there; on any failure the draft stays |
 | `delete_inbox_item` | write | Delete a draft permanently |
 
 ### Presence
@@ -479,20 +480,39 @@ needs only read access.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field, and `markdown`: a line like `![](/api/attachments/att.../photo.png)` that embeds the file in a long-text field (see [Embedding files in long text](#embedding-files-in-long-text)). Without `project_id` the file is uploaded for your inbox (see [Inbox](#inbox); not for tokens limited to specific projects) |
+| `upload_attachment` | write | Upload from `content_base64` or a public `url` (fetched by the server through the automations' SSRF guard); returns the attachment reference to put into an attachment field, and `markdown`: a line like `![](/api/attachments/att.../photo.png)` that embeds the file in a rich text field (see [Embedding files in rich text](#embedding-files-in-rich-text)). Without `project_id` the file is uploaded for your inbox (see [Inbox](#inbox); not for tokens limited to specific projects) |
 | `export_csv` | any | A view as CSV text; cut at about 80 KB at a row boundary with the totals |
 | `import_csv` | write | CSV text into an existing table (columns by header or `mapping`) or into a new table with inferred field types; all or nothing |
 
-#### Embedding files in long text
+#### Embedding files in rich text
 
-A long-text field holds Markdown, and an uploaded file can be embedded in it: put the `markdown` line that
+A rich text field holds Markdown, and an uploaded file can be embedded in it: put the `markdown` line that
 `upload_attachment` returns on a line of its own in the value you write with `create_records` or
 `update_records` (or in an inbox draft's `body`). Images, video and audio then show as blocks, any other
 file as a download card; add alt text and a caption with `![Alt](/api/attachments/att.../name.png "Caption")`.
 The file must belong to the same project as the record (upload with that `project_id`), otherwise the write
 fails with `attachment att... is not a file of this project`; for an inbox draft, upload without `project_id`
 and filing moves the file into the project. Images from other websites (`![](https://...)`) are never shown,
-only a link. Details and the serving rules: [docs/api.md](api.md#files-in-long-text-internal-api).
+only a link. Details and the serving rules: [docs/api.md](api.md#files-in-rich-text-internal-api).
+
+#### Mentioning people
+
+Comments and rich text fields can mention people: write `@[Name](usrXXXX)` with the
+person's user id from `list_collaborators` (the name is only a label; the id counts). The person gets
+a `mention` notification ("Name mentioned you in Record", opening the record) once the text is on a
+record and visible to them:
+
+- a comment, when it is posted (`add_comment`), and when its author edits it to add the mention;
+- a long-text value, when a record is created or updated with it (`create_records`,
+  `update_records`, `import_csv`, `api_request`, automations, which write as their creator) and when
+  an inbox draft is filed (`file_inbox_item`, in a rich text field or with `note_as_comment`). An inbox
+  draft itself notifies nobody: only you can see it. Neither does a public form submission, which has
+  no author.
+
+Only mentions the text did not already have count (saving the same text again notifies nobody), never
+the author, and only people who can see the project. A mention inside code (`` `@[Name](usr...)` ``)
+or with escaped brackets (`@\[Name\](usr...)`, how the editor stores typed brackets) is just text.
+The notification's `snippet` is the text around the mention without its Markdown.
 
 ### Administration
 

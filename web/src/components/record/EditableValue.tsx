@@ -9,7 +9,7 @@
  * - A checkbox and a rating are edited where they are: they are the control, not a picture of one.
  * - The edit ends when the editor commits (Enter, a pick, Done), is cancelled (Escape), or when focus
  *   leaves the field. Pop-overs, menus and the full-screen dialog of an editor are part of the field,
- *   though they render in portals (React's focus events tell). Long text saves while it is typed, so
+ *   though they render in portals (React's focus events tell). Multiline text saves while it is typed, so
  *   Escape there ends the edit and keeps the text. Escape never closes the record around the field.
  * - The value area is as tall as what it shows (one line when empty), not as tall as its editor: a
  *   record of many short or empty fields stays compact.
@@ -20,11 +20,12 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Keyb
 import type { Field } from "@/api/types";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
-import { displayShapeOf } from "@/lib/cells/kinds";
+import { displayShapeOf, isMultilineText } from "@/lib/cells/kinds";
 import { CellValue } from "./CellValue";
 import { FieldEditor } from "./editors/FieldEditor";
 import { EditSessionProvider, type EditSession } from "./editors/session";
 import type { EditValue } from "./editors/env";
+import { LinkedRecordCards, useLinkCards } from "./linked/LinkedRecords";
 
 /** Inside a rendered value, what answers a click itself. */
 const INTERACTIVE = "a[href], button, input, select, textarea, summary, video, audio, iframe, [role=button], [role=checkbox], [contenteditable=true]";
@@ -65,6 +66,8 @@ function isEmpty(value: unknown): boolean {
 
 /** Fields whose editor is a pop-over off a button: the pointer says "pick" rather than "type". */
 const PICKERS = new Set(["select", "multi_select", "link", "user", "attachment"]);
+/** Values shown as cards fill the box with things of their own to click: room is left under them that edits the field. */
+const CARDS = new Set(["link", "attachment"]);
 
 export interface EditableValueProps {
   field: Field;
@@ -86,8 +89,9 @@ export interface EditableValueProps {
 
 export function EditableValue({ field, value, failed, labelId, format, emails, editorKey, startEditing = false, onChange, onCommit }: EditableValueProps) {
   const shape = displayShapeOf(field);
+  const linkCards = useLinkCards();
   const direct = shape === "checkbox" || shape === "rating";
-  const long = field.type === "long_text";
+  const long = isMultilineText(field);
   const [editing, setEditing] = useState(startEditing && !direct);
   const viewRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLDivElement>(null);
@@ -141,10 +145,15 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
     inside.current = true;
   };
 
+  /** Saves without an edit session: linked records reordered or removed on their cards. */
+  const save = (edit: EditValue) => {
+    const saved = onCommit(edit);
+    if (saved) setHeld(saved);
+  };
   const commit = (edit: EditValue) => {
     const saved = onCommit(edit);
     if (saved) setHeld(saved);
-    // Long text saves as it is typed; everything else is done when it commits.
+    // Multiline text saves as it is typed; everything else is done when it commits.
     if (!long && !direct) stop(true);
   };
 
@@ -153,6 +162,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
   if (direct) {
     return (
       <div
+        data-edit-field=""
         className={cn(box, "flex-row items-center justify-start hover:bg-hover")}
         onClick={(e) => {
           // The padding around the control counts as the control.
@@ -172,7 +182,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
           onFocus={onFocus}
           onBlur={onBlur}
           // Escape belongs to the field, not to the record (ExpandedRecord leaves it alone in here). The
-          // single-line editors cancel on it themselves; long text, saved as it is typed, just ends the edit.
+          // single-line editors cancel on it themselves; multiline text, saved as it is typed, just ends the edit.
           data-escape-cancels=""
           onKeyDown={(e) => {
             // Only an Escape from the field itself: one in a pop-over of its editor (a link, alt text)
@@ -213,6 +223,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
   return (
     <div
       ref={viewRef}
+      data-edit-field=""
       role="button"
       tabIndex={0}
       aria-label={`Edit ${field.name}`}
@@ -220,10 +231,17 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
       onClick={onClick}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
-      className={cn(box, "outline-none hover:bg-hover focus-visible:border-ring", PICKERS.has(shape) ? "cursor-pointer" : "cursor-text")}
+      className={cn(box, "outline-none hover:bg-hover focus-visible:border-ring", PICKERS.has(shape) ? "cursor-pointer" : "cursor-text", CARDS.has(shape) && !isEmpty(shown) && "pb-3")}
     >
       <div id={describedBy} className="min-w-0">
-        {isEmpty(shown) ? <span className="text-faint">Empty</span> : <CellValue field={field} value={shown} format={format} emails={emails} linkFiles />}
+        {isEmpty(shown) ? (
+          <span className="text-faint">Empty</span>
+        ) : field.type === "link" && linkCards ? (
+          // The same cards as while it is edited: reordered and removed right here.
+          <LinkedRecordCards field={field} value={shown} format={format} emails={emails} fallback={<CellValue field={field} value={shown} format={format} emails={emails} />} onChange={(refs) => save({ json: refs.length > 0 ? refs : null })} />
+        ) : (
+          <CellValue field={field} value={shown} format={format} emails={emails} linkFiles />
+        )}
       </div>
     </div>
   );

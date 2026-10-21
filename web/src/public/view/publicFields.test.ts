@@ -16,7 +16,7 @@ describe("public values for the shared display helpers", () => {
   it("leaves every other value alone", () => {
     expect(normalizeValue({ type: "number" }, 3)).toBe(3);
     expect(normalizeValue({ type: "link" }, [{ id: "rec1", name: "Alpha" }])).toEqual([{ id: "rec1", name: "Alpha" }]);
-    expect(normalizeValue({ type: "single_line_text" }, undefined)).toBeNull();
+    expect(normalizeValue({ type: "text" }, undefined)).toBeNull();
   });
 
   it("shows people by name in the shared chip code", () => {
@@ -28,14 +28,14 @@ describe("public values for the shared display helpers", () => {
   });
 
   it("keeps the view's field order and takes the first field as the title", () => {
-    const fields = sharedFields({ fields: [pf("b", "single_line_text"), pf("a", "number", { precision: 0, allow_negative: true })] });
+    const fields = sharedFields({ fields: [pf("b", "text"), pf("a", "number", { precision: 0, allow_negative: true })] });
     expect(fields.list.map((f) => f.id)).toEqual(["b", "a"]);
     expect(fields.title?.id).toBe("b");
     expect(fields.byId.get("a")?.type).toBe("number");
   });
 
   it("wraps a record with normalised values", () => {
-    const fields = sharedFields({ fields: [pf("created", "created_by"), pf("n", "single_line_text")] });
+    const fields = sharedFields({ fields: [pf("created", "created_by"), pf("n", "text")] });
     const rec = toRecord({ id: "rec1", values: { created: { name: "Ada" }, n: "x", stale: 1 } } as PublicRecord, fields);
     expect(rec).toMatchObject({ id: "rec1", values: { created: "Ada", n: "x", stale: 1 } });
   });

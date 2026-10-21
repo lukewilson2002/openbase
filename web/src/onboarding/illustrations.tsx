@@ -94,7 +94,7 @@ export function BasesArt() {
         <Animated motion="unfold" delay={0.45} duration={0.5} className="flex flex-col gap-1.5 border-t border-line bg-bg p-2">
           {WEDDING_TABLES.map((t, i) => (
             <Animated key={t.name} motion="slide" delay={0.55 + i * 0.15} duration={0.5} className="flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-2.5 py-[9px] text-[0.8125rem]">
-              <Table2 className="size-4 shrink-0 text-primary" strokeWidth={1.8} />
+              <Table2 className="size-4 shrink-0 text-primary-text" strokeWidth={1.8} />
               <span className="min-w-0 flex-1 truncate font-semibold text-fg">{t.name}</span>
               <span className="shrink-0 text-muted">{t.count}</span>
             </Animated>
@@ -508,7 +508,7 @@ export function InboxArt() {
           </div>
           <div className="flex flex-col gap-1 border-t border-line bg-bg p-1.5">
             <div className="flex items-center gap-1.5 px-1 text-[0.6875rem] font-semibold text-muted">
-              <Table2 className="size-3.5 text-primary" strokeWidth={1.8} /> Ideas
+              <Table2 className="size-3.5 text-primary-text" strokeWidth={1.8} /> Ideas
             </div>
             {IDEAS.map((idea) => (
               <div key={idea} className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs text-fg">

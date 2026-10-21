@@ -10,8 +10,8 @@ const tags = f("tags", "multiple_select", { choices: [{ id: "t1", name: "A", col
 
 describe("which control a field gets", () => {
   it("maps types to controls", () => {
-    expect(controlKindOf(f("a", "single_line_text"))).toBe("text");
-    expect(controlKindOf(f("a", "long_text", { rich: false }))).toBe("textarea");
+    expect(controlKindOf(f("a", "text"))).toBe("text");
+    expect(controlKindOf(f("a", "text", { multiline: true }))).toBe("textarea");
     expect(controlKindOf(f("a", "currency", { precision: 2, symbol: "$", allow_negative: true }))).toBe("number");
     expect(controlKindOf(f("a", "duration", { format: "h_mm" }))).toBe("number");
     expect(controlKindOf(f("a", "phone"))).toBe("tel");
@@ -25,7 +25,7 @@ describe("which control a field gets", () => {
   });
 
   it("starts with an empty input of the right shape", () => {
-    expect(emptyInput(f("a", "single_line_text"))).toBe("");
+    expect(emptyInput(f("a", "text"))).toBe("");
     expect(emptyInput(f("a", "checkbox"))).toBe(false);
     expect(emptyInput(tags)).toEqual([]);
     expect(emptyInput(f("a", "rating", { max: 5 }))).toBe(0);
@@ -40,7 +40,7 @@ describe("which control a field gets", () => {
 describe("building the submission", () => {
   it("reads text, numbers, selects, dates and checkboxes into stored values", () => {
     const fields = [
-      f("name", "single_line_text"),
+      f("name", "text"),
       f("qty", "number", { precision: 0, allow_negative: true }),
       f("price", "currency", { precision: 2, symbol: "$", allow_negative: true }),
       f("when", "date", { include_time: false, date_format: "iso", time_format: "h24", timezone: null }),
@@ -75,7 +75,7 @@ describe("building the submission", () => {
   });
 
   it("leaves empty optional fields out and keeps 0", () => {
-    const { values, errors } = buildSubmission([f("a", "single_line_text"), f("n", "number", { precision: 0, allow_negative: true }), f("ok", "checkbox"), tags], { a: " ", n: "0", ok: false, tags: [] }, ctx);
+    const { values, errors } = buildSubmission([f("a", "text"), f("n", "number", { precision: 0, allow_negative: true }), f("ok", "checkbox"), tags], { a: " ", n: "0", ok: false, tags: [] }, ctx);
     expect(errors).toEqual({});
     expect(values).toEqual({ n: 0 });
     expect(hasAnyValue(values)).toBe(true);
@@ -83,7 +83,7 @@ describe("building the submission", () => {
   });
 
   it("flags required fields that are empty, unchecked or cleared", () => {
-    const fields = [f("a", "single_line_text", {}, { required: true }), f("ok", "checkbox", {}, { required: true }), { ...tags, required: true }, f("n", "number", { precision: 0, allow_negative: true }, { required: true })];
+    const fields = [f("a", "text", {}, { required: true }), f("ok", "checkbox", {}, { required: true }), { ...tags, required: true }, f("n", "number", { precision: 0, allow_negative: true }, { required: true })];
     const { errors } = buildSubmission(fields, { a: "  ", ok: false, tags: [], n: "" }, ctx);
     expect(errors).toEqual({ a: "This field is required.", ok: "This box must be checked.", tags: "This field is required.", n: "This field is required." });
   });

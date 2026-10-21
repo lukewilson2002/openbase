@@ -38,7 +38,7 @@ pub fn definitions() -> Vec<ToolDef> {
     let ftype = json!({
         "type": "string",
         "enum": type_names(),
-        "description": "Field type. Call field_types for each type's options and value shape.",
+        "description": "Field type. For text: rich_text (Markdown) for notes, summaries, descriptions, articles, posts and anything longer than a sentence; text for names, titles, codes and other short plain values. Call field_types for what each type is for, its options and value shape.",
     });
     let options = free_object(
         "Type options, e.g. {\"choices\": [\"Todo\", {\"name\": \"Done\", \"color\": \"green\"}]} for selects (choices are names or {name, color}; names like Critical/High/Low/Done get a fitting colour when none is given), {\"precision\": 2} for numbers, {\"linked_table\": \"Customers\"} for links, {\"expression\": \"{Price} * {Qty}\"} for formulas, {\"link_field\": \"Orders\", \"target_field\": \"Total\", \"expression\": \"SUM(values)\"} for rollups. Tables and fields may be given by name. See field_types.",
@@ -100,7 +100,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a project, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new project (create_project): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the project, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
+            "Add a table to a project, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with just the primary text field 'Name' and a grid view, exactly like the first table of a new project (create_project): nothing else is added, so you do not need to check which fields exist. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once (rich_text for notes, summaries and articles; text for names and codes). It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the project, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -185,7 +185,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_field",
             "Create a field",
-            "Add a field (column) to a table. All 28 types are supported; call field_types for the options and value shape of each. Link fields also create the inverse field in the other table (name it with inverse_name). Computed fields (formula, lookup, rollup, count, ...) are filled in automatically. The result's views_note says what to check in the table's views (forms do not ask for a new field until you add it). Needs the creator role.",
+            "Add a field (column) to a table. All 28 types are supported; call field_types for what each is for, its options and value shape. Pick rich_text, not text, for anything people will read as prose: notes, summaries, descriptions, articles, blog posts; text is for short plain values such as names, titles and codes. Link fields also create the inverse field in the other table (name it with inverse_name). Computed fields (formula, lookup, rollup, count, ...) are filled in automatically. The result's views_note says what to check in the table's views (forms do not ask for a new field until you add it). Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -203,7 +203,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_field",
             "Update a field",
-            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
+            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type (or turning a text field's multiline off) CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true. Text and rich text convert both ways: rich text becomes the plain text it shows, and plain text becomes rich text that shows the same; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -213,7 +213,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "description": string("New description."),
                     "type": ftype,
                     "options": free_object("Options to change, in the shape of create_field's `options` (merged into the current ones; names accepted). Needed with `type` for types that require options."),
-                    "confirm_conversion": boolean("Set true to confirm a type change that converts existing data."),
+                    "confirm_conversion": boolean("Set true to confirm a type change (or multiline turned off) that converts existing data."),
                 }),
                 &["project_id", "table", "field"],
             ),
@@ -603,9 +603,10 @@ struct CreateTable {
 fn new_field_body(
     schema: &ob_core::api::schema::BaseSchema,
     table: &Table,
-    f: NewField,
+    mut f: NewField,
 ) -> Result<Value, String> {
     check_type(&f.field_type).map_err(|e| e.text)?;
+    f.field_type = canonical_type(&f.field_type).to_string();
     let mut options = f.options.unwrap_or_else(|| json!({}));
     field_options_to_ids(schema, table, &f.field_type, &mut options, None)?;
     let mut body = Map::new();
@@ -627,9 +628,7 @@ fn placeholder_field(body: &Value) -> Field {
     )
     .ok()
     .filter(|k| matches!(k, ob_core::field::FieldKind::Link(_)))
-    .unwrap_or_else(|| {
-        ob_core::field::FieldKind::SingleLineText(ob_core::field::TextOptions::default())
-    });
+    .unwrap_or_else(|| ob_core::field::FieldKind::Text(ob_core::field::TextOptions::default()));
     Field {
         id: name.clone(),
         table_id: String::new(),
@@ -666,7 +665,7 @@ async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
             table_id: String::new(),
             name: "Name".into(),
             description: None,
-            kind: ob_core::field::FieldKind::SingleLineText(ob_core::field::TextOptions::default()),
+            kind: ob_core::field::FieldKind::Text(ob_core::field::TextOptions::default()),
         });
         let mut defs = Vec::new();
         for (i, f) in list.into_iter().enumerate() {
@@ -850,8 +849,18 @@ async fn delete_table(ctx: &McpCtx, a: TableArg) -> ToolResult {
 
 // ----------------------------------------------------------------------------------- fields
 
+/// The current name of a field type: `single_line_text` and `long_text`
+/// (the names before v0.8) are still understood. Other names are returned as given.
+fn canonical_type(t: &str) -> &str {
+    match t {
+        "single_line_text" => "text",
+        "long_text" => "rich_text",
+        t => t,
+    }
+}
+
 fn check_type(t: &str) -> Result<(), ToolResult> {
-    if type_names().contains(&t) {
+    if type_names().contains(&canonical_type(t)) {
         Ok(())
     } else {
         Err(ToolResult::error(format!(
@@ -878,10 +887,11 @@ struct CreateField {
     inverse_name: Option<String>,
 }
 
-async fn create_field(ctx: &McpCtx, a: CreateField) -> ToolResult {
+async fn create_field(ctx: &McpCtx, mut a: CreateField) -> ToolResult {
     if let Err(e) = check_type(&a.field_type) {
         return e;
     }
+    a.field_type = canonical_type(&a.field_type).to_string();
     let schema = match load_schema(ctx, &a.base_id).await {
         Ok(s) => s,
         Err(e) => return e,
@@ -978,10 +988,25 @@ async fn update_field(ctx: &McpCtx, a: UpdateField) -> ToolResult {
         Err(e) => return e,
     };
     let current_type = type_name(field);
-    let new_type = a.field_type.clone().unwrap_or_else(|| current_type.clone());
+    let new_type = a
+        .field_type
+        .as_deref()
+        .map_or_else(|| current_type.clone(), |t| canonical_type(t).to_string());
     let converts = new_type != current_type;
     if converts && a.confirm_conversion != Some(true) {
         return ToolResult::error(conversion_warning(table, field, &current_type, &new_type));
+    }
+    let joins_lines = !converts
+        && new_type == "text"
+        && current_options(field).get("multiline") == Some(&json!(true))
+        && a.options.as_ref().and_then(|o| o.get("multiline")) == Some(&json!(false));
+    if joins_lines && a.confirm_conversion != Some(true) {
+        return ToolResult::error(format!(
+            "Turning multiline off for '{}' in '{}' joins the lines of every existing value \
+             (each line break becomes a space), and the old values are not kept. If this is \
+             intended, repeat the call with confirm_conversion=true.",
+            field.name, table.name
+        ));
     }
 
     let mut body = Map::new();
@@ -1156,33 +1181,58 @@ struct FieldTypesArg {
 const DATE_OPTS: &str = "{include_time: false, date_format: us|european|iso|friendly, time_format: h12|h24, timezone?: IANA zone}";
 const VALUE_FORMAT: &str = "format?: {kind: number|percent, precision} | {kind: currency, precision, symbol} | {kind: duration, format} | {kind: date, ...date options}";
 
-/// (type, label, computed, options help, value help, example options).
-fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)> {
-    let e =
-        |t: &'static str, l: &'static str, c: bool, options: &str, value: &str, example: Value| {
-            (t, l, c, options.to_string(), value.to_string(), example)
-        };
+/// One field type explained to an agent.
+struct TypeHelp {
+    name: &'static str,
+    label: &'static str,
+    computed: bool,
+    /// What the type is for: how an agent chooses between types.
+    use_for: &'static str,
+    options: String,
+    value: String,
+    example: Value,
+}
+
+fn catalogue() -> Vec<TypeHelp> {
+    let e = |name: &'static str,
+             label: &'static str,
+             computed: bool,
+             use_for: &'static str,
+             options: &str,
+             value: &str,
+             example: Value| TypeHelp {
+        name,
+        label,
+        computed,
+        use_for,
+        options: options.to_string(),
+        value: value.to_string(),
+        example,
+    };
     vec![
         e(
-            "single_line_text",
-            "Single line text",
+            "text",
+            "Text",
             false,
-            "{default?: string}",
+            "Short plain values: names, titles, codes, ids, a single sentence. With multiline: plain text whose line breaks matter but that has no formatting, like a postal address. Not for notes, summaries or articles: use rich_text",
+            "{multiline?: boolean (false), default?: string} multiline keeps line breaks; without it a line break becomes a space. Never formatted: Markdown shows as typed",
             "string",
             json!({}),
         ),
         e(
-            "long_text",
-            "Long text",
+            "rich_text",
+            "Rich text",
             false,
-            "{rich?: boolean} rich = markdown; it can embed files of the same project, see upload_attachment (`markdown`); an https:// image is shown only as a link",
-            "string",
-            json!({"rich": true}),
+            "Anything written to be read: notes, summaries, descriptions, meeting minutes, articles, blog posts, documentation, instructions. It is Markdown: text formatting (bold, italics, headings, links, code), tables, lists and checklists, images and other embedded files, @mentions, quotes and more. Choose it over text for anything longer than a sentence",
+            "{} (no options; always multiline Markdown). It can embed files of the same project, see upload_attachment (`markdown`); an https:// image is shown only as a link; @[Name](usrXXXX) mentions a person (notified when the cell is saved)",
+            "Markdown string",
+            json!({}),
         ),
         e(
             "number",
             "Number",
             false,
+            "Whole or decimal numbers: quantities, scores, measurements",
             "{precision: 0-8 (0), allow_negative: true, default?: number}",
             "number",
             json!({"precision": 2}),
@@ -1191,6 +1241,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "currency",
             "Currency",
             false,
+            "Money amounts, shown with a symbol",
             "{precision: 2, symbol: \"$\", allow_negative: true}",
             "number",
             json!({"symbol": "EUR "}),
@@ -1199,6 +1250,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "percent",
             "Percent",
             false,
+            "Percentages: rates, progress, shares",
             "{precision: 0, allow_negative: true, default?}",
             "fraction: 0.25 is 25%",
             json!({"precision": 1}),
@@ -1207,6 +1259,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "duration",
             "Duration",
             false,
+            "Lengths of time: hours, minutes and seconds",
             "{format: h_mm | h_mm_ss | h_mm_ss_s | h_mm_ss_ss | h_mm_ss_sss}",
             "seconds as a number; with typecast also \"1:30:00\"",
             json!({"format": "h_mm_ss"}),
@@ -1215,6 +1268,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "rating",
             "Rating",
             false,
+            "A score shown as stars or hearts",
             "{max: 1-10 (5), icon: \"star\", color: \"yellow\"}",
             "integer 1..max",
             json!({"max": 5}),
@@ -1223,6 +1277,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "checkbox",
             "Checkbox",
             false,
+            "Yes or no: done, approved, active",
             "{icon: \"check\", color: \"green\"}",
             "true or false",
             json!({}),
@@ -1231,6 +1286,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "single_select",
             "Single select",
             false,
+            "One option from a fixed list: status, category, priority, stage",
             "{choices: [\"Todo\", {name: \"Done\", color: \"green\"}]} choices are names or {name, color?}; colours: blue cyan teal green yellow orange red pink purple gray (+ _dark). Pass color to set it at creation. Without one, common severity/status names get a matching colour (Critical/Urgent red, High orange, Medium/In Progress yellow, Low/Done green, Open/Todo blue, Cancelled gray) and any other name cycles through the palette",
             "choice name; with typecast a missing choice is created",
             json!({"choices": ["Todo", "Doing", {"name": "Done", "color": "green"}]}),
@@ -1239,6 +1295,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "multiple_select",
             "Multiple select",
             false,
+            "Several options from a fixed list: tags, labels, skills",
             "same as single_select",
             "array of choice names",
             json!({"choices": ["Urgent", "Billing"]}),
@@ -1247,17 +1304,35 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "date",
             "Date",
             false,
+            "A date, optionally with a time: due dates, events, deadlines",
             DATE_OPTS,
             "\"YYYY-MM-DD\", or an ISO datetime when include_time",
             json!({"include_time": false, "date_format": "iso"}),
         ),
-        e("email", "Email", false, "{}", "string", json!({})),
-        e("url", "URL", false, "{}", "string", json!({})),
-        e("phone", "Phone number", false, "{}", "string", json!({})),
+        e(
+            "email",
+            "Email",
+            false,
+            "An email address",
+            "{}",
+            "string",
+            json!({}),
+        ),
+        e("url", "URL", false, "A web link", "{}", "string", json!({})),
+        e(
+            "phone",
+            "Phone number",
+            false,
+            "A phone number",
+            "{}",
+            "string",
+            json!({}),
+        ),
         e(
             "attachment",
             "Attachment",
             false,
+            "Files and images kept with the record",
             "{}",
             "array of {id}: upload with upload_attachment (same project), then write the returned reference",
             json!({}),
@@ -1266,6 +1341,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "link",
             "Link to another record",
             false,
+            "Records of another table (or this one): relationships such as a task's project or an order's customer",
             "{linked_table: name or id, single?: boolean (one record only), picker_view?: view of the linked table}. Also pass inverse_name to create_field: the name of the matching field created in the other table (both sides are kept in sync)",
             "array of record ids of the linked table (results show {id, name})",
             json!({"linked_table": "Customers", "single": true}),
@@ -1274,6 +1350,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "user",
             "User",
             false,
+            "People who can access the project: owner, assignee, reviewer",
             "{multiple?: boolean, notify?: boolean}",
             "{id} or {email} (array for multiple); the person must have access to the project (list_collaborators)",
             json!({"multiple": false}),
@@ -1282,6 +1359,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "formula",
             "Formula",
             true,
+            "A value calculated from other fields of the record",
             &format!(
                 "{{expression: \"{{Price}} * {{Qty}}\", {VALUE_FORMAT}}}; reference fields as {{Field Name}}; check first with check_formula"
             ),
@@ -1292,6 +1370,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "lookup",
             "Lookup",
             true,
+            "Values of a field of the linked records",
             "{link_field: a link field of this table, target_field: a field of the linked table}",
             "not writable; an array of the linked records' values",
             json!({"link_field": "Customer", "target_field": "Email"}),
@@ -1300,6 +1379,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "rollup",
             "Rollup",
             true,
+            "A summary (sum, count, list, ...) of a field of the linked records",
             &format!(
                 "{{link_field, target_field, expression: \"SUM(values)\" (a formula over the array `values`, e.g. COUNTA(values), ARRAYJOIN(values, \", \")), {VALUE_FORMAT}}}"
             ),
@@ -1310,6 +1390,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "count",
             "Count",
             true,
+            "How many records are linked",
             "{link_field: a link field of this table}",
             "not writable; number of linked records",
             json!({"link_field": "Orders"}),
@@ -1318,6 +1399,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "created_time",
             "Created time",
             true,
+            "When the record was created",
             DATE_OPTS,
             "not writable; set when the record is created",
             json!({"include_time": true}),
@@ -1326,6 +1408,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "last_modified_time",
             "Last modified time",
             true,
+            "When the record (or some of its fields) last changed",
             "{fields?: [names watched; empty = any editable field], date?: date options}",
             "not writable",
             json!({"fields": []}),
@@ -1334,6 +1417,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "created_by",
             "Created by",
             true,
+            "Who created the record",
             "{}",
             "not writable",
             json!({}),
@@ -1342,6 +1426,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "last_modified_by",
             "Last modified by",
             true,
+            "Who last changed the record (or some of its fields)",
             "{fields?: [names watched]}",
             "not writable",
             json!({}),
@@ -1350,6 +1435,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "autonumber",
             "Autonumber",
             true,
+            "A number counting up in creation order",
             "{}",
             "not writable; 1, 2, 3, ... in creation order",
             json!({}),
@@ -1358,6 +1444,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "barcode",
             "Barcode",
             false,
+            "A barcode's value",
             "{}",
             "string or {text}",
             json!({}),
@@ -1366,6 +1453,7 @@ fn catalogue() -> Vec<(&'static str, &'static str, bool, String, String, Value)>
             "button",
             "Button",
             true,
+            "A button that opens a link made from the record",
             "{label: string, url_formula: formula producing an http(s) or mailto URL}",
             "not writable; opens the URL in the web app",
             json!({"label": "Open", "url_formula": "\"https://example.com/\" & {Name}"}),
@@ -1379,27 +1467,29 @@ fn field_types(a: FieldTypesArg) -> ToolResult {
         None => ToolResult::ok(json!({
             "types": all
                 .iter()
-                .map(|(t, l, c, _, v, _)| json!({
-                    "type": t,
-                    "label": l,
-                    "computed": c,
-                    "value": v,
+                .map(|h| json!({
+                    "type": h.name,
+                    "label": h.label,
+                    "computed": h.computed,
+                    "use_for": h.use_for,
+                    "value": h.value,
                 }))
                 .collect::<Vec<_>>(),
-            "usage": "create_field {base_id, table, name, type, options}. Call field_types with `type` for the options of one type.",
+            "usage": "create_field {project_id, table, name, type, options}. Call field_types with `type` for the options of one type. For text, pick by what the value is: rich_text for anything written to be read (notes, summaries, descriptions, articles, posts), text for short plain values (names, titles, codes).",
         })),
-        Some(t) => match all.iter().find(|(name, ..)| *name == t) {
+        Some(t) => match all.iter().find(|h| h.name == canonical_type(&t)) {
             None => ToolResult::error(format!(
                 "Unknown field type '{t}'. Types: {}.",
                 type_names().join(", ")
             )),
-            Some((t, l, c, options, value, example)) => ToolResult::ok(json!({
-                "type": t,
-                "label": l,
-                "computed": c,
-                "options": options,
-                "value": value,
-                "example": { "tool": "create_field", "arguments": { "name": l, "type": t, "options": example } },
+            Some(h) => ToolResult::ok(json!({
+                "type": h.name,
+                "label": h.label,
+                "computed": h.computed,
+                "use_for": h.use_for,
+                "options": h.options,
+                "value": h.value,
+                "example": { "tool": "create_field", "arguments": { "name": h.label, "type": h.name, "options": h.example } },
             })),
         },
     }
@@ -1411,7 +1501,7 @@ mod tests {
 
     #[test]
     fn the_help_covers_every_type_exactly_once() {
-        let helped: Vec<&str> = catalogue().iter().map(|e| e.0).collect();
+        let helped: Vec<&str> = catalogue().iter().map(|e| e.name).collect();
         let all = type_names();
         assert_eq!(all.len(), 28);
         assert_eq!(
@@ -1441,6 +1531,9 @@ mod tests {
     fn unknown_types_are_listed() {
         assert!(check_type("number").is_ok());
         let e = check_type("numbr").unwrap_err();
-        assert!(e.text.contains("single_line_text"));
+        assert!(e.text.contains("rich_text"));
+        // The names before v0.8 still work.
+        assert!(check_type("single_line_text").is_ok());
+        assert!(check_type("long_text").is_ok());
     }
 }

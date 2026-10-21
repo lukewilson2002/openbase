@@ -57,7 +57,7 @@ function GalleryInner(props: ViewProps) {
 
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const settings = (
-    <ViewSettings label={coverField ? `Cover: ${coverField.name}` : "Cover"} active={!!coverField} note={note}>
+    <ViewSettings note={note}>
       <FieldSelect
         label="Cover image"
         fields={attachmentFields}
@@ -136,7 +136,7 @@ function GalleryInner(props: ViewProps) {
                           open();
                         }
                       }}
-                      className="relative cursor-pointer overflow-hidden rounded-xl border border-line bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring"
+                      className="relative cursor-pointer overflow-hidden rounded-xl border border-line bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-primary-soft-line hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       <CardBody
                         record={rec}

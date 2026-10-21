@@ -563,3 +563,28 @@ async fn commenters_can_mention_and_the_notification_names_them() {
     assert_eq!(n[0].1["author_id"], commenter.user_id.clone().unwrap());
     assert_eq!(n[0].1["author_name"], "commenter-user@example.com");
 }
+
+#[tokio::test]
+async fn comments_are_markdown_and_mentions_follow_its_rules() {
+    let s = setup().await;
+    let ann = s.f.member("ann@example.com", Role::Viewer);
+    let bob = s.f.member("bob@example.com", Role::Viewer);
+    // A mention in code is text; the snippet is the words without the markup.
+    let body = format!(
+        "## Review\n\n- **{}** please check\n- `{}` is how you write a mention",
+        mention("Ann", &ann),
+        mention("Bob", &bob)
+    );
+    let c = s.post_ok(&s.f.owner, &body).await;
+    assert_eq!(c["body"], body.as_str(), "stored as written");
+    let n = s.notifications_of(&ann);
+    assert_eq!(n.len(), 1);
+    assert_eq!(
+        n[0].1["snippet"],
+        format!(
+            "Review @Ann please check {} is how you write a mention",
+            mention("Bob", &bob)
+        )
+    );
+    assert!(s.notifications_of(&bob).is_empty());
+}

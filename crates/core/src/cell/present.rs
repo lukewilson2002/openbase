@@ -29,8 +29,8 @@ pub fn to_value(field: &Field, stored: Option<&Json>, names: &dyn NameResolver) 
         return Value::Null;
     };
     match &field.kind {
-        FieldKind::SingleLineText(_)
-        | FieldKind::LongText(_)
+        FieldKind::Text(_)
+        | FieldKind::RichText(_)
         | FieldKind::Email(_)
         | FieldKind::Url(_)
         | FieldKind::Phone(_)

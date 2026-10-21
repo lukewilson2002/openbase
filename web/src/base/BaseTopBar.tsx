@@ -1,44 +1,36 @@
 /**
- * The project's parts of the app's top bar. On a desktop: `[tile] Household / [tile] Chores /
- * [icon] Tasks` as plain text at the start, in place of the logo (the open table last, its icon a
- * button that changes it), then who is viewing the project and Share. On a phone: the open table's
+ * The project's parts of the app's top bar. On a desktop: `Household / Chores / Tasks` as plain text
+ * at the start, in place of the logo (the open table last, the only bold part, in the accent colour), then "Search everything", who is viewing the project and Share. On a phone: the open table's
  * icon with `Household / Chores` small over its name (without a table open, the project's tile and
  * name), which opens the menu like the toggle beside it, then the faces and a Share icon. Getting
  * to another workspace or project is the menu's job. Share is for creators and owners: inviting and
  * sharing a view both need that role, so below it the dialog would hold nothing to do.
  */
 import { Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Share2 } from "lucide-react";
-import { api } from "@/api/endpoints";
-import { keys } from "@/api/keys";
 import type { BaseSchema, Table } from "@/api/types";
-import { EntityTile, WorkspaceTile } from "@/components/icons/EntityIcon";
+import { EntityTile } from "@/components/icons/EntityIcon";
 import { TableIcon } from "@/components/icons/TableIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { usePresence } from "@/hooks/usePresence";
 import { BaseAvatars } from "@/shell/BaseAvatars";
 import { useOpenMenu } from "@/shell/AppShell";
+import { SearchSlot } from "@/shell/SearchEverything";
 import { basePermissions } from "./permissions";
-import { CRUMB_TEXT, TableCrumb } from "./TableCrumb";
+import { CRUMB_OPEN, CRUMB_TEXT, TableCrumb } from "./TableCrumb";
 
-/** `Household / Chores / Tasks` with their icons: the desktop top bar's start, in place of the logo. */
+/** `Household / Chores / Tasks`: the desktop top bar's start, in place of the logo. */
 export function BaseBrand({ schema, table }: { schema: BaseSchema; table?: Table }) {
-  const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
-  // The tile's colour comes from the workspaces list, which may not be here yet.
-  const ws = workspaces.data?.find((w) => w.id === schema.workspace_id) ?? { name: schema.workspace_name };
   return (
     <div className="-ml-1.5 flex min-w-0 items-center gap-2 px-2">
-      <span className={cn("flex min-w-0 items-center gap-2", CRUMB_TEXT)}>
-        <WorkspaceTile ws={ws} size="sm" />
+      <span className={cn("flex min-w-0 items-center", CRUMB_TEXT)}>
         <span className="min-w-0 truncate">{schema.workspace_name}</span>
       </span>
       <span aria-hidden className="shrink-0 text-lg text-line-strong">
         /
       </span>
-      <h1 className={cn("flex min-w-0 items-center gap-2", CRUMB_TEXT)}>
-        <EntityTile name={schema.name} icon={schema.icon} color={schema.color} size="sm" />
+      <h1 className={cn("flex min-w-0 items-center", CRUMB_TEXT, !table && CRUMB_OPEN)}>
         <span className="min-w-0 truncate">{schema.name}</span>
       </h1>
       {table && (
@@ -46,7 +38,7 @@ export function BaseBrand({ schema, table }: { schema: BaseSchema; table?: Table
           <span aria-hidden className="shrink-0 text-lg text-line-strong">
             /
           </span>
-          <TableCrumb schema={schema} table={table} />
+          <TableCrumb table={table} />
         </>
       )}
     </div>
@@ -59,7 +51,8 @@ export function BaseTopBar({ schema, table, onShare, desktop }: { schema: BaseSc
   const viewers = usePresence(schema.id);
   return (
     <>
-      {desktop ? <div className="flex-1" /> : <PhoneBaseTitle schema={schema} table={table} />}
+      {/* The search box takes what room the path leaves; with too little it is a button at the end. */}
+      {desktop ? <SearchSlot /> : <PhoneBaseTitle schema={schema} table={table} />}
       {/* Below 360 px the faces would leave the name no room at all; Members in the menu lists them. */}
       <Link to={`/workspace/${schema.workspace_id}/members`} className="shrink-0 rounded-full px-1 no-underline max-[359px]:hidden">
         <BaseAvatars people={schema.people} viewers={viewers} max={desktop ? 4 : 3} size={desktop ? "md" : "sm"} />

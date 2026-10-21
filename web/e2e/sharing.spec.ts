@@ -66,9 +66,9 @@ async function seed(page: Page): Promise<Fixture> {
   const t = base.tables[0] ?? (await call<TableDto>(req, "post", `/api/bases/${base.id}/tables`, { name: "Contacts" }));
   const name = t.primary_field_id;
   // A new table has only its primary field; the form and CSV tests expect a Notes field after Name.
-  await call(req, "post", `/api/tables/${t.id}/fields`, { name: "Notes", type: "long_text", options: {} });
+  await call(req, "post", `/api/tables/${t.id}/fields`, { name: "Notes", type: "rich_text", options: {} });
   const qty = await call<{ id: string }>(req, "post", `/api/tables/${t.id}/fields`, { name: "Qty", type: "number", options: { precision: 0, allow_negative: false } });
-  const salary = await call<{ id: string }>(req, "post", `/api/tables/${t.id}/fields`, { name: "Salary", type: "single_line_text", options: {} });
+  const salary = await call<{ id: string }>(req, "post", `/api/tables/${t.id}/fields`, { name: "Salary", type: "text", options: { multiline: false } });
   const status = await call<{ id: string; options: { choices: { id: string; name: string }[] } }>(req, "post", `/api/tables/${t.id}/fields`, {
     name: "Status",
     type: "single_select",

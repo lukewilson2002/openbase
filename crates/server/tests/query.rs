@@ -412,7 +412,7 @@ async fn a_condition_that_no_longer_fits_its_field_type_is_ignored() {
         .patch(
             &p.f.owner,
             &format!("/api/fields/{}", p.age),
-            json!({ "type": "single_line_text", "options": {} }),
+            json!({ "type": "text", "options": {} }),
         )
         .await
         .assert_status(200);

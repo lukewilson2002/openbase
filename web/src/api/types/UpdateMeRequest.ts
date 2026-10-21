@@ -4,4 +4,8 @@ export type UpdateMeRequest = { name?: string | null,
 /**
  * IANA zone, or empty string to clear (use browser zone).
  */
-timezone?: string | null, intro_seen?: boolean | null, };
+timezone?: string | null, intro_seen?: boolean | null, 
+/**
+ * One of [`ACCENTS`], or empty string for the default (blue).
+ */
+accent?: string | null, };

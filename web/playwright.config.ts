@@ -58,18 +58,25 @@ export default defineConfig({
     { name: "automations", testMatch: /automations\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Kanban, gallery, calendar, timeline, list, trash and the notification bell; signs up its own user.
     { name: "views", testMatch: /views\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // Grouping by a date with a day / week / month / quarter / year granularity; signs up its own user.
+    { name: "date-groups", testMatch: /dateGroups\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // An MCP OAuth client: registration, login, consent, code exchange, MCP calls and revocation from
     // the account page; signs up its own users.
     { name: "oauth", testMatch: /oauth\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The account page's AI assistants tab: instructions per assistant, copy buttons, phone width, both themes.
     { name: "assistants", testMatch: /assistants\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // The accent colour: picked from the account menu, saved on the account, painted before first paint.
+    { name: "appearance", testMatch: /appearance\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // A phone-sized touch screen: no horizontal overflow and no text field under 16px (iOS zoom).
     { name: "mobile", testMatch: /mobile\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Passkeys with Chrome's virtual authenticator: add, sign in without a password, skip 2FA, remove,
     // and an administrator removing another user's passkeys; signs up its own users.
     { name: "passkeys", testMatch: /passkeys\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // Search everything from inside a project, with match highlights and "This project"; a crowded
+    // bar and a phone fold it into a button. Signs up its own users.
+    { name: "search", testMatch: /search\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "oauth", "assistants", "mobile", "passkeys"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search"] },
   ],
 });

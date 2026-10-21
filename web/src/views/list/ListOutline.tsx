@@ -11,7 +11,7 @@ import type { Field, GroupHeader, TableRecord } from "@/api/types";
 import { CellValue } from "@/components/record/CellValue";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/cn";
-import { colorDotClass } from "@/lib/colors";
+import { accentHue } from "@/lib/colors";
 import type { FormatCtx } from "@/lib/cells/format";
 import { displayShapeOf, selectChoicesOf } from "@/lib/cells/kinds";
 import { swatchColor } from "@/lib/cells/palette";
@@ -21,8 +21,6 @@ import { buildOutline, flattenOutline, groupDefaults, type GroupNode } from "./o
 
 /** Rows rendered per group before "Show more" (a group can hold thousands). */
 export const ROWS_PER_GROUP = 200;
-/** Fields shown beside the title in a row. */
-export const ROW_FIELDS = 3;
 /** Indent of one outline level, and of records under their group's chevron. */
 const LEVEL_PX = 20;
 const ROW_PAD = 16;
@@ -56,7 +54,8 @@ const isPill = (f: Field) => {
 };
 
 function Row({ record, indent, p }: { record: TableRecord; indent: number; p: ListOutlineProps }) {
-  const shown = fieldsToShow(p.fields, record, p.format, ROW_FIELDS);
+  // Every field the view shows that has something in it (Hide fields decides which); empty ones are left out.
+  const shown = fieldsToShow(p.fields, record, p.format, Infinity);
   const color = p.colors[record.id];
   const title = cardTitle(p.primary, record, p.format);
   const description = descriptionText(p.descriptionField, p.descriptionField ? record.values[p.descriptionField.id] : undefined, p.format);
@@ -139,22 +138,23 @@ function Records({ node, indent, p }: { node: GroupNode | null; indent: number; 
   );
 }
 
-/** The face of a person group or the dot of a choice group, beside the group's name. */
+/** The face of a person group beside the group's name (a choice group's colour fills its heading instead). */
 function GroupMark({ header, p }: { header: GroupHeader; p: ListOutlineProps }) {
   const field = p.tableFields.find((f) => f.id === header.field_id);
-  if (!field || header.key === "") return null;
-  const shape = displayShapeOf(field);
-  if (shape === "user")
-    return (
-      <span aria-hidden className="contents">
-        <Avatar name={header.label} email={p.emails.get(header.key)} color={p.format.userColor?.(header.key)} size="sm" className="size-[22px] text-[0.6875rem]" />
-      </span>
-    );
-  if (shape === "select" || shape === "multi_select") {
-    const color = selectChoicesOf(field).find((c) => c.id === header.key)?.color;
-    return color ? <span aria-hidden className={cn("size-2 shrink-0 rounded-full", colorDotClass(color))} /> : null;
-  }
-  return null;
+  if (!field || header.key === "" || displayShapeOf(field) !== "user") return null;
+  return (
+    <span aria-hidden className="contents">
+      <Avatar name={header.label} email={p.emails.get(header.key)} color={p.format.userColor?.(header.key)} size="sm" className="size-[22px] text-[0.6875rem]" />
+    </span>
+  );
+}
+
+/** A heading's background: a choice group's is filled with the choice's colour, the rest are neutral. */
+function headingFill(header: GroupHeader, p: ListOutlineProps): string {
+  const field = p.tableFields.find((f) => f.id === header.field_id);
+  const shape = field && header.key !== "" ? displayShapeOf(field) : null;
+  const color = field && (shape === "select" || shape === "multi_select") ? selectChoicesOf(field).find((c) => c.id === header.key)?.color : null;
+  return color ? `ob-hue-${accentHue(color)} ob-fill ob-fill-hover` : "bg-subtle hover:bg-hover";
 }
 
 export function ListOutline(p: ListOutlineProps) {
@@ -177,7 +177,10 @@ export function ListOutline(p: ListOutlineProps) {
                 onClick={() => p.onToggle(row.node.path)}
                 aria-label={`${row.collapsed ? "Expand" : "Collapse"} ${row.node.header.label}`}
                 style={{ paddingLeft: ROW_PAD + row.depth * LEVEL_PX }}
-                className="flex min-h-11 w-full items-center gap-2.5 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] bg-subtle pr-4 text-left font-semibold hover:bg-hover"
+                className={cn(
+                  "flex min-h-11 w-full items-center gap-2.5 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] pr-4 text-left font-semibold",
+                  headingFill(row.node.header, p),
+                )}
               >
                 <ChevronDown aria-hidden className={cn("size-4 shrink-0 text-muted transition-transform duration-200", row.collapsed && "-rotate-90")} />
                 <GroupMark header={row.node.header} p={p} />

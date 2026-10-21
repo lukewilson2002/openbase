@@ -26,6 +26,9 @@ use crate::value::Value;
 ///   choices first, see [`choices_needed_for_conversion`]); multi → single
 ///   keeps the first;
 /// - anything → text uses [`display_text`] (truncated to the cell limit);
+///   into one-line text, line breaks and the spaces around them become one
+///   space. Markdown is not read or written here: the server turns rich
+///   text into plain text and back around this (`fields_engine`);
 /// - numeric ↔ numeric keeps the raw number (re-rounded and range-checked
 ///   for the target), checkbox → number is 1, number → checkbox is `≠ 0`;
 /// - dates and date-times re-normalize through the target's zone and
@@ -82,9 +85,25 @@ pub fn convert(
     let from_text = || parse_text(to, &text(), ctx).ok().flatten();
 
     match &to.kind {
-        FieldKind::SingleLineText(_) | FieldKind::LongText(_) | FieldKind::Barcode(_) => {
-            let multiline = matches!(to.kind, FieldKind::LongText(_));
-            let cleaned: String = clean_text(&text(), multiline)
+        FieldKind::Text(_) | FieldKind::RichText(_) | FieldKind::Barcode(_) => {
+            let multiline = match &to.kind {
+                FieldKind::Text(o) => o.multiline,
+                FieldKind::RichText(_) => true,
+                _ => false,
+            };
+            let text = text();
+            let text = if multiline {
+                text
+            } else {
+                // One line: each run of line breaks, with the spaces around it, becomes one space.
+                let lines: Vec<&str> = text
+                    .lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .collect();
+                lines.join(" ")
+            };
+            let cleaned: String = clean_text(&text, multiline)
                 .chars()
                 .take(MAX_TEXT_CELL_LEN)
                 .collect();

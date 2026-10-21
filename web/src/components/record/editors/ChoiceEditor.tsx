@@ -154,7 +154,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
                 className={cn("flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left", i === active && "bg-hover")}
               >
                 <Pill choice={c} />
-                {on && <Check aria-hidden className="size-4 text-primary" />}
+                {on && <Check aria-hidden className="size-4 text-primary-text" />}
               </button>
             </li>
           );

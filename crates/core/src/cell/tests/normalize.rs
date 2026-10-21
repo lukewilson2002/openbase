@@ -77,8 +77,8 @@ fn canonical_samples_are_fixed_points() {
 }
 
 #[test]
-fn single_line_text() {
-    let f = kind(FieldType::SingleLineText);
+fn text() {
+    let f = kind(FieldType::Text);
     assert_eq!(strict(&f, json!("hi")), Some(json!("hi")));
     assert_eq!(strict(&f, json!("a\nb\r\nc")), Some(json!("a b c")));
     assert_eq!(strict(&f, json!("")), None);
@@ -106,7 +106,7 @@ fn single_line_text() {
 
 #[test]
 fn text_length_limit() {
-    let f = kind(FieldType::LongText);
+    let f = kind(FieldType::RichText);
     let max = "é".repeat(MAX_TEXT_CELL_LEN);
     assert_eq!(strict(&f, json!(max.clone())), Some(json!(max)));
     let over = "a".repeat(MAX_TEXT_CELL_LEN + 1);
@@ -119,8 +119,24 @@ fn text_length_limit() {
 }
 
 #[test]
-fn long_text_keeps_newlines() {
-    let f = kind(FieldType::LongText);
+fn multiline_text_keeps_newlines() {
+    let f = field(FieldKind::Text(TextOptions {
+        multiline: true,
+        default: None,
+    }));
+    assert_eq!(
+        strict(&f, json!("a\r\nb\rc\n\nd")),
+        Some(json!("a\nb\nc\n\nd"))
+    );
+    assert_eq!(
+        strict(&f, json!("**not bold**")),
+        Some(json!("**not bold**"))
+    );
+}
+
+#[test]
+fn rich_text_keeps_newlines() {
+    let f = kind(FieldType::RichText);
     assert_eq!(
         strict(&f, json!("a\r\nb\rc\n\nd")),
         Some(json!("a\nb\nc\n\nd"))
@@ -461,7 +477,7 @@ fn missing_choices_lists_unknown_names() {
         vec!["Teal", "A, B"]
     );
     assert_eq!(missing_choices(&m, &json!({"x": 1})), Vec::<String>::new());
-    let text = sample_field(FieldType::SingleLineText);
+    let text = sample_field(FieldType::Text);
     assert!(missing_choices(&text, &json!("x")).is_empty());
 }
 

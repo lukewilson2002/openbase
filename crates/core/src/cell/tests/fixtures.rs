@@ -160,8 +160,8 @@ pub(crate) fn sample_field(t: FieldType) -> Field {
 /// Canonical stored samples for each type (non-empty).
 pub(crate) fn sample_values(t: FieldType) -> Vec<Json> {
     match t {
-        FieldType::SingleLineText => vec![json!("hello"), json!("42"), json!("Red"), json!("yes")],
-        FieldType::LongText => vec![json!("line one\nline two"), json!("3.5")],
+        FieldType::Text => vec![json!("hello"), json!("42"), json!("Red"), json!("yes")],
+        FieldType::RichText => vec![json!("line one\nline two"), json!("3.5")],
         FieldType::Number => vec![json!(42), json!(-3.25), json!(0)],
         FieldType::Currency => vec![json!(1234.5), json!(-5)],
         FieldType::Percent => vec![json!(0.5), json!(1.25)],

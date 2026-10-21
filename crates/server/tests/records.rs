@@ -134,7 +134,7 @@ async fn field_defaults_apply_to_new_records_only_for_absent_fields() {
     let t = f
         .add_field(
             &f.table_id,
-            json!({ "name": "Greeting", "type": "single_line_text", "options": { "default": "hello" } }),
+            json!({ "name": "Greeting", "type": "text", "options": { "default": "hello" } }),
         )
         .await;
     let n = f
@@ -176,7 +176,7 @@ async fn sink() -> Sink {
     let table = id_of(&f.add_table("Sink").await);
     let mut ids = std::collections::HashMap::new();
     let specs: Vec<(&'static str, Value)> = vec![
-        ("long", json!({ "type": "long_text", "options": {} })),
+        ("long", json!({ "type": "rich_text", "options": {} })),
         (
             "number",
             json!({ "type": "number", "options": { "precision": 2, "allow_negative": false } }),

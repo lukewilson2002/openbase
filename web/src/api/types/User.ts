@@ -4,4 +4,8 @@ export type User = { id: string, email: string, name: string, is_admin: boolean,
 /**
  * Whether the user has seen (or skipped) the introduction.
  */
-intro_seen: boolean, };
+intro_seen: boolean, 
+/**
+ * The app's accent colour for this person, one of [`ACCENTS`]; none = the default, blue.
+ */
+accent?: string | null, };

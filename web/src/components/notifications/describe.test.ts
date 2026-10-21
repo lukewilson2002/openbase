@@ -8,6 +8,9 @@ describe("describeNotification", () => {
   it("describes a mention with a link that opens the record", () => {
     const v = describeNotification(n("mention", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Launch plan", snippet: "can you check this?", author_name: "Grace", author_id: "usr2", comment_id: "cmt1" }));
     expect(v).toEqual({ kind: "mention", title: "Grace mentioned you in Launch plan", detail: "can you check this?", href: "/base/app1/tbl1?record=rec1" });
+    // A mention in a rich text cell reads the same and opens the same record.
+    const cell = describeNotification(n("mention", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Launch plan", snippet: "…ask @Ada about it", author_name: "Grace", field_id: "fld1", field_name: "Notes" }));
+    expect(cell).toEqual({ kind: "mention", title: "Grace mentioned you in Launch plan", detail: "…ask @Ada about it", href: "/base/app1/tbl1?record=rec1" });
   });
 
   it("describes an assignment", () => {

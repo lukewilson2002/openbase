@@ -1,4 +1,4 @@
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BasePerson, BaseSchema } from "@/api/types";
@@ -6,15 +6,18 @@ import { SIDEBAR_KEY } from "@/shell/sidebarPrefs";
 import { USER, apiError, makeSchema, makeView, makeWorkspace, mockApi, renderApp, stubDesktop } from "@/test/utils";
 
 // These tests are about the shell (menu, top bar, permissions). The real grid draws on a canvas
-// and has its own tests under src/views/grid, so the shell tests render the placeholder for it.
+// and has its own tests under src/views/grid, so the shell tests render the placeholder for it,
+// with the toolbar's view switcher above it (the real views draw it in their toolbar).
 vi.mock("@/views/grid/GridView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
+  const { ViewSwitcher } = await import("@/components/viewbar/ViewSwitcher");
   const { useSearchParams } = await import("react-router");
   // Shows the ?record= parameter so tests can see whether the shell's redirects keep it.
   function Stub(props: Parameters<typeof PlaceholderView>[0]) {
     const [params] = useSearchParams();
     return (
       <>
+        <ViewSwitcher schema={props.schema} table={props.table} view={props.view} />
         <PlaceholderView {...props} />
         <output data-testid="record-param">{params.get("record")}</output>
       </>
@@ -26,7 +29,16 @@ vi.mock("@/views/grid/GridView", async () => {
 // Same for the kanban view (its own tests live in src/views/kanban).
 vi.mock("@/views/kanban/KanbanView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
-  return { default: PlaceholderView };
+  const { ViewSwitcher } = await import("@/components/viewbar/ViewSwitcher");
+  function Stub(props: Parameters<typeof PlaceholderView>[0]) {
+    return (
+      <>
+        <ViewSwitcher schema={props.schema} table={props.table} view={props.view} />
+        <PlaceholderView {...props} />
+      </>
+    );
+  }
+  return { default: Stub };
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -52,9 +64,23 @@ const openProjectMenu = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 const itemNames = (menu: HTMLElement) => within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim());
 
-/** Unfolds a table's views in the menu: opening a table leaves them folded. */
-async function showViews(user: ReturnType<typeof userEvent.setup>, table = "Tasks") {
-  await user.click(screen.getByRole("button", { name: `Show views of ${table}` }));
+/** Opens the list of the open table's views, from the toolbar's button naming the open view. */
+async function openViews(user: ReturnType<typeof userEvent.setup>, open = "All tasks", table = "Tasks") {
+  await user.click(screen.getByRole("button", { name: `View: ${open}` }));
+  return screen.findByRole("menu", { name: `Views of ${table}` });
+}
+
+/** Opens the submenu of a view type's views, from its row in the list (the views of one type share a row). */
+async function openType(user: ReturnType<typeof userEvent.setup>, list: HTMLElement, type: string) {
+  within(list).getByRole("menuitem", { name: new RegExp(`^${type} views`) }).focus();
+  await user.keyboard("{ArrowRight}");
+  return screen.findByRole("menu", { name: `${type} views` });
+}
+
+/** Opens a view's options with a right-click on it in the list. */
+async function openViewOptions(list: HTMLElement, view: string | RegExp, name: string) {
+  fireEvent.contextMenu(within(list).getByRole("menuitem", { name: view }), { clientX: 60, clientY: 80 });
+  return screen.findByRole("menu", { name: `Options for ${name}` });
 }
 
 /** Opens the "Add view" menu of the open table: in the table's "…" menu. */
@@ -84,11 +110,11 @@ describe("base shell on a desktop", () => {
     const user = userEvent.setup();
     openBase("owner");
     expect(await screen.findByText("Grid view coming soon")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show views of Tasks" })).toHaveAttribute("aria-expanded", "false");
-    await showViews(user);
-    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
+    // The open view is the toolbar's, not the menu's.
+    const list = await openViews(user);
+    expect(within(await openType(user, list, "Grid")).getByRole("menuitem", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
   });
 
   it("puts the project in the app shell: `Acme / Project tracker` as plain text in the top bar, the Inbox and Notifications, then the tree in the menu", async () => {
@@ -225,23 +251,23 @@ describe("base shell on a desktop", () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
-    await showViews(user);
-    await user.click(screen.getByRole("link", { name: "Board" }));
+    await user.click(within(await openViews(user)).getByRole("menuitem", { name: "Board" }));
     expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Board" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
+    expect(within(await openViews(user, "Board")).getByRole("menuitem", { name: "Board" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("switches tables, opening the other table's first view without unfolding its views", async () => {
+  it("switches tables, opening the other table's first view", async () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
     await user.click(screen.getByRole("link", { name: "People" }));
     expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "People" })).toHaveAttribute("aria-current", "page");
-    // Opening a table leaves its views folded, and every other table's too.
-    expect(screen.getByRole("button", { name: "Show views of People" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: "Everyone" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "All tasks" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View: Everyone" })).toBeInTheDocument();
+    // The menu lists no views, of this table or of any other.
+    expect(within(menu()).queryByRole("link", { name: "Everyone" })).not.toBeInTheDocument();
+    expect(within(menu()).queryByRole("link", { name: "All tasks" })).not.toBeInTheDocument();
   });
 
   it("opens the view last used in a table when its row is tapped, and remembers each view it shows", async () => {
@@ -253,7 +279,7 @@ describe("base shell on a desktop", () => {
     await user.click(within(tables()).getByRole("link", { name: "Tasks" }));
     expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show views of Tasks" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "View: Board" })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl1" }, workspaces: { wsp1: "app1" } });
     expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
@@ -280,30 +306,36 @@ describe("base shell on a desktop", () => {
     expect(await screen.findByRole("main", { name: "All tasks" })).toBeInTheDocument();
   });
 
-  it("expands and collapses a table with its chevron without opening it", async () => {
+  it("lists tables only in the menu: no chevron, and no views under a table", async () => {
     const user = userEvent.setup();
-    openBase("owner");
+    openBase("creator");
     await screen.findByText("Grid view coming soon");
-    const show = screen.getByRole("button", { name: "Show views of People" });
-    expect(show).toHaveAttribute("aria-expanded", "false");
-    await user.click(show);
-    expect(screen.getByRole("link", { name: "Everyone" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
-    await showViews(user);
-    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
-    await user.click(screen.getByRole("button", { name: "Hide views of Tasks" }));
-    expect(screen.queryByRole("link", { name: "All tasks" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Show|Hide) views of/ })).not.toBeInTheDocument();
+    expect(within(tables()).getAllByRole("link").map((a) => a.textContent)).toEqual(["Tasks", "People"]);
+    expect(within(menu()).queryByRole("list", { name: /^(Shared|Personal) views$/ })).not.toBeInTheDocument();
+    expect(within(menu()).queryByRole("button", { name: /^Options for/ })).not.toBeInTheDocument();
+    // The views are in the toolbar's list instead.
+    expect(within(await openViews(user)).getByRole("menuitem", { name: "Board" })).toBeInTheDocument();
   });
 
-  it("shows personal views in their own list, marked as personal", async () => {
+  it("marks the open table's row, and gives a table with no icon the default one", async () => {
+    openBase("owner");
+    await screen.findByText("Grid view coming soon");
+    const tasks = within(tables()).getByRole("link", { name: "Tasks" });
+    expect(tasks).toHaveClass("bg-primary", "font-semibold");
+    const people = within(tables()).getByRole("link", { name: "People" });
+    expect(people).not.toHaveClass("bg-primary");
+    expect(people).not.toHaveClass("font-semibold");
+    expect(tasks.firstElementChild).toBe(tasks.querySelector("svg.lucide-sheet"));
+  });
+
+  it("marks personal views as personal in the list of views", async () => {
     const user = userEvent.setup();
     openBase("editor");
     await screen.findByText("Grid view coming soon");
-    await showViews(user);
-    const personal = screen.getByRole("list", { name: "Personal views" });
-    expect(within(personal).getByRole("link", { name: /My tasks/ })).toBeInTheDocument();
-    expect(within(personal).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "Shared views" })).queryByText("My tasks")).not.toBeInTheDocument();
+    const grids = await openType(user, await openViews(user), "Grid");
+    expect(within(within(grids).getByRole("menuitem", { name: /My tasks/ })).getByRole("img", { name: "Personal view" })).toBeInTheDocument();
+    expect(within(within(grids).getByRole("menuitem", { name: /All tasks/ })).queryByRole("img", { name: "Personal view" })).not.toBeInTheDocument();
   });
 
   it("collapses the menu with the corner toggle and remembers it", async () => {
@@ -331,8 +363,13 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       openBase("viewer");
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
-      expect(screen.queryByRole("button", { name: /^Options for/ })).not.toBeInTheDocument();
+      // The browser's own menu stays on the views: there is nothing to do with one, nor an Add view.
+      expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }))).toBe(true);
+      const list = await openViews(user);
+      expect(fireEvent.contextMenu(within(list).getByRole("menuitem", { name: "Board" }))).toBe(true);
+      expect(screen.queryByRole("menu", { name: /^Options for/ })).not.toBeInTheDocument();
+      expect(within(list).queryByRole("menuitem", { name: "Add view" })).not.toBeInTheDocument();
+      await user.keyboard("{Escape}");
       // A table's menu only takes a viewer to its default grid; the project's has nothing to add.
       await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
       expect(itemNames(await screen.findByRole("menu"))).toEqual(["Edit schema"]);
@@ -359,11 +396,15 @@ describe("base shell on a desktop", () => {
         "POST /api/tables/tbl1/views": (call: { body: unknown }) => ({ id: "viw9", table_id: "tbl1", name: (call.body as { name: string }).name, type: "calendar", personal: true, locked: false, config: {} }),
       });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
       expect(screen.queryByTitle("Rename project")).not.toBeInTheDocument();
       // Shared views are creator territory; the editor's own personal view is manageable.
-      expect(screen.queryByRole("button", { name: "Options for All tasks" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Options for My tasks" })).toBeInTheDocument();
+      expect(fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }))).toBe(true);
+      expect(screen.queryByRole("menu", { name: "Options for All tasks" })).not.toBeInTheDocument();
+      const list = await openViews(user);
+      const mine = await openViewOptions(await openType(user, list, "Grid"), /My tasks/, "My tasks");
+      expect(within(mine).getByRole("menuitem", { name: "Rename view" })).toBeInTheDocument();
+      await user.keyboard("{Escape}{Escape}{Escape}");
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
 
       const types = await openAddView(user);
       expect(within(types).getByText(/Editors can create personal views/)).toBeInTheDocument();
@@ -424,11 +465,12 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
       expect(screen.getByRole("button", { name: "Table options for Tasks" })).toBeInTheDocument();
       // Every table has its menu, not only the open one.
       expect(screen.getByRole("button", { name: "Table options for People" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Options for All tasks" })).toBeInTheDocument();
+      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
+      expect(await screen.findByRole("menu", { name: "Options for All tasks" })).toBeInTheDocument();
+      await user.keyboard("{Escape}");
       const types = await openAddView(user);
       const items = within(types).getAllByRole("menuitem");
       expect(items.map((i) => i.textContent)).toEqual([
@@ -449,7 +491,6 @@ describe("base shell on a desktop", () => {
         "POST /api/tables/tbl1/views": { id: "viw9", table_id: "tbl1", name: "Sprint board", type: "kanban", personal: false, locked: false, config: {} },
       });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
       await openAddView(user);
       await pick(user, /^Kanban/);
       const dialog = await screen.findByRole("dialog", { name: "New kanban view" });
@@ -466,8 +507,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       const api = openBase("creator", { "PATCH /api/views/viw1": { status: 204 } });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
-      await user.click(screen.getByRole("button", { name: "Options for All tasks" }));
+      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
       await user.click(await screen.findByRole("menuitem", { name: "Lock view" }));
       await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
       expect(api.callsTo("PATCH /api/views/viw1")[0]?.body).toEqual({ locked: true });
@@ -477,8 +517,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
-      await user.click(screen.getByRole("button", { name: "Options for My tasks" }));
+      await openViewOptions(await openType(user, await openViews(user), "Grid"), /My tasks/, "My tasks");
       expect(await screen.findByRole("menuitem", { name: "Rename view" })).toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: /Lock view/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: /Share view/ })).not.toBeInTheDocument();
@@ -488,8 +527,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       const api = openBase("creator", { "PATCH /api/views/viw2": { status: 204 } });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
-      await user.click(screen.getByRole("button", { name: "Options for Board" }));
+      await openViewOptions(await openViews(user), "Board", "Board");
       await user.click(await screen.findByRole("menuitem", { name: "Rename view" }));
       const dialog = await screen.findByRole("dialog", { name: "Rename view" });
       const name = within(dialog).getByLabelText("Name");
@@ -526,7 +564,7 @@ describe("base shell on a desktop", () => {
       expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Projects" });
     });
 
-    it("keeps the default grid out of the menu, and opens it from a table's Edit schema", async () => {
+    it("lists the default grid first in the view list, and opens it from a table's Edit schema", async () => {
       const user = userEvent.setup();
       const schema = makeSchema("creator");
       const t = schema.tables[0]!;
@@ -535,9 +573,11 @@ describe("base shell on a desktop", () => {
       await screen.findByText("Grid view coming soon");
       // The table opens its first view, not the default grid (the open table's row links to what is open).
       await waitFor(() => expect(within(tables()).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1"));
-      await showViews(user);
-      expect(within(tables()).queryByRole("link", { name: /Default grid/ })).toBeNull();
-      expect(within(tables()).getByRole("link", { name: /All tasks/ })).toBeInTheDocument();
+      expect(within(menu()).queryByRole("link", { name: /Default grid/ })).toBeNull();
+      const list = await openViews(user);
+      expect(within(list).getAllByRole("menuitem")[0]).toHaveAccessibleName("Default grid");
+      expect(within(list).getAllByRole("menuitem")[0]).toHaveAttribute("href", "/base/app1/tbl1/viwD");
+      await user.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
       await user.click(await screen.findByRole("menuitem", { name: "Edit schema" }));
       await waitFor(() => expect(within(tables()).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viwD"));
@@ -549,9 +589,8 @@ describe("base shell on a desktop", () => {
       schema.tables = [{ ...schema.tables[0]!, views: [schema.tables[0]!.views[0]!] }];
       openBase("creator", { "GET /api/bases/app1": schema });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
 
-      await user.click(screen.getByRole("button", { name: "Options for All tasks" }));
+      fireEvent.contextMenu(screen.getByRole("button", { name: "View: All tasks" }));
       expect(await screen.findByRole("menuitem", { name: "Delete view" })).not.toHaveAttribute("aria-disabled");
       await user.keyboard("{Escape}");
       await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
@@ -583,8 +622,7 @@ describe("base shell on a desktop", () => {
       const user = userEvent.setup();
       openBase("creator", { "GET /api/views/viw2/shares": [] });
       await screen.findByText("Grid view coming soon");
-      await showViews(user);
-      await user.click(screen.getByRole("button", { name: "Options for Board" }));
+      await openViewOptions(await openViews(user), "Board", "Board");
       await user.click(await screen.findByRole("menuitem", { name: "Share view…" }));
       const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
       expect(within(dialog).getByRole("tab", { name: "Share a view" })).toHaveAttribute("aria-selected", "true");
@@ -619,23 +657,31 @@ describe("base shell on a desktop", () => {
       expect(api.callsTo("GET /api/trash")[0]!.query.get("base_id")).toBe("app1");
     });
 
-    it("links creators to the automations from the open project's row and menu", async () => {
+    it("links creators to the automations from the project's menu, not a row of their own", async () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      const link = within(menu()).getByRole("link", { name: "Automations" });
-      expect(link).toHaveAttribute("href", "/base/app1/automations");
-      expect(link).not.toHaveAttribute("aria-current", "page");
+      expect(within(menu()).queryByRole("link", { name: "Automations" })).toBeNull();
       expect(within(await openProjectMenu(user)).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
+    });
+
+    it("opens the project's menu with a right-click on its row", async () => {
+      openBase("creator");
+      await screen.findByText("Grid view coming soon");
+      const name = within(menu()).getByRole("button", { name: "Project tracker" });
+      // Not the browser's own menu.
+      expect(fireEvent.contextMenu(name)).toBe(false);
+      const options = await screen.findByRole("menu");
+      expect(within(options).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
+      expect(within(options).getByRole("menuitem", { name: "Rename project" })).toBeInTheDocument();
     });
   });
 
   it("keeps ?record= when it canonicalises a link such as a notification's", async () => {
-    const user = userEvent.setup();
     openBase("owner", {}, "/base/app1/tbl1?record=rec1");
     expect(await screen.findByTestId("record-param")).toHaveTextContent("rec1");
-    await showViews(user);
-    expect(screen.getByRole("link", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
+    expect(within(tables()).getByRole("link", { name: "Tasks" })).toHaveAttribute("aria-current", "page");
   });
 });
 
@@ -690,7 +736,7 @@ describe("an empty base", () => {
 });
 
 describe("base shell on a phone", () => {
-  it("keeps the menu in a drawer that closes when a view is chosen", async () => {
+  it("keeps the menu in a drawer that closes when a table is chosen", async () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
@@ -700,16 +746,15 @@ describe("base shell on a phone", () => {
 
     await user.click(screen.getByRole("button", { name: "Show menu" }));
     let drawer = await screen.findByRole("dialog", { name: "Menu" });
-    // Unfolding the table's views keeps the drawer open; it is remembered for the next time.
-    await showViews(user);
-    await user.click(within(drawer).getByRole("link", { name: "Board" }));
-    expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
+    // Opening a table closes the drawer; the table opens the view last used in it.
+    await user.click(within(drawer).getByRole("link", { name: "People" }));
+    expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
 
-    // Choosing the view already open closes it too, though the address stays the same.
+    // Choosing the table already open closes it too, though the address stays the same.
     await user.click(screen.getByRole("button", { name: "Show menu" }));
     drawer = await screen.findByRole("dialog", { name: "Menu" });
-    await user.click(within(drawer).getByRole("link", { name: "Board" }));
+    await user.click(within(drawer).getByRole("link", { name: "People" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
@@ -728,7 +773,6 @@ describe("base shell on a phone", () => {
     expect(within(nav).getAllByRole("button")[0]).toHaveAccessibleName("Notifications");
     expect(within(nav).getByRole("list", { name: "Tables in Project tracker" })).toBeInTheDocument();
     // Folding rows is not navigating: the drawer stays.
-    await user.click(within(nav).getByRole("button", { name: "Show views of People" }));
     await user.click(within(nav).getByRole("button", { name: "Collapse Project tracker" }));
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
   });
@@ -754,24 +798,26 @@ describe("icons", () => {
   };
   const icon = (el: HTMLElement | Element | null, name: string) => el?.querySelector(`svg.lucide-${name}`);
 
-  it("shows the base icon in the top bar and a table's own icon left of its name in the menu (none for a plain table)", async () => {
+  it("shows a table's own icon left of its name in the menu (a sheet for a plain table); the top bar's path has no icons", async () => {
     openBase("viewer", { "GET /api/bases/app1": withIcons("viewer") });
     await screen.findByText("Grid view coming soon");
-    const tile = screen.getByRole("heading", { level: 1 }).querySelector("[data-entity-tile]")!;
-    expect(icon(tile, "store")).toBeInTheDocument();
-    expect(tile).not.toHaveTextContent("P");
+    const path = screen.getByRole("heading", { level: 1 }).parentElement!;
+    expect(path).toHaveTextContent("Project tracker");
+    expect(path.querySelector("[data-entity-tile], svg")).toBeNull();
 
     const tasks = screen.getByRole("link", { name: "Tasks" });
     expect(icon(tasks, "truck")).toBeInTheDocument();
     expect(tasks.firstElementChild).toBe(icon(tasks, "truck"));
     const people = screen.getByRole("link", { name: "People" });
-    expect(people.querySelector("svg")).toBeNull();
+    expect(icon(people, "sheet")).toBeInTheDocument();
+    expect(people.firstElementChild).toBe(icon(people, "sheet"));
+    expect(icon(people, "truck")).not.toBeInTheDocument();
   });
 
-  it("shows the generic base icon in the top bar tile when the base has no icon", async () => {
+  it("shows the generic base icon on its row in the menu when the base has no icon", async () => {
     openBase("viewer");
     await screen.findByText("Grid view coming soon");
-    const tile = screen.getByRole("heading", { level: 1 }).querySelector("[data-entity-tile]");
+    const tile = within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: "Project tracker" }).querySelector("[data-entity-tile]");
     expect(tile?.querySelector("svg.lucide-database")).toBeInTheDocument();
     expect(tile).not.toHaveTextContent("P");
   });
@@ -820,7 +866,7 @@ describe("icons", () => {
     openBase("viewer", { "GET /api/bases/app1": withIcons("viewer") });
     await screen.findByText("Grid view coming soon");
     expect(screen.queryByRole("button", { name: /Change the icon of/ })).not.toBeInTheDocument();
-    expect(document.querySelector("header [data-entity-tile] svg.lucide-store")).toBeInTheDocument();
+    expect(icon(screen.getByRole("link", { name: "Tasks" }), "truck")).toBeInTheDocument();
   });
 
   it("changes a table's icon from its menu", async () => {

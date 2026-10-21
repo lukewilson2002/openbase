@@ -16,7 +16,8 @@ const EMAIL = "journey-admin@example.com";
 const PASSWORD = "correct horse battery staple 42";
 const CSRF = { "X-OpenBase-CSRF": "1" };
 
-// Grid geometry (views/grid/cellModels.ts defaultWidth, GlideGrid.tsx): row marker, header, row height.
+// Grid geometry (GlideGrid.tsx): row marker, header, row height. The column widths below are saved on
+// the view before the grid is clicked: a column without a width of its own fits its content.
 const MARKER_W = 56;
 const HEADER_H = 44;
 const ROW_H = 42;
@@ -128,13 +129,14 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("button", { name: "Create table" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    // A new table opens in its default grid, its only view: the toolbar's first icon, not a named view.
-    await expect(page.getByRole("link", { name: "Default grid" })).toHaveAttribute("aria-current", "page");
+    // A new table opens in its default grid, its only view: the view button names it, not a named view.
+    await expect(page.getByRole("button", { name: "View: Default grid" })).toBeVisible();
     const defaultId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
     expect((await loadTable()).views.map((v) => [v.id, v.is_default])).toEqual([[defaultId, true]]);
     // A shared grid of its own, named after its type, keeps the filter and sort the steps below save.
-    await page.getByRole("button", { name: "Add view" }).click();
-    await page.getByRole("menuitem", { name: /^Grid/ }).click();
+    await page.getByRole("button", { name: "View: Default grid" }).click();
+    await page.getByRole("menuitem", { name: "Add view" }).click();
+    await page.getByRole("menu", { name: "Add view" }).getByRole("menuitem", { name: /^Grid/ }).click();
     const dialog = page.getByRole("dialog", { name: "New grid view" });
     await expect(dialog.getByLabel("Name")).toHaveValue("Grid");
     await dialog.getByRole("button", { name: "Create view" }).click();
@@ -184,7 +186,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     });
 
     table = await loadTable();
-    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "single_line_text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
+    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
     const double = table.fields.find((f) => f.name === "Double")!;
     expect(double.options).toMatchObject({ expression: "{Qty} * 2", result_type: "number" });
     const status = table.fields.find((f) => f.name === "Status")!;
@@ -194,6 +196,15 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   const fid = (name: string) => table.fields.find((f) => f.name === name)!.id;
+
+  await test.step("gives the grid's columns known widths, to click cells by position", async () => {
+    const view = (await loadTable()).views.find((v) => v.id === viewId)!;
+    const field_widths = Object.fromEntries(COLUMNS.map((c) => [fid(c.key === "name" ? "Name" : c.key[0]!.toUpperCase() + c.key.slice(1)), c.width]));
+    const res = await page.request.patch(`/api/views/${viewId}`, { data: { config: { ...view.config, field_widths } }, headers: CSRF });
+    expect(res.ok(), await res.text()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+  });
 
   await test.step("adds records and edits cells in the grid", async () => {
     await expect(page.getByText("0 items")).toBeVisible();
@@ -262,7 +273,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.keyboard.press("Shift+Space");
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Charlie" })).toBeVisible();
-    await dialog.getByRole("combobox", { name: "Write a comment" }).fill("Ship it");
+    await dialog.getByRole("textbox", { name: "Write a comment" }).fill("Ship it");
     await dialog.getByRole("button", { name: "Comment" }).click();
     await expect(dialog.getByText("Ship it")).toBeVisible();
     const rec = (await records())[0]!;
@@ -347,7 +358,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await menu.getByRole("button", { name: "Project options for Journey base" }).click();
     await page.getByRole("menuitem", { name: /Change icon/ }).click();
     await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
-    await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
+    // The menu's row shows the icon; the top bar's path is plain text.
+    await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile]")).toHaveCount(0);
     await expect(menu.getByRole("button", { name: "Journey base", exact: true }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
 
     await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();

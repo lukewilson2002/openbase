@@ -70,7 +70,7 @@ beforeAll(async () => {
   const st = (await field(contacts, { name: "Status", type: "single_select", options: { choices: [{ id: "", name: "Todo", color: "gray" }, { id: "", name: "Done", color: "green" }] } })) as Select;
   status = st.id;
   for (const c of st.options.choices) choice[c.name] = c.id;
-  secret = (await field(contacts, { name: "Salary", type: "single_line_text", options: {} })).id;
+  secret = (await field(contacts, { name: "Salary", type: "text", options: { multiline: false } })).id;
   owner = (await field(contacts, { name: "Owner", type: "user", options: { multiple: false, notify: false } })).id;
   photo = (await field(contacts, { name: "Photo", type: "attachment", options: {} })).id;
   due = (await field(contacts, { name: "Due", type: "date", options: { include_time: true, date_format: "iso", time_format: "h24", timezone: null } })).id;
@@ -306,7 +306,7 @@ describe("a public form", () => {
     const pub = parse("PublicForm", await anon.run(() => publicApi.form(link.token)));
     expect(pub).toMatchObject({ title: "Contact us", description: "We reply within a day", submit_label: "Send", success_message: "Thank you", redirect_url: "https://example.com/thanks", show_submit_another: true });
     expect(pub.fields.map((f) => f.label)).toEqual(["Your name", "Email", "Qty", "Status", "Photo"]);
-    expect(pub.fields[0]).toMatchObject({ id: name, required: true, help: "As on your ID", type: "single_line_text" });
+    expect(pub.fields[0]).toMatchObject({ id: name, required: true, help: "As on your ID", type: "text" });
     expect(pub.fields.find((f) => f.id === status)?.options).toMatchObject({ choices: [{ name: "Todo" }, { name: "Done" }] });
     expect(pub.fields.some((f) => f.id === owner || f.id === parent)).toBe(false);
   });
@@ -438,7 +438,7 @@ describe("CSV import", () => {
     target = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Imports")));
     tName = target.primary_field_id;
     tQty = (await w.owner.run(() => schemaApi.createField(target.id, { name: "Qty", type: "number", options: { precision: 0, allow_negative: false } }))).id;
-    tNote = (await w.owner.run(() => schemaApi.createField(target.id, { name: "Note", type: "single_line_text", options: {} }))).id;
+    tNote = (await w.owner.run(() => schemaApi.createField(target.id, { name: "Note", type: "text", options: { multiline: false } }))).id;
   });
 
   const rowsOf = async () => {

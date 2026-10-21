@@ -453,7 +453,7 @@ mod tests {
     }
 
     fn text(id: &str) -> Field {
-        field(id, FieldKind::SingleLineText(TextOptions::default()))
+        field(id, FieldKind::Text(TextOptions::default()))
     }
 
     fn ids(fields: &[Field]) -> Vec<&str> {

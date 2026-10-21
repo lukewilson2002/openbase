@@ -1,21 +1,26 @@
-/** Comment thread of a record: list, post with @mention autocomplete, edit and delete your own. */
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+/**
+ * Comment thread of a record: list, post, edit and delete your own. A comment is rich text, written in
+ * the editor of rich text fields (with @mentions of the project's people, and files for those who
+ * may upload them) and stored as Markdown; Markdown.tsx shows it.
+ */
+import { Suspense, lazy, useMemo, useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Send, Trash2 } from "lucide-react";
 import { commentsApi } from "@/api/records";
 import { keys } from "@/api/keys";
-import type { Collaborator, Comment } from "@/api/types";
+import type { AttachmentRef, Collaborator, Comment } from "@/api/types";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
 import { personColors } from "@/lib/colors";
 import { formatDateTime } from "@/lib/format";
-import { insertMention, openMention, parseComment } from "./mentions";
+import { Markdown } from "./Markdown";
+
+// Tiptap is a chunk of its own, fetched when a comment box first shows.
+const RichTextEditor = lazy(() => import("@/components/richtext/RichTextEditor").then((m) => ({ default: m.RichTextEditor })));
 
 export interface CommentsPanelProps {
   recordId: string;
@@ -24,127 +29,41 @@ export interface CommentsPanelProps {
   /** Commenters and above may post; viewers only read. */
   canComment: boolean;
   timeZone: string;
+  /** Uploads a file to the record's project (editors and above); without it comments cannot add files. */
+  upload?: (file: File) => Promise<AttachmentRef>;
 }
 
 export function CommentBody({ body }: { body: string }) {
-  return (
-    <p className="whitespace-pre-wrap break-words text-[0.8125rem]">
-      {parseComment(body).map((p, i) =>
-        p.kind === "text" ? (
-          <span key={i}>{p.text}</span>
-        ) : (
-          <span key={i} className="rounded bg-primary-soft px-1 font-medium text-primary">
-            @{p.name}
-          </span>
-        ),
-      )}
-    </p>
-  );
+  return <Markdown source={body} className="break-words" />;
 }
 
-/** A textarea that offers collaborators after typing `@`. */
-function MentionTextarea({ value, onChange, collaborators, label, onSubmit, placeholder, autoFocus }: { value: string; onChange: (v: string) => void; collaborators: readonly Collaborator[]; label: string; onSubmit: () => void; placeholder?: string; autoFocus?: boolean }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const [caret, setCaret] = useState(0);
-  const [active, setActive] = useState(0);
-  const listId = useId();
-  const open = openMention(value, caret);
-  const matches = useMemo(() => {
-    if (!open) return [];
-    const q = open.query.toLowerCase();
-    return collaborators.filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().startsWith(q)).slice(0, 6);
-  }, [open, collaborators]);
-  const colors = useMemo(() => personColors(collaborators), [collaborators]);
-
-  // The caret is restored after React has applied the new text (never before, or typing races it).
-  const pendingCaret = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const at = pendingCaret.current;
-    if (at === null || !ref.current) return;
-    pendingCaret.current = null;
-    ref.current.focus();
-    ref.current.setSelectionRange(at, at);
-    setCaret(at);
-  });
-
-  const choose = (c: Collaborator) => {
-    if (!open) return;
-    const out = insertMention(value, caret, open, { userId: c.id, name: c.name });
-    pendingCaret.current = out.caret;
-    onChange(out.text);
+/** The rich text box of a comment; Ctrl/Cmd+Enter sends it. */
+function CommentEditor({ value, onChange, onSubmit, label, placeholder, autoFocus, people, upload }: { value: string; onChange: (md: string) => void; onSubmit: () => void; label: string; placeholder?: string; autoFocus?: boolean; people: readonly Collaborator[]; upload?: (file: File) => Promise<AttachmentRef> }) {
+  const onKeyDownCapture = (e: KeyboardEvent) => {
+    if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+    // Before the editor sees it: there Cmd+Enter would add a line break.
+    e.preventDefault();
+    e.stopPropagation();
+    onSubmit();
   };
-
   return (
-    <div className="relative">
-      <Textarea
-        ref={ref}
-        aria-label={label}
-        rows={3}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        value={value}
-        maxLength={10000}
-        role="combobox"
-        aria-expanded={matches.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={matches.length > 0 ? `${listId}-${active}` : undefined}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setCaret(e.target.selectionStart ?? 0);
-          setActive(0);
-        }}
-        onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-        onKeyDown={(e) => {
-          if (matches.length > 0) {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setActive((a) => (a + 1) % matches.length);
-              return;
-            }
-            if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setActive((a) => (a - 1 + matches.length) % matches.length);
-              return;
-            }
-            if (e.key === "Enter" || e.key === "Tab") {
-              e.preventDefault();
-              const c = matches[active];
-              if (c) choose(c);
-              return;
-            }
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              setCaret(0);
-              return;
-            }
-          }
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            onSubmit();
-          }
-        }}
-      />
-      {matches.length > 0 && (
-        <ul id={listId} role="listbox" aria-label="People to mention" className="absolute bottom-full z-30 mb-1 w-64 overflow-hidden rounded-md border border-line bg-surface p-1 shadow-pop">
-          {matches.map((c, i) => (
-            <li key={c.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
-              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(c)} className={cn("flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[0.8125rem]", i === active && "bg-hover")}>
-                <Avatar name={c.name} email={c.email} color={colors.get(c.id)} size="sm" />
-                <span className="min-w-0">
-                  <span className="block truncate">{c.name}</span>
-                  <span className="block truncate text-xs text-muted">{c.email}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div onKeyDownCapture={onKeyDownCapture}>
+      <Suspense fallback={<EditorLoading />}>
+        <RichTextEditor value={value} onChange={onChange} autoFocus={autoFocus} compact placeholder={placeholder} people={people} upload={upload} aria-label={label} />
+      </Suspense>
     </div>
   );
 }
 
-export function CommentsPanel({ recordId, collaborators, currentUserId, canComment, timeZone }: CommentsPanelProps) {
+function EditorLoading() {
+  return (
+    <div className="flex min-h-[7rem] items-center justify-center rounded-md border border-line-strong bg-surface">
+      <Spinner label="Loading editor" />
+    </div>
+  );
+}
+
+export function CommentsPanel({ recordId, collaborators, currentUserId, canComment, timeZone, upload }: CommentsPanelProps) {
   const qc = useQueryClient();
   const toast = useToast();
   const list = useQuery({ queryKey: keys.comments(recordId), queryFn: () => commentsApi.list(recordId) });
@@ -211,7 +130,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
                   </div>
                   {isEditing ? (
                     <div className="mt-1 flex flex-col gap-1.5">
-                      <MentionTextarea label="Edit comment" value={editing.body} onChange={(body) => setEditing({ id: c.id, body })} collaborators={collaborators} onSubmit={() => editing.body.trim() && save.mutate(editing)} autoFocus />
+                      <CommentEditor label="Edit comment" value={editing.body} onChange={(body) => setEditing({ id: c.id, body })} people={collaborators} upload={upload} onSubmit={() => editing.body.trim() && save.mutate(editing)} autoFocus />
                       <div className="flex justify-end gap-1.5">
                         <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
                           Cancel
@@ -238,7 +157,7 @@ export function CommentsPanel({ recordId, collaborators, currentUserId, canComme
             if (draft.trim()) post.mutate(draft.trim());
           }}
         >
-          <MentionTextarea label="Write a comment" placeholder="Write a comment. Type @ to mention someone." value={draft} onChange={setDraft} collaborators={collaborators} onSubmit={() => draft.trim() && post.mutate(draft.trim())} />
+          <CommentEditor label="Write a comment" placeholder="Write a comment. Type @ to mention someone." value={draft} onChange={setDraft} people={collaborators} upload={upload} onSubmit={() => draft.trim() && post.mutate(draft.trim())} />
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-muted">Ctrl+Enter to send</span>
             <Button type="submit" size="sm" variant="primary" loading={post.isPending} disabled={!draft.trim()}>

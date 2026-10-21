@@ -73,7 +73,7 @@ function FileLink({ file }: { file: AttachmentRef }) {
   return (
     <button
       type="button"
-      className="min-w-0 truncate text-left text-[0.8125rem] text-primary underline-offset-2 hover:underline"
+      className="min-w-0 truncate text-left text-[0.8125rem] text-primary-text underline-offset-2 hover:underline"
       onClick={() => {
         setFailed(false);
         publicApi

@@ -839,7 +839,7 @@ async fn description_field_survives_its_field_being_deleted_or_converted() {
     let details = f
         .add_field(
             &f.table_id,
-            json!({ "name": "Details", "type": "long_text", "options": {} }),
+            json!({ "name": "Details", "type": "rich_text", "options": {} }),
         )
         .await;
     let details_id = sid(&details["id"]).to_string();
@@ -1032,7 +1032,7 @@ async fn only_stale_references_are_forgiven_not_everything_the_old_config_mentio
         .patch(
             &f.owner,
             &format!("/api/fields/{n_id}"),
-            json!({ "type": "single_line_text", "options": {} }),
+            json!({ "type": "text", "options": {} }),
         )
         .await
         .assert_status(200);
@@ -1059,4 +1059,36 @@ async fn only_stale_references_are_forgiven_not_everything_the_old_config_mentio
     fitting["filter"] = json!({ "conjunction": "and", "items": [
         { "field_id": n_id, "op": "contains", "value": "x" } ] });
     save(fitting).await.assert_status(200);
+}
+
+#[tokio::test]
+async fn a_timeline_keeps_its_label_width_within_bounds() {
+    let f = Fixture::new().await;
+    let created = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Plan", "type": "timeline" }),
+        )
+        .await;
+    created.assert_status(201);
+    let id = sid(&created.body["id"]).to_string();
+    let mut config = created.body["config"].clone();
+
+    config["timeline"]["label_width"] = json!(300);
+    let saved = f
+        .app
+        .patch(&f.owner, &view_path(&id), json!({ "config": config }))
+        .await;
+    saved.assert_status(200);
+    assert_eq!(saved.body["config"]["timeline"]["label_width"], json!(300));
+
+    for bad in [79, 801] {
+        config["timeline"]["label_width"] = json!(bad);
+        f.app
+            .patch(&f.owner, &view_path(&id), json!({ "config": config }))
+            .await
+            .assert_status(400);
+    }
 }

@@ -16,6 +16,8 @@ pub mod history;
 pub mod inbox;
 pub mod invites;
 pub mod links;
+pub mod markdown;
+pub mod mentions;
 pub mod notifications;
 pub mod oauth;
 pub mod passkeys;

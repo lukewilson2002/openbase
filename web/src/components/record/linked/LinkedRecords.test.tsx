@@ -10,15 +10,15 @@ import { EditorEnvProvider } from "../editors/env";
 import { LinkEditor } from "../editors/LinkEditor";
 
 // Tasks (tbl1): Name, Requires -> Tasks of tbl2 ("Setup").
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const requires = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_req_by", single: false }, { id: "fld_requires", name: "Requires" });
 const tasks = makeTable([name, requires]);
 // Setup (tbl2): Title, Status, Notes, Due (hidden in its grid), Owner text; its grid puts Notes first.
-const title = { ...field("single_line_text", {}, { id: "fld_title", name: "Title" }), table_id: "tbl2" };
+const title = { ...field("text", { multiline: false }, { id: "fld_title", name: "Title" }), table_id: "tbl2" };
 const status = { ...field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" }), table_id: "tbl2" };
-const notes = { ...field("long_text", { rich: false }, { id: "fld_notes", name: "Notes" }), table_id: "tbl2" };
+const notes = { ...field("text", { multiline: true }, { id: "fld_notes", name: "Notes" }), table_id: "tbl2" };
 const due = { ...field("date", { include_time: false, date_format: "iso", time_format: "h24" } as never, { id: "fld_due", name: "Due" }), table_id: "tbl2" };
-const extra = { ...field("single_line_text", {}, { id: "fld_extra", name: "Extra" }), table_id: "tbl2" };
+const extra = { ...field("text", { multiline: false }, { id: "fld_extra", name: "Extra" }), table_id: "tbl2" };
 const grid2 = makeView({ id: "viw2" });
 const setupTable = makeTable([title, status, notes, due, extra], {
   id: "tbl2",
@@ -38,6 +38,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}) {
     "GET /api/records/rec1/history": [],
     "POST /api/tables/tbl2/records/get": (call: { body: unknown }) => ({ records: (call.body as { ids: string[] }).ids.includes("recD") ? [domain] : [] }),
     "GET /api/tables/tbl2/records/recD": domain,
+    "PATCH /api/tables/tbl1/records": (call: { body: { records: { values: Record<string, unknown> }[] } }) => ({ records: [{ ...task, values: { ...task.values, ...call.body.records[0]!.values } }] }),
   } as never);
   const props: ExpandedRecordProps = {
     schema,
@@ -65,22 +66,32 @@ function setup(over: Partial<ExpandedRecordProps> = {}) {
 }
 
 describe("linked records in the record panel", () => {
-  it("shows each linked record as a card with the first filled fields of its table's grid, and opens it", async () => {
-    const { api, props } = setup();
-    const card = await screen.findByRole("button", { name: "Open Buy the domain" });
-    // Its grid's order (Notes before Status), Due hidden there, three fields at most.
-    await waitFor(() => expect(within(card).getAllByRole("term").map((t) => t.textContent)).toEqual(["Notes", "Status", "Extra"]));
-    expect(card).toHaveTextContent("Registered at Porkbun");
-    expect(api.calls.find((c) => c.path === "/api/tables/tbl2/records/get")?.body).toEqual({ ids: ["recD"] });
-    await userEvent.click(card);
-    expect(props.onOpenLinked).toHaveBeenCalledWith("tbl2", "recD");
-    // Opening a card is not an edit of the field.
-    expect(screen.queryByRole("combobox", { name: "Search Requires" })).toBeNull();
+  /** A linked record's card (not a button: see the first test). */
+  const findCard = () => waitFor(() => {
+    const el = document.querySelector<HTMLElement>('[data-linked-record="recD"]');
+    expect(el).not.toBeNull();
+    return el!;
   });
 
-  it("shows the whole linked record when a finger rests on its card, and the press does not open it", async () => {
+  it("shows each linked record as a card with its title, description and labels; a click edits the field", async () => {
+    const { api, props } = setup();
+    const card = await findCard();
+    expect(screen.queryByRole("button", { name: "Open Buy the domain" })).toBeNull();
+    // The first text field of its grid describes it, its select is a label; nothing else while it has labels.
+    await waitFor(() => expect(card).toHaveTextContent("Registered at Porkbun"));
+    expect(within(card).getByText("Done")).toBeInTheDocument();
+    expect(card).not.toHaveTextContent("Renews yearly");
+    expect(within(card).queryByRole("term")).toBeNull();
+    expect(api.calls.find((c) => c.path === "/api/tables/tbl2/records/get")?.body).toEqual({ ids: ["recD"] });
+    // A click is an edit of the field, not a way into the record (that is the Open of its details).
+    await userEvent.click(card);
+    expect(await screen.findByRole("combobox", { name: "Search Requires" })).toBeInTheDocument();
+    expect(props.onOpenLinked).not.toHaveBeenCalled();
+  });
+
+  it("shows the whole linked record when a finger rests on its card, which opens it from there", async () => {
     const { props } = setup();
-    const card = await screen.findByRole("button", { name: "Open Buy the domain" });
+    const card = await findCard();
     vi.useFakeTimers();
     fireEvent.pointerDown(card, { pointerType: "touch", clientX: 10, clientY: 10 });
     act(() => vi.advanceTimersByTime(500));
@@ -142,5 +153,47 @@ describe("the link picker", () => {
     expect(option).toHaveTextContent("Buy the domain");
     const lookup = api.calls.find((c) => c.path === "/api/tables/tbl2/records/lookup")!;
     expect(lookup.query.get("fields")).toBe("fld_notes,fld_status,fld_extra");
+  });
+
+  it("keeps the picked records in the field as cards while picking more, the pop-over only searching", async () => {
+    const domainB = { ...makeRecord({ fld_title: "Pick a host" }, "recH"), table_id: "tbl2" };
+    mockApi({
+      "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recH", name: "Pick a host" }] },
+      "POST /api/tables/tbl2/records/get": (call: { body: unknown }) => ({ records: [domain, domainB].filter((r) => (call.body as { ids: string[] }).ids.includes(r.id)) }),
+    } as never);
+    const onChange = vi.fn();
+    const env = { baseId: "app1", tableId: "tbl1", collaborators: PEOPLE, timeZone: "UTC", canCreateOptions: false, format: { timeZone: "UTC", userName: () => undefined }, currentUserId: "usr1", schema };
+    render(
+      <Providers client={createQueryClient()}>
+        <EditorEnvProvider value={env}>
+          <LinkEditor field={requires} value={[{ id: "recD", name: "Buy the domain" }]} variant="form" onChange={onChange} onCommit={vi.fn()} onCancel={vi.fn()} />
+        </EditorEnvProvider>
+      </Providers>,
+    );
+    const field = screen.getByRole("button", { name: "Requires" });
+    expect(within(field).getByRole("list", { name: "Linked records in Requires" })).toHaveTextContent("Buy the domain");
+    await userEvent.click(field);
+    const panel = await screen.findByRole("dialog");
+    // The pop-over finds and picks; the records picked are not listed again in it, nor can it clear them.
+    expect(within(panel).queryByRole("list", { name: "Linked records in Requires" })).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Clear" })).toBeNull();
+    await userEvent.click(within(await within(panel).findByRole("option", { name: /Pick a host/ })).getByRole("button"));
+    expect(within(field).getAllByRole("listitem").map((li) => li.textContent)).toEqual([expect.stringContaining("Buy the domain"), expect.stringContaining("Pick a host")]);
+    // A card's ✕ removes it, and the pop-over stays open for more.
+    await userEvent.click(within(field).getByRole("button", { name: "Remove Buy the domain" }));
+    expect(onChange).toHaveBeenLastCalledWith({ json: [{ id: "recH", name: "Pick a host" }] });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Search Requires" })).toHaveFocus();
+  });
+});
+
+describe("linked records in the record panel, edited in place", () => {
+  it("removes a record with its card's ✕ and saves it at once, without opening the picker", async () => {
+    const { api } = setup();
+    await waitFor(() => expect(document.querySelector('[data-linked-record="recD"]')).not.toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "Remove Buy the domain" }));
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "rec1", values: { fld_requires: null } }] });
+    expect(screen.queryByRole("combobox", { name: "Search Requires" })).toBeNull();
   });
 });

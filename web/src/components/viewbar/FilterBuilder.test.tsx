@@ -7,7 +7,7 @@ import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, CHOICES, PEOPLE, field } from "@/test/fields";
 import { FilterBuilder } from "./FilterBuilder";
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const qty = field("number", { precision: 0, allow_negative: true }, { id: "fld_qty", name: "Qty" });
 const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
 const due = field("date", { include_time: false, date_format: "us", time_format: "h12", timezone: null }, { id: "fld_due", name: "Due" });

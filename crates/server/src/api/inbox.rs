@@ -12,7 +12,7 @@
 //!   creates a record in the table through the normal record write path (so the
 //!   caller needs the Editor role there, and validation, history, events and
 //!   automations all apply), hands the draft's files that `fields` uses over to
-//!   the table's base (also the unattached uploads that long text values in `fields`, or the
+//!   the table's base (also the unattached uploads that rich text values in `fields`, or the
 //!   draft text with `note_as_comment`, embed by address), with `note_as_comment` adds the draft's text as the
 //!   record's first comment, and deletes the draft, all in one transaction. The
 //!   answer is the created record.

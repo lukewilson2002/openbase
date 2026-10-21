@@ -134,7 +134,7 @@ export function ViewSetupState({ setup, picture, heading, body, emptyBody, picke
             {canAddField && (
               <>
                 {" "}
-                <button type="button" onClick={() => setAdding(true)} className="text-primary underline underline-offset-2 hover:text-primary-hover">
+                <button type="button" onClick={() => setAdding(true)} className="text-primary-text underline underline-offset-2 hover:text-primary-hover">
                   {footLink}
                 </button>
               </>

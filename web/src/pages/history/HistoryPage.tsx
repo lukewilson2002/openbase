@@ -135,7 +135,7 @@ export function HistoryPage() {
                   onClick={() => update({ kind: c.kind })}
                   className={cn(
                     "h-8 shrink-0 rounded-full border px-3 text-[0.8125rem] font-semibold transition-colors pointer-coarse:h-10",
-                    on ? "border-primary bg-primary-soft text-primary-ink" : "border-line bg-surface text-muted hover:bg-hover",
+                    on ? "border-primary bg-primary text-primary-fg" : "border-line bg-surface text-muted hover:bg-hover",
                   )}
                 >
                   {c.label}

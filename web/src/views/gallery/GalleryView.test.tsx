@@ -36,12 +36,12 @@ describe("GalleryView", () => {
     expect(screen.getByRole("button", { name: "R2" }).querySelector("img")).toBeNull();
   });
 
-  it("names the cover field in the toolbar, tinted, and crops from the More menu", async () => {
+  it("keeps the cover behind the toolbar's View button, and crops from the More menu", async () => {
     const user = userEvent.setup();
     const view = gallery();
     const { api } = setup("editor", view, records, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
     await screen.findByRole("button", { name: "R1" });
-    expect(screen.getAllByRole("button", { name: "Cover: Cover" })[0]!.className).toContain("bg-primary-soft");
+    expect(screen.getAllByRole("button", { name: "View" })[0]!).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "Crop cover images" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));

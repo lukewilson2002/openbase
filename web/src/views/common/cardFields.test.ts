@@ -4,7 +4,7 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { cardFields, cardTitle, coverUrl, descriptionText, fieldsToShow, hasCardValue, isDescriptionField } from "./cardFields";
 
 const f = ALL_FIELDS;
-const table = makeTable([f.single_line_text!, f.number!, f.checkbox!, f.attachment!, f.button!, f.single_select!]);
+const table = makeTable([f.text!, f.number!, f.checkbox!, f.attachment!, f.button!, f.single_select!]);
 
 describe("card fields", () => {
   it("lists visible non-title fields in view order and skips buttons and excluded fields", () => {
@@ -27,13 +27,13 @@ describe("card fields", () => {
   });
 
   it("takes text-like fields as descriptions and flattens them to one line of plain text", () => {
-    const yes = (["single_line_text", "long_text", "lookup"] as const).map((t) => isDescriptionField(f[t]!));
+    const yes = (["text", "rich_text", "lookup"] as const).map((t) => isDescriptionField(f[t]!));
     expect(yes).toEqual([true, true, true]);
     expect([f.number!, f.formula!, f.single_select!, f.url!, f.attachment!].some(isDescriptionField)).toBe(false);
     expect(isDescriptionField({ ...f.formula!, options: { ...(f.formula!.options as object), result_type: "text" } } as typeof f.formula)).toBe(true);
-    expect(descriptionText(f.single_line_text, " a \n\n b ", DEFAULT_CTX)).toBe("a b");
-    expect(descriptionText(f.long_text, "# Head\n\n*soft* &amp; `code`", DEFAULT_CTX)).toBe("Head soft & code");
-    expect(descriptionText(f.long_text, null, DEFAULT_CTX)).toBe("");
+    expect(descriptionText(f.text, " a \n\n b ", DEFAULT_CTX)).toBe("a b");
+    expect(descriptionText(f.rich_text, "# Head\n\n*soft* &amp; `code`", DEFAULT_CTX)).toBe("Head soft & code");
+    expect(descriptionText(f.rich_text, null, DEFAULT_CTX)).toBe("");
     expect(descriptionText(undefined, "x", DEFAULT_CTX)).toBe("");
   });
 
@@ -45,7 +45,7 @@ describe("card fields", () => {
     expect(coverUrl(f.attachment!, makeRecord({ [f.attachment!.id]: files }))).toBe("/api/attachments/att2/thumb");
     expect(coverUrl(f.attachment!, makeRecord({}))).toBeNull();
     expect(coverUrl(undefined, makeRecord({}))).toBeNull();
-    expect(cardTitle(f.single_line_text, makeRecord({ [f.single_line_text!.id]: " Hello " }), DEFAULT_CTX)).toBe("Hello");
-    expect(cardTitle(f.single_line_text, makeRecord({}), DEFAULT_CTX)).toBe("Untitled");
+    expect(cardTitle(f.text, makeRecord({ [f.text!.id]: " Hello " }), DEFAULT_CTX)).toBe("Hello");
+    expect(cardTitle(f.text, makeRecord({}), DEFAULT_CTX)).toBe("Untitled");
   });
 });

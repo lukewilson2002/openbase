@@ -36,10 +36,10 @@ fn computed_types_are_rejected() {
 
 #[test]
 fn text_types() {
-    let s = sample_field(FieldType::SingleLineText);
+    let s = sample_field(FieldType::Text);
     assert_eq!(p(&s, "hello"), Some(json!("hello")));
     assert_eq!(p(&s, "two\nlines"), Some(json!("two lines")));
-    let l = sample_field(FieldType::LongText);
+    let l = sample_field(FieldType::RichText);
     assert_eq!(p(&l, "two\r\nlines"), Some(json!("two\nlines")));
     let b = sample_field(FieldType::Barcode);
     assert_eq!(p(&b, "0042"), Some(json!("0042")), "leading zeros kept");

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
-import { cellValueOf, createCellModelFactory, defaultWidth, toColumnSpecs } from "./cellModels";
+import { cellValueOf, createCellModelFactory, toColumnSpecs } from "./cellModels";
 
-const fields = [ALL_FIELDS.single_line_text, ALL_FIELDS.single_select, ALL_FIELDS.formula, ALL_FIELDS.created_time, ALL_FIELDS.autonumber, ALL_FIELDS.created_by];
-const columns = toColumnSpecs(fields, "fld_single_line_text", { fld_single_select: 300 }, { fld_formula: 99 });
-const rec = makeRecord({ fld_single_line_text: "Hello", fld_single_select: "chs3", fld_formula: 5 });
+const fields = [ALL_FIELDS.text, ALL_FIELDS.single_select, ALL_FIELDS.formula, ALL_FIELDS.created_time, ALL_FIELDS.autonumber, ALL_FIELDS.created_by];
+const columns = toColumnSpecs(fields, "fld_text", { fld_single_select: 300 }, { fld_formula: 99 });
+const rec = makeRecord({ fld_text: "Hello", fld_single_select: "chs3", fld_formula: 5 });
 
 describe("toColumnSpecs", () => {
-  it("applies saved widths, live overrides and defaults; computed columns are read-only", () => {
-    expect(columns.map((c) => c.width)).toEqual([defaultWidth(fields[0]!), 300, 99, defaultWidth(fields[3]!), defaultWidth(fields[4]!), defaultWidth(fields[5]!)]);
+  it("applies saved widths and live overrides, and leaves the rest to fit their content; computed columns are read-only", () => {
+    expect(columns.map((c) => c.width)).toEqual([undefined, 300, 99, undefined, undefined, undefined]);
     expect(columns.map((c) => c.readOnly)).toEqual([false, false, true, true, true, true]);
     expect(columns[0]!.isPrimary).toBe(true);
     expect(columns[1]!.isPrimary).toBe(false);
@@ -22,7 +22,7 @@ describe("cellValueOf", () => {
     expect(cellValueOf(rec, ALL_FIELDS.autonumber)).toBe(1);
     expect(cellValueOf(rec, ALL_FIELDS.created_by)).toBe("usr1");
     expect(cellValueOf(rec, ALL_FIELDS.number)).toBeNull();
-    expect(cellValueOf(rec, ALL_FIELDS.single_line_text)).toBe("Hello");
+    expect(cellValueOf(rec, ALL_FIELDS.text)).toBe("Hello");
   });
 });
 
@@ -51,7 +51,7 @@ describe("createCellModelFactory", () => {
   });
 
   it("new record objects (after an edit or refetch) get fresh models", () => {
-    const edited = { ...rec, values: { ...rec.values, fld_single_line_text: "Bye" } };
+    const edited = { ...rec, values: { ...rec.values, fld_text: "Bye" } };
     expect(factory.forRecord(edited, 0, undefined)).toMatchObject({ display: "Bye" });
     expect(factory.forRecord(rec, 0, undefined)).toMatchObject({ display: "Hello" });
   });

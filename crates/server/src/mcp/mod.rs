@@ -49,6 +49,7 @@ pub mod inbox;
 pub mod people;
 pub mod resolve;
 pub mod schema;
+pub mod search;
 pub mod sharing;
 pub mod support;
 pub mod tools;
@@ -102,8 +103,8 @@ const TOOLS_PAGE: usize = 100;
 const INSTRUCTIONS: &str = "\
 OpenBase is a self-hosted Airtable alternative. Tools act as the token's user, within the token's permissions: anything the user can do in the web app. \
 A project is called a base in the REST API (/api/bases, ids start with app). Start with list_projects, then get_project_schema for table, field and view names. \
-Records: list_records, search_records, get_record, create_records, update_records, delete_records use field NAMES; writes take up to 10 records per call; deleted records go to the trash (restore_from_trash). For counts, sums, averages, min/max or per-group breakdowns use aggregate_records, not record reads. \
-Structure: create_table, create_field (field_types explains the 28 types), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups by field name). Sidebar order: reorder_workspaces, reorder_projects, reorder_tables, reorder_views. \
+Records: list_records, search_records (one table; search_everything: all projects), get_record, create_records, update_records, delete_records use field NAMES; writes take up to 10 records per call; deleted records go to the trash (restore_from_trash). For counts, sums, averages, min/max or per-group breakdowns use aggregate_records, not record reads. \
+Structure: create_table, create_field (field_types explains the 28 types), update_field, create_view / update_view (grid, kanban, calendar, gallery, timeline, form, list; filters, sorts and groups by field name). Sidebar order: the reorder_* tools. \
 Views: keep each table's views useful to people and to you. When you create or import a table, or add, remove or retype fields, add or fix the views its purpose and the user's use of it call for, and only those (a calendar for dated records, a kanban by status, a form for intake), named for what they show. Read through a fitting view with query_view (its filter and sort applied) and point people to views by name. \
 Also: icons (Lucide names; list_icons), formulas (check_formula), comments, record history, share links and public forms, automations, CSV import and export, file uploads, notifications, your inbox of quick-capture drafts (list_inbox, add_to_inbox, file_inbox_item). \
 Tokens with the 'manage' permission also manage workspaces, members (one role per workspace; no per-project roles), invites and projects; instance administrators get admin_* tools. \
@@ -114,6 +115,7 @@ Credentials, sessions, API tokens, password resets, 2FA and the SMTP password ca
 /// application-management groups.
 pub fn definitions() -> Vec<tools::ToolDef> {
     let mut all = data::definitions();
+    all.extend(search::definitions());
     all.extend(people::definitions());
     all.extend(schema::definitions());
     all.extend(views::definitions());
@@ -128,6 +130,9 @@ pub fn definitions() -> Vec<tools::ToolDef> {
 
 /// Run the tool `name` (its level was already checked against the token).
 pub async fn run(ctx: &McpCtx, name: &str, args: Value) -> tools::ToolResult {
+    if let Some(r) = search::run(ctx, name, &args).await {
+        return r;
+    }
     if let Some(r) = people::run(ctx, name, &args).await {
         return r;
     }

@@ -3,4 +3,4 @@
 /**
  * Field type tag without options. Serialized names match [`FieldKind`] tags.
  */
-export type FieldType = "single_line_text" | "long_text" | "number" | "currency" | "percent" | "duration" | "rating" | "checkbox" | "single_select" | "multiple_select" | "date" | "email" | "url" | "phone" | "attachment" | "link" | "user" | "formula" | "lookup" | "rollup" | "count" | "created_time" | "last_modified_time" | "created_by" | "last_modified_by" | "autonumber" | "barcode" | "button";
+export type FieldType = "text" | "rich_text" | "number" | "currency" | "percent" | "duration" | "rating" | "checkbox" | "single_select" | "multiple_select" | "date" | "email" | "url" | "phone" | "attachment" | "link" | "user" | "formula" | "lookup" | "rollup" | "count" | "created_time" | "last_modified_time" | "created_by" | "last_modified_by" | "autonumber" | "barcode" | "button";

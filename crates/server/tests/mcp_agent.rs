@@ -303,7 +303,7 @@ async fn an_agent_runs_the_business_without_the_ui() {
     agent
         .call(
             "create_field",
-            json!({"base_id": base_id, "table": "Activity log", "name": "Detail", "type": "long_text"}),
+            json!({"base_id": base_id, "table": "Activity log", "name": "Detail", "type": "rich_text"}),
         )
         .await;
 

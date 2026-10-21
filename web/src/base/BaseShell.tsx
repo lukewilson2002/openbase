@@ -123,8 +123,9 @@ export function BaseShell({ section }: { section?: "automations" }) {
           hidePhoneLogo
           mainLabel={automations ? "Automations" : (view?.name ?? "Project content")}
           brand={<BaseBrand schema={schema} table={table} />}
+          searchHere={{ workspaceId: schema.workspace_id, baseId: schema.id }}
           topBar={<BaseTopBar schema={schema} table={table} desktop={desktop} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
-          sidebar={<NavTree workspaceId={schema.workspace_id} baseId={schema.id} tableId={table?.id} viewId={view?.id} automations={automations} />}
+          sidebar={<NavTree workspaceId={schema.workspace_id} baseId={schema.id} tableId={table?.id} viewId={view?.id} />}
           sidebarFooter={<NavGlobalLinks page={null} />}
         >
           {page}

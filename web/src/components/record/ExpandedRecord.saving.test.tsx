@@ -1,4 +1,4 @@
-/** The expanded record's save status, long text that saves while typed, the Share button, and the full-screen editors. */
+/** The expanded record's save status, multiline text that saves while typed, the Share button, and the full-screen editors. */
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
@@ -10,9 +10,9 @@ import { PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
 import { apiError, makeSchema, mockApi } from "@/test/utils";
 import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
 
-const name = field("single_line_text", {}, { id: "fld_name", name: "Name" });
-const plain = field("long_text", { rich: false }, { id: "fld_plain", name: "Plain notes" });
-const rich = field("long_text", { rich: true }, { id: "fld_rich", name: "Notes" });
+const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
+const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain notes" });
+const rich = field("rich_text", {}, { id: "fld_rich", name: "Notes" });
 const table = makeTable([name, plain, rich]);
 const schema = { ...makeSchema("owner"), tables: [table] };
 const record = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec1");
@@ -61,10 +61,13 @@ async function edit(field: string): Promise<HTMLInputElement & HTMLTextAreaEleme
   return (await screen.findByRole("textbox", { name: field })) as HTMLInputElement & HTMLTextAreaElement;
 }
 
+/** A field's row (the comment box below is a rich text editor too). */
+const fieldRow = (name: string) => screen.getByRole("group", { name });
+
 /** Starts editing the rich text field and waits for its editor. */
 async function editRich() {
   await userEvent.click(await screen.findByRole("button", { name: "Edit Notes" }));
-  return screen.findByRole("toolbar", { name: "Formatting" });
+  return within(fieldRow("Notes")).findByRole("toolbar", { name: "Formatting" });
 }
 
 afterEach(() => {
@@ -127,7 +130,7 @@ describe("ExpandedRecord: save status", () => {
   });
 });
 
-describe("ExpandedRecord: long text saves while typing", () => {
+describe("ExpandedRecord: multiline text saves while typing", () => {
   it("saves the plain text field once typing pauses, without rebuilding the text area under the caret", async () => {
     const { api } = setup();
     const area = await edit("Plain notes");
@@ -171,7 +174,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
     const toolbar = await editRich();
     expect(toolbar).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Preview" })).not.toBeInTheDocument();
-    const pm = document.querySelector(".ProseMirror") as HTMLElement & { editor: Editor };
+    const pm = fieldRow("Notes").querySelector(".ProseMirror") as HTMLElement & { editor: Editor };
     expect(pm).toHaveTextContent("Plan");
     expect(pm.querySelector("h1")).not.toBeNull();
     act(() => {
@@ -181,7 +184,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
     const sent = (api.callsTo(PATCH)[0]!.body as { records: { values: Record<string, string> }[] }).records[0]!.values.fld_rich!;
     expect(sent).toMatch(/^# Plan\n\n- one.*done$/);
-    expect(document.querySelector(".ProseMirror")).toBe(pm);
+    expect(fieldRow("Notes").querySelector(".ProseMirror")).toBe(pm);
   });
 
   it("embeds a file inserted into the rich text: it goes up to the project of the record and is saved as an image line", async () => {
@@ -189,10 +192,10 @@ describe("ExpandedRecord: long text saves while typing", () => {
     await editRich();
     // The editor starts with the caret at the end; the file goes in at the caret, so put it after the heading.
     act(() => {
-      (document.querySelector(".ProseMirror") as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(1);
+      (fieldRow("Notes").querySelector(".ProseMirror") as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(1);
     });
-    await userEvent.upload(screen.getByLabelText("Media files"), new File(["png"], "plan.png", { type: "image/png" }));
-    await waitFor(() => expect(document.querySelector(".ProseMirror figure.ob-media img")).toHaveAttribute("src", "/api/attachments/att5/plan.png"));
+    await userEvent.upload(within(fieldRow("Notes")).getByLabelText("Media files"), new File(["png"], "plan.png", { type: "image/png" }));
+    await waitFor(() => expect(fieldRow("Notes").querySelector(".ProseMirror figure.ob-media img")).toHaveAttribute("src", "/api/attachments/att5/plan.png"));
     expect(api.callsTo("POST /api/bases/app1/attachments")).toHaveLength(1);
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1), { timeout: 3000 });
     const sent = (api.callsTo(PATCH)[0]!.body as { records: { values: Record<string, string> }[] }).records[0]!.values.fld_rich!;
@@ -202,7 +205,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
   it("opens the rich text editor full screen from the corner button and closes it on Escape without closing the record", async () => {
     const { props } = setup();
     await editRich();
-    await userEvent.click(screen.getByRole("button", { name: "Open full screen" }));
+    await userEvent.click(within(fieldRow("Notes")).getByRole("button", { name: "Open full screen" }));
     const full = await screen.findByRole("dialog", { name: "Notes" });
     expect(within(full).getByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
     expect(within(full).getByRole("button", { name: "Done" })).toBeInTheDocument();
@@ -214,13 +217,13 @@ describe("ExpandedRecord: long text saves while typing", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Notes" })).not.toBeInTheDocument());
     expect(props.onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    await waitFor(() => expect(document.querySelector(".ProseMirror")).toHaveTextContent("extra"));
+    await waitFor(() => expect(fieldRow("Notes").querySelector(".ProseMirror")).toHaveTextContent("extra"));
   });
 
   it("opens the plain text field full screen from its corner button", async () => {
     const { api } = setup();
     await edit("Plain notes");
-    await userEvent.click(screen.getByRole("button", { name: "Open full screen" }));
+    await userEvent.click(within(fieldRow("Plain notes")).getByRole("button", { name: "Open full screen" }));
     const full = await screen.findByRole("dialog", { name: "Plain notes" });
     const area = within(full).getByRole("textbox", { name: "Plain notes" });
     expect(area).toHaveValue("first");
@@ -232,7 +235,7 @@ describe("ExpandedRecord: long text saves while typing", () => {
   });
 });
 
-describe("ExpandedRecord: long text while saves and refetches are in flight", () => {
+describe("ExpandedRecord: multiline text while saves and refetches are in flight", () => {
   const GET = "GET /api/tables/tbl1/records/rec1";
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

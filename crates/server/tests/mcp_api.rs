@@ -233,6 +233,39 @@ async fn every_catalogued_endpoint_is_served_by_the_router() {
 // ----------------------------------------------------------------------- api_request
 
 #[tokio::test]
+async fn an_agent_with_a_manage_token_sets_the_accent_colour() {
+    let r = rig().await;
+    let app = r.app();
+    let (_, res) = api(
+        app,
+        &r.manage,
+        "PATCH",
+        "/api/auth/me",
+        Value::Null,
+        json!({"accent": "purple"}),
+    )
+    .await;
+    assert_eq!(res["status"], 200);
+    assert_eq!(res["body"]["accent"], "purple");
+    // The web app reads the same profile.
+    assert_eq!(
+        app.get(&r.p.f.owner, "/api/auth/me").await.body["accent"],
+        "purple"
+    );
+    // A token without the manage scope may not change the account.
+    let (_, res) = api(
+        app,
+        &r.write,
+        "PATCH",
+        "/api/auth/me",
+        Value::Null,
+        json!({"accent": "red"}),
+    )
+    .await;
+    assert_eq!(res["status"], 403);
+}
+
+#[tokio::test]
 async fn api_request_runs_gets_posts_patches_and_deletes_like_the_web_app() {
     let r = rig().await;
     let app = r.app();

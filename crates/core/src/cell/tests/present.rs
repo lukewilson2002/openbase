@@ -78,8 +78,8 @@ fn every_sample_value_reads_non_blank() {
 #[test]
 fn to_value_per_type() {
     let s = |t: FieldType, v: Json| to_value(&sample_field(t), Some(&v), &Names);
-    assert_eq!(s(FieldType::SingleLineText, json!("hi")), text("hi"));
-    assert_eq!(s(FieldType::SingleLineText, json!("")), Value::Null);
+    assert_eq!(s(FieldType::Text, json!("hi")), text("hi"));
+    assert_eq!(s(FieldType::Text, json!("")), Value::Null);
     assert_eq!(s(FieldType::Number, json!(2.5)), Value::Number(2.5));
     assert_eq!(
         s(FieldType::Number, json!("2.5")),
@@ -389,7 +389,7 @@ fn display_other_types() {
         "photo.png, notes.txt"
     );
     assert_eq!(
-        show(&sample_field(FieldType::LongText), json!("a\nb")),
+        show(&sample_field(FieldType::RichText), json!("a\nb")),
         "a\nb"
     );
     assert_eq!(

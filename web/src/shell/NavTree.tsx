@@ -8,6 +8,7 @@
  * hand-made choices are remembered per device. A project's tables are loaded when it is opened,
  * from the same query the project's page uses. The "…" menus hold the workspace's and the project's
  * actions: new project, import, members, history, trash, settings, rename, icon, share, automations, delete.
+ * A right-click on any row of the tree opens its "…" menu too.
  *
  * Workspaces and, inside a workspace, projects can be put in another order: drag a row, or "Move up"
  * and "Move down" in its "…" menu (see `sortable.tsx`). A person's workspace order is their own; the
@@ -31,8 +32,8 @@ import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { useNavDialog } from "./NavDialogs";
 import { NavTables } from "./NavTables";
-import { RowChevron, SidebarHeading, SidebarLink, rowActionClass } from "./Sidebar";
-import { MoveItems, NO_DRAG, ReorderRoot, SortableGroup, SortableRow } from "./sortable";
+import { RowChevron, SidebarHeading, SidebarLink, rowActionClass, rowNamePadClass } from "./Sidebar";
+import { MoveItems, NO_DRAG, ReorderRoot, SortableGroup, SortableRow, useRowMenu } from "./sortable";
 import { useOpenState } from "./useOpenState";
 import { useReorder } from "./useReorder";
 
@@ -43,8 +44,6 @@ export interface NavTreeProps {
   baseId?: string;
   tableId?: string;
   viewId?: string;
-  /** The project's automations page is open. */
-  automations?: boolean;
 }
 
 export function NavTree(props: NavTreeProps) {
@@ -116,13 +115,15 @@ export function NavGlobalLinks({ page }: { page: "history" | "trash" | null }) {
 }
 
 /** A row's name: a tile and the text, filling the row up to the "…" button. */
-const rowNameClass =
-  "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] pl-1.5 pr-8 text-left text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11 pointer-coarse:pr-10";
+const rowNameClass = cn(
+  "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] pl-1.5 text-left text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11",
+  rowNamePadClass,
+);
 
 function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary; tree: NavTreeProps; expanded: boolean; onToggle: (open: boolean) => void }) {
   const groupId = `ws-${ws.id}-projects`;
   const reorder = useReorder();
-  const current = ws.id === tree.workspaceId;
+  const { menu, onContextMenu } = useRowMenu();
   const name = (
     <>
       <WorkspaceTile ws={ws} size="sm" className="size-[22px] text-xs" />
@@ -135,21 +136,22 @@ function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary;
       label={ws.name}
       className="flex flex-col gap-0.5"
       rowClassName="group/item relative flex items-center"
+      onContextMenu={onContextMenu}
       row={
         <>
           <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${ws.name}`} controls={groupId} onClick={() => onToggle(!expanded)} />
           {/* The name folds the workspace like its chevron: it goes nowhere. */}
-          <button type="button" onClick={() => onToggle(!expanded)} className={cn(rowNameClass, current && "font-semibold")}>
+          <button type="button" onClick={() => onToggle(!expanded)} className={rowNameClass}>
             {name}
           </button>
-          <WorkspaceMenu ws={ws} />
+          <WorkspaceMenu ws={ws} menu={menu} />
         </>
       }
     >
       {expanded && (
         <SortableGroup group={`projects-${ws.id}`} items={ws.bases} idOf={(b) => b.id} enabled={ws.bases.every((b) => basePermissions.editBase(b.role))} onReorder={(ids) => reorder({ kind: "projects", workspaceId: ws.id, ids })}>
           {(bases) => (
-            <ul id={groupId} aria-label={`Projects in ${ws.name}`} className="flex flex-col gap-0.5 pb-1 pl-3.5">
+            <ul id={groupId} aria-label={`Projects in ${ws.name}`} className="flex flex-col gap-0.5 pb-1 pl-[7px]">
               {bases.map((b) => (
                 <ProjectItem key={b.id} base={b} workspaceName={ws.name} tree={tree} />
               ))}
@@ -162,10 +164,12 @@ function WorkspaceItem({ ws, tree, expanded, onToggle }: { ws: WorkspaceSummary;
   );
 }
 
-/** A "…" button with its menu, in the place every tree row keeps it. */
-function RowMenu({ label, children }: { label: string; children: ReactNode }) {
+type RowMenuState = ReturnType<typeof useRowMenu>["menu"];
+
+/** A "…" button with its menu, in the place every tree row keeps it; `menu` also opens it on a right-click. */
+function RowMenu({ label, menu, children }: { label: string; menu: RowMenuState; children: ReactNode }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu {...menu}>
       <DropdownMenuTrigger asChild>
         <IconButton label={label} size="sm" noTooltip className={rowActionClass} {...NO_DRAG}>
           <Ellipsis aria-hidden className="size-4" />
@@ -186,12 +190,12 @@ function LinkItem({ to, icon, children }: { to: string; icon: ReactNode; childre
   );
 }
 
-function WorkspaceMenu({ ws }: { ws: WorkspaceSummary }) {
+function WorkspaceMenu({ ws, menu }: { ws: WorkspaceSummary; menu: RowMenuState }) {
   const openDialog = useNavDialog();
   const isOwner = atLeast(ws.role, "owner");
   const canCreate = atLeast(ws.role, "creator");
   return (
-    <RowMenu label={`Workspace options for ${ws.name}`}>
+    <RowMenu label={`Workspace options for ${ws.name}`} menu={menu}>
       {canCreate && (
         <>
           <DropdownMenuItem onSelect={() => openDialog({ kind: "create-project", workspaceId: ws.id })}>
@@ -250,21 +254,23 @@ function ProjectItem({ base, workspaceName, tree }: { base: BaseSummary; workspa
   const active = base.id === tree.baseId;
   const expanded = toggled[base.id] ?? active;
   const groupId = `project-${base.id}-tables`;
+  const { menu, onContextMenu } = useRowMenu();
   return (
     <SortableRow
       id={base.id}
       label={base.name}
       className="flex flex-col gap-0.5"
       rowClassName="group/item relative flex items-center"
+      onContextMenu={onContextMenu}
       row={
         <>
           <RowChevron expanded={expanded} label={`${expanded ? "Collapse" : "Expand"} ${base.name}`} controls={groupId} onClick={() => toggle(base.id, !expanded)} />
           {/* The name folds the project like its chevron; its tables are what open pages. */}
-          <button type="button" onClick={() => toggle(base.id, !expanded)} className={cn(rowNameClass, active && "font-semibold")}>
+          <button type="button" onClick={() => toggle(base.id, !expanded)} className={rowNameClass}>
             <EntityTile name={base.name} icon={base.icon} color={base.color} size="xs" />
             <span className="min-w-0 flex-1 truncate">{base.name}</span>
           </button>
-          <ProjectMenu base={base} workspaceName={workspaceName} open={active} />
+          <ProjectMenu base={base} workspaceName={workspaceName} open={active} menu={menu} />
         </>
       }
     >
@@ -273,7 +279,7 @@ function ProjectItem({ base, workspaceName, tree }: { base: BaseSummary; workspa
   );
 }
 
-function ProjectMenu({ base, workspaceName, open }: { base: BaseSummary; workspaceName: string; open: boolean }) {
+function ProjectMenu({ base, workspaceName, open, menu }: { base: BaseSummary; workspaceName: string; open: boolean; menu: RowMenuState }) {
   const qc = useQueryClient();
   const toast = useToast();
   const openDialog = useNavDialog();
@@ -290,7 +296,7 @@ function ProjectMenu({ base, workspaceName, open }: { base: BaseSummary; workspa
   });
   const canEdit = basePermissions.editBase(base.role);
   return (
-    <RowMenu label={`Project options for ${base.name}`}>
+    <RowMenu label={`Project options for ${base.name}`} menu={menu}>
       {addTable && (
         <>
           <DropdownMenuSub>
@@ -360,7 +366,7 @@ function ProjectMenu({ base, workspaceName, open }: { base: BaseSummary; workspa
   );
 }
 
-/** What an open project holds: its tables (from its schema, the query the project's page shares) and Automations. */
+/** What an open project holds: its tables (from its schema, the query the project's page shares). Its automations are in its menu. */
 function ProjectBody({ id, base, tree }: { id: string; base: BaseSummary; tree: NavTreeProps }) {
   const openBaseDialog = useBaseDialog();
   // Fresh enough as it is: the open project's page loaded this a moment ago and keeps it current.
@@ -379,7 +385,7 @@ function ProjectBody({ id, base, tree }: { id: string; base: BaseSummary; tree: 
     );
   } else if (schema.isError) {
     tables = (
-      <p className="py-1 pl-[42px] text-xs text-muted">
+      <p className="py-1 pl-1.5 text-xs text-muted">
         Could not load the tables.{" "}
         <button type="button" onClick={() => void schema.refetch()} className="underline hover:text-fg">
           Try again
@@ -387,24 +393,13 @@ function ProjectBody({ id, base, tree }: { id: string; base: BaseSummary; tree: 
       </p>
     );
   } else {
-    tables = <p className="py-1 pl-[42px] text-xs text-muted">Loading tables…</p>;
+    tables = <p className="py-1 pl-1.5 text-xs text-muted">Loading tables…</p>;
   }
   return (
-    <div id={id} className="flex flex-col gap-0.5 pb-1 pl-3.5">
+    // One indent (7 px) in, plus the chevron's column (28 px) that tables do not have: a table's icon
+    // sits just inside its project's tile, as each level of the tree sits inside the one above.
+    <div id={id} className="flex flex-col gap-0.5 pb-1 pl-[35px]">
       {tables}
-      {basePermissions.manageAutomations(base.role) && (
-        <SidebarLink
-          to={`/base/${base.id}/automations`}
-          end={false}
-          muted
-          active={active && !!tree.automations}
-          icon={<Zap />}
-          className="h-[34px] pl-[34px] pointer-coarse:h-11"
-          iconClassName="[&>svg]:size-4"
-        >
-          Automations
-        </SidebarLink>
-      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ describe("Button", () => {
   });
   it("has a soft variant: the primary colour on its soft background", () => {
     render(<Button variant="soft">New base</Button>);
-    expect(screen.getByRole("button")).toHaveClass("bg-primary-soft", "text-primary");
+    expect(screen.getByRole("button")).toHaveClass("bg-primary-soft", "text-primary-text");
   });
 });
 

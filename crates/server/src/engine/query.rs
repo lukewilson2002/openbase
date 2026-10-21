@@ -63,11 +63,13 @@ use ob_core::ids::FieldId;
 use ob_core::limits;
 use ob_core::query::{
     CompiledFilter, CompiledRowColor, OwnedRow, QueryCtx, Row, aggregate, aggregations_for,
-    compile_filter, compile_row_color, group_spans, matches, matches_search, row_color_compiled,
-    search_needle, sort_rows_with_groups,
+    compile_filter, compile_row_color, group_day, group_spans, matches, matches_search,
+    row_color_compiled, search_needle, sort_rows_with_groups,
 };
 use ob_core::value::Value;
-use ob_core::view::{Aggregation, Condition, Filter, FilterItem, RowColor, Sort, ViewConfig};
+use ob_core::view::{
+    Aggregation, Condition, Filter, FilterItem, Group, RowColor, Sort, ViewConfig,
+};
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
@@ -269,7 +271,7 @@ struct Plan {
     by_id: HashMap<FieldId, Field>,
     filter: CompiledFilter,
     sorts: Vec<Sort>,
-    groups: Vec<Sort>,
+    groups: Vec<Group>,
     search: String,
     search_fields: Vec<Field>,
     range: Option<RangeSpec>,
@@ -388,15 +390,21 @@ fn is_user_field(f: &Field) -> bool {
     )
 }
 
-fn sortable(by_id: &HashMap<FieldId, Field>, sorts: &[Sort]) -> Vec<Sort> {
+/// The sort or group levels on existing sortable fields, each field once.
+fn sortable<T: Clone>(
+    by_id: &HashMap<FieldId, Field>,
+    levels: &[T],
+    field_id: fn(&T) -> &FieldId,
+) -> Vec<T> {
     let mut seen = HashSet::new();
-    sorts
+    levels
         .iter()
         .filter(|s| {
+            let id = field_id(s);
             by_id
-                .get(&s.field_id)
+                .get(id)
                 .is_some_and(|f| !matches!(f.kind, FieldKind::Button(_)))
-                && seen.insert(s.field_id.clone())
+                && seen.insert(id.clone())
         })
         .cloned()
         .collect()
@@ -543,8 +551,8 @@ impl Plan {
             .transpose()?;
         let ctx = QueryCtx::new(Utc::now(), tz).with_user(user_id);
         Ok(Plan {
-            sorts: sortable(&by_id, &config.sorts),
-            groups: sortable(&by_id, &config.groups)
+            sorts: sortable(&by_id, &config.sorts, |s| &s.field_id),
+            groups: sortable(&by_id, &config.groups, |g| &g.field_id)
                 .into_iter()
                 .take(limits::MAX_GROUPS)
                 .collect(),
@@ -565,8 +573,9 @@ impl Plan {
     fn keep(&self) -> HashSet<String> {
         self.sorts
             .iter()
-            .chain(&self.groups)
-            .map(|s| s.field_id.clone())
+            .map(|s| &s.field_id)
+            .chain(self.groups.iter().map(|g| &g.field_id))
+            .cloned()
             .collect()
     }
 
@@ -669,7 +678,14 @@ fn group_headers(rows: &[OwnedRow], plan: &Plan, names: &NameCache) -> Vec<Group
         .filter_map(|span| {
             let level = plan.groups.get(span.level)?;
             let field = plan.by_id.get(&level.field_id)?;
-            let value = group_value(field, &span.key.key, span.key.empty, rows.get(span.start));
+            let first = rows.get(span.start);
+            // A date group's key names its period (a month, a year...); a
+            // record moved into it gets the period's first day.
+            let day = first
+                .and_then(|r| group_day(field, r.get(&field.id), plan.tz, level.granularity))
+                .map(|d| d.format("%Y-%m-%d").to_string());
+            let key = day.as_deref().unwrap_or(&span.key.key);
+            let value = group_value(field, key, span.key.empty, first);
             Some(GroupHeader {
                 depth: span.level,
                 field_id: field.id.clone(),
@@ -1186,14 +1202,28 @@ pub struct RecordHit {
     pub starts_with: bool,
     /// When the primary field did not match: the text of the field that did.
     pub matched_text: Option<String>,
+    /// The id and name of that field.
+    pub matched_field: Option<(FieldId, String)>,
+}
+
+/// The text the global search reads in a cell: its display text, and for rich
+/// text its words without the Markdown (a mention reads `@Name`), so neither
+/// matches nor snippets show markup.
+fn search_text(field: &Field, stored: Option<&Json>, names: &NameCache, tz: Tz) -> String {
+    let text = display_text(field, stored, names, tz);
+    if matches!(field.kind, FieldKind::RichText(_)) {
+        crate::store::mentions::plain_text(&text)
+    } else {
+        text
+    }
 }
 
 /// Fields whose text the global search reads besides the primary field.
 fn is_text_like(kind: &FieldKind) -> bool {
     matches!(
         kind,
-        FieldKind::SingleLineText(_)
-            | FieldKind::LongText(_)
+        FieldKind::Text(_)
+            | FieldKind::RichText(_)
             | FieldKind::Email(_)
             | FieldKind::Url(_)
             | FieldKind::Phone(_)
@@ -1202,7 +1232,7 @@ fn is_text_like(kind: &FieldKind) -> bool {
 
 /// Live records of `table` whose primary field or text-like fields contain
 /// `needle` (from [`search_needle`]), compared like the grid search: display
-/// text, ignoring case. Primary fields that start with the needle come first,
+/// text, ignoring case (rich text as its words, see [`search_text`]). Primary fields that start with the needle come first,
 /// then other primary-field matches, then matches in other fields; at most
 /// `limit`, in manual order within each group. Reads at most `*rows_left`
 /// records and counts them off, so a search over many tables shares one
@@ -1236,7 +1266,7 @@ pub fn search_table(
     let (mut starts, mut contains, mut elsewhere) = (Vec::new(), Vec::new(), Vec::new());
     scan_rows(conn, &table.id, &needed, &names, |row| {
         *rows_left -= 1;
-        let name = display_text(&primary, row.get(&primary.id), &names, tz);
+        let name = search_text(&primary, row.get(&primary.id), &names, tz);
         let lower = name.to_lowercase();
         if lower.starts_with(needle) {
             starts.push(RecordHit {
@@ -1244,6 +1274,7 @@ pub fn search_table(
                 name,
                 starts_with: true,
                 matched_text: None,
+                matched_field: None,
             });
         } else if lower.contains(needle) {
             if contains.len() < limit {
@@ -1252,19 +1283,21 @@ pub fn search_table(
                     name,
                     starts_with: false,
                     matched_text: None,
+                    matched_field: None,
                 });
             }
         } else if elsewhere.len() < limit {
-            let matched = others
-                .iter()
-                .map(|f| display_text(f, row.get(&f.id), &names, tz))
-                .find(|text| text.to_lowercase().contains(needle));
-            if let Some(text) = matched {
+            let matched = others.iter().find_map(|f| {
+                let text = search_text(f, row.get(&f.id), &names, tz);
+                text.to_lowercase().contains(needle).then_some((f, text))
+            });
+            if let Some((f, text)) = matched {
                 elsewhere.push(RecordHit {
                     id: row.id,
                     name,
                     starts_with: false,
                     matched_text: Some(text),
+                    matched_field: Some((f.id.clone(), f.name.clone())),
                 });
             }
         }
@@ -1349,7 +1382,7 @@ mod tests {
         )
         .unwrap();
         for (i, id) in ["fldName", "fldNote"].into_iter().enumerate() {
-            let f = field(id, FieldKind::SingleLineText(TextOptions::default()));
+            let f = field(id, FieldKind::Text(TextOptions::default()));
             let f = Field {
                 table_id: "t".into(),
                 ..f
@@ -1514,7 +1547,7 @@ mod tests {
 
     #[test]
     fn sanitize_drops_conditions_on_unknown_fields_and_unfit_operators() {
-        let name = field("name", FieldKind::SingleLineText(TextOptions::default()));
+        let name = field("name", FieldKind::Text(TextOptions::default()));
         let by_id: HashMap<FieldId, Field> = [("name".to_string(), name)].into();
         let filter: Filter = serde_json::from_value(json!({
             "conjunction": "or",
@@ -1536,7 +1569,7 @@ mod tests {
 
     #[test]
     fn group_value_is_the_raw_value_to_write() {
-        let status = field("status", FieldKind::SingleLineText(TextOptions::default()));
+        let status = field("status", FieldKind::Text(TextOptions::default()));
         let row = owned("r", json!({"status": "Open"}));
         assert_eq!(
             group_value(&status, "Open", false, Some(&row)),

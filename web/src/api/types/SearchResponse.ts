@@ -2,7 +2,8 @@
 import type { SearchResult } from "./SearchResult";
 
 /**
- * `GET /api/search?q=&limit=`: matches in workspace, base, table and view
- * names, in record text and in comments, best first.
+ * `GET /api/search?q=&limit=&workspace=&base=`: matches in workspace, base,
+ * table and view names, in record text and in comments, best first;
+ * `workspace` or `base` narrows them to what is inside it.
  */
 export type SearchResponse = { results: Array<SearchResult>, };

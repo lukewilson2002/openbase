@@ -336,7 +336,7 @@ fn config_hash(config: &ob_core::view::ViewConfig) -> u64 {
 }
 
 /// Whether a public viewer of `r` can see the file `att_id`: it is in a visible attachment
-/// field, or referenced (`/api/attachments/{id}/...`) in a visible long text field, of a live
+/// field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live
 /// record the view's filter lets through. Decided per file, from the few records that mention
 /// its id, not by reading the whole view; the answer is cached (least recently used).
 fn attachment_exposed(
@@ -402,10 +402,10 @@ fn compute_exposed(
         .filter(|f| matches!(f.kind, FieldKind::Attachment(_)))
         .map(|f| f.id.as_str())
         .collect();
-    // Files embedded or linked in visible long text are shown too.
+    // Files embedded or linked in visible rich text are shown too.
     let text_fields: Vec<&str> = visible
         .iter()
-        .filter(|f| matches!(f.kind, FieldKind::LongText(_)))
+        .filter(|f| matches!(f.kind, FieldKind::RichText(_)))
         .map(|f| f.id.as_str())
         .collect();
     if attachment_fields.is_empty() && text_fields.is_empty() {

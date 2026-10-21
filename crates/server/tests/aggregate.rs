@@ -492,10 +492,7 @@ async fn invalid_requests_say_what_is_wrong_and_what_would_work() {
     )
     .await;
     assert!(m.contains("Cannot sum \"Name\""), "{m}");
-    assert!(
-        m.contains("single_line_text") && m.contains("\"Age\""),
-        "{m}"
-    );
+    assert!(m.contains("text") && m.contains("\"Age\""), "{m}");
     let m = bad(
         f,
         json!({ "aggregates": [{ "function": "avg", "field": "Status" }] }),

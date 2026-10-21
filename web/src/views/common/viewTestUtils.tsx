@@ -11,7 +11,7 @@ import { USER, makeView, mockApi, stubDesktop, type Handler, type MockApi, type 
 import type { ViewProps } from "../types";
 
 export const F = {
-  name: field("single_line_text", {}, { id: "f_name", name: "Name" }),
+  name: field("text", { multiline: false }, { id: "f_name", name: "Name" }),
   status: field("single_select", { choices: [{ id: "s1", name: "Todo", color: "gray" }, { id: "s2", name: "Doing", color: "blue" }, { id: "s3", name: "Done", color: "green" }] }, { id: "f_status", name: "Status" }),
   start: field("date", { include_time: false, date_format: "iso", time_format: "h24", timezone: null }, { id: "f_start", name: "Start" }),
   end: field("date", { include_time: false, date_format: "iso", time_format: "h24", timezone: null }, { id: "f_end", name: "End" }),

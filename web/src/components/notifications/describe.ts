@@ -1,7 +1,8 @@
 /**
  * Turns a notification into text and a link. The payload keys are the ones the server writes:
- * `mention` (store/comments.rs) has `base_id`, `base_name`, `table_id`, `table_name`, `record_id`,
- * `record_name`, `comment_id`, `snippet`, `author_id`, `author_name` (and `base_icon`/`table_icon`,
+ * `mention` (store/mentions.rs) has `base_id`, `base_name`, `table_id`, `table_name`, `record_id`,
+ * `record_name`, `snippet`, `author_id`, `author_name`, then `comment_id` for a mention in a comment or
+ * `field_id`/`field_name` for one in a rich text cell (and `base_icon`/`table_icon`,
  * the Lucide names the base and table had then, which `notificationPlace` returns); `assigned` (engine/write.rs)
  * has the same location keys plus `field_id`, `field_name` and `assigned_by` (a user id, no name);
  * `automation` has `message`, `automation_name`, `base_id`, `record_id`. Every key is optional

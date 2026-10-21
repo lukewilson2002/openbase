@@ -407,17 +407,14 @@ async fn converting_a_link_to_another_type_removes_the_inverse() {
         .patch(
             &f.owner,
             &format!("/api/fields/{}", sid(&link["id"])),
-            json!({ "type": "single_line_text", "options": {} }),
+            json!({ "type": "text", "options": {} }),
         )
         .await;
     r.assert_status(200);
-    assert_eq!(r.body["type"], "single_line_text");
+    assert_eq!(r.body["type"], "text");
     assert_eq!(r.body["removed_field_ids"], json!([iid]));
     assert!(!has_field(&f.table(t2id).await, "Table 1"));
-    assert_eq!(
-        field(&f.table(&f.table_id).await, "Orders")["type"],
-        "single_line_text"
-    );
+    assert_eq!(field(&f.table(&f.table_id).await, "Orders")["type"], "text");
 
     // the orphaned inverse is not offered in the trash and cannot be restored
     let trash = f
@@ -442,7 +439,7 @@ async fn converting_a_field_to_a_link_drops_its_values_and_creates_the_inverse()
     let text = f
         .add_field(
             &f.table_id,
-            json!({ "name": "Ref", "type": "single_line_text", "options": {} }),
+            json!({ "name": "Ref", "type": "text", "options": {} }),
         )
         .await;
     let tid = sid(&text["id"]);

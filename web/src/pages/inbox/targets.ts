@@ -34,15 +34,9 @@ export function captureTargets(workspaces: readonly WorkspaceSummary[]): TargetW
 
 // ---- the table's fields -------------------------------------------------------------------
 
-/** A long text field whose editor is the rich one. */
-export function isRichLongText(field: Field): boolean {
-  return field.type === "long_text" && !!field.options.rich;
-}
-
-/** Long text fields that can take the note, rich ones first (the note is Markdown, which they show formatted). */
+/** Fields that can take the note: rich text first (the note is Markdown, which it shows formatted), then multiline text (which shows the Markdown as typed). */
 export function noteFields(table: Table): Field[] {
-  const long = table.fields.filter((f) => f.type === "long_text");
-  return [...long.filter(isRichLongText), ...long.filter((f) => !isRichLongText(f))];
+  return [...table.fields.filter((f) => f.type === "rich_text"), ...table.fields.filter((f) => f.type === "text" && f.options.multiline)];
 }
 
 /**
@@ -51,7 +45,7 @@ export function noteFields(table: Table): Field[] {
  */
 export const NOTE_AS_COMMENT = "comment";
 
-/** The field the note goes into unless the person picks another: the first rich long text, else the first long text. */
+/** The field the note goes into unless the person picks another: the first rich text, else the first multiline text. */
 export function defaultNoteField(table: Table): Field | undefined {
   return noteFields(table)[0];
 }
@@ -131,4 +125,23 @@ export function draftPreview(item: Pick<InboxItem, "title" | "body" | "attachmen
     if (text) return text;
   }
   return item.attachments.length > 0 ? item.attachments[0]!.filename : "Empty draft";
+}
+
+/** Someone a note can mention. */
+export interface NotePerson {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * Everyone who can open one of the person's projects (pending invites aside), once each, by name: who a
+ * note may mention before a table is picked. Filing notifies only those who can see the record.
+ */
+export function everyoneInProjects(workspaces: readonly WorkspaceSummary[]): NotePerson[] {
+  const byId = new Map<string, NotePerson>();
+  for (const ws of workspaces)
+    for (const base of ws.bases)
+      for (const p of base.people) if (p.user_id && !p.pending && !byId.has(p.user_id)) byId.set(p.user_id, { id: p.user_id, name: p.name, email: p.email });
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -5,7 +5,7 @@
 //! Credential, 2FA and session endpoints are session-only: API tokens are
 //! rejected whatever their scope, so a leaked token can't take over the account.
 //! Reading the profile (`GET /api/auth/me`) works with any token; changing the
-//! display name or time zone needs the `manage` permission.
+//! display name, time zone or accent colour needs the `manage` permission.
 
 use std::time::Duration;
 
@@ -470,6 +470,11 @@ async fn update_me(
         .as_deref()
         .map(users::validate_timezone)
         .transpose()?;
+    let accent = req
+        .accent
+        .as_deref()
+        .map(users::validate_accent)
+        .transpose()?;
     let user = state
         .db
         .write(move |tx| {
@@ -481,6 +486,9 @@ async fn update_me(
             )?;
             if let Some(seen) = req.intro_seen {
                 users::set_intro_seen(tx, &actor.user_id, seen)?;
+            }
+            if let Some(accent) = &accent {
+                users::set_accent(tx, &actor.user_id, accent.as_deref())?;
             }
             users::require(tx, &actor.user_id)
         })

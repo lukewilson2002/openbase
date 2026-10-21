@@ -3,7 +3,7 @@
  * mutates its input; the toolbar persists the result with `PATCH /api/views/{id}`
  * (a full replacement of the config).
  */
-import type { Aggregation, Direction, Field, Filter, RowColor, RowHeight, Sort, Table, ViewConfig } from "@/api/types";
+import type { Aggregation, Direction, Field, Filter, Group, RowColor, RowHeight, Table, ViewConfig } from "@/api/types";
 import { kindClassOf } from "@/lib/cells/kinds";
 import { countConditions, MAX_FILTER_CONDITIONS, newCondition, pruneFilter } from "@/lib/cells/filters";
 
@@ -120,12 +120,22 @@ export function addSortLike(config: ViewConfig, key: SortKey, fieldId: string, d
   return { ...config, [key]: [...list, { field_id: fieldId, direction }] };
 }
 
-export function updateSortLike(config: ViewConfig, key: SortKey, index: number, patch: Partial<Sort>): ViewConfig {
-  const list = config[key];
+/**
+ * Patch one sort or group level. A group's granularity belongs to its field (only dates have
+ * one), so picking another field drops it and the level starts again at the default, by day.
+ */
+export function updateSortLike(config: ViewConfig, key: SortKey, index: number, patch: Partial<Group>): ViewConfig {
+  const list: readonly Group[] = config[key];
   if (index < 0 || index >= list.length) return config;
   // Changing the field to one already used elsewhere would duplicate it.
   if (patch.field_id && list.some((s, i) => i !== index && s.field_id === patch.field_id)) return config;
-  return { ...config, [key]: list.map((s, i) => (i === index ? { ...s, ...patch } : s)) };
+  const next = (s: Group): Group => {
+    const merged = { ...s, ...patch };
+    if (patch.field_id === undefined || patch.field_id === s.field_id || "granularity" in patch) return merged;
+    const { granularity: _dropped, ...rest } = merged;
+    return rest;
+  };
+  return { ...config, [key]: list.map((s, i) => (i === index ? next(s) : s)) };
 }
 
 export function removeSortLike(config: ViewConfig, key: SortKey, index: number): ViewConfig {

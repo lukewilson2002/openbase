@@ -6,12 +6,12 @@ import type { GridColumnSpec } from "./adapter";
 import { toColumnSpecs } from "./cellModels";
 import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
 
-const fields: Field[] = [ALL_FIELDS.single_line_text, ALL_FIELDS.number, ALL_FIELDS.single_select, ALL_FIELDS.checkbox, ALL_FIELDS.formula, ALL_FIELDS.link];
+const fields: Field[] = [ALL_FIELDS.text, ALL_FIELDS.number, ALL_FIELDS.single_select, ALL_FIELDS.checkbox, ALL_FIELDS.formula, ALL_FIELDS.link];
 const columns: GridColumnSpec[] = toColumnSpecs(fields, fields[0]!.id, {}, {});
 const records: TableRecord[] = [
-  makeRecord({ fld_single_line_text: "one", fld_number: 1, fld_single_select: "chs1", fld_checkbox: true }, "r1"),
-  makeRecord({ fld_single_line_text: "two" }, "r2"),
-  makeRecord({ fld_single_line_text: "three", fld_number: 3 }, "r3"),
+  makeRecord({ fld_text: "one", fld_number: 1, fld_single_select: "chs1", fld_checkbox: true }, "r1"),
+  makeRecord({ fld_text: "two" }, "r2"),
+  makeRecord({ fld_text: "three", fld_number: 3 }, "r3"),
 ];
 
 /** Rows: [group header, r1, r2, r3] so group rows are skipped by pastes. */
@@ -35,7 +35,7 @@ describe("planPaste", () => {
     const plan = planPaste(reader(), { col: 0, row: 0 }, [["alpha", "$12.50", "In progress", "yes"]], { parse });
     expect(plan.errors).toEqual([]);
     expect(plan.changes).toEqual([
-      { recordId: "r1", fieldId: "fld_single_line_text", before: "one", after: "alpha" },
+      { recordId: "r1", fieldId: "fld_text", before: "one", after: "alpha" },
       { recordId: "r1", fieldId: "fld_number", before: 1, after: 12.5 },
       { recordId: "r1", fieldId: "fld_single_select", before: "chs1", after: "chs2" },
     ]);
@@ -53,7 +53,7 @@ describe("planPaste", () => {
   it("reports values that do not fit and still plans the rest", () => {
     const plan = planPaste(reader(), { col: 0, row: 1 }, [["x", "not a number"]], { parse });
     expect(plan.errors).toEqual(['number: "not a number" is not a number']);
-    expect(plan.changes).toEqual([{ recordId: "r2", fieldId: "fld_single_line_text", before: "two", after: "x" }]);
+    expect(plan.changes).toEqual([{ recordId: "r2", fieldId: "fld_text", before: "two", after: "x" }]);
   });
 
   it("repeats a single value over the selected range", () => {
@@ -69,7 +69,7 @@ describe("planPaste", () => {
   it("collects rows beyond the last record as new records", () => {
     const plan = planPaste(reader(), { col: 0, row: 2 }, [["c"], ["d", "4"], ["e"]], { parse });
     expect(plan.changes.map((c) => c.recordId)).toEqual(["r3"]);
-    expect(plan.newRecords).toEqual([{ fld_single_line_text: "d", fld_number: 4 }, { fld_single_line_text: "e" }]);
+    expect(plan.newRecords).toEqual([{ fld_text: "d", fld_number: 4 }, { fld_text: "e" }]);
   });
 
   it("refuses rows that are not loaded", () => {
@@ -87,7 +87,7 @@ describe("planPaste", () => {
 describe("planClear", () => {
   it("clears editable non-empty cells only", () => {
     const plan = planClear(reader(), [{ x: 0, y: 0, width: 5, height: 2 }]);
-    expect(plan.changes.map((c) => `${c.recordId}:${c.fieldId}`)).toEqual(["r1:fld_single_line_text", "r1:fld_number", "r1:fld_single_select", "r1:fld_checkbox", "r2:fld_single_line_text"]);
+    expect(plan.changes.map((c) => `${c.recordId}:${c.fieldId}`)).toEqual(["r1:fld_text", "r1:fld_number", "r1:fld_single_select", "r1:fld_checkbox", "r2:fld_text"]);
     expect(plan.changes.every((c) => c.after === null)).toBe(true);
   });
   it("does not clear the same cell twice for overlapping rectangles", () => {
@@ -104,8 +104,8 @@ describe("planFill", () => {
   it("copies the source down, repeating the pattern", () => {
     const plan = planFill(reader(), { x: 0, y: 0, width: 1, height: 1 }, { x: 0, y: 1, width: 1, height: 2 }, parse, DEFAULT_CTX);
     expect(plan.changes).toEqual([
-      { recordId: "r2", fieldId: "fld_single_line_text", before: "two", after: "one" },
-      { recordId: "r3", fieldId: "fld_single_line_text", before: "three", after: "one" },
+      { recordId: "r2", fieldId: "fld_text", before: "two", after: "one" },
+      { recordId: "r3", fieldId: "fld_text", before: "three", after: "one" },
     ]);
   });
   it("fills across columns of different types through text parsing", () => {
