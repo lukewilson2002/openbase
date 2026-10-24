@@ -446,4 +446,122 @@ describe("TimelineView", () => {
     // R2's lane starts on Mar 4; the bar keeps Mar 5, where it was dropped.
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [F.start.id]: "2026-03-05", [F.end.id]: "2026-03-09" } }] });
   });
+
+  describe("lanes beyond the window", () => {
+    it("makes a lane for every collaborator of a people field, and (Empty), though none has a bar in view", async () => {
+      setup("editor", tl({ group_field_id: F.owner.id }));
+      await screen.findByRole("button", { name: /^R1, / });
+      for (const name of ["Ada Lovelace", "Grace Hopper", "(Empty)"]) expect(screen.getByText(name)).toBeInTheDocument();
+      // Nobody owns any of the records: the two people's lanes are empty, (Empty) has them all.
+      expect(screen.getAllByText("0 bars")).toHaveLength(2);
+      expect(screen.getByText("4 bars")).toBeInTheDocument();
+    });
+
+    it("moves a bar into the lane of a collaborator who has no bars", async () => {
+      const u = user();
+      const { api } = setup("editor", tl({ group_field_id: F.owner.id }), { "PATCH /api/tables/tbl1/records": { records: [records[0]!] } });
+      const bar = await screen.findByRole("button", { name: /^R1, / });
+      bar.focus();
+      // All the records are in (Empty), the last lane; Up goes to Grace, whose lane exists with nothing in it.
+      await u.keyboard("{ArrowUp}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [F.owner.id]: ["usr2"] } }] });
+    });
+
+    it("adds the unused choices and (Empty) to the lanes of the view's grouping, and lets a bar be dropped on (Empty)", async () => {
+      const u = user();
+      const view = viewWithConfig("viw1", "timeline", { groups: [{ field_id: F.status.id, direction: "asc" }], timeline: { start_field_id: F.start.id, end_field_id: F.end.id, group_field_id: null, dependency_field_id: null, scale: "week" } });
+      const groups = [
+        { key: "s1", label: "Todo", field_id: F.status.id, depth: 0, start: 0, count: 1, value: "s1" },
+        { key: "s2", label: "Doing", field_id: F.status.id, depth: 0, start: 1, count: 2, value: "s2" },
+      ];
+      const { api } = setup("editor", view, { "PATCH /api/tables/tbl1/records": { records: [records[0]!] }, "POST /api/views/viw1/query": () => ({ total: 3, offset: 0, records: records.slice(0, 3), groups, colors: {} }) });
+      const bar = await screen.findByRole("button", { name: /^R1, / });
+      for (const name of ["Todo", "Doing", "Done", "(Empty)"]) expect(screen.getByText(name)).toBeInTheDocument();
+      // R1 is in Todo; the lanes below it are Doing, Done and (Empty): three steps down is the empty one.
+      bar.focus();
+      await u.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(3));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [F.status.id]: "s2" } }] });
+    });
+
+    it("keeps the lanes of the view's grouping when nothing is in the window", async () => {
+      const view = viewWithConfig("viw1", "timeline", { groups: [{ field_id: F.status.id, direction: "asc" }], timeline: { start_field_id: F.start.id, end_field_id: F.end.id, group_field_id: null, dependency_field_id: null, scale: "week" } });
+      setup("editor", view, {}, []);
+      expect(await screen.findByText("Done")).toBeInTheDocument();
+      expect(screen.getByText("(Empty)")).toBeInTheDocument();
+    });
+  });
+
+  describe("dependencies", () => {
+    it("names a violated dependency in each bar's accessible name, not only by colour", async () => {
+      setup("editor", tl({ dependency_field_id: F.deps.id }));
+      const r2 = await screen.findByRole("button", { name: /^R2, / });
+      expect(r2).toHaveAccessibleName(/Dependency overlap: it starts before R1 ends\. Dependency overlap: it ends after R3 starts\./);
+      expect(screen.getByRole("button", { name: /^R1, .*it ends after R2 starts/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^R4, / })).not.toHaveAccessibleName(/Dependency/);
+    });
+
+    it("lists the overlapping dependencies in the footer, each opening the later record", async () => {
+      const u = user();
+      const { container } = setup("editor", tl({ dependency_field_id: F.deps.id }));
+      await screen.findByRole("button", { name: /^R1, / });
+      expect(screen.getByText("2 dependencies overlap")).toBeInTheDocument();
+      await u.click(screen.getByRole("button", { name: "R3 after R2" }));
+      expect(container.ownerDocument.querySelector("[data-testid=where]")).toHaveTextContent("record=r3");
+    });
+
+    it("says when dependencies have no arrow because the other record has no dates", async () => {
+      const recs = [records[0]!, rec("r5", { [F.start.id]: "2026-03-05", [F.end.id]: "2026-03-06", [F.deps.id]: [{ id: "r6", name: "R6" }] }), rec("r6", {})];
+      setup("editor", tl({ dependency_field_id: F.deps.id }), {}, recs);
+      expect(await screen.findByText(/1 dependency has no arrow: the other record has no dates or is outside this window\./)).toBeInTheDocument();
+    });
+
+    it("makes a dependency by dragging a bar's connector onto another bar: the later record's link field gets the earlier one", async () => {
+      const { api } = setup("editor", tl({ dependency_field_id: F.deps.id }), { "PATCH /api/tables/tbl1/records": { records: [records[3]!] } });
+      await screen.findByRole("button", { name: /^R1, / });
+      // R4 is a milestone on its own row in the left-column layout; link R1 -> R4 by dropping R1's end connector on R4.
+      const r1 = screen.getByRole("button", { name: /^R1, / });
+      const r4 = screen.getByRole("button", { name: /^R4, / });
+      const at = (el: HTMLElement) => ({ x: parseFloat(el.style.left) + 8, y: parseFloat(el.style.top) + 14 });
+      const to = at(r4);
+      const connector = r1.querySelector("[data-connector=end]")!;
+      fireEvent.pointerDown(connector, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+      fireEvent.pointerMove(connector, { clientX: to.x, clientY: to.y, pointerId: 1 });
+      fireEvent.pointerUp(connector, { clientX: to.x, clientY: to.y, pointerId: 1 });
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r4", values: { [F.deps.id]: ["r1"] } }] });
+      expect(await screen.findByText("R4 now comes after R1")).toBeInTheDocument();
+    });
+
+    it("keeps the record's other predecessors when one is added from the keyboard", async () => {
+      const u = user();
+      const { api } = setup("editor", tl({ dependency_field_id: F.deps.id }), { "PATCH /api/tables/tbl1/records": { records: [records[2]!] } });
+      (await screen.findByRole("button", { name: /^R1, / })).focus();
+      await u.keyboard("l");
+      screen.getByRole("button", { name: /^R3, / }).focus();
+      await u.keyboard("{Enter}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      // R3 already comes after R2.
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r3", values: { [F.deps.id]: ["r2", "r1"] } }] });
+    });
+
+    it("removes only the chosen predecessor from a selected arrow, with a toast", async () => {
+      const u = user();
+      const { api, container } = setup("editor", tl({ dependency_field_id: F.deps.id }), { "PATCH /api/tables/tbl1/records": { records: [records[2]!] } });
+      await screen.findByRole("button", { name: /^R1, / });
+      await u.click(container.querySelector('[data-dependency-hit="r2>r3"]')!);
+      await u.click(screen.getByRole("button", { name: /^Remove dependency: R3 comes after R2/ }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r3", values: { [F.deps.id]: null } }] });
+      expect(await screen.findByText("Dependency removed")).toBeInTheDocument();
+    });
+
+    it("gives viewers no connectors and arrows they cannot select", async () => {
+      const { container } = setup("viewer", tl({ dependency_field_id: F.deps.id }));
+      await screen.findByRole("button", { name: /^R1, / });
+      expect(container.querySelector("[data-connector]")).toBeNull();
+      expect(container.querySelector("[data-dependency-hit]")).toBeNull();
+    });
+  });
 });

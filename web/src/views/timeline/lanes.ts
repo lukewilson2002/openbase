@@ -3,7 +3,7 @@
  * headers or client-side by the timeline's group field), and the field values a drag or a
  * create-by-dragging produces.
  */
-import type { DateOptions, Field, GroupHeader, TableRecord } from "@/api/types";
+import type { Collaborator, DateOptions, Field, GroupHeader, TableRecord } from "@/api/types";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { kindClassOf, linkRefs, selectChoicesOf, stringItems } from "@/lib/cells/kinds";
 import type { DateFields } from "../common/dateFields";
@@ -65,30 +65,80 @@ function compareLanes(field: Field, a: Lane, b: Lane): number {
   return collator.compare(a.label, b.label);
 }
 
-/** Group records into lanes by a field, client-side. Records keep their order inside a lane. */
-export function groupIntoLanes(records: readonly TableRecord[], field: Field, ctx: FormatCtx): Lane[] {
+/** A person who can have a lane of their own, whether or not they have records in view. */
+export type LanePerson = Pick<Collaborator, "id" | "name">;
+
+/** Fields whose values are worked out, not stored: their lanes show records but cannot take a bar. */
+const FIXED_TYPES = new Set<Field["type"]>(["formula", "lookup", "rollup", "created_by", "last_modified_by", "created_time", "last_modified_time", "autonumber", "count"]);
+const isFixed = (field: Field) => FIXED_TYPES.has(field.type);
+
+/** The lanes a field has whatever the loaded records are: every choice, every collaborator, and (Empty). Others only have the lanes their records make. */
+function everyLane(field: Field, people: readonly LanePerson[]): Lane[] {
+  const kind = kindClassOf(field);
+  const out: Lane[] = [];
+  const lane = (key: string, label: string, value: unknown, color?: string): Lane => ({ key, label, color, value: isFixed(field) ? undefined : value, fieldId: field.id, records: [] });
+  if (kind === "select" || kind === "multi_select") {
+    for (const c of selectChoicesOf(field)) out.push(lane(c.id, c.name, kind === "select" ? c.id : [c.id], c.color));
+  } else if (kind === "user" || kind === "user_multi") {
+    for (const p of people) out.push(lane(p.id, p.name || p.id, [p.id]));
+  } else return out;
+  out.push(lane("", EMPTY_LABEL, null));
+  return out;
+}
+
+/**
+ * Group records into lanes by a field, client-side. Records keep their order inside a lane. A choice
+ * or user field has a lane for every choice or collaborator and one for (Empty), also those with no
+ * record in view, so a bar can be dragged to any of them.
+ */
+export function groupIntoLanes(records: readonly TableRecord[], field: Field, ctx: FormatCtx, people: readonly LanePerson[] = []): Lane[] {
+  const fixed = isFixed(field);
   const lanes = new Map<string, Lane>();
   for (const r of records) {
     const l = laneOf(field, r, ctx);
     let lane = lanes.get(l.key);
     if (!lane) {
-      lane = { key: l.key, label: l.label, color: l.color, value: l.value, fieldId: field.id, records: [] };
+      lane = { key: l.key, label: l.label, color: l.color, value: fixed ? undefined : l.value, fieldId: field.id, records: [] };
       lanes.set(l.key, lane);
     }
     lane.records.push(r);
   }
-  // Select lanes show every choice, even without records, so a record can be dragged into them.
-  for (const c of selectChoicesOf(field)) {
-    if (!lanes.has(c.id)) lanes.set(c.id, { key: c.id, label: c.name, color: c.color, value: field.type === "single_select" ? c.id : [c.id], fieldId: field.id, records: [] });
-  }
+  for (const l of everyLane(field, people)) if (!lanes.has(l.key)) lanes.set(l.key, l);
   return [...lanes.values()].sort((a, b) => compareLanes(field, a, b));
 }
 
-/** Lanes from the first level of the view's own grouping (`QueryResponse.groups`). */
-export function lanesFromGroups(records: readonly TableRecord[], groups: readonly GroupHeader[]): Lane[] {
-  return groups
+/**
+ * Lanes from the first level of the view's own grouping (`QueryResponse.groups`), which only holds
+ * the groups that have records in view. Given the grouped field, a choice or user field also gets the
+ * lanes of its other choices or collaborators and (Empty), placed in the order the groups run in; the
+ * (Empty) group (a null value) is a lane records can be dropped on like the others.
+ */
+export function lanesFromGroups(records: readonly TableRecord[], groups: readonly GroupHeader[], field?: Field, people: readonly LanePerson[] = []): Lane[] {
+  const fixed = !!field && isFixed(field);
+  const choices = field ? selectChoicesOf(field) : [];
+  const lanes: Lane[] = groups
     .filter((g) => g.depth === 0)
-    .map((g) => ({ key: g.key, label: g.label, value: g.value ?? undefined, fieldId: g.field_id, records: records.slice(g.start, g.start + g.count) }));
+    .map((g) => ({
+      key: g.key,
+      label: g.label,
+      color: choices.find((c) => c.id === g.key)?.color,
+      // Without the field, a null value (nothing to write) cannot be told from an empty group's.
+      value: fixed || (!field && g.value == null) ? undefined : g.value,
+      fieldId: g.field_id,
+      records: records.slice(g.start, g.start + g.count),
+    }));
+  if (!field) return lanes;
+  const have = new Set(lanes.map((l) => l.key));
+  const extra = everyLane(field, people).filter((l) => !have.has(l.key));
+  if (extra.length === 0) return lanes;
+  const emptyAt = lanes.findIndex((l) => l.key === "");
+  const named = lanes.filter((l) => l.key !== "");
+  const extraNamed = extra.filter((l) => l.key !== "");
+  const down = named.length > 1 && compareLanes(field, named[0]!, named[named.length - 1]!) > 0;
+  const merged = [...named, ...extraNamed].sort((a, b) => (down ? -1 : 1) * compareLanes(field, a, b));
+  const empty = lanes[emptyAt] ?? extra.find((l) => l.key === "");
+  if (!empty) return merged;
+  return emptyAt === 0 ? [empty, ...merged] : [...merged, empty];
 }
 
 export const NO_LANE: Lane = { key: "", label: "", records: [] };

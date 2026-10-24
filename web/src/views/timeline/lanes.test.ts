@@ -51,6 +51,79 @@ describe("groupIntoLanes", () => {
   });
 });
 
+describe("lanes that exist whatever is in the window", () => {
+  const user = ALL_FIELDS.user!;
+  const people = [
+    { id: "u1", name: "Zed" },
+    { id: "u2", name: "Amy" },
+  ];
+  const ctx = { ...DEFAULT_CTX, userName: (id: string) => ({ u1: "Zed", u2: "Amy" })[id] };
+
+  it("gives a user field a lane for every collaborator and (Empty), with a lane value that puts a bar there", () => {
+    const lanes = groupIntoLanes([rec("a", { [user.id]: ["u1"] })], user, ctx, people);
+    expect(lanes.map((l) => [l.label, l.records.length, l.value])).toEqual([
+      ["Amy", 0, ["u2"]],
+      ["Zed", 1, ["u1"]],
+      ["(Empty)", 0, null],
+    ]);
+  });
+
+  it("gives a select field its (Empty) lane even when every record has a choice", () => {
+    const lanes = groupIntoLanes([rec("a", { [status.id]: "chs1" })], status, DEFAULT_CTX);
+    expect(lanes.map((l) => l.label)).toEqual(["Todo", "In progress", "Done", "(Empty)"]);
+    expect(lanes[3]!.value).toBeNull();
+  });
+
+  it("does not offer a lane value for a field that is worked out", () => {
+    const by = ALL_FIELDS.created_by!;
+    const lanes = groupIntoLanes([rec("a", { [by.id]: ["u1"] })], by, ctx, people);
+    expect(lanes.map((l) => l.value)).toEqual([undefined, undefined, undefined]);
+  });
+
+  const header = (key: string, label: string, start: number, count: number, value: unknown, field_id = status.id): GroupHeader => ({ depth: 0, field_id, key, label, value: value as GroupHeader["value"], start, count });
+
+  it("adds the unused choices and (Empty) to the view's grouping, in the order its groups run", () => {
+    const records = [rec("a", {}), rec("b", {})];
+    const lanes = lanesFromGroups(records, [header("chs3", "Done", 0, 1, "chs3"), header("chs1", "Todo", 1, 1, "chs1")], status);
+    // The groups run Done, Todo (descending): the unused choice joins them that way.
+    expect(lanes.map((l) => [l.label, l.records.length])).toEqual([
+      ["Done", 1],
+      ["In progress", 0],
+      ["Todo", 1],
+      ["(Empty)", 0],
+    ]);
+    expect(lanes[1]!.value).toBe("chs2");
+    expect(lanes[1]!.color).toBe("blue");
+  });
+
+  it("keeps the (Empty) group where the grouping put it, and its null value so a bar can be dropped there", () => {
+    const records = [rec("a", {}), rec("b", {})];
+    const lanes = lanesFromGroups(records, [header("", "(Empty)", 0, 1, null), header("chs2", "In progress", 1, 1, "chs2")], status);
+    expect(lanes.map((l) => l.label)).toEqual(["(Empty)", "Todo", "In progress", "Done"]);
+    expect(lanes[0]!.value).toBeNull();
+    expect(lanes[0]!.fieldId).toBe(status.id);
+  });
+
+  it("adds collaborators with no records to a grouping by a user field", () => {
+    const lanes = lanesFromGroups([rec("a", {})], [header("u1", "Zed", 0, 1, ["u1"], user.id)], user, people);
+    expect(lanes.map((l) => [l.label, l.value])).toEqual([
+      ["Amy", ["u2"]],
+      ["Zed", ["u1"]],
+      ["(Empty)", null],
+    ]);
+  });
+
+  it("has the lanes of a grouped field with no records at all, and none for other kinds of field", () => {
+    expect(lanesFromGroups([], [], status).map((l) => l.label)).toEqual(["Todo", "In progress", "Done", "(Empty)"]);
+    expect(lanesFromGroups([], [], ALL_FIELDS.text!)).toEqual([]);
+  });
+
+  it("makes a computed grouping's lanes unable to take a bar", () => {
+    const lanes = lanesFromGroups([rec("a", {})], [header("x", "X", 0, 1, null, "fld_formula")], ALL_FIELDS.formula!);
+    expect(lanes[0]!.value).toBeUndefined();
+  });
+});
+
 describe("lanesFromGroups", () => {
   it("slices the ordered records by the top-level group headers", () => {
     const header = (depth: number, key: string, start: number, count: number): GroupHeader => ({ depth, field_id: "f", key, label: key.toUpperCase(), value: key, start, count });

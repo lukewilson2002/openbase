@@ -2,18 +2,19 @@
  * The timeline chart: a scrolling time axis, a fixed left column (one row per record, or one per
  * swimlane), bars (or milestone diamonds), a today marker and dependency arrows, all plain DOM and
  * one SVG layer. Bars move and resize by dragging (whole days), empty lane space creates a record
- * by dragging across days, and bars also work from the keyboard (Enter opens, arrows move,
- * Shift+arrows resize the end).
+ * by dragging across days, a bar's connector dragged onto another bar makes a dependency, and bars
+ * also work from the keyboard (Enter or Space opens, arrows move, Shift+arrows resize the end,
+ * Alt+Shift+arrows the start). Dragging near the chart's edge scrolls it.
  *
  * The chart is controlled: the host owns the axis window and writes dates. Scrolling near an
  * edge asks the host to extend the window, and the chart keeps the visible days steady when the
  * window or the scale changes. A bar that runs past the visible edge gets a square end and an
  * arrow there, and its label stays in view while it is scrolled.
  */
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type Ref, type RefObject } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type Ref, type RefObject } from "react";
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { COARSE_POINTER, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useHoldToDrag } from "@/lib/holdToDrag";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { cn } from "@/lib/cn";
@@ -27,10 +28,12 @@ import {
   arrowPath,
   axisWidth,
   barRect,
+  canDepend,
   centerDayOf,
   dayAtX,
-  dragDays,
   dragSpan,
+  edgeScrollSpeed,
+  handleBox,
   layoutLanes,
   majorTicks,
   minorIsDay,
@@ -72,6 +75,8 @@ export interface TimelineBar extends BarInput {
   canResize: boolean;
   /** The start edge can be dragged (when absent, as `canResize`). */
   canResizeStart?: boolean;
+  /** Dependencies can start or end at this bar (default: yes, when the chart can make them). */
+  canLink?: boolean;
   /** Dependency violated at this bar's start. */
   violated?: boolean;
   /** Something to know about its dates, said in its name and on hover ("The end is before the start"). */
@@ -139,6 +144,12 @@ export interface TimelineChartProps {
   unscheduleZone?: RefObject<HTMLElement | null>;
   /** A dragged bar is over `unscheduleZone` (or no longer is), for the column to show it takes the drop. */
   onOverUnschedule?(over: boolean): void;
+  /** Makes `toId` depend on `fromId` (an arrow from the end of `fromId` to the start of `toId`): a connector dragged onto a bar, or L then Enter on bars. Without it, bars show no connectors. */
+  onLink?(fromId: string, toId: string): void;
+  /** Removes that dependency: Delete on a selected arrow, or its remove button. Without it, arrows cannot be selected. */
+  onUnlink?(fromId: string, toId: string): void;
+  /** The T key. */
+  onToday?(): void;
   onNeedMore(side: "start" | "end"): void;
   onZoom(dir: "in" | "out"): void;
   /** The day at the centre of the visible chart, reported after scrolling and layout changes. */
@@ -153,6 +164,8 @@ interface DragState {
   mode: DragMode;
   startX: number;
   startY: number;
+  /** The (fractional) day under the pointer when it was pressed: days moved are counted from it, so scrolling while dragging counts too. */
+  startDay: number;
   days: number;
   moved: boolean;
   /** The swim lane a moved bar is over, when it is another lane it can go to. */
@@ -168,6 +181,22 @@ interface CreateState {
   startX: number;
   moved: boolean;
 }
+
+/** A dependency being made by dragging a bar's connector: from its `side`, to the bar under the pointer. */
+interface LinkState {
+  fromId: string;
+  side: "start" | "end";
+  /** The pointer, in the bars' layer. */
+  x: number;
+  y: number;
+  /** The bar a drop here would link to (one that is allowed). */
+  targetId?: string;
+}
+
+/** What auto-scrolling re-applies each frame, with the pointer where it last was. */
+type EdgeDrag = { x: number; y: number } & ({ kind: "bar"; bar: TimelineBar } | { kind: "create" } | { kind: "link"; bar: TimelineBar; side: "start" | "end" });
+
+const edgeKey = (fromId: string, toId: string) => `${fromId}>${toId}`;
 
 const gridLine = "border-[color-mix(in_srgb,var(--line)_55%,var(--surface))]";
 const weekendBody = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
@@ -269,6 +298,19 @@ export function TimelineChart(props: TimelineChartProps) {
     setCreatingState(c);
   };
   const width = axisWidth(axis);
+  const coarse = useMediaQuery(COARSE_POINTER);
+  const linkingRef = useRef<LinkState | null>(null);
+  const [linking, setLinkingState] = useState<LinkState | null>(null);
+  const setLinking = (l: LinkState | null) => {
+    linkingRef.current = l;
+    setLinkingState(l);
+  };
+  // The arrow that is selected (focused), as `edgeKey`, to remove it.
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  // Linking from the keyboard: the bar chosen with L, waiting for the bar that comes after it.
+  const [linkFrom, setLinkFrom] = useState<string | null>(null);
+  // Something to tell the person that is not in a bar's name (a link that was refused).
+  const [note, setNote] = useState<string | null>(null);
 
   const placed = useMemo(() => layoutLanes(lanes.map((l) => ({ key: l.lane.key, bars: l.bars })), axis), [lanes, axis]);
   const lanesHeight = placed.length ? placed[placed.length - 1]!.top + placed[placed.length - 1]!.height : 0;
@@ -327,17 +369,89 @@ export function TimelineChart(props: TimelineChartProps) {
     else if (el.scrollWidth - el.clientWidth - el.scrollLeft < EDGE_PX) props.onNeedMore("end");
   };
 
-  useImperativeHandle(props.ref, () => ({
-    page: (dir) => {
-      const el = scroller.current;
-      if (!el) return;
-      // Whole days, so a page lands on a day boundary like the first screen did.
-      const days = Math.max(1, Math.floor(visibleWidth(el) / axis.pxPerDay));
-      const target = el.scrollLeft + dir * days * axis.pxPerDay;
-      if (typeof el.scrollTo === "function") el.scrollTo({ left: target, behavior: "smooth" });
-      else el.scrollLeft = target;
+  // ---- scrolling toward the edge while something is dragged -------------------------------------
+  const edgeRef = useRef<EdgeDrag | null>(null);
+  const edgeFrame = useRef(0);
+  const edgeAt = useRef(0);
+  const edgeTickRef = useRef<(now: number) => void>(() => {});
+  const stopEdge = () => {
+    edgeRef.current = null;
+    if (edgeFrame.current) cancelAnimationFrame(edgeFrame.current);
+    edgeFrame.current = 0;
+    edgeAt.current = 0;
+  };
+  const scheduleEdge = () => {
+    if (!edgeFrame.current && edgeRef.current && typeof requestAnimationFrame === "function") edgeFrame.current = requestAnimationFrame((t) => edgeTickRef.current(t));
+  };
+  /** The pointer of a drag is at (x, y): while it is near the chart's left or right edge the chart scrolls, and the drag is worked out again. */
+  const pullEdge = (e: EdgeDrag) => {
+    edgeRef.current = e;
+    scheduleEdge();
+  };
+  edgeTickRef.current = (now) => {
+    edgeFrame.current = 0;
+    const e = edgeRef.current;
+    const el = scroller.current;
+    if (!e || !el) return;
+    const dt = edgeAt.current ? Math.min(50, now - edgeAt.current) : 16;
+    edgeAt.current = now;
+    const rect = el.getBoundingClientRect();
+    const speed = edgeScrollSpeed(e.x, rect.left + labelW, rect.right);
+    if (speed !== 0) {
+      const before = el.scrollLeft;
+      el.scrollLeft = before + (speed * dt) / 1000;
+      if (el.scrollLeft !== before) {
+        if (e.kind === "bar") moveBarTo(e.bar, e.x, e.y);
+        else if (e.kind === "create") moveCreateTo(e.x);
+        else moveLinkTo(e.bar, e.side, e.x, e.y);
+      }
+    }
+    scheduleEdge();
+  };
+  useEffect(
+    () => () => {
+      if (edgeFrame.current) cancelAnimationFrame(edgeFrame.current);
     },
-  }));
+    [],
+  );
+
+  const pageBy = (dir: -1 | 1) => {
+    const el = scroller.current;
+    if (!el) return;
+    // Whole days, so a page lands on a day boundary like the first screen did.
+    const days = Math.max(1, Math.floor(visibleWidth(el) / axis.pxPerDay));
+    const target = el.scrollLeft + dir * days * axis.pxPerDay;
+    if (typeof el.scrollTo === "function") el.scrollTo({ left: target, behavior: "smooth" });
+    else el.scrollLeft = target;
+  };
+  useImperativeHandle(props.ref, () => ({ page: pageBy }));
+
+  // Keys for the chart as a whole, from anything inside it that did not use the key: T is today, + and - zoom, [ and ] page.
+  const helpId = useId();
+  const chartKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).closest("input, textarea, select, [contenteditable='true']")) return;
+    if (e.key === "t" || e.key === "T") props.onToday?.();
+    else if (e.key === "+" || e.key === "=") props.onZoom("in");
+    else if (e.key === "-" || e.key === "_") props.onZoom("out");
+    else if (e.key === "[") pageBy(-1);
+    else if (e.key === "]") pageBy(1);
+    else return;
+    e.preventDefault();
+  };
+  // The day a record added from the keyboard gets: today when it is on screen, else the middle of what is.
+  const keyboardDay = () => {
+    const todayDay = Math.floor(nowMs / 86_400_000);
+    if (view.right <= view.left) return todayDay;
+    const first = dayAtX(view.left, axis);
+    const last = dayAtX(view.right - 1, axis);
+    return todayDay >= first && todayDay <= last ? todayDay : Math.floor(centerDayOf(view.left, view.right - view.left, axis));
+  };
+  // What was said about a refused or begun link goes away on its own.
+  useEffect(() => {
+    if (!note) return;
+    const t = window.setTimeout(() => setNote(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [note]);
 
   // Ctrl/Cmd + wheel zooms (a non-passive listener is needed to stop the browser zooming the page).
   const zoomRef = useRef(props.onZoom);
@@ -406,6 +520,8 @@ export function TimelineChart(props: TimelineChartProps) {
     }
   };
 
+  /** The (fractional) day under a pointer position: the axis scrolls and grows, so this is always read from the layer's current place. */
+  const dayFracAt = (clientX: number) => (clientX - (layer.current?.getBoundingClientRect().left ?? 0)) / axis.pxPerDay + axis.fromDay;
   const allows = (bar: TimelineBar, mode: DragMode) => (mode === "move" ? bar.canMove : mode === "start" ? (bar.canResizeStart ?? bar.canResize) : bar.canResize);
 
   const startBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
@@ -416,31 +532,39 @@ export function TimelineChart(props: TimelineChartProps) {
     // can is selected instead: see the bar's pointer up).
     const mode: DragMode = allowed ? (handle ?? "move") : "move";
     const { currentTarget: el, pointerId, clientX: startX, clientY: startY } = e;
+    const startDay = dayFracAt(startX);
     barGate.press(e, () => {
       capture(el, pointerId);
-      setDrag({ id: bar.id, mode, startX, startY, days: 0, moved: false });
+      setDrag({ id: bar.id, mode, startX, startY, startDay, days: 0, moved: false });
     });
   };
-  const moveBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
+  const moveBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => moveBarTo(bar, e.clientX, e.clientY);
+  const moveBarTo = (bar: TimelineBar, clientX: number, clientY: number) => {
     const d = dragRef.current;
     if (!d || d.id !== bar.id) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
+    const dx = clientX - d.startX;
+    const dy = clientY - d.startY;
     const allowed = allows(bar, d.mode);
     const moved = d.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
     // Over the unscheduled column, a moved bar goes back to it (it stays drawn where it was until dropped).
     const zone = allowed && d.mode === "move" && props.onUnschedule ? props.unscheduleZone?.current?.getBoundingClientRect() : undefined;
-    const unschedule = !!zone && e.clientX >= zone.left && e.clientX < zone.right && e.clientY >= zone.top && e.clientY < zone.bottom;
+    const unschedule = !!zone && clientX >= zone.left && clientX < zone.right && clientY >= zone.top && clientY < zone.bottom;
     if (unschedule !== !!d.unschedule) props.onOverUnschedule?.(unschedule);
-    if (unschedule) return setDrag({ ...d, days: 0, toLane: undefined, unschedule, moved });
+    if (unschedule) {
+      stopEdge();
+      return setDrag({ ...d, days: 0, toLane: undefined, unschedule, moved });
+    }
     // A moved bar can also go up or down into another swim lane.
-    const toLane = allowed && d.mode === "move" ? laneAt(bar.id, e.clientY - (layer.current?.getBoundingClientRect().top ?? 0)) : undefined;
-    setDrag({ ...d, days: allowed ? dragDays(dx, axis) : 0, toLane, unschedule: false, moved });
+    const toLane = allowed && d.mode === "move" ? laneAt(bar.id, clientY - (layer.current?.getBoundingClientRect().top ?? 0)) : undefined;
+    // Counted from the day under the pointer when it was pressed, so scrolling under a held pointer moves the bar too.
+    setDrag({ ...d, days: allowed ? Math.round(dayFracAt(clientX) - d.startDay) : 0, toLane, unschedule: false, moved });
+    if (moved && allowed) pullEdge({ kind: "bar", bar, x: clientX, y: clientY });
   };
   /** `select`: the bar a mouse released without moving, selected rather than opened (see the bar's pointer up). */
   const endBar = (bar: TimelineBar, cancel = false, select?: HTMLElement) => {
     const d = dragRef.current;
     setDrag(null);
+    stopEdge();
     if (d?.unschedule) props.onOverUnschedule?.(false);
     if (!d || d.id !== bar.id || cancel) return;
     if (!d.moved) {
@@ -451,9 +575,33 @@ export function TimelineChart(props: TimelineChartProps) {
     else if (d.days !== 0 || repairs(bar, d.mode, d.moved)) props.onCommit(bar.id, d.mode, d.days);
   };
   const barKey = (bar: TimelineBar, e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === "Escape" && linkFrom) {
       e.preventDefault();
-      props.onOpen(bar.id);
+      setLinkFrom(null);
+      setNote(null);
+      return;
+    }
+    // Enter or Space opens the bar, or (after L on another bar) makes this the bar that comes after it.
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (linkFrom && linkFrom !== bar.id) linkByKey(linkFrom, bar);
+      else props.onOpen(bar.id);
+      return;
+    }
+    // L starts a dependency from this bar: focus the bar that comes after it, and press Enter.
+    if ((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey && props.onLink) {
+      e.preventDefault();
+      setLinkFrom(bar.id);
+      setNote(`${bar.title} comes first. Move to the bar that comes after it and press Enter, or Escape to cancel.`);
+      return;
+    }
+    // Alt+Shift+Left or Right moves the start edge; other Alt keys are the browser's (Alt+Left is back).
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      const edge = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (e.shiftKey && edge && allows(bar, "start")) {
+        e.preventDefault();
+        props.onCommit(bar.id, "start", edge);
+      }
       return;
     }
     // Delete deletes the record of a selected bar; U takes it off the timeline, back to the unscheduled records.
@@ -505,24 +653,88 @@ export function TimelineChart(props: TimelineChartProps) {
       setCreating({ laneKey, fromDay: day, toDay: day, startX, moved: false });
     });
   };
-  const moveCreate = (e: PointerEvent<HTMLDivElement>) => {
+  const moveCreate = (e: PointerEvent<HTMLDivElement>) => moveCreateTo(e.clientX);
+  const moveCreateTo = (clientX: number) => {
     const c = creatingRef.current;
     if (!c) return;
-    setCreating({ ...c, toDay: dayUnder(e.clientX), moved: c.moved || Math.abs(e.clientX - c.startX) > 6 });
+    const moved = c.moved || Math.abs(clientX - c.startX) > 6;
+    setCreating({ ...c, toDay: dayUnder(clientX), moved });
+    if (moved) pullEdge({ kind: "create", x: clientX, y: 0 });
   };
   const endCreate = (cancel = false) => {
     const c = creatingRef.current;
     setCreating(null);
+    stopEdge();
     if (c && c.moved && !cancel) props.onCreate(c.laneKey, c.fromDay, c.toDay);
   };
 
-  // ---- dependency arrows ------------------------------------------------------------------------
+  // ---- dependencies: made by dragging a connector, or L then Enter; removed from a selected arrow ----------
+  const linkGate = useHoldToDrag();
+  const titleOf = useMemo(() => new Map(lanes.flatMap((l) => l.bars).map((b) => [b.id, b.title] as const)), [lanes]);
+  const layerPoint = (clientX: number, clientY: number) => {
+    const r = layer.current?.getBoundingClientRect();
+    return { x: clientX - (r?.left ?? 0), y: clientY - (r?.top ?? 0) };
+  };
+  /** The bar under a point of the bars' layer, other than `exceptId` (a little slack around it). */
+  const barAt = (x: number, y: number, exceptId: string): string | undefined => {
+    for (const [id, r] of rects) if (id !== exceptId && x >= r.x - 4 && x <= r.x + r.width + 4 && y >= r.y - 2 && y <= r.y + BAR_HEIGHT + 2) return id;
+    return undefined;
+  };
+  /** The bar a connector of `fromId` dropped at this point would link to, if the link is allowed. */
+  const linkTarget = (fromId: string, side: "start" | "end", x: number, y: number): string | undefined => {
+    const id = barAt(x, y, fromId);
+    return id && (side === "end" ? canDepend(edges, fromId, id) : canDepend(edges, id, fromId)) ? id : undefined;
+  };
+  const startLink = (bar: TimelineBar, side: "start" | "end", e: PointerEvent<HTMLSpanElement>) => {
+    // The press is the connector's, not the bar's (which would move it).
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const { currentTarget: el, pointerId, clientX, clientY } = e;
+    const p = layerPoint(clientX, clientY);
+    linkGate.press(e, () => {
+      capture(el, pointerId);
+      setLinking({ fromId: bar.id, side, ...p });
+    });
+  };
+  const moveLinkTo = (bar: TimelineBar, side: "start" | "end", clientX: number, clientY: number) => {
+    const l = linkingRef.current;
+    if (!l || l.fromId !== bar.id) return;
+    const p = layerPoint(clientX, clientY);
+    setLinking({ ...l, ...p, targetId: linkTarget(bar.id, side, p.x, p.y) });
+    pullEdge({ kind: "link", bar, side, x: clientX, y: clientY });
+  };
+  const endLink = (bar: TimelineBar, cancel = false) => {
+    const l = linkingRef.current;
+    setLinking(null);
+    stopEdge();
+    if (!l || l.fromId !== bar.id || cancel || !l.targetId) return;
+    if (l.side === "end") props.onLink?.(bar.id, l.targetId);
+    else props.onLink?.(l.targetId, bar.id);
+  };
+  /** Enter on the bar that comes after the one chosen with L. */
+  const linkByKey = (fromId: string, to: TimelineBar) => {
+    if (canDepend(edges, fromId, to.id)) {
+      props.onLink?.(fromId, to.id);
+      setNote(null);
+    } else setNote(`${to.title} can't come after ${titleOf.get(fromId) ?? "it"}: it already does, or that would make a loop. Choose another bar, or press Escape.`);
+    setLinkFrom(null);
+  };
+  const unlink = (edge: DependencyEdge) => {
+    setSelectedEdge(null);
+    props.onUnlink?.(edge.fromId, edge.toId);
+  };
+  const edgeName = (edge: DependencyEdge) => `${titleOf.get(edge.toId) ?? "A record"} comes after ${titleOf.get(edge.fromId) ?? "another"}${edge.violated ? ", but they overlap" : ""}`;
+
   const arrows = edges.flatMap((edge) => {
     const from = live(edge.fromId);
     const to = live(edge.toId);
     if (!from || !to) return [];
-    return [{ edge, d: arrowPath({ x: from.x + from.width, y: from.y + BAR_HEIGHT / 2 }, { x: to.x, y: to.y + BAR_HEIGHT / 2 }) }];
+    const a = { x: from.x + from.width, y: from.y + BAR_HEIGHT / 2 };
+    const b = { x: to.x, y: to.y + BAR_HEIGHT / 2 };
+    return [{ edge, d: arrowPath(a, b), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }];
   });
+  const selected = arrows.find((a) => edgeKey(a.edge.fromId, a.edge.toId) === selectedEdge);
+  const linkSource = linking ? rects.get(linking.fromId) : undefined;
 
   const todayX = xOfMs(nowMs, axis);
   const todayVisible = todayX >= 0 && todayX <= width;
@@ -534,9 +746,18 @@ export function TimelineChart(props: TimelineChartProps) {
     <div
       ref={scroller}
       onScroll={onScroll}
-      className={cn("relative overflow-auto", props.fitContent ? "min-h-0 shrink" : "h-full")}
+      onKeyDown={chartKey}
+      role="region"
+      aria-label="Timeline"
+      aria-describedby={helpId}
+      tabIndex={0}
+      className={cn("relative overflow-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", props.fitContent ? "min-h-0 shrink" : "h-full")}
       data-testid="timeline-scroller"
     >
+      <p id={helpId} className="sr-only">
+        Keys: T goes to today, plus and minus zoom, [ and ] page earlier and later. On a bar: Enter or Space opens it, the arrow keys move it, Shift with Left or Right moves its end, Alt and Shift with Left or Right moves its start, Up and Down change swimlane, U takes it off the timeline, Delete deletes it
+        {props.onLink ? ", L starts a dependency from it" : ""}.
+      </p>
       <div className="relative" style={{ width: labelW + width, minHeight: HEADER_HEIGHT + Math.max(bodyHeight, 1) }}>
         {/* The left column's divider, the whole height and pinned with the column: drag it (or use the arrow keys) to widen or narrow the column. */}
         {showLabels && wide && (
@@ -615,6 +836,11 @@ export function TimelineChart(props: TimelineChartProps) {
           </div>
         </div>
 
+        {/* A word about a dependency being made or refused, pinned at the top left of the rows. */}
+        <div aria-live="polite" className="sticky left-0 z-50 h-0 w-max max-w-full">
+          {note && <p className="mx-2 mt-2 w-fit max-w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface px-3 py-1.5 text-[0.8125rem] shadow-pop">{note}</p>}
+        </div>
+
         {/* Weekends and grid lines, under the rows so the row lines stay visible across weekends. */}
         <div className="pointer-events-none absolute" style={{ left: labelW, top: HEADER_HEIGHT, width, height: lanesHeight }}>
           {weekends.map((d) => (
@@ -677,6 +903,21 @@ export function TimelineChart(props: TimelineChartProps) {
                     <span className="text-xs text-muted">
                       {cl.bars.length} bar{cl.bars.length === 1 ? "" : "s"}
                     </span>
+                    {/* Out of sight until it is tabbed to: adds a record to this lane on the day in view, for people who cannot drag. */}
+                    {canCreate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const day = keyboardDay();
+                          props.onCreate(lane.key, day, day);
+                        }}
+                        aria-label={`Add a record to ${lane.label || "this lane"}`}
+                        title="Add a record on the day in view"
+                        className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-semibold text-fg opacity-0 focus-visible:opacity-100"
+                      >
+                        <Plus aria-hidden className="size-3" /> Add
+                      </button>
+                    )}
                   </div>
                 ))}
             </div>
@@ -698,7 +939,7 @@ export function TimelineChart(props: TimelineChartProps) {
 
         <div className="pointer-events-none absolute z-[5]" style={{ left: labelW, top: HEADER_HEIGHT, width, height: lanesHeight }}>
           {todayVisible && <div role="img" aria-label="Today" data-today-line className="absolute inset-y-0 -ml-px w-0.5 bg-primary opacity-55" style={{ left: todayX }} />}
-          <svg className="absolute inset-0 overflow-visible" width={width} height={lanesHeight} aria-hidden>
+          <svg className="absolute inset-0 overflow-visible" width={width} height={lanesHeight} role={props.onUnlink && arrows.length ? "group" : undefined} aria-label={props.onUnlink && arrows.length ? "Dependencies" : undefined} aria-hidden={props.onUnlink && arrows.length ? undefined : true}>
             <defs>
               <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
                 <path d="M0 0 L8 4 L0 8 z" fill="var(--faint)" />
@@ -707,17 +948,62 @@ export function TimelineChart(props: TimelineChartProps) {
                 <path d="M0 0 L8 4 L0 8 z" fill="var(--danger)" />
               </marker>
             </defs>
-            {arrows.map(({ edge, d }) => (
-              <path
-                key={`${edge.fromId}>${edge.toId}`}
-                d={d}
-                data-dependency={edge.violated ? "violated" : "ok"}
-                fill="none"
-                strokeWidth={1.5}
-                stroke={edge.violated ? "var(--danger)" : "var(--faint)"}
-                markerEnd={`url(#${edge.violated ? "tl-arrow-bad" : "tl-arrow"})`}
-              />
-            ))}
+            {arrows.map(({ edge, d }) => {
+              const key = edgeKey(edge.fromId, edge.toId);
+              const on = key === selectedEdge;
+              return (
+                <g key={key}>
+                  <path
+                    d={d}
+                    data-dependency={edge.violated ? "violated" : "ok"}
+                    data-selected={on || undefined}
+                    fill="none"
+                    strokeWidth={on ? 3 : 1.5}
+                    stroke={on ? "var(--primary)" : edge.violated ? "var(--danger)" : "var(--faint)"}
+                    markerEnd={`url(#${edge.violated ? "tl-arrow-bad" : "tl-arrow"})`}
+                  />
+                  {/* A wide invisible stroke to point at, and the way to it from the keyboard: Delete removes the dependency. */}
+                  {props.onUnlink && (
+                    <path
+                      d={d}
+                      data-dependency-hit={key}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${edgeName(edge)}. Delete removes this dependency.`}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={coarse ? 24 : 14}
+                      style={{ pointerEvents: "stroke", cursor: "pointer", outline: "none" }}
+                      onClick={(e) => {
+                        setSelectedEdge(key);
+                        (e.currentTarget as SVGPathElement).focus();
+                      }}
+                      onFocus={() => setSelectedEdge(key)}
+                      onBlur={() => setSelectedEdge((cur) => (cur === key ? null : cur))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Delete" || e.key === "Backspace") {
+                          e.preventDefault();
+                          unlink(edge);
+                        } else if (e.key === "Escape") (e.currentTarget as SVGPathElement).blur();
+                      }}
+                    />
+                  )}
+                </g>
+              );
+            })}
+            {linking && linkSource && (
+              <>
+                <path
+                  d={`M ${linking.side === "end" ? linkSource.x + linkSource.width : linkSource.x} ${linkSource.y + BAR_HEIGHT / 2} L ${linking.x} ${linking.y}`}
+                  data-link-preview
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
+                />
+                <circle cx={linking.x} cy={linking.y} r={4} fill="var(--primary)" />
+              </>
+            )}
           </svg>
         </div>
 
@@ -732,6 +1018,33 @@ export function TimelineChart(props: TimelineChartProps) {
             const measured = view.right > view.left;
             const offLeft = measured && !r.milestone && r.x < view.left - 1;
             const offRight = measured && !r.milestone && r.x + r.width > view.right + 1;
+            const hb = handleBox(r.width, coarse);
+            const cs = coarse ? 20 : 12;
+            // The knob a dependency is dragged from, beside the bar's edge: seen when the bar is pointed at or selected
+            // (always, at the end, on a touch screen). Dropped on another bar it makes that one come after (end) or before (start).
+            const connector = (side: "start" | "end", left: number) =>
+              props.onLink && bar.canLink !== false && !(coarse && side === "start") ? (
+                <span
+                  aria-hidden
+                  data-connector={side}
+                  onPointerDown={(e) => startLink(bar, side, e)}
+                  onPointerMove={(e) => {
+                    e.stopPropagation();
+                    if (linkGate.move(e)) moveLinkTo(bar, side, e.clientX, e.clientY);
+                  }}
+                  onPointerUp={(e) => {
+                    e.stopPropagation();
+                    if (linkGate.release(e) === "drag") endLink(bar);
+                  }}
+                  onPointerCancel={(e) => {
+                    e.stopPropagation();
+                    if (linkGate.release(e, true) === "drag") endLink(bar, true);
+                  }}
+                  title={side === "end" ? "Drag onto a bar to make it come after this one" : "Drag onto a bar to make it come before this one"}
+                  className="absolute top-1/2 z-[2] -translate-y-1/2 cursor-crosshair rounded-full border-2 border-primary bg-surface opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100 pointer-coarse:opacity-70"
+                  style={{ left, width: cs, height: cs }}
+                />
+              ) : null;
             const described = props.describe?.(bar.id) ?? null;
             const withDescription = !!described && hasDescription(described.field, described.record, described.format);
             const el = (
@@ -745,6 +1058,7 @@ export function TimelineChart(props: TimelineChartProps) {
                 data-milestone={r.milestone || undefined}
                 data-violated={bar.violated || undefined}
                 data-invalid={bar.span.reversed || undefined}
+                data-link-target={linking?.targetId === bar.id || undefined}
                 title={withDescription ? undefined : label}
                 onPointerDown={(e) => startBar(bar, e)}
                 onPointerMove={(e) => barGate.move(e) && moveBar(bar, e)}
@@ -763,7 +1077,7 @@ export function TimelineChart(props: TimelineChartProps) {
                 onKeyDown={(e) => barKey(bar, e)}
                 className={cn(
                   // Selected (focused, by a click or the keyboard), it is outlined.
-                  "pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus:outline-2 focus:outline-offset-2 focus:outline-ring",
+                  "group pointer-events-auto absolute flex touch-pan-x touch-pan-y select-none items-center [-webkit-touch-callout:none] outline-none focus:outline-2 focus:outline-offset-2 focus:outline-ring",
                   bar.canMove ? "cursor-grab" : "cursor-pointer",
                   dragging && "z-20 cursor-grabbing shadow-pop",
                   dragging && drag?.unschedule && "opacity-50",
@@ -775,6 +1089,7 @@ export function TimelineChart(props: TimelineChartProps) {
                       offRight && "rounded-r-none",
                       bar.violated && "ring-2 ring-danger",
                     ),
+                  (linking?.targetId === bar.id || linkFrom === bar.id) && "ring-2 ring-primary",
                 )}
                 style={{ left: r.x, top: r.y, width: r.width, height: BAR_HEIGHT }}
               >
@@ -786,14 +1101,17 @@ export function TimelineChart(props: TimelineChartProps) {
                       style={{ marginLeft: (r.width - 14) / 2 }}
                     />
                     {/* A milestone gets an end by dragging this edge out (a reversed end is repaired the same way). */}
-                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 -right-2 z-[1] w-3 cursor-ew-resize rounded-r-[7px] hover:bg-black/15" />}
-                    <span className="pointer-events-none absolute whitespace-nowrap text-xs font-medium" style={{ left: r.width + 4 }}>
+                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 z-[1] cursor-ew-resize rounded-r-[7px] hover:bg-black/15" style={{ right: -(coarse ? 14 : 8), width: coarse ? 22 : 12 }} />}
+                    {connector("start", -(cs + 4))}
+                    {connector("end", r.width + 4)}
+                    <span className="pointer-events-none absolute whitespace-nowrap text-xs font-medium" style={{ left: r.width + 4 + (props.onLink ? cs + 4 : 0) }}>
                       {bar.label ?? bar.title}
                     </span>
                   </>
                 ) : (
                   <>
-                    {(bar.canResizeStart ?? bar.canResize) && <span aria-hidden data-handle="start" className="absolute inset-y-0 left-0 z-[1] w-1.5 cursor-ew-resize rounded-l-[7px] hover:bg-black/15" />}
+                    {(bar.canResizeStart ?? bar.canResize) && <span aria-hidden data-handle="start" className="absolute inset-y-0 z-[1] cursor-ew-resize rounded-l-[7px] hover:bg-black/15" style={{ left: -hb.outside, width: hb.size }} />}
+                    {connector("start", -(hb.outside + cs + 4))}
                     {/* Sticky, so the start of a bar scrolled past the left column still says what it is. */}
                     <span className="pointer-events-none sticky flex min-w-0 items-center gap-1.5 overflow-hidden px-2.5" style={{ left: labelW }}>
                       {offLeft && <ChevronLeft aria-hidden className="-ml-1 size-3.5 shrink-0" />}
@@ -804,7 +1122,8 @@ export function TimelineChart(props: TimelineChartProps) {
                         <ChevronRight aria-hidden className="size-3.5" />
                       </span>
                     )}
-                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 right-0 z-[1] w-1.5 cursor-ew-resize rounded-r-[7px] hover:bg-black/15" />}
+                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 z-[1] cursor-ew-resize rounded-r-[7px] hover:bg-black/15" style={{ right: -hb.outside, width: hb.size }} />}
+                    {connector("end", r.width + hb.outside + 4)}
                   </>
                 )}
                 {dragging && drag && (
@@ -823,6 +1142,21 @@ export function TimelineChart(props: TimelineChartProps) {
               el
             );
           })}
+          {selected && props.onUnlink && (
+            <button
+              type="button"
+              tabIndex={-1}
+              data-unlink
+              aria-label={`Remove dependency: ${edgeName(selected.edge)}`}
+              title="Remove this dependency"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => unlink(selected.edge)}
+              className="pointer-events-auto absolute z-30 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-muted shadow-pop hover:text-danger pointer-coarse:size-9"
+              style={{ left: selected.mid.x, top: selected.mid.y }}
+            >
+              <X aria-hidden className="size-3.5" />
+            </button>
+          )}
           {creating?.moved && (
             <GhostBar creating={creating} spanDays={props.createSpansDays ?? true} axis={axis} top={(placed.find((p) => p.key === creating.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2} />
           )}

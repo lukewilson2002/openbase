@@ -255,6 +255,38 @@ export function dragSpan<S extends Span>(span: S, mode: DragMode, days: number):
   }
 }
 
+/**
+ * How a bar's resize handles sit: `size` wide (a finger needs more than a mouse), but never more
+ * than a third of the bar inside it, so the middle can always be grabbed to move it. What does not
+ * fit inside sticks out past the edge instead (all of it, on a very narrow bar).
+ */
+export function handleBox(barWidth: number, coarse: boolean): { size: number; outside: number } {
+  const size = coarse ? 20 : 6;
+  // A bar too narrow to give up a third to each edge is moved by its whole body, resized from just outside it.
+  const inside = barWidth < (coarse ? 36 : 24) ? 0 : Math.min(size, Math.floor(barWidth / 3));
+  return { size, outside: size - inside };
+}
+
+// ---- edge scrolling ----------------------------------------------------------------------------
+
+const EDGE_ZONE_PX = 56;
+const EDGE_SPEED_MIN = 120;
+const EDGE_SPEED_MAX = 900;
+
+/**
+ * Pixels per second a chart scrolls while something is dragged at `x`, between the visible
+ * part's `left` and `right`: nothing in the middle, faster the closer to (or past) an edge. Negative scrolls
+ * toward the start. The zone shrinks to a quarter of a narrow chart so the middle stays calm.
+ */
+export function edgeScrollSpeed(x: number, left: number, right: number): number {
+  const zone = Math.min(EDGE_ZONE_PX, Math.max(0, (right - left) / 4));
+  if (zone <= 0) return 0;
+  const speed = (depth: number) => EDGE_SPEED_MIN + (EDGE_SPEED_MAX - EDGE_SPEED_MIN) * Math.min(1, depth / zone) ** 2;
+  if (x < left + zone) return -speed(left + zone - x);
+  if (x > right - zone) return speed(x - (right - zone));
+  return 0;
+}
+
 // ---- lanes -------------------------------------------------------------------------------------
 
 /** A span as the timeline reads a record: plus what is odd about it, so the bar can say so. */
@@ -378,6 +410,46 @@ export function dependencyEdges(
     }
   }
   return out;
+}
+
+/**
+ * How many dependencies of the loaded records have no arrow because the other record has no dates
+ * (or is not in the loaded window).
+ */
+export function skippedDependencies(
+  records: readonly { id: string; values: Record<string, unknown> }[],
+  depFieldId: string,
+  spans: ReadonlyMap<string, Span>,
+): number {
+  let n = 0;
+  for (const r of records) {
+    const links = r.values[depFieldId];
+    if (!Array.isArray(links)) continue;
+    const mine = spans.has(r.id);
+    for (const l of links) {
+      const id = typeof l === "string" ? l : l && typeof l === "object" && typeof (l as { id?: unknown }).id === "string" ? (l as { id: string }).id : null;
+      if (id && id !== r.id && (!mine || !spans.has(id))) n++;
+    }
+  }
+  return n;
+}
+
+/** Whether making `toId` depend on `fromId` is allowed: not itself, not already so, and no loop (`toId` already leads to `fromId`). */
+export function canDepend(edges: readonly DependencyEdge[], fromId: string, toId: string): boolean {
+  if (fromId === toId || edges.some((e) => e.fromId === fromId && e.toId === toId)) return false;
+  // Is `fromId` reachable from `toId` along the arrows? Then the new arrow would close a loop.
+  const seen = new Set([toId]);
+  const todo = [toId];
+  while (todo.length) {
+    const id = todo.pop()!;
+    for (const e of edges) {
+      if (e.fromId !== id || seen.has(e.toId)) continue;
+      if (e.toId === fromId) return false;
+      seen.add(e.toId);
+      todo.push(e.toId);
+    }
+  }
+  return true;
 }
 
 export interface Point {

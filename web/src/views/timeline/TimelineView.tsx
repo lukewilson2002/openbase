@@ -26,10 +26,11 @@ import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
 import { DAY_MS, isDateLike, isWritableDate, padRange, wallNow, wallYmd } from "../common/wallTime";
+import { linkRefs } from "@/lib/cells/kinds";
 import { cardFields, cardTitle, fieldsToShow, itemsLabel } from "../common/cardFields";
 import { DescriptionSelect, setDescriptionField, useDescriptionField, type DescriptionSource } from "../common/description";
 import type { ViewProps } from "../types";
-import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, rangeTitle, stepScale, type Axis, type DragMode, type TimelineSpan } from "./geometry";
+import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, rangeTitle, skippedDependencies, stepScale, type Axis, type DragMode, type TimelineSpan } from "./geometry";
 import { NO_LANE, createWrites, dragWrites, dropWrites, groupIntoLanes, lanesFromGroups, spanLabel, timelineSpan, type Lane } from "./lanes";
 import { TimelineChart, type ChartLane, type TimelineBar, type TimelineChartHandle } from "./TimelineChart";
 import { useWallNow } from "./useWallNow";
@@ -154,15 +155,46 @@ function TimelineInner(props: ViewProps) {
   }, [fields, data, timeZone]);
 
   const edges = useMemo(() => (depField && data ? dependencyEdges(data.records, depField.id, spans) : []), [depField, data, spans]);
-  const violatedTargets = useMemo(() => new Set(edges.filter((e) => e.violated).map((e) => e.toId)), [edges]);
+  const violatedEdges = useMemo(() => edges.filter((e) => e.violated), [edges]);
+  // Dependencies with no arrow: the other record has no dates, or is outside the loaded window.
+  const undrawnDependencies = useMemo(() => (depField && data ? skippedDependencies(data.records, depField.id, spans) : 0), [depField, data, spans]);
+  const titleById = useMemo(() => new Map((data?.records ?? []).map((r) => [r.id, cardTitle(primary, r, setup.format)] as const)), [data, primary, setup.format]);
+  // What a violated dependency says in the bars' names (a colour alone is not enough): who each bar clashes with.
+  const dependencyHints = useMemo(() => {
+    const names = (ids: string[]) => {
+      const t = ids.map((id) => titleById.get(id) ?? "another record");
+      return t.length > 3 ? `${t.slice(0, 3).join(", ")} and ${t.length - 3} more` : t.length > 1 ? `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}` : t[0]!;
+    };
+    const before = new Map<string, string[]>();
+    const after = new Map<string, string[]>();
+    for (const e of violatedEdges) {
+      before.set(e.toId, [...(before.get(e.toId) ?? []), e.fromId]);
+      after.set(e.fromId, [...(after.get(e.fromId) ?? []), e.toId]);
+    }
+    const out = new Map<string, string>();
+    for (const id of new Set([...before.keys(), ...after.keys()])) {
+      const parts: string[] = [];
+      const preds = before.get(id);
+      const succs = after.get(id);
+      if (preds) parts.push(`Dependency overlap: it starts before ${names(preds)} ends.`);
+      if (succs) parts.push(`Dependency overlap: it ends after ${names(succs)} starts.`);
+      out.set(id, parts.join(" "));
+    }
+    return out;
+  }, [violatedEdges, titleById]);
+  const violatedTargets = useMemo(() => new Set(violatedEdges.map((e) => e.toId)), [violatedEdges]);
 
-  const grouped = !!groupField || (data?.groups.length ?? 0) > 0;
+  // The lanes of a choice or person field are all its choices or all the base's collaborators, not just those with bars in the
+  // window; the view's own grouping, with nothing in the window, still has them.
+  const viewGroupField = table.fields.find((f) => f.id === cfg.queryConfig.groups[0]?.field_id);
   const laneModels = useMemo<Lane[]>(() => {
     if (!data) return [{ ...NO_LANE }];
-    if (groupField) return groupIntoLanes(data.records, groupField, setup.format);
-    if (data.groups.length > 0) return lanesFromGroups(data.records, data.groups);
-    return [{ ...NO_LANE, records: data.records }];
-  }, [data, groupField, setup.format]);
+    if (groupField) return groupIntoLanes(data.records, groupField, setup.format, setup.people);
+    if (data.groups.length > 0) return lanesFromGroups(data.records, data.groups, table.fields.find((f) => f.id === data.groups[0]!.field_id), setup.people);
+    const empty = viewGroupField ? lanesFromGroups([], [], viewGroupField, setup.people) : [];
+    return empty.length > 0 ? empty : [{ ...NO_LANE, records: data.records }];
+  }, [data, groupField, viewGroupField, table.fields, setup.format, setup.people]);
+  const grouped = !!groupField || (data?.groups.length ?? 0) > 0 || laneModels.some((l) => l.fieldId !== undefined);
 
   // The left column names each record, so the bar can say its dates; the first other field that
   // has a value (who it is for) sits quietly beside the name.
@@ -194,7 +226,7 @@ function TimelineInner(props: ViewProps) {
       canResize: canEditEnd && !span.endOnly,
       canResizeStart: canEditDates && span.hasEnd,
       violated: violatedTargets.has(r.id),
-      hint: span.reversed ? "Its end is before its start. Drag its right edge to set the end." : span.endOnly ? "It has no start date." : undefined,
+      hint: [span.reversed ? "Its end is before its start. Drag its right edge to set the end." : span.endOnly ? "It has no start date." : undefined, dependencyHints.get(r.id)].filter(Boolean).join(" ") || undefined,
     });
     if (!grouped) {
       const dated = (data?.records ?? []).filter((r) => spans.has(r.id));
@@ -218,7 +250,7 @@ function TimelineInner(props: ViewProps) {
         return span ? [barOf(r, span)] : [];
       }),
     }));
-  }, [grouped, laneModels, spans, primary, setup.format, data, canEditDates, canEditEnd, violatedTargets, sideFields, hasSorts]);
+  }, [grouped, laneModels, spans, primary, setup.format, data, canEditDates, canEditEnd, violatedTargets, dependencyHints, sideFields, hasSorts]);
   const showLabels = !grouped || chartLanes.length > 1 || chartLanes.some((l) => l.lane.label !== "");
 
   // ---- axis and scale ------------------------------------------------------------------------------
@@ -308,6 +340,27 @@ function TimelineInner(props: ViewProps) {
     [fields, writes, forgetPlaced],
   );
   const onDeleteBar = useCallback((recordId: string) => setup.actions.requestDelete([recordId]), [setup.actions]);
+  // Dependencies are the successor's link field: it lists the records it comes after.
+  const dependsOn = useCallback((recordId: string) => (depField ? linkRefs(recordById.get(recordId)?.values[depField.id]) : []), [depField, recordById]);
+  const onLink = useCallback(
+    (fromId: string, toId: string) => {
+      if (!depField) return;
+      const cur = dependsOn(toId);
+      if (cur.some((x) => x.id === fromId)) return;
+      const ref = { id: fromId, name: titleById.get(fromId) ?? fromId };
+      // A field that holds one link is given this one instead of the old.
+      const next = depField.type === "link" && depField.options.single ? [ref] : [...cur, ref];
+      void writes.update(toId, { [depField.id]: next }, { label: "Add dependency", toast: `${titleById.get(toId) || "Record"} now comes after ${ref.name || "the other record"}` });
+    },
+    [depField, dependsOn, titleById, writes],
+  );
+  const onUnlink = useCallback(
+    (fromId: string, toId: string) => {
+      if (!depField) return;
+      void writes.update(toId, { [depField.id]: dependsOn(toId).filter((x) => x.id !== fromId) }, { label: "Remove dependency", toast: "Dependency removed" });
+    },
+    [depField, dependsOn, writes],
+  );
   const unscheduleZone = useRef<HTMLDivElement>(null);
   const [overUnscheduled, setOverUnscheduled] = useState(false);
 
@@ -391,7 +444,7 @@ function TimelineInner(props: ViewProps) {
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
-          <button type="button" onClick={goToday} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+          <button type="button" onClick={goToday} title="Go to today (T)" className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
             Today
           </button>
           {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
@@ -456,6 +509,9 @@ function TimelineInner(props: ViewProps) {
           onDropRecord={canEditDates ? onDropRecord : undefined}
           onUnschedule={canEditDates ? onUnschedule : undefined}
           onDelete={setup.actions.canEdit ? onDeleteBar : undefined}
+          onLink={depField && setup.canEdit ? onLink : undefined}
+          onUnlink={depField && setup.canEdit ? onUnlink : undefined}
+          onToday={goToday}
           unscheduleZone={unscheduleZone}
           onOverUnschedule={setOverUnscheduled}
         />
@@ -505,7 +561,24 @@ function TimelineInner(props: ViewProps) {
                 {itemsLabel(total)}
               </span>
             )}
-            {depField && edges.some((e) => e.violated) && <span className="text-danger">{edges.filter((e) => e.violated).length} dependencies overlap</span>}
+            {depField && violatedEdges.length > 0 && (
+              <span className="flex flex-wrap items-baseline gap-x-1.5 text-danger">
+                <span>
+                  {violatedEdges.length} {violatedEdges.length === 1 ? "dependency overlaps" : "dependencies overlap"}
+                </span>
+                {violatedEdges.slice(0, 3).map((e) => (
+                  <button key={`${e.fromId}>${e.toId}`} type="button" onClick={() => setup.openRecord(e.toId)} title={`${titleById.get(e.toId)} starts before ${titleById.get(e.fromId)} ends`} className="underline hover:no-underline">
+                    {titleById.get(e.toId) || "Untitled"} after {titleById.get(e.fromId) || "Untitled"}
+                  </button>
+                ))}
+                {violatedEdges.length > 3 && <span>and {violatedEdges.length - 3} more</span>}
+              </span>
+            )}
+            {depField && undrawnDependencies > 0 && (
+              <span role="status">
+                {undrawnDependencies} {undrawnDependencies === 1 ? "dependency has" : "dependencies have"} no arrow: the other record has no dates or is outside this window.
+              </span>
+            )}
             {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this window.</span>}
             {records.error && !data && <span role="alert">Could not load records: {records.error.message}</span>}
             {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}

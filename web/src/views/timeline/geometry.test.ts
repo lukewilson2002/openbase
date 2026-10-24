@@ -5,13 +5,16 @@ import {
   arrowPath,
   axisWidth,
   barRect,
+  canDepend,
   centerDayOf,
   dayAtX,
   dayNumber,
   dependencyEdges,
   dragDays,
   dragSpan,
+  edgeScrollSpeed,
   extendAxis,
+  handleBox,
   layoutLanes,
   majorTicks,
   makeAxis,
@@ -19,6 +22,7 @@ import {
   minorTicks,
   rangeTitle,
   showsWeekends,
+  skippedDependencies,
   weekendStarts,
   windowStart,
   packRows,
@@ -241,6 +245,60 @@ describe("dependencies", () => {
       ["t", span(ms(2026, 3, 5), ms(2026, 3, 7))],
     ]);
     expect(dependencyEdges([{ id: "t", values: { dep: [{ id: "m", name: "M" }] } }], "dep", m)[0]!.violated).toBe(true);
+  });
+});
+
+describe("making dependencies", () => {
+  const edge = (fromId: string, toId: string) => ({ fromId, toId, violated: false });
+
+  it("allows a new pair, but not itself, a repeat, or a loop (also through other bars)", () => {
+    const edges = [edge("a", "b"), edge("b", "c")];
+    expect(canDepend(edges, "a", "c")).toBe(true);
+    expect(canDepend(edges, "c", "d")).toBe(true);
+    expect(canDepend(edges, "a", "a")).toBe(false);
+    expect(canDepend(edges, "a", "b")).toBe(false);
+    expect(canDepend(edges, "b", "a")).toBe(false);
+    expect(canDepend(edges, "c", "a")).toBe(false);
+  });
+
+  it("counts links that cannot be drawn because a record has no dates or is not loaded", () => {
+    const sp = new Map<string, Span>([
+      ["a", span(ms(2026, 3, 1), ms(2026, 3, 4))],
+      ["b", span(ms(2026, 3, 4), ms(2026, 3, 6))],
+    ]);
+    const rec = (id: string, preds: unknown) => ({ id, values: { dep: preds } as Record<string, unknown> });
+    const records = [rec("b", [{ id: "a", name: "A" }, { id: "gone", name: "G" }, "b"]), rec("nodates", [{ id: "a", name: "A" }]), rec("a", [])];
+    // b -> gone (not loaded) and nodates -> a (no dates of its own); the self link and the drawn one do not count.
+    expect(skippedDependencies(records, "dep", sp)).toBe(2);
+  });
+});
+
+describe("resize handles", () => {
+  it("keep a third of the bar free to move it, and stand outside a bar too narrow for that", () => {
+    expect(handleBox(200, false)).toEqual({ size: 6, outside: 0 });
+    expect(handleBox(200, true)).toEqual({ size: 20, outside: 0 });
+    expect(handleBox(50, true)).toEqual({ size: 20, outside: 4 });
+    expect(handleBox(8, false)).toEqual({ size: 6, outside: 6 });
+    expect(handleBox(8, true)).toEqual({ size: 20, outside: 20 });
+  });
+});
+
+describe("edgeScrollSpeed", () => {
+  it("is still in the middle, scrolls toward the edge the pointer is near, and faster the closer it is", () => {
+    expect(edgeScrollSpeed(400, 100, 700)).toBe(0);
+    const nearRight = edgeScrollSpeed(680, 100, 700);
+    const atRight = edgeScrollSpeed(699, 100, 700);
+    const pastRight = edgeScrollSpeed(900, 100, 700);
+    expect(nearRight).toBeGreaterThan(0);
+    expect(atRight).toBeGreaterThan(nearRight);
+    expect(pastRight).toBe(900);
+    expect(edgeScrollSpeed(110, 100, 700)).toBeLessThan(0);
+    expect(edgeScrollSpeed(0, 100, 700)).toBe(-900);
+  });
+
+  it("shrinks its zone on a narrow chart so the middle stays calm, and does nothing without room", () => {
+    expect(edgeScrollSpeed(150, 100, 200)).toBe(0);
+    expect(edgeScrollSpeed(150, 150, 150)).toBe(0);
   });
 });
 
