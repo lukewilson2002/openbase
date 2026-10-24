@@ -535,3 +535,67 @@ async fn kanban_hidden_stacks_and_card_settings_round_trip() {
         .await;
     assert!(e.contains("not a choice of field 'Status'"), "{e}");
 }
+
+#[tokio::test]
+async fn list_prefix_and_parent_fields_are_set_by_name() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Tasks").await;
+    r.field("Tasks", "Done", "checkbox", json!({})).await;
+    r.field("Tasks", "Parent", "link", json!({"linked_table": "Tasks"}))
+        .await;
+
+    // A new list with no list settings prefixes its rows with the first checkbox field.
+    let made = a
+        .call(
+            "create_view",
+            json!({"project_id": b, "table": "Tasks", "name": "To do", "type": "list"}),
+        )
+        .await;
+    assert_eq!(made["view"]["config"]["list"]["prefix_field_id"], "Done");
+    let view_id = made["view"]["id"].as_str().unwrap().to_string();
+
+    let updated = a
+        .call(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"list": {"parent_field_id": "Parent"}}}),
+        )
+        .await;
+    assert_eq!(
+        updated["view"]["config"]["list"]["parent_field_id"],
+        "Parent"
+    );
+    assert_eq!(updated["view"]["config"]["list"]["prefix_field_id"], "Done");
+    let saved = raw_view(&r, &view_id).await;
+    assert!(
+        saved["config"]["list"]["parent_field_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("fld")
+    );
+
+    // null clears one setting; the wrong kinds of field are refused by name.
+    a.call(
+        "update_view",
+        json!({"project_id": b, "view": view_id, "config": {"list": {"prefix_field_id": null}}}),
+    )
+    .await;
+    let e = a
+        .fails(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"list": {"parent_field_id": "Done"}}}),
+        )
+        .await;
+    assert!(e.contains("list parent field must be a link field"), "{e}");
+    let e = a
+        .fails(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"list": {"prefix_field_id": "Parent"}}}),
+        )
+        .await;
+    assert!(e.contains("list prefix field must be a checkbox"), "{e}");
+}

@@ -106,6 +106,7 @@ export type { LastModifiedOptions } from "./LastModifiedOptions";
 export type { LinkCandidates } from "./LinkCandidates";
 export type { LinkOptions } from "./LinkOptions";
 export type { LinkRef } from "./LinkRef";
+export type { ListConfig } from "./ListConfig";
 export type { LoginRequest } from "./LoginRequest";
 export type { LoginResponse } from "./LoginResponse";
 export type { LookupOptions } from "./LookupOptions";

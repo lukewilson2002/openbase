@@ -344,6 +344,7 @@ const CONFIG_KEYS: &[&str] = &[
     "kanban",
     "calendar",
     "gallery",
+    "list",
     "timeline",
     "form",
 ];
@@ -359,6 +360,7 @@ const KANBAN_KEYS: &[&str] = &[
 ];
 const CALENDAR_KEYS: &[&str] = &["date_field_id", "end_field_id"];
 const GALLERY_KEYS: &[&str] = &["cover_field_id", "cover_crop"];
+const LIST_KEYS: &[&str] = &["prefix_field_id", "parent_field_id"];
 const TIMELINE_KEYS: &[&str] = &[
     "start_field_id",
     "end_field_id",
@@ -652,6 +654,12 @@ impl Xlate<'_> {
         self.settings(obj, "gallery", GALLERY_KEYS, &["cover_field_id"])?;
         self.settings(
             obj,
+            "list",
+            LIST_KEYS,
+            &["prefix_field_id", "parent_field_id"],
+        )?;
+        self.settings(
+            obj,
             "timeline",
             TIMELINE_KEYS,
             &[
@@ -934,7 +942,7 @@ impl Xlate<'_> {
 
 /// Merge `patch` into `base` the way `update_view` applies a partial config: sections in the
 /// patch replace the same sections of `base`; the settings sections (kanban, calendar, gallery,
-/// timeline, form) merge key by key; `null` removes a key back to its default.
+/// list, timeline, form) merge key by key; `null` removes a key back to its default.
 pub fn merge_config(base: &Value, patch: &Value) -> Value {
     let mut out = base.as_object().cloned().unwrap_or_default();
     let Some(p) = patch.as_object() else {
@@ -943,7 +951,7 @@ pub fn merge_config(base: &Value, patch: &Value) -> Value {
     for (k, v) in p {
         let nested = matches!(
             k.as_str(),
-            "kanban" | "calendar" | "gallery" | "timeline" | "form"
+            "kanban" | "calendar" | "gallery" | "list" | "timeline" | "form"
         );
         if v.is_null() {
             out.remove(k);
@@ -1013,7 +1021,7 @@ fn prune_defaults(cfg: &mut Value) {
             }
         }
     }
-    for key in ["kanban", "calendar", "gallery", "timeline", "form"] {
+    for key in ["kanban", "calendar", "gallery", "list", "timeline", "form"] {
         if let Some(Value::Object(m)) = o.get_mut(key) {
             m.retain(|_, v| match v {
                 Value::Null => false,
@@ -1027,7 +1035,7 @@ fn prune_defaults(cfg: &mut Value) {
     if matches!(o.get("kanban"), Some(Value::Object(m)) if m.is_empty()) {
         o.remove("kanban");
     }
-    for key in ["calendar", "gallery", "timeline", "form"] {
+    for key in ["calendar", "gallery", "list", "timeline", "form"] {
         if matches!(o.get(key), Some(Value::Object(m)) if m.is_empty()) {
             o.remove(key);
         }

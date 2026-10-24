@@ -417,7 +417,7 @@ fn condition_key(c: &Condition) -> Option<String> {
 
 /// The single-field slots of a config with the label the validator reports
 /// them under.
-pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10] {
+pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 12] {
     [
         ("kanban stack field", config.kanban.stack_field_id.as_ref()),
         ("kanban cover field", config.kanban.cover_field_id.as_ref()),
@@ -431,6 +431,8 @@ pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10
             "gallery cover field",
             config.gallery.cover_field_id.as_ref(),
         ),
+        ("list prefix field", config.list.prefix_field_id.as_ref()),
+        ("list parent field", config.list.parent_field_id.as_ref()),
         (
             "timeline start field",
             config.timeline.start_field_id.as_ref(),

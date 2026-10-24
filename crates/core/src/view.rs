@@ -284,6 +284,18 @@ pub struct GalleryConfig {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[serde(default)]
+pub struct ListConfig {
+    /// Checkbox, single select or user (one person) field drawn at the start of every row and
+    /// editable there: tick items off without opening them.
+    pub prefix_field_id: Option<FieldId>,
+    /// Link field whose records are in this same table: a record links to its parent, and the
+    /// list nests it under that parent (sub-items). Only the first linked record counts as parent.
+    pub parent_field_id: Option<FieldId>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(default)]
 pub struct TimelineConfig {
     pub start_field_id: Option<FieldId>,
     pub end_field_id: Option<FieldId>,
@@ -364,6 +376,7 @@ pub struct ViewConfig {
     pub kanban: KanbanConfig,
     pub calendar: CalendarConfig,
     pub gallery: GalleryConfig,
+    pub list: ListConfig,
     pub timeline: TimelineConfig,
     pub form: FormConfig,
 }

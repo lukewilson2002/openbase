@@ -18,7 +18,7 @@ use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
 use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
 use ob_core::view::{
-    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ViewConfig, ViewType,
+    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ListConfig, ViewConfig, ViewType,
 };
 use rusqlite::{Transaction, params};
 
@@ -93,6 +93,18 @@ pub fn default_gallery_config(fields: &[Field]) -> Option<GalleryConfig> {
         })
 }
 
+/// The list config a new list starts with: the table's first checkbox field as its prefix, so a
+/// to-do list shows its tick boxes from the start. `None` when the table has no checkbox field.
+pub fn default_list_config(fields: &[Field]) -> Option<ListConfig> {
+    fields
+        .iter()
+        .find(|f| matches!(f.kind, FieldKind::Checkbox(_)))
+        .map(|f| ListConfig {
+            prefix_field_id: Some(f.id.clone()),
+            parent_field_id: None,
+        })
+}
+
 /// Create a view in `table_id`.
 pub fn create(
     tx: &Transaction,
@@ -126,6 +138,13 @@ pub fn create(
         && let Some(gallery) = default_gallery_config(&fields)
     {
         config.gallery = gallery;
+    }
+    // The same for a list and its prefix.
+    if input.view_type == ViewType::List
+        && config.list == ListConfig::default()
+        && let Some(list) = default_list_config(&fields)
+    {
+        config.list = list;
     }
     validate_config(&fields, &config)?;
     let view = View {
@@ -510,6 +529,29 @@ fn check_slot_types(fields: &[Field], config: &ViewConfig, stale: &Stale) -> App
         if !self_link && !stale.field("timeline dependency field", &f.id) {
             return Err(AppError::bad_request(format!(
                 "timeline dependency field must be a link field to records of the same table, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.list.prefix_field_id) {
+        let prefix = match &f.kind {
+            FieldKind::SingleSelect(_) | FieldKind::Checkbox(_) => true,
+            FieldKind::User(o) => !o.multiple,
+            _ => false,
+        };
+        if !prefix && !stale.field("list prefix field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "list prefix field must be a checkbox, a single select, or a user field that holds one person, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.list.parent_field_id) {
+        let self_link =
+            matches!(&f.kind, FieldKind::Link(l) if Some(l.linked_table_id.as_str()) == table_id);
+        if !self_link && !stale.field("list parent field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "list parent field must be a link field to records of the same table, but {}",
                 describe(f)
             )));
         }

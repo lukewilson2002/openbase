@@ -399,7 +399,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 |---|---|---|
 | `get_view` | any | A view's configuration, with field names |
 | `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration |
-| `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / timeline / form settings) |
+| `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / list / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
 | `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |
 | `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters. Optional `from` and `to` (`YYYY-MM-DD`, both included; the same day for one day) return only what a calendar or timeline shows for that window: a record is in when its span from start to end overlaps the range, one with a single date counts as that day, one with no date is left out. The dates are the view's calendar or timeline fields, or `date_field` / `end_field` (needed for other view types); the answer repeats them in `range`. Same as the `range` of `POST /api/views/{id}/query` |
@@ -423,12 +423,22 @@ card settings are `show_all_people` (a user field: also a stack for people witho
 default is only people who hold cards), `card_field_limit` (most non-empty fields a card
 shows, default 6) and `cover_fit` (fit the cover inside the card instead of cropping it).
 
+**List views.** `list.prefix_field_id` is drawn at the start of every row and can be
+changed there (a checkbox is ticked off in place); a new list uses the table's first
+checkbox field when its config says nothing about the list. `list.parent_field_id` is a
+link field whose records are in the same table: a record linked to another is that
+record's sub-item, nested under it (within its group) and folded away with it. To
+indent a record under another, `update_records` its parent field to the parent's name;
+to outdent it, set the field to the grandparent, or to nothing.
+
 **Field types are checked.** A calendar `date_field_id` / `end_field_id` and a timeline
 `start_field_id` / `end_field_id` must be date fields (date, created time, last modified
 time, or a formula or rollup that returns a date), and an end must differ from its start;
 a timeline `dependency_field_id` must be a link field to the same table; a kanban
 `stack_field_id` must be a single select, a user field that holds one person, or a
-checkbox. `create_view` and `update_view` (and the same REST calls) refuse anything else
+checkbox; a list `prefix_field_id` must be a checkbox, a single select, or a user field
+that holds one person, and a list `parent_field_id` a link field to the same table.
+`create_view` and `update_view` (and the same REST calls) refuse anything else
 with an error naming the field and its type, instead of saving a view the app cannot
 draw. A reference the view already had in that place is left alone when you change
 something else.
