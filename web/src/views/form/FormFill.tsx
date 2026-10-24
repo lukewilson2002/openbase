@@ -17,8 +17,8 @@ import { FormDone } from "@/components/forms/FormDone";
 import { Notice } from "@/components/layouts";
 import type { EditValue } from "@/components/record/editors/env";
 import { Button } from "@/components/ui/button";
-import { resolveForm, type Drafts } from "@/lib/forms/drafts";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, liveEntries, redirectAfterSubmit } from "@/lib/forms/formConfig";
+import { defaultDrafts, resolveForm, shownItems, type Drafts } from "@/lib/forms/drafts";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, fieldDefault, liveEntries, liveItems, redirectAfterSubmit } from "@/lib/forms/formConfig";
 import type { ViewSetup } from "../common/useViewSetup";
 import { FormSurface } from "./FormSurface";
 
@@ -26,7 +26,9 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
   const { table, view, config, people, timeZone } = setup;
   const form = config.form;
   const qc = useQueryClient();
-  const [drafts, setDrafts] = useState<Drafts>({});
+  const items = useMemo(() => liveItems(form, table), [form, table]);
+  // Fields with a default start with it, as they do on the public form.
+  const [drafts, setDrafts] = useState<Drafts>(() => defaultDrafts(items));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
   const [resetKey, setResetKey] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const entries = useMemo(() => liveEntries(form, table), [form, table]);
+  const shown = useMemo(() => shownItems(items, drafts, { timeZone, users: people }), [items, drafts, timeZone, people]);
   const redirect = done ? redirectAfterSubmit(form.redirect_url, done.recordId) : null;
 
   // A form with a redirect address sends people there at once, in place of the message.
@@ -65,6 +68,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
       entries.map(({ entry, field }) => ({ field, required: entry.required })),
       drafts,
       { timeZone, users: people },
+      shown,
     );
     setErrors(resolved.errors);
     const firstBad = entries.find(({ field }) => resolved.errors[field.id]);
@@ -76,9 +80,12 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
       setFailure("Fill in at least one field first.");
       return;
     }
+    // A field with a default that was cleared, or is hidden by a show-if, stays empty instead of getting the default.
+    const values: Record<string, unknown> = { ...resolved.values };
+    for (const { field } of entries) if (!(field.id in values) && fieldDefault(field) !== null) values[field.id] = null;
     setSubmitting(true);
     try {
-      const created = await recordsApi.create(table.id, { records: [{ values: resolved.values as never }], typecast: true });
+      const created = await recordsApi.create(table.id, { records: [{ values: values as never }], typecast: true });
       // A link field changes the linked table's records too.
       void qc.invalidateQueries({ queryKey: entries.some((e) => e.field.type === "link") ? ["records"] : recordKeys.table(table.id) });
       setDone({ recordId: created?.records?.[0]?.id ?? null });
@@ -91,7 +98,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
 
   if (done) {
     const another = () => {
-      setDrafts({});
+      setDrafts(defaultDrafts(items));
       setErrors({});
       setFailure(null);
       setResetKey((k) => k + 1);
@@ -121,6 +128,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
         form={form}
         table={table}
         hiddenFields={config.hidden_fields}
+        visible={shown}
         drafts={drafts}
         onEdit={onEdit}
         errors={errors}

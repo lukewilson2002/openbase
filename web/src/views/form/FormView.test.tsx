@@ -17,7 +17,7 @@ function formView(form: Partial<ViewConfig["form"]> = {}, over: Partial<View> = 
   return viewWithConfig(
     "viw1",
     "form",
-    { form: { title: "", description: "", fields: [entry(F.name.id, { required: true, label: "Your name", help: "As on your passport" }), entry(F.status.id), entry(F.owner.id), entry(F.deps.id)], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, ...form } },
+    { form: { title: "", description: "", fields: [entry(F.name.id, { required: true, label: "Your name", help: "As on your passport" }), entry(F.status.id), entry(F.owner.id), entry(F.deps.id)], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, notify_user_ids: [], ...form } },
     over,
   );
 }
@@ -450,5 +450,147 @@ describe("the settings of what happens afterwards", () => {
     expect(screen.getByText("Not offered while the form goes to another address.")).toBeInTheDocument();
     expect(screen.getByText("Not shown while the form goes to another address.")).toBeInTheDocument();
     expect(screen.getByText(/\{record_id\}/)).toBeInTheDocument();
+  });
+});
+
+describe("headings and text between the fields", () => {
+  it("adds a heading and a paragraph, edits their text, and shows them in the preview", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("creator");
+    await screen.findByRole("heading", { name: "Form" });
+    await user.click(screen.getByRole("button", { name: "Add a heading or text" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Section heading" }));
+    await user.clear(screen.getByLabelText("Heading text"));
+    await user.type(screen.getByLabelText("Heading text"), "About you");
+    await user.click(screen.getByRole("button", { name: "Add a heading or text" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Text between fields" }));
+    await user.clear(screen.getByLabelText("Text"));
+    await user.type(screen.getByLabelText("Text"), "Tell us a bit");
+    const preview = screen.getByRole("region", { name: "Form preview" });
+    expect(within(preview).getByRole("heading", { name: "About you" })).toBeInTheDocument();
+    expect(within(preview).getByText("Tell us a bit")).toBeInTheDocument();
+    await waitFor(async () => expect((await saved(api)).fields.filter((f) => f.block).map((f) => [f.block, f.label ?? f.help])).toEqual([["heading", "About you"], ["text", "Tell us a bit"]]), { timeout: 3000 });
+    const blocks = (await saved(api)).fields.filter((f) => f.block);
+    expect(blocks[0]!.field_id).toMatch(/^blk/);
+    expect(blocks[0]!.required).toBe(false);
+  });
+
+  it("moves a heading with the fields, removes it with Undo, and counts only the questions", async () => {
+    const user = userEvent.setup();
+    const form = { fields: [entry(F.name.id), entry("blk1", { block: "heading", label: "Details" }), entry(F.status.id)] };
+    const { api } = setup("creator", formView(form));
+    await screen.findByRole("heading", { name: "Form" });
+    expect(screen.getByText("2 in the form")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move the heading Details up" }));
+    await waitFor(async () => expect((await saved(api)).fields.map((f) => f.field_id)).toEqual(["blk1", F.name.id, F.status.id]), { timeout: 3000 });
+    await user.click(screen.getByRole("button", { name: "Remove the heading Details from the form" }));
+    await waitFor(async () => expect((await saved(api, 2)).fields.map((f) => f.field_id)).toEqual([F.name.id, F.status.id]), { timeout: 3000 });
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(async () => expect((await saved(api, 3)).fields.map((f) => f.field_id)).toEqual(["blk1", F.name.id, F.status.id]), { timeout: 3000 });
+  });
+});
+
+describe("conditional questions", () => {
+  const todo = { conjunction: "and" as const, items: [{ field_id: F.status.id, op: "is" as const, value: "s1" }] };
+  const conditional = () => formView({ fields: [entry(F.name.id), entry(F.status.id), entry(F.effort.id, { required: true, show_if: todo })] });
+
+  it("sets a condition on a question above, and offers only the ones above", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("creator", formView({ fields: [entry(F.name.id), entry(F.status.id), entry(F.effort.id)] }));
+    await screen.findByRole("heading", { name: "Form" });
+    await user.click(screen.getByRole("button", { name: "Edit number" }));
+    const editor = screen.getByTestId(`show-if-${F.effort.id}`);
+    await user.click(within(editor).getByRole("button", { name: "Add condition" }));
+    // Name and Status are above number; number itself is not offered.
+    const choices = within(within(editor).getByRole("combobox", { name: "Field" })).getAllByRole("option").map((o) => o.textContent);
+    expect(choices).toEqual(["Name", "Status"]);
+    await user.selectOptions(within(editor).getByRole("combobox", { name: "Field" }), F.status.id);
+    await waitFor(async () => expect((await saved(api)).fields.find((f) => f.field_id === F.effort.id)?.show_if?.items[0]).toMatchObject({ field_id: F.status.id, op: "is" }), { timeout: 3000 });
+    expect(within(screen.getByRole("listitem", { name: "Form field number" })).getByText("Conditional")).toBeInTheDocument();
+  });
+
+  it("says there is nothing to depend on for the first question", async () => {
+    const user = userEvent.setup();
+    setup("creator", formView({ fields: [entry(F.name.id), entry(F.status.id)] }));
+    await screen.findByRole("heading", { name: "Form" });
+    await user.click(screen.getByRole("button", { name: "Edit Name" }));
+    expect(within(screen.getByTestId(`show-if-${F.name.id}`)).getByText(/Put a text, number, rating, checkbox or select question above/)).toBeInTheDocument();
+  });
+
+  it("hides the question in the preview until the answer above matches", async () => {
+    const user = userEvent.setup();
+    setup("creator", conditional());
+    await screen.findByRole("heading", { name: "Form" });
+    const preview = screen.getByRole("region", { name: "Form preview" });
+    expect(within(preview).queryByText("number")).not.toBeInTheDocument();
+    // Required, but hidden: the preview's Submit does not stop at it.
+    await user.type(within(preview).getByRole("textbox", { name: "Name" }), "Ada");
+    await user.click(within(preview).getByRole("button", { name: "Submit" }));
+    expect(await screen.findByText(/Thanks/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to the form" }));
+    await user.click(within(screen.getByRole("region", { name: "Form preview" })).getByRole("button", { name: "Status" }));
+    await user.click(within(within(await screen.findByRole("listbox", { name: "Status" })).getByRole("option", { name: "Todo" })).getByRole("button"));
+    expect(await within(screen.getByRole("region", { name: "Form preview" })).findByText("number")).toBeInTheDocument();
+  });
+
+  it("fills in the form without the hidden question, and sends it once it is shown", async () => {
+    const user = userEvent.setup();
+    const created = { records: [{ id: "recNew", table_id: "tbl1", created_at: 1, updated_at: 1, created_by: "usr1", updated_by: "usr1", autonumber: null, values: {} }] };
+    const view = formView({ fields: [entry(F.name.id), entry(F.status.id), entry(F.effort.id, { required: true, show_if: todo })], success_message: "Done", show_submit_another: true }, { locked: true });
+    const { api } = setup("editor", view, { "POST /api/tables/tbl1/records": { status: 201, json: created } });
+    await user.type(await screen.findByRole("textbox", { name: "Name" }), "Ada");
+    expect(screen.queryByText("number")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await screen.findByText("Done");
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toEqual({ records: [{ values: { [F.name.id]: "Ada" } }], typecast: true });
+  });
+});
+
+describe("field defaults and descriptions", () => {
+  const described = { ...F.name, options: { multiline: false, default: "Acme" }, description: "Who is asking" };
+
+  it("starts Fill in form with the default, shows the description as help, and sends a cleared default as empty", async () => {
+    const user = userEvent.setup();
+    const created = { records: [{ id: "recNew", table_id: "tbl1", created_at: 1, updated_at: 1, created_by: "usr1", updated_by: "usr1", autonumber: null, values: {} }] };
+    const view = formView({ fields: [entry(F.name.id), entry(F.effort.id)] }, { locked: true });
+    const schema = projectSchema("editor", [view]);
+    schema.tables[0]!.fields = schema.tables[0]!.fields.map((f) => (f.id === F.name.id ? (described as never) : f));
+    const api = renderView(FormView, { schema, viewId: "viw1", routes: { "POST /api/tables/tbl1/records": { status: 201, json: created } } }).api;
+    const box = await screen.findByRole("textbox", { name: "Name" });
+    expect(box).toHaveValue("Acme");
+    expect(screen.getByText("Who is asking")).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(screen.getByRole("textbox", { name: "number" }), "7");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await screen.findByText(/Thanks/);
+    // Name was cleared: an explicit null, so the server does not put the default back.
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toEqual({ records: [{ values: { [F.name.id]: null, [F.effort.id]: 7 } }], typecast: true });
+  });
+});
+
+describe("who is notified of responses", () => {
+  it("turns on notifications for the signed-in person in one click, and lists the others", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("creator");
+    await screen.findByRole("heading", { name: "Form" });
+    const me = screen.getByRole("switch", { name: "Notify me of new responses" });
+    await waitFor(() => expect(me).toBeEnabled());
+    expect(me).not.toBeChecked();
+    await user.click(me);
+    await waitFor(async () => expect((await saved(api)).notify_user_ids).toEqual(["usr1"]), { timeout: 3000 });
+    await user.click(screen.getByRole("button", { name: "More options" }));
+    await user.click(await screen.findByRole("switch", { name: /Grace Hopper/ }));
+    await waitFor(async () => expect((await saved(api, 2)).notify_user_ids).toEqual(["usr1", "usr2"]), { timeout: 3000 });
+  });
+
+  it("stays available to an editor while the public link locks the rest of the form", async () => {
+    const user = userEvent.setup();
+    const { api } = setup("editor", formView(), { "GET /api/views/viw1/share-status": { enabled: true } });
+    await screen.findByText(/public link/);
+    expect(screen.getByLabelText("Title")).toBeDisabled();
+    const me = screen.getByRole("switch", { name: "Notify me of new responses" });
+    await waitFor(() => expect(me).toBeEnabled());
+    await user.click(me);
+    await waitFor(async () => expect((await saved(api)).notify_user_ids).toEqual(["usr1"]), { timeout: 3000 });
   });
 });

@@ -18,9 +18,9 @@ import { EditorEnvProvider, type EditValue } from "@/components/record/editors/e
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/checkbox";
 import { cn } from "@/lib/cn";
-import { resolveForm, type Drafts } from "@/lib/forms/drafts";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, liveEntries, previewPublicFields, summarizeForm } from "@/lib/forms/formConfig";
-import { buildSubmission, emptyInput, type FormInput } from "@/lib/forms/publicValues";
+import { defaultDrafts, resolveForm, shownItems, type Drafts } from "@/lib/forms/drafts";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, liveEntries, liveItems, previewPublicFields, summarizeForm } from "@/lib/forms/formConfig";
+import { buildSubmission, initialInput, shownFields, type FormInput } from "@/lib/forms/publicValues";
 import { PublicFieldInput } from "@/public/form/PublicFieldInput";
 import { SegmentedSwitch } from "../common/SegmentedSwitch";
 import type { ViewSetup } from "../common/useViewSetup";
@@ -45,7 +45,10 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
   const form = config.form;
   const readOnly = !cfg.canConfigure || linkLocked;
   const [publicOnly, setPublicOnly] = useState(false);
-  const [drafts, setDrafts] = useState<Drafts>({});
+  const items = useMemo(() => liveItems(form, table), [form, table]);
+  // The preview starts with the defaults, like the real forms. What was typed wins over them.
+  const [typed, setDrafts] = useState<Drafts>({});
+  const drafts = useMemo<Drafts>(() => ({ ...defaultDrafts(items), ...typed }), [items, typed]);
   const [publicInputs, setPublicInputs] = useState<Record<string, FormInput>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
@@ -54,6 +57,15 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
   const summary = summarizeForm(form, table, config);
   const publicFields = useMemo(() => previewPublicFields(form, table, config.hidden_fields), [form, table, config.hidden_fields]);
   // The preview cannot add select options (that would change the field) whoever is looking at it.
+  const publicValues = useMemo(
+    () => ({ ...Object.fromEntries(publicFields.filter((f) => !f.block).map((f) => [f.id, initialInput(f)] as const)), ...publicInputs }),
+    [publicFields, publicInputs],
+  );
+  // What the preview shows: the entries whose show-if holds for the answers typed so far.
+  const visible = useMemo(
+    () => (publicOnly ? shownFields(publicFields, publicValues, { timeZone }) : shownItems(items, drafts, { timeZone, users: people })),
+    [publicOnly, publicFields, publicValues, items, drafts, timeZone, people],
+  );
   const previewEnv = useMemo(() => ({ ...setup.editorEnv, canCreateOptions: false }), [setup.editorEnv]);
 
   // What was checked belongs to the form as it was.
@@ -73,11 +85,12 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
   /** The preview's Submit: the same checks as the real form, and then the "after submitting" screen. */
   const trySubmit = () => {
     const problems = publicOnly
-      ? buildSubmission(publicFields, publicInputs, { timeZone }).errors
+      ? buildSubmission(publicFields, publicValues, { timeZone }).errors
       : resolveForm(
           liveEntries(form, table).map(({ entry, field }) => ({ field, required: entry.required })),
           drafts,
           { timeZone, users: people },
+          visible,
         ).errors;
     setErrors(problems);
     if (Object.keys(problems).length === 0) setSent(true);
@@ -118,7 +131,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
                   : "You do not have permission to change this form."}
             </Notice>
           )}
-          <FormSettings form={form} title={view.name} readOnly={readOnly} onChange={onChange} />
+          <FormSettings form={form} title={view.name} readOnly={readOnly} onChange={onChange} people={people} currentUserId={setup.currentUserId} notifyReadOnly={!cfg.canConfigure} />
           <div aria-hidden className="my-0.5 h-px bg-[color-mix(in_srgb,var(--line)_60%,var(--surface))]" />
           <FormFieldList form={form} table={table} hiddenFields={config.hidden_fields} readOnly={readOnly} onChange={onChange} onShowPublic={onShowPublic} />
         </div>
@@ -161,6 +174,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
               table={table}
               hiddenFields={config.hidden_fields}
               publicOnly={publicOnly}
+              visible={visible}
               drafts={drafts}
               onEdit={onEdit}
               errors={errors}
@@ -175,7 +189,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
                       return (
                         <PublicFieldInput
                           field={pf}
-                          value={publicInputs[pf.id] ?? emptyInput(pf)}
+                          value={publicValues[pf.id] ?? initialInput(pf)}
                           error={errors[pf.id]}
                           onChange={(v) => {
                             setPublicInputs((cur) => ({ ...cur, [pf.id]: v }));

@@ -297,6 +297,7 @@ describe("a public form", () => {
       success_message: "Thank you",
       redirect_url: "https://example.com/thanks",
       show_submit_another: true,
+      notify_user_ids: [],
     };
     formView = parse("View", await w.owner.run(() => api.views.update(created.id, { config: { ...created.config, form } })));
     link = await share(formView, "form");

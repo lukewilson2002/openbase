@@ -5,7 +5,8 @@
  * "fill in form" mode; the public page has its own lightweight inputs (`public/`).
  *
  * Fields the public form does not collect (links, users, fields the view hides) are marked
- * "Signed-in editors only" so the builder shows what visitors will actually get.
+ * "Signed-in editors only" so the builder shows what visitors will actually get. Headings and paragraphs
+ * are drawn between the questions, and an entry whose show-if does not hold (`visible` lists what does) is left out.
  *
  * With `onSubmit` the form sends on Enter in a one-line input and on Ctrl or Cmd+Enter anywhere in it.
  */
@@ -15,7 +16,7 @@ import type { Field, FormConfig, FormField, Table } from "@/api/types";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import type { EditValue } from "@/components/record/editors/env";
 import { cn } from "@/lib/cn";
-import { liveEntries, publicStatus } from "@/lib/forms/formConfig";
+import { blockText, helpFor, liveItems, publicStatus } from "@/lib/forms/formConfig";
 import type { Drafts } from "@/lib/forms/drafts";
 
 export interface FormSurfaceProps {
@@ -27,6 +28,8 @@ export interface FormSurfaceProps {
   hiddenFields: readonly string[];
   /** Show only what a visitor of the public link gets. */
   publicOnly?: boolean;
+  /** The ids of the entries to draw (those whose show-if holds); absent: all of them. */
+  visible?: ReadonlySet<string>;
   /** Current drafts (to restore values when editors remount). */
   drafts: Drafts;
   onEdit: (field: Field, edit: EditValue) => void;
@@ -86,6 +89,8 @@ function FieldBlock({
 }) {
   const labelId = `form-field-${field.id}`;
   const label = entry.label?.trim() || field.name;
+  // The form's own help, else the field's description.
+  const help = helpFor(entry, field);
   return (
     <div className="flex flex-col gap-1.5" role="group" aria-labelledby={labelId} data-field-id={field.id}>
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -103,7 +108,7 @@ function FieldBlock({
           </span>
         )}
       </div>
-      {entry.help?.trim() && <p className="whitespace-pre-wrap text-[0.8125rem] text-muted">{entry.help}</p>}
+      {help && <p className="whitespace-pre-wrap text-[0.8125rem] text-muted">{help}</p>}
       {inert && field.type === "attachment" ? (
         <p className="rounded-md border border-dashed border-line-strong px-3 py-2 text-[0.8125rem] text-muted">
           Files cannot be added in the preview.
@@ -137,6 +142,7 @@ export function FormSurface({
   table,
   hiddenFields,
   publicOnly,
+  visible,
   drafts,
   onEdit,
   errors,
@@ -148,9 +154,15 @@ export function FormSurface({
   inert,
   renderField,
 }: FormSurfaceProps) {
-  const entries = liveEntries(form, table);
-  const shown = entries.filter(({ field }) => !publicOnly || publicStatus(field, hiddenFields).public);
-  const anyRequired = shown.some((e) => e.entry.required);
+  const items = liveItems(form, table).filter((item) => {
+    if (visible && !visible.has(item.entry.field_id)) return false;
+    // An empty heading or paragraph draws nothing.
+    if (item.kind === "block") return blockText(item.entry) !== "";
+    return !publicOnly || publicStatus(item.field, hiddenFields).public;
+  });
+  const questions = items.filter((i) => i.kind === "field");
+  const anyRequired = questions.some((i) => i.entry.required);
+  const asked = liveItems(form, table).filter((i) => i.kind === "field").length;
   return (
     <section
       aria-label={label}
@@ -174,13 +186,25 @@ export function FormSurface({
         {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{form.description}</p>}
         {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
       </header>
-      {shown.length === 0 ? (
+      {questions.length === 0 ? (
         <p className="rounded-md bg-subtle px-3 py-4 text-center text-[0.8125rem] text-muted">
-          {entries.length === 0 ? "This form has no fields yet." : "None of this form's fields are collected by the public form."}
+          {asked === 0 ? "This form has no fields yet." : "None of this form's fields are collected by the public form."}
         </p>
       ) : (
         <div className="flex flex-col gap-[18px]">
-          {shown.map(({ entry, field }) => {
+          {items.map((item) => {
+            if (item.kind === "block") {
+              return item.block === "heading" ? (
+                <h3 key={item.entry.field_id} className="mt-1 border-b border-line pb-1.5 text-[1.0625rem] font-semibold">
+                  {blockText(item.entry)}
+                </h3>
+              ) : (
+                <p key={item.entry.field_id} className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">
+                  {blockText(item.entry)}
+                </p>
+              );
+            }
+            const { entry, field } = item;
             const status = publicStatus(field, hiddenFields);
             const custom = renderField?.(entry, field);
             if (custom) return <Fragment key={`${field.id}:${resetKey}`}>{custom}</Fragment>;

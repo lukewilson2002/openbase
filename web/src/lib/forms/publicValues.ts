@@ -10,6 +10,7 @@
 import type { AttachmentRef, DateOptions, Field, FormSubmission, PublicFormField, SelectChoice } from "@/api/types";
 import { fromInputValue } from "@/lib/cells/dates";
 import { parseText } from "@/lib/cells/parse";
+import { shownEntries } from "./showIf";
 
 /** What one input holds while the visitor is filling it in. */
 export type FormInput = string | number | boolean | string[] | AttachmentRef[] | null | undefined;
@@ -93,6 +94,13 @@ export function emptyInput(f: Pick<PublicFormField, "type" | "options">): FormIn
   }
 }
 
+/** The input a field starts with: its default when it has one, else nothing (or unchecked). */
+export function initialInput(f: Pick<PublicFormField, "type" | "options" | "default">): FormInput {
+  const d = f.default;
+  if ((typeof d === "string" && d !== "") || typeof d === "number") return typeof d === "number" ? String(d) : d;
+  return emptyInput(f);
+}
+
 export function isEmptyInput(v: FormInput): boolean {
   if (v === null || v === undefined || v === false || v === 0) return true;
   if (typeof v === "string") return v.trim() === "";
@@ -154,11 +162,35 @@ function convert(f: PublicFormField, input: FormInput, ctx: SubmissionCtx): { ok
   }
 }
 
-/** Check every field and build the submission. Empty optional fields are left out. */
+/** What an input holds in its stored form (what a show-if reads), or null when it is empty or not valid yet. */
+export function answerOf(f: PublicFormField, input: FormInput, ctx: SubmissionCtx): unknown {
+  const res = convert(f, input, ctx);
+  return res.ok ? res.value : null;
+}
+
+/**
+ * The ids of the entries a visitor is shown: those whose show-if holds for the answers above them. A condition on a
+ * question the form does not collect counts as unanswered (as on the server).
+ */
+export function shownFields(fields: readonly PublicFormField[], inputs: FormInputs, ctx: SubmissionCtx): Set<string> {
+  const byId = new Map(fields.filter((f) => !f.block).map((f) => [f.id, f] as const));
+  return shownEntries(
+    fields.map((f) => ({ id: f.id, showIf: f.show_if, answer: f.block ? undefined : () => answerOf(f, inputs[f.id], ctx) })),
+    (id) => byId.get(id),
+    "unanswered",
+  );
+}
+
+/**
+ * Check every field and build the submission. Empty optional fields are left out; headings and paragraphs
+ * and the questions a show-if hides are neither checked nor sent.
+ */
 export function buildSubmission(fields: readonly PublicFormField[], inputs: FormInputs, ctx: SubmissionCtx): Submission {
   const values: FormSubmission["values"] = {};
   const errors: Record<string, string> = {};
+  const shown = shownFields(fields, inputs, ctx);
   for (const f of fields) {
+    if (f.block || !shown.has(f.id)) continue;
     const input = inputs[f.id];
     const res = convert(f, input, ctx);
     if (!res.ok) {

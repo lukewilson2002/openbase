@@ -58,6 +58,7 @@ function WhatIsPublic({ view, table, kind }: { view: View; table: ShareViewDialo
     const entries = liveEntries(view.config.form, table);
     const shown = entries.filter((e) => publicStatus(e.field, view.config.hidden_fields).public);
     const left = entries.length - shown.length;
+    const notified = view.config.form.notify_user_ids.length;
     return (
       <div className="flex flex-col gap-1 rounded-md bg-subtle px-3 py-2 text-[0.8125rem]">
         <p>
@@ -69,6 +70,15 @@ function WhatIsPublic({ view, table, kind }: { view: View; table: ShareViewDialo
           {left > 0 && ` ${left} more (links and users) are not collected publicly.`}
         </p>
         {shown.length === 0 && <p className="text-danger">The form has no fields visitors can fill in. Add some in the builder first.</p>}
+        <p>
+          <strong>Responses:</strong>{" "}
+          {notified === 0
+            ? "nobody is told when one comes in. Turn on “Notify me of new responses” in the form builder."
+            : `${notified} ${notified === 1 ? "person is" : "people are"} notified of each one (in the app, and by email if this server can send mail).`}
+        </p>
+        <p>
+          <strong>Prefill:</strong> add <code>?prefill_Field name=value</code> to a link to start a field with that value, and <code>&amp;hide_Field name=true</code> to take it off the page.
+        </p>
       </div>
     );
   }

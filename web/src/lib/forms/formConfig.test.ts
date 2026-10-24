@@ -3,11 +3,16 @@ import type { FormConfig } from "@/api/types";
 import { ALL_FIELDS, field, makeTable } from "@/test/fields";
 import {
   addAllFormFields,
+  addFormBlock,
   addFormField,
   addableFields,
+  blockText,
   canBeInForm,
   cleanForm,
+  fieldDefault,
+  helpFor,
   liveEntries,
+  liveItems,
   moveFormField,
   moveFormFieldById,
   previewPublicFields,
@@ -19,7 +24,9 @@ import {
   removedFormField,
   requiredBlockedReason,
   sameForm,
+  showIfSources,
   summarizeForm,
+  toggleNotify,
   updateFormField,
   updateFormSettings,
 } from "./formConfig";
@@ -31,7 +38,7 @@ const parent = field("link", { linked_table_id: "tbl1", inverse_field_id: "f_kid
 const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });
 const table = makeTable([name, notes, owner, parent, total]);
 
-const empty: FormConfig = { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false };
+const empty: FormConfig = { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, notify_user_ids: [] };
 const entry = (id: string, extra: Partial<FormConfig["fields"][number]> = {}) => ({ field_id: id, required: false, label: null, help: null, ...extra });
 const ids = (f: FormConfig) => f.fields.map((x) => x.field_id);
 
@@ -222,5 +229,97 @@ describe("the public form as the builder previews it", () => {
       ["f_notes", "Notes", "Anything else?", false, "text"],
     ]);
     expect(previewPublicFields(f, table, ["f_notes"]).map((x) => x.id)).toEqual(["f_name"]);
+  });
+});
+
+describe("headings and paragraphs", () => {
+  it("adds them anywhere, with a made-up id and some starting text", () => {
+    let form = addFormField(addFormField(empty, table, "f_name"), table, "f_notes");
+    form = addFormBlock(form, "heading", 1, "blkH");
+    form = addFormBlock(form, "text", undefined, "blkT");
+    expect(ids(form)).toEqual(["f_name", "blkH", "f_notes", "blkT"]);
+    expect(form.fields[1]).toMatchObject({ block: "heading", required: false, label: "New section" });
+    expect(form.fields[3]).toMatchObject({ block: "text", help: expect.any(String) });
+    expect(addFormBlock(empty, "heading").fields[0]!.field_id).toMatch(/^blk[a-z0-9]{14}$/);
+  });
+
+  it("keeps them in the layout between the questions, and out of the list of questions", () => {
+    const form: FormConfig = { ...empty, fields: [entry("f_name"), entry("blkH", { block: "heading", label: "About you" }), entry("f_gone"), entry("f_notes"), entry("blkT", { block: "text", help: "  Mind the gap  " })] };
+    expect(liveItems(form, table).map((i) => (i.kind === "field" ? i.field.id : `${i.block}:${i.entry.field_id}`))).toEqual(["f_name", "heading:blkH", "f_notes", "text:blkT"]);
+    expect(liveEntries(form, table).map((e) => e.field.id)).toEqual(["f_name", "f_notes"]);
+    expect(blockText(form.fields[1]!)).toBe("About you");
+    expect(blockText(form.fields[4]!)).toBe("Mind the gap");
+  });
+
+  it("survives cleaning and pruning, is never required, and can be removed and moved like a field", () => {
+    const form: FormConfig = { ...empty, fields: [entry("f_gone"), entry("blkH", { block: "heading", label: "About you", required: true }), entry("f_name")] };
+    const pruned = pruneForm(form, table);
+    expect(ids(pruned)).toEqual(["blkH", "f_name"]);
+    expect(cleanForm(pruned).fields[0]).toEqual({ field_id: "blkH", required: false, label: "About you", help: null, block: "heading" });
+    expect(ids(moveFormFieldById(pruned, "blkH", "f_name"))).toEqual(["f_name", "blkH"]);
+    expect(ids(removeFormField(pruned, "blkH"))).toEqual(["f_name"]);
+  });
+});
+
+describe("show-if conditions", () => {
+  const cond = (field_id: string) => ({ conjunction: "and" as const, items: [{ field_id, op: "is_not_empty" as const, value: null }] });
+
+  it("may read the testable questions above an entry, and only those", () => {
+    const form: FormConfig = { ...empty, fields: [entry("f_name"), entry("blkH", { block: "heading" }), entry("f_owner"), entry("f_notes"), entry("f_total")] };
+    expect(showIfSources(form, table, 0)).toEqual([]);
+    expect(showIfSources(form, table, 3).map((f) => f.id)).toEqual(["f_name"]);
+    expect(showIfSources(form, table, 4).map((f) => f.id)).toEqual(["f_name", "f_notes"]);
+  });
+
+  it("is dropped on save where it reads something else (the server refuses it), and kept where it is fine", () => {
+    const form: FormConfig = {
+      ...empty,
+      fields: [entry("f_name"), entry("f_notes", { show_if: cond("f_name") }), entry("f_owner", { show_if: cond("f_later") }), entry("blkH", { block: "heading", show_if: { conjunction: "or", items: [{ field_id: "f_notes", op: "is_empty", value: null }, { field_id: "f_later", op: "is_empty", value: null }] } }), entry("f_later")],
+    };
+    const pruned = pruneForm(form, table);
+    expect(pruned.fields[1]!.show_if).toEqual(cond("f_name"));
+    expect(pruned.fields[2]!.show_if).toBeNull();
+    expect(pruned.fields[3]!.show_if).toEqual({ conjunction: "or", items: [{ field_id: "f_notes", op: "is_empty", value: null }] });
+    expect(cleanForm(pruned).fields[2]).not.toHaveProperty("show_if");
+    expect(cleanForm(pruned).fields[1]!.show_if).toEqual(cond("f_name"));
+  });
+
+  it("lets the public preview carry the show-if, the default and the field's description", () => {
+    const described = { ...field("text", { multiline: false, default: "Acme" }, { id: "f_org", name: "Organization" }), description: "Who you work for" };
+    const t = makeTable([name, described]);
+    const form: FormConfig = { ...empty, fields: [entry("f_name"), entry("blkH", { block: "heading", label: "Work" }), entry("f_org", { show_if: cond("f_name") }), entry("blkE", { block: "text", help: " " })] };
+    const got = previewPublicFields(form, t, []);
+    expect(got.map((f) => f.id)).toEqual(["f_name", "blkH", "f_org"]);
+    expect(got[1]).toMatchObject({ block: "heading", label: "Work", required: false });
+    expect(got[2]).toMatchObject({ help: "Who you work for", default: "Acme", show_if: cond("f_name") });
+    // The form's own help wins.
+    expect(previewPublicFields({ ...form, fields: [entry("f_org", { help: "Ours" })] }, t, [])[0]!.help).toBe("Ours");
+  });
+});
+
+describe("defaults and descriptions", () => {
+  it("reads the default of text, number and percent fields", () => {
+    expect(fieldDefault(field("text", { multiline: false, default: "x" }))).toBe("x");
+    expect(fieldDefault(field("text", { multiline: false, default: "" }))).toBeNull();
+    expect(fieldDefault(field("number", { precision: 0, allow_negative: true, default: 3 }))).toBe(3);
+    expect(fieldDefault(field("number", { precision: 0, allow_negative: true }))).toBeNull();
+    expect(fieldDefault(field("checkbox", { icon: "check", color: "green" }))).toBeNull();
+  });
+
+  it("uses the description as help when the form has none", () => {
+    const f = { ...field("text", { multiline: false }), description: "About it" };
+    expect(helpFor({ help: null }, f)).toBe("About it");
+    expect(helpFor({ help: "  " }, f)).toBe("About it");
+    expect(helpFor({ help: "Ours" }, f)).toBe("Ours");
+    expect(helpFor({ help: null }, field("text", { multiline: false }))).toBeNull();
+  });
+});
+
+describe("who is told about responses", () => {
+  it("adds and removes a person without repeating them", () => {
+    const a = toggleNotify(empty, "usr1", true);
+    expect(a.notify_user_ids).toEqual(["usr1"]);
+    expect(toggleNotify(a, "usr1", true)).toBe(a);
+    expect(toggleNotify(toggleNotify(a, "usr2", true), "usr1", false).notify_user_ids).toEqual(["usr2"]);
   });
 });

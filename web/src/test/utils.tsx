@@ -139,7 +139,7 @@ export function makeView(over: Partial<View> & { id: string; type?: View["type"]
       calendar: { date_field_id: null, end_field_id: null },
       gallery: { cover_field_id: null, cover_crop: false },
       timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },
-      form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false },
+      form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, notify_user_ids: [] },
     },
     personal: false,
     locked: false,

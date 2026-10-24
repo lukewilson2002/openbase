@@ -55,6 +55,16 @@ describe("describeNotification", () => {
     expect(describeNotification(n("automation", {})).title).toBe("Automation notification");
   });
 
+  it("describes a response sent through a form", () => {
+    expect(describeNotification(n("form_response", { form_name: "Intake", base_id: "app1", table_id: "tbl1", table_name: "Requests", record_id: "rec1" }))).toMatchObject({
+      kind: "form_response",
+      title: "New response to Intake",
+      detail: "In Requests",
+      href: "/base/app1/tbl1?record=rec1",
+    });
+    expect(describeNotification(n("form_response", {})).title).toBe("New form response");
+  });
+
   it("falls back for kinds it does not know", () => {
     expect(describeNotification(n("something_new", { message: "Hello" }))).toMatchObject({ kind: "other", title: "Hello" });
     expect(describeNotification(n("something_new", {})).title).toBe("New notification");

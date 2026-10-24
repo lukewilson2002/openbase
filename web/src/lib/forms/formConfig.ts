@@ -9,11 +9,14 @@
  *     and skips fields the form view hides; such a link or user field cannot be made required
  *     (a newly saved form is refused), since only signed-in editors could be held to it;
  *   - `redirect_url` is an http or https URL with a host, at most 2048 characters;
- *   - texts are limited to 255 characters (title, submit label) and 20,000 (the others).
+ *   - texts are limited to 255 characters (title, submit label) and 20,000 (the others);
+ *   - a form entry is a question or, with `block`, a heading (its text is the label) or a paragraph (its text is the
+ *     help) that has an id of its own; every entry may carry a `show_if` on the questions above it (see ./showIf).
  */
-import type { Field, FormConfig, FormField, PublicFormField, Table, ViewConfig } from "@/api/types";
+import type { Field, Filter, FormBlock, FormConfig, FormField, PublicFormField, Table, ViewConfig } from "@/api/types";
 import { isComputed } from "@/lib/cells/kinds";
 import { safeRedirect } from "@/lib/publicErrors";
+import { canTestInShowIf, restrictShowIf } from "./showIf";
 
 export const MAX_FORM_TITLE = 255;
 export const MAX_FORM_TEXT = 20_000;
@@ -68,6 +71,50 @@ export function liveEntries(form: FormConfig, table: Pick<Table, "fields">): { e
   return out;
 }
 
+/** An entry of the form as it is laid out: a question about a table field, or a heading or paragraph. */
+export type FormItem = { kind: "field"; entry: FormField; field: Field } | { kind: "block"; entry: FormField; block: FormBlock };
+
+/** Every entry of the form in order: the questions whose field still exists (first mention wins) and the blocks. */
+export function liveItems(form: FormConfig, table: Pick<Table, "fields">): FormItem[] {
+  const byId = new Map(table.fields.map((f) => [f.id, f] as const));
+  const out: FormItem[] = [];
+  const seen = new Set<string>();
+  for (const entry of form.fields) {
+    if (entry.block) {
+      if (!seen.has(entry.field_id)) {
+        seen.add(entry.field_id);
+        out.push({ kind: "block", entry, block: entry.block });
+      }
+      continue;
+    }
+    const field = byId.get(entry.field_id);
+    if (field && !seen.has(field.id)) {
+      seen.add(field.id);
+      out.push({ kind: "field", entry, field });
+    }
+  }
+  return out;
+}
+
+/** The text a heading or paragraph shows. */
+export function blockText(entry: FormField): string {
+  return ((entry.block === "heading" ? entry.label : entry.help) ?? "").trim();
+}
+
+/** The default a text, number or percent field starts with, as a value to submit (null when it has none). */
+export function fieldDefault(field: Pick<Field, "type" | "options">): string | number | null {
+  const options = field.options as { default?: string | number | null } | null | undefined;
+  const d = options?.default;
+  if (field.type === "text") return typeof d === "string" && d !== "" ? d : null;
+  if (field.type === "number" || field.type === "percent") return typeof d === "number" ? d : null;
+  return null;
+}
+
+/** The help shown under a question: the form's own, else the field's description. */
+export function helpFor(entry: Pick<FormField, "help">, field: Pick<Field, "description">): string | null {
+  return entry.help?.trim() ? entry.help : field.description?.trim() ? field.description : null;
+}
+
 /** Fields that can still be added: editable and not already in the form, in table order. */
 export function addableFields(form: FormConfig, table: Pick<Table, "fields">): Field[] {
   const used = new Set(form.fields.map((f) => f.field_id));
@@ -102,6 +149,28 @@ export function addAllFormFields(form: FormConfig, table: Pick<Table, "fields">,
   return addableFields(form, table).reduce((f, field) => addFormField(f, table, field.id, removed?.get(field.id)), form);
 }
 
+/** A fresh id for a heading or paragraph (the server keeps ids that are given). */
+export function newBlockId(): string {
+  const rand = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID().replace(/-/g, "").slice(0, 14) : Math.random().toString(36).slice(2, 16).padEnd(14, "0");
+  return `blk${rand}`;
+}
+
+export const NEW_BLOCK_TEXT: Record<FormBlock, string> = { heading: "New section", text: "Some words for the people filling this in" };
+
+/** Add a heading or paragraph at `index` of the form's entries (default: the end). */
+export function addFormBlock(form: FormConfig, block: FormBlock, index?: number, id: string = newBlockId()): FormConfig {
+  const entry: FormField = {
+    field_id: id,
+    required: false,
+    label: block === "heading" ? NEW_BLOCK_TEXT.heading : null,
+    help: block === "text" ? NEW_BLOCK_TEXT.text : null,
+    block,
+  };
+  const fields = [...form.fields];
+  fields.splice(index === undefined ? fields.length : Math.min(Math.max(index, 0), fields.length), 0, entry);
+  return { ...form, fields };
+}
+
 export function removeFormField(form: FormConfig, fieldId: string): FormConfig {
   if (!form.fields.some((f) => f.field_id === fieldId)) return form;
   return { ...form, fields: form.fields.filter((f) => f.field_id !== fieldId) };
@@ -133,7 +202,7 @@ export function moveFormFieldById(form: FormConfig, activeId: string, overId: st
   );
 }
 
-export type FormFieldPatch = Partial<Pick<FormField, "required" | "label" | "help">>;
+export type FormFieldPatch = Partial<Pick<FormField, "required" | "label" | "help" | "show_if">>;
 
 export function updateFormField(form: FormConfig, fieldId: string, patch: FormFieldPatch): FormConfig {
   let changed = false;
@@ -145,7 +214,7 @@ export function updateFormField(form: FormConfig, fieldId: string, patch: FormFi
   return changed ? { ...form, fields } : form;
 }
 
-export type FormSettingsPatch = Partial<Pick<FormConfig, "title" | "description" | "submit_label" | "success_message" | "redirect_url" | "show_submit_another">>;
+export type FormSettingsPatch = Partial<Pick<FormConfig, "title" | "description" | "submit_label" | "success_message" | "redirect_url" | "show_submit_another" | "notify_user_ids">>;
 
 export function updateFormSettings(form: FormConfig, patch: FormSettingsPatch): FormConfig {
   return { ...form, ...patch };
@@ -182,7 +251,10 @@ export function redirectUrlProblem(url: string): string | null {
 /** Empty strings become `null`, so a cleared label falls back to the field name on the server. */
 export function cleanFormField(entry: FormField): FormField {
   const trim = (s: string | null | undefined) => (s && s.trim() !== "" ? s : null);
-  return { field_id: entry.field_id, required: entry.required, label: trim(entry.label), help: trim(entry.help) };
+  const out: FormField = { field_id: entry.field_id, required: entry.block ? false : entry.required, label: trim(entry.label), help: trim(entry.help) };
+  if (entry.show_if && entry.show_if.items.length > 0) out.show_if = entry.show_if;
+  if (entry.block) out.block = entry.block;
+  return out;
 }
 
 /** What gets saved: cleaned entries and an empty redirect as `null`. */
@@ -191,14 +263,40 @@ export function cleanForm(form: FormConfig): FormConfig {
   return { ...form, fields: form.fields.map(cleanFormField), redirect_url: redirect === "" ? null : redirect };
 }
 
+/** Why a show-if can read this question, or null when it can. */
+export function showIfBlockedReason(field: Pick<Field, "type">): string | null {
+  return canTestInShowIf(field) ? null : "Only text, number, rating, checkbox and select questions can be tested.";
+}
+
+/** The questions an entry's show-if may read: the testable questions above it (`index` is its place among the form's entries). */
+export function showIfSources(form: FormConfig, table: Pick<Table, "fields">, index: number): Field[] {
+  const byId = new Map(table.fields.map((f) => [f.id, f] as const));
+  const out: Field[] = [];
+  for (const e of form.fields.slice(0, Math.max(index, 0))) {
+    const f = !e.block ? byId.get(e.field_id) : undefined;
+    if (f && canTestInShowIf(f) && !out.includes(f)) out.push(f);
+  }
+  return out;
+}
+
 /**
  * Drop entries of fields that were deleted or became computed since the form was built; the
- * server refuses a form that names them (unless they were already there).
+ * server refuses a form that names them (unless they were already there). Headings and paragraphs
+ * stay, and so does each show-if as far as it reads a question above its entry that a form can test
+ * (the server refuses the others).
  */
 export function pruneForm(form: FormConfig, table: Pick<Table, "fields">): FormConfig {
   const live = new Set(table.fields.filter(canBeInForm).map((f) => f.id));
-  const fields = form.fields.filter((f) => live.has(f.field_id));
-  return fields.length === form.fields.length ? form : { ...form, fields };
+  const fields = form.fields.filter((f) => f.block || live.has(f.field_id));
+  let changed = fields.length !== form.fields.length;
+  const tidy = fields.map((entry, i) => {
+    if (!entry.show_if) return entry;
+    const showIf: Filter | null = restrictShowIf(entry.show_if, new Set(showIfSources({ ...form, fields }, table, i).map((f) => f.id)));
+    if (showIf === entry.show_if) return entry;
+    changed = true;
+    return { ...entry, show_if: showIf };
+  });
+  return changed ? { ...form, fields: tidy } : form;
 }
 
 /** Whether two forms would save the same thing. */
@@ -230,19 +328,52 @@ export function summarizeForm(form: FormConfig, table: Pick<Table, "fields">, co
 }
 
 /**
- * The form's fields as a visitor of the public link gets them (what `GET /api/public/forms/{token}` would
- * answer), for the builder's preview: the same fields in the same order, with the label, help and required
- * marker set in the form.
+ * The form's entries as a visitor of the public link gets them (what `GET /api/public/forms/{token}` would
+ * answer), for the builder's preview: the same fields in the same order, with the label, help (the form's own,
+ * else the field's description), default, show-if and required marker, and the headings and paragraphs that have
+ * some text.
  */
 export function previewPublicFields(form: FormConfig, table: Pick<Table, "fields">, hiddenFields: readonly string[]): PublicFormField[] {
-  return liveEntries(form, table)
-    .filter(({ field }) => publicStatus(field, hiddenFields).public)
-    .map(({ entry, field }) => ({
+  const out: PublicFormField[] = [];
+  const known = new Set(table.fields.map((f) => f.id));
+  for (const item of liveItems(form, table)) {
+    const showIf = restrictShowIf(item.entry.show_if, known);
+    if (item.kind === "block") {
+      const text = blockText(item.entry);
+      if (text === "") continue;
+      out.push({
+        id: item.entry.field_id,
+        label: item.block === "heading" ? text : "",
+        help: item.block === "text" ? text : null,
+        required: false,
+        type: "text",
+        options: {},
+        default: null,
+        show_if: showIf,
+        block: item.block,
+      });
+      continue;
+    }
+    const { entry, field } = item;
+    if (!publicStatus(field, hiddenFields).public) continue;
+    out.push({
       id: field.id,
       label: entry.label?.trim() || field.name,
-      help: entry.help?.trim() ? entry.help : null,
+      help: helpFor(entry, field),
       required: entry.required,
       type: field.type,
       options: field.options as PublicFormField["options"],
-    }));
+      default: fieldDefault(field),
+      show_if: showIf,
+      block: null,
+    });
+  }
+  return out;
+}
+
+/** Add the person to the people the form notifies, or take them off. */
+export function toggleNotify(form: FormConfig, userId: string, on: boolean): FormConfig {
+  const has = form.notify_user_ids.includes(userId);
+  if (on === has) return form;
+  return { ...form, notify_user_ids: on ? [...form.notify_user_ids, userId] : form.notify_user_ids.filter((u) => u !== userId) };
 }

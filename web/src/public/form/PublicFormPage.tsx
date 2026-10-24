@@ -6,8 +6,8 @@
  * redirect address, goes straight there (the address may carry the new record's id).
  */
 import { EntityLabel } from "@/components/icons/EntityIcon";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useParams } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useLocation, useParams } from "react-router";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef, PublicForm } from "@/api/types";
 import { FormDone } from "@/components/forms/FormDone";
@@ -16,7 +16,8 @@ import { Notice } from "@/components/layouts";
 import { describeSubmitError } from "@/lib/publicErrors";
 import { browserTimeZone } from "@/lib/format";
 import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, redirectAfterSubmit } from "@/lib/forms/formConfig";
-import { buildSubmission, emptyInput, hasAnyValue, type FormInput } from "@/lib/forms/publicValues";
+import { readPrefill, type Prefill } from "@/lib/forms/prefill";
+import { buildSubmission, hasAnyValue, initialInput, shownFields, type FormInput } from "@/lib/forms/publicValues";
 import { PasswordPrompt, PublicLoading, PublicProblemScreen, PublicShell } from "../PublicShell";
 import { usePublicLoad } from "../usePublicLoad";
 import { PublicFieldInput } from "./PublicFieldInput";
@@ -31,12 +32,16 @@ export default function PublicFormPage() {
   return <FilledForm token={token} password={load.password} form={state.data} />;
 }
 
-function initialInputs(form: PublicForm): Record<string, FormInput> {
-  return Object.fromEntries(form.fields.map((f) => [f.id, emptyInput(f)]));
+/** What each input starts with: the address's prefill, else the field's default, else nothing. */
+function initialInputs(form: PublicForm, prefill: Prefill): Record<string, FormInput> {
+  return Object.fromEntries(form.fields.filter((f) => !f.block).map((f) => [f.id, prefill.values[f.id] ?? initialInput(f)]));
 }
 
 function FilledForm({ token, password, form }: { token: string; password: string | null; form: PublicForm }) {
-  const [inputs, setInputs] = useState<Record<string, FormInput>>(() => initialInputs(form));
+  const { search } = useLocation();
+  // The address can start fields off with a value and take some off the page (see lib/forms/prefill).
+  const prefill = useMemo(() => readPrefill(form.fields, search), [form.fields, search]);
+  const [inputs, setInputs] = useState<Record<string, FormInput>>(() => initialInputs(form, prefill));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(0);
@@ -100,7 +105,7 @@ function FilledForm({ token, password, form }: { token: string; password: string
 
   if (done) {
     const another = () => {
-      setInputs(initialInputs(form));
+      setInputs(initialInputs(form, prefill));
       setErrors({});
       setFailure(null);
       setDone(null);
@@ -116,7 +121,12 @@ function FilledForm({ token, password, form }: { token: string; password: string
     );
   }
 
-  const anyRequired = form.fields.some((f) => f.required);
+  // What the visitor sees: the entries whose show-if holds for the answers above them, without the fields the address hides.
+  const timeZone = browserTimeZone();
+  const shown = shownFields(form.fields, inputs, { timeZone });
+  const visible = form.fields.filter((f) => shown.has(f.id) && !prefill.hidden.has(f.id));
+  const questions = form.fields.filter((f) => !f.block);
+  const anyRequired = visible.some((f) => !f.block && f.required);
   return (
     <PublicShell>
       <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate aria-label={form.title} className="flex flex-col gap-6 rounded-lg border border-line bg-surface p-5 shadow-sm sm:p-7">
@@ -128,19 +138,19 @@ function FilledForm({ token, password, form }: { token: string; password: string
           {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] text-muted">{form.description}</p>}
           {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
         </header>
-        {form.fields.length === 0 ? (
+        {questions.length === 0 ? (
           <Notice>This form has no questions yet.</Notice>
         ) : (
           <div className="flex flex-col gap-5">
-            {form.fields.map((f) => (
-              <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />
-            ))}
+            {visible.map((f) =>
+              f.block ? <PublicFormBlock key={f.id} field={f} /> : <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />,
+            )}
           </div>
         )}
         {failure && <Notice tone="error">{failure}</Notice>}
         {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
         <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={form.fields.length === 0 || uploading > 0}>
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={questions.length === 0 || uploading > 0}>
             {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
           </Button>
           {uploading > 0 && <span className="text-[0.8125rem] text-muted">Waiting for the upload to finish…</span>}
@@ -148,4 +158,10 @@ function FilledForm({ token, password, form }: { token: string; password: string
       </form>
     </PublicShell>
   );
+}
+
+/** A heading or a paragraph between the questions. */
+export function PublicFormBlock({ field }: { field: PublicForm["fields"][number] }) {
+  if (field.block === "heading") return <h2 className="mt-2 border-b border-line pb-1.5 text-lg font-semibold">{field.label}</h2>;
+  return <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{field.help}</p>;
 }
