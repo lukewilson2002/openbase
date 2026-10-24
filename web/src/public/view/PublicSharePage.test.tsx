@@ -25,7 +25,7 @@ const FIELDS: PublicField[] = [
   { id: "f_cover", name: "Cover", type: "attachment", options: {}, description: null },
 ];
 
-const config = { field_widths: {}, frozen_columns: 0, kanban_stack_field_id: null, kanban_cover_field_id: null, description_field_id: null, kanban_hide_empty_stacks: false, gallery_cover_field_id: null, calendar_date_field_id: null, calendar_end_field_id: null, timeline_start_field_id: null, timeline_end_field_id: null, timeline_group_field_id: null };
+const config = { field_widths: {}, frozen_columns: 0, kanban_stack_field_id: null, kanban_cover_field_id: null, description_field_id: null, kanban_hide_empty_stacks: false, kanban_stack_order: [], kanban_hidden_stacks: [], kanban_card_field_limit: null, kanban_cover_fit: false, gallery_cover_field_id: null, calendar_date_field_id: null, calendar_end_field_id: null, timeline_start_field_id: null, timeline_end_field_id: null, timeline_group_field_id: null };
 
 function view(type: PublicView["type"], patch: Partial<PublicView["config"]> = {}, fields = FIELDS): PublicView {
   return { kind: "view", name: "Team board", type, table_name: "Tasks", base_name: "Studio", fields, config: { ...config, ...patch } };
@@ -237,6 +237,13 @@ describe("shared views of other types", () => {
     expect(within(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).getByRole("article", { name: "Task 3" })).toBeInTheDocument();
     // Read-only: no drag handles, no add buttons.
     expect(screen.queryByRole("button", { name: /Add card/ })).not.toBeInTheDocument();
+  });
+
+  it("follows the board's stack order and leaves its hidden stacks off", async () => {
+    open(view("kanban", { kanban_stack_field_id: "f_status", kanban_stack_order: ["s2", "s1"], kanban_hidden_stacks: [""] }));
+    await screen.findByRole("listitem", { name: "Stack: Done" });
+    const stacks = within(screen.getByRole("list", { name: "Stacks" })).getAllByRole("listitem", { name: /^Stack: / }).map((s) => s.getAttribute("aria-label"));
+    expect(stacks).toEqual(["Stack: Done", "Stack: Todo"]);
   });
 
   it("shows a board's description under the card title instead of as a row", async () => {

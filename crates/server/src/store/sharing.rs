@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ob_core::api::records::Record;
 use ob_core::api::sharing::{PublicField, PublicRecord, PublicViewConfig, ShareKind, ShareLink};
-use ob_core::field::{Field, FieldKind};
+use ob_core::field::{Field, FieldKind, FieldType};
 use ob_core::query::{MapRow, QueryCtx, compile_filter, matches};
 use ob_core::view::{Filter, FilterItem, FormBlock, FormField, ViewConfig, ViewType};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
@@ -462,16 +462,25 @@ pub fn public_field(field: &Field) -> PublicField {
     }
 }
 
-/// Layout-relevant parts of a view config, restricted to `visible` field ids.
-pub fn public_config(config: &ViewConfig, visible: &HashSet<&str>) -> PublicViewConfig {
-    let keep = |id: &Option<String>| -> Option<String> {
-        id.clone().filter(|i| visible.contains(i.as_str()))
+/// Layout-relevant parts of a view config, restricted to the `visible` fields.
+pub fn public_config(config: &ViewConfig, visible: &[Field]) -> PublicViewConfig {
+    let ids: HashSet<&str> = visible.iter().map(|f| f.id.as_str()).collect();
+    let keep =
+        |id: &Option<String>| -> Option<String> { id.clone().filter(|i| ids.contains(i.as_str())) };
+    let stack_field =
+        keep(&config.kanban.stack_field_id).and_then(|id| visible.iter().find(|f| f.id == id));
+    // Person stacks are keyed by user id, which a public viewer never sees.
+    let stack_keys = |keys: &Vec<String>| -> Vec<String> {
+        match stack_field {
+            Some(f) if f.field_type() != FieldType::User => keys.clone(),
+            _ => Vec::new(),
+        }
     };
     PublicViewConfig {
         field_widths: config
             .field_widths
             .iter()
-            .filter(|(id, _)| visible.contains(id.as_str()))
+            .filter(|(id, _)| ids.contains(id.as_str()))
             .map(|(k, v)| (k.clone(), *v))
             .collect::<BTreeMap<_, _>>(),
         frozen_columns: config.frozen_columns,
@@ -479,6 +488,10 @@ pub fn public_config(config: &ViewConfig, visible: &HashSet<&str>) -> PublicView
         kanban_cover_field_id: keep(&config.kanban.cover_field_id),
         description_field_id: keep(&config.description_field_id),
         kanban_hide_empty_stacks: config.kanban.hide_empty_stacks,
+        kanban_stack_order: stack_keys(&config.kanban.stack_order),
+        kanban_hidden_stacks: stack_keys(&config.kanban.hidden_stacks),
+        kanban_card_field_limit: config.kanban.card_field_limit,
+        kanban_cover_fit: config.kanban.cover_fit,
         gallery_cover_field_id: keep(&config.gallery.cover_field_id),
         calendar_date_field_id: keep(&config.calendar.date_field_id),
         calendar_end_field_id: keep(&config.calendar.end_field_id),
@@ -656,5 +669,35 @@ mod tests {
             }),
         );
         assert_eq!(public_options(&link), json!({ "single": true }));
+    }
+
+    #[test]
+    fn public_config_carries_kanban_layout_but_not_person_stack_keys() {
+        let status = field(
+            "fld_status",
+            FieldKind::SingleSelect(ob_core::field::SelectOptions::default()),
+        );
+        let owner = field(
+            "fld_owner",
+            FieldKind::User(ob_core::field::UserOptions::default()),
+        );
+        let mut config = ViewConfig::default();
+        config.kanban.stack_field_id = Some("fld_status".into());
+        config.kanban.stack_order = vec!["selB".into(), "selA".into()];
+        config.kanban.hidden_stacks = vec!["selC".into()];
+        config.kanban.card_field_limit = Some(3);
+        config.kanban.cover_fit = true;
+        let public = public_config(&config, &[status.clone(), owner.clone()]);
+        assert_eq!(public.kanban_stack_order, vec!["selB", "selA"]);
+        assert_eq!(public.kanban_hidden_stacks, vec!["selC"]);
+        assert_eq!(public.kanban_card_field_limit, Some(3));
+        assert!(public.kanban_cover_fit);
+
+        config.kanban.stack_field_id = Some("fld_owner".into());
+        config.kanban.stack_order = vec!["usr1".into()];
+        config.kanban.hidden_stacks = vec!["usr2".into()];
+        let public = public_config(&config, &[status, owner]);
+        assert!(public.kanban_stack_order.is_empty());
+        assert!(public.kanban_hidden_stacks.is_empty());
     }
 }

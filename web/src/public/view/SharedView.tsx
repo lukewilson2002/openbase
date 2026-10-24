@@ -100,7 +100,7 @@ export function SharedView({ token, password, view }: SharedViewProps) {
       )}
       {mode === "table" && <TableBody view={view} fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} offset={offset} onOffset={setOffset} sort={sort} onSort={setSort} transient={transient} timeZone={timeZone} />}
       {mode === "gallery" && <GalleryBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} coverId={cfg.gallery_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
-      {mode === "kanban" && stackField && <KanbanBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} stackFieldId={stackField.id} hideEmpty={cfg.kanban_hide_empty_stacks} coverId={cfg.kanban_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
+      {mode === "kanban" && stackField && <KanbanBody fields={fields} token={token} password={password} search={search} searchText={searchText} onSearch={setSearchText} stackFieldId={stackField.id} hideEmpty={cfg.kanban_hide_empty_stacks} stackOrder={cfg.kanban_stack_order} hiddenStacks={cfg.kanban_hidden_stacks} cardFieldLimit={cfg.kanban_card_field_limit ?? undefined} coverFit={cfg.kanban_cover_fit} coverId={cfg.kanban_cover_field_id} descriptionId={cfg.description_field_id} timeZone={timeZone} />}
       {mode === "calendar" && dates && (
         <>
           <Toolbar search={searchText} onSearch={setSearchText} summary={null} />
@@ -172,7 +172,7 @@ function GalleryBody(p: BodyProps & { coverId: string | null | undefined; descri
   );
 }
 
-function KanbanBody(p: BodyProps & { stackFieldId: string; hideEmpty: boolean; coverId: string | null | undefined; descriptionId: string | null | undefined }) {
+function KanbanBody(p: BodyProps & { stackFieldId: string; hideEmpty: boolean; stackOrder: readonly string[]; hiddenStacks: readonly string[]; cardFieldLimit?: number; coverFit: boolean; coverId: string | null | undefined; descriptionId: string | null | undefined }) {
   const all = usePublicAll({ token: p.token, password: p.password, fields: p.fields, search: p.search, timeZone: p.timeZone });
   const data = all.data;
   const stackField = p.fields.byId.get(p.stackFieldId)!;
@@ -183,7 +183,7 @@ function KanbanBody(p: BodyProps & { stackFieldId: string; hideEmpty: boolean; c
         {all.fetching && <Spinner className="size-4" label="Loading records" />}
       </Toolbar>
       {all.error && !data && <ErrorLine error={all.error} onRetry={all.refetch} />}
-      {data && <PublicKanban stackField={stackField} hideEmpty={p.hideEmpty} records={data.records} fields={card} colors={data.colors} />}
+      {data && <PublicKanban stackField={stackField} hideEmpty={p.hideEmpty} stackOrder={p.stackOrder} hiddenStacks={p.hiddenStacks} cardFieldLimit={p.cardFieldLimit} coverFit={p.coverFit} records={data.records} fields={card} colors={data.colors} />}
       {data?.truncated && <p className="mt-3 text-xs text-muted">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} cards.</p>}
     </>
   );

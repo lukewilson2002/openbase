@@ -375,7 +375,6 @@ async fn public_view(
         .read(move |conn| schema::table_fields(conn, &table_id))
         .await?;
     let visible = sharing::visible_fields(&r.view.view.config, &fields);
-    let ids: HashSet<&str> = visible.iter().map(|f| f.id.as_str()).collect();
     Ok(Json(PublicView {
         kind: ShareKind::View,
         name: r.view.view.name.clone(),
@@ -385,7 +384,7 @@ async fn public_view(
         base_name: r.base_name.clone(),
         base_icon: r.base_icon.clone(),
         fields: visible.iter().map(sharing::public_field).collect(),
-        config: sharing::public_config(&r.view.view.config, &ids),
+        config: sharing::public_config(&r.view.view.config, &visible),
     }))
 }
 

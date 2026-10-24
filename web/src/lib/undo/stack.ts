@@ -3,8 +3,6 @@
  * action log"), generic over its operations so any view can use it. It holds data only: the owner
  * supplies a runner that performs an operation's inverse (or the operation again, for redo).
  *
- * `views/grid/undo.ts` is the same structure fixed to the grid's own operations; the grid can move
- * onto this one by giving its operation type to `UndoStack<UndoOp>`.
  */
 
 export const DEFAULT_UNDO_LIMIT = 100;

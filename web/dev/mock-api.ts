@@ -138,12 +138,12 @@ function emptyConfig(): Obj {
     summaries: {},
     wrap_headers: false,
     description_field_id: null,
-    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [] },
+    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false },
     calendar: { date_field_id: null, end_field_id: null },
     gallery: { cover_field_id: null, cover_crop: false },
     list: { prefix_field_id: null, parent_field_id: null },
     timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },
-    form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false },
+    form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, notify_user_ids: [] },
   };
 }
 
@@ -157,11 +157,11 @@ const views: Obj[] = [
     table_id: T_PROJECTS,
     name: "Board",
     type: "kanban",
-    config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [] }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
+    config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
     personal: false,
     locked: false,
   },
-  { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [] }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
+  { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
   { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
   { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), description_field_id: "fld_j_summary", calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw15", table_id: T_PROJECTS, name: "Review calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_review", end_field_id: null } }, personal: false, locked: false },
@@ -914,6 +914,9 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     ws.workspaces.push({ id: item.id, name: item.name, icon: item.icon, role: "owner" });
     ws.members[item.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
     return send(res, 200, { ok: true, restored_field_ids: [] }), true;
+  }
+  if ((g = /^\/api\/views\/([^/]+)\/share-status$/.exec(p)) && m === "GET") {
+    return send(res, 200, { enabled: shares.some((x) => x.view_id === g![1] && x.enabled) }), true;
   }
   if ((g = /^\/api\/views\/([^/]+)\/shares$/.exec(p))) {
     if (m === "GET") return send(res, 200, shares.filter((x) => x.view_id === g![1])), true;

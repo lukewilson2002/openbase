@@ -133,6 +133,17 @@ pub struct PublicViewConfig {
     pub description_field_id: Option<String>,
     #[serde(default)]
     pub kanban_hide_empty_stacks: bool,
+    /// Stack keys in the view's order, and the stacks it leaves off the board. Empty for
+    /// person stacks, whose keys are user ids a public viewer does not see.
+    #[serde(default)]
+    pub kanban_stack_order: Vec<String>,
+    #[serde(default)]
+    pub kanban_hidden_stacks: Vec<String>,
+    #[serde(default)]
+    pub kanban_card_field_limit: Option<u32>,
+    /// Kanban covers are fitted whole rather than cropped.
+    #[serde(default)]
+    pub kanban_cover_fit: bool,
     #[serde(default)]
     pub gallery_cover_field_id: Option<String>,
     #[serde(default)]
