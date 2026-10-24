@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GroupHeader } from "@/api/types";
-import { allPaths, buildOutline, flattenOutline, groupDefaults, leafNodes, moveBetweenGroups, placeIndexes, planDrop, visibleIds, type DropPlan } from "./outline";
+import type { TableRecord } from "@/api/types";
+import { ALL_FIELDS, makeRecord } from "@/test/fields";
+import { DEFAULT_CTX } from "@/lib/cells/format";
+import { allPaths, buildOutline, flattenOutline, foldRows, foldedAncestors, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, visibleIds, withTails, type DropPlan } from "./outline";
 
 const h = (depth: number, field_id: string, key: string, start: number, count: number, value: unknown = key): GroupHeader => ({ depth, field_id, key, label: key || "(Empty)", value: value as GroupHeader["value"], start, count });
 
@@ -170,5 +173,149 @@ describe("visibleIds", () => {
     expect(visibleIds(ids, roots, new Set(["st:todo"]))).toEqual(["r3", "r4", "r5"]);
     expect(visibleIds(ids, roots, new Set(["st:todo/ow:ada", "st:done"]))).toEqual(["r2", "r5"]);
     expect(visibleIds(ids, roots, new Set(["st:todo"]), "r1")).toEqual(["r1", "r3", "r4", "r5"]);
+  });
+});
+
+describe("buildOutline places", () => {
+  it("numbers every group among its siblings", () => {
+    const tree = buildOutline(groups);
+    expect(tree.map((n) => [n.pos, n.size])).toEqual([[1, 3], [2, 3], [3, 3]]);
+    expect(tree[0]!.children.map((n) => [n.pos, n.size])).toEqual([[1, 2], [2, 2]]);
+  });
+});
+
+// Sub-items: a record's parent is the first record its parent field links to.
+const P = "f_parent";
+const node = (id: string, parent?: string | string[]): TableRecord => {
+  const parents = parent === undefined ? [] : Array.isArray(parent) ? parent : [parent];
+  return makeRecord(parents.length ? { [P]: parents.map((x) => ({ id: x, name: x.toUpperCase() })) } : {}, id);
+};
+const order = (rows: ReturnType<typeof nestRows>) => rows.map((r) => `${"-".repeat(r.depth)}${r.record.id}`);
+
+describe("parentLinkOf", () => {
+  it("is the first linked record, and nothing without a parent field or a link", () => {
+    expect(parentLinkOf(node("b", ["a", "z"]), P)).toEqual({ id: "a", name: "A" });
+    expect(parentLinkOf(node("b"), P)).toBeNull();
+    expect(parentLinkOf(node("b", "a"), null)).toBeNull();
+  });
+});
+
+describe("nestRows", () => {
+  it("leaves the order alone without a parent field", () => {
+    const rows = nestRows([node("a"), node("b", "a")], null);
+    expect(order(rows)).toEqual(["a", "b"]);
+    expect(rows.map((r) => [r.pos, r.size])).toEqual([[1, 2], [2, 2]]);
+  });
+
+  it("puts each record right after its parent, deeper, keeping the view's order among siblings", () => {
+    const rows = nestRows([node("a"), node("c", "b"), node("b", "a"), node("d"), node("e", "a"), node("f", "e")], P);
+    expect(order(rows)).toEqual(["a", "-b", "--c", "-e", "--f", "d"]);
+    expect(rows.map((r) => r.children)).toEqual([2, 1, 0, 1, 0, 0]);
+    expect(rows.map((r) => r.parentId)).toEqual([null, "a", "b", "a", "e", null]);
+    expect(rows.map((r) => [r.pos, r.size])).toEqual([[1, 2], [1, 2], [1, 1], [2, 2], [1, 1], [2, 2]]);
+  });
+
+  it("draws a record whose parent is not in the group as a top-level row", () => {
+    expect(order(nestRows([node("a", "elsewhere"), node("b", "a")], P))).toEqual(["a", "-b"]);
+  });
+
+  it("does not lose the records of a loop, or loop forever on a record that is its own parent", () => {
+    expect(order(nestRows([node("a", "b"), node("b", "a"), node("c", "c")], P)).sort()).toEqual(["-b", "a", "c"]);
+  });
+});
+
+describe("foldRows", () => {
+  const rows = nestRows([node("a"), node("b", "a"), node("c", "b"), node("d", "a"), node("e")], P);
+
+  it("hides everything under a folded row, however deep", () => {
+    expect(order(foldRows(rows, new Set()))).toEqual(["a", "-b", "--c", "-d", "e"]);
+    expect(order(foldRows(rows, new Set(["a"])))).toEqual(["a", "e"]);
+    expect(order(foldRows(rows, new Set(["b"])))).toEqual(["a", "-b", "-d", "e"]);
+  });
+
+  it("names the folded rows that hide a row", () => {
+    expect(foldedAncestors(rows, "c", new Set(["a", "b"]))).toEqual(["a", "b"]);
+    expect(foldedAncestors(rows, "c", new Set(["b"]))).toEqual(["b"]);
+    expect(foldedAncestors(rows, "e", new Set(["a"]))).toEqual([]);
+    expect(foldedAncestors(rows, "zzz", new Set(["a"]))).toEqual([]);
+  });
+});
+
+describe("indent and outdent", () => {
+  const rows = nestRows([node("a"), node("b", "a"), node("c", "b"), node("d", "a"), node("e")], P);
+
+  it("indents under the row above at the same level", () => {
+    expect(indentTarget(rows, "e")?.id).toBe("a");
+    expect(indentTarget(rows, "d")?.id).toBe("b");
+    expect(indentTarget(rows, "c")).toBeNull(); // first of its level under b
+    expect(indentTarget(rows, "a")).toBeNull();
+    expect(indentTarget(rows, "nope")).toBeNull();
+  });
+
+  it("outdents to the parent's own parent", () => {
+    expect(outdentValue(rows, "c", P)).toEqual([{ id: "a", name: "A" }]);
+    expect(outdentValue(rows, "b", P)).toEqual([]);
+    expect(outdentValue(rows, "a", P)).toBeNull();
+  });
+
+  it("outdents a row whose parent is in another group by clearing the link", () => {
+    expect(outdentValue(nestRows([node("a", "elsewhere")], P), "a", P)).toEqual([]);
+  });
+});
+
+describe("rowLabel", () => {
+  it("says the title, then each shown value with its field, then the description", () => {
+    const num = ALL_FIELDS.number!;
+    const done = ALL_FIELDS.checkbox!;
+    const label = rowLabel("Write docs", [{ field: num, value: 3 }, { field: done, value: true }], "Draft first", DEFAULT_CTX);
+    expect(label).toBe(`Write docs, ${num.name}: 3.00, ${done.name}: checked, Draft first`);
+    expect(rowLabel("Idea", [], "", DEFAULT_CTX)).toBe("Idea");
+  });
+});
+
+describe("withTails", () => {
+  const r = (id: string) => makeRecord({}, id);
+  // Eight records in three groups; only the first four are loaded: A r0 r1, B r2 r3 r4 (runs over), C r5 r6 r7.
+  const gs = [h(0, "st", "a", 0, 2), h(0, "st", "b", 2, 3), h(0, "st", "c", 5, 3)];
+  const base = [r("r0"), r("r1"), r("r2"), r("r3")];
+
+  it("leaves a fully loaded list as it is", () => {
+    const out = withTails(base, [h(0, "st", "a", 0, 2), h(0, "st", "b", 2, 2)], 4, new Map());
+    expect(out.records.map((x) => x.id)).toEqual(["r0", "r1", "r2", "r3"]);
+    expect([...out.loaded]).toEqual([["st:a", 2], ["st:b", 2]]);
+  });
+
+  it("counts what is loaded of a group that runs over the end", () => {
+    const out = withTails(base, gs, 8, new Map());
+    expect([...out.loaded]).toEqual([["st:a", 2], ["st:b", 2], ["st:c", 0]]);
+    expect(out.records).toHaveLength(4);
+  });
+
+  it("appends the fetched rows after the loaded ones and moves the groups' starts", () => {
+    const out = withTails(base, gs, 8, new Map([["st:b", [r("r4")]], ["st:c", [r("r5"), r("r6")]]]));
+    expect(out.records.map((x) => x.id)).toEqual(["r0", "r1", "r2", "r3", "r4", "r5", "r6"]);
+    expect(out.groups.map((g) => [g.key, g.start, g.count])).toEqual([["a", 0, 2], ["b", 2, 3], ["c", 5, 3]]);
+    expect([...out.loaded]).toEqual([["st:a", 2], ["st:b", 3], ["st:c", 2]]);
+  });
+
+  it("starts a group that lies wholly past the end after the rows fetched before it", () => {
+    const out = withTails(base, gs, 8, new Map([["st:c", [r("r5")]]]));
+    expect(out.records.map((x) => x.id)).toEqual(["r0", "r1", "r2", "r3", "r5"]);
+    expect(out.groups.find((g) => g.key === "c")).toMatchObject({ start: 4, count: 3 });
+    expect(out.loaded.get("st:c")).toBe(1);
+  });
+
+  it("moves the start of a group that holds sub-groups to its first sub-group's", () => {
+    const nested = [h(0, "st", "a", 0, 4), h(1, "ow", "x", 0, 4), h(0, "st", "z", 4, 3), h(1, "ow", "y", 4, 3)];
+    const out = withTails(base, nested, 7, new Map([["st:z/ow:y", [r("r4"), r("r5")]]]));
+    expect(out.groups.map((g) => [g.key, g.start])).toEqual([["a", 0], ["x", 0], ["z", 4], ["y", 4]]);
+    expect(out.loaded.get("st:z/ow:y")).toBe(2);
+  });
+
+  it("treats a list without groups as one group of `total` records", () => {
+    const out = withTails(base, [], 7, new Map([["", [r("r4"), r("r5")]]]));
+    expect(out.records).toHaveLength(6);
+    expect(out.loaded.get("")).toBe(6);
+    expect(out.groups).toEqual([]);
   });
 });

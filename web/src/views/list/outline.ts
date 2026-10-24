@@ -4,7 +4,9 @@
  * flattens it for rendering with collapsed groups hidden, and works out the field values a new
  * record inside a group should start with.
  */
-import type { GroupHeader } from "@/api/types";
+import type { Field, GroupHeader, LinkRef, TableRecord } from "@/api/types";
+import { displayText, type FormatCtx } from "@/lib/cells/format";
+import { displayShapeOf, isLinkRef } from "@/lib/cells/kinds";
 
 export interface GroupNode {
   header: GroupHeader;
@@ -16,6 +18,9 @@ export interface GroupNode {
   count: number;
   /** Header chain from the top group down to this one (inclusive). */
   chain: GroupHeader[];
+  /** Place among the groups next to it (1-based) and how many there are, for a screen reader. */
+  pos: number;
+  size: number;
 }
 
 export function buildOutline(groups: readonly GroupHeader[]): GroupNode[] {
@@ -31,10 +36,19 @@ export function buildOutline(groups: readonly GroupHeader[]): GroupNode[] {
       start: header.start,
       count: header.count,
       chain: [...(parent?.chain ?? []), header],
+      pos: 0,
+      size: 0,
     };
     (parent ? parent.children : roots).push(node);
     stack[header.depth] = node;
   }
+  const number = (list: GroupNode[]) =>
+    list.forEach((n, i) => {
+      n.pos = i + 1;
+      n.size = list.length;
+      number(n.children);
+    });
+  number(roots);
   return roots;
 }
 
@@ -196,4 +210,185 @@ export function visibleIds(ids: readonly string[], roots: readonly GroupNode[], 
   };
   walk(roots);
   return ids.filter((id, i) => !hidden.has(i) || id === keep);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sub-items
+
+/** The record a record is the sub-item of: the first record linked in the view's parent field. */
+export function parentLinkOf(record: TableRecord, parentFieldId: string | null | undefined): LinkRef | null {
+  if (!parentFieldId) return null;
+  const v = record.values[parentFieldId];
+  return Array.isArray(v) ? (v.find(isLinkRef) ?? null) : null;
+}
+
+/** One drawn row of a group: the record, and where it sits in the group's sub-item tree. */
+export interface NestedRow {
+  record: TableRecord;
+  /** Levels below the group's own rows (0 for a row that is not a sub-item). */
+  depth: number;
+  /** The row above it that it is a sub-item of; null for a top-level row. */
+  parentId: string | null;
+  /** Rows nested directly under it. */
+  children: number;
+  /** Place among the rows next to it (1-based) and how many there are. */
+  pos: number;
+  size: number;
+}
+
+/**
+ * The records of one group in the order they are drawn: each record followed by its sub-items (the
+ * records whose parent field links to it), recursively, siblings in the view's own order. A record
+ * whose parent is not among `records` (it is in another group, or is not loaded) is top-level, and
+ * so is every record of a loop (A under B under A): nothing is lost. Without a parent field the
+ * records come back as they are.
+ */
+export function nestRows(records: readonly TableRecord[], parentFieldId: string | null | undefined): NestedRow[] {
+  if (!parentFieldId) return records.map((record, i) => ({ record, depth: 0, parentId: null, children: 0, pos: i + 1, size: records.length }));
+  const present = new Set(records.map((r) => r.id));
+  const kids = new Map<string, TableRecord[]>();
+  const tops: TableRecord[] = [];
+  for (const r of records) {
+    const parent = parentLinkOf(r, parentFieldId)?.id;
+    if (parent && parent !== r.id && present.has(parent)) kids.set(parent, [...(kids.get(parent) ?? []), r]);
+    else tops.push(r);
+  }
+  const out: NestedRow[] = [];
+  const seen = new Set<string>();
+  const walk = (list: readonly TableRecord[], depth: number, parentId: string | null) => {
+    list.forEach((record, i) => {
+      if (seen.has(record.id)) return;
+      seen.add(record.id);
+      const children = kids.get(record.id) ?? [];
+      out.push({ record, depth, parentId, children: children.filter((c) => !seen.has(c.id)).length, pos: i + 1, size: list.length });
+      walk(children, depth + 1, record.id);
+    });
+  };
+  walk(tops, 0, null);
+  // Records that are only reachable through a loop have no top-level ancestor: they start over as top-level rows.
+  const loose = records.filter((r) => !seen.has(r.id));
+  for (const r of loose) {
+    if (seen.has(r.id)) continue;
+    walk([r], 0, null);
+  }
+  return out;
+}
+
+/** The rows left after folding: nothing under a folded row is drawn. */
+export function foldRows(rows: readonly NestedRow[], folded: ReadonlySet<string>): NestedRow[] {
+  if (folded.size === 0) return [...rows];
+  const out: NestedRow[] = [];
+  let hideBelow = Infinity;
+  for (const row of rows) {
+    if (row.depth > hideBelow) continue;
+    hideBelow = Infinity;
+    out.push(row);
+    if (row.children > 0 && folded.has(row.record.id)) hideBelow = row.depth;
+  }
+  return out;
+}
+
+/** The rows above `id` that are folded and hide it, outermost first. */
+export function foldedAncestors(rows: readonly NestedRow[], id: string, folded: ReadonlySet<string>): string[] {
+  const at = rows.findIndex((r) => r.record.id === id);
+  if (at < 0) return [];
+  const out: string[] = [];
+  let depth = rows[at]!.depth;
+  for (let i = at - 1; i >= 0 && depth > 0; i--) {
+    if (rows[i]!.depth < depth) {
+      depth = rows[i]!.depth;
+      if (folded.has(rows[i]!.record.id)) out.unshift(rows[i]!.record.id);
+    }
+  }
+  return out;
+}
+
+/** The row above `id` at its own level, whose sub-item indenting it makes it (none for the first of its level). */
+export function indentTarget(rows: readonly NestedRow[], id: string): TableRecord | null {
+  const at = rows.findIndex((r) => r.record.id === id);
+  if (at < 0) return null;
+  const depth = rows[at]!.depth;
+  for (let i = at - 1; i >= 0; i--) {
+    if (rows[i]!.depth === depth) return rows[i]!.record;
+    if (rows[i]!.depth < depth) return null;
+  }
+  return null;
+}
+
+/**
+ * The value of the parent field that outdenting `id` sets: the parent's own parent, or nothing when
+ * the parent is top-level. Null when `id` is not a sub-item (a top-level row with no parent link).
+ */
+export function outdentValue(rows: readonly NestedRow[], id: string, parentFieldId: string): LinkRef[] | null {
+  const row = rows.find((r) => r.record.id === id);
+  if (!row) return null;
+  if (row.parentId === null) return parentLinkOf(row.record, parentFieldId) ? [] : null;
+  const parent = rows.find((r) => r.record.id === row.parentId);
+  const grand = parent ? parentLinkOf(parent.record, parentFieldId) : null;
+  return grand ? [grand] : [];
+}
+
+/** The text of a record's row as a screen reader says it: the title, then the shown values with their field names. */
+export function rowLabel(title: string, parts: readonly { field: Field; value: unknown }[], description: string, format: FormatCtx): string {
+  const said = parts.map(({ field, value }) => {
+    const shape = displayShapeOf(field);
+    const text = shape === "checkbox" ? (value === true ? "checked" : "unchecked") : displayText(field, value as TableRecord["values"][string], format);
+    return `${field.name}: ${text}`;
+  });
+  return [title, ...said, description].filter((x) => x !== "").join(", ");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Groups past the loaded records
+
+/** Records and group headers with the rows fetched for groups past the first records spliced in. */
+export interface WithTails {
+  records: TableRecord[];
+  groups: GroupHeader[];
+  /** Rows present per group that holds records (by path; "" without groups). */
+  loaded: Map<string, number>;
+}
+
+/**
+ * The first records of the view are loaded up to a cap, but the group headers cover all of it: a
+ * group that starts past the cap (or runs over it) has rows that are fetched when it is opened.
+ * This lays `tails` (the fetched rows of such a group, from where the loaded records end) after
+ * the loaded records and moves the groups' `start` to match, so everything else can keep reading
+ * "the records of a group are `records[start..start+count]`". Without groups, `total` is the
+ * count of the one unnamed group "".
+ */
+export function withTails(records: readonly TableRecord[], groups: readonly GroupHeader[], total: number, tails: ReadonlyMap<string, readonly TableRecord[]>): WithTails {
+  const roots = buildOutline(groups);
+  const leaves: { path: string; start: number; count: number }[] = groups.length > 0 ? leafNodes(roots) : [{ path: "", start: 0, count: total }];
+  const out = [...records];
+  // Rows fetched against an older load of the records could repeat one that is loaded now: a record is drawn once.
+  const present = new Set(records.map((r) => r.id));
+  const loaded = new Map<string, number>();
+  const starts = new Map<string, number>();
+  for (const leaf of leaves) {
+    const have = Math.max(0, Math.min(leaf.count, records.length - leaf.start));
+    if (leaf.start + leaf.count <= records.length) {
+      starts.set(leaf.path, leaf.start);
+      loaded.set(leaf.path, leaf.count);
+      continue;
+    }
+    const tail = (tails.get(leaf.path) ?? []).filter((r) => !present.has(r.id)).slice(0, leaf.count - have);
+    for (const r of tail) present.add(r.id);
+    // A group that runs over the cap continues straight on from the loaded records; later ones start after the rows loaded so far.
+    starts.set(leaf.path, have > 0 ? leaf.start : out.length);
+    out.push(...tail);
+    loaded.set(leaf.path, have + tail.length);
+  }
+  if (out.length === records.length) return { records: [...records], groups: [...groups], loaded };
+  const moved: GroupHeader[] = [];
+  const place = (list: readonly GroupNode[]) => {
+    for (const n of list) {
+      const start = n.children.length > 0 ? firstStart(n) : (starts.get(n.path) ?? n.start);
+      moved.push({ ...n.header, start });
+      place(n.children);
+    }
+  };
+  const firstStart = (n: GroupNode): number => (n.children.length > 0 ? firstStart(n.children[0]!) : (starts.get(n.path) ?? n.start));
+  place(roots);
+  return { records: out, groups: moved, loaded };
 }

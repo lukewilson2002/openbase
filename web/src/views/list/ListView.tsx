@@ -1,11 +1,14 @@
 /**
  * List view: a collapsible outline of the view's records, grouped by the view's groups (up to
- * three levels, from `QueryResponse.groups`), with compact rows and an add button per group.
+ * three levels, from `QueryResponse.groups`), with compact rows and an add button per group. A
+ * prefix field (a checkbox, a choice, a person) starts every row and is changed there, and a
+ * self-link parent field nests records under their parents (indent, outdent, fold).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUp } from "lucide-react";
 import { recordKeys } from "@/api/records";
+import type { Field, ViewConfig } from "@/api/types";
 import type { MenuAnchor } from "@/components/ui/anchored-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
@@ -20,14 +23,23 @@ import { useRecordSelection } from "../common/useRecordSelection";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { ViewFrame } from "../common/ViewFrame";
-import { ViewSettings } from "../common/ViewSettings";
+import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import type { ViewProps } from "../types";
-import { ListOutline } from "./ListOutline";
-import { allPaths, buildOutline, leafNodes, moveBetweenGroups, placeIndexes, planDrop, visibleIds, type DropPlan } from "./outline";
+import { ListOutline, type RowTreeActions } from "./ListOutline";
+import { allPaths, buildOutline, leafNodes, moveBetweenGroups, placeIndexes, planDrop, visibleIds, withTails, type DropPlan } from "./outline";
+import { isPrefixField } from "./RowPrefix";
+import { useGroupRows } from "./useGroupRows";
 
 export default function ListView(props: ViewProps) {
   return <ListInner key={props.view.id} {...props} />;
 }
+
+function setList(c: ViewConfig, patch: Partial<ViewConfig["list"]>): ViewConfig {
+  return { ...c, list: { ...c.list, ...patch } };
+}
+
+/** A link field to the table's own records: what rows can be nested by. */
+const isSelfLink = (f: Field, tableId: string) => f.type === "link" && f.options.linked_table_id === tableId;
 
 function ListInner(props: ViewProps) {
   const setup = useViewSetup(props);
@@ -36,13 +48,25 @@ function ListInner(props: ViewProps) {
   const toast = useToast();
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
   const { candidates: descriptionFields, field: descriptionField } = useDescriptionField(table, config);
+  const prefixFields = useMemo(() => table.fields.filter(isPrefixField), [table.fields]);
+  const parentFields = useMemo(() => table.fields.filter((f) => isSelfLink(f, table.id)), [table.fields, table.id]);
+  const prefix = prefixFields.find((f) => f.id === config.list.prefix_field_id);
+  const parentField = parentFields.find((f) => f.id === config.list.parent_field_id);
   // A group header already says the value of the field it groups by; the description sits under
-  // the title.
-  const fields = useMemo(() => cardFields(table, config, new Set([...config.groups.map((g) => g.field_id), descriptionField?.id ?? ""])), [table, config, descriptionField?.id]);
+  // the title; the prefix starts the row and the parent field is the nesting.
+  const fields = useMemo(
+    () => cardFields(table, config, new Set([...config.groups.map((g) => g.field_id), descriptionField?.id ?? "", prefix?.id ?? "", parentField?.id ?? ""])),
+    [table, config, descriptionField?.id, prefix?.id, parentField?.id],
+  );
   const [collapsed, toggle, replace] = usePersistedSet(`ob-list-collapsed:${view.id}`);
+  const [folded, toggleFold] = usePersistedSet(`ob-list-folded:${view.id}`);
 
   const records = useViewRecords({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient });
-  const data = records.data;
+  const loadedData = records.data;
+  // Groups past the records the view loaded have their rows fetched when they are opened.
+  const groupRows = useGroupRows({ tableId: table.id, viewId: view.id, configKey: setup.configKey, search: setup.debouncedSearch, timeZone: setup.timeZone, transient: setup.transient, base: loadedData });
+  const lifted = useMemo(() => (loadedData ? withTails(loadedData.records, loadedData.groups, loadedData.total, groupRows.tails) : undefined), [loadedData, groupRows.tails]);
+  const data = useMemo(() => (loadedData && lifted ? { ...loadedData, records: lifted.records, groups: lifted.groups } : undefined), [loadedData, lifted]);
   const grouped = !!data && data.groups.length > 0;
   const roots = useMemo(() => buildOutline(data?.groups ?? []), [data?.groups]);
   const paths = useMemo(() => allPaths(roots), [roots]);
@@ -67,7 +91,7 @@ function ListInner(props: ViewProps) {
     if (at >= 0 && recordIds.includes(openId!)) lastIndex.current = at;
   }, [openId, panelIds, recordIds]);
 
-  const [menu, setMenu] = useState<{ id: string; anchor: MenuAnchor } | null>(null);
+  const [menu, setMenu] = useState<{ id: string; anchor: MenuAnchor; tree: RowTreeActions } | null>(null);
   // Rows can be put in a new place only where the view keeps them in manual order.
   const reorderable = setup.canEdit && cfg.queryConfig.sorts.length === 0;
 
@@ -81,13 +105,19 @@ function ListInner(props: ViewProps) {
       return;
     }
     const order = placeIndexes(recordIds, id, plan);
-    // The outline's counts are not what the writes patch, so the groups are updated here.
+    // The outline's counts are not what the writes patch, so the groups are updated here (not while rows
+    // fetched for later groups are laid in, which moves the numbers they count by).
     await qc.cancelQueries({ queryKey: recordKeys.table(table.id) });
-    if (order && Object.keys(plan.values).length > 0) {
+    if (order && plan.groupLabel && loadedData && recordIds.length === loadedData.records.length) {
       qc.setQueryData<ViewRecordsData>(records.queryKey, (old) => old && { ...old, groups: moveBetweenGroups(old.groups, order.a, order.b, plan.from, plan.to) });
     }
     await writes.updateAndMove(id, plan.values, { beforeId: plan.beforeId, afterId: plan.afterId }, { label: "Move record", toast: plan.groupLabel ? `Moved to ${plan.groupLabel}` : undefined });
   };
+
+  const setPrefix = (id: string, value: unknown) => {
+    if (prefix) void writes.update(id, { [prefix.id]: value }, { label: `Change ${prefix.name}` });
+  };
+  const setParent = (id: string, parent: { id: string; name: string }[], label: string) => (parentField ? writes.update(id, { [parentField.id]: parent }, { label }) : undefined);
 
   const recordsOf = (ids: readonly string[]) => (data?.records ?? []).filter((r) => ids.includes(r.id));
   const duplicateIds = (ids: readonly string[]) => void actions.duplicate(recordsOf(ids), ids.length > 1 ? sel.clear : undefined);
@@ -126,7 +156,19 @@ function ListInner(props: ViewProps) {
       <ListOutline
         records={data.records}
         groups={data.groups}
+        total={data.total}
+        loadedRows={lifted?.loaded}
+        rowStatus={groupRows.status}
+        onNeedRows={groupRows.request}
+        onRetryRows={groupRows.retry}
         primary={primary}
+        prefix={prefix}
+        onPrefixChange={setup.canEdit ? setPrefix : undefined}
+        parentField={parentField}
+        folded={folded}
+        onToggleFold={toggleFold}
+        onSetParent={setup.canEdit ? setParent : undefined}
+        people={setup.people}
         fields={fields}
         descriptionField={descriptionField}
         tableFields={table.fields}
@@ -140,7 +182,7 @@ function ListInner(props: ViewProps) {
         onAdd={(defaults) => void add(defaults)}
         selection={sel}
         onDelete={(ids) => actions.requestDelete(ids, sel.clear)}
-        onRecordMenu={(id, anchor) => setMenu({ id, anchor })}
+        onRecordMenu={(id, anchor, tree) => setMenu({ id, anchor, tree })}
         onReorder={reorderable ? reorder : undefined}
         reveal={openId}
       />
@@ -155,6 +197,24 @@ function ListInner(props: ViewProps) {
       features={{ rowHeight: false }}
       toolbarSetting={
         <ViewSettings note={cfg.canConfigure ? undefined : "You do not have permission to change this view."}>
+          <FieldSelect
+            label="Prefix field"
+            fields={prefixFields}
+            value={prefix?.id ?? ""}
+            noneLabel="No prefix"
+            disabled={!cfg.canConfigure}
+            onChange={(id) => cfg.update((c) => setList(c, { prefix_field_id: id }))}
+            hint={prefixFields.length === 0 ? "Add a checkbox, single select or person field to show it at the start of each row." : "Shown at the start of each row and changed there: tick off a checkbox without opening the record."}
+          />
+          <FieldSelect
+            label="Sub-items"
+            fields={parentFields}
+            value={parentField?.id ?? ""}
+            noneLabel="No sub-items"
+            disabled={!cfg.canConfigure}
+            onChange={(id) => cfg.update((c) => setList(c, { parent_field_id: id }))}
+            hint={parentFields.length === 0 ? "Add a link field to this table's own records to nest rows under their parent." : "Rows linked in this field sit under their parent. Tab indents a row and Shift+Tab outdents it."}
+          />
           <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
         </ViewSettings>
       }
@@ -170,7 +230,6 @@ function ListInner(props: ViewProps) {
             {itemsLabel(total)}
             {setup.debouncedSearch ? " found" : ""}
           </span>
-          {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {total.toLocaleString()} records. Filter the view to see the rest.</span>}
           {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
         </>
       }
@@ -188,6 +247,9 @@ function ListInner(props: ViewProps) {
         onDuplicate={() => duplicateIds(menuIds)}
         onDelete={() => actions.requestDelete(menuIds, sel.clear)}
         onMoveToStart={reorderable && menu && startId && startId !== menu.id ? moveToStart : undefined}
+        onIndent={menuIds.length === 1 ? menu?.tree.indent : undefined}
+        onOutdent={menuIds.length === 1 ? menu?.tree.outdent : undefined}
+        onAddSub={menuIds.length === 1 ? menu?.tree.addSub : undefined}
       />
     </ViewFrame>
   );
