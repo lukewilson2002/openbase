@@ -223,7 +223,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const deleteSelected = () => props.onDeleteRecords([...sel.ids], sel.clear);
   const onBoardKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // Menus and dialogs are drawn elsewhere in the page but their keys bubble through here.
-    if (!props.canEdit || !e.currentTarget.contains(e.target as Node)) return;
+    // While a card is carried, Escape cancels the drag and nothing else.
+    if (!props.canEdit || drag.activeId || !e.currentTarget.contains(e.target as Node)) return;
     sel.handleKeyDown(e, { onDelete: deleteSelected });
   };
 
@@ -266,7 +267,9 @@ export function KanbanBoard(props: KanbanBoardProps) {
       const at = list.indexOf(String(id));
       const overAt = over !== undefined && !isStackId(over) ? list.indexOf(String(over)) : -1;
       const pos = at >= 0 ? at : overAt;
-      return pos >= 0 ? `${stackName(container)}, position ${pos + 1} of ${list.length}` : stackName(container);
+      // dnd-kit announces before the provisional order has the card in its new stack.
+      const total = at >= 0 ? list.length : list.length + 1;
+      return pos >= 0 ? `${stackName(container)}, position ${pos + 1} of ${total}` : stackName(container);
     };
     return {
       onDragStart: ({ active }) => (isStackId(active.id) ? `Picked up the ${stackLabel(active.id)} stack.` : `Picked up ${titleOf(active.id)}, in ${where(active.id, undefined)}.`),
@@ -900,6 +903,8 @@ function KanbanCard({
     } else if (p.canEdit && e.key === "Delete" && sel.count === 0) {
       // With a selection the board's Delete handler asks about all of it.
       e.preventDefault();
+      // Focus stays on the board: the card below it, else the one above, takes over.
+      (neighbourCard(e.currentTarget, "ArrowDown") ?? neighbourCard(e.currentTarget, "ArrowUp"))?.focus();
       p.onDeleteRecords([record.id]);
     }
   };

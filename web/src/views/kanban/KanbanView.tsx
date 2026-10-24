@@ -190,7 +190,11 @@ function KanbanInner(props: ViewProps) {
     : kind === "select"
       ? "Adding a stack adds an option to the field, which takes the Creator role."
       : kind === "user"
-        ? "Stacks follow the people with cards. Turn on Show everyone in View to add the rest."
+        ? kanban.show_all_people
+        ? "Every collaborator has a stack. Add people to the base to give them one."
+        : cfg.canConfigure
+          ? "Stacks follow the people with cards. Turn on Show everyone in View to add the rest."
+          : "Stacks follow the people with cards."
         : kind === "checkbox"
           ? "A checkbox always has two stacks: checked and unchecked."
           : undefined;

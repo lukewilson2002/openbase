@@ -352,6 +352,12 @@ describe("KanbanView", () => {
       expect(screen.getByText(/Stacks follow the people with cards/)).toBeInTheDocument();
     });
 
+    it("says so where Add a stack would be, and not to turn on a setting you cannot change", async () => {
+      setup("viewer", byOwner(), {}, { records: owned });
+      await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
+      expect(screen.getByText("Stacks follow the people with cards.")).toBeInTheDocument();
+    });
+
     it("draws a stack for everyone when the setting asks for it, and saves the setting", async () => {
       const user = userEvent.setup();
       const view = byOwner();

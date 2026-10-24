@@ -340,6 +340,7 @@ describe("KanbanBoard", () => {
       await user.keyboard("{Delete}");
       expect(props.onDeleteRecords).toHaveBeenLastCalledWith(["r2"]);
 
+      screen.getByRole("button", { name: "Fix bug" }).focus();
       await user.keyboard("x");
       expect(screen.getByRole("toolbar")).toHaveTextContent("1 selected");
       await user.keyboard("{Delete}");
@@ -348,6 +349,27 @@ describe("KanbanBoard", () => {
       expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
       await user.keyboard("{Control>}a{/Control}");
       expect(screen.getByRole("toolbar")).toHaveTextContent("3 selected");
+    });
+
+    it("Delete moves focus to a neighbouring card instead of dropping it", async () => {
+      const user = userEvent.setup();
+      board();
+      screen.getByRole("button", { name: "Write docs" }).focus();
+      await user.keyboard("{Delete}");
+      expect(screen.getByRole("button", { name: "Fix bug" })).toHaveFocus();
+    });
+
+    it("Escape while carrying a card cancels the drag and keeps the selection", async () => {
+      const user = userEvent.setup();
+      const { props } = board();
+      screen.getByRole("button", { name: "Write docs" }).focus();
+      await user.keyboard("x");
+      expect(screen.getByRole("toolbar")).toHaveTextContent("1 selected");
+      await user.keyboard(" ");
+      await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+      await user.keyboard("{Escape}");
+      expect(screen.getByRole("toolbar")).toHaveTextContent("1 selected");
+      expect(props.onDrop).not.toHaveBeenCalled();
     });
 
     it("cannot select or delete without edit rights", async () => {
