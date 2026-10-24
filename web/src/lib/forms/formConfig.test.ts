@@ -10,10 +10,14 @@ import {
   liveEntries,
   moveFormField,
   moveFormFieldById,
+  previewPublicFields,
   pruneForm,
   publicStatus,
+  redirectAfterSubmit,
   redirectUrlProblem,
   removeFormField,
+  removedFormField,
+  requiredBlockedReason,
   sameForm,
   summarizeForm,
   updateFormField,
@@ -152,5 +156,71 @@ describe("saving", () => {
     const a: FormConfig = { ...empty, fields: [entry("a")] };
     expect(sameForm(a, { ...empty, redirect_url: "", fields: [entry("a", { label: "" })] })).toBe(true);
     expect(sameForm(a, { ...empty, fields: [entry("a", { required: true })] })).toBe(false);
+  });
+});
+
+describe("removing a field and adding it back", () => {
+  const form = { ...empty, fields: [entry("f_name"), entry("f_notes", { label: "Comments", help: "Anything else?", required: true }), entry("f_owner")] };
+
+  it("remembers the entry and its place", () => {
+    expect(removedFormField(form, "f_notes")).toEqual({ entry: form.fields[1], index: 1 });
+    expect(removedFormField(form, "zz")).toBeNull();
+  });
+
+  it("puts a removed field back where it was, with its label, help and required", () => {
+    const taken = removedFormField(form, "f_notes")!;
+    const without = removeFormField(form, "f_notes");
+    expect(addFormField(without, table, "f_notes", taken)).toEqual(form);
+    // The place is kept as well as it can be when the list got shorter meanwhile.
+    expect(ids(addFormField({ ...empty, fields: [entry("f_name")] }, table, "f_notes", { ...taken, index: 5 }))).toEqual(["f_name", "f_notes"]);
+  });
+
+  it("does not add a field twice", () => {
+    expect(addFormField(form, table, "f_notes", removedFormField(form, "f_notes")!)).toBe(form);
+  });
+
+  it("gives back the settings of every field added again, the others get the defaults", () => {
+    const taken = new Map([["f_notes", removedFormField(form, "f_notes")!]]);
+    const next = addAllFormFields({ ...empty, fields: [entry("f_name")] }, table, taken);
+    expect(next.fields.find((f) => f.field_id === "f_notes")).toMatchObject({ label: "Comments", required: true });
+    expect(next.fields.find((f) => f.field_id === "f_parent")).toEqual(entry("f_parent"));
+  });
+
+  it("does not bring a link or user field back as required", () => {
+    const required = { entry: entry("f_owner", { required: true, label: "Who" }), index: 0 };
+    expect(addFormField(empty, table, "f_owner", required).fields[0]).toEqual(entry("f_owner", { label: "Who" }));
+  });
+});
+
+describe("what can be required", () => {
+  it("is everything but the fields the public form cannot ask for", () => {
+    expect(requiredBlockedReason(name)).toBeNull();
+    expect(requiredBlockedReason(owner)).toMatch(/User fields cannot be required/);
+    expect(requiredBlockedReason(parent)).toMatch(/Link fields cannot be required/);
+  });
+});
+
+describe("the redirect after a submission", () => {
+  it("puts the new record's id into {record_id}, encoded", () => {
+    expect(redirectAfterSubmit("https://example.com/t?id={record_id}&again={record_id}", "rec 1/2")).toBe("https://example.com/t?id=rec%201%2F2&again=rec%201%2F2");
+    expect(redirectAfterSubmit("https://example.com/{record_id}", "recAbc")).toBe("https://example.com/recAbc");
+    expect(redirectAfterSubmit("https://example.com/t?id={record_id}", null)).toBe("https://example.com/t?id=");
+  });
+
+  it("is nothing without an address and for anything but http and https", () => {
+    expect(redirectAfterSubmit(null, "rec1")).toBeNull();
+    expect(redirectAfterSubmit("", "rec1")).toBeNull();
+    expect(redirectAfterSubmit("javascript:alert(1)", "rec1")).toBeNull();
+  });
+});
+
+describe("the public form as the builder previews it", () => {
+  it("lists the collectable, visible fields with the form's label, help and required", () => {
+    const f = { ...empty, fields: [entry("f_name", { label: "Your name", required: true }), entry("f_owner"), entry("f_notes", { help: "Anything else?" })] };
+    expect(previewPublicFields(f, table, []).map((x) => [x.id, x.label, x.help, x.required, x.type])).toEqual([
+      ["f_name", "Your name", null, true, "text"],
+      ["f_notes", "Notes", "Anything else?", false, "text"],
+    ]);
+    expect(previewPublicFields(f, table, ["f_notes"]).map((x) => x.id)).toEqual(["f_name"]);
   });
 });

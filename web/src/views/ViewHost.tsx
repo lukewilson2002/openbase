@@ -49,7 +49,8 @@ export function ViewHost({ schema, table, view }: ViewHostProps) {
   return (
     <ViewErrorBoundary resetKey={view.id}>
       <Suspense fallback={<PageSpinner label="Loading view" />}>
-        <ViewComponent schema={schema} table={table} view={view} role={schema.role} />
+        {/* Keyed by the view: moving between two views of one type starts the next one fresh, with none of the previous one's drafts, screens or open dialogs. */}
+        <ViewComponent key={view.id} schema={schema} table={table} view={view} role={schema.role} />
       </Suspense>
     </ViewErrorBoundary>
   );

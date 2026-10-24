@@ -2,19 +2,20 @@
  * `/form/:token` (and `/f/:token`): a public form. No account, no app shell, no redirect to the
  * login page. Loads `GET /api/public/forms/{token}`, asks for the password when the link has one
  * (kept in memory), validates before sending, uploads files through the form's own endpoint, and
- * ends with the success message, an optional "Submit another response" and an optional redirect.
+ * ends with the success message and an optional "Submit another response", or, when the form has a
+ * redirect address, goes straight there (the address may carry the new record's id).
  */
 import { EntityLabel } from "@/components/icons/EntityIcon";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
-import { CircleCheck } from "lucide-react";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef, PublicForm } from "@/api/types";
+import { FormDone } from "@/components/forms/FormDone";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/layouts";
-import { describeSubmitError, safeRedirect } from "@/lib/publicErrors";
+import { describeSubmitError } from "@/lib/publicErrors";
 import { browserTimeZone } from "@/lib/format";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE } from "@/lib/forms/formConfig";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, redirectAfterSubmit } from "@/lib/forms/formConfig";
 import { buildSubmission, emptyInput, hasAnyValue, type FormInput } from "@/lib/forms/publicValues";
 import { PasswordPrompt, PublicLoading, PublicProblemScreen, PublicShell } from "../PublicShell";
 import { usePublicLoad } from "../usePublicLoad";
@@ -40,16 +41,15 @@ function FilledForm({ token, password, form }: { token: string; password: string
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Set once the answers were sent: the id of the new record (it can be part of the redirect address).
+  const [done, setDone] = useState<{ recordId: string | null } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const redirect = safeRedirect(form.redirect_url);
+  const redirect = done ? redirectAfterSubmit(form.redirect_url, done.recordId) : null;
 
-  // The visitor sees the message first; a configured redirect follows right after.
+  // A form with a redirect address sends people there at once, in place of the message.
   useEffect(() => {
-    if (!done || !redirect) return;
-    const t = setTimeout(() => window.location.assign(redirect), 1200);
-    return () => clearTimeout(t);
-  }, [done, redirect]);
+    if (redirect) window.location.assign(redirect);
+  }, [redirect]);
 
   const set = useCallback((id: string, value: FormInput) => {
     setInputs((cur) => ({ ...cur, [id]: value }));
@@ -89,8 +89,8 @@ function FilledForm({ token, password, form }: { token: string; password: string
     }
     setSubmitting(true);
     try {
-      await publicApi.submitForm(token, values, password);
-      setDone(true);
+      const sent = await publicApi.submitForm(token, values, password);
+      setDone({ recordId: sent?.record_id ?? null });
     } catch (err) {
       setFailure(describeSubmitError(err));
     } finally {
@@ -99,26 +99,19 @@ function FilledForm({ token, password, form }: { token: string; password: string
   };
 
   if (done) {
+    const another = () => {
+      setInputs(initialInputs(form));
+      setErrors({});
+      setFailure(null);
+      setDone(null);
+    };
     return (
       <PublicShell>
-        <div role="status" className="mx-auto mt-6 flex w-full flex-col items-center gap-3 rounded-lg border border-line bg-surface p-8 text-center shadow-sm">
-          <CircleCheck aria-hidden className="size-9 text-success" />
-          <h1 className="text-xl">{form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}</h1>
-          {redirect && <p className="text-[0.8125rem] text-muted">Taking you on…</p>}
-          {form.show_submit_another && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setInputs(initialInputs(form));
-                setErrors({});
-                setFailure(null);
-                setDone(false);
-              }}
-            >
-              Submit another response
-            </Button>
-          )}
-        </div>
+        {redirect ? (
+          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
+        ) : (
+          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? another : undefined} />
+        )}
       </PublicShell>
     );
   }

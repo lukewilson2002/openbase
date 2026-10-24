@@ -2,20 +2,23 @@
  * "Fill in form" for signed-in editors: the form as configured (every field, including links and
  * users, which the public form cannot collect), submitting a record through the normal records
  * API (`POST /api/tables/{id}/records`, typecast on), so history, automations and live updates
- * behave exactly as for any other new record.
+ * behave exactly as for any other new record. Sending works from the keyboard (Enter in a one-line
+ * input, Ctrl or Cmd+Enter anywhere), a refusal puts the cursor in the first field that needs
+ * attention, and what happens afterwards (message, redirect, submit another) is what the public
+ * page does.
  */
 import { EntityLabel } from "@/components/icons/EntityIcon";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleCheck } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { Field } from "@/api/types";
+import { FormDone } from "@/components/forms/FormDone";
 import { Notice } from "@/components/layouts";
 import type { EditValue } from "@/components/record/editors/env";
 import { Button } from "@/components/ui/button";
 import { resolveForm, type Drafts } from "@/lib/forms/drafts";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, liveEntries } from "@/lib/forms/formConfig";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, liveEntries, redirectAfterSubmit } from "@/lib/forms/formConfig";
 import type { ViewSetup } from "../common/useViewSetup";
 import { FormSurface } from "./FormSurface";
 
@@ -27,10 +30,17 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Set once the record was added: its id (it can be part of the redirect address).
+  const [done, setDone] = useState<{ recordId: string | null } | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const entries = useMemo(() => liveEntries(form, table), [form, table]);
+  const redirect = done ? redirectAfterSubmit(form.redirect_url, done.recordId) : null;
+
+  // A form with a redirect address sends people there at once, in place of the message.
+  useEffect(() => {
+    if (redirect) window.location.assign(redirect);
+  }, [redirect]);
 
   const onEdit = (field: Field, edit: EditValue) => {
     setDrafts((d) => ({ ...d, [field.id]: edit }));
@@ -41,7 +51,15 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
     });
   };
 
+  /** Puts the cursor in the field (the first one that needs attention) and brings it into view. */
+  const focusField = (id: string) => {
+    const block = [...(top.current?.querySelectorAll<HTMLElement>("[data-field-id]") ?? [])].find((el) => el.dataset["fieldId"] === id);
+    block?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    block?.querySelector<HTMLElement>("input, textarea, select, button, [contenteditable=true]")?.focus({ preventScroll: true });
+  };
+
   const submit = async () => {
+    if (submitting) return;
     setFailure(null);
     const resolved = resolveForm(
       entries.map(({ entry, field }) => ({ field, required: entry.required })),
@@ -49,8 +67,9 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
       { timeZone, users: people },
     );
     setErrors(resolved.errors);
-    if (Object.keys(resolved.errors).length > 0) {
-      top.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    const firstBad = entries.find(({ field }) => resolved.errors[field.id]);
+    if (firstBad) {
+      focusField(firstBad.field.id);
       return;
     }
     if (Object.keys(resolved.values).length === 0) {
@@ -59,10 +78,10 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
     }
     setSubmitting(true);
     try {
-      await recordsApi.create(table.id, { records: [{ values: resolved.values as never }], typecast: true });
+      const created = await recordsApi.create(table.id, { records: [{ values: resolved.values as never }], typecast: true });
       // A link field changes the linked table's records too.
       void qc.invalidateQueries({ queryKey: entries.some((e) => e.field.type === "link") ? ["records"] : recordKeys.table(table.id) });
-      setDone(true);
+      setDone({ recordId: created?.records?.[0]?.id ?? null });
     } catch (e) {
       setFailure(errorMessage(e));
     } finally {
@@ -71,26 +90,27 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
   };
 
   if (done) {
-    return (
-      <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-3 rounded-[14px] border border-line bg-surface p-8 text-center shadow-[0_10px_28px_rgb(15_20_30/0.06)]" role="status">
-        <CircleCheck aria-hidden className="size-8 text-success" />
-        <h2 className="text-xl">{form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}</h2>
-        <p className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted">
-          The record was added to <EntityLabel icon={table.icon}>{table.name}</EntityLabel>.
-        </p>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setDrafts({});
-            setErrors({});
-            setFailure(null);
-            setResetKey((k) => k + 1);
-            setDone(false);
-          }}
-        >
-          Submit another response
-        </Button>
-      </div>
+    const another = () => {
+      setDrafts({});
+      setErrors({});
+      setFailure(null);
+      setResetKey((k) => k + 1);
+      setDone(null);
+    };
+    const shape = "max-w-[600px] rounded-[14px] shadow-[0_10px_28px_rgb(15_20_30/0.06)]";
+    return redirect ? (
+      <FormDone className={shape} message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
+    ) : (
+      <FormDone
+        className={shape}
+        message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}
+        note={
+          <span className="inline-flex items-center gap-1.5">
+            The record was added to <EntityLabel icon={table.icon}>{table.name}</EntityLabel>.
+          </span>
+        }
+        onAnother={form.show_submit_another ? another : undefined}
+      />
     );
   }
 
@@ -105,7 +125,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
         onEdit={onEdit}
         errors={errors}
         resetKey={resetKey}
-        banner={form.redirect_url ? <Notice>Visitors of the public form are sent to {form.redirect_url} after submitting; here you stay on this page.</Notice> : undefined}
+        onSubmit={() => void submit()}
         footer={
           <div className="flex flex-col gap-3">
             {failure && <Notice tone="error">{failure}</Notice>}

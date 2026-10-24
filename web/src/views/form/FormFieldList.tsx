@@ -2,9 +2,14 @@
  * The builder's field list: one compact row per field with a drag handle (dnd-kit; pointer and
  * keyboard), its type, its name, a required switch and remove. The name opens the row to change the
  * label and help text, with up/down buttons as a plain alternative to dragging. "Add a field" lists
- * the fields that are not in the form yet.
+ * the fields that are not in the form yet. A removed field keeps its label, help text and required
+ * switch for as long as the builder is open: a toast offers Undo, and adding it again puts it back
+ * where it was, as it was.
+ *
+ * Link and user fields cannot be required (the public form does not collect them), and a field the form
+ * view hides can be shown on the public form again from its row.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -15,8 +20,25 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { FieldTypeIcon } from "@/components/ui/field-type-icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input, Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
-import { MAX_FORM_TEXT, addAllFormFields, canBeInForm, addFormField, addableFields, liveEntries, moveFormField, moveFormFieldById, publicStatus, removeFormField, updateFormField, type FormFieldPatch } from "@/lib/forms/formConfig";
+import {
+  MAX_FORM_TEXT,
+  addAllFormFields,
+  canBeInForm,
+  addFormField,
+  addableFields,
+  liveEntries,
+  moveFormField,
+  moveFormFieldById,
+  publicStatus,
+  removeFormField,
+  removedFormField,
+  requiredBlockedReason,
+  updateFormField,
+  type FormFieldPatch,
+  type RemovedFormField,
+} from "@/lib/forms/formConfig";
 
 export interface FormFieldListProps {
   form: FormConfig;
@@ -24,13 +46,31 @@ export interface FormFieldListProps {
   hiddenFields: readonly string[];
   readOnly: boolean;
   onChange: (next: FormConfig) => void;
+  /** Shows a field the form view hides on the public form again. */
+  onShowPublic?: (fieldId: string) => void;
 }
 
-function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, form }: { entry: FormField; field: Field; index: number; count: number; hiddenFields: readonly string[]; readOnly: boolean; onChange: FormFieldListProps["onChange"]; form: FormConfig }) {
+interface RowProps {
+  entry: FormField;
+  field: Field;
+  index: number;
+  count: number;
+  hiddenFields: readonly string[];
+  readOnly: boolean;
+  onChange: FormFieldListProps["onChange"];
+  onRemove: (field: Field) => void;
+  onShowPublic?: FormFieldListProps["onShowPublic"];
+  form: FormConfig;
+}
+
+function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onRemove, onShowPublic, form }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id, disabled: readOnly });
   // A field whose label or help was changed shows those straight away, so the change is not hidden.
   const [open, setOpen] = useState(() => !!(entry.label?.trim() || entry.help?.trim()));
   const status = publicStatus(field, hiddenFields);
+  // A field the public form cannot ask for cannot be required either; one that already is can still be switched off.
+  const noRequired = requiredBlockedReason(field);
+  const requiredLocked = noRequired !== null && !entry.required;
   const patch = (p: FormFieldPatch) => onChange(updateFormField(form, field.id, p));
   const shownName = entry.label?.trim() || field.name;
   return (
@@ -41,16 +81,16 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
       aria-label={`Form field ${field.name}`}
       className={cn("rounded-[10px] border border-line bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
     >
-      <div className="flex min-h-[46px] items-center gap-2.5 px-1.5">
+      <div className="flex min-h-[46px] items-center gap-2.5 px-1.5 pointer-coarse:min-h-[56px]">
         <button
           type="button"
           aria-label={`Drag ${field.name} to reorder`}
           disabled={readOnly}
-          className="inline-flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
+          className="inline-flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40 pointer-coarse:mr-1 pointer-coarse:size-11"
           {...attributes}
           {...listeners}
         >
-          <GripVertical aria-hidden className="size-4" />
+          <GripVertical aria-hidden className="size-4 pointer-coarse:size-5" />
         </button>
         <FieldTypeIcon type={field.type} />
         <button
@@ -68,8 +108,32 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
             <Lock aria-hidden className="size-3" /> <span className="max-sm:sr-only">Not public</span>
           </span>
         )}
-        <Switch className="flex-row-reverse text-muted" checked={entry.required} disabled={readOnly} onCheckedChange={(required) => patch({ required })} label="Required" />
-        <IconButton label={`Remove ${field.name} from the form`} size="sm" noTooltip disabled={readOnly} onClick={() => onChange(removeFormField(form, field.id))}>
+        {status.public === false && status.reason === "hidden" && onShowPublic && !readOnly && (
+          <button
+            type="button"
+            aria-label={`Show ${field.name} on the public form`}
+            title="Show this field on the public form"
+            onClick={() => onShowPublic(field.id)}
+            className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
+          >
+            Show
+          </button>
+        )}
+        <span title={noRequired ?? undefined} className="shrink-0">
+          <Switch
+            className="flex-row-reverse text-muted"
+            checked={entry.required}
+            disabled={readOnly || requiredLocked}
+            onCheckedChange={(required) => patch({ required })}
+            label={
+              <>
+                Required
+                {requiredLocked && <span className="sr-only"> ({noRequired})</span>}
+              </>
+            }
+          />
+        </span>
+        <IconButton label={`Remove ${field.name} from the form`} size="sm" noTooltip disabled={readOnly} className="pointer-coarse:ml-2" onClick={() => onRemove(field)}>
           <X aria-hidden className="size-4" />
         </IconButton>
       </div>
@@ -95,18 +159,36 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, for
             </IconButton>
           </div>
           {!status.public && <p className="text-xs text-muted">{status.message}</p>}
+          {noRequired && <p className="text-xs text-muted">{noRequired}</p>}
         </div>
       )}
     </li>
   );
 }
 
-export function FormFieldList({ form, table, hiddenFields, readOnly, onChange }: FormFieldListProps) {
+export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, onShowPublic }: FormFieldListProps) {
+  const toast = useToast();
+  // What was removed, by field id, for putting it back where it was with its label, help text and required switch.
+  const removed = useRef(new Map<string, RemovedFormField>());
+  const latest = useRef(form);
+  latest.current = form;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const entries = liveEntries(form, table);
   const ids = entries.map((e) => e.field.id);
   const addable = addableFields(form, table);
   const computedCount = table.fields.filter((f) => !canBeInForm(f)).length;
+
+  const onRemove = (field: Field) => {
+    const taken = removedFormField(form, field.id);
+    if (!taken) return;
+    removed.current.set(field.id, taken);
+    onChange(removeFormField(form, field.id));
+    toast.toast({
+      title: `${field.name} removed from the form`,
+      action: { label: "Undo", onClick: () => onChange(addFormField(latest.current, table, field.id, taken)) },
+      durationMs: 8000,
+    });
+  };
 
   const onDragEnd = (e: DragEndEvent) => {
     if (e.over && e.active.id !== e.over.id) onChange(moveFormFieldById(form, String(e.active.id), String(e.over.id)));
@@ -127,7 +209,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange }:
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <ul aria-label="Form fields" className="flex flex-col gap-2">
             {entries.map(({ entry, field }, i) => (
-              <Row key={field.id} entry={entry} field={field} index={i} count={entries.length} hiddenFields={hiddenFields} readOnly={readOnly} form={form} onChange={onChange} />
+              <Row key={field.id} entry={entry} field={field} index={i} count={entries.length} hiddenFields={hiddenFields} readOnly={readOnly} form={form} onChange={onChange} onRemove={onRemove} onShowPublic={onShowPublic} />
             ))}
           </ul>
         </SortableContext>
@@ -145,12 +227,12 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange }:
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-[min(20rem,var(--ob-avail))] w-60 overflow-y-auto">
             {addable.map((f) => (
-              <DropdownMenuItem key={f.id} onSelect={() => onChange(addFormField(form, table, f.id))}>
+              <DropdownMenuItem key={f.id} onSelect={() => onChange(addFormField(form, table, f.id, removed.current.get(f.id)))}>
                 <FieldTypeIcon type={f.type} /> {f.name}
               </DropdownMenuItem>
             ))}
             {addable.length > 1 && (
-              <DropdownMenuItem onSelect={() => onChange(addAllFormFields(form, table))}>
+              <DropdownMenuItem onSelect={() => onChange(addAllFormFields(form, table, removed.current))}>
                 <ListPlus aria-hidden className="size-4 text-muted" /> Add all fields
               </DropdownMenuItem>
             )}

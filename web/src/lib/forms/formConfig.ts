@@ -6,12 +6,14 @@
  * `form_fields`; the server stays authoritative):
  *   - computed fields (formulas, lookups, autonumber, ...) can never be part of a form;
  *   - the public form never collects link or user fields (they would need pickers over other data),
- *     and skips fields the form view hides;
+ *     and skips fields the form view hides; such a link or user field cannot be made required
+ *     (a newly saved form is refused), since only signed-in editors could be held to it;
  *   - `redirect_url` is an http or https URL with a host, at most 2048 characters;
  *   - texts are limited to 255 characters (title, submit label) and 20,000 (the others).
  */
-import type { Field, FormConfig, FormField, Table, ViewConfig } from "@/api/types";
+import type { Field, FormConfig, FormField, PublicFormField, Table, ViewConfig } from "@/api/types";
 import { isComputed } from "@/lib/cells/kinds";
+import { safeRedirect } from "@/lib/publicErrors";
 
 export const MAX_FORM_TITLE = 255;
 export const MAX_FORM_TEXT = 20_000;
@@ -44,6 +46,13 @@ export function publicStatus(field: Pick<Field, "id" | "type">, hiddenFields: re
   return { public: true };
 }
 
+/** Why a field cannot be marked required, or null when it can (the server refuses it for link and user fields). */
+export function requiredBlockedReason(field: Pick<Field, "type">): string | null {
+  if (field.type === "link") return "Link fields cannot be required: the public form does not ask for them.";
+  if (field.type === "user") return "User fields cannot be required: the public form does not ask for them.";
+  return null;
+}
+
 /** The form's entries whose field still exists, in form order (a deleted field's stale entry is dropped). */
 export function liveEntries(form: FormConfig, table: Pick<Table, "fields">): { entry: FormField; field: Field }[] {
   const byId = new Map(table.fields.map((f) => [f.id, f] as const));
@@ -65,19 +74,44 @@ export function addableFields(form: FormConfig, table: Pick<Table, "fields">): F
   return table.fields.filter((f) => canBeInForm(f) && !used.has(f.id));
 }
 
-export function addFormField(form: FormConfig, table: Pick<Table, "fields">, fieldId: string): FormConfig {
-  const field = table.fields.find((f) => f.id === fieldId);
-  if (!field || !canBeInForm(field) || form.fields.some((f) => f.field_id === fieldId)) return form;
-  return { ...form, fields: [...form.fields, { field_id: fieldId, required: false, label: null, help: null }] };
+/** An entry taken out of the form, with the place it had, so it can come back as it was. */
+export interface RemovedFormField {
+  entry: FormField;
+  index: number;
 }
 
-export function addAllFormFields(form: FormConfig, table: Pick<Table, "fields">): FormConfig {
-  return addableFields(form, table).reduce((f, field) => addFormField(f, table, field.id), form);
+/** The entry as it re-enters the form: a field that cannot be required is not. */
+function restoredEntry(field: Field, removed: RemovedFormField | undefined): FormField {
+  if (!removed) return { field_id: field.id, required: false, label: null, help: null };
+  return { ...removed.entry, required: removed.entry.required && requiredBlockedReason(field) === null };
+}
+
+/** Add a field at the end, or, when it was removed before (`removed`), back to its place with its label, help and required. */
+export function addFormField(form: FormConfig, table: Pick<Table, "fields">, fieldId: string, removed?: RemovedFormField): FormConfig {
+  const field = table.fields.find((f) => f.id === fieldId);
+  if (!field || !canBeInForm(field) || form.fields.some((f) => f.field_id === fieldId)) return form;
+  const entry = restoredEntry(field, removed);
+  if (!removed) return { ...form, fields: [...form.fields, entry] };
+  const fields = [...form.fields];
+  fields.splice(Math.min(Math.max(removed.index, 0), fields.length), 0, entry);
+  return { ...form, fields };
+}
+
+/** Add every field that is left; those removed earlier (`removed`, by field id) keep their settings. */
+export function addAllFormFields(form: FormConfig, table: Pick<Table, "fields">, removed?: ReadonlyMap<string, RemovedFormField>): FormConfig {
+  return addableFields(form, table).reduce((f, field) => addFormField(f, table, field.id, removed?.get(field.id)), form);
 }
 
 export function removeFormField(form: FormConfig, fieldId: string): FormConfig {
   if (!form.fields.some((f) => f.field_id === fieldId)) return form;
   return { ...form, fields: form.fields.filter((f) => f.field_id !== fieldId) };
+}
+
+/** What `removeFormField` takes out, for putting it back. */
+export function removedFormField(form: FormConfig, fieldId: string): RemovedFormField | null {
+  const index = form.fields.findIndex((f) => f.field_id === fieldId);
+  const entry = form.fields[index];
+  return entry ? { entry, index } : null;
 }
 
 /** Move the entry at `from` to position `to` (indexes into `form.fields`). */
@@ -115,6 +149,18 @@ export type FormSettingsPatch = Partial<Pick<FormConfig, "title" | "description"
 
 export function updateFormSettings(form: FormConfig, patch: FormSettingsPatch): FormConfig {
   return { ...form, ...patch };
+}
+
+/** Where `redirect_url` has the new record's id put in. */
+export const RECORD_ID_TOKEN = "{record_id}";
+
+/**
+ * Where to send people after a submission: the form's redirect address with the new record's id in
+ * place of `{record_id}`, or null when the form has none (or it is not an http or https address).
+ */
+export function redirectAfterSubmit(url: string | null | undefined, recordId: string | null | undefined): string | null {
+  if (!url) return null;
+  return safeRedirect(url.split(RECORD_ID_TOKEN).join(encodeURIComponent(recordId ?? "")));
 }
 
 /** `null` when the URL is acceptable (or empty), else what is wrong with it. */
@@ -181,4 +227,22 @@ export function summarizeForm(form: FormConfig, table: Pick<Table, "fields">, co
     else excluded.push({ field, status });
   }
   return { total: entries.length, publicCount, excluded, publicEmpty: publicCount === 0 };
+}
+
+/**
+ * The form's fields as a visitor of the public link gets them (what `GET /api/public/forms/{token}` would
+ * answer), for the builder's preview: the same fields in the same order, with the label, help and required
+ * marker set in the form.
+ */
+export function previewPublicFields(form: FormConfig, table: Pick<Table, "fields">, hiddenFields: readonly string[]): PublicFormField[] {
+  return liveEntries(form, table)
+    .filter(({ field }) => publicStatus(field, hiddenFields).public)
+    .map(({ entry, field }) => ({
+      id: field.id,
+      label: entry.label?.trim() || field.name,
+      help: entry.help?.trim() ? entry.help : null,
+      required: entry.required,
+      type: field.type,
+      options: field.options as PublicFormField["options"],
+    }));
 }

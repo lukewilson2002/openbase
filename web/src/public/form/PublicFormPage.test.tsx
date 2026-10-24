@@ -205,28 +205,43 @@ describe("a form that cannot be shown", () => {
 });
 
 describe("the redirect after submitting", () => {
-  it("goes to the configured address after the message", async () => {
+  function stubLocation() {
     const assign = vi.fn();
     const real = window.location;
     vi.stubGlobal("location", { ...real, assign, pathname: real.pathname, search: real.search, origin: real.origin });
+    return assign;
+  }
+
+  it("goes to the configured address at once, in place of the message and without another-response button", async () => {
+    const assign = stubLocation();
     const user = userEvent.setup();
     open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, { ...form, redirect_url: "https://example.com/thanks" });
     await fillRequired(user);
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
-    await screen.findByText("You are on the list!");
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://example.com/thanks"), { timeout: 3000 });
+    await screen.findByText("Taking you on…");
+    expect(assign).toHaveBeenCalledWith("https://example.com/thanks");
+    expect(screen.queryByText("You are on the list!")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit another response" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "https://example.com/thanks");
+  });
+
+  it("puts the new record's id into {record_id}", async () => {
+    const assign = stubLocation();
+    const user = userEvent.setup();
+    open({ "POST /api/public/forms/tok_abc/submit": { ok: true, record_id: "rec_9/x" } }, { ...form, redirect_url: "https://example.com/thanks?id={record_id}" });
+    await fillRequired(user);
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("Taking you on…");
+    expect(assign).toHaveBeenCalledWith("https://example.com/thanks?id=rec_9%2Fx");
   });
 
   it("ignores an address that is not http or https", async () => {
-    const assign = vi.fn();
-    const real = window.location;
-    vi.stubGlobal("location", { ...real, assign, pathname: real.pathname, search: real.search, origin: real.origin });
+    const assign = stubLocation();
     const user = userEvent.setup();
     open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, { ...form, redirect_url: "javascript:alert(1)" });
     await fillRequired(user);
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
     await screen.findByText("You are on the list!");
-    await new Promise((r) => setTimeout(r, 1500));
     expect(assign).not.toHaveBeenCalled();
   });
 });

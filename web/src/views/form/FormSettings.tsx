@@ -1,10 +1,13 @@
-/** Title, description, submit button, success message, redirect and "submit another" of a form. */
+/**
+ * Title, description, submit button, success message, redirect and "submit another" of a form. A redirect
+ * address replaces the message and the "submit another" button: people are sent there at once.
+ */
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/checkbox";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import type { FormConfig } from "@/api/types";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, MAX_FORM_TEXT, MAX_FORM_TITLE, MAX_REDIRECT_URL, redirectUrlProblem, updateFormSettings, type FormSettingsPatch } from "@/lib/forms/formConfig";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, MAX_FORM_TEXT, MAX_FORM_TITLE, MAX_REDIRECT_URL, RECORD_ID_TOKEN, redirectUrlProblem, updateFormSettings, type FormSettingsPatch } from "@/lib/forms/formConfig";
 
 export interface FormSettingsProps {
   form: FormConfig;
@@ -22,7 +25,7 @@ function RedirectField({ value, readOnly, onValid }: { value: string; readOnly: 
   const [touched, setTouched] = useState(false);
   const problem = touched ? redirectUrlProblem(text) : null;
   return (
-    <Field label="After submitting, go to" hint="Optional. Visitors of the public form are sent to this address instead of seeing the message." error={problem}>
+    <Field label="After submitting, go to" hint={`Optional. People are sent to this address right after submitting, in the public form and in Fill in form, instead of seeing the message. ${RECORD_ID_TOKEN} in the address becomes the new record's id.`} error={problem}>
       {(ctl) => (
         <Input
           {...ctl}
@@ -65,7 +68,7 @@ export function FormSettings({ form, title, readOnly, onChange }: FormSettingsPr
         <Field label="Submit button">
           {(ctl) => <Input {...ctl} value={form.submit_label} placeholder={DEFAULT_SUBMIT_LABEL} maxLength={MAX_FORM_TITLE} disabled={readOnly} className={inputClass} onChange={(e) => set({ submit_label: e.target.value })} />}
         </Field>
-        <Field label="After submitting">
+        <Field label="After submitting" hint={form.redirect_url ? "Not shown while the form goes to another address." : undefined}>
           {(ctl) => <Input {...ctl} value={form.success_message} placeholder={DEFAULT_SUCCESS_MESSAGE} maxLength={MAX_FORM_TEXT} disabled={readOnly} className={inputClass} onChange={(e) => set({ success_message: e.target.value })} />}
         </Field>
       </div>
@@ -75,7 +78,10 @@ export function FormSettings({ form, title, readOnly, onChange }: FormSettingsPr
       {more && (
         <div className="flex flex-col gap-3 pl-5">
           <RedirectField value={form.redirect_url ?? ""} readOnly={readOnly} onValid={(url) => set({ redirect_url: url })} />
-          <Switch checked={form.show_submit_another} disabled={readOnly} onCheckedChange={(on) => set({ show_submit_another: on })} label="Offer “Submit another response” after submitting" />
+          <div className="flex flex-col gap-1">
+            <Switch checked={form.show_submit_another} disabled={readOnly || !!form.redirect_url} onCheckedChange={(on) => set({ show_submit_another: on })} label="Offer “Submit another response” after submitting" />
+            {form.redirect_url && <p className="pl-11 text-xs text-muted">Not offered while the form goes to another address.</p>}
+          </div>
         </div>
       )}
     </section>
