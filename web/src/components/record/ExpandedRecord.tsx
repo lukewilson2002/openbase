@@ -26,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { personColors } from "@/lib/colors";
 import { copyToClipboard } from "@/lib/format";
+import { deleteRecordsText } from "./deleteText";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { isComputed, isMultilineText } from "@/lib/cells/kinds";
 import { LinkedRecordsProvider, type LinkedRecordsHost } from "./linked/LinkedRecords";
@@ -287,6 +288,8 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
     // One save at a time per table, in the order they were made, so a slow earlier save of a text
     // being typed cannot land after a later one.
     scope: { id: `record-saves:${table.id}` },
+    // A view waits for these before it decides a record just added was left untouched.
+    mutationKey: ["record-save", table.id],
     mutationFn: async ({ recordId: id, field, value }: { recordId: string; field: Field; value: unknown }) => recordsApi.update(table.id, { typecast: true, records: [{ id, values: { [field.id]: toWire(field, value) as never } }] }),
     onMutate: async ({ recordId: id, field, value }) => {
       inflight.current++;
@@ -568,7 +571,7 @@ export function ExpandedRecord({ schema, table, role, recordId, config, prevId, 
           </D.Content>
         </D.Portal>
       </D.Root>
-      <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} title="Delete this record?" description="It moves to the trash. You can restore it from there." confirmLabel="Delete record" destructive onConfirm={remove} />
+      <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} {...deleteRecordsText(role)} confirmLabel="Delete record" destructive onConfirm={remove} />
     </EditorEnvProvider>
   );
 }

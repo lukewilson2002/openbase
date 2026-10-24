@@ -9,6 +9,7 @@ import { EditorEnvProvider } from "@/components/record/editors/env";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
 import { gridRecordLayout } from "@/views/grid/useViewConfig";
+import { useUndoShortcuts } from "./useUndoShortcuts";
 import type { ViewSetup } from "./useViewSetup";
 
 /**
@@ -63,6 +64,8 @@ export interface ViewFrameProps {
 export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarSetting, toolbarExtra, moreToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Ctrl/Cmd+Z reverts the last drop, edit, add or delete (not while a record is open: its fields have their own).
+  useUndoShortcuts(setup.writes.history, setup.canEdit && !setup.openRecordId);
   // A record shows its fields as the table's grid lays them out, whichever view it is opened from.
   const recordLayout = useMemo(() => gridRecordLayout(table, role) ?? config, [table, role, config]);
 
@@ -141,12 +144,16 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           onNavigate={setup.openRecord}
           onClose={() => setup.openRecord(null)}
           justCreated={setup.newRecordId === setup.openRecordId}
+          // Deletes and copies go through the view's writes, so they can be undone.
+          onDeleteRecord={setup.canEdit ? (id) => setup.writes.remove([id]) : undefined}
+          onDuplicateRecord={setup.canEdit ? async (r) => (await setup.writes.duplicate([r]))[0] : undefined}
           emails={setup.emails}
           timeZone={setup.timeZone}
           currentUserId={setup.currentUserId}
           collaborators={setup.people}
         />
       )}
+      {setup.actions.dialog}
     </EditorEnvProvider>
   );
 }
