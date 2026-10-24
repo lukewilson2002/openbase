@@ -146,3 +146,133 @@ describe("ListView", () => {
     });
   });
 });
+
+describe("ListView selection, menu and order", () => {
+  const flat = viewWithConfig("viw1", "list", {});
+  const three = [rec("r1", {}), rec("r2", {}), rec("r3", {})];
+  const flatSetup = (role = "editor", routes: Record<string, unknown> = {}, server = { records: three, groups: [] as GroupHeader[] }, view = flat) => setup(role, view, server, routes);
+
+  it("selects rows with Ctrl-click and deletes them from the bar after asking", async () => {
+    const user = userEvent.setup();
+    const { api } = flatSetup("editor", { "DELETE /api/tables/tbl1/records": null });
+    await screen.findByRole("button", { name: "R1" });
+    await user.keyboard("{Control>}");
+    await user.click(screen.getByRole("button", { name: "R1" }));
+    await user.click(screen.getByRole("button", { name: "R3" }));
+    await user.keyboard("{/Control}");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    const bar = screen.getByRole("toolbar", { name: "Selected records" });
+    expect(bar).toHaveTextContent("2 selected");
+    expect(screen.getByRole("button", { name: "R1" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(bar).getByRole("button", { name: /Delete/ }));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Delete 2 records?");
+    await user.click(screen.getByRole("button", { name: "Delete 2 records" }));
+    await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r1", "r3"] }));
+  });
+
+  it("duplicates from the bar and from the row menu", async () => {
+    const user = userEvent.setup();
+    const { api } = flatSetup("editor", { "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {})] } });
+    await screen.findByRole("button", { name: "R2" });
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R2" }) });
+    const menu = await screen.findByRole("menu", { name: "Record menu" });
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Open record", "Select", "Duplicate record", "Move to start", "Delete record"]);
+    await user.click(within(menu).getByRole("menuitem", { name: "Duplicate record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")[0]!.body).toEqual({ ids: ["r2"] }));
+  });
+
+  it("deletes the focused row with the Delete key, with an Undo toast", async () => {
+    const user = userEvent.setup();
+    const { api } = flatSetup("editor", { "DELETE /api/tables/tbl1/records": null });
+    await screen.findByRole("button", { name: "R2" });
+    screen.getByRole("button", { name: "R2" }).focus();
+    await user.keyboard("{Delete}");
+    await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r2"] }));
+    expect(await screen.findByText("Record deleted")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
+  });
+
+  it("moves a row down with Alt+Down through the move endpoint, and shows it at once", async () => {
+    const user = userEvent.setup();
+    let order = three;
+    const { api } = flatSetup("editor", {
+      "POST /api/views/viw1/query": () => ({ total: 3, offset: 0, records: order, groups: [], colors: {} }),
+      "POST /api/tables/tbl1/records/move": () => {
+        order = [order[1]!, order[0]!, order[2]!];
+        return { records: [] };
+      },
+    });
+    await screen.findByRole("button", { name: "R1" });
+    screen.getByRole("button", { name: "R1" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/move")[0]!.body).toEqual({ ids: ["r1"], before_id: null, after_id: "r2" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^R\d$/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["R2", "R1", "R3"]));
+    expect(await screen.findByText("Record moved")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "R1" })).toHaveFocus();
+  });
+
+  it("does not offer to move rows when the view sorts", async () => {
+    const user = userEvent.setup();
+    const sorted = viewWithConfig("viw1", "list", { sorts: [{ field_id: F.name.id, direction: "asc" }] });
+    const { api } = flatSetup("editor", { "POST /api/tables/tbl1/records/move": { records: [] } }, undefined, sorted);
+    await screen.findByRole("button", { name: "R1" });
+    screen.getByRole("button", { name: "R1" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "R2" }) });
+    expect(screen.queryByRole("menuitem", { name: "Move to start" })).not.toBeInTheDocument();
+    expect(api.callsTo("POST /api/tables/tbl1/records/move")).toHaveLength(0);
+  });
+
+  it("changes the group value when a row moves into another group, and the headings count it at once", async () => {
+    const user = userEvent.setup();
+    const byStatus = viewWithConfig("viw1", "list", { groups: [{ field_id: F.status.id, direction: "asc" }] });
+    const rows = [rec("r1", { [F.status.id]: "s1" }), rec("r2", { [F.status.id]: "s1" }), rec("r3", { [F.status.id]: "s2" })];
+    const heads = [header(0, F.status.id, "s1", "Todo", 0, 2, "s1"), header(0, F.status.id, "s2", "Doing", 2, 1, "s2")];
+    // The server holds the change back, so what the outline shows is the view's own doing.
+    const { api } = setup("editor", byStatus, { records: rows, groups: heads }, {
+      "PATCH /api/tables/tbl1/records": () => new Promise(() => undefined),
+    });
+    await screen.findByRole("button", { name: "R2" });
+    screen.getByRole("button", { name: "R2" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "r2", values: { [F.status.id]: "s2" } }] });
+    expect(screen.getByRole("button", { name: "Collapse Todo" })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: "Collapse Doing" })).toHaveTextContent("2");
+    const doing = screen.getByRole("group", { name: "Doing" });
+    expect(within(doing).getAllByRole("button", { name: /^R\d$/ }).map((b) => b.getAttribute("aria-label"))).toEqual(["R2", "R3"]);
+  });
+});
+
+describe("ListView record panel", () => {
+  it("steps Previous and Next over the rows on screen, not the records of folded groups", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("ob-list-collapsed:viw1", JSON.stringify([`${F.status.id}:s2`]));
+    const byStatus = viewWithConfig("viw1", "list", { groups: [{ field_id: F.status.id, direction: "asc" }] });
+    const rows = [rec("r1", { [F.status.id]: "s1" }), rec("r2", { [F.status.id]: "s1" }), rec("r3", { [F.status.id]: "s2" }), rec("r4", { [F.status.id]: "s3" })];
+    const heads = [header(0, F.status.id, "s1", "Todo", 0, 2, "s1"), header(0, F.status.id, "s2", "Doing", 2, 1, "s2"), header(0, F.status.id, "s3", "Done", 3, 1, "s3")];
+    setup("editor", byStatus, { records: rows, groups: heads }, { "GET /api/tables/tbl1/records/r2": rows[1]!, "GET /api/tables/tbl1/records/r4": rows[3]! });
+    await user.click(await screen.findByRole("button", { name: "R2" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /Next record/ }));
+    // r3 is in the folded group: the next row on screen is r4.
+    expect(screen.getByTestId("where")).toHaveTextContent("?record=r4");
+    localStorage.clear();
+  });
+
+  it("keeps Previous and Next for a record that no longer matches the view", async () => {
+    const user = userEvent.setup();
+    const flat = viewWithConfig("viw1", "list", {});
+    const all = [rec("r1", {}), rec("r2", {}), rec("r3", {})];
+    let served = all;
+    const { client } = setup("editor", flat, { records: all, groups: [] }, { "POST /api/views/viw1/query": () => ({ total: served.length, offset: 0, records: served, groups: [], colors: {} }), "GET /api/tables/tbl1/records/r2": all[1]! });
+    await user.click(await screen.findByRole("button", { name: "R2" }));
+    const dialog = await screen.findByRole("dialog");
+    served = [all[0]!, all[2]!];
+    await client.invalidateQueries({ queryKey: ["records"] });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "R2" })).not.toBeInTheDocument());
+    expect(within(dialog).getByRole("button", { name: /Previous record/ })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled();
+  });
+});
+

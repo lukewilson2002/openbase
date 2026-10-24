@@ -1,9 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { GroupHeader, TableRecord } from "@/api/types";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
+import type { RecordSelection } from "../common/useRecordSelection";
 import { ListOutline, ROWS_PER_GROUP, type ListOutlineProps } from "./ListOutline";
 
 const name = ALL_FIELDS.text!;
@@ -34,6 +35,19 @@ function outline(over: Partial<ListOutlineProps> = {}) {
   };
   return { props, ...render(<ListOutline {...props} />) };
 }
+
+const fakeSelection = (over: Partial<RecordSelection> = {}): RecordSelection => ({
+  ids: [],
+  count: 0,
+  has: () => false,
+  toggle: vi.fn(),
+  set: vi.fn(),
+  selectAll: vi.fn(),
+  clear: vi.fn(),
+  handleClick: vi.fn(() => false),
+  handleKeyDown: vi.fn(() => false),
+  ...over,
+});
 
 describe("ListOutline", () => {
   it("shows group headers with counts and each group's records, with their fields", () => {
@@ -137,3 +151,168 @@ describe("ListOutline", () => {
     expect(screen.getAllByRole("button", { name: /^Row \d+$/ })).toHaveLength(ROWS_PER_GROUP + 30);
   });
 });
+
+describe("ListOutline keyboard", () => {
+  it("makes one heading or row the tab stop", () => {
+    outline();
+    const stops = [...document.querySelectorAll("[data-nav]")].filter((el) => (el as HTMLElement).tabIndex === 0);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toBe(screen.getByRole("button", { name: "Collapse Todo" }));
+  });
+
+  it("moves between headings and rows with the arrow keys, Home and End", async () => {
+    const user = userEvent.setup();
+    outline();
+    screen.getByRole("button", { name: "Collapse Todo" }).focus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Write docs" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Collapse Done" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("button", { name: "Fix bug" })).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(screen.getByRole("button", { name: "Idea" })).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(screen.getByRole("button", { name: "Collapse Todo" })).toHaveFocus();
+    // The row last focused is where Tab comes back to.
+    await user.keyboard("{End}");
+    expect(screen.getByRole("button", { name: "Idea" }).tabIndex).toBe(0);
+    expect(screen.getByRole("button", { name: "Collapse Todo" }).tabIndex).toBe(-1);
+  });
+
+  it("folds and unfolds with Left and Right, and Left on a row goes to its heading", async () => {
+    const user = userEvent.setup();
+    const { props, rerender } = outline();
+    screen.getByRole("button", { name: "Collapse Todo" }).focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(props.onToggle).toHaveBeenCalledWith(`${status.id}:chs1`);
+    rerender(<ListOutline {...props} collapsed={new Set([`${status.id}:chs1`])} />);
+    await user.keyboard("{ArrowRight}");
+    expect(props.onToggle).toHaveBeenCalledTimes(2);
+    screen.getByRole("button", { name: "Ship it" }).focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("button", { name: "Collapse Done" })).toHaveFocus();
+  });
+
+  it("skips the rows of a folded group", async () => {
+    const user = userEvent.setup();
+    outline({ collapsed: new Set([`${status.id}:chs1`]) });
+    screen.getByRole("button", { name: "Expand Todo" }).focus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Collapse Done" })).toHaveFocus();
+  });
+
+  it("opens a row with Enter, selects it with Space and deletes it with Delete", async () => {
+    const user = userEvent.setup();
+    const selection = fakeSelection();
+    const onDelete = vi.fn();
+    const { props } = outline({ selection, onDelete });
+    screen.getByRole("button", { name: "Fix bug" }).focus();
+    await user.keyboard(" ");
+    expect(selection.toggle).toHaveBeenCalledWith("r2");
+    await user.keyboard("{Enter}");
+    expect(props.onOpen).toHaveBeenCalledWith("r2");
+    await user.keyboard("{Delete}");
+    expect(onDelete).toHaveBeenCalledWith(["r2"]);
+  });
+
+  it("does not delete for people who cannot edit", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    outline({ selection: fakeSelection(), onDelete, canEdit: false });
+    screen.getByRole("button", { name: "Fix bug" }).focus();
+    await user.keyboard("{Delete}");
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("follows a link inside a row on Enter instead of opening the row", async () => {
+    const user = userEvent.setup();
+    const url = ALL_FIELDS.url!;
+    const { props } = outline({ records: [rec("r1", "Site", { [url.id]: "https://example.com" })], groups: [], fields: [url] });
+    const link = screen.getByRole("link");
+    const click = vi.fn((e: MouseEvent) => e.preventDefault());
+    link.addEventListener("click", click);
+    link.focus();
+    await user.keyboard("{Enter}");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(props.onOpen).not.toHaveBeenCalled();
+    await user.click(link);
+    expect(props.onOpen).not.toHaveBeenCalled();
+  });
+
+  it("sends a click to the selection first", async () => {
+    const user = userEvent.setup();
+    const selection = fakeSelection({ handleClick: vi.fn(() => true) });
+    const { props } = outline({ selection });
+    await user.click(screen.getByRole("button", { name: "Fix bug" }));
+    expect(selection.handleClick).toHaveBeenCalledWith("r2", expect.anything());
+    expect(props.onOpen).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("checkbox", { name: "Select Fix bug" }));
+    expect(selection.toggle).toHaveBeenCalledWith("r2");
+  });
+
+  it("opens the menu on right-click, but leaves a link's own menu alone", () => {
+    const onRecordMenu = vi.fn();
+    outline({ onRecordMenu });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Fix bug" }), { clientX: 30, clientY: 40 });
+    expect(onRecordMenu).toHaveBeenCalledWith("r2", { x: 30, y: 40, width: 1, height: 1 });
+  });
+});
+
+describe("ListOutline order", () => {
+  it("reports Alt+Down as a move after the next row of the same group", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    outline({ onReorder });
+    screen.getByRole("button", { name: "Write docs" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(onReorder).toHaveBeenCalledWith("r1", expect.objectContaining({ afterId: "r2", values: {} }));
+  });
+
+  it("moves into the next group when it passes the end of its own, taking that group's value", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    outline({ onReorder });
+    screen.getByRole("button", { name: "Fix bug" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(onReorder).toHaveBeenCalledWith("r2", expect.objectContaining({ beforeId: "r3", values: { [status.id]: "chs3" } }));
+  });
+
+  it("moves up into the previous group after its last row", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    outline({ onReorder });
+    screen.getByRole("button", { name: "Ship it" }).focus();
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    expect(onReorder).toHaveBeenCalledWith("r3", expect.objectContaining({ afterId: "r2", beforeId: undefined, values: { [status.id]: "chs1" } }));
+  });
+
+  it("does nothing without a way to reorder, or for readers", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    outline({ onReorder, canEdit: false });
+    screen.getByRole("button", { name: "Write docs" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it("reports that a group made of a field that cannot be written to blocks the move", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    outline({ onReorder, tableFields: [name, num] });
+    screen.getByRole("button", { name: "Fix bug" }).focus();
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(onReorder).toHaveBeenCalledWith("r2", "blocked");
+  });
+});
+
+describe("ListOutline reveal", () => {
+  it("draws the open record even when it is past the first rows of its group", () => {
+    const many = Array.from({ length: ROWS_PER_GROUP + 30 }, (_, i) => rec(`m${i}`, `Row ${i}`));
+    const { props, rerender } = outline({ records: many, groups: [] });
+    expect(screen.queryByRole("button", { name: `Row ${ROWS_PER_GROUP + 5}` })).not.toBeInTheDocument();
+    rerender(<ListOutline {...props} reveal={`m${ROWS_PER_GROUP + 5}`} />);
+    expect(screen.getByRole("button", { name: `Row ${ROWS_PER_GROUP + 5}` })).toBeInTheDocument();
+  });
+});
+
