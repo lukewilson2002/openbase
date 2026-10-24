@@ -30,13 +30,13 @@ describe("CalendarView on a phone", () => {
     expect(pill).toHaveClass("absolute");
   });
 
-  it("opens them as a sheet over the bottom of the calendar rather than a column beside it", async () => {
+  it("opens them as a sheet under the calendar rather than a column beside it", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     setup();
     await user.click(await screen.findByRole("button", { name: /^Show unscheduled records/ }));
     const sheet = await screen.findByRole("complementary", { name: "Unscheduled records" });
     expect(sheet).toHaveAttribute("data-stacked");
-    expect(sheet).toHaveClass("inset-x-0", "absolute");
+    expect(sheet).toHaveClass("max-h-[40%]");
     expect(sheet).not.toHaveClass("w-52");
     expect(await within(sheet).findByText("R3")).toBeInTheDocument();
     expect(within(sheet).getByText(/Hold a record/)).toBeInTheDocument();

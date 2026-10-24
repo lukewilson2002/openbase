@@ -280,6 +280,18 @@ describe("CalendarView", () => {
       expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
     });
 
+    it("moves the keyboard focus to the event beside the one taken off", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      // The server drops the record off the calendar once its dates are cleared.
+      const rows = [...records];
+      setup("editor", cal(), { "PATCH /api/tables/tbl1/records": () => { rows.splice(1, 1); return { records: [records[2]!] }; } }, rows);
+      const chip = (await screen.findByText("R2")).closest(".fc-event") as HTMLElement;
+      chip.focus();
+      await user.keyboard("{Delete}");
+      await waitFor(() => expect(document.querySelector('.fc-event[data-record-id="r2"]')).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe((screen.getAllByText("R1")[0] as HTMLElement).closest(".fc-event")));
+    });
+
     it("does nothing for a viewer", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { api } = setup("viewer");

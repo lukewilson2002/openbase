@@ -129,9 +129,10 @@ interface ChipDescription {
 function EventChip({ arg, description }: { arg: EventContentArg; description: ChipDescription | null }) {
   const color = arg.event.extendedProps.color as string | undefined;
   const details = arg.event.extendedProps.details as string[] | undefined;
+  const timed = !!arg.timeText && !arg.event.allDay;
   const chip = (
-    <span className={cn("ob-cal-chip", color ? choiceClass(color) : "ob-cal-chip-plain")}>
-      {arg.timeText && !arg.event.allDay && <span className="shrink-0 font-medium opacity-80">{arg.timeText}</span>}
+    <span className={cn("ob-cal-chip", color ? choiceClass(color) : "ob-cal-chip-plain", details && !timed && "ob-cal-chip-detailed")}>
+      {timed && <span className="shrink-0 font-medium opacity-80">{arg.timeText}</span>}
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="ob-cal-title">{arg.event.title}</span>
         {details && <span className="ob-cal-details">{details.join(" · ")}</span>}
@@ -330,11 +331,27 @@ function CalendarInner(props: ViewProps) {
     arg.el.setAttribute("data-record-id", String(arg.event.extendedProps.recordId));
     if (!arg.el.hasAttribute("tabindex")) arg.el.tabIndex = 0;
   };
+  // After Delete the focus goes to the event beside the one taken off, once the calendar has redrawn without it.
+  const box = useRef<HTMLDivElement>(null);
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusNext.current) return;
+    const timer = setTimeout(() => {
+      const id = focusNext.current;
+      focusNext.current = null;
+      if (id) box.current?.querySelector<HTMLElement>(`.fc-event[data-record-id="${id}"]`)?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [events]);
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!startWritable || !DELETE_KEYS.has(e.key) || !(e.target instanceof Element)) return;
     const id = e.target.closest(".fc-event")?.getAttribute("data-record-id");
     if (!id) return;
     e.preventDefault();
+    // An event drawn over several weeks is several elements: the records in the order they are drawn.
+    const shown = [...new Set([...(box.current?.querySelectorAll(".fc-event[data-record-id]") ?? [])].map((el) => el.getAttribute("data-record-id")!))];
+    const at = shown.indexOf(id);
+    focusNext.current = shown[at + 1] ?? shown[at - 1] ?? null;
     unschedule(id);
   };
 
@@ -402,8 +419,8 @@ function CalendarInner(props: ViewProps) {
     );
   } else {
     body = (
-      <div className="absolute inset-0 flex">
-        <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("absolute inset-0 flex", !desktop && "flex-col")}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
             <button type="button" onClick={() => api()?.today()} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
               Today
@@ -430,7 +447,7 @@ function CalendarInner(props: ViewProps) {
               {reason}
             </p>
           )}
-          <div className="ob-calendar relative min-h-0 flex-1" onKeyDown={onKeyDown}>
+          <div ref={box} className="ob-calendar relative min-h-0 flex-1" onKeyDown={onKeyDown}>
             <FullCalendar
               // A different kind of date field draws weeks and days differently: start over in the same layout.
               key={grid}
@@ -484,8 +501,9 @@ function CalendarInner(props: ViewProps) {
           onToggle={toggleUnscheduled}
           records={unscheduled}
           primary={primary}
-          fields={cardFieldList}
-          descriptionField={descriptionField}
+          // On a phone the sheet is only a title per record, so it leaves the days room.
+          fields={desktop ? cardFieldList : []}
+          descriptionField={desktop ? descriptionField : undefined}
           table={table}
           role={setup.role}
           format={setup.format}

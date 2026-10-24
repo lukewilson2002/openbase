@@ -151,6 +151,17 @@
   font-weight: 500;
   opacity: 0.8;
 }
+/* A month cell has little height: with a line of fields under it an all-day title takes one line, and on a phone (cells a finger wide) the fields wait for the week and day layouts. */
+@media (min-width: 768px) {
+  .ob-calendar .fc-dayGridMonth-view .ob-cal-chip-detailed .ob-cal-title {
+    -webkit-line-clamp: 1;
+  }
+}
+@media (max-width: 767px) {
+  .ob-calendar .fc-dayGridMonth-view .ob-cal-details {
+    display: none;
+  }
+}
 /* Week and day layouts of date-only fields: a row of tall day cells, with the room the hourly grid would use. */
 .ob-calendar .fc-dayGridWeek-view .fc-daygrid-day-top,
 .ob-calendar .fc-dayGridDay-view .fc-daygrid-day-top {

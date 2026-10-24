@@ -5,8 +5,9 @@
  * (`nativeDrag`) an item is an HTML drag carrying its record id as `RECORD_DRAG_TYPE`. Nothing here
  * imports FullCalendar, so a view without a calendar does not load its styles.
  *
- * On a phone (`stacked`) there is no room beside the view: the closed column becomes a pill at the
- * bottom of it, and the open one a sheet over its lower part, full width, so the days stay in reach.
+ * On a phone (`stacked`) there is no room beside the view: the closed column becomes a pill over the
+ * bottom of it, and the open one a full-width sheet under it (the view shrinks to make room, so every
+ * day stays in reach to drop on).
  */
 import { useEffect, useRef, type Ref } from "react";
 import { ChevronsLeft, ChevronsRight, ChevronDown, GripVertical, Inbox } from "lucide-react";
@@ -48,7 +49,7 @@ export interface UnscheduledListProps {
   hint?: string;
   /** Something dragged over the column will be unscheduled when dropped (a timeline bar): it shows it takes it. */
   dropActive?: boolean;
-  /** Phone layout (see the file comment). The list's parent must be positioned: the pill and the sheet sit at its bottom. */
+  /** Phone layout (see the file comment). The list's parent must be positioned, and a column of flex items when stacked. */
   stacked?: boolean;
   /** The column's outer element, for a view that tests where a dragged item was dropped. */
   zoneRef?: Ref<HTMLElement>;
@@ -118,7 +119,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
       data-stacked={stacked || undefined}
       className={cn(
         "flex shrink-0 flex-col",
-        stacked ? "absolute inset-x-0 bottom-0 z-20 max-h-[55%] rounded-t-xl border-t border-line shadow-pop" : "w-52 border-l border-line",
+        stacked ? "max-h-[40%] border-t border-line" : "w-52 border-l border-line",
         columnBg,
         dropActive && dropClass,
       )}
