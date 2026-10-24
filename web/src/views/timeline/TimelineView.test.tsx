@@ -379,14 +379,18 @@ describe("TimelineView", () => {
       expect((api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body as { records: { values: unknown }[] }).records[0]!.values).toEqual({ [F.start.id]: "2026-03-03" });
     });
 
-    it("explains a calculated start, offers no add, and still lets the end be dragged", async () => {
+    it("explains a calculated start, adds a blank record to fill in, and still lets the end be dragged", async () => {
+      const u = user();
       const startDue = tl({ start_field_id: due.id, end_field_id: F.end.id });
       const schema = calcSchema("editor", startDue);
       const all = queryHandler({ records: [rec("r1", { [due.id]: "2026-03-02", [F.end.id]: "2026-03-05" })] });
-      renderView(TimelineView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": all } as never });
+      const created = rec("r9", {});
+      const { api } = renderView(TimelineView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": all, "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created } as never });
       const bar = await screen.findByRole("button", { name: /^R1, / });
-      expect(screen.getByText(/The start date \(Due\) is calculated, so bars can't be moved or added\. You can still change the end \(End\)/)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
+      expect(screen.getByText(/The start date \(Due\) is calculated, so bars can't be moved, and Add makes a record to fill in\. You can still change the end \(End\)/)).toBeInTheDocument();
+      await u.click(screen.getByRole("button", { name: "Add record" }));
+      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: {} }] });
       expect(bar.querySelector("[data-handle=end]")).not.toBeNull();
       expect(bar.querySelector("[data-handle=start]")).toBeNull();
     });
@@ -483,6 +487,21 @@ describe("TimelineView", () => {
       await u.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
       await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(3));
       expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [F.status.id]: "s2" } }] });
+    });
+
+    it("moving a record with several people into (Empty) drops only the one that put it in the lane", async () => {
+      const u = user();
+      const team = field("user", { multiple: true, notify: false }, { id: "f_team", name: "Team" });
+      const schema = projectSchema("editor", [tl({ group_field_id: team.id })]);
+      schema.tables[0]!.fields = [...schema.tables[0]!.fields, team];
+      const all = queryHandler({ records: [rec("r1", { [F.start.id]: "2026-03-02", [F.end.id]: "2026-03-06", [team.id]: ["usr2", "usr1"] })] });
+      const { api } = renderView(TimelineView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": all, "PATCH /api/tables/tbl1/records": { records: [] } } as never });
+      const bar = await screen.findByRole("button", { name: /^R1, / });
+      bar.focus();
+      // The record is in Grace's lane (its first person); the lane below is (Empty).
+      await u.keyboard("{ArrowDown}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [team.id]: ["usr1"] } }] });
     });
 
     it("keeps the lanes of the view's grouping when nothing is in the window", async () => {

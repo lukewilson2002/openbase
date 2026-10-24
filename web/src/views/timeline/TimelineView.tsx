@@ -46,8 +46,8 @@ export default function TimelineView(props: ViewProps) {
 function datesNote(start: Field, end: Field | undefined): string | undefined {
   const startFixed = !isWritableDate(start);
   const endFixed = !!end && !isWritableDate(end);
-  if (startFixed && endFixed) return `The start (${start.name}) and end (${end.name}) dates are calculated, so they can't be changed here: bars can't be moved, resized or added.`;
-  if (startFixed) return `The start date (${start.name}) is calculated, so bars can't be moved or added.${end ? ` You can still change the end (${end.name}) by dragging a bar's right edge.` : ""}`;
+  if (startFixed && endFixed) return `The start (${start.name}) and end (${end.name}) dates are calculated, so they can't be changed here: bars can't be moved or resized, and Add makes a record to fill in.`;
+  if (startFixed) return `The start date (${start.name}) is calculated, so bars can't be moved, and Add makes a record to fill in.${end ? ` You can still change the end (${end.name}) by dragging a bar's right edge.` : ""}`;
   if (endFixed) return `The end date (${end.name}) is calculated, so only the start can be changed here: drag a bar or its left edge.`;
   return undefined;
 }
@@ -552,7 +552,8 @@ function TimelineInner(props: ViewProps) {
       layout={fields ? "hug" : "bare"}
       features={{ group: true, rowHeight: false }}
       toolbarSetting={settings}
-      onAdd={addToday ?? (!fields && setup.canEdit ? () => void setup.addRecord({}) : undefined)}
+      // With dates that cannot be written, Add still makes a record, left blank for the person to fill in.
+      onAdd={addToday ?? (setup.canEdit ? () => void setup.addRecord({}) : undefined)}
       footer={
         fields ? (
           <>

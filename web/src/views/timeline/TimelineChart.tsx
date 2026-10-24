@@ -585,7 +585,11 @@ export function TimelineChart(props: TimelineChartProps) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (linkFrom && linkFrom !== bar.id) linkByKey(linkFrom, bar);
-      else props.onOpen(bar.id);
+      else if (linkFrom) {
+        // The bar chosen with L is not its own successor: that gives up the link instead of opening the record.
+        setLinkFrom(null);
+        setNote(null);
+      } else props.onOpen(bar.id);
       return;
     }
     // L starts a dependency from this bar: focus the bar that comes after it, and press Enter.
@@ -605,13 +609,16 @@ export function TimelineChart(props: TimelineChartProps) {
       return;
     }
     // Delete deletes the record of a selected bar; U takes it off the timeline, back to the unscheduled records.
+    // The bar goes away, so the keyboard stays in the chart (its keys still work) instead of falling to the page.
     if ((e.key === "Delete" || e.key === "Backspace") && props.onDelete) {
       e.preventDefault();
+      scroller.current?.focus();
       props.onDelete(bar.id);
       return;
     }
     if ((e.key === "u" || e.key === "U") && !e.ctrlKey && !e.metaKey && !e.altKey && bar.canMove && props.onUnschedule) {
       e.preventDefault();
+      scroller.current?.focus();
       props.onUnschedule(bar.id);
       return;
     }
@@ -747,6 +754,13 @@ export function TimelineChart(props: TimelineChartProps) {
       ref={scroller}
       onScroll={onScroll}
       onKeyDown={chartKey}
+      onBlur={(e) => {
+        // A dependency begun with L is given up when focus leaves the chart.
+        if (linkFrom && !e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setLinkFrom(null);
+          setNote(null);
+        }
+      }}
       role="region"
       aria-label="Timeline"
       aria-describedby={helpId}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DAY_MS } from "../common/wallTime";
@@ -179,6 +179,7 @@ describe("TimelineChart", () => {
     await user.keyboard("{Backspace}");
     expect(onDelete).toHaveBeenLastCalledWith("r2");
     expect(onUnschedule).not.toHaveBeenCalled();
+    screen.getByRole("button", { name: /^Ship it/ }).focus();
     await user.keyboard("u");
     expect(onUnschedule).toHaveBeenCalledWith("r2");
     unmount();
@@ -187,6 +188,17 @@ describe("TimelineChart", () => {
     screen.getByRole("button", { name: /^Locked/ }).focus();
     await user.keyboard("{Delete}u");
     expect(onUnschedule).not.toHaveBeenCalled();
+  });
+
+  it("keeps the keyboard in the chart after a bar is deleted or taken off", async () => {
+    const user = userEvent.setup();
+    chart({ onUnschedule: vi.fn(), onDelete: vi.fn() });
+    screen.getByRole("button", { name: /^Launch/ }).focus();
+    await user.keyboard("{Delete}");
+    expect(screen.getByRole("region", { name: "Timeline" })).toHaveFocus();
+    screen.getByRole("button", { name: /^Design review/ }).focus();
+    await user.keyboard("u");
+    expect(screen.getByRole("region", { name: "Timeline" })).toHaveFocus();
   });
 
   it("gives a milestone an end handle, and repairs a reversed end by dragging it", () => {
@@ -590,6 +602,24 @@ describe("TimelineChart", () => {
       await user.keyboard("l{Escape}");
       screen.getByRole("button", { name: /^Launch/ }).focus();
       await user.keyboard("{Enter}");
+      expect(props.onOpen).toHaveBeenCalledWith("r3");
+    });
+
+    it("gives up a dependency begun with L on Enter over the same bar, or when focus leaves the chart", async () => {
+      const user = userEvent.setup();
+      const onLink = vi.fn();
+      const { props } = chart({ onLink });
+      screen.getByRole("button", { name: /^Design review/ }).focus();
+      await user.keyboard("l{Enter}");
+      expect(props.onOpen).not.toHaveBeenCalled();
+      expect(screen.queryByText(/comes first/)).toBeNull();
+      await user.keyboard("l");
+      expect(screen.getByText(/Design review comes first/)).toBeInTheDocument();
+      act(() => (document.activeElement as HTMLElement).blur());
+      expect(screen.queryByText(/comes first/)).toBeNull();
+      screen.getByRole("button", { name: /^Launch/ }).focus();
+      await user.keyboard("{Enter}");
+      expect(onLink).not.toHaveBeenCalled();
       expect(props.onOpen).toHaveBeenCalledWith("r3");
     });
 
