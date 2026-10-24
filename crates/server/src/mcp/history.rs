@@ -27,7 +27,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_trash",
             "List the trash",
-            "List what was deleted and can still be restored: records, fields, tables and views of a project (creator role), or the projects of a workspace (workspace_id; owner role and the manage permission). With neither id, lists your deleted workspaces (manage permission). Items are kept for the trash retention period.",
+            "List what was deleted and can still be restored: records, fields, tables and views of a project (creator role; with the editor role you see the records you deleted yourself and your own personal views), or the projects of a workspace (workspace_id; owner role and the manage permission). With neither id, lists your deleted workspaces (manage permission). Items are kept for the trash retention period.",
             object(
                 json!({
                     "project_id": string("Project whose trash to list."),
@@ -39,7 +39,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "restore_from_trash",
             "Restore from the trash",
-            "Restore a deleted record, field, table, view, project or workspace by id (ids come from list_trash, or from the result of the delete). Restoring a field brings back the fields trashed with it. Projects and workspaces need the manage permission and the owner role.",
+            "Restore a deleted record, field, table, view, project or workspace by id (ids come from list_trash, or from the result of the delete). Fields, tables and other people's records need the creator role; an editor can restore the records they deleted themselves. Restoring a field brings back the fields trashed with it. Projects and workspaces need the manage permission and the owner role.",
             object(
                 json!({
                     "kind": enumeration(TRASH_KINDS, "What to restore."),

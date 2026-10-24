@@ -78,8 +78,8 @@ async fn base_trash(
     let out = state
         .db
         .read(move |c| {
-            perm::require_base(c, &actor, &id, Role::Creator)?;
-            trash::list_base(c, &id, &actor.user_id, retention)
+            let role = perm::require_base(c, &actor, &id, Role::Editor)?;
+            trash::list_base(c, &id, &actor.user_id, role, retention)
         })
         .await?;
     Ok(Json(out))

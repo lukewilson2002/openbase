@@ -186,8 +186,23 @@ enum InBase {
     /// Creator and up: tables, fields, shared views, their own personal views
     /// and records.
     Everything,
-    /// Below creator: only their own personal views.
+    /// Editors: their own personal views and the records they deleted
+    /// themselves.
+    Own,
+    /// Viewers: only their own personal views.
     OwnViews,
+}
+
+impl InBase {
+    fn of_role(role: Role) -> InBase {
+        if role >= Role::Creator {
+            InBase::Everything
+        } else if role >= Role::Editor {
+            InBase::Own
+        } else {
+            InBase::OwnViews
+        }
+    }
 }
 
 /// The trash of one live base, unsorted: tables, fields, views (shared ones
@@ -263,7 +278,8 @@ fn base_items(
         }
     }
 
-    if everything && filter.wants(Kind::Record) {
+    if scope != InBase::OwnViews && filter.wants(Kind::Record) {
+        // Editors see only the records they deleted themselves.
         let mut stmt = conn.prepare(
             "SELECT r.id, r.table_id, t.name, r.deleted_at,
                     json_extract(r.data, '$.\"' || t.primary_field_id || '\"'),
@@ -271,21 +287,25 @@ fn base_items(
              FROM records r JOIN tables t ON t.id = r.table_id
              LEFT JOIN users u ON u.id = r.deleted_by
              WHERE t.base_id = ?1 AND t.deleted_at IS NULL AND r.deleted_at IS NOT NULL
+               AND (?3 OR r.deleted_by = ?4)
              ORDER BY r.deleted_at DESC, r.id LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![base_id, MAX_TRASHED_RECORDS_LISTED], |r| {
-            Ok(Found {
-                kind: "record",
-                id: r.get(0)?,
-                name: primary_text(r.get::<_, SqlValue>(4)?),
-                icon: None,
-                table_id: Some(r.get(1)?),
-                table_name: Some(r.get(2)?),
-                deleted_at: r.get(3)?,
-                deleted_by_id: r.get(5)?,
-                deleted_by_name: r.get(6)?,
-            })
-        })?;
+        let rows = stmt.query_map(
+            params![base_id, MAX_TRASHED_RECORDS_LISTED, everything, user_id],
+            |r| {
+                Ok(Found {
+                    kind: "record",
+                    id: r.get(0)?,
+                    name: primary_text(r.get::<_, SqlValue>(4)?),
+                    icon: None,
+                    table_id: Some(r.get(1)?),
+                    table_name: Some(r.get(2)?),
+                    deleted_at: r.get(3)?,
+                    deleted_by_id: r.get(5)?,
+                    deleted_by_name: r.get(6)?,
+                })
+            },
+        )?;
         for row in rows {
             found.push(row?);
         }
@@ -320,13 +340,15 @@ fn cap_records(items: &mut Vec<TrashItem>) {
     });
 }
 
-/// Everything in the trash of a base, newest first: tables, fields, views
-/// (only shared ones and the caller's own personal ones) and records. The
-/// caller must be allowed to restore them (Creator).
+/// Everything in the trash of a base the caller may restore, newest first.
+/// Creators get tables, fields, views (shared ones and their own personal
+/// ones) and records; editors only their own personal views and the records
+/// they deleted themselves. `role` is the caller's role on the base.
 pub fn list_base(
     conn: &Connection,
     base_id: &str,
     user_id: &str,
+    role: Role,
     retention_ms: i64,
 ) -> AppResult<TrashListing> {
     let place = base_place(conn, base_id)?;
@@ -334,7 +356,7 @@ pub fn list_base(
         conn,
         &place,
         user_id,
-        InBase::Everything,
+        InBase::of_role(role),
         &Filter::default(),
         retention_ms,
     )?;
@@ -508,8 +530,9 @@ fn token_reaches_base(actor: &Actor, base_id: &str) -> bool {
 /// - deleted workspaces they own (the manage permission without a base limit);
 /// - trashed bases of live workspaces they own (the manage permission, and a
 ///   base-limited token only sees its bases);
-/// - inside each live base they can open: everything with the creator role,
-///   and their own personal views at any role (nothing for a read-only token).
+/// - inside each live base they can open: everything with the creator role;
+///   with the editor role the records they deleted themselves; and their own
+///   personal views at any role (nothing for a read-only token).
 ///
 /// Items inside trashed bases or workspaces are not listed: they come back
 /// with the base or workspace, and cannot be restored on their own.
@@ -575,12 +598,11 @@ pub fn list_all(
             let Ok(role) = perm::require_base(conn, actor, base_id, Role::Viewer) else {
                 continue;
             };
-            let scope = if role >= Role::Creator {
-                InBase::Everything
-            } else {
-                InBase::OwnViews
-            };
+            let scope = InBase::of_role(role);
             if scope == InBase::OwnViews && !filter.wants(Kind::View) {
+                continue;
+            }
+            if scope == InBase::Own && !filter.wants(Kind::View) && !filter.wants(Kind::Record) {
                 continue;
             }
             let place = base_place(conn, base_id)?;
@@ -636,7 +658,8 @@ fn workspace_role_any(
 
 /// Resolve `{kind, id}` to a [`Target`] and check the actor may restore it:
 /// Owner for workspaces and bases (session only), Creator for items inside a
-/// base, the owner for their own personal views.
+/// base, the owner for their own personal views, and Editor for records the
+/// editor deleted themselves.
 pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppResult<Target> {
     match kind {
         "workspace" => {
@@ -716,13 +739,23 @@ pub fn authorize(conn: &Connection, actor: &Actor, kind: &str, id: &str) -> AppR
             Ok(Target::View(id.to_string()))
         }
         "record" => {
-            let base = lookup_text(
-                conn,
-                "SELECT t.base_id FROM records r JOIN tables t ON t.id = r.table_id WHERE r.id = ?1",
-                id,
-                "record",
-            )?;
-            perm::require_base(conn, actor, &base, Role::Creator)?;
+            let (base, deleted_by): (String, Option<String>) = conn
+                .query_row(
+                    "SELECT t.base_id, r.deleted_by FROM records r
+                     JOIN tables t ON t.id = r.table_id WHERE r.id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?
+                .ok_or_else(|| AppError::not_found("record"))?;
+            // Editors may bring back the records they deleted themselves;
+            // anything else needs the creator role.
+            let role = perm::require_base(conn, actor, &base, Role::Editor)?;
+            if role < Role::Creator && deleted_by.as_deref() != Some(actor.user_id.as_str()) {
+                return Err(AppError::forbidden(
+                    "editors can restore only the records they deleted themselves; this needs the creator role on this base",
+                ));
+            }
             Ok(Target::Record(id.to_string()))
         }
         other => Err(AppError::bad_request(format!(
