@@ -62,6 +62,82 @@ async fn every_view_type_can_be_created_with_default_config() {
 }
 
 #[tokio::test]
+async fn new_galleries_cover_with_the_first_attachment_field() {
+    let f = Fixture::new().await;
+    // No attachment field yet: nothing to cover with.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Bare", "type": "gallery" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], Value::Null);
+
+    let first = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Photo", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let second = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Scan", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Pictures", "type": "gallery" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], first["id"]);
+    assert_eq!(r.body["config"]["gallery"]["cover_crop"], true);
+
+    // A config that says nothing about the gallery gets the same cover; one that does is kept.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Filtered", "type": "gallery", "config": { "frozen_columns": 1 } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], first["id"]);
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Chosen", "type": "gallery",
+                    "config": { "gallery": { "cover_field_id": second["id"] } } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], second["id"]);
+    assert_eq!(r.body["config"]["gallery"]["cover_crop"], false);
+
+    // Other view types are left alone.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Board", "type": "kanban" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], Value::Null);
+}
+
+#[tokio::test]
 async fn new_forms_default_to_all_editable_fields_in_order() {
     let f = Fixture::new().await;
     f.add_field(

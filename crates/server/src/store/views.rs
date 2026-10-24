@@ -17,7 +17,9 @@ use std::collections::{HashMap, HashSet};
 use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
 use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
-use ob_core::view::{Filter, FilterItem, FormConfig, FormField, ViewConfig};
+use ob_core::view::{
+    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ViewConfig, ViewType,
+};
 use rusqlite::{Transaction, params};
 
 use crate::db::now_ms;
@@ -78,6 +80,19 @@ pub fn default_form_config(fields: &[Field]) -> FormConfig {
     }
 }
 
+/// The gallery config a new gallery starts with: the table's first attachment field as its cover,
+/// cropped to fill the card (a gallery with no cover is a wall of text cards). `None` when the table
+/// has no attachment field.
+pub fn default_gallery_config(fields: &[Field]) -> Option<GalleryConfig> {
+    fields
+        .iter()
+        .find(|f| matches!(f.kind, FieldKind::Attachment(_)))
+        .map(|f| GalleryConfig {
+            cover_field_id: Some(f.id.clone()),
+            cover_crop: true,
+        })
+}
+
 /// Create a view in `table_id`.
 pub fn create(
     tx: &Transaction,
@@ -95,16 +110,23 @@ pub fn create(
     let name = schema::validate_name(&input.name, "view")?;
     ensure_view_capacity(tx, table_id)?;
     let fields = schema::table_fields(tx, table_id)?;
-    let config = match &input.config {
+    let mut config = match &input.config {
         Some(c) => c.clone(),
         None => {
             let mut c = ViewConfig::default();
-            if input.view_type == ob_core::view::ViewType::Form {
+            if input.view_type == ViewType::Form {
                 c.form = default_form_config(&fields);
             }
             c
         }
     };
+    // A gallery whose config says nothing about the gallery gets the cover a person would choose.
+    if input.view_type == ViewType::Gallery
+        && config.gallery == GalleryConfig::default()
+        && let Some(gallery) = default_gallery_config(&fields)
+    {
+        config.gallery = gallery;
+    }
     validate_config(&fields, &config)?;
     let view = View {
         id: new_id(ob_core::ids::VIEW),
