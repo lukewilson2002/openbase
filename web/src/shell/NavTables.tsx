@@ -125,7 +125,7 @@ function TableItem({
           </Link>
           <DropdownMenu {...menu}>
             <DropdownMenuTrigger asChild>
-              <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className={rowActionClass} {...NO_DRAG}>
+              <IconButton label={`Table options for ${t.name}`} size="sm" noTooltip className={cn(rowActionClass, active && "text-primary-fg hover:bg-primary-fg/15 hover:text-primary-fg")} {...NO_DRAG}>
                 <Ellipsis aria-hidden className="size-4" />
               </IconButton>
             </DropdownMenuTrigger>

@@ -182,7 +182,7 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
                     <TypeIcon aria-hidden className="size-4 shrink-0 text-muted" />
                     <span className="min-w-0 flex-1 truncate">{shown.name}</span>
                     <span aria-hidden data-more="" className="shrink-0 text-xs text-muted">+{more}</span>
-                    {shown.id === view.id && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
+                    {shown.id === view.id && <Check aria-hidden className="size-4 shrink-0 text-primary-mark" />}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent aria-label={heading} aria-labelledby={undefined} className="w-60" onFocusOutside={stayWhileMenuOpen} onPointerDownOutside={stayWhileMenuOpen} onInteractOutside={stayWhileMenuOpen}>
                     {g.views.map((v) => (
@@ -322,7 +322,7 @@ function ViewMenuItem({
         <span className="min-w-0 flex-1 truncate">{name}</span>
         {v.personal && <UserIcon aria-label="Personal view" role="img" className="size-3.5 shrink-0 text-muted" />}
         {v.locked && <Lock aria-label="Locked view" role="img" className="size-3.5 shrink-0 text-muted" />}
-        {active && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
+        {active && <Check aria-hidden className="size-4 shrink-0 text-primary-mark" />}
       </Link>
     </DropdownMenuItem>
   );

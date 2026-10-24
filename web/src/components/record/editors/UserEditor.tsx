@@ -127,7 +127,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
                         <span className="block truncate">{u.name}</span>
                         <span className="block truncate text-xs text-muted">{u.email}</span>
                       </span>
-                      {on && <Check aria-hidden className="size-4 text-primary-text" />}
+                      {on && <Check aria-hidden className="size-4 text-primary-mark" />}
                     </button>
                   </li>
                 );

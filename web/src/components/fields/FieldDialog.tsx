@@ -206,7 +206,7 @@ export function FieldDialog({ state, schema, table, onOpenChange, onSaved }: Fie
         {showDescription ? (
           <FormField label="Description (optional)">{(c) => <Textarea {...c} rows={2} maxLength={20000} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />}</FormField>
         ) : (
-          <button type="button" className="self-start text-[0.8125rem] text-primary-text hover:underline" onClick={() => setShowDescription(true)}>
+          <button type="button" className="self-start text-[0.8125rem] text-primary-text underline hover:no-underline" onClick={() => setShowDescription(true)}>
             Add a description
           </button>
         )}

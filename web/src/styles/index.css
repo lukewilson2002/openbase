@@ -116,6 +116,7 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-fg: var(--primary-fg);
   --color-primary-text: var(--primary-text);
+  --color-primary-mark: var(--ring);
   --color-primary-soft: var(--primary-soft);
   --color-primary-soft-line: var(--primary-soft-line);
   --color-primary-ink: var(--primary-ink);
@@ -369,34 +370,34 @@
  *   .ob-lane         a faint, see-through wash (a timeline swim lane behind its bars)
  */
 .ob-hue-blue {
-  --accent: #1f5ae0;
+  --accent: #0b48af;
 }
 .ob-hue-cyan {
-  --accent: #0e7490;
+  --accent: #007fad;
 }
 .ob-hue-teal {
-  --accent: #0f766e;
+  --accent: #00857e;
 }
 .ob-hue-green {
-  --accent: #157a39;
+  --accent: #008a1e;
 }
 .ob-hue-yellow {
-  --accent: #8a5a00;
+  --accent: #996f00;
 }
 .ob-hue-orange {
-  --accent: #a85a0a;
+  --accent: #ca4c00;
 }
 .ob-hue-red {
-  --accent: #c4261d;
+  --accent: #b0002e;
 }
 .ob-hue-pink {
-  --accent: #b0175a;
+  --accent: #c72e7d;
 }
 .ob-hue-purple {
-  --accent: #6b3fc4;
+  --accent: #581ab5;
 }
 .ob-hue-gray {
-  --accent: #566070;
+  --accent: #444955;
 }
 .ob-tint,
 .ob-tint-button {

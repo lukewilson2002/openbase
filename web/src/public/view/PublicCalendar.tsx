@@ -27,7 +27,7 @@ function Chip({ chip }: { chip: DayChip }) {
     <li
       title={chip.time ? `${chip.time} ${chip.title}` : chip.title}
       data-record-id={chip.id}
-      className={cn("truncate rounded px-1.5 py-0.5 text-xs", !p && "bg-primary-soft text-primary-text")}
+      className={cn("truncate rounded px-1.5 py-0.5 text-xs", !p && "bg-primary text-primary-fg")}
       style={p ? { background: p.bg, color: p.fg } : undefined}
     >
       {chip.time && <span className="mr-1 opacity-80">{chip.time}</span>}

@@ -48,7 +48,7 @@ function FirstWorkspace() {
   return (
     <div className="flex justify-center px-4 py-8 sm:px-6 sm:py-12">
       <section aria-labelledby="first-workspace-title" className="flex w-full max-w-[520px] flex-col gap-[22px] sm:pt-10">
-        <span aria-hidden className="flex size-14 items-center justify-center rounded-2xl bg-primary-soft text-primary-text">
+        <span aria-hidden className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-fg">
           <SquarePlus className="size-7" strokeWidth={1.8} />
         </span>
         <div>

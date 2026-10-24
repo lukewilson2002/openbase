@@ -186,7 +186,7 @@ function Value({ text, tone }: { text: string; tone: "old" | "new" }) {
     <>
       <Tag className={cn("break-words rounded px-1.5 py-0.5 text-[0.8125rem] no-underline", tone === "old" ? "bg-danger-soft line-through decoration-danger/60" : "bg-success-soft")}>{text ? shown : "(empty)"}</Tag>
       {long && (
-        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-xs font-medium text-primary-text hover:underline">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="ml-1 text-xs font-medium text-primary-text underline hover:no-underline">
           {open ? "less" : "more"}
         </button>
       )}
@@ -209,7 +209,7 @@ function CommentText({ body }: { body: string }) {
 
 function Toggle({ expanded, onClick, more, less }: { expanded: boolean; onClick: () => void; more: string; less: string }) {
   return (
-    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-xs font-medium text-primary-text hover:underline">
+    <button type="button" aria-expanded={expanded} onClick={onClick} className="mt-1 text-xs font-medium text-primary-text underline hover:no-underline">
       {expanded ? less : more}
     </button>
   );

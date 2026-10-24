@@ -192,7 +192,7 @@ function ValueRow({ field, value, onChange, ctx, timeZone, collaborators }: { fi
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => pick(m)}
-                className={cn("rounded px-1.5 py-0.5", mode === m ? "bg-primary-soft text-primary-text" : "text-muted hover:bg-hover")}
+                className={cn("rounded px-1.5 py-0.5", mode === m ? "bg-primary text-primary-fg" : "text-muted hover:bg-hover")}
               >
                 {m === "value" ? "Fixed value" : "Template"}
               </button>

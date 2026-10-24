@@ -234,7 +234,7 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
                   <span className="flex shrink-0 items-center [&>svg]:size-4">{e.kind === "action" && e.busy ? <Spinner className="size-4" label="Working" /> : e.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{e.label}</span>
                   {e.kind === "panel" && e.value && <span className={cn("max-w-[45%] truncate text-[0.8125rem] font-semibold", !e.active && "text-primary-text")}>{e.value}</span>}
-                  {e.kind === "toggle" && e.checked && <Check aria-hidden className="size-4 shrink-0 text-primary-text" />}
+                  {e.kind === "toggle" && e.checked && <Check aria-hidden className="size-4 shrink-0 text-primary-mark" />}
                 </button>
               ),
             )}

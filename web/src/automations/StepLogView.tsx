@@ -12,7 +12,7 @@ export function StatusBadge({ status }: { status: RunStatus | StepStatus }) {
         status === "succeeded" && "bg-success-soft text-success",
         status === "failed" && "bg-danger-soft text-danger",
         (status === "skipped" || status === "queued") && "bg-subtle text-muted",
-        status === "running" && "bg-primary-soft text-primary-text",
+        status === "running" && "bg-primary text-primary-fg",
       )}
     >
       {label}

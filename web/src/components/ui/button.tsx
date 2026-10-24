@@ -13,7 +13,7 @@ const variants: Record<ButtonVariant, string> = {
   secondary: "border border-line-strong bg-surface text-fg hover:bg-hover",
   ghost: "text-fg hover:bg-hover",
   danger: "bg-danger text-danger-fg hover:bg-danger-hover",
-  link: "text-primary-text underline-offset-2 hover:underline px-0",
+  link: "text-primary-text underline underline-offset-2 hover:no-underline px-0",
 };
 
 const sizes: Record<ButtonSize, string> = {
