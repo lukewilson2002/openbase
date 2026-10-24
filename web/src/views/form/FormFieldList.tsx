@@ -17,7 +17,7 @@ import { useRef, useState } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignLeft, ArrowDown, ArrowUp, GripVertical, Heading, ListPlus, Lock, Plus, X } from "lucide-react";
+import { AlignLeft, ArrowDown, ArrowUp, GitBranch, GripVertical, Heading, ListPlus, Lock, Plus, X } from "lucide-react";
 import type { Field, FormBlock, FormConfig, FormField, Table } from "@/api/types";
 import { FilterBuilder } from "@/components/viewbar/FilterBuilder";
 import { Switch } from "@/components/ui/checkbox";
@@ -33,15 +33,18 @@ import {
   addFormBlock,
   blockText,
   canBeInForm,
+  cleanForm,
   addFormField,
   addableFields,
   liveItems,
   moveFormField,
   moveFormFieldById,
+  pruneForm,
   publicStatus,
   removeFormField,
   removedFormField,
   requiredBlockedReason,
+  sameForm,
   showIfSources,
   updateFormField,
   type FormFieldPatch,
@@ -70,6 +73,15 @@ interface RowProps {
   onShowPublic?: FormFieldListProps["onShowPublic"];
   form: FormConfig;
   table: Pick<Table, "fields">;
+}
+
+/** Marks a row that is shown only for some answers; on a phone only the icon fits next to the row's controls. */
+function ConditionalBadge({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-xs text-muted", className)} title="Shown only when the answers above match">
+      <GitBranch aria-hidden className="size-3" /> <span className="max-sm:sr-only">Conditional</span>
+    </span>
+  );
 }
 
 /** "Show only if": the filter builder over the questions above the row; nothing set means the row is always shown. */
@@ -106,7 +118,8 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
       aria-label={`Form field ${field.name}`}
       className={cn("rounded-[10px] border border-line bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
     >
-      <div className="flex min-h-[46px] items-center gap-2.5 px-1.5 pointer-coarse:min-h-[56px]">
+      {/* On a narrow screen the switch and remove button drop to a second line instead of squeezing the name out. */}
+      <div className="flex min-h-[46px] flex-wrap items-center gap-x-2.5 gap-y-1 px-1.5 py-0.5 pointer-coarse:min-h-[56px]">
         <button
           type="button"
           aria-label={`Drag ${field.name} to reorder`}
@@ -123,16 +136,12 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
           aria-expanded={open}
           aria-label={`Edit ${field.name}`}
           onClick={() => setOpen((o) => !o)}
-          className="min-w-0 flex-1 truncate rounded text-left text-[0.875rem] font-medium hover:underline"
+          className="min-w-20 flex-1 truncate rounded text-left text-[0.875rem] font-medium hover:underline"
           title="Change the label, help text and conditions"
         >
           {shownName}
         </button>
-        {entry.show_if && (
-          <span className="shrink-0 rounded-full bg-subtle px-2 py-0.5 text-xs text-muted" title="Shown only when the answers above match">
-            Conditional
-          </span>
-        )}
+        {entry.show_if && <ConditionalBadge />}
         {!status.public && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs" title={status.message}>
             <Lock aria-hidden className="size-3" /> <span className="max-sm:sr-only">Not public</span>
@@ -149,23 +158,25 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
             Show
           </button>
         )}
-        <span title={noRequired ?? undefined} className="shrink-0">
-          <Switch
-            className="flex-row-reverse text-muted"
-            checked={entry.required}
-            disabled={readOnly || requiredLocked}
-            onCheckedChange={(required) => patch({ required })}
-            label={
-              <>
-                Required
-                {requiredLocked && <span className="sr-only"> ({noRequired})</span>}
-              </>
-            }
-          />
-        </span>
-        <IconButton label={`Remove ${field.name} from the form`} size="sm" noTooltip disabled={readOnly} className="pointer-coarse:ml-2" onClick={() => onRemove(field.id, field.name)}>
-          <X aria-hidden className="size-4" />
-        </IconButton>
+        <div className="ml-auto flex shrink-0 items-center gap-2.5">
+          <span title={noRequired ?? undefined} className="shrink-0">
+            <Switch
+              className="flex-row-reverse text-muted"
+              checked={entry.required}
+              disabled={readOnly || requiredLocked}
+              onCheckedChange={(required) => patch({ required })}
+              label={
+                <>
+                  Required
+                  {requiredLocked && <span className="sr-only"> ({noRequired})</span>}
+                </>
+              }
+            />
+          </span>
+          <IconButton label={`Remove ${field.name} from the form`} size="sm" noTooltip disabled={readOnly} className="pointer-coarse:ml-2" onClick={() => onRemove(field.id, field.name)}>
+            <X aria-hidden className="size-4" />
+          </IconButton>
+        </div>
       </div>
       {open && (
         <div className="flex flex-col gap-2 border-t border-line px-3 py-2.5">
@@ -252,11 +263,7 @@ function BlockRow({ entry, index, count, readOnly, onChange, onRemove, form, tab
             <Textarea aria-label={`Text`} rows={2} value={entry.help ?? ""} placeholder="Some words for the people filling this in" maxLength={MAX_FORM_TEXT} disabled={readOnly} onChange={(e) => patch({ help: e.target.value })} className="text-[0.8125rem]" />
           )}
         </div>
-        {entry.show_if && (
-          <span className="mt-1.5 shrink-0 rounded-full bg-subtle px-2 py-0.5 text-xs text-muted" title="Shown only when the answers above match">
-            Conditional
-          </span>
-        )}
+        {entry.show_if && <ConditionalBadge className="mt-1.5" />}
         <IconButton label={`Remove the ${kind.toLowerCase()} ${name} from the form`} size="sm" noTooltip disabled={readOnly} className="mt-0.5 pointer-coarse:ml-2" onClick={() => onRemove(id, `${kind} “${name}”`)}>
           <X aria-hidden className="size-4" />
         </IconButton>
@@ -287,7 +294,10 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
     const taken = removedFormField(form, id);
     if (!taken) return;
     removed.current.set(id, taken);
-    onChange(removeFormField(form, id));
+    const removedForm = removeFormField(form, id);
+    onChange(removedForm);
+    // What the form is saved as once the removal went through (conditions on the removed question are dropped with it).
+    const saved = cleanForm(pruneForm(removedForm, table));
     toast.toast({
       title: `${name} removed from the form`,
       // A field goes back through addFormField (which knows the table); a heading or paragraph is put back as it was.
@@ -295,7 +305,9 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
         label: "Undo",
         onClick: () => {
           const cur = latest.current;
-          if (taken.entry.block) {
+          // Nothing changed since: bring the form back exactly as it was, with the conditions that read the question.
+          if (sameForm(cur, saved)) onChange(form);
+          else if (taken.entry.block) {
             const fields = [...cur.fields];
             fields.splice(Math.min(taken.index, fields.length), 0, taken.entry);
             onChange({ ...cur, fields });

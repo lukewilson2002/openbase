@@ -244,6 +244,19 @@ describe("removing and re-adding a field", () => {
     await waitFor(async () => expect((await saved(api, 2)).fields).toEqual([entry(F.name.id, { required: true }), entry(F.status.id, { label: "How far along?", help: "Pick one", required: true }), entry(F.start.id)]), { timeout: 3000 });
   });
 
+  it("brings back the conditions that read a removed question with Undo", async () => {
+    const user = userEvent.setup();
+    const showIf = { conjunction: "and" as const, items: [{ field_id: F.status.id, op: "is" as const, value: "s1" }] };
+    const { api } = setup("creator", formView({ fields: [entry(F.name.id), entry(F.status.id), entry(F.effort.id, { show_if: showIf })] }));
+    await screen.findByRole("heading", { name: "Form" });
+    await user.click(screen.getByRole("button", { name: "Remove Status from the form" }));
+    // The condition goes with the question it read.
+    await waitFor(async () => expect((await saved(api)).fields.find((f) => f.field_id === F.effort.id)?.show_if ?? null).toBeNull(), { timeout: 3000 });
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(async () => expect((await saved(api, 2)).fields.find((f) => f.field_id === F.effort.id)?.show_if).toEqual(showIf), { timeout: 3000 });
+    expect((await saved(api, 2)).fields.map((f) => f.field_id)).toEqual([F.name.id, F.status.id, F.effort.id]);
+  });
+
   it("brings a removed field back where it was when it is added again", async () => {
     const user = userEvent.setup();
     const { api } = setup("creator", configured());
