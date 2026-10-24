@@ -583,6 +583,18 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
         if !seen.insert(f.field_id.as_str()) {
             return Err(AppError::bad_request("a form field is listed twice"));
         }
+        // The public form never collects link or user fields, so a "required" there would be
+        // enforced for signed-in editors only: it is refused (one the saved form already had stays).
+        if f.required
+            && !stale.field("form required", &f.field_id)
+            && !crate::store::sharing::is_public_form_type(field)
+        {
+            return Err(AppError::bad_request(format!(
+                "'{}' is a {} field, which public forms cannot collect, so it cannot be required in the form",
+                field.name,
+                field.field_type().label()
+            )));
+        }
         for text in [&f.label, &f.help].into_iter().flatten() {
             if text.chars().count() > limits::MAX_DESCRIPTION_LEN {
                 return Err(AppError::bad_request("form field text is too long"));

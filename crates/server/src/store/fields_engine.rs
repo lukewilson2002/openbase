@@ -373,6 +373,9 @@ impl Stale {
         }
         for f in &config.form.fields {
             out.add("form", &f.field_id);
+            if f.required {
+                out.add("form required", &f.field_id);
+            }
         }
         out
     }

@@ -793,6 +793,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "ShareLink[] {id, kind, token, url, enabled, has_password}",
     ),
     e(
+        GET,
+        "/api/views/{id}/share-status",
+        "sharing",
+        "editor",
+        Read,
+        "Whether a view has an enabled share link (while it does, only a creator can change what the link shows, e.g. a form).",
+        NO_BODY,
+        "{enabled: bool}",
+    ),
+    e(
         POST,
         "/api/views/{id}/shares",
         "sharing",

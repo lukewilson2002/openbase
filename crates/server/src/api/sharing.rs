@@ -1,7 +1,9 @@
 //! Share links and the public endpoints behind them.
 //!
 //! **Management** (signed-in Creator on the view's base):
-//! `GET|POST /api/views/{id}/shares`, `PATCH|DELETE /api/shares/{id}`.
+//! `GET|POST /api/views/{id}/shares`, `PATCH|DELETE /api/shares/{id}`. Editors can ask
+//! `GET /api/views/{id}/share-status` whether the view has an enabled link (they cannot change
+//! what a link shows, so the form builder is read-only for them then).
 //!
 //! **Public** (no credentials; the unguessable token is the capability):
 //! - `GET  /api/public/shares/{token}`: the shared view (layout + visible fields);
@@ -103,6 +105,7 @@ pub fn router() -> Router<AppState> {
         ));
     Router::new()
         .route("/api/views/{id}/shares", get(list).post(create))
+        .route("/api/views/{id}/share-status", get(share_status))
         .route("/api/shares/{id}", patch(update).delete(remove))
         .merge(public)
 }
@@ -143,6 +146,30 @@ async fn list(
         })
         .await?;
     Ok(Json(rows.iter().map(|r| r.to_dto(&url)).collect()))
+}
+
+/// `GET /api/views/{id}/share-status`: `{"enabled": bool}`, whether the view has an enabled
+/// share link. Editors and up; no token or link detail is given.
+async fn share_status(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(view_id): Path<String>,
+) -> AppResult<Json<Json2>> {
+    let enabled = state
+        .db
+        .read(move |conn| {
+            let base = perm::base_of_view(conn, &view_id)?;
+            perm::require_base(conn, &actor, &base, Role::Editor)?;
+            let view = schema::live_view(conn, &view_id)?;
+            if view.owner_id.is_some() {
+                return Ok(false);
+            }
+            Ok(sharing::list_for_view(conn, &view_id)?
+                .iter()
+                .any(|s| s.enabled))
+        })
+        .await?;
+    Ok(Json(json!({ "enabled": enabled })))
 }
 
 async fn create(
@@ -613,7 +640,9 @@ async fn submit_form(
     for event in outcome.events() {
         state.events.publish(&outcome.base_id, None, None, event);
     }
-    Ok(Json(json!({ "ok": true })))
+    // The new record's id lets a redirect address carry it (`{record_id}`).
+    let record_id = outcome.target().created.first().cloned();
+    Ok(Json(json!({ "ok": true, "record_id": record_id })))
 }
 
 /// Charge the byte budgets of anonymous uploads (see [`UPLOAD_MB_PER_IP`]);

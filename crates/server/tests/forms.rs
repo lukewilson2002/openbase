@@ -311,7 +311,7 @@ async fn submit_creates_an_anonymous_record() {
         }))
         .await;
     r.assert_status(200);
-    assert_eq!(r.body, json!({ "ok": true }));
+    assert_eq!(r.body["ok"], true);
     assert!(r.headers[axum::http::header::CACHE_CONTROL] == "no-store");
     assert_eq!(fm.count(), before + 1);
 
@@ -328,6 +328,8 @@ async fn submit_creates_an_anonymous_record() {
     assert_eq!(rec["created_by"], Value::Null);
     assert_eq!(rec["updated_by"], Value::Null);
     let id = rec["id"].as_str().unwrap();
+    // The answer carries the new record's id (a redirect address can include it).
+    assert_eq!(r.body["record_id"], id);
     let history = p.f.history(id);
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].0, "create");
@@ -1024,4 +1026,123 @@ async fn anonymous_uploads_have_a_byte_budget_per_base() {
         .assert_status(429);
     // Files the owner uploads are not anonymous and not counted.
     fm.p.f.upload("mine.txt", b"mine").await;
+}
+
+#[tokio::test]
+async fn a_link_or_user_field_cannot_be_required_in_a_form() {
+    let fm = form().await;
+    let f = &fm.p.f;
+    let view_url = format!("/api/views/{}", fm.view);
+    let mut config = view_config(&fm).await;
+    for (id, kind) in [(&fm.orders_link, "Link"), (&fm.assignee, "User")] {
+        let mut c = config.clone();
+        for e in c["form"]["fields"].as_array_mut().unwrap() {
+            if e["field_id"] == json!(id) {
+                e["required"] = json!(true);
+            }
+        }
+        let r = f
+            .app
+            .patch(&f.owner, &view_url, json!({ "config": c }))
+            .await;
+        r.assert_status(400);
+        let msg = r.body["error"]["message"].as_str().unwrap().to_lowercase();
+        assert!(
+            msg.contains(&kind.to_lowercase()) && msg.contains("cannot be required"),
+            "{msg}"
+        );
+    }
+    // Saving the form without a rule on them is fine, and so is a required ordinary field.
+    config["form"]["fields"][1]["required"] = json!(true);
+    f.app
+        .patch(&f.owner, &view_url, json!({ "config": config }))
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn a_required_link_the_form_already_had_can_still_be_saved() {
+    let fm = form().await;
+    let f = &fm.p.f;
+    let view_url = format!("/api/views/{}", fm.view);
+    // A form made before the rule (written straight into the store) keeps saving unchanged.
+    let mut config = view_config(&fm).await;
+    for e in config["form"]["fields"].as_array_mut().unwrap() {
+        if e["field_id"] == json!(fm.orders_link) {
+            e["required"] = json!(true);
+        }
+    }
+    let stored = serde_json::to_string(&config).unwrap();
+    let view = fm.view.clone();
+    f.app
+        .state
+        .db
+        .write_sync(|tx| {
+            tx.execute(
+                "UPDATE views SET config = ?2 WHERE id = ?1",
+                rusqlite::params![view, stored],
+            )?;
+            Ok::<_, openbase::error::AppError>(())
+        })
+        .unwrap();
+    config["form"]["title"] = json!("Renamed");
+    f.app
+        .patch(&f.owner, &view_url, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+    // Turning it off is possible, turning it back on is not.
+    for e in config["form"]["fields"].as_array_mut().unwrap() {
+        if e["field_id"] == json!(fm.orders_link) {
+            e["required"] = json!(false);
+        }
+    }
+    f.app
+        .patch(&f.owner, &view_url, json!({ "config": config.clone() }))
+        .await
+        .assert_status(200);
+    for e in config["form"]["fields"].as_array_mut().unwrap() {
+        if e["field_id"] == json!(fm.orders_link) {
+            e["required"] = json!(true);
+        }
+    }
+    f.app
+        .patch(&f.owner, &view_url, json!({ "config": config }))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
+async fn editors_can_ask_whether_the_form_has_a_public_link() {
+    let fm = form().await;
+    let f = &fm.p.f;
+    let url = format!("/api/views/{}/share-status", fm.view);
+    let editor = f.member("ed@x.io", openbase::perm::Role::Editor);
+    let viewer = f.member("vw@x.io", openbase::perm::Role::Viewer);
+    let r = f.app.get(&editor, &url).await;
+    r.assert_status(200);
+    assert_eq!(r.body, json!({ "enabled": true }));
+    f.app.get(&viewer, &url).await.assert_status(403);
+    // The editor cannot change the form while the link is on, and the answer follows the link.
+    f.app
+        .patch(
+            &f.owner,
+            &format!("/api/shares/{}", fm.share_id),
+            json!({ "enabled": false }),
+        )
+        .await
+        .assert_status(200);
+    let r = f.app.get(&editor, &url).await;
+    assert_eq!(r.body, json!({ "enabled": false }));
+}
+
+/// The saved config of the form view.
+async fn view_config(fm: &Form) -> Value {
+    let t = fm.p.f.table(&fm.p.f.table_id).await;
+    t["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == json!(fm.view))
+        .unwrap()["config"]
+        .clone()
 }
