@@ -352,6 +352,10 @@ const KANBAN_KEYS: &[&str] = &[
     "cover_field_id",
     "hide_empty_stacks",
     "stack_order",
+    "hidden_stacks",
+    "show_all_people",
+    "card_field_limit",
+    "cover_fit",
 ];
 const CALENDAR_KEYS: &[&str] = &["date_field_id", "end_field_id"];
 const GALLERY_KEYS: &[&str] = &["cover_field_id", "cover_crop"];
@@ -736,26 +740,30 @@ impl Xlate<'_> {
                 self.field_value(v, &format!("kanban.{key}"))?;
             }
         }
-        if let (Some(field), Some(order)) = (stack_field, o.get_mut("stack_order")) {
-            self.stack_order(&field, order)?;
+        if let Some(field) = stack_field {
+            for key in ["stack_order", "hidden_stacks"] {
+                if let Some(order) = o.get_mut(key) {
+                    self.stack_order(&field, key, order)?;
+                }
+            }
         }
         Ok(())
     }
 
-    /// `stack_order`: stacks by choice name (single select), person name (user field) or
+    /// `stack_order` and `hidden_stacks`: stacks by choice name (single select), person name (user field) or
     /// Checked / Unchecked (checkbox); `Uncategorized` is the stack of cards with no value,
     /// which the web app stores as an empty string.
-    fn stack_order(&self, field: &Field, order: &mut Value) -> Result<(), String> {
+    fn stack_order(&self, field: &Field, key: &str, order: &mut Value) -> Result<(), String> {
         let Value::Array(items) = order else {
             return if order.is_null() {
                 Ok(())
             } else {
-                Err("kanban.stack_order must be a list of stack names".into())
+                Err(format!("kanban.{key} must be a list of stack names"))
             };
         };
         for item in items {
             let Value::String(s) = item else {
-                return Err("kanban.stack_order must be a list of stack names".into());
+                return Err(format!("kanban.{key} must be a list of stack names"));
             };
             *s = self.stack_key(field, s)?;
         }

@@ -8,4 +8,22 @@ stack_field_id?: string | null, cover_field_id?: string | null, hide_empty_stack
 /**
  * Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
  */
-stack_order: Array<string>, };
+stack_order: Array<string>, 
+/**
+ * Stacks left off the board in this view (same keys as `stack_order`); their cards stay in
+ * the table and are still found by search and filters.
+ */
+hidden_stacks: Array<string>, 
+/**
+ * Stacked by a person: a stack for every collaborator, even those without cards. Off: only
+ * the people who hold cards get one.
+ */
+show_all_people: boolean, 
+/**
+ * Most non-empty fields a card shows (absent = 6).
+ */
+card_field_limit?: number | null, 
+/**
+ * Cover images fit inside their box (true) instead of cropping to fill it (false).
+ */
+cover_fit: boolean, };

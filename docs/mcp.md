@@ -417,7 +417,11 @@ called `Uncategorized` (the web app saves it as an empty string; `""` is accepte
 `get_view` shows it as `Uncategorized`), so the order read from `get_view` can be passed
 back to `update_view` unchanged, even when a person rearranged the board in the app. An
 update that sets only `stack_order` reads it against the view's saved stack field. Stacks
-left out follow the listed ones.
+left out follow the listed ones. `kanban.hidden_stacks` takes the same names and leaves
+those stacks off the board in this view (their cards stay in the table). The other kanban
+card settings are `show_all_people` (a user field: also a stack for people without cards;
+default is only people who hold cards), `card_field_limit` (most non-empty fields a card
+shows, default 6) and `cover_fit` (fit the cover inside the card instead of cropping it).
 
 **Field types are checked.** A calendar `date_field_id` / `end_field_id` and a timeline
 `start_field_id` / `end_field_id` must be date fields (date, created time, last modified

@@ -472,3 +472,66 @@ async fn query_view_takes_a_date_range_with_overlap_semantics() {
         .await;
     assert!(e.contains("need a date range"), "{e}");
 }
+
+#[tokio::test]
+async fn kanban_hidden_stacks_and_card_settings_round_trip() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Tasks").await;
+    let status = r
+        .field(
+            "Tasks",
+            "Status",
+            "single_select",
+            json!({"choices": ["Todo", "Doing", "Done"]}),
+        )
+        .await;
+    let ids = choice_ids(&status);
+
+    let made = a
+        .call(
+            "create_view",
+            json!({"project_id": b, "table": "Tasks", "name": "Board", "type": "kanban",
+                   "config": {"kanban": {"stack_field_id": "Status",
+                                         "hidden_stacks": ["Done", "Uncategorized"],
+                                         "card_field_limit": 10, "cover_fit": true,
+                                         "show_all_people": true}}}),
+        )
+        .await;
+    let view_id = made["view"]["id"].as_str().unwrap().to_string();
+    // Names for the model, ids (and "" for Uncategorized) as the web app saves them.
+    assert_eq!(
+        made["view"]["config"]["kanban"]["hidden_stacks"],
+        json!(["Done", "Uncategorized"])
+    );
+    let raw = raw_view(&r, &view_id).await;
+    assert_eq!(
+        raw["config"]["kanban"]["hidden_stacks"],
+        json!([ids[2], ""])
+    );
+    assert_eq!(raw["config"]["kanban"]["card_field_limit"], 10);
+    assert_eq!(raw["config"]["kanban"]["cover_fit"], true);
+    assert_eq!(raw["config"]["kanban"]["show_all_people"], true);
+
+    // Hidden stacks alone are read against the view's saved stack field.
+    a.call(
+        "update_view",
+        json!({"project_id": b, "view": view_id,
+               "config": {"kanban": {"hidden_stacks": ["Doing"]}}}),
+    )
+    .await;
+    assert_eq!(
+        raw_view(&r, &view_id).await["config"]["kanban"]["hidden_stacks"],
+        json!([ids[1]])
+    );
+
+    let e = a
+        .fails(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"kanban": {"hidden_stacks": ["Nowhere"]}}}),
+        )
+        .await;
+    assert!(e.contains("not a choice of field 'Status'"), "{e}");
+}

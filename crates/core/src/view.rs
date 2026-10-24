@@ -251,6 +251,16 @@ pub struct KanbanConfig {
     pub hide_empty_stacks: bool,
     /// Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
     pub stack_order: Vec<String>,
+    /// Stacks left off the board in this view (same keys as `stack_order`); their cards stay in
+    /// the table and are still found by search and filters.
+    pub hidden_stacks: Vec<String>,
+    /// Stacked by a person: a stack for every collaborator, even those without cards. Off: only
+    /// the people who hold cards get one.
+    pub show_all_people: bool,
+    /// Most non-empty fields a card shows (absent = 6).
+    pub card_field_limit: Option<u32>,
+    /// Cover images fit inside their box (true) instead of cropping to fill it (false).
+    pub cover_fit: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
