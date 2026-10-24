@@ -161,9 +161,11 @@ describe("dragging", () => {
     expect(dragSpan(timed, "start", 2).startMs).toBe(ms(2026, 3, 10, 10) - 15 * 60_000);
   });
 
-  it("leaves a milestone's edges alone", () => {
+  it("leaves a milestone's start edge alone and grows an end from its end edge", () => {
     const m = span(ms(2026, 3, 10), ms(2026, 3, 11), { hasEnd: false });
-    expect(dragSpan(m, "end", 3)).toBe(m);
+    expect(dragSpan(m, "start", 3)).toBe(m);
+    expect(dragSpan(m, "end", 3)).toMatchObject({ hasEnd: true, startMs: ms(2026, 3, 10), endMs: ms(2026, 3, 14) });
+    expect(dragSpan(m, "end", -3)).toMatchObject({ hasEnd: true, endMs: ms(2026, 3, 11) }); // keeps one day
     expect(dragSpan(m, "move", 3).startMs).toBe(ms(2026, 3, 13));
   });
 });

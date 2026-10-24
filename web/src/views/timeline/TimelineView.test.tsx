@@ -2,6 +2,8 @@ import { createEvent, fireEvent, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
+import { apiError } from "@/test/utils";
+import { field } from "@/test/fields";
 import { stubDesktop } from "@/test/utils";
 import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import TimelineView from "./TimelineView";
@@ -75,7 +77,7 @@ describe("TimelineView", () => {
     expect(await screen.findByText("5 items")).toBeInTheDocument();
     const column = await screen.findByRole("complementary", { name: "Unscheduled records" });
     expect(within(column).getByRole("button", { name: "R5" })).toBeInTheDocument();
-    expect(within(column).getByText("Drag a record onto the timeline to give it a date, or a bar here to clear its dates.")).toBeInTheDocument();
+    expect(within(column).getByText(/^Drag a record onto the timeline to give it a date, or a bar here to clear its dates/)).toBeInTheDocument();
   });
 
   it("dates a record dropped from the unscheduled column on the day it lands", async () => {
@@ -243,16 +245,29 @@ describe("TimelineView", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
   });
 
-  it("clears a selected bar's dates with Delete, back to the unscheduled records", async () => {
+  it("deletes the record of a selected bar with Delete, with an Undo toast, and does not touch its dates", async () => {
+    const u = user();
+    const { api } = setup("editor", tl(), { "DELETE /api/tables/tbl1/records": null, "POST /api/tables/tbl1/records/restore": { records: [] } });
+    const bar = await screen.findByRole("button", { name: /^R1, / });
+    await u.click(bar);
+    await u.keyboard("{Delete}");
+    await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r1"] });
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(0);
+    expect(await screen.findByRole("button", { name: "Undo" })).toBeInTheDocument();
+  });
+
+  it("clears a selected bar's dates with U, back to the unscheduled records", async () => {
     const u = user();
     const { api } = setup("editor", tl(), { "PATCH /api/tables/tbl1/records": { records: [records[0]!] } });
     const bar = await screen.findByRole("button", { name: /^R1, / });
     await u.click(bar);
-    await u.keyboard("{Delete}");
+    await u.keyboard("u");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     const sent = (api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body as { records: { id: string; values: Record<string, unknown> }[] }).records[0]!;
     expect(sent.id).toBe("r1");
     expect(Object.values(sent.values)).toEqual([null, null]);
+    expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
   });
 
   it("asks for a start field when none is set", async () => {
@@ -277,5 +292,158 @@ describe("TimelineView", () => {
     await u.click(screen.getByRole("button", { name: "Add record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_start: "2026-03-12", f_end: "2026-03-12" } }] });
+  });
+
+  describe("records with odd dates", () => {
+    const dropOn = (item: Element) => {
+      const data = new Map<string, string>();
+      const dataTransfer = { setData: (t: string, v: string) => data.set(t, v), getData: (t: string) => data.get(t) ?? "", get types() { return [...data.keys()]; }, effectAllowed: "", dropEffect: "" };
+      fireEvent.dragStart(item, { dataTransfer });
+      const lane = document.querySelector("[data-lane]")!;
+      const at = (ev: Event) => Object.defineProperty(ev, "clientX", { value: 400 });
+      fireEvent(lane, at(createEvent.dragOver(lane, { dataTransfer })));
+      fireEvent(lane, at(createEvent.drop(lane, { dataTransfer })));
+    };
+
+    it("draws a record with only an end as a milestone, and writes only the start when it is dropped from Unscheduled", async () => {
+      stubDesktop();
+      const endOnly = rec("r6", { [F.end.id]: "2026-03-30" });
+      const { api } = setup("editor", tl(), { "PATCH /api/tables/tbl1/records": { records: [endOnly] } }, [...records, endOnly]);
+      const milestone = await screen.findByRole("button", { name: /^R6, Mar 30\. It has no start date/ });
+      expect(milestone).toHaveAttribute("data-milestone", "true");
+      const column = await screen.findByRole("complementary", { name: "Unscheduled records" });
+      dropOn(within(column).getByRole("button", { name: "R6" }).closest("li")!);
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      const sent = (api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body as { records: { values: Record<string, string> }[] }).records[0]!;
+      expect(Object.keys(sent.values)).toEqual([F.start.id]);
+    });
+
+    it("puts a record back in Unscheduled when its drop could not be saved", async () => {
+      stubDesktop();
+      const undatedRec = rec("r5", {});
+      setup("editor", tl(), { "PATCH /api/tables/tbl1/records": apiError(400, "validation", "nope") }, [...records, undatedRec]);
+      await screen.findByRole("button", { name: /^R1, / });
+      const column = await screen.findByRole("complementary", { name: "Unscheduled records" });
+      dropOn(within(column).getByRole("button", { name: "R5" }).closest("li")!);
+      expect(await screen.findByText(/Could not save/i)).toBeInTheDocument();
+      expect(await within(column).findByRole("button", { name: "R5" })).toBeInTheDocument();
+    });
+
+    it("draws a reversed record as a flagged milestone with an end handle", async () => {
+      const reversed = rec("r7", { [F.start.id]: "2026-03-10", [F.end.id]: "2026-03-03" });
+      setup("editor", tl(), {}, [...records, reversed]);
+      const m = await screen.findByRole("button", { name: /^R7, Mar 10\. Its end is before its start/ });
+      expect(m).toHaveAttribute("data-milestone", "true");
+      expect(m).toHaveAttribute("data-invalid", "true");
+      expect(m.querySelector("[data-handle=end]")).not.toBeNull();
+      // A milestone with only a start has the handle too.
+      expect(screen.getByRole("button", { name: /^R4, Mar 15/ }).querySelector("[data-handle=end]")).not.toBeNull();
+    });
+
+    it("lets a start-only milestone grow an end with Shift+Arrow, writing only the end", async () => {
+      const u = user();
+      const { api } = setup("editor", tl(), { "PATCH /api/tables/tbl1/records": { records: [records[3]!] } });
+      const bar = await screen.findByRole("button", { name: /^R4, Mar 15/ });
+      bar.focus();
+      await u.keyboard("{Shift>}{ArrowRight}{/Shift}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r4", values: { [F.end.id]: "2026-03-16" } }] });
+    });
+  });
+
+  describe("calculated dates", () => {
+    const due = field("formula", { expression: "{Start}+3", result_type: "date", format: { kind: "date", include_time: false, date_format: "iso", time_format: "h24", timezone: null } }, { id: "f_due", name: "Due" });
+    const calcSchema = (role = "editor", view = tl({ end_field_id: due.id })) => {
+      const s = projectSchema(role, [view]);
+      s.tables[0]!.fields = [...s.tables[0]!.fields, due];
+      return s;
+    };
+    const run = (schema: ReturnType<typeof calcSchema>, routes: Record<string, unknown> = {}) => {
+      const view = schema.tables[0]!.views[0]!;
+      const all = queryHandler({ records: [rec("r1", { [F.start.id]: "2026-03-02", [due.id]: "2026-03-05" })] });
+      return renderView(TimelineView, { schema, viewId: view.id, routes: { "POST /api/views/viw1/query": all, ...routes } as never });
+    };
+
+    it("explains that a calculated end leaves the start to change, and writes only the start", async () => {
+      const u = user();
+      const { api } = run(calcSchema(), { "PATCH /api/tables/tbl1/records": { records: [] } });
+      const bar = await screen.findByRole("button", { name: /^R1, / });
+      expect(screen.getByText(/The end date \(Due\) is calculated, so only the start can be changed here/)).toBeInTheDocument();
+      // The start edge is still the person's to drag; the calculated end has no handle.
+      expect(bar.querySelector("[data-handle=start]")).not.toBeNull();
+      expect(bar.querySelector("[data-handle=end]")).toBeNull();
+      expect(screen.getByRole("button", { name: "Add record" })).toBeInTheDocument();
+      bar.focus();
+      await u.keyboard("{ArrowRight}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect((api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body as { records: { values: unknown }[] }).records[0]!.values).toEqual({ [F.start.id]: "2026-03-03" });
+    });
+
+    it("explains a calculated start, offers no add, and still lets the end be dragged", async () => {
+      const startDue = tl({ start_field_id: due.id, end_field_id: F.end.id });
+      const schema = calcSchema("editor", startDue);
+      const all = queryHandler({ records: [rec("r1", { [due.id]: "2026-03-02", [F.end.id]: "2026-03-05" })] });
+      renderView(TimelineView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": all } as never });
+      const bar = await screen.findByRole("button", { name: /^R1, / });
+      expect(screen.getByText(/The start date \(Due\) is calculated, so bars can't be moved or added\. You can still change the end \(End\)/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
+      expect(bar.querySelector("[data-handle=end]")).not.toBeNull();
+      expect(bar.querySelector("[data-handle=start]")).toBeNull();
+    });
+
+    it("says nothing about it to someone who cannot edit anyway", async () => {
+      run(calcSchema("viewer"));
+      await screen.findByRole("button", { name: /^R1, / });
+      expect(screen.queryByText(/is calculated/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("empty window", () => {
+    const farAway = [rec("r1", { [F.start.id]: "2031-03-02", [F.end.id]: "2031-03-06" })];
+
+    it("invites an editor to drag across a lane, and points at the Unscheduled column", async () => {
+      stubDesktop();
+      const undated = queryHandler({ records: [rec("r5", {})] });
+      const empty = { total: 0, offset: 0, records: [], groups: [], colors: {} };
+      const count = queryHandler({ records: [rec("r1", {}), rec("r5", {})] });
+      const query = (call: { body: QueryRequest }) => (JSON.stringify(call.body.transient ?? {}).includes('"is_empty"') ? (undated as never as (c: unknown) => unknown)(call) : call.body.limit === 1 ? (count as never as (c: unknown) => unknown)(call) : empty);
+      setup("editor", tl(), { "POST /api/views/viw1/query": query }, farAway);
+      const msg = await screen.findByText(/No records with dates in this range\./);
+      expect(msg).toHaveTextContent("Other records are dated outside it: use Today or the arrows to find them.");
+      expect(msg).toHaveTextContent("1 record has no start date: drag it in from the Unscheduled column.");
+      expect(msg).toHaveTextContent("Drag across a lane to add one.");
+    });
+
+    it("does not invite a viewer to add one", async () => {
+      const empty = { total: 0, offset: 0, records: [], groups: [], colors: {} };
+      setup("viewer", tl(), { "POST /api/views/viw1/query": empty }, []);
+      const msg = await screen.findByText(/No records with dates in this range\./);
+      expect(msg).not.toHaveTextContent(/Drag across/);
+    });
+  });
+
+  describe("swimlanes and grouping", () => {
+    it("says which one makes the lanes when both are set, and can switch to the grouping", async () => {
+      const u = user();
+      const view = tl({ group_field_id: F.status.id });
+      const groups = [{ key: "u1", label: "Ada", field_id: F.owner.id, depth: 0, start: 0, count: 1, value: null }];
+      const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }), "POST /api/views/viw1/query": () => ({ total: 4, offset: 0, records, groups, colors: {} }) });
+      await screen.findByRole("button", { name: /^R1, / });
+      expect(screen.getByText(/The lanes come from the Swimlanes setting \(Status\), so the view's grouping by Owner is not used here\./)).toBeInTheDocument();
+      await u.click(screen.getByRole("button", { name: "Use the grouping instead" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { timeline: { group_field_id: unknown } } }).config.timeline.group_field_id).toBeNull();
+    });
+  });
+
+  it("keeps the day a bar is dropped on when it moves into a lane of the same date field", async () => {
+    const { api } = setup("editor", tl({ group_field_id: F.start.id }), { "PATCH /api/tables/tbl1/records": { records: [records[0]!] } });
+    const bar = await screen.findByRole("button", { name: /^R1, / });
+    fireEvent.pointerDown(bar, { button: 0, clientX: 100, clientY: 20, pointerId: 1 });
+    fireEvent.pointerMove(bar, { clientX: 268, clientY: 80, pointerId: 1 }); // 3 days at 56px a day, one lane down
+    fireEvent.pointerUp(bar, { clientX: 268, clientY: 80, pointerId: 1 });
+    await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+    // R2's lane starts on Mar 4; the bar keeps Mar 5, where it was dropped.
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { [F.start.id]: "2026-03-05", [F.end.id]: "2026-03-09" } }] });
   });
 });

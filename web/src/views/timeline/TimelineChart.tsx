@@ -10,7 +10,7 @@
  * window or the scale changes. A bar that runs past the visible edge gets a square end and an
  * arrow there, and its label stays in view while it is scrolled.
  */
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type Ref, type RefObject } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type Ref, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { TimelineScale } from "@/api/types";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -68,9 +68,14 @@ export interface TimelineBar extends BarInput {
   /** Text inside the bar when it is not the title (the dates, when the left column names the record). */
   label?: string;
   canMove: boolean;
+  /** The end edge can be dragged (a milestone grows an end this way). */
   canResize: boolean;
+  /** The start edge can be dragged (when absent, as `canResize`). */
+  canResizeStart?: boolean;
   /** Dependency violated at this bar's start. */
   violated?: boolean;
+  /** Something to know about its dates, said in its name and on hover ("The end is before the start"). */
+  hint?: string;
 }
 
 export interface ChartLane {
@@ -104,6 +109,10 @@ export interface TimelineChartProps {
   /** Saves a width dragged on the column's divider (`null`: back to fitting the labels); without it a drag holds only until the page changes. */
   onLabelWidth?: (width: number | null) => void;
   canCreate: boolean;
+  /** Dragging across days to add a record gives it an end (else only the first day is saved, and the ghost shows just that). */
+  createSpansDays?: boolean;
+  /** Said where the chart has no bars (the host knows about records outside the window and the unscheduled ones). */
+  emptyMessage?: ReactNode;
   /**
    * Bring this day into view when `nonce` changes: centred, or (`start`) at the start of its period
    * with a little of what came before, the way the view opens.
@@ -122,8 +131,10 @@ export interface TimelineChartProps {
   onCreate(laneKey: string, fromDay: number, toDay: number): void;
   /** A record dragged in from the unscheduled list (`RECORD_DRAG_TYPE`) and dropped on a lane's day. */
   onDropRecord?(recordId: string, laneKey: string, day: number): void;
-  /** Takes a bar off the timeline (clears its dates): Delete on a selected bar, or a bar dropped on `unscheduleZone`. */
+  /** Takes a bar off the timeline (clears its dates): U on a selected bar, or a bar dropped on `unscheduleZone`. */
   onUnschedule?(recordId: string): void;
+  /** Delete or Backspace on a selected bar. */
+  onDelete?(recordId: string): void;
   /** Where a dragged bar can be dropped to unschedule it (the unscheduled column). */
   unscheduleZone?: RefObject<HTMLElement | null>;
   /** A dragged bar is over `unscheduleZone` (or no longer is), for the column to show it takes the drop. */
@@ -368,16 +379,20 @@ export function TimelineChart(props: TimelineChartProps) {
     if (!to || to.recordId || to.lane.key === from.lane.key || to.lane.value === undefined || to.lane.fieldId !== from.lane.fieldId) return undefined;
     return to.lane.key;
   };
+  /** Dragging this bar's end edge, even by nothing, writes the end it is missing (it is before the start). */
+  const repairs = (bar: TimelineBar, mode: DragMode, moved: boolean) => moved && mode === "end" && !!bar.span.reversed;
   const live = (id: string) => {
     const base = rects.get(id);
     if (!base) return undefined;
-    if (!drag || drag.id !== id || (drag.days === 0 && !drag.toLane)) return base;
+    if (!drag || drag.id !== id) return base;
     const bar = lanes.flatMap((l) => l.bars).find((b) => b.id === id);
     if (!bar) return base;
+    // A reversed record's end edge repairs it even without moving a day.
+    if (drag.days === 0 && !drag.toLane && !repairs(bar, drag.mode, drag.moved)) return base;
     const r = barRect(dragSpan(bar.span, drag.mode, drag.days), axis);
     // Over another lane, the bar is drawn on that lane's first row.
     const into = drag.toLane !== undefined ? placed.find((p) => p.key === drag.toLane) : undefined;
-    return { ...base, x: r.x, width: r.width, y: into ? into.top + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2 : base.y };
+    return { ...base, ...r, y: into ? into.top + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2 : base.y };
   };
 
   // A finger holds a bar (or a lane) for a moment before it drags; a swipe scrolls the chart.
@@ -391,10 +406,12 @@ export function TimelineChart(props: TimelineChartProps) {
     }
   };
 
+  const allows = (bar: TimelineBar, mode: DragMode) => (mode === "move" ? bar.canMove : mode === "start" ? (bar.canResizeStart ?? bar.canResize) : bar.canResize);
+
   const startBar = (bar: TimelineBar, e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const handle = (e.target as HTMLElement).dataset.handle as "start" | "end" | undefined;
-    const allowed = (handle ?? "move") === "move" ? bar.canMove : bar.canResize;
+    const allowed = allows(bar, handle ?? "move");
     // A bar that cannot change still takes the press, so that releasing it opens the record (one that
     // can is selected instead: see the bar's pointer up).
     const mode: DragMode = allowed ? (handle ?? "move") : "move";
@@ -409,7 +426,7 @@ export function TimelineChart(props: TimelineChartProps) {
     if (!d || d.id !== bar.id) return;
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
-    const allowed = d.mode === "move" ? bar.canMove : bar.canResize;
+    const allowed = allows(bar, d.mode);
     const moved = d.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
     // Over the unscheduled column, a moved bar goes back to it (it stays drawn where it was until dropped).
     const zone = allowed && d.mode === "move" && props.onUnschedule ? props.unscheduleZone?.current?.getBoundingClientRect() : undefined;
@@ -431,7 +448,7 @@ export function TimelineChart(props: TimelineChartProps) {
       else props.onOpen(bar.id);
     } else if (d.unschedule) props.onUnschedule?.(bar.id);
     else if (d.toLane !== undefined) props.onCommit(bar.id, d.mode, d.days, d.toLane);
-    else if (d.days !== 0) props.onCommit(bar.id, d.mode, d.days);
+    else if (d.days !== 0 || repairs(bar, d.mode, d.moved)) props.onCommit(bar.id, d.mode, d.days);
   };
   const barKey = (bar: TimelineBar, e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
@@ -439,8 +456,13 @@ export function TimelineChart(props: TimelineChartProps) {
       props.onOpen(bar.id);
       return;
     }
-    // Delete takes a selected bar off the timeline, back to the unscheduled records.
-    if ((e.key === "Delete" || e.key === "Backspace") && bar.canMove && props.onUnschedule) {
+    // Delete deletes the record of a selected bar; U takes it off the timeline, back to the unscheduled records.
+    if ((e.key === "Delete" || e.key === "Backspace") && props.onDelete) {
+      e.preventDefault();
+      props.onDelete(bar.id);
+      return;
+    }
+    if ((e.key === "u" || e.key === "U") && !e.ctrlKey && !e.metaKey && !e.altKey && bar.canMove && props.onUnschedule) {
       e.preventDefault();
       props.onUnschedule(bar.id);
       return;
@@ -675,7 +697,7 @@ export function TimelineChart(props: TimelineChartProps) {
         )}
 
         <div className="pointer-events-none absolute z-[5]" style={{ left: labelW, top: HEADER_HEIGHT, width, height: lanesHeight }}>
-          {todayVisible && <div className="absolute inset-y-0 -ml-px w-0.5 bg-primary opacity-55" style={{ left: todayX }} />}
+          {todayVisible && <div role="img" aria-label="Today" data-today-line className="absolute inset-y-0 -ml-px w-0.5 bg-primary opacity-55" style={{ left: todayX }} />}
           <svg className="absolute inset-0 overflow-visible" width={width} height={lanesHeight} aria-hidden>
             <defs>
               <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
@@ -705,7 +727,7 @@ export function TimelineChart(props: TimelineChartProps) {
             const r = live(bar.id);
             if (!r) return null;
             const dragging = drag?.id === bar.id && drag.moved;
-            const label = `${bar.title}, ${spanLabel(bar.span)}`;
+            const label = `${bar.title}, ${spanLabel(bar.span)}${bar.hint ? `. ${bar.hint}` : ""}`;
             // Only a laid-out chart knows its visible edges; before that every bar is drawn whole.
             const measured = view.right > view.left;
             const offLeft = measured && !r.milestone && r.x < view.left - 1;
@@ -722,6 +744,7 @@ export function TimelineChart(props: TimelineChartProps) {
                 data-record-id={bar.id}
                 data-milestone={r.milestone || undefined}
                 data-violated={bar.violated || undefined}
+                data-invalid={bar.span.reversed || undefined}
                 title={withDescription ? undefined : label}
                 onPointerDown={(e) => startBar(bar, e)}
                 onPointerMove={(e) => barGate.move(e) && moveBar(bar, e)}
@@ -759,16 +782,18 @@ export function TimelineChart(props: TimelineChartProps) {
                   <>
                     <span
                       aria-hidden
-                      className={cn("size-3.5 shrink-0 rotate-45 rounded-[2px] border", bar.color ? choiceClass(bar.color) : "ob-tl-bar-plain", bar.violated && "ring-2 ring-danger")}
+                      className={cn("size-3.5 shrink-0 rotate-45 rounded-[2px] border", bar.color ? choiceClass(bar.color) : "ob-tl-bar-plain", (bar.violated || bar.span.reversed) && "ring-2 ring-danger")}
                       style={{ marginLeft: (r.width - 14) / 2 }}
                     />
+                    {/* A milestone gets an end by dragging this edge out (a reversed end is repaired the same way). */}
+                    {bar.canResize && <span aria-hidden data-handle="end" className="absolute inset-y-0 -right-2 z-[1] w-3 cursor-ew-resize rounded-r-[7px] hover:bg-black/15" />}
                     <span className="pointer-events-none absolute whitespace-nowrap text-xs font-medium" style={{ left: r.width + 4 }}>
                       {bar.label ?? bar.title}
                     </span>
                   </>
                 ) : (
                   <>
-                    {bar.canResize && <span aria-hidden data-handle="start" className="absolute inset-y-0 left-0 z-[1] w-1.5 cursor-ew-resize rounded-l-[7px] hover:bg-black/15" />}
+                    {(bar.canResizeStart ?? bar.canResize) && <span aria-hidden data-handle="start" className="absolute inset-y-0 left-0 z-[1] w-1.5 cursor-ew-resize rounded-l-[7px] hover:bg-black/15" />}
                     {/* Sticky, so the start of a bar scrolled past the left column still says what it is. */}
                     <span className="pointer-events-none sticky flex min-w-0 items-center gap-1.5 overflow-hidden px-2.5" style={{ left: labelW }}>
                       {offLeft && <ChevronLeft aria-hidden className="-ml-1 size-3.5 shrink-0" />}
@@ -799,11 +824,12 @@ export function TimelineChart(props: TimelineChartProps) {
             );
           })}
           {creating?.moved && (
-            <GhostBar creating={creating} axis={axis} top={(placed.find((p) => p.key === creating.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2} />
+            <GhostBar creating={creating} spanDays={props.createSpansDays ?? true} axis={axis} top={(placed.find((p) => p.key === creating.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2} />
           )}
           {dropAt && (
             <GhostBar
               creating={{ laneKey: dropAt.laneKey, fromDay: dropAt.day, toDay: dropAt.day, startX: 0, moved: true }}
+              spanDays
               axis={axis}
               top={(placed.find((p) => p.key === dropAt.laneKey)?.top ?? 0) + LANE_PAD + (ROW_HEIGHT - BAR_HEIGHT) / 2}
             />
@@ -811,8 +837,8 @@ export function TimelineChart(props: TimelineChartProps) {
         </div>
 
         {!loading && totalBars === 0 && (
-          <p className="pointer-events-none absolute z-10 text-[0.8125rem] text-muted" style={{ top: HEADER_HEIGHT + 24, left: labelW + 24 }}>
-            No records with dates in this range. Drag across a lane to add one.
+          <p className="pointer-events-none absolute z-10 max-w-[min(32rem,calc(100vw-4rem))] text-[0.8125rem] text-muted" role="status" style={{ top: HEADER_HEIGHT + 24, left: labelW + 24 }}>
+            {props.emptyMessage ?? <>No records with dates in this range.{canCreate && " Drag across a lane to add one."}</>}
           </p>
         )}
       </div>
@@ -820,8 +846,9 @@ export function TimelineChart(props: TimelineChartProps) {
   );
 }
 
-function GhostBar({ creating, axis, top }: { creating: CreateState; axis: Axis; top: number }) {
+/** The days a new record would get: `spanDays` false saves only the first, so only that one is drawn. */
+function GhostBar({ creating, spanDays, axis, top }: { creating: CreateState; spanDays: boolean; axis: Axis; top: number }) {
   const a = Math.min(creating.fromDay, creating.toDay);
-  const b = Math.max(creating.fromDay, creating.toDay) + 1;
+  const b = spanDays ? Math.max(creating.fromDay, creating.toDay) + 1 : a + 1;
   return <div aria-hidden className="absolute rounded-[7px] border-2 border-dashed border-primary bg-primary-soft" style={{ left: xOfDay(a, axis), top, width: (b - a) * axis.pxPerDay, height: BAR_HEIGHT }} />;
 }

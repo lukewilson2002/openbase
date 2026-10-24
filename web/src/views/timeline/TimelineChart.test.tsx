@@ -1,17 +1,17 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { DAY_MS, type Span } from "../common/wallTime";
-import { BAR_HEIGHT, MILESTONE_SIZE, type DependencyEdge } from "./geometry";
+import { DAY_MS } from "../common/wallTime";
+import { BAR_HEIGHT, MILESTONE_SIZE, type DependencyEdge, type TimelineSpan } from "./geometry";
 import { TimelineChart, type ChartLane, type TimelineBar, type TimelineChartProps } from "./TimelineChart";
 
 const day = (y: number, m: number, d: number) => Math.floor(Date.UTC(y, m - 1, d) / DAY_MS);
 const ms = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d);
-const span = (s: number, e: number, over: Partial<Span> = {}): Span => ({ startMs: s, endMs: e, startDateOnly: true, hasEnd: true, ...over });
+const span = (s: number, e: number, over: Partial<TimelineSpan> = {}): TimelineSpan => ({ startMs: s, endMs: e, startDateOnly: true, hasEnd: true, ...over });
 
 const AXIS = { fromDay: day(2026, 3, 1), toDay: day(2026, 6, 1), pxPerDay: 10 };
 
-function bar(id: string, title: string, s: Span, over: Partial<TimelineBar> = {}): TimelineBar {
+function bar(id: string, title: string, s: TimelineSpan, over: Partial<TimelineBar> = {}): TimelineBar {
   return { id, title, span: s, canMove: true, canResize: s.hasEnd, ...over };
 }
 
@@ -140,22 +140,69 @@ describe("TimelineChart", () => {
     expect(props.onOpen).toHaveBeenCalledWith("r1");
   });
 
-  it("takes a selected bar off the timeline with Delete or Backspace, if it may move", async () => {
+  it("deletes the record of a selected bar with Delete or Backspace, and takes it off the timeline with U", async () => {
     const user = userEvent.setup();
     const onUnschedule = vi.fn();
-    const { unmount } = chart({ onUnschedule });
+    const onDelete = vi.fn();
+    const { unmount } = chart({ onUnschedule, onDelete });
     screen.getByRole("button", { name: /^Launch/ }).focus();
     await user.keyboard("{Delete}");
-    expect(onUnschedule).toHaveBeenCalledWith("r3");
+    expect(onDelete).toHaveBeenCalledWith("r3");
     screen.getByRole("button", { name: /^Ship it/ }).focus();
     await user.keyboard("{Backspace}");
-    expect(onUnschedule).toHaveBeenLastCalledWith("r2");
+    expect(onDelete).toHaveBeenLastCalledWith("r2");
+    expect(onUnschedule).not.toHaveBeenCalled();
+    await user.keyboard("u");
+    expect(onUnschedule).toHaveBeenCalledWith("r2");
     unmount();
     onUnschedule.mockClear();
     chart({ onUnschedule }, [{ lane: { key: "a", label: "A", records: [] }, bars: [bar("r1", "Locked", span(ms(2026, 3, 10), ms(2026, 3, 14)), { canMove: false, canResize: false })] }]);
     screen.getByRole("button", { name: /^Locked/ }).focus();
-    await user.keyboard("{Delete}");
+    await user.keyboard("{Delete}u");
     expect(onUnschedule).not.toHaveBeenCalled();
+  });
+
+  it("gives a milestone an end handle, and repairs a reversed end by dragging it", () => {
+    const onCommit = vi.fn();
+    chart({ onCommit }, [
+      {
+        lane: { key: "a", label: "A", records: [] },
+        bars: [
+          bar("m1", "Start only", span(ms(2026, 3, 10), ms(2026, 3, 11), { hasEnd: false }), { canResize: true }),
+          bar("m2", "Backwards", span(ms(2026, 3, 20), ms(2026, 3, 21), { hasEnd: false, reversed: true }), { canResize: true, hint: "Its end is before its start." }),
+        ],
+      },
+    ]);
+    const m1 = screen.getByRole("button", { name: /^Start only/ });
+    expect(m1.querySelector("[data-handle=end]")).not.toBeNull();
+    expect(m1.querySelector("[data-handle=start]")).toBeNull();
+    const m2 = screen.getByRole("button", { name: /^Backwards.*Its end is before its start/ });
+    expect(m2).toHaveAttribute("data-invalid", "true");
+    const handle = m2.querySelector("[data-handle=end]")!;
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100, clientY: 20, pointerId: 1 });
+    fireEvent.pointerMove(m2, { clientX: 104, clientY: 20, pointerId: 1 });
+    fireEvent.pointerUp(m2, { clientX: 104, clientY: 20, pointerId: 1 });
+    // Not a day away, but the bar has no valid end: it is written.
+    expect(onCommit).toHaveBeenCalledWith("m2", "end", 0);
+  });
+
+  it("draws the ghost of a new record as one day when only the first day is saved", () => {
+    const { container } = chart({ createSpansDays: false });
+    const lane = container.querySelector("[data-lane=a]")!;
+    fireEvent.pointerDown(lane, { button: 0, clientX: 200, pointerId: 1 });
+    fireEvent.pointerMove(lane, { clientX: 300, pointerId: 1 });
+    const ghost = container.querySelector(".border-dashed") as HTMLElement;
+    expect(ghost.style.width).toBe(`${AXIS.pxPerDay}px`);
+  });
+
+  it("says what can be done when there are no bars, and names the today line", () => {
+    const { rerender, props } = chart({}, []);
+    expect(screen.getByRole("status")).toHaveTextContent("No records with dates in this range. Drag across a lane to add one.");
+    rerender(<TimelineChart {...props} lanes={[]} canCreate={false} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/^No records with dates in this range\.$/);
+    rerender(<TimelineChart {...props} lanes={[]} emptyMessage="Nothing here, but a record is far away." />);
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing here, but a record is far away.");
+    expect(screen.getByRole("img", { name: "Today" })).toBeInTheDocument();
   });
 
   it("takes a bar dropped on the unscheduled column off the timeline", () => {

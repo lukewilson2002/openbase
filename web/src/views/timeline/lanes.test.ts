@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { DateOptions, Field, GroupHeader } from "@/api/types";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
-import { DAY_MS, type Span } from "../common/wallTime";
-import { createWrites, dragWrites, groupIntoLanes, lanesFromGroups, spanLabel, type TimelineDateFields } from "./lanes";
+import { DAY_MS } from "../common/wallTime";
+import type { TimelineSpan } from "./geometry";
+import { createWrites, dragWrites, dropWrites, groupIntoLanes, lanesFromGroups, spanLabel, timelineSpan, type TimelineDateFields } from "./lanes";
 
 const status = ALL_FIELDS.single_select!;
 const rec = (id: string, v: Record<string, unknown>) => makeRecord(v, id);
@@ -68,7 +69,7 @@ describe("date writes", () => {
   const df = (id: string): Field => field("date", day, { id });
   const tf = (id: string): Field => field("date", timed, { id });
   const dayFields: TimelineDateFields = { start: { field: df("s"), opts: day }, end: { field: df("e"), opts: day } };
-  const sp = (s: number, e: number, over: Partial<Span> = {}): Span => ({ startMs: s, endMs: e, startDateOnly: true, hasEnd: true, ...over });
+  const sp = (s: number, e: number, over: Partial<TimelineSpan> = {}): TimelineSpan => ({ startMs: s, endMs: e, startDateOnly: true, hasEnd: true, ...over });
 
   it("writes only the edges a drag changed (date-only end stores the last day)", () => {
     const before = sp(D(2026, 3, 10), D(2026, 3, 13));
@@ -98,6 +99,43 @@ describe("date writes", () => {
     expect(createWrites(f1, f2, { ...dayFields, end: null }, "UTC")).toEqual({ s: "2026-03-05" });
     const fields: TimelineDateFields = { start: { field: tf("s"), opts: timed }, end: { field: tf("e"), opts: timed } };
     expect(createWrites(f1, f2, fields, "UTC")).toEqual({ s: "2026-03-05T14:00:00.000Z", e: "2026-03-09T21:00:00.000Z" }); // 09:00 EST and 17:00 EDT (DST began on the 8th)
+  });
+
+  it("reads an end-only record as a milestone on its end day and an end before the start as reversed", () => {
+    expect(timelineSpan({ s: "2026-03-10", e: "2026-03-12" }, dayFields, "UTC")).toMatchObject({ startMs: D(2026, 3, 10), endMs: D(2026, 3, 13), hasEnd: true });
+    expect(timelineSpan({ e: "2026-11-30" }, dayFields, "UTC")).toEqual({ startMs: D(2026, 11, 30), endMs: D(2026, 12, 1), startDateOnly: true, hasEnd: false, endOnly: true });
+    expect(timelineSpan({ s: "2026-03-10", e: "2026-03-03" }, dayFields, "UTC")).toMatchObject({ startMs: D(2026, 3, 10), hasEnd: false, reversed: true });
+    expect(timelineSpan({ s: "2026-03-10" }, dayFields, "UTC")).not.toHaveProperty("reversed");
+    expect(timelineSpan({}, dayFields, "UTC")).toBeNull();
+    expect(timelineSpan({ e: "2026-03-10" }, { ...dayFields, end: null }, "UTC")).toBeNull();
+  });
+
+  it("moves an end-only milestone by its end, and gives a milestone an end from its end edge", () => {
+    const endOnly = sp(D(2026, 3, 10), D(2026, 3, 11), { hasEnd: false, endOnly: true });
+    expect(dragWrites(endOnly, sp(D(2026, 3, 12), D(2026, 3, 13), { hasEnd: false, endOnly: true }), "move", dayFields, "UTC")).toEqual({ e: "2026-03-12" });
+    const m = sp(D(2026, 3, 10), D(2026, 3, 11), { hasEnd: false });
+    expect(dragWrites(m, sp(D(2026, 3, 10), D(2026, 3, 13)), "end", dayFields, "UTC")).toEqual({ e: "2026-03-12" });
+    // An end edge dragged back to where it was does not invent an end; a reversed end is repaired by it.
+    expect(dragWrites(m, m, "end", dayFields, "UTC")).toEqual({});
+    expect(dragWrites({ ...m, reversed: true }, m, "end", dayFields, "UTC")).toEqual({ e: "2026-03-10" });
+  });
+
+  it("writes only the dates that are not calculated", () => {
+    const calcEnd: TimelineDateFields = { ...dayFields, end: { field: field("formula", { expression: "x", result_type: "date" }, { id: "e" }), opts: day } };
+    expect(dragWrites(sp(D(2026, 3, 10), D(2026, 3, 13)), sp(D(2026, 3, 12), D(2026, 3, 15)), "move", calcEnd, "UTC")).toEqual({ s: "2026-03-12" });
+    expect(createWrites(Math.floor(D(2026, 3, 5) / DAY_MS), Math.floor(D(2026, 3, 9) / DAY_MS), calcEnd, "UTC")).toEqual({ s: "2026-03-05" });
+    const calcStart: TimelineDateFields = { ...dayFields, start: { field: field("created_time", day, { id: "s" }), opts: day } };
+    expect(dragWrites(sp(D(2026, 3, 10), D(2026, 3, 13)), sp(D(2026, 3, 12), D(2026, 3, 15)), "move", calcStart, "UTC")).toEqual({ e: "2026-03-14" });
+  });
+
+  it("drops a record on a day: its start, keeping an end that is not before it", () => {
+    const d = Math.floor(D(2026, 11, 5) / DAY_MS);
+    expect(dropWrites(d, { e: "2026-11-30" }, dayFields, "UTC")).toEqual({ s: "2026-11-05" });
+    expect(dropWrites(d, { e: "2026-11-05" }, dayFields, "UTC")).toEqual({ s: "2026-11-05" });
+    // An end before the new start would be invalid: it becomes that day. No end: a one-day bar.
+    expect(dropWrites(d, { e: "2026-11-01" }, dayFields, "UTC")).toEqual({ s: "2026-11-05", e: "2026-11-05" });
+    expect(dropWrites(d, {}, dayFields, "UTC")).toEqual({ s: "2026-11-05", e: "2026-11-05" });
+    expect(dropWrites(d, { e: "2026-11-30" }, { ...dayFields, end: null }, "UTC")).toEqual({ s: "2026-11-05" });
   });
 
   it("labels spans for the drag tooltip", () => {

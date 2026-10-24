@@ -240,8 +240,9 @@ export const dragDays = (dx: number, a: Axis): number => Math.round(dx / a.pxPer
 /**
  * The span after dragging by whole days: the whole bar (`move`), its start edge or its end edge.
  * A bar never collapses: edges stop one day (date-only) or 15 minutes (timed) short of each other.
+ * A milestone (no end, or an end before its start) grows an end when its end is dragged out.
  */
-export function dragSpan(span: Span, mode: DragMode, days: number): Span {
+export function dragSpan<S extends Span>(span: S, mode: DragMode, days: number): S {
   const shift = days * DAY_MS;
   const minLen = span.startDateOnly ? DAY_MS : 15 * 60_000;
   switch (mode) {
@@ -250,16 +251,24 @@ export function dragSpan(span: Span, mode: DragMode, days: number): Span {
     case "start":
       return span.hasEnd ? { ...span, startMs: Math.min(span.startMs + shift, span.endMs - minLen) } : span;
     case "end":
-      return span.hasEnd ? { ...span, endMs: Math.max(span.endMs + shift, span.startMs + minLen) } : span;
+      return { ...span, hasEnd: true, endMs: Math.max(span.endMs + shift, span.startMs + minLen) };
   }
 }
 
 // ---- lanes -------------------------------------------------------------------------------------
 
+/** A span as the timeline reads a record: plus what is odd about it, so the bar can say so. */
+export interface TimelineSpan extends Span {
+  /** The record has an end but no start: a milestone on the end day. */
+  endOnly?: boolean;
+  /** The end is before the start: drawn as a milestone on the start, to be repaired by dragging its end out. */
+  reversed?: boolean;
+}
+
 export interface BarInput {
   id: string;
   title: string;
-  span: Span;
+  span: TimelineSpan;
 }
 
 export interface LaneInput<T extends BarInput = BarInput> {

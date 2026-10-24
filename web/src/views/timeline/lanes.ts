@@ -7,8 +7,8 @@ import type { DateOptions, Field, GroupHeader, TableRecord } from "@/api/types";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { kindClassOf, linkRefs, selectChoicesOf, stringItems } from "@/lib/cells/kinds";
 import type { DateFields } from "../common/dateFields";
-import { DAY_MS, wallToStored, wallYmd, type Span } from "../common/wallTime";
-import type { DragMode } from "./geometry";
+import { DAY_MS, isWritableDate, readWall, recordSpan, wallToStored, wallYmd, type Span } from "../common/wallTime";
+import type { DragMode, TimelineSpan } from "./geometry";
 
 export interface Lane {
   key: string;
@@ -102,24 +102,67 @@ function storeEnd(endExclusiveMs: number, end: { opts: DateOptions }, zone: stri
   return end.opts.include_time ? wallToStored(endExclusiveMs, end.opts, zone) : wallToStored(Math.floor((endExclusiveMs - 1) / DAY_MS) * DAY_MS, end.opts, zone);
 }
 
-/** Field values to write after a drag: only the dates the drag actually changed. */
-export function dragWrites(before: Span, after: Span, mode: DragMode, fields: TimelineDateFields, zone: string): Record<string, string> {
+/**
+ * The span a record occupies on the timeline: its start and end; a milestone when it has only a
+ * start, or its end is not after the start (`reversed`); a milestone on the end day when it has
+ * only an end (`endOnly`). Null when it has neither.
+ */
+export function timelineSpan(values: Record<string, unknown>, fields: TimelineDateFields, zone: string): TimelineSpan | null {
+  const start = { id: fields.start.field.id, opts: fields.start.opts };
+  const end = fields.end && { id: fields.end.field.id, opts: fields.end.opts };
+  const span = recordSpan(values, start, end, zone);
+  if (!span) {
+    const e = end && readWall(values[end.id], end.opts, zone);
+    return e ? { startMs: e.ms, endMs: e.dateOnly ? e.ms + DAY_MS : e.ms, startDateOnly: e.dateOnly, hasEnd: false, endOnly: true } : null;
+  }
+  if (span.hasEnd || !end) return span;
+  const e = readWall(values[end.id], end.opts, zone);
+  // An end before the start: a timed end equal to the start is just an event of no length.
+  return e && (e.dateOnly ? e.ms + DAY_MS : e.ms) < span.startMs ? { ...span, reversed: true } : span;
+}
+
+/** Field values to write after a drag: only the dates the drag actually changed, and only those that can be written. */
+export function dragWrites(before: TimelineSpan, after: Span, mode: DragMode, fields: TimelineDateFields, zone: string): Record<string, string> {
   const out: Record<string, string> = {};
-  if ((mode === "move" || mode === "start") && after.startMs !== before.startMs) out[fields.start.field.id] = wallToStored(after.startMs, fields.start.opts, zone);
-  if (fields.end && before.hasEnd && (mode === "move" || mode === "end") && after.endMs !== before.endMs) out[fields.end.field.id] = storeEnd(after.endMs, fields.end, zone);
+  const end = fields.end && isWritableDate(fields.end.field) ? fields.end : null;
+  // A milestone on an end alone moves that end.
+  if (before.endOnly) {
+    if (end && mode === "move" && after.startMs !== before.startMs) out[end.field.id] = wallToStored(after.startMs, end.opts, zone);
+    return out;
+  }
+  if (isWritableDate(fields.start.field) && (mode === "move" || mode === "start") && after.startMs !== before.startMs) out[fields.start.field.id] = wallToStored(after.startMs, fields.start.opts, zone);
+  if (end && (mode === "move" || mode === "end")) {
+    // A milestone only gets an end from its end edge (and a reversed one is repaired by it, even undragged).
+    const grows = mode === "end" && !before.hasEnd && (after.endMs !== before.endMs || !!before.reversed);
+    if (grows || (before.hasEnd && after.endMs !== before.endMs)) out[end.field.id] = storeEnd(after.endMs, end, zone);
+  }
   return out;
 }
 
-/** Values for a record created by dragging across `fromDay..toDay` (day numbers, either order). */
+const endOfDay = (day: number, end: { opts: DateOptions }) => (end.opts.include_time ? day * DAY_MS + 17 * 3_600_000 : day * DAY_MS);
+
+/** Values for a record created by dragging across `fromDay..toDay` (day numbers, either order). An end that cannot be written is left out. */
 export function createWrites(fromDay: number, toDay: number, fields: TimelineDateFields, zone: string): Record<string, string> {
   const first = Math.min(fromDay, toDay);
   const last = Math.max(fromDay, toDay);
   const startMs = first * DAY_MS + (fields.start.opts.include_time ? 9 * 3_600_000 : 0);
   const out: Record<string, string> = { [fields.start.field.id]: wallToStored(startMs, fields.start.opts, zone) };
-  if (fields.end) {
-    const endMs = fields.end.opts.include_time ? last * DAY_MS + 17 * 3_600_000 : last * DAY_MS;
-    out[fields.end.field.id] = wallToStored(endMs, fields.end.opts, zone);
-  }
+  if (fields.end && isWritableDate(fields.end.field)) out[fields.end.field.id] = wallToStored(endOfDay(last, fields.end), fields.end.opts, zone);
+  return out;
+}
+
+/**
+ * Values for a record dragged in from the unscheduled column onto `day`: its start. An end it
+ * already has is kept when it is not before the new start; else (or when it has none) the end is
+ * that same day.
+ */
+export function dropWrites(day: number, current: Record<string, unknown>, fields: TimelineDateFields, zone: string): Record<string, string> {
+  const out = createWrites(day, day, fields, zone);
+  const end = fields.end;
+  if (!end || !isWritableDate(end.field)) return out;
+  const startMs = day * DAY_MS + (fields.start.opts.include_time ? 9 * 3_600_000 : 0);
+  const e = readWall(current[end.field.id], end.opts, zone);
+  if (e && (e.dateOnly ? e.ms + DAY_MS : e.ms) > startMs) delete out[end.field.id];
   return out;
 }
 
