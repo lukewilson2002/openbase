@@ -236,6 +236,8 @@ describe("GalleryView keyboard and selection", () => {
     screen.getByRole("button", { name: "R2" }).focus();
     await user.keyboard("{Delete}");
     await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r2"] }));
+    // Focus stays in the gallery, on the card after the deleted one.
+    await waitFor(() => expect(screen.getByRole("button", { name: "R3" })).toHaveFocus());
     expect(await screen.findByText("Record deleted")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
   });

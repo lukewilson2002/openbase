@@ -3,7 +3,7 @@ import type { GroupHeader } from "@/api/types";
 import type { TableRecord } from "@/api/types";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
 import { DEFAULT_CTX } from "@/lib/cells/format";
-import { allPaths, buildOutline, flattenOutline, foldRows, foldedAncestors, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, visibleIds, withTails, type DropPlan } from "./outline";
+import { allPaths, buildOutline, flattenOutline, foldRows, foldedAncestors, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, drawnIds, withTails, type DropPlan } from "./outline";
 
 const h = (depth: number, field_id: string, key: string, start: number, count: number, value: unknown = key): GroupHeader => ({ depth, field_id, key, label: key || "(Empty)", value: value as GroupHeader["value"], start, count });
 
@@ -167,15 +167,6 @@ describe("moveBetweenGroups", () => {
   });
 });
 
-describe("visibleIds", () => {
-  it("leaves out the records of folded groups, but keeps the open one", () => {
-    expect(visibleIds(ids, roots, new Set())).toEqual(ids);
-    expect(visibleIds(ids, roots, new Set(["st:todo"]))).toEqual(["r3", "r4", "r5"]);
-    expect(visibleIds(ids, roots, new Set(["st:todo/ow:ada", "st:done"]))).toEqual(["r2", "r5"]);
-    expect(visibleIds(ids, roots, new Set(["st:todo"]), "r1")).toEqual(["r1", "r3", "r4", "r5"]);
-  });
-});
-
 describe("buildOutline places", () => {
   it("numbers every group among its siblings", () => {
     const tree = buildOutline(groups);
@@ -317,5 +308,39 @@ describe("withTails", () => {
     expect(out.records).toHaveLength(6);
     expect(out.loaded.get("")).toBe(6);
     expect(out.groups).toEqual([]);
+  });
+});
+
+describe("drawnIds", () => {
+  const recs = ["r0", "r1", "r2", "r3", "r4", "r5"].map((id) => node(id));
+  const none = new Set<string>();
+
+  it("is the records in order, less those of folded groups, but keeps the open one", () => {
+    expect(drawnIds(recs, roots, null, { collapsed: none })).toEqual(ids);
+    expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo"]) })).toEqual(["r3", "r4", "r5"]);
+    expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo/ow:ada", "st:done"]) })).toEqual(["r2", "r5"]);
+    expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo"]), keep: "r1" })).toEqual(["r1", "r3", "r4", "r5"]);
+  });
+
+  it("puts sub-items right after their parent, inside their group, and leaves out the folded ones", () => {
+    // r1 is a sub-item of r0 (same group); r3 links to r0 in another group, so it stays top-level in its own.
+    const grouped = { collapsed: none };
+    const nested = [node("r0"), node("r1", "r0"), node("r2"), node("r3", "r0"), node("r4", "r3"), node("r5")];
+    expect(drawnIds(nested, roots, P, grouped)).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
+    // r4 is listed before its parent r3: it is drawn right after it.
+    const swapped = [node("r0"), node("r1"), node("r2"), node("r4", "r3"), node("r3"), node("r5")];
+    expect(drawnIds(swapped, roots, P, grouped)).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
+    // Folding a parent hides its sub-items from the selection but not from the panel's steps.
+    const tucked = [node("r0"), node("r1", "r0"), node("r2"), node("r3"), node("r4"), node("r5")];
+    expect(drawnIds(tucked, roots, P, { collapsed: none, folded: new Set(["r0"]) })).toEqual(["r0", "r2", "r3", "r4", "r5"]);
+    expect(drawnIds(tucked, roots, P, { collapsed: none })).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
+    expect(drawnIds(tucked, roots, P, { collapsed: none, folded: new Set(["r0"]), keep: "r1" })).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
+  });
+
+  it("follows the rows present per group and a list without groups", () => {
+    expect(drawnIds(recs.slice(0, 4), roots, null, { collapsed: none, loaded: new Map([["st:todo/ow:ada", 2], ["st:todo/ow:grace", 1], ["st:done/ow:ada", 1]]) })).toEqual(["r0", "r1", "r2", "r3"]);
+    const flat = [node("a"), node("b", "a"), node("c")];
+    expect(drawnIds(flat, [], P, { collapsed: none })).toEqual(["a", "b", "c"]);
+    expect(drawnIds([node("a"), node("c"), node("b", "a")], [], P, { collapsed: none })).toEqual(["a", "b", "c"]);
   });
 });

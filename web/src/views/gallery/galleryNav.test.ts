@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { neighbourCard, onLastRow, type CardBox } from "./galleryNav";
+import { neighbourCard, onLastRow, survivorAfterDelete, type CardBox } from "./galleryNav";
 
 /** Seven cards in rows of three; the last row has one card. */
 const boxes: CardBox[] = Array.from({ length: 7 }, (_, i) => ({ left: (i % 3) * 100, top: Math.floor(i / 3) * 80, width: 90 }));
@@ -41,5 +41,19 @@ describe("onLastRow", () => {
     expect(onLastRow(boxes, 6)).toBe(true);
     expect(onLastRow(boxes, 5)).toBe(false);
     expect(onLastRow(boxes, 12)).toBe(false);
+  });
+});
+
+describe("survivorAfterDelete", () => {
+  const ids = ["a", "b", "c", "d"];
+  it("is the next card, else the one before", () => {
+    expect(survivorAfterDelete(ids, new Set(["b"]))).toBe("c");
+    expect(survivorAfterDelete(ids, new Set(["d"]))).toBe("c");
+    expect(survivorAfterDelete(ids, new Set(["b", "c"]))).toBe("d");
+    expect(survivorAfterDelete(ids, new Set(["c", "d"]))).toBe("b");
+  });
+  it("is null when nothing is left or nothing is deleted", () => {
+    expect(survivorAfterDelete(ids, new Set(ids))).toBeNull();
+    expect(survivorAfterDelete(ids, new Set(["z"]))).toBeNull();
   });
 });

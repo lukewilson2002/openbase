@@ -53,6 +53,7 @@ import {
   parentLinkOf,
   planDrop,
   rowLabel,
+  survivorAfterDelete,
   type DropPlan,
   type GroupNode,
   type NestedRow,
@@ -624,13 +625,22 @@ export function ListOutline(p: ListOutlineProps) {
     reorder(String(active.id), overId.startsWith("group:") ? { kind: "group", path: overId.slice("group:".length) } : { kind: "row", id: overId });
   };
 
+  // Focus stays in the list when rows go: the row after them, else the one before, takes it over.
+  const deleteRows = (gone: readonly string[]) => {
+    if (!p.canEdit || !p.onDelete) return;
+    const rowIds = navKeys.filter((k) => k.startsWith("r:")).map((k) => k.slice(2));
+    const keep = survivorAfterDelete(rowIds, new Set(gone));
+    if (keep) roving.focusKey(`r:${keep}`);
+    p.onDelete(gone);
+  };
+
   const go = (at: number) => {
     const key = navKeys[Math.max(0, Math.min(navKeys.length - 1, at))];
     if (key) roving.focusKey(key);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const sel = p.selection;
-    if (sel?.handleKeyDown(e, { onDelete: () => p.onDelete?.(sel.ids) })) return;
+    if (sel?.handleKeyDown(e, { onDelete: () => deleteRows(sel.ids) })) return;
     const el = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>("[data-nav]") : null;
     // Keys pressed in a link inside a row belong to the link, not to the row.
     if (!el || e.target !== el) return;
@@ -733,7 +743,7 @@ export function ListOutline(p: ListOutlineProps) {
       case "Delete":
         if (!row || !p.canEdit || !p.onDelete) return;
         e.preventDefault();
-        p.onDelete([id]);
+        deleteRows([id]);
         break;
       case "Tab": {
         // Under a parent field Tab indents and Shift+Tab outdents; where that cannot be done, focus moves on as usual.

@@ -32,7 +32,7 @@ import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import { ViewFrame } from "../common/ViewFrame";
 import type { ViewProps } from "../types";
-import { neighbourCard, onLastRow } from "./galleryNav";
+import { neighbourCard, onLastRow, survivorAfterDelete } from "./galleryNav";
 import { useGalleryData } from "./useGalleryData";
 
 /** Fields one card shows (those with a value, in the view's order); a "+N more" says how many it left out. */
@@ -128,8 +128,15 @@ function GalleryInner(props: ViewProps) {
   const duplicateIds = (ids: readonly string[]) => void actions.duplicate(recordsOf(ids), ids.length > 1 ? sel.clear : undefined);
 
   // --- Keys -----------------------------------------------------------------------------------
+  // Focus stays in the gallery when cards go: the card after them, else the one before, takes it over.
+  const deleteFromKeys = (ids: readonly string[], onDone?: () => void) => {
+    if (!setup.canEdit) return;
+    const keep = survivorAfterDelete(recordIds, new Set(ids));
+    if (keep) roving.focusKey(keep);
+    actions.requestDelete(ids, onDone);
+  };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (sel.handleKeyDown(e, { onDelete: () => actions.requestDelete(sel.ids, sel.clear) })) return;
+    if (sel.handleKeyDown(e, { onDelete: () => deleteFromKeys(sel.ids, sel.clear) })) return;
     const card = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>("[data-record-id]") : null;
     // Keys pressed in a link or button inside a card belong to it, not to the card.
     if (!card || e.target !== card) return;
@@ -147,7 +154,7 @@ function GalleryInner(props: ViewProps) {
     }
     if (e.key === "Delete" && setup.canEdit) {
       e.preventDefault();
-      actions.requestDelete([id]);
+      deleteFromKeys([id]);
       return;
     }
     const cards = [...(roving.containerRef.current?.querySelectorAll<HTMLElement>("[data-record-id]") ?? [])];

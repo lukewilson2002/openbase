@@ -60,3 +60,16 @@ export function onLastRow(boxes: readonly CardBox[], index: number): boolean {
   const here = boxes[index];
   return !!here && boxes.every((b) => b.top <= here.top + 1);
 }
+
+/**
+ * The card focus goes to when `deleted` cards are removed: the first one left after the first
+ * deleted card, else the last one before it. Null when none is left.
+ */
+export function survivorAfterDelete(ids: readonly string[], deleted: ReadonlySet<string>): string | null {
+  const first = ids.findIndex((id) => deleted.has(id));
+  if (first < 0) return null;
+  const after = ids.slice(first).find((id) => !deleted.has(id));
+  if (after) return after;
+  for (let i = first - 1; i >= 0; i--) if (!deleted.has(ids[i]!)) return ids[i]!;
+  return null;
+}

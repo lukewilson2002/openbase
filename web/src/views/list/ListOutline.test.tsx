@@ -228,6 +228,19 @@ describe("ListOutline keyboard", () => {
     expect(onDelete).toHaveBeenCalledWith(["r2"]);
   });
 
+  it("keeps focus in the list when Delete is pressed: on the next row, else the one before", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    outline({ onDelete });
+    row("Fix bug").focus();
+    await user.keyboard("{Delete}");
+    // The row after it, though it is in the next group.
+    expect(row("Ship it")).toHaveFocus();
+    row("Idea").focus();
+    await user.keyboard("{Delete}");
+    expect(row("Ship it")).toHaveFocus();
+  });
+
   it("does not delete for people who cannot edit", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();

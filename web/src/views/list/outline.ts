@@ -193,23 +193,16 @@ export function placeIndexes(ids: readonly string[], draggedId: string, place: {
 }
 
 /**
- * The records that are on screen: those outside folded groups. `keep` (the record open in the panel)
- * counts even inside a folded group, so Previous and Next from it find their neighbours.
+ * The row focus goes to when `deleted` rows are removed: the first one left after the first deleted
+ * row (in the order given), else the last one before it. Null when none is left.
  */
-export function visibleIds(ids: readonly string[], roots: readonly GroupNode[], collapsed: ReadonlySet<string>, keep?: string | null): string[] {
-  if (collapsed.size === 0) return [...ids];
-  const hidden = new Set<number>();
-  const walk = (list: readonly GroupNode[]) => {
-    for (const n of list) {
-      if (collapsed.has(n.path)) {
-        for (let i = n.start; i < n.start + n.count; i++) hidden.add(i);
-      } else {
-        walk(n.children);
-      }
-    }
-  };
-  walk(roots);
-  return ids.filter((id, i) => !hidden.has(i) || id === keep);
+export function survivorAfterDelete(ids: readonly string[], deleted: ReadonlySet<string>): string | null {
+  const first = ids.findIndex((id) => deleted.has(id));
+  if (first < 0) return null;
+  const after = ids.slice(first).find((id) => !deleted.has(id));
+  if (after) return after;
+  for (let i = first - 1; i >= 0; i--) if (!deleted.has(ids[i]!)) return ids[i]!;
+  return null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -336,6 +329,43 @@ export function rowLabel(title: string, parts: readonly { field: Field; value: u
     return `${field.name}: ${text}`;
   });
   return [title, ...said, description].filter((x) => x !== "").join(", ");
+}
+
+/**
+ * The ids of the records in the order the outline draws them: group by group, and inside a group each
+ * record followed by its sub-items (see `nestRows`). Records of folded groups are left out, and so are
+ * those under a folded row when `folded` is given; `keep` (the open record) stays wherever it would
+ * be. `loaded` is the rows present per group (see `withTails`); without it every record in the range
+ * of its group counts.
+ */
+export function drawnIds(
+  records: readonly TableRecord[],
+  roots: readonly GroupNode[],
+  parentFieldId: string | null | undefined,
+  opts: { collapsed: ReadonlySet<string>; folded?: ReadonlySet<string>; loaded?: ReadonlyMap<string, number>; keep?: string | null },
+): string[] {
+  const out: string[] = [];
+  const add = (path: string, start: number, count: number, hidden: boolean) => {
+    const have = opts.loaded?.get(path) ?? Math.max(0, Math.min(count, records.length - start));
+    const rows = nestRows(records.slice(start, start + have), parentFieldId);
+    const shown = opts.folded && opts.folded.size > 0 ? new Set(foldRows(rows, opts.folded).map((r) => r.record.id)) : null;
+    for (const { record } of rows) {
+      if (record.id === opts.keep || (!hidden && (!shown || shown.has(record.id)))) out.push(record.id);
+    }
+  };
+  if (roots.length === 0) {
+    add("", 0, records.length, false);
+    return out;
+  }
+  const walk = (list: readonly GroupNode[], hidden: boolean) => {
+    for (const n of list) {
+      const folded = hidden || opts.collapsed.has(n.path);
+      if (n.children.length > 0) walk(n.children, folded);
+      else add(n.path, n.start, n.count, folded);
+    }
+  };
+  walk(roots, false);
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------

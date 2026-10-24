@@ -354,6 +354,17 @@ describe("ListView sub-items", () => {
     ]);
   });
 
+  it("steps Previous and Next through the rows in the order they are drawn, sub-items after their parent", async () => {
+    const user = userEvent.setup();
+    // r3 is a sub-item of r1 but is listed after r2: it is drawn right under r1.
+    const listed = [rec("r1", {}), rec("r2", {}), rec("r3", parentOf("r1"))];
+    setup("editor", nestedView, { records: listed, groups: [] }, { "GET /api/tables/tbl1/records/r1": listed[0]! });
+    await user.click(await screen.findByRole("treeitem", { name: /^R1(,|$)/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /Next record/ }));
+    expect(screen.getByTestId("where")).toHaveTextContent("?record=r3");
+  });
+
   it("folds a parent and remembers it", async () => {
     const user = userEvent.setup();
     setup("editor", nestedView, { records: tree, groups: [] });

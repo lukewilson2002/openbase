@@ -26,7 +26,7 @@ import { ViewFrame } from "../common/ViewFrame";
 import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import type { ViewProps } from "../types";
 import { ListOutline, type RowTreeActions } from "./ListOutline";
-import { allPaths, buildOutline, leafNodes, moveBetweenGroups, placeIndexes, planDrop, visibleIds, withTails, type DropPlan } from "./outline";
+import { allPaths, buildOutline, drawnIds, leafNodes, moveBetweenGroups, placeIndexes, planDrop, withTails, type DropPlan } from "./outline";
 import { isPrefixField } from "./RowPrefix";
 import { useGroupRows } from "./useGroupRows";
 
@@ -73,19 +73,25 @@ function ListInner(props: ViewProps) {
   const recordIds = useMemo(() => data?.records.map((r) => r.id) ?? [], [data?.records]);
 
   // What can be selected, and what Previous and Next of the record panel step through: the rows on
-  // screen, which leaves out the records of folded groups.
+  // screen, in the order they are drawn (sub-items follow their parent), which leaves out the records
+  // of folded groups and of folded rows.
   const openId = setup.openRecordId;
-  const onScreen = useMemo(() => visibleIds(recordIds, roots, collapsed), [recordIds, roots, collapsed]);
+  const parentId = parentField?.id;
+  const onScreen = useMemo(
+    () => drawnIds(data?.records ?? [], roots, parentId, { collapsed, folded, loaded: lifted?.loaded }),
+    [data?.records, roots, parentId, collapsed, folded, lifted?.loaded],
+  );
   const sel = useRecordSelection(onScreen);
   // The open record itself always counts: from a folded group, or after it stopped matching the view
   // (edited out of its filter), it keeps its place so Previous and Next still work from it.
   const lastIndex = useRef(-1);
   const panelIds = useMemo(() => {
-    const seen = visibleIds(recordIds, roots, collapsed, openId);
+    // Folded rows count here: opening a record unfolds the rows above it.
+    const seen = drawnIds(data?.records ?? [], roots, parentId, { collapsed, loaded: lifted?.loaded, keep: openId });
     if (!openId || seen.includes(openId)) return seen;
     const at = Math.min(Math.max(lastIndex.current, 0), seen.length);
     return [...seen.slice(0, at), openId, ...seen.slice(at)];
-  }, [recordIds, roots, collapsed, openId]);
+  }, [data?.records, roots, parentId, collapsed, lifted?.loaded, openId]);
   useEffect(() => {
     const at = openId ? panelIds.indexOf(openId) : -1;
     if (at >= 0 && recordIds.includes(openId!)) lastIndex.current = at;
