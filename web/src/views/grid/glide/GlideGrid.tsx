@@ -469,7 +469,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     const wrap = wrapRef.current;
     if (wrap) {
       const model = args.kind === "cell" ? pr.current.getCell(args.location[0], args.location[1]) : null;
-      const cut = model?.kind === "group" && args.location[0] === 0 && model.label.length * GROUP_LABEL_CHAR_PX > args.bounds.width - 28 - model.depth * 14 - 40;
+      const cut = args.kind === "cell" && model?.kind === "group" && args.location[0] === 0 && model.label.length * GROUP_LABEL_CHAR_PX > args.bounds.width - 28 - model.depth * 14 - 40;
       const title = cut && model?.kind === "group" ? model.label : "";
       if (wrap.title !== title) wrap.title = title;
     }
