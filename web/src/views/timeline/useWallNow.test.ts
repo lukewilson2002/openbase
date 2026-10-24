@@ -23,4 +23,13 @@ describe("useWallNow", () => {
     });
     expect(new Date(result.current).getUTCDate()).toBe(14);
   });
+
+  it("is read to the minute, so the view only redraws when the marker could have moved", () => {
+    const { result } = renderHook(() => useWallNow("UTC"));
+    expect(result.current % 60_000).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(result.current % 60_000).toBe(0);
+  });
 });

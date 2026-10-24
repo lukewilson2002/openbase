@@ -332,8 +332,10 @@ function TimelineInner(props: ViewProps) {
   const onUnschedule = useCallback(
     (recordId: string) => {
       if (!fields) return;
-      const values: Record<string, unknown> = { [fields.start.field.id]: null };
+      const values: Record<string, unknown> = {};
+      if (isWritableDate(fields.start.field)) values[fields.start.field.id] = null;
       if (fields.end && isWritableDate(fields.end.field)) values[fields.end.field.id] = null;
+      if (Object.keys(values).length === 0) return;
       forgetPlaced(recordId);
       void writes.update(recordId, values, { label: "Unschedule record", toast: "Moved to Unscheduled" });
     },
