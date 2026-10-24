@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { choiceClass } from "@/lib/colors";
 import { stringItems } from "@/lib/cells/kinds";
 import { EditorShell } from "./EditorShell";
-import { useEditorEnv, type FieldEditorCallbacks } from "./env";
+import { useEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
 
 export interface UserEditorProps extends FieldEditorCallbacks {
   field: Field;
@@ -37,6 +37,8 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
   selectedRef.current = selected;
   const [query, setQuery] = useState(initialText ?? "");
   const [active, setActive] = useState(0);
+  // The highlight is the user's choice once they typed or moved it; before that it only rests on the first row.
+  const [moved, setMoved] = useState(false);
   const listId = useId();
   const closeRef = useRef<() => void>(() => {});
   const commit: FieldEditorCallbacks["onCommit"] = (edit, move) => {
@@ -49,9 +51,11 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
     return q ? env.collaborators.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) : env.collaborators;
   }, [env.collaborators, query]);
 
-  const toggle = (id: string) => {
+  const toggle = (id: string, move?: Move) => {
     if (!multiple) {
-      commit({ json: [id] });
+      // The editor can stay mounted after this (a form), so it shows the pick at once.
+      setSelected([id]);
+      commit({ json: [id] }, move);
       return;
     }
     const next = selectedRef.current.includes(id) ? selectedRef.current.filter((x) => x !== id) : [...selectedRef.current, id];
@@ -59,17 +63,47 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
     onChange?.({ json: next });
   };
 
+  /** Clears the value; the chips go at once, the editor can stay mounted after this (a form). */
+  const clear = () => {
+    setSelected([]);
+    commit({ json: null });
+  };
+
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.min(people.length - 1, a + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.max(0, a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const u = people[active];
-      if (u) toggle(u.id);
+      e.stopPropagation();
+      // Enter on one person picks them and goes on to the next row; on several it toggles, and Ctrl or Cmd with it is done.
+      const down: Move | undefined = variant === "cell" ? [0, e.shiftKey ? -1 : 1] : undefined;
+      if (multiple && (e.ctrlKey || e.metaKey)) {
+        commit({ json: selectedRef.current }, down);
+      } else {
+        const u = people[active];
+        if (u) toggle(u.id, down);
+      }
+    } else if (e.key === "Tab" && variant === "cell") {
+      e.preventDefault();
+      e.stopPropagation();
+      // Tab takes the highlighted person when the user went looking for one, else what is picked already.
+      const lit = moved || query.trim() !== "" ? people[active] : undefined;
+      const json = multiple
+        ? lit && query.trim() !== "" && !selectedRef.current.includes(lit.id)
+          ? [...selectedRef.current, lit.id]
+          : selectedRef.current
+        : lit
+          ? [lit.id]
+          : selectedRef.current.length > 0
+            ? selectedRef.current
+            : null;
+      commit({ json }, [e.shiftKey ? -1 : 1, 0]);
     }
   };
 
@@ -105,6 +139,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setActive(0);
+                  setMoved(false);
                 }}
                 onKeyDown={onKey}
                 role="combobox"
@@ -135,7 +170,7 @@ export function UserEditor({ field, value, variant, target, initialText, onChang
               {people.length === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">No matching people.</li>}
             </ul>
             <div className="flex items-center justify-between gap-2 border-t border-line p-2">
-              <Button size="sm" variant="ghost" onClick={() => commit({ json: null })} disabled={selected.length === 0}>
+              <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                 Clear
               </Button>
               {multiple && (

@@ -135,6 +135,21 @@ export function AttachmentEditor({ field, value, variant, target, onChange, onCo
         closeRef.current = close;
         return (
           <div
+            onKeyDown={(e) => {
+              if (variant !== "cell" || busy > 0) return;
+              // Tab is done, going on to the next cell; so is Enter (Ctrl or Cmd with it from anywhere), unless it is
+              // pressing a button or following a link of the panel.
+              const onControl = (e.target as Element).closest("button, a, input, [role='button']");
+              if (e.key === "Tab") {
+                e.preventDefault();
+                e.stopPropagation();
+                commit({ json: filesRef.current }, [e.shiftKey ? -1 : 1, 0]);
+              } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey || !onControl)) {
+                e.preventDefault();
+                e.stopPropagation();
+                commit({ json: filesRef.current }, [0, e.shiftKey ? -1 : 1]);
+              }
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               setDragging(true);

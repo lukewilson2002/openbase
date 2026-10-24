@@ -21,7 +21,7 @@ import { LinkedRecordList } from "../linked/LinkedRecordList";
 import { PREVIEW_FIELDS, RecordPeek, linkedTableOf, previewFields, titleOf, useRecordsById } from "../linked/LinkedRecords";
 import { RecordSummary } from "../RecordSummary";
 import { EditorShell } from "./EditorShell";
-import { useOptionalEditorEnv, type FieldEditorCallbacks } from "./env";
+import { useOptionalEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
 import { useDebounced } from "./useDebounced";
 
 export interface LinkEditorProps extends FieldEditorCallbacks {
@@ -52,6 +52,8 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
   selectedRef.current = selected;
   const [query, setQuery] = useState(initialText ?? "");
   const [active, setActive] = useState(0);
+  // The highlight is the user's choice once they typed or moved it; before that it only rests on the first row.
+  const [moved, setMoved] = useState(false);
   const listId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<() => void>(() => {});
@@ -110,23 +112,54 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
       : null;
   // The cards stay outside the pop-over: in the field itself in a form, over the cell in the grid.
   const inPlace = !!cards;
-  const pick = (r: LinkRef) => {
-    if (single) commit({ json: [r] });
-    else set([...selectedRef.current, r]);
+  const pick = (r: LinkRef, move?: Move) => {
+    if (single) {
+      // The editor can stay mounted after this (a form), so it shows the pick at once.
+      setSelected([r]);
+      commit({ json: [r] }, move);
+    } else set([...selectedRef.current, r]);
+  };
+
+  /** Clears the value; the chips go at once, the editor can stay mounted after this (a form). */
+  const clear = () => {
+    setSelected([]);
+    commit({ json: null });
   };
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.min(total - 1, a + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.max(0, a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
+      e.stopPropagation();
+      // Enter on one record picks it and goes on to the next row; on several it adds, and Ctrl or Cmd with it (or
+      // Enter with nothing to add) is done.
+      const down: Move | undefined = variant === "cell" ? [0, e.shiftKey ? -1 : 1] : undefined;
       const c = candidates[active];
-      if (c) pick(c);
-      else if (!single) commit({ json: selectedRef.current });
+      if (!single && (e.ctrlKey || e.metaKey)) commit({ json: selectedRef.current }, down);
+      else if (c) pick(c, down);
+      else if (!single) commit({ json: selectedRef.current }, down);
+    } else if (e.key === "Tab" && variant === "cell") {
+      e.preventDefault();
+      e.stopPropagation();
+      // Tab takes the highlighted record when the user went looking for one, else what is linked already.
+      const lit = moved || query.trim() !== "" ? candidates[active] : undefined;
+      const json = single
+        ? lit
+          ? [lit]
+          : selectedRef.current.length > 0
+            ? selectedRef.current
+            : null
+        : lit && query.trim() !== ""
+          ? [...selectedRef.current, lit]
+          : selectedRef.current;
+      commit({ json }, [e.shiftKey ? -1 : 1, 0]);
     } else if (e.key === "Backspace" && query === "" && !single && selectedRef.current.length > 0) {
       set(selectedRef.current.slice(0, -1));
     }
@@ -203,6 +236,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setActive(0);
+                  setMoved(false);
                 }}
                 onKeyDown={onKey}
                 role="combobox"
@@ -244,7 +278,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
             {(!inPlace || !single) && (
               <div className="flex items-center justify-between gap-2 border-t border-line p-2">
                 {!inPlace && (
-                  <Button size="sm" variant="ghost" onClick={() => commit({ json: null })} disabled={selected.length === 0}>
+                  <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                     Clear
                   </Button>
                 )}

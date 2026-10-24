@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 import { choiceClass } from "@/lib/colors";
 import { stringItems } from "@/lib/cells/kinds";
 import { EditorShell } from "./EditorShell";
-import { useEditorEnv, type FieldEditorCallbacks } from "./env";
+import { useEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
 
 export interface ChoiceEditorProps extends FieldEditorCallbacks {
   field: Field;
@@ -38,6 +38,8 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
   selectedRef.current = selected;
   const [query, setQuery] = useState(initialText ?? "");
   const [active, setActive] = useState(0);
+  // The highlight is the user's choice once they typed or moved it; before that it only rests on the first row.
+  const [moved, setMoved] = useState(false);
   const [busy, setBusy] = useState(false);
   const listId = useId();
   const closeRef = useRef<() => void>(() => {});
@@ -59,12 +61,20 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
     onChange?.({ json: multiple ? ids : (ids[0] ?? null) });
   };
 
-  const pick = (c: SelectChoice) => {
+  const pick = (c: SelectChoice, move?: Move) => {
     if (multiple) {
       report(selectedRef.current.includes(c.id) ? selectedRef.current.filter((x) => x !== c.id) : [...selectedRef.current, c.id]);
     } else {
-      onCommit({ json: c.id });
+      // The editor can stay mounted after this (a form), so it shows the pick at once.
+      setSelected([c.id]);
+      onCommit({ json: c.id }, move);
     }
+  };
+
+  /** Clears the value; the chips go at once, the editor can stay mounted after this (a form). */
+  const clear = () => {
+    setSelected([]);
+    onCommit({ json: null });
   };
 
   const create = async () => {
@@ -86,20 +96,34 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.min(rows - 1, a + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      setMoved(true);
       setActive((a) => Math.max(0, a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (active < filtered.length) {
+      e.stopPropagation();
+      // Enter on one value picks it and goes on to the next row; on several it toggles, and Ctrl or Cmd with it is done.
+      const down: Move | undefined = variant === "cell" ? [0, e.shiftKey ? -1 : 1] : undefined;
+      if (multiple && (e.ctrlKey || e.metaKey)) {
+        onCommit({ json: selectedRef.current }, down);
+      } else if (active < filtered.length) {
         const c = filtered[active];
-        if (c) pick(c);
+        if (c) pick(c, down);
       } else if (canCreate) void create();
-      if (multiple && e.ctrlKey) onCommit({ json: selectedRef.current });
     } else if (e.key === "Tab" && variant === "cell") {
       e.preventDefault();
-      onCommit({ json: multiple ? selectedRef.current : (selectedRef.current[0] ?? null) }, [e.shiftKey ? -1 : 1, 0]);
+      e.stopPropagation();
+      // Tab takes the highlighted option when the user went looking for one, else what is picked already.
+      const lit = moved || query.trim() !== "" ? filtered[active] : undefined;
+      const json = multiple
+        ? lit && query.trim() !== "" && !selectedRef.current.includes(lit.id)
+          ? [...selectedRef.current, lit.id]
+          : selectedRef.current
+        : (lit?.id ?? selectedRef.current[0] ?? null);
+      onCommit({ json }, [e.shiftKey ? -1 : 1, 0]);
     }
   };
 
@@ -130,6 +154,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
           onChange={(e) => {
             setQuery(e.target.value);
             setActive(0);
+            setMoved(false);
           }}
           onKeyDown={onKey}
           role="combobox"
@@ -177,7 +202,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
         {rows === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{choices.length === 0 ? "This field has no options yet." : "No matching options."}</li>}
       </ul>
       <div className="flex items-center justify-between gap-2 border-t border-line p-2">
-        <Button size="sm" variant="ghost" onClick={() => onCommit({ json: null })} disabled={selected.length === 0}>
+        <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
           Clear
         </Button>
         {multiple && (

@@ -55,7 +55,7 @@ export function FieldEditor(props: FieldEditorProps) {
     case "attachment":
       return <AttachmentEditor field={field} value={value} variant={variant} target={target} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
     case "rating":
-      return <RatingEditor field={field} value={value} variant={variant} bare={bare} onCommit={onCommit} onCancel={onCancel} />;
+      return <RatingEditor field={field} value={value} variant={variant} bare={bare} initialText={initialText} onChange={onChange} onCommit={onCommit} onCancel={onCancel} />;
     case "checkbox":
       return <CheckboxEditor field={field} value={value} onCommit={onCommit} onCancel={onCancel} />;
     case "multiline": {
