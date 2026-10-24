@@ -45,7 +45,7 @@ function setup() {
       <ToastProvider>{children}</ToastProvider>
     </QueryClientProvider>
   );
-  const hook = renderHook(() => useRecordOps({ tableId: "tbl1", fields: [name], data, stack, canEdit: true, onRowsChanged: () => void rowsChanged.n++ }), { wrapper });
+  const hook = renderHook(() => useRecordOps({ baseId: "app1", tableId: "tbl1", fields: [name], data, stack, canEdit: true, onRowsChanged: () => void rowsChanged.n++ }), { wrapper });
   return { hook, data, stack, rowsChanged };
 }
 
@@ -211,5 +211,34 @@ describe("useRecordOps against the server's record contract", () => {
     });
     expect(out).toHaveLength(500);
     expect(stack.peekUndo()).toMatchObject({ kind: "create" });
+  });
+
+  it("deleting a field can be undone from the trash, and done again", async () => {
+    const api = mockApi({
+      "DELETE /api/fields/fld_name": { ok: true, deleted_field_ids: ["fld_name"] },
+      "POST /api/trash/restore": { ok: true, restored_field_ids: ["fld_name"] },
+    });
+    const { hook, stack } = setup();
+    let ok = false;
+    await act(async () => {
+      ok = await hook.result.current.deleteField(name);
+    });
+    expect(ok).toBe(true);
+    expect(stack.peekUndo()).toMatchObject({ kind: "field", fieldId: "fld_name" });
+    await act(async () => hook.result.current.undo());
+    expect(api.callsTo("POST /api/trash/restore")[0]!.body).toEqual({ kind: "field", id: "fld_name" });
+    await act(async () => hook.result.current.redo());
+    expect(api.callsTo("DELETE /api/fields/fld_name")).toHaveLength(2);
+  });
+
+  it("a field that could not be deleted leaves nothing to undo", async () => {
+    mockApi({ "DELETE /api/fields/fld_name": { status: 403, json: { error: { code: "forbidden", message: "no" } } } });
+    const { hook, stack } = setup();
+    let ok = true;
+    await act(async () => {
+      ok = await hook.result.current.deleteField(name);
+    });
+    expect(ok).toBe(false);
+    expect(stack.canUndo).toBe(false);
   });
 });

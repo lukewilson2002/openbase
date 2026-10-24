@@ -10,6 +10,7 @@
  * - `delete` records removed: undo restores them, redo deletes them again.
  * - `move`   records dragged to another place in manual order: undo puts them back next to the
  *            neighbour they had.
+ * - `field`  a field deleted: undo restores it from the trash, redo deletes it again.
  * - `group`  several of the above that happened as one step (a paste past the last row: new records and
  *            the cells filled in them).
  */
@@ -31,6 +32,7 @@ export type UndoOp =
   | { kind: "create"; label: string; ids: string[] }
   | { kind: "delete"; label: string; ids: string[] }
   | { kind: "move"; label: string; ids: string[]; before: Placement; after: Placement }
+  | { kind: "field"; label: string; fieldId: string }
   | { kind: "group"; label: string; ops: UndoOp[] };
 
 export type Direction = "undo" | "redo";

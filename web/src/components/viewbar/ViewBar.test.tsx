@@ -564,23 +564,16 @@ describe("Hide fields: order", () => {
     expect(applied(props.update, props.config).field_order).toEqual(["fld_1", "fld_3", "fld_2", "fld_4"]);
   });
 
-  it("reorders by dragging a row's handle onto another row", async () => {
-    const props = await open();
-    const rows = screen.getAllByRole("listitem");
-    const dragged = rows.find((r) => within(r).queryByText("Field 4"))!;
-    const target = rows.find((r) => within(r).queryByText("Field 2"))!;
-    expect(dragged).toHaveAttribute("draggable", "true");
-    expect(rows.find((r) => within(r).queryByText("Field 1"))).toHaveAttribute("draggable", "false");
-    const data = { setData: vi.fn(), effectAllowed: "" };
-    fireEvent.dragStart(dragged, { dataTransfer: data });
-    fireEvent.dragOver(target, { dataTransfer: data });
-    fireEvent.drop(target, { dataTransfer: data });
-    expect(applied(props.update, props.config).field_order).toEqual(["fld_1", "fld_4", "fld_2", "fld_3"]);
+  it("has a drag handle on every field but the primary one", async () => {
+    await open();
+    expect(screen.getByRole("button", { name: "Drag Field 4 to reorder" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Drag Field 1 to reorder" })).not.toBeInTheDocument();
   });
 
   it("offers no reordering while the list is filtered by the search box", async () => {
     await open();
     await userEvent.type(screen.getByRole("textbox", { name: "Find a field" }), "Field 3");
     expect(screen.queryByRole("button", { name: /^Move Field/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Drag Field/ })).not.toBeInTheDocument();
   });
 });

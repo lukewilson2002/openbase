@@ -334,6 +334,32 @@ describe("GridView: column menu", () => {
   });
 });
 
+describe("GridView: deleting a field", () => {
+  it("offers Undo, which restores the field from the trash", async () => {
+    const user = userEvent.setup();
+    const view = viewWithConfig("viw1", "grid", {});
+    const { api } = renderView(GridView, {
+      schema: projectSchema("creator", [view]),
+      viewId: "viw1",
+      routes: {
+        "POST /api/views/viw1/query": queryHandler({ records }),
+        [`DELETE /api/fields/${F.status.id}`]: { ok: true, deleted_field_ids: [F.status.id] },
+        "POST /api/trash/restore": { ok: true, restored_field_ids: [F.status.id] },
+      } as never,
+    });
+    await loaded();
+    const status = grid().columns.findIndex((c) => c.id === F.status.id);
+    act(() => grid().onHeaderMenu(status, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete field" }));
+    await user.click(await screen.findByRole("button", { name: "Delete field" }));
+    await screen.findByText(/deleted$/);
+    expect(api.callsTo(`DELETE /api/fields/${F.status.id}`)).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(api.callsTo("POST /api/trash/restore")).toHaveLength(1));
+    expect(api.callsTo("POST /api/trash/restore")[0]!.body).toEqual({ kind: "field", id: F.status.id });
+  });
+});
+
 describe("GridView: edits made in the record panel", () => {
   it("are on the undo stack, so Undo reverts the last thing done", async () => {
     const user = userEvent.setup();

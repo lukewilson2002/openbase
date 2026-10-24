@@ -15,6 +15,9 @@
  */
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, GripVertical, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type Modifier } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { BaseSchema, Collaborator, Filter, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
 import { useExportCsv } from "@/components/csv/ExportCsvButton";
 import { Button } from "@/components/ui/button";
@@ -247,9 +250,10 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
   );
 }
 
+const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 });
+
 function HideFields({ table, config, update }: { table: Table; config: ViewConfig; update: ViewBarProps["update"] }) {
   const [q, setQ] = useState("");
-  const [dragging, setDragging] = useState<string | null>(null);
   const { all } = resolveFieldOrder(table, config);
   const hidden = new Set(config.hidden_fields);
   const search = q.trim().toLowerCase();
@@ -257,52 +261,40 @@ function HideFields({ table, config, update }: { table: Table; config: ViewConfi
   // Moving within a filtered list would be a guess about the fields in between.
   const reorderable = search === "" && all.length > 2;
   const move = (fromId: string, toId: string) => update((c) => moveField(c, table, fromId, toId));
+  // Fields are put in order by their handles only, so a swipe elsewhere still scrolls the list.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const onSortEnd = (e: DragEndEvent) => {
+    if (e.over && e.active.id !== e.over.id) move(String(e.active.id), String(e.over.id));
+  };
   return (
     <div>
       <Input aria-label="Find a field" placeholder="Find a field" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />
-      <ul className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
-        {shown.map((f) => {
-          const primary = f.id === table.primary_field_id;
-          const at = all.indexOf(f);
-          const draggable = reorderable && !primary;
-          return (
-            <li
-              key={f.id}
-              draggable={draggable}
-              onDragStart={(e) => {
-                setDragging(f.id);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", f.id);
-              }}
-              onDragOver={(e) => {
-                if (dragging !== null && !primary) e.preventDefault();
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragging !== null && dragging !== f.id && !primary) move(dragging, f.id);
-                setDragging(null);
-              }}
-              onDragEnd={() => setDragging(null)}
-              className={cn("flex items-center gap-1 rounded px-1 py-1 hover:bg-hover", dragging === f.id && "opacity-50")}
-            >
-              {reorderable && <GripVertical aria-hidden className={cn("size-4 shrink-0 text-faint", draggable ? "cursor-grab" : "invisible")} />}
-              <FieldTypeIcon type={f.type} />
-              <Switch className="min-w-0 flex-1 flex-row-reverse justify-between" label={<span className="truncate">{f.name}</span>} checked={primary || !hidden.has(f.id)} disabled={primary} onCheckedChange={(on) => update((c) => setHiddenField(c, table, f.id, !on))} />
-              {reorderable && (
-                <>
-                  <IconButton label={`Move ${f.name} up`} size="sm" noTooltip disabled={primary || at <= 1} onClick={() => move(f.id, all[at - 1]!.id)} className={primary ? "invisible" : undefined}>
-                    <ArrowUp aria-hidden className="size-4" />
-                  </IconButton>
-                  <IconButton label={`Move ${f.name} down`} size="sm" noTooltip disabled={primary || at >= all.length - 1} onClick={() => move(f.id, all[at + 1]!.id)} className={primary ? "invisible" : undefined}>
-                    <ArrowDown aria-hidden className="size-4" />
-                  </IconButton>
-                </>
-              )}
-            </li>
-          );
-        })}
-        {shown.length === 0 && <li className="px-1 py-2 text-[0.8125rem] text-muted">No matching fields.</li>}
-      </ul>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[verticalOnly]} onDragEnd={onSortEnd}>
+        {/* The primary field stays first: it is not one of the items that can be moved. */}
+        <SortableContext items={all.filter((f) => f.id !== table.primary_field_id).map((f) => f.id)} strategy={verticalListSortingStrategy}>
+          <ul className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+            {shown.map((f) => {
+              const primary = f.id === table.primary_field_id;
+              const at = all.indexOf(f);
+              return (
+                <HideFieldRow
+                  key={f.id}
+                  field={f}
+                  primary={primary}
+                  shown={primary || !hidden.has(f.id)}
+                  reorderable={reorderable}
+                  canUp={at > 1}
+                  canDown={at < all.length - 1}
+                  onToggle={(on) => update((c) => setHiddenField(c, table, f.id, !on))}
+                  onUp={() => move(f.id, all[at - 1]!.id)}
+                  onDown={() => move(f.id, all[at + 1]!.id)}
+                />
+              );
+            })}
+            {shown.length === 0 && <li className="px-1 py-2 text-[0.8125rem] text-muted">No matching fields.</li>}
+          </ul>
+        </SortableContext>
+      </DndContext>
       <div className="mt-2 flex gap-2 border-t border-line pt-2">
         <Button size="sm" variant="secondary" onClick={() => update((c) => setAllHidden(c, table, true))}>
           Hide all
@@ -312,6 +304,61 @@ function HideFields({ table, config, update }: { table: Table; config: ViewConfi
         </Button>
       </div>
     </div>
+  );
+}
+
+/** One field of Hide fields: its handle (drag, or Space and the arrow keys), the switch, and Move up and down for a touch screen. */
+function HideFieldRow({
+  field,
+  primary,
+  shown,
+  reorderable,
+  canUp,
+  canDown,
+  onToggle,
+  onUp,
+  onDown,
+}: {
+  field: Table["fields"][number];
+  primary: boolean;
+  shown: boolean;
+  reorderable: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  onToggle: (on: boolean) => void;
+  onUp: () => void;
+  onDown: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id, disabled: primary || !reorderable });
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-1 rounded bg-surface px-1 py-1 hover:bg-hover", isDragging && "relative z-10 shadow-pop")}>
+      {reorderable &&
+        (primary ? (
+          <span aria-hidden className="inline-block h-6 w-5 shrink-0" />
+        ) : (
+          <button
+            type="button"
+            aria-label={`Drag ${field.name} to reorder`}
+            className="inline-flex h-6 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:text-fg active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical aria-hidden className="size-4" />
+          </button>
+        ))}
+      <FieldTypeIcon type={field.type} />
+      <Switch className="min-w-0 flex-1 flex-row-reverse justify-between" label={<span className="truncate">{field.name}</span>} checked={shown} disabled={primary} onCheckedChange={onToggle} />
+      {reorderable && (
+        <>
+          <IconButton label={`Move ${field.name} up`} size="sm" noTooltip disabled={primary || !canUp} onClick={onUp} className={primary ? "invisible" : undefined}>
+            <ArrowUp aria-hidden className="size-4" />
+          </IconButton>
+          <IconButton label={`Move ${field.name} down`} size="sm" noTooltip disabled={primary || !canDown} onClick={onDown} className={primary ? "invisible" : undefined}>
+            <ArrowDown aria-hidden className="size-4" />
+          </IconButton>
+        </>
+      )}
+    </li>
   );
 }
 

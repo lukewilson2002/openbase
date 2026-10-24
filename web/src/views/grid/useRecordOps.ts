@@ -5,7 +5,9 @@
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { recordKeys, recordsApi } from "@/api/records";
+import { api } from "@/api/endpoints";
+import { keys } from "@/api/keys";
+import { recordKeys, recordsApi, schemaApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { useToast } from "@/components/ui/toast";
 import { errorMessage } from "@/api/client";
@@ -37,6 +39,8 @@ export interface RecordOps {
   duplicateRecords(ids: readonly string[]): Promise<TableRecord[]>;
   /** Delete records (to the trash), with a toast whose Undo restores them. */
   deleteRecords(ids: readonly string[]): Promise<boolean>;
+  /** Delete a field (to the trash), with a toast whose Undo restores it. */
+  deleteField(field: Field): Promise<boolean>;
   /** Place records before or after another one. `previous` is where the first of them was, for Undo. */
   moveRecords(ids: readonly string[], target: { beforeId?: string; afterId?: string }, previous?: Placement): Promise<boolean>;
   /** Record the steps collected for one gesture as a single undo entry, with a toast offering Undo when `message` is given. */
@@ -47,6 +51,7 @@ export interface RecordOps {
 }
 
 export interface RecordOpsParams {
+  baseId: string;
   tableId: string;
   fields: readonly Field[];
   data: GridData;
@@ -64,7 +69,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace("{n}", n.toLocaleString()));
 
-export function useRecordOps({ tableId, fields, data, stack, canEdit, onRowsChanged }: RecordOpsParams): RecordOps {
+export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, onRowsChanged }: RecordOpsParams): RecordOps {
   const qc = useQueryClient();
   const toast = useToast();
   const fieldById = useMemo(() => new Map(fields.map((f) => [f.id, f] as const)), [fields]);
@@ -132,6 +137,17 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit, onRowsChan
           }
           return;
         }
+        case "field": {
+          try {
+            if (dir === "undo") await api.trash.restore({ kind: "field", id: op.fieldId });
+            else await schemaApi.deleteField(op.fieldId);
+          } finally {
+            // The columns, and what the other views and records hold of the field, change with it.
+            void qc.invalidateQueries({ queryKey: keys.base(baseId) });
+            void qc.invalidateQueries({ queryKey: ["records"] });
+          }
+          return;
+        }
         case "group": {
           const ops = dir === "undo" ? [...op.ops].reverse() : op.ops;
           for (const sub of ops) await perform(sub, dir);
@@ -139,7 +155,7 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit, onRowsChan
         }
       }
     },
-    [data, writePatches, invalidate, fieldById, tableId, onRowsChanged],
+    [data, writePatches, invalidate, fieldById, tableId, onRowsChanged, qc, baseId],
   );
 
   const undo = useCallback(async () => {
@@ -331,6 +347,22 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit, onRowsChan
     [canEdit, tableId, toast, record, invalidate, onRowsChanged],
   );
 
+  const deleteField = useCallback<RecordOps["deleteField"]>(
+    async (field) => {
+      try {
+        await schemaApi.deleteField(field.id);
+      } catch (e) {
+        toast.error(e, "Could not delete the field");
+        return false;
+      }
+      void qc.invalidateQueries({ queryKey: keys.base(baseId) });
+      void qc.invalidateQueries({ queryKey: ["records"] });
+      record({ kind: "field", label: `Delete field ${field.name}`, fieldId: field.id }, undefined, `Field "${field.name}" deleted`);
+      return true;
+    },
+    [qc, baseId, toast, record],
+  );
+
   // --- History --------------------------------------------------------------------------------
 
   const revision = useSyncExternalStore(
@@ -344,5 +376,5 @@ export function useRecordOps({ tableId, fields, data, stack, canEdit, onRowsChan
     [stack, revision, undo, redo],
   );
 
-  return { applyChanges, createRecords, duplicateRecords, deleteRecords, moveRecords, commit, history, undo, redo };
+  return { applyChanges, createRecords, duplicateRecords, deleteRecords, deleteField, moveRecords, commit, history, undo, redo };
 }

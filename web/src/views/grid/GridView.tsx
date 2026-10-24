@@ -14,7 +14,7 @@ import { useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { recordKeys, recordsApi, schemaApi } from "@/api/records";
+import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDialog";
@@ -205,7 +205,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const selectionRef = useRef<GridSelectionInfo>(EMPTY_SELECTION);
   // Records came or went (a delete, a copy, an undo of either): the rows a selection named hold other records now.
   const onRowsChanged = useCallback(() => gridRef.current?.clearSelection(), []);
-  const ops = useRecordOps({ tableId: table.id, fields: table.fields, data, stack, canEdit, onRowsChanged });
+  const ops = useRecordOps({ baseId: schema.id, tableId: table.id, fields: table.fields, data, stack, canEdit, onRowsChanged });
   const opsRef = useRef(ops);
   opsRef.current = ops;
 
@@ -1045,13 +1045,12 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         open={!!confirmField}
         onOpenChange={(o) => !o && setConfirmField(null)}
         title={`Delete field "${confirmField?.name ?? ""}"?`}
-        description="The field and its values are removed from every view. You can restore it from the trash."
+        description="The field and its values are removed from every view. Undo brings it back, as does the trash."
         confirmLabel="Delete field"
         destructive
         onConfirm={async () => {
           if (!confirmField) return;
-          await schemaApi.deleteField(confirmField.id);
-          await qc.invalidateQueries({ queryKey: keys.base(schema.id) });
+          await opsRef.current.deleteField(confirmField);
         }}
       />
       <ConfirmDialog
