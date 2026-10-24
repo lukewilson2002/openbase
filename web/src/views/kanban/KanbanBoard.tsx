@@ -217,8 +217,13 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const orderedIds = useMemo(() => shownStacks.flatMap((s) => s.records.map((r) => r.id)), [shownStacks]);
   const sel = useRecordSelection(orderedIds);
   const [tabStop, setTabStop] = useState<string | null>(null);
-  // One card is the tab stop: the one last focused, else the first.
-  const stopId = tabStop !== null && recordsById.has(tabStop) ? tabStop : (orderedIds[0] ?? null);
+  // One card is the tab stop: the one last focused, else the first. Only cards that are drawn count: a
+  // collapsed stack or one cut off by "Show more" has none, and a tab stop nobody can reach loses the board.
+  const drawnIds = useMemo(
+    () => shownStacks.flatMap((s) => (props.collapsed.has(s.key) ? [] : (items[s.key] ?? []).slice(0, shown[s.key] ?? CARDS_PER_STACK))),
+    [shownStacks, props.collapsed, items, shown],
+  );
+  const stopId = tabStop !== null && drawnIds.includes(tabStop) ? tabStop : (drawnIds[0] ?? null);
 
   const deleteSelected = () => props.onDeleteRecords([...sel.ids], sel.clear);
   const onBoardKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -930,6 +935,8 @@ function KanbanCard({
       aria-roledescription={p.canEdit ? "draggable card" : "card"}
       // Once something is selected every card says whether it is part of it.
       aria-pressed={isDragging ? true : sel.count > 0 ? selected : undefined}
+      // Without edit rights the card still opens, so it is not "disabled" (dnd-kit says so).
+      aria-disabled={undefined}
       data-record-id={record.id}
       data-selected={selected || undefined}
       onFocus={() => onFocusCard(record.id)}

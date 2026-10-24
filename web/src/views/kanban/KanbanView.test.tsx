@@ -399,6 +399,17 @@ describe("KanbanView", () => {
       expect(savedKanban(api).hidden_stacks).toEqual(["s3"]);
     });
 
+    it("starts with every stack showing when the board is stacked by another field", async () => {
+      const user = userEvent.setup();
+      const view = board({ hidden_stacks: ["", "s2"] });
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Stack cards by" }), F.owner.id);
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api)).toMatchObject({ stack_field_id: F.owner.id, stack_order: [], hidden_stacks: [] });
+    });
+
     it("can hide a populated Uncategorized stack too", async () => {
       const user = userEvent.setup();
       const view = board();

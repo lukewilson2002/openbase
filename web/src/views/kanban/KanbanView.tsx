@@ -148,16 +148,12 @@ function KanbanInner(props: ViewProps) {
   const editChoices = useCallback(
     async (change: (choices: SelectChoice[]) => SelectChoice[]) => {
       if (!choiceField || choiceField.type !== "single_select") return;
-      try {
-        await schemaApi.updateField(choiceField.id, { type: choiceField.type, options: { choices: change(choiceField.options.choices) } });
-      } catch (e) {
-        toast.error(e, "Could not change the stack");
-        throw e;
-      }
+      // A failure throws to the dialog that asked, which says so itself.
+      await schemaApi.updateField(choiceField.id, { type: choiceField.type, options: { choices: change(choiceField.options.choices) } });
       await qc.invalidateQueries({ queryKey: keys.base(schema.id) });
       await qc.invalidateQueries({ queryKey: ["records", table.id] });
     },
-    [choiceField, qc, schema.id, table.id, toast],
+    [choiceField, qc, schema.id, table.id],
   );
   const renameStack = choiceField ? (key: string, name: string) => editChoices((cs) => cs.map((c) => (c.id === key ? { ...c, name } : c))) : undefined;
   const colorStack = choiceField ? (key: string, color: string) => editChoices((cs) => cs.map((c) => (c.id === key ? { ...c, color } : c))) : undefined;
@@ -201,7 +197,7 @@ function KanbanInner(props: ViewProps) {
   const cardLimit = kanban.card_field_limit ?? CARD_FIELD_LIMIT;
   const limitOptions = [...new Set([...CARD_LIMITS, ALL_FIELDS_LIMIT, cardLimit])].sort((a, b) => a - b);
   const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
-  const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [] }));
+  const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [], hidden_stacks: [] }));
   const settings = (
     <ViewSettings note={note}>
       <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseStack} hint="A single select, single user or checkbox field." />

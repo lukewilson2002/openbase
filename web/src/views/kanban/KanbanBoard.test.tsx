@@ -430,6 +430,22 @@ describe("KanbanBoard", () => {
     });
   });
 
+  describe("tab stop", () => {
+    it("moves to a drawn card when the focused one goes out of sight with its stack", async () => {
+      const { props, rerender } = board();
+      act(() => screen.getByRole("button", { name: "Write docs" }).focus());
+      // Collapsing the stack the card sits in leaves no card of it to tab to; the next stack's first is the stop.
+      rerender(<KanbanBoard {...props} collapsed={new Set(["chs1"])} />);
+      expect(screen.queryByRole("button", { name: "Write docs" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Ship it" })).toHaveAttribute("tabindex", "0");
+    });
+
+    it("does not call a card disabled when its person cannot edit (it still opens)", () => {
+      board({ canEdit: false });
+      expect(screen.getByRole("button", { name: "Write docs" })).not.toHaveAttribute("aria-disabled");
+    });
+  });
+
   describe("links inside a card", () => {
     it("follow on Enter instead of opening the record, which Enter on the card itself still does", async () => {
       const user = userEvent.setup();
