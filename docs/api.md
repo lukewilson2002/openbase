@@ -629,6 +629,36 @@ length). Unattached public-form uploads are deleted after 2 hours.
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user) and answers `{"ok": true, "record_id"}` (a form's `redirect_url` may contain `{record_id}`, which the page replaces). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
 | `POST /api/public/forms/{token}/attachments` | multipart `file` for an attachment field of the form (at most 25 MB, further capped by the upload limit) |
 
+### Form logic, prefill and notifications
+
+The form config (`views.config.form`) is a list of **entries**: a question (`{field_id, required, label, help}`)
+or, with `block`, a heading (`{block: "heading", label}`) or a paragraph (`{block: "text", help}`). A block's
+`field_id` is made by the server (`blk...`) when left out. `GET /api/public/forms/{token}` lists the entries in
+order; a block has `block` set (and `type` `text`, `options` `{}`), nothing is submitted for it, and one with no
+text is left out.
+
+- **Show-if.** Any entry may have `show_if`, a view filter (`{conjunction, items: [{field_id, op, value}]}`) on
+  the questions above it, of type text, number, currency, percent, rating, checkbox, single or multiple select
+  (400 otherwise, or when the field is below it; a condition the saved form already had is left alone). While it
+  does not hold the entry is hidden: on submit its answer is ignored (not even validated), it is not required, and
+  it gives no answer to the entries below it. The rules are those of view filters: a condition with an empty
+  operand is ignored, `is_not` / `does_not_contain` / `is_none_of` / `has_none_of` are met by an unanswered
+  question, comparisons are not. The public definition carries each `show_if` (conditions on fields the table no
+  longer has are dropped), so the page can evaluate it as the visitor answers.
+- **Defaults and descriptions.** Each public form field has `default` (text, number and percent fields) that the
+  page starts with, and `help` is the form's own help, else the field's description. A question that is shown but
+  left empty (a default cleared) is written empty instead of getting the default; fields the form does not ask
+  for still get theirs.
+- **Prefill.** The public page reads `?prefill_<Field>=<value>` and `?hide_<Field>=true` from its address, for
+  example `/form/shr_...?prefill_Customer=Acme&prefill_Priority=High&hide_Customer=true`. `<Field>` is the
+  question's label (any case; `+` or `%20` for spaces) or its field id. Values: text as it is; numbers as
+  digits; dates `2026-03-01` (`2026-03-01T14:30` with a time); a single select by option name; a multiple select
+  by option names separated by commas or repeated; a checkbox `true` / `false`; a rating a number. Values that do
+  not fit are ignored. A hidden field is still sent with the answers; a required field with no value is never hidden.
+- **Notifications.** `form.notify_user_ids` lists project members who get a `form_response` notification (and an
+  email when SMTP is set up, within the hourly email budget) for each response that arrives through the public link
+  (400 for anyone who is not a member). Changing only this list is open to Editors even while the link is on.
+
 ---
 
 ## 4. CSV

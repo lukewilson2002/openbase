@@ -377,6 +377,7 @@ const FORM_KEYS: &[&str] = &[
     "success_message",
     "redirect_url",
     "show_submit_another",
+    "notify_user_ids",
 ];
 
 fn check_keys(obj: &Map<String, Value>, allowed: &[&str], what: &str) -> Result<(), String> {
@@ -679,21 +680,99 @@ impl Xlate<'_> {
             if let Some(fields) = fo.get_mut("fields") {
                 let Some(list) = fields.as_array_mut() else {
                     return Err(
-                        "form.fields must be a list of {field_id, required, label, help}".into(),
+                        "form.fields must be a list of {field_id, required, label, help, show_if}, or {block, label|help} for a heading or text"
+                            .into(),
                     );
                 };
                 for item in list {
                     let Some(o) = item.as_object_mut() else {
                         return Err(
-                            "each form field must be {field_id, required?, label?, help?}".into(),
+                            "each form field must be {field_id, required?, label?, help?, show_if?} or {block, label|help}"
+                                .into(),
                         );
                     };
                     check_keys(
                         o,
-                        &["field_id", "field", "required", "label", "help"],
+                        &[
+                            "field_id", "field", "required", "label", "help", "show_if", "block",
+                        ],
                         "a form field",
                     )?;
-                    self.field_ref(o, "a form field")?;
+                    // A heading or a paragraph is no field: its id (made when the form is saved)
+                    // passes through as it is.
+                    if o.get("block").is_none_or(Value::is_null) {
+                        self.field_ref(o, "a form field")?;
+                    }
+                    if let Some(show_if) = o.get_mut("show_if")
+                        && !show_if.is_null()
+                    {
+                        self.filter(show_if)?;
+                    }
+                }
+            }
+            if let Some(people) = fo.get_mut("notify_user_ids") {
+                self.people_list(people, "form.notify_user_ids")?;
+            }
+        }
+        Ok(())
+    }
+
+    /// A list of people of the project: the app speaks in user ids, the model in email addresses
+    /// (or names, or ids).
+    fn people_list(&self, v: &mut Value, what: &str) -> Result<(), String> {
+        let Value::Array(items) = v else {
+            return if v.is_null() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{what} must be a list of people (email, name or user id)"
+                ))
+            };
+        };
+        for item in items {
+            let Value::String(s) = item else {
+                return Err(format!(
+                    "{what} must be a list of people (email, name or user id)"
+                ));
+            };
+            let Some(people) = self.people else { continue };
+            match self.mode {
+                Mode::ToNames => {
+                    if let Some(email) = people.get(s.as_str()).and_then(|p| p["email"].as_str()) {
+                        *s = email.to_string();
+                    }
+                }
+                Mode::ToIds => {
+                    if people.contains_key(s.as_str()) {
+                        continue;
+                    }
+                    let lower = s.trim().to_lowercase();
+                    let mut found = None;
+                    for key in ["email", "name"] {
+                        let hits: Vec<&str> = people
+                            .iter()
+                            .filter(|(_, p)| {
+                                p[key].as_str().map(|t| t.trim().to_lowercase()).as_deref()
+                                    == Some(lower.as_str())
+                            })
+                            .map(|(id, _)| id.as_str())
+                            .collect();
+                        match hits.as_slice() {
+                            [one] => {
+                                found = Some((*one).to_string());
+                                break;
+                            }
+                            [] => {}
+                            _ => {
+                                return Err(format!(
+                                    "Several people are named '{s}'; use their email or user id (list_collaborators)."
+                                ));
+                            }
+                        }
+                    }
+                    *s = found.ok_or_else(|| {
+                        format!("'{s}' is not a person of this project (list_collaborators).")
+                    })?;
                 }
             }
         }

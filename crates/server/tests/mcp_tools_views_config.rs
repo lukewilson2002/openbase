@@ -599,3 +599,89 @@ async fn list_prefix_and_parent_fields_are_set_by_name() {
         .await;
     assert!(e.contains("list prefix field must be a checkbox"), "{e}");
 }
+
+#[tokio::test]
+async fn form_show_if_blocks_and_notifications_are_set_by_name() {
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Requests").await;
+    let kind = r
+        .field(
+            "Requests",
+            "Type",
+            "single_select",
+            json!({"choices": ["Bug", "Idea"]}),
+        )
+        .await;
+    r.field("Requests", "Steps", "text", json!({})).await;
+    let bug_id = choice_ids(&kind)[0].clone();
+    let people = a.call("list_collaborators", json!({"project_id": b})).await;
+    let me = &people["collaborators"][0];
+    let (my_id, email) = (
+        me["id"].as_str().unwrap().to_string(),
+        me["email"].as_str().unwrap().to_string(),
+    );
+
+    let made = a
+        .call(
+            "create_view",
+            json!({"project_id": b, "table": "Requests", "name": "Intake", "type": "form",
+                   "config": {"form": {
+                       "fields": [
+                           {"field_id": "Type"},
+                           {"block": "heading", "label": "Bug details"},
+                           {"field_id": "Steps",
+                            "show_if": {"conjunction": "and", "items": [
+                                {"field_id": "Type", "op": "is", "value": "Bug"}]}},
+                       ],
+                       "notify_user_ids": [email]}}}),
+        )
+        .await;
+    let view_id = made["view"]["id"].as_str().unwrap().to_string();
+    // Saved the way the web app reads it: ids, and an id of its own for the heading.
+    let raw = raw_view(&r, &view_id).await;
+    let entries = raw["config"]["form"]["fields"].as_array().unwrap();
+    assert_eq!(entries[1]["block"], "heading");
+    assert!(entries[1]["field_id"].as_str().unwrap().starts_with("blk"));
+    assert_eq!(entries[2]["show_if"]["items"][0]["value"], json!(bug_id));
+    assert_eq!(raw["config"]["form"]["notify_user_ids"], json!([my_id]));
+    // The model reads names again, and can send them back unchanged.
+    let got = a
+        .call("get_view", json!({"project_id": b, "view": view_id}))
+        .await;
+    let form = got["view"]["config"]["form"].clone();
+    assert_eq!(form["fields"][2]["show_if"]["items"][0]["value"], "Bug");
+    assert_eq!(form["fields"][2]["show_if"]["items"][0]["field_id"], "Type");
+    assert_eq!(form["notify_user_ids"], json!([email]));
+    a.call(
+        "update_view",
+        json!({"project_id": b, "view": view_id, "config": {"form": form}}),
+    )
+    .await;
+    assert_eq!(
+        raw_view(&r, &view_id).await["config"]["form"]["fields"][1]["field_id"],
+        entries[1]["field_id"],
+        "the heading keeps its id"
+    );
+    // Mistakes are named.
+    let e = a
+        .fails(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"form": {"notify_user_ids": ["Nobody Here"]}}}),
+        )
+        .await;
+    assert!(e.contains("not a person of this project"), "{e}");
+    let e = a
+        .fails(
+            "update_view",
+            json!({"project_id": b, "view": view_id,
+                   "config": {"form": {"fields": [
+                       {"field_id": "Steps", "show_if": {"conjunction": "and", "items": [
+                           {"field_id": "Type", "op": "is", "value": "Idea"}]}},
+                       {"field_id": "Type"}]}}}),
+        )
+        .await;
+    assert!(e.contains("above"), "{e}");
+}

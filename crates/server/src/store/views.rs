@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
 use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
+use ob_core::query::compile_filter;
 use ob_core::view::{
     Filter, FilterItem, FormConfig, FormField, GalleryConfig, ListConfig, ViewConfig, ViewType,
 };
@@ -71,9 +72,7 @@ pub fn default_form_config(fields: &[Field]) -> FormConfig {
             .filter(|f| !f.field_type().is_computed())
             .map(|f| FormField {
                 field_id: f.id.clone(),
-                required: false,
-                label: None,
-                help: None,
+                ..Default::default()
             })
             .collect(),
         ..FormConfig::default()
@@ -146,7 +145,9 @@ pub fn create(
     {
         config.list = list;
     }
+    normalize_form(&mut config.form);
     validate_config(&fields, &config)?;
+    check_form_notify(tx, &table.base_id, &config.form, None)?;
     let view = View {
         id: new_id(ob_core::ids::VIEW),
         table_id: table.id.clone(),
@@ -167,8 +168,12 @@ pub fn create(
 /// shown fields and their order, the filter, or the form (fields, texts,
 /// redirect). Widths, sorts, colours and the like are not.
 fn changes_exposure(old: &ViewConfig, new: &ViewConfig) -> bool {
-    let key =
-        |c: &ViewConfig| serde_json::json!([c.hidden_fields, c.field_order, c.filter, c.form]);
+    // Who a form notifies is not something a visitor sees.
+    let key = |c: &ViewConfig| {
+        let mut form = c.form.clone();
+        form.notify_user_ids.clear();
+        serde_json::json!([c.hidden_fields, c.field_order, c.filter, form])
+    };
     key(old) != key(new)
 }
 
@@ -269,10 +274,19 @@ pub fn update(
     }
     if let Some(config) = &patch.config {
         let fields = schema::table_fields(tx, &row.view.table_id)?;
-        validate_config_with(&fields, config, &Stale::of(&row.view.config))?;
+        let mut config = config.clone();
+        normalize_form(&mut config.form);
+        validate_config_with(&fields, &config, &Stale::of(&row.view.config))?;
+        let table = live_table(tx, &row.view.table_id)?;
+        check_form_notify(
+            tx,
+            &table.base_id,
+            &config.form,
+            Some(&row.view.config.form),
+        )?;
         tx.execute(
             "UPDATE views SET config = ?2 WHERE id = ?1",
-            params![view_id, serde_json::to_string(config)?],
+            params![view_id, serde_json::to_string(&config)?],
         )?;
     }
     if let Some(locked) = patch.locked {
@@ -470,7 +484,7 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
             check(id, what)?;
         }
     }
-    check_form(&config.form, &known, stale)?;
+    check_form(&config.form, fields, &known, stale)?;
     check_slot_types(fields, config, stale)?;
     fields_engine::validate_view_config_semantics(fields, config, stale)
 }
@@ -607,7 +621,145 @@ fn walk_filter(
     Ok(())
 }
 
-fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -> AppResult<()> {
+/// Most people one form can notify.
+const MAX_FORM_NOTIFY: usize = 50;
+/// Prefix of the ids of a form's headings and paragraphs.
+const BLOCK_ID_PREFIX: &str = "blk";
+
+/// Tidy a form before it is checked and saved: the blocks (headings, paragraphs) get ids of their
+/// own when they come without one and are never required, and the list of people to notify has
+/// no repeats.
+pub fn normalize_form(form: &mut FormConfig) {
+    for f in &mut form.fields {
+        if f.block.is_some() {
+            f.required = false;
+            if f.field_id.trim().is_empty() {
+                f.field_id = new_id(BLOCK_ID_PREFIX);
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    form.notify_user_ids.retain(|u| seen.insert(u.clone()));
+}
+
+/// The people a form notifies must be members of the project. Ones the saved form already
+/// listed are left alone (someone may have left since).
+pub fn check_form_notify(
+    conn: &rusqlite::Connection,
+    base_id: &str,
+    form: &FormConfig,
+    saved: Option<&FormConfig>,
+) -> AppResult<()> {
+    if form.notify_user_ids.len() > MAX_FORM_NOTIFY {
+        return Err(AppError::bad_request(format!(
+            "a form can notify at most {MAX_FORM_NOTIFY} people"
+        )));
+    }
+    for id in &form.notify_user_ids {
+        if saved.is_some_and(|s| s.notify_user_ids.contains(id)) {
+            continue;
+        }
+        let active: bool = conn
+            .query_row("SELECT is_active FROM users WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap_or(false);
+        if !active || crate::perm::base_role(conn, id, base_id)?.is_none() {
+            return Err(AppError::bad_request(format!(
+                "'{id}' is not a member of this project, so the form cannot notify them"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `filter` without the conditions `skip` says to leave out, and without the groups that leaves
+/// empty.
+fn without_conditions(filter: &Filter, skip: &dyn Fn(&ob_core::view::Condition) -> bool) -> Filter {
+    let items = filter
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            FilterItem::Condition(c) => (!skip(c)).then(|| item.clone()),
+            FilterItem::Group(g) => {
+                let g = without_conditions(g, skip);
+                (!g.items.is_empty()).then_some(FilterItem::Group(g))
+            }
+        })
+        .collect();
+    Filter {
+        conjunction: filter.conjunction,
+        items,
+    }
+}
+
+/// Check the show-if of the form entry `entry` (the `index`th): its conditions read questions
+/// above it that a form can test, with operators and operands that suit them. Conditions the
+/// saved form already had stay valid even when the field has changed since.
+fn check_show_if(
+    show_if: &Filter,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    fields: &[Field],
+    known: &HashMap<&str, &Field>,
+    stale: &Stale,
+) -> AppResult<()> {
+    let kept = without_conditions(show_if, &|c| stale.show_if_condition(&entry.field_id, c));
+    if let Some(e) = first_show_if_problem(&kept, entry, earlier, known) {
+        return Err(e);
+    }
+    compile_filter(&kept, fields).map_err(AppError::bad_request)?;
+    Ok(())
+}
+
+fn first_show_if_problem(
+    filter: &Filter,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    known: &HashMap<&str, &Field>,
+) -> Option<AppError> {
+    filter.items.iter().find_map(|item| match item {
+        FilterItem::Condition(c) => show_if_problem(c, entry, earlier, known),
+        FilterItem::Group(g) => first_show_if_problem(g, entry, earlier, known),
+    })
+}
+
+fn show_if_problem(
+    c: &ob_core::view::Condition,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    known: &HashMap<&str, &Field>,
+) -> Option<AppError> {
+    let Some(source) = known.get(c.field_id.as_str()) else {
+        return Some(AppError::bad_request(format!(
+            "a show-if of the form refers to an unknown field '{}'",
+            c.field_id
+        )));
+    };
+    let on = entry.field_id.as_str();
+    if !earlier.contains(c.field_id.as_str()) {
+        return Some(AppError::bad_request(format!(
+            "'{}' can only be shown depending on a question above it in the form, and '{}' is not above it",
+            known.get(on).map_or(on, |f| f.name.as_str()),
+            source.name
+        )));
+    }
+    if !crate::store::sharing::show_if_source_ok(source) {
+        return Some(AppError::bad_request(format!(
+            "'{}' is a {} field, which a form cannot test: use a text, number, rating, checkbox or select question",
+            source.name,
+            source.field_type().label()
+        )));
+    }
+    None
+}
+
+fn check_form(
+    form: &FormConfig,
+    fields: &[Field],
+    known: &HashMap<&str, &Field>,
+    stale: &Stale,
+) -> AppResult<()> {
     if form.title.chars().count() > limits::MAX_NAME_LEN
         || form.submit_label.chars().count() > limits::MAX_NAME_LEN
         || form.description.chars().count() > limits::MAX_DESCRIPTION_LEN
@@ -627,7 +779,28 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
         }
     }
     let mut seen = HashSet::new();
+    // The questions above the entry being checked (blocks cannot be asked about).
+    let mut earlier: HashSet<&str> = HashSet::new();
     for f in &form.fields {
+        for text in [&f.label, &f.help].into_iter().flatten() {
+            if text.chars().count() > limits::MAX_DESCRIPTION_LEN {
+                return Err(AppError::bad_request("form field text is too long"));
+            }
+        }
+        if f.block.is_some() {
+            if f.field_id.trim().is_empty() || known.contains_key(f.field_id.as_str()) {
+                return Err(AppError::bad_request(
+                    "a form heading or text needs an id of its own, not a field's",
+                ));
+            }
+            if !seen.insert(f.field_id.as_str()) {
+                return Err(AppError::bad_request("a form field is listed twice"));
+            }
+            if let Some(show_if) = &f.show_if {
+                check_show_if(show_if, f, &earlier, fields, known, stale)?;
+            }
+            continue;
+        }
         let forgiven = stale.field("form", &f.field_id);
         let Some(field) = known.get(f.field_id.as_str()) else {
             if forgiven {
@@ -659,11 +832,10 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
                 field.field_type().label()
             )));
         }
-        for text in [&f.label, &f.help].into_iter().flatten() {
-            if text.chars().count() > limits::MAX_DESCRIPTION_LEN {
-                return Err(AppError::bad_request("form field text is too long"));
-            }
+        if let Some(show_if) = &f.show_if {
+            check_show_if(show_if, f, &earlier, fields, known, stale)?;
         }
+        earlier.insert(f.field_id.as_str());
     }
     Ok(())
 }
@@ -879,9 +1051,7 @@ mod tests {
         assert!(validate_config(&f, &c).is_ok());
         c.form.fields.push(FormField {
             field_id: "c".into(),
-            required: false,
-            label: None,
-            help: None,
+            ..Default::default()
         });
         assert!(validate_config(&f, &c).is_err(), "computed field in form");
     }

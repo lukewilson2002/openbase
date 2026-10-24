@@ -376,8 +376,29 @@ impl Stale {
             if f.required {
                 out.add("form required", &f.field_id);
             }
+            if let Some(show_if) = &f.show_if {
+                out.add_show_if(&f.field_id, show_if);
+            }
         }
         out
+    }
+
+    fn add_show_if(&mut self, entry: &str, filter: &Filter) {
+        for item in &filter.items {
+            match item {
+                FilterItem::Condition(c) => {
+                    if let Some(key) = show_if_key(entry, c) {
+                        self.0.insert(key);
+                    }
+                }
+                FilterItem::Group(g) => self.add_show_if(entry, g),
+            }
+        }
+    }
+
+    /// Did the old form give the entry `entry` this very show-if condition?
+    pub fn show_if_condition(&self, entry: &str, c: &Condition) -> bool {
+        show_if_key(entry, c).is_some_and(|k| self.0.contains(&k))
     }
 
     fn add(&mut self, slot: &str, id: &str) {
@@ -407,6 +428,12 @@ impl Stale {
     fn condition(&self, c: &Condition) -> bool {
         condition_key(c).is_some_and(|k| self.0.contains(&k))
     }
+}
+
+fn show_if_key(entry: &str, c: &Condition) -> Option<String> {
+    serde_json::to_string(c)
+        .ok()
+        .map(|json| format!("show if\0{entry}\0{json}"))
 }
 
 fn condition_key(c: &Condition) -> Option<String> {

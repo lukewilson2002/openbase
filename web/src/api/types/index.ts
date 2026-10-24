@@ -80,6 +80,7 @@ export type { FileInboxItem } from "./FileInboxItem";
 export type { Filter } from "./Filter";
 export type { FilterItem } from "./FilterItem";
 export type { FilterOp } from "./FilterOp";
+export type { FormBlock } from "./FormBlock";
 export type { FormConfig } from "./FormConfig";
 export type { FormField } from "./FormField";
 export type { FormSubmission } from "./FormSubmission";

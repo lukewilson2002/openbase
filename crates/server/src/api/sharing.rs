@@ -499,21 +499,47 @@ async fn public_form(
         .await?;
     let cfg = &r.view.view.config;
     let form = &cfg.form;
-    let inputs = sharing::form_fields(cfg, &fields)
+    let inputs = sharing::form_items(cfg, &fields)
         .into_iter()
-        .map(|(entry, field)| PublicFormField {
-            label: entry
-                .label
-                .as_deref()
-                .map(str::trim)
-                .filter(|l| !l.is_empty())
-                .unwrap_or(&field.name)
-                .to_string(),
-            help: entry.help.clone().filter(|h| !h.trim().is_empty()),
-            required: entry.required,
-            field_type: field.field_type(),
-            options: sharing::public_options(&field),
-            id: field.id,
+        .map(|item| {
+            let show_if = sharing::effective_show_if(item.entry().show_if.as_ref(), &fields);
+            let text = |s: &Option<String>| s.clone().filter(|h| !h.trim().is_empty());
+            match item {
+                sharing::FormItem::Question(entry, field) => PublicFormField {
+                    label: entry
+                        .label
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty())
+                        .unwrap_or(&field.name)
+                        .to_string(),
+                    // The field's own description explains it when the form says nothing.
+                    help: text(&entry.help).or_else(|| text(&field.description)),
+                    required: entry.required,
+                    field_type: field.field_type(),
+                    options: sharing::public_options(&field),
+                    default: sharing::form_default(&field),
+                    show_if,
+                    block: None,
+                    id: field.id,
+                },
+                sharing::FormItem::Block(entry, block) => PublicFormField {
+                    label: entry
+                        .label
+                        .as_deref()
+                        .map(str::trim)
+                        .unwrap_or("")
+                        .to_string(),
+                    help: text(&entry.help),
+                    required: false,
+                    field_type: ob_core::field::FieldType::Text,
+                    options: Json2::Null,
+                    default: None,
+                    show_if,
+                    block: Some(block),
+                    id: entry.field_id,
+                },
+            }
         })
         .collect();
     let or = |s: &str, default: &str| {
@@ -545,17 +571,28 @@ fn form_error(field: &Field, msg: impl std::fmt::Display) -> AppError {
     AppError::bad_request(format!("field \"{}\": {msg}", field.name))
 }
 
-/// Check a submission against the form and return the values to write.
+/// Check a submission against the form and return the values to write. An entry whose show-if
+/// does not hold for the answers above it is left out: its answer is ignored and it is not
+/// required. A question that is shown or hidden but empty is written as `null`, so that it stays
+/// empty instead of getting the field's default (a visitor who saw the default and cleared it
+/// chose that).
 fn validate_submission(
     cfg: &ob_core::view::ViewConfig,
     fields: &[Field],
     submission: FormSubmission,
 ) -> AppResult<std::collections::BTreeMap<String, Json2>> {
-    let inputs = sharing::form_fields(cfg, fields);
+    let items = sharing::form_items(cfg, fields);
+    let inputs: Vec<&Field> = items
+        .iter()
+        .filter_map(|i| match i {
+            sharing::FormItem::Question(_, f) => Some(f.as_ref()),
+            sharing::FormItem::Block(..) => None,
+        })
+        .collect();
     if inputs.is_empty() {
         return Err(AppError::bad_request("this form has no fields"));
     }
-    let allowed: HashSet<&str> = inputs.iter().map(|(_, f)| f.id.as_str()).collect();
+    let allowed: HashSet<&str> = inputs.iter().map(|f| f.id.as_str()).collect();
     if let Some(bad) = submission
         .values
         .keys()
@@ -567,7 +604,22 @@ fn validate_submission(
     }
     let cell_ctx = CellCtx::utc(chrono::Utc::now()).with_typecast(true);
     let mut out = std::collections::BTreeMap::new();
-    for (entry, field) in &inputs {
+    let mut empty = Vec::new();
+    // The stored form of the answers of the questions shown so far: what show-ifs read.
+    let mut answers = serde_json::Map::new();
+    for item in &items {
+        let entry = item.entry();
+        let shown = match sharing::effective_show_if(entry.show_if.as_ref(), fields) {
+            Some(cond) => sharing::show_if_holds(&cond, fields, &answers),
+            None => true,
+        };
+        let sharing::FormItem::Question(entry, field) = item else {
+            continue;
+        };
+        if !shown {
+            empty.push(field.id.clone());
+            continue;
+        }
         let value = submission.values.get(&field.id).filter(|v| !v.is_null());
         let normalized = match value {
             None => None,
@@ -580,7 +632,8 @@ fn validate_submission(
             }
         };
         match (normalized, value) {
-            (Some(_), Some(v)) => {
+            (Some(stored), Some(v)) => {
+                answers.insert(field.id.clone(), stored);
                 out.insert(field.id.clone(), v.clone());
             }
             _ if entry.required => {
@@ -589,11 +642,14 @@ fn validate_submission(
                     field.name
                 )));
             }
-            _ => {}
+            _ => empty.push(field.id.clone()),
         }
     }
     if out.is_empty() {
         return Err(AppError::bad_request("the form is empty"));
+    }
+    for id in empty {
+        out.insert(id, Json2::Null);
     }
     Ok(out)
 }
@@ -613,7 +669,7 @@ async fn submit_form(
         SUBMIT_WINDOW,
     )?;
     let t = token.clone();
-    let outcome = state
+    let (outcome, notified) = state
         .db
         .write(move |tx| {
             // Re-resolve inside the transaction: the form may have been
@@ -628,13 +684,16 @@ async fn submit_form(
                 },
             )
             .typecast(true);
-            create_records(
+            let outcome = create_records(
                 tx,
                 &ctx,
                 &r.table.id,
                 vec![ob_core::api::records::NewRecord { values }],
                 &CreateOpts::default(),
-            )
+            )?;
+            let record_id = outcome.target().created.first().cloned();
+            let notified = notify_response(tx, &r, record_id.as_deref())?;
+            Ok((outcome, notified))
         })
         .await?;
     for event in outcome.events() {
@@ -642,7 +701,102 @@ async fn submit_form(
     }
     // The new record's id lets a redirect address carry it (`{record_id}`).
     let record_id = outcome.target().created.first().cloned();
+    mail_response(&state, &notified, record_id.as_deref());
     Ok(Json(json!({ "ok": true, "record_id": record_id })))
+}
+
+/// A person told about a response, with what an email to them needs.
+struct Notified {
+    user_id: String,
+    name: String,
+    email: String,
+    place: String,
+    link: String,
+}
+
+/// Tell the people the form notifies (project members only: someone who has left is skipped)
+/// that a response came in: an in-app notification each.
+fn notify_response(
+    tx: &rusqlite::Transaction,
+    r: &Resolved,
+    record_id: Option<&str>,
+) -> AppResult<Vec<Notified>> {
+    use rusqlite::OptionalExtension;
+    let form = &r.view.view.config.form;
+    let mut out = Vec::new();
+    let form_name = if form.title.trim().is_empty() {
+        r.view.view.name.clone()
+    } else {
+        form.title.clone()
+    };
+    for user_id in &form.notify_user_ids {
+        let who: Option<(String, String)> = tx
+            .query_row(
+                "SELECT name, email FROM users WHERE id = ?1 AND is_active = 1",
+                [user_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((name, email)) = who else { continue };
+        if perm::base_role(tx, user_id, &r.table.base_id)?.is_none() {
+            continue;
+        }
+        crate::store::notifications::create(
+            tx,
+            user_id,
+            "form_response",
+            &json!({
+                "message": format!("A new response came in through the form \"{form_name}\"."),
+                "form_name": form_name,
+                "view_id": r.view.view.id,
+                "base_id": r.table.base_id,
+                "base_name": r.base_name,
+                "base_icon": r.base_icon,
+                "table_id": r.table.id,
+                "table_name": r.table.name,
+                "table_icon": r.table.icon,
+                "record_id": record_id,
+            }),
+        )?;
+        out.push(Notified {
+            user_id: user_id.clone(),
+            name,
+            email,
+            place: format!(
+                "{} / {} (the form \"{form_name}\")",
+                r.base_name, r.table.name
+            ),
+            link: format!("/base/{}/{}", r.table.base_id, r.table.id),
+        });
+    }
+    Ok(out)
+}
+
+/// Email those people too when the server can send mail. Failures are only logged, and each
+/// person's mail counts against the hourly email budget like any other mail the server sends.
+fn mail_response(state: &AppState, notified: &[Notified], record_id: Option<&str>) {
+    if notified.is_empty() || !state.email.enabled() {
+        return;
+    }
+    let base = state.config.public_url.trim_end_matches('/');
+    for n in notified {
+        if crate::email::spend_budget(&state.limiter, &state.config, &n.user_id, 1).is_err() {
+            continue;
+        }
+        let link = match record_id {
+            Some(id) => format!("{base}{}?record={id}", n.link),
+            None => format!("{base}{}", n.link),
+        };
+        crate::email::send_in_background(
+            state.mailer.clone(),
+            n.email.clone(),
+            "New form response on OpenBase".to_string(),
+            format!(
+                "Hi {},\n\nA new response came in on {}.\n\nOpen it:\n\n{link}\n",
+                n.name, n.place
+            ),
+        );
+    }
 }
 
 /// Charge the byte budgets of anonymous uploads (see [`UPLOAD_MB_PER_IP`]);

@@ -493,6 +493,31 @@ needs only read access.
 
 ### Share links and public forms
 
+A form is set up with `create_view` / `update_view` (`config.form`, field and choice **names**):
+
+```json
+{"form": {
+  "fields": [
+    {"field_id": "Type", "required": true},
+    {"block": "heading", "label": "Bug details"},
+    {"field_id": "Steps", "show_if": {"conjunction": "and", "items": [{"field_id": "Type", "op": "is", "value": "Bug"}]}},
+    {"block": "text", "help": "Attach a screenshot if you can."}
+  ],
+  "notify_user_ids": ["ada@example.com"]}}
+```
+
+- `show_if` is an ordinary view filter on the questions **above** the entry (text, number, rating, checkbox and
+  select questions only). While it does not hold the entry is not shown, its answer is ignored and it is not
+  required (and its field default is not applied). It works the same in the web app, on the public form and on
+  the server. Headings and text blocks (`block: heading` with `label`, `block: text` with `help`) can have one too;
+  they get an id of their own (`blk...`) when saved, which `get_view` returns and you send back unchanged.
+- A form shows each field's default, and uses the field's description as help when the form's `help` is empty.
+- `notify_user_ids` (email, name or user id of project members) get a notification, and an email if the server
+  sends mail, for every response that comes in through the public link. An editor may change this list even
+  while the link is on.
+- A public form link can prefill and hide fields: `?prefill_<Field name>=value` and `&hide_<Field name>=true`
+  (see [docs/api.md](api.md#form-logic-prefill-and-notifications)).
+
 | Tool | Needs | What it does |
 |---|---|---|
 | `create_share_link` | write | Public read-only page of a view, or a public form for a form view; optional password; returns the URL |

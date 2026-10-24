@@ -333,11 +333,30 @@ pub struct FormConfig {
     /// Only http(s) URLs are accepted.
     pub redirect_url: Option<String>,
     pub show_submit_another: bool,
+    /// People who get a notification (and an email when the server can send mail) for every
+    /// response that comes in through the form's public link. Project members only.
+    pub notify_user_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// What a layout entry of a form is, in place of a question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(rename_all = "snake_case")]
+pub enum FormBlock {
+    /// A section heading: `label` is its text.
+    Heading,
+    /// A paragraph of explanatory text: `help` is its text.
+    Text,
+}
+
+/// One entry of a form: a question about a table field, or (with `block`) a heading or a
+/// paragraph between questions.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FormField {
+    /// The table field asked for. A block has an id of its own (`blk...`, made when the form is
+    /// saved if it is left out) that no field uses.
+    #[serde(default)]
     pub field_id: FieldId,
     #[serde(default)]
     pub required: bool,
@@ -346,6 +365,13 @@ pub struct FormField {
     pub label: Option<String>,
     #[serde(default)]
     pub help: Option<String>,
+    /// Show this entry only when the answers given so far (the entries above it) meet the
+    /// condition; otherwise it is left out, its answer is ignored and it is not required.
+    #[serde(default)]
+    pub show_if: Option<Filter>,
+    /// Set for a heading or a paragraph of text instead of a question.
+    #[serde(default)]
+    pub block: Option<FormBlock>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

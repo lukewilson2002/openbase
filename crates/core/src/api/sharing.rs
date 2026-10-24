@@ -16,7 +16,7 @@ use serde_json::Value as Json;
 
 use crate::api::records::GroupHeader;
 use crate::field::FieldType;
-use crate::view::ViewType;
+use crate::view::{Filter, FormBlock, ViewType};
 
 /// What a share link exposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -206,6 +206,18 @@ pub struct PublicFormField {
     pub field_type: FieldType,
     /// Type options: select choices, rating max, number precision, ...
     pub options: Json,
+    /// What the field starts with (its default as a value to submit), so a visitor sees what an
+    /// untouched box would otherwise get.
+    #[serde(default)]
+    pub default: Option<Json>,
+    /// Shown only while the answers given above it meet this condition (field ids are those of the
+    /// form's other inputs; one that is not among them counts as unanswered).
+    #[serde(default)]
+    pub show_if: Option<Filter>,
+    /// Set for a heading (`label` is its text) or a paragraph (`help` is its text): not an input,
+    /// `type` is `text` and `options` empty, and nothing is submitted for it.
+    #[serde(default)]
+    pub block: Option<FormBlock>,
 }
 
 /// `GET /api/public/forms/{token}`.
