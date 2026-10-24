@@ -169,6 +169,9 @@ function CalendarInner(props: ViewProps) {
   const { table, view, config, cfg, writes, timeZone, addRecord } = setup;
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const calendar = useRef<FullCalendar>(null);
+  const zone = useRef<HTMLElement>(null);
+  // The event being dragged was let go over the unscheduled column (FullCalendar tells us this before it tells us where it landed).
+  const releasedOnZone = useRef(false);
   const dateFields = useMemo(() => table.fields.filter(isDateLike), [table.fields]);
   const fields = useMemo(() => resolveCalendarFields(table.fields, config.calendar.date_field_id, config.calendar.end_field_id), [table.fields, config.calendar.date_field_id, config.calendar.end_field_id]);
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
@@ -260,6 +263,11 @@ function CalendarInner(props: ViewProps) {
 
   const times = (arg: EventDropArg | EventResizeDoneArg, change: "move" | "resize") => ({ startMs: arg.event.start!.getTime(), endMs: arg.event.end?.getTime() ?? null, allDay: arg.event.allDay, change });
   const onEventDrop = (arg: EventDropArg) => {
+    // Let go over the unscheduled sheet, which on a phone lies over the days: that is an unschedule (see onEventDragStop), not a move.
+    if (releasedOnZone.current) {
+      arg.revert();
+      return;
+    }
     const t = times(arg, "move");
     apply(String(arg.event.extendedProps.recordId), t, `Moved to ${dayLabel(t.startMs)}`, arg.revert);
   };
@@ -285,7 +293,8 @@ function CalendarInner(props: ViewProps) {
 
   const onDrop = (arg: DropArg) => {
     const id = arg.draggedEl.getAttribute("data-record-id");
-    if (!id || !fields) return;
+    // Let go over the unscheduled sheet (over the days on a phone): the record stays where it was.
+    if (!id || !fields || inside(zone.current, pointOf(arg.jsEvent))) return;
     void writes.update(id, dateClickValues(arg.date.getTime(), arg.allDay, fields, timeZone), { label: "Schedule record", toast: `Scheduled for ${dayLabel(arg.date.getTime())}` });
   };
 
@@ -297,7 +306,6 @@ function CalendarInner(props: ViewProps) {
     },
     [fields, writes],
   );
-  const zone = useRef<HTMLElement>(null);
   const [dragging, setDragging] = useState(false);
   const [overZone, setOverZone] = useState(false);
   // While an event is dragged, the column shows whether the pointer is over it.
@@ -314,7 +322,8 @@ function CalendarInner(props: ViewProps) {
   }, [dragging]);
   const onEventDragStop = (arg: { event: { extendedProps: Record<string, unknown> }; jsEvent: MouseEvent }) => {
     setDragging(false);
-    if (startWritable && inside(zone.current, pointOf(arg.jsEvent))) unschedule(String(arg.event.extendedProps.recordId));
+    releasedOnZone.current = startWritable && inside(zone.current, pointOf(arg.jsEvent));
+    if (releasedOnZone.current) unschedule(String(arg.event.extendedProps.recordId));
   };
   // Every event can be focused and carries its record, for Delete.
   const onEventMount = (arg: EventMountArg) => {
@@ -458,7 +467,10 @@ function CalendarInner(props: ViewProps) {
                 arg.jsEvent.preventDefault();
                 setup.openRecord(String(arg.event.extendedProps.recordId));
               }}
-              eventDragStart={() => setDragging(true)}
+              eventDragStart={() => {
+                releasedOnZone.current = false;
+                setDragging(true);
+              }}
               eventDragStop={onEventDragStop}
               eventDrop={onEventDrop}
               eventResize={onEventResize}
