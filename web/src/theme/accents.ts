@@ -112,6 +112,14 @@ const SOURCE: Partial<Record<Accent, { bg: string; fg: string }>> = {
   pink: { bg: "#ec4899", fg: "#2e0716" },
 };
 
+/**
+ * Accents whose fill is a light colour carrying dark text, not a deep one carrying white: white on a
+ * yellow only reads once the yellow is a dark olive, and a gold is what yellow should look like.
+ */
+const DARK_TEXT: Partial<Record<Accent, { primary: string; hover: string; fg: string }>> = {
+  yellow: { primary: "#e3a912", hover: "#cc960a", fg: "#241a00" },
+};
+
 /** The swatch of an accent: the palette's saturated colour (or its `SOURCE`) and the text it carries. */
 export function swatch(accent: Accent): { bg: string; fg: string } {
   return SOURCE[accent] ?? PALETTE[`${accent}_dark`]!;
@@ -247,10 +255,11 @@ function generate(accent: Accent, mode: Mode): TokenSet {
 
   // The fill is the swatch a step deeper and calmer (`DIM`) with white text on it, deeper still (hue
   // kept) where white would not read yet; its hover is a step deeper again.
-  out["primary-fg"] = "#ffffff";
-  out.primary = settle(out, "primary", { l: (color.l - DIM.l) * DIM.scale, c: color.c * DIM.c, h: color.h }, -1);
+  const gold = DARK_TEXT[accent];
+  out["primary-fg"] = gold?.fg ?? "#ffffff";
+  out.primary = gold?.primary ?? settle(out, "primary", { l: (color.l - DIM.l) * DIM.scale, c: color.c * DIM.c, h: color.h }, -1);
   const primary = hexToOklch(out.primary);
-  out["primary-hover"] = settle(out, "primary-hover", { ...primary, l: primary.l - 0.06 }, -1);
+  out["primary-hover"] = gold?.hover ?? settle(out, "primary-hover", { ...primary, l: primary.l - 0.06 }, -1);
 
   // A hover is a light wash of the primary, short of a selection's full fill, thinned if text on it
   // would stop reading.

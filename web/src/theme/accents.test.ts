@@ -82,6 +82,12 @@ describe("accent colours", () => {
         const t = ACCENT_THEMES[accent][mode];
         const primary = hexToOklch(t.primary);
         expect(t.primary, `${accent} ${mode}`).toBe(ACCENT_THEMES[accent].light.primary);
+        // Yellow is a gold carrying dark text: white on it only reads once it is a dark olive.
+        if (accent === "yellow") {
+          expect(contrast(t["primary-fg"], t.primary), "yellow text on gold").toBeGreaterThanOrEqual(4.5);
+          expect(contrast(t["primary-fg"], t["primary-hover"]), "yellow text on hover").toBeGreaterThanOrEqual(4.5);
+          continue;
+        }
         expect(t["primary-fg"], `${accent} ${mode}`).toBe("#ffffff");
         expect(contrast("#ffffff", t.primary), `${accent} white on primary`).toBeGreaterThanOrEqual(4.5);
         expect(contrast("#ffffff", t["primary-hover"]), `${accent} white on hover`).toBeGreaterThanOrEqual(4.5);
