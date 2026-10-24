@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
-import { UNCATEGORIZED, buildStacks, isStackField, moveStackKey, planDrop, recordStackKey, stackKind, stackValue } from "./stacks";
+import { UNCATEGORIZED, applyShownOrder, buildAllStacks, buildStacks, clearStack, isStackField, moveStackKey, planDrop, recordStackKey, stackKind, stackValue } from "./stacks";
 
 const status = ALL_FIELDS.single_select!; // choices chs1 Todo, chs2 In progress, chs3 Done
 const rec = (id: string, v: Record<string, unknown>) => makeRecord(v, id);
@@ -65,14 +65,35 @@ describe("buildStacks", () => {
     expect(stacks.map((s) => s.label)).toEqual(["Todo", "In progress", "Done"]);
   });
 
-  it("stacks by user: every collaborator gets a stack, plus unknown holders", () => {
+  describe("person stacks", () => {
     const user = field("user", { multiple: false, notify: false }, { id: "fld_owner" });
-    const stacks = buildStacks(user, [rec("a", { fld_owner: ["usr2"] }), rec("b", { fld_owner: ["ghost"] })], { stackOrder: [], hideEmpty: false, people });
-    expect(stacks.map((s) => [s.key, s.label, s.records.length])).toEqual([
-      ["usr1", "Ada", 0],
-      ["usr2", "Grace", 1],
-      ["ghost", "ghost", 1],
-    ]);
+    const held = [rec("a", { fld_owner: ["usr2"] }), rec("b", { fld_owner: ["ghost"] })];
+
+    it("has a stack only for collaborators who hold cards, and never shows an id", () => {
+      const stacks = buildStacks(user, held, { stackOrder: [], hideEmpty: false, people });
+      expect(stacks.map((s) => [s.key, s.label, s.records.length])).toEqual([
+        ["usr2", "Grace", 1],
+        ["ghost", "Former member", 1],
+      ]);
+    });
+
+    it("adds a stack for every collaborator when asked", () => {
+      const stacks = buildStacks(user, held, { stackOrder: [], hideEmpty: false, people, showAllPeople: true });
+      expect(stacks.map((s) => [s.key, s.label])).toEqual([
+        ["usr1", "Ada"],
+        ["usr2", "Grace"],
+        ["ghost", "Former member"],
+      ]);
+    });
+
+    it("tells former members apart, and says people are loading before the collaborators arrive", () => {
+      const two = [rec("a", { fld_owner: ["zed"] }), rec("b", { fld_owner: ["abe"] })];
+      expect(buildStacks(user, two, { stackOrder: [], hideEmpty: false, people }).map((s) => [s.key, s.label])).toEqual([
+        ["abe", "Former member"],
+        ["zed", "Former member 2"],
+      ]);
+      expect(buildStacks(user, two, { stackOrder: [], hideEmpty: false, people: [], peopleLoading: true }).every((s) => s.label.startsWith("Loading"))).toBe(true);
+    });
   });
 
   it("stacks a checkbox into unchecked and checked", () => {
@@ -86,6 +107,33 @@ describe("buildStacks", () => {
 
   it("returns nothing for a field that cannot stack", () => {
     expect(buildStacks(ALL_FIELDS.number!, records, { stackOrder: [], hideEmpty: false, people })).toEqual([]);
+  });
+});
+
+describe("hidden stacks", () => {
+  const records = [rec("r1", { [status.id]: "chs3" }), rec("r2", {})];
+
+  it("buildStacks leaves them out and buildAllStacks flags them, cards and all", () => {
+    const opts = { stackOrder: [], hideEmpty: false, people, hiddenStacks: ["chs3", UNCATEGORIZED] };
+    expect(buildStacks(status, records, opts).map((s) => s.key)).toEqual(["chs1", "chs2"]);
+    const all = buildAllStacks(status, records, opts);
+    expect(all.filter((s) => s.hidden).map((s) => [s.label, s.records.length])).toEqual([
+      ["Uncategorized", 1],
+      ["Done", 1],
+    ]);
+  });
+
+  it("keeps a hidden stack's place when the shown ones are reordered", () => {
+    expect(applyShownOrder(["a", "h", "b", "c"], ["a", "b", "c"], ["c", "a", "b"])).toEqual(["c", "h", "a", "b"]);
+  });
+});
+
+describe("clearStack", () => {
+  it("offers an empty Uncategorized to drop on when none is shown, for selects and people only", () => {
+    expect(clearStack(status, [{ key: "chs1" }])).toMatchObject({ key: UNCATEGORIZED, label: "Uncategorized", records: [] });
+    expect(clearStack(status, [{ key: UNCATEGORIZED }, { key: "chs1" }])).toBeNull();
+    expect(clearStack(field("user", { multiple: false, notify: false }), [])).not.toBeNull();
+    expect(clearStack(ALL_FIELDS.checkbox!, [])).toBeNull();
   });
 });
 

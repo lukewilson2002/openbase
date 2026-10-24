@@ -30,6 +30,8 @@ export interface Stack {
   color?: string;
   uncategorized: boolean;
   records: TableRecord[];
+  /** Left off the board by the view's `hidden_stacks` (only `buildAllStacks` returns these). */
+  hidden?: boolean;
 }
 
 /** The stack a record belongs to. Unknown choices and missing values are Uncategorized. */
@@ -67,10 +69,25 @@ export interface BuildStacksOptions {
   stackOrder: readonly string[];
   hideEmpty: boolean;
   people: readonly Pick<Collaborator, "id" | "name">[];
+  /** Stack keys the view leaves off the board. */
+  hiddenStacks?: readonly string[];
+  /** Person stacks: one for every collaborator. Off: only for people who hold cards. */
+  showAllPeople?: boolean;
+  /** The collaborators have not loaded yet: people missing from `people` are not strangers yet. */
+  peopleLoading?: boolean;
 }
 
-/** Every stack for a stack field, in display order, holding the records in their given order. */
-export function buildStacks(field: Field, records: readonly TableRecord[], opts: BuildStacksOptions): Stack[] {
+/** Label of a stack for someone who is not (or not yet known as) a collaborator: never their id. */
+function strangerLabel(opts: BuildStacksOptions, nth: number): string {
+  if (opts.peopleLoading) return "Loading people…";
+  return nth === 0 ? "Former member" : `Former member ${nth + 1}`;
+}
+
+/**
+ * Every stack for a stack field, in display order, holding the records in their given order. The ones the
+ * view hides are flagged `hidden` rather than dropped, so the board can offer to bring them back.
+ */
+export function buildAllStacks(field: Field, records: readonly TableRecord[], opts: BuildStacksOptions): Stack[] {
   const kind = stackKind(field);
   if (!kind) return [];
   const buckets = new Map<string, TableRecord[]>();
@@ -92,9 +109,11 @@ export function buildStacks(field: Field, records: readonly TableRecord[], opts:
     for (const c of field.options.choices) add(c.id, c.name, c.color);
   } else if (kind === "user") {
     add(UNCATEGORIZED, "Uncategorized");
-    for (const p of opts.people) add(p.id, p.name);
+    // Collaborators with no cards only get a stack when asked for: a large base would fill the board with them.
+    for (const p of opts.people) if (opts.showAllPeople || buckets.has(p.id)) add(p.id, p.name);
     // Users who hold cards but are no longer collaborators still need a stack.
-    for (const key of buckets.keys()) if (key !== UNCATEGORIZED && !meta.has(key)) add(key, key);
+    const strangers = [...buckets.keys()].filter((key) => key !== UNCATEGORIZED && !meta.has(key)).sort();
+    strangers.forEach((key, i) => add(key, strangerLabel(opts, i)));
   } else {
     add("false", "Unchecked");
     add("true", "Checked", "green");
@@ -102,6 +121,7 @@ export function buildStacks(field: Field, records: readonly TableRecord[], opts:
 
   const inOrder = opts.stackOrder.filter((k, i, a) => meta.has(k) && a.indexOf(k) === i);
   const ordered = [...inOrder, ...natural.filter((k) => !inOrder.includes(k))];
+  const hidden = new Set(opts.hiddenStacks ?? []);
 
   const stacks: Stack[] = ordered.map((key) => ({
     key,
@@ -109,10 +129,27 @@ export function buildStacks(field: Field, records: readonly TableRecord[], opts:
     color: meta.get(key)!.color,
     uncategorized: key === UNCATEGORIZED,
     records: buckets.get(key) ?? [],
+    ...(hidden.has(key) ? { hidden: true } : {}),
   }));
   // An empty Uncategorized stack is not a value anyone chose, only a column of nothing in front of
   // the real stacks; it shows up again as soon as a card has no value.
   return stacks.filter((s) => s.records.length > 0 || (!opts.hideEmpty && !s.uncategorized));
+}
+
+/** The stacks the board draws: `buildAllStacks` without the hidden ones. */
+export function buildStacks(field: Field, records: readonly TableRecord[], opts: BuildStacksOptions): Stack[] {
+  return buildAllStacks(field, records, opts).filter((s) => !s.hidden);
+}
+
+/**
+ * The empty drop target offered while a card is dragged when no "Uncategorized" stack is on the board
+ * (it is empty, or hidden), so a drop can still clear the card's value. Checkboxes always have both stacks.
+ */
+export function clearStack(field: Field, shown: readonly Pick<Stack, "key">[]): Stack | null {
+  const kind = stackKind(field);
+  if (kind !== "select" && kind !== "user") return null;
+  if (shown.some((s) => s.key === UNCATEGORIZED)) return null;
+  return { key: UNCATEGORIZED, label: "Uncategorized", uncategorized: true, records: [] };
 }
 
 /** `stack_order` after moving a stack one place left or right among the shown stacks. */
@@ -123,6 +160,16 @@ export function moveStackKey(shownKeys: readonly string[], key: string, dir: -1 
   const next = [...shownKeys];
   [next[i], next[j]] = [next[j]!, next[i]!];
   return next;
+}
+
+/**
+ * `stack_order` after the shown stacks were put in a new order. Hidden stacks keep their place among
+ * `allKeys` (the order before), so they come back where they were.
+ */
+export function applyShownOrder(allKeys: readonly string[], shownBefore: readonly string[], shownAfter: readonly string[]): string[] {
+  const shown = new Set(shownBefore);
+  const queue = [...shownAfter];
+  return allKeys.map((k) => (shown.has(k) ? (queue.shift() ?? k) : k));
 }
 
 export interface DropPlan {

@@ -135,7 +135,7 @@ export function makeView(over: Partial<View> & { id: string; type?: View["type"]
       summaries: {},
       wrap_headers: false,
       description_field_id: null,
-      kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [] },
+      kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, cover_fit: false },
       calendar: { date_field_id: null, end_field_id: null },
       gallery: { cover_field_id: null, cover_crop: false },
       timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },
