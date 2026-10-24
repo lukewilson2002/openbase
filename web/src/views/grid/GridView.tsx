@@ -309,8 +309,15 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
               const hits = found.records.filter((r) => r.name.toLowerCase() === name.toLowerCase());
               if (hits.length > 1) sameName.add(linkKey(tableId, name));
               else if (hits[0]) {
-                linkIds.set(name.toLowerCase(), hits[0].id);
-                names.set(hits[0].id, hits[0].name);
+                // Names are resolved by text alone: the same name in two linked tables would hand one of them the other's record.
+                const taken = linkIds.get(name.toLowerCase());
+                if (taken && taken !== hits[0].id) {
+                  sameName.add(linkKey(tableId, name));
+                  for (const other of wanted.keys()) sameName.add(linkKey(other, name));
+                } else {
+                  linkIds.set(name.toLowerCase(), hits[0].id);
+                  names.set(hits[0].id, hits[0].name);
+                }
               }
             }
           }
@@ -599,33 +606,40 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [setSearchParams],
   );
 
-  /** Neighbouring record ids in grid order (for prev/next in the expanded record). */
-  const neighbours = useMemo(() => {
-    if (!openRecordId) return { prev: null as string | null, next: null as string | null };
+  /** Record indexes of the rows before and after the open record in grid order (-1: none), skipping group headers and folded groups. */
+  const neighbourIndexes = useMemo(() => {
+    const none = { prev: -1, next: -1 };
+    if (!openRecordId) return none;
     const idx = data.indexOf(openRecordId);
-    if (idx < 0) return { prev: null, next: null };
-    const row = rowMap.rowOfRecord(idx);
-    const find = (dir: 1 | -1): string | null => {
+    const row = idx < 0 ? -1 : rowMap.rowOfRecord(idx);
+    if (row < 0) return none;
+    const find = (dir: 1 | -1): number => {
       for (let r = row + dir; r >= 0 && r < rowMap.length; r += dir) {
-        const rec = recordAtRow(r);
-        if (rec) return rec.id;
-        if (rowMap.recordIndexAt(r) >= 0) return null; // not loaded yet
+        const i = rowMap.recordIndexAt(r);
+        if (i >= 0) return i;
       }
-      return null;
+      return -1;
     };
     return { prev: find(-1), next: find(1) };
     // `data.version` changes when pages arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRecordId, data.version, rowMap, recordAtRow]);
-  // Stepping through the records must not stop where the loaded pages do: the pages on either side of the
-  // open record are fetched, and the buttons enable themselves when they arrive.
-  useEffect(() => {
-    if (!openRecordId) return;
-    const idx = data.indexOf(openRecordId);
-    if (idx >= 0) dataRef.current.ensureRange(Math.max(0, idx - 1), idx + 1);
+  }, [openRecordId, data.version, rowMap]);
+  /** Neighbouring record ids in grid order (for prev/next in the expanded record); null until their page has arrived. */
+  const neighbours = useMemo(
+    () => ({
+      prev: neighbourIndexes.prev >= 0 ? (dataRef.current.getRecord(neighbourIndexes.prev)?.id ?? null) : null,
+      next: neighbourIndexes.next >= 0 ? (dataRef.current.getRecord(neighbourIndexes.next)?.id ?? null) : null,
+    }),
     // `data.version` changes when pages arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRecordId, data.version]);
+    [neighbourIndexes, data.version],
+  );
+  // Stepping through the records must not stop where the loaded pages do: the pages of the records on
+  // either side of the open one are fetched, and the buttons enable themselves when they arrive. (Not
+  // `ensureRange`: that is the range on screen, which a refresh keeps.)
+  useEffect(() => {
+    for (const i of [neighbourIndexes.prev, neighbourIndexes.next]) if (i >= 0 && !dataRef.current.getRecord(i)) void dataRef.current.loadRange(i, i);
+  }, [neighbourIndexes, data.version]);
 
   // ---- add / delete rows -----------------------------------------------------------------------
   // The new row is selected and scrolled into view once its page has arrived, unless the person has
@@ -837,7 +851,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     canEdit,
     canReorderRows: reorderable,
     canReorderColumns: true,
-    version: data.version + (collapsed.size > 0 ? 1 : 0) + (hasSummary ? (aggregations.dataUpdatedAt % 1000) : 0),
+    version: data.version + collapsed.size + (hasSummary ? (aggregations.dataUpdatedAt % 1000) : 0),
     getCell,
     onVisibleRowsChange,
     onCommitEdits,

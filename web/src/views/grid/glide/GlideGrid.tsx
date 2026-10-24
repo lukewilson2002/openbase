@@ -78,6 +78,8 @@ const ADD_COLUMN_ID = "__add_field__";
 export const GRID_HEADER_HEIGHT = 44;
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
 const rowMarkers = (width: number) => ({ kind: "both", width, startIndex: MARKER_START_INDEX }) as const;
+/** About how wide a character of a group label is, to tell when the first column cuts it. */
+const GROUP_LABEL_CHAR_PX = 7;
 /** Glide's header menu button, at the right end of a header (its `menuButtonSize`). */
 const HEADER_MENU_WIDTH = 30;
 /** The primary field's pin button, just left of the header menu button. */
@@ -463,6 +465,14 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   // Which linked record's chip the pointer is over, if any: the host shows its preview.
   const hoveredLink = useRef<string | null>(null);
   const onMouseMove = useCallback((args: GridMouseEventArgs) => {
+    // A group header's label is cut to its column: the whole of it shows as the tooltip.
+    const wrap = wrapRef.current;
+    if (wrap) {
+      const model = args.kind === "cell" ? pr.current.getCell(args.location[0], args.location[1]) : null;
+      const cut = model?.kind === "group" && args.location[0] === 0 && model.label.length * GROUP_LABEL_CHAR_PX > args.bounds.width - 28 - model.depth * 14 - 40;
+      const title = cut && model?.kind === "group" ? model.label : "";
+      if (wrap.title !== title) wrap.title = title;
+    }
     const report = pr.current.onLinkHover;
     if (!report) return;
     const hit = args.kind === "cell" ? linkChipAt(pr.current, args.location, args.bounds, args.localEventX, args.localEventY) : null;

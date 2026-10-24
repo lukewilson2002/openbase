@@ -43,6 +43,29 @@ describe("resolveFieldOrder", () => {
   });
 });
 
+describe("freezing while fields are hidden or shown", () => {
+  // f1 | f2 f3 frozen | f4
+  const frozen = (): ViewConfig => ({ ...empty(), frozen_columns: 2 });
+  it("hiding a column before the line keeps the line after the same column", () => {
+    const c = setHiddenField(frozen(), table, "f2", true);
+    expect(c.frozen_columns).toBe(1);
+    expect(ids(resolveFieldOrder(table, c).visible).slice(0, 1 + c.frozen_columns)).toEqual(["f1", "f3"]);
+  });
+  it("hiding a column after the line leaves it", () => {
+    expect(setHiddenField(frozen(), table, "f4", true).frozen_columns).toBe(2);
+  });
+  it("showing a column before the line freezes it with the others, so the line stays put", () => {
+    const hidden = { ...frozen(), hidden_fields: ["f2"], frozen_columns: 1 };
+    expect(setHiddenField(hidden, table, "f2", false).frozen_columns).toBe(2);
+  });
+  it("hiding every frozen column unfreezes", () => {
+    expect(setAllHidden(frozen(), table, true).frozen_columns).toBe(0);
+  });
+  it("does nothing while nothing is frozen", () => {
+    expect(setHiddenField(empty(), table, "f2", true).frozen_columns).toBe(0);
+  });
+});
+
 describe("hiding and ordering", () => {
   it("toggles hidden fields and ignores the primary", () => {
     const c = setHiddenField(empty(), table, "f2", true);

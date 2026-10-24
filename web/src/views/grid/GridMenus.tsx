@@ -48,57 +48,55 @@ export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFi
   if (!field || !spec) return null;
   return (
     <AnchoredMenu anchor={at} onClose={onClose} label={`Column menu for ${field.name}`}>
-      <>
-          <DropdownMenuLabel>{field.name}</DropdownMenuLabel>
-          <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "name")}>
-            <Pencil aria-hidden className="size-4" /> Rename field
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field)}>
-            <Pencil aria-hidden className="size-4" /> Edit field…
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "type")}>
-            <Type aria-hidden className="size-4" /> Change field type…
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!canManageFields} onSelect={() => onInsert("left")}>
-            <ArrowLeftToLine aria-hidden className="size-4" /> Insert field left
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canManageFields} onSelect={() => onInsert("right")}>
-            <ArrowRightToLine aria-hidden className="size-4" /> Insert field right
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!canSort || !isSortable(field)} onSelect={() => cfg.update((c) => sortOnly(c, field.id, "asc"))}>
-            <ArrowDownAZ aria-hidden className="size-4" /> {asc}
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canSort || !isSortable(field)} onSelect={() => cfg.update((c) => sortOnly(c, field.id, "desc"))}>
-            <ArrowUpZA aria-hidden className="size-4" /> {desc}
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canSort || !isFilterable(field)} onSelect={() => cfg.update((c) => addFilterCondition(c, field))}>
-            <Filter aria-hidden className="size-4" /> Filter by this field
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canSort || !isGroupable(field)} onSelect={() => cfg.update((c) => addSortLike(c, "groups", field.id))}>
-            <Group aria-hidden className="size-4" /> Group by this field
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={spec.isPrimary || index <= 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, -1))}>
-            <ArrowLeft aria-hidden className="size-4" /> Move left
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={spec.isPrimary || index >= columns.length - 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, 1))}>
-            <ArrowRight aria-hidden className="size-4" /> Move right
-          </DropdownMenuItem>
-          {index > 0 && (
-            <DropdownMenuItem onSelect={() => cfg.update((c) => setFrozenColumns(c, frozenHere ? 0 : index))}>
-              {frozenHere ? <PinOff aria-hidden className="size-4" /> : <Pin aria-hidden className="size-4" />}
-              {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem disabled={spec.isPrimary} onSelect={() => cfg.update((c) => setHiddenField(c, table, field.id, true))}>
-            <EyeOff aria-hidden className="size-4" /> Hide field
-          </DropdownMenuItem>
-          <DropdownMenuItem danger disabled={!canManageFields || spec.isPrimary} onSelect={() => onDelete(field)}>
-            <Trash2 aria-hidden className="size-4" /> Delete field
-          </DropdownMenuItem>
-        </>
+      <DropdownMenuLabel>{field.name}</DropdownMenuLabel>
+      <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "name")}>
+        <Pencil aria-hidden className="size-4" /> Rename field
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field)}>
+        <Pencil aria-hidden className="size-4" /> Edit field…
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "type")}>
+        <Type aria-hidden className="size-4" /> Change field type…
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={!canManageFields} onSelect={() => onInsert("left")}>
+        <ArrowLeftToLine aria-hidden className="size-4" /> Insert field left
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canManageFields} onSelect={() => onInsert("right")}>
+        <ArrowRightToLine aria-hidden className="size-4" /> Insert field right
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={!canSort || !isSortable(field)} onSelect={() => cfg.update((c) => sortOnly(c, field.id, "asc"))}>
+        <ArrowDownAZ aria-hidden className="size-4" /> {asc}
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canSort || !isSortable(field)} onSelect={() => cfg.update((c) => sortOnly(c, field.id, "desc"))}>
+        <ArrowUpZA aria-hidden className="size-4" /> {desc}
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canSort || !isFilterable(field)} onSelect={() => cfg.update((c) => addFilterCondition(c, field))}>
+        <Filter aria-hidden className="size-4" /> Filter by this field
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!canSort || !isGroupable(field)} onSelect={() => cfg.update((c) => addSortLike(c, "groups", field.id))}>
+        <Group aria-hidden className="size-4" /> Group by this field
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={spec.isPrimary || index <= 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, -1))}>
+        <ArrowLeft aria-hidden className="size-4" /> Move left
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={spec.isPrimary || index >= columns.length - 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, 1))}>
+        <ArrowRight aria-hidden className="size-4" /> Move right
+      </DropdownMenuItem>
+      {index > 0 && (
+        <DropdownMenuItem onSelect={() => cfg.update((c) => setFrozenColumns(c, frozenHere ? 0 : index))}>
+          {frozenHere ? <PinOff aria-hidden className="size-4" /> : <Pin aria-hidden className="size-4" />}
+          {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem disabled={spec.isPrimary} onSelect={() => cfg.update((c) => setHiddenField(c, table, field.id, true))}>
+        <EyeOff aria-hidden className="size-4" /> Hide field
+      </DropdownMenuItem>
+      <DropdownMenuItem danger disabled={!canManageFields || spec.isPrimary} onSelect={() => onDelete(field)}>
+        <Trash2 aria-hidden className="size-4" /> Delete field
+      </DropdownMenuItem>
     </AnchoredMenu>
   );
 }

@@ -50,14 +50,27 @@ export function resolveFieldOrder(table: Pick<Table, "fields" | "primary_field_i
   return { visible, hidden, all };
 }
 
+/**
+ * Hiding or showing fields moves the freeze line if it is left alone (it is a count of columns): the
+ * columns frozen before stay frozen, so the line stays after the same column.
+ */
+function keepFrozen(table: Pick<Table, "fields" | "primary_field_id">, before: ViewConfig, after: ViewConfig): ViewConfig {
+  if (before.frozen_columns <= 0) return after;
+  const frozen = resolveFieldOrder(table, before).visible.slice(1, 1 + before.frozen_columns);
+  const now = resolveFieldOrder(table, after).visible.map((f) => f.id);
+  // The primary field is column 0, so the index of the last frozen column is the count.
+  const count = frozen.reduce((n, f) => Math.max(n, now.indexOf(f.id)), 0);
+  return count === after.frozen_columns ? after : { ...after, frozen_columns: count };
+}
+
 export function setHiddenField(config: ViewConfig, table: Pick<Table, "fields" | "primary_field_id">, fieldId: string, hidden: boolean): ViewConfig {
   if (fieldId === table.primary_field_id) return config;
   const rest = config.hidden_fields.filter((id) => id !== fieldId);
-  return { ...config, hidden_fields: hidden ? [...rest, fieldId] : rest };
+  return keepFrozen(table, config, { ...config, hidden_fields: hidden ? [...rest, fieldId] : rest });
 }
 
 export function setAllHidden(config: ViewConfig, table: Pick<Table, "fields" | "primary_field_id">, hidden: boolean): ViewConfig {
-  return { ...config, hidden_fields: hidden ? table.fields.filter((f) => f.id !== table.primary_field_id).map((f) => f.id) : [] };
+  return keepFrozen(table, config, { ...config, hidden_fields: hidden ? table.fields.filter((f) => f.id !== table.primary_field_id).map((f) => f.id) : [] });
 }
 
 /** Move the field at `from` to `to` among all fields (indexes into `resolveFieldOrder(...).all`). */

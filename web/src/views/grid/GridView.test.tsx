@@ -292,6 +292,24 @@ describe("GridView: record panel", () => {
   });
 });
 
+describe("GridView: record panel with folded groups", () => {
+  it("steps over a folded group to the next record that is on screen", async () => {
+    const groups: GroupHeader[] = [
+      { depth: 0, field_id: F.status.id, key: "s1", value: "s1", label: "Todo", count: 2, start: 0 },
+      { depth: 0, field_id: F.status.id, key: "s2", value: "s2", label: "Doing", count: 2, start: 2 },
+      { depth: 0, field_id: F.status.id, key: "s3", value: "s3", label: "Done", count: 2, start: 4 },
+    ];
+    // The middle group is folded: after r2 comes r5.
+    localStorage.setItem("ob-grid-collapsed:viw1", JSON.stringify([`${F.status.id}:s2`]));
+    const { api } = setup({ recs: records.slice(0, 6), groups, route: "/base/app1/tbl1/viw1?record=r2", routes: { "GET /api/tables/tbl1/records/r2": records[1], "GET /api/tables/tbl1/records/r5": records[4] } });
+    const next = await screen.findByRole("button", { name: "Next record (Alt+Down)" });
+    await waitFor(() => expect(next).toBeEnabled());
+    await userEvent.setup().click(next);
+    await waitFor(() => expect(api.callsTo("GET /api/tables/tbl1/records/r5").length).toBeGreaterThan(0));
+    expect(api.callsTo("GET /api/tables/tbl1/records/r3")).toHaveLength(0);
+  });
+});
+
 describe("GridView: column menu", () => {
   it("moves a column left or right, never before the primary field", async () => {
     const user = userEvent.setup();
