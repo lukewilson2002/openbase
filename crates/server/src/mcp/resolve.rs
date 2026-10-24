@@ -312,10 +312,20 @@ pub enum Mode {
     ToNames,
 }
 
+/// The name `stack_order` uses for the stack of cards that have no value (the web app saves it
+/// as an empty string).
+pub const UNCATEGORIZED_STACK: &str = "Uncategorized";
+
 /// Rewrites references inside a view configuration (JSON shape of `ViewConfig`).
 pub struct Xlate<'a> {
     pub table: &'a Table,
     pub mode: Mode,
+    /// The project's people, to read user names in a kanban `stack_order` (left out: user ids
+    /// pass through unchanged).
+    pub people: Option<&'a People>,
+    /// The stack field the view already has, for a config that sets `stack_order` without
+    /// `stack_field_id`.
+    pub stack_field: Option<&'a str>,
 }
 
 const CONFIG_KEYS: &[&str] = &[
@@ -373,6 +383,28 @@ fn check_keys(obj: &Map<String, Value>, allowed: &[&str], what: &str) -> Result<
         }
     }
     Ok(())
+}
+
+impl<'a> Xlate<'a> {
+    pub fn new(table: &'a Table, mode: Mode) -> Xlate<'a> {
+        Xlate {
+            table,
+            mode,
+            people: None,
+            stack_field: None,
+        }
+    }
+
+    pub fn with_people(mut self, people: &'a People) -> Xlate<'a> {
+        self.people = Some(people);
+        self
+    }
+
+    /// `stack_field` is the id of the kanban stack field the view being changed already has.
+    pub fn with_stack_field(mut self, stack_field: Option<&'a str>) -> Xlate<'a> {
+        self.stack_field = stack_field;
+        self
+    }
 }
 
 impl Xlate<'_> {
@@ -695,19 +727,170 @@ impl Xlate<'_> {
         let stack_field = match (&stack_raw, self.mode) {
             (Some(raw), Mode::ToIds) => Some(field_lookup(self.table, raw)?.clone()),
             (Some(raw), Mode::ToNames) => self.table.fields.iter().find(|f| &f.id == raw).cloned(),
-            (None, _) => None,
+            (None, _) => self
+                .stack_field
+                .and_then(|id| self.table.fields.iter().find(|f| f.id == id).cloned()),
         };
         for key in ["stack_field_id", "cover_field_id"] {
             if let Some(v) = o.get_mut(key) {
                 self.field_value(v, &format!("kanban.{key}"))?;
             }
         }
-        if let (Some(field), Some(order)) = (stack_field, o.get_mut("stack_order"))
-            && is_select(&field)
-        {
-            self.choice_value(&field, order)?;
+        if let (Some(field), Some(order)) = (stack_field, o.get_mut("stack_order")) {
+            self.stack_order(&field, order)?;
         }
         Ok(())
+    }
+
+    /// `stack_order`: stacks by choice name (single select), person name (user field) or
+    /// Checked / Unchecked (checkbox); `Uncategorized` is the stack of cards with no value,
+    /// which the web app stores as an empty string.
+    fn stack_order(&self, field: &Field, order: &mut Value) -> Result<(), String> {
+        let Value::Array(items) = order else {
+            return if order.is_null() {
+                Ok(())
+            } else {
+                Err("kanban.stack_order must be a list of stack names".into())
+            };
+        };
+        for item in items {
+            let Value::String(s) = item else {
+                return Err("kanban.stack_order must be a list of stack names".into());
+            };
+            *s = self.stack_key(field, s)?;
+        }
+        Ok(())
+    }
+
+    fn stack_key(&self, field: &Field, v: &str) -> Result<String, String> {
+        let trimmed = v.trim();
+        let lower = trimmed.to_lowercase();
+        let uncategorized = lower == UNCATEGORIZED_STACK.to_lowercase();
+        match (&field.kind, self.mode) {
+            (FieldKind::SingleSelect(_), Mode::ToIds) => {
+                let list = choices(field);
+                if trimmed.is_empty() {
+                    Ok(String::new())
+                } else if let Some(c) = list.iter().find(|c| c.id == v) {
+                    Ok(c.id.clone())
+                } else if let Some(c) = list.iter().find(|c| c.name.trim().to_lowercase() == lower)
+                {
+                    Ok(c.id.clone())
+                } else if uncategorized {
+                    Ok(String::new())
+                } else {
+                    Err(format!(
+                        "'{v}' is not a choice of field '{}'. Stacks: {}, '{UNCATEGORIZED_STACK}'.",
+                        field.name,
+                        list_names(list.iter().map(|c| format!("'{}'", c.name)))
+                    ))
+                }
+            }
+            (FieldKind::SingleSelect(_), Mode::ToNames) => {
+                let list = choices(field);
+                if v.is_empty() {
+                    // A choice that is itself called Uncategorized keeps the name; the empty
+                    // string is always accepted back for the stack without a value.
+                    let clash = list.iter().any(|c| {
+                        c.name.trim().to_lowercase() == UNCATEGORIZED_STACK.to_lowercase()
+                    });
+                    Ok(if clash {
+                        String::new()
+                    } else {
+                        UNCATEGORIZED_STACK.into()
+                    })
+                } else {
+                    Ok(list
+                        .iter()
+                        .find(|c| c.id == v)
+                        .map(|c| c.name.clone())
+                        .unwrap_or_else(|| v.to_string()))
+                }
+            }
+            (FieldKind::User(_), Mode::ToIds) => {
+                let Some(people) = self.people else {
+                    return Ok(v.to_string());
+                };
+                let text = |p: &Value, key: &str| {
+                    p.get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_lowercase()
+                };
+                if trimmed.is_empty() {
+                    return Ok(String::new());
+                }
+                if people.contains_key(v) {
+                    return Ok(v.to_string());
+                }
+                for key in ["name", "email"] {
+                    let hits: Vec<&str> = people
+                        .iter()
+                        .filter(|(_, p)| text(p, key) == lower)
+                        .map(|(id, _)| id.as_str())
+                        .collect();
+                    match hits.as_slice() {
+                        [one] => return Ok((*one).to_string()),
+                        [] => {}
+                        _ => {
+                            return Err(format!(
+                                "Several people are named '{v}'; use their email or user id (list_collaborators)."
+                            ));
+                        }
+                    }
+                }
+                if uncategorized {
+                    return Ok(String::new());
+                }
+                let mut names: Vec<String> = people
+                    .values()
+                    .filter_map(|p| p["name"].as_str().map(|n| format!("'{n}'")))
+                    .collect();
+                names.sort();
+                Err(format!(
+                    "'{v}' is not a person of this project. Stacks: {}, '{UNCATEGORIZED_STACK}'.",
+                    list_names(names.into_iter())
+                ))
+            }
+            (FieldKind::User(_), Mode::ToNames) => {
+                if v.is_empty() {
+                    return Ok(UNCATEGORIZED_STACK.into());
+                }
+                let Some(person) = self.people.and_then(|p| p.get(v)) else {
+                    return Ok(v.to_string());
+                };
+                let name = person["name"].as_str().unwrap_or(v);
+                let shared = self
+                    .people
+                    .map(|p| {
+                        p.values()
+                            .filter(|o| o["name"].as_str() == Some(name))
+                            .count()
+                    })
+                    .unwrap_or(1);
+                // Two people with one name could not be told apart: show the id.
+                Ok(if shared > 1 {
+                    v.to_string()
+                } else {
+                    name.to_string()
+                })
+            }
+            (FieldKind::Checkbox(_), Mode::ToIds) => match lower.as_str() {
+                "true" | "checked" => Ok("true".into()),
+                "false" | "unchecked" => Ok("false".into()),
+                _ => Err(format!(
+                    "'{v}' is not a stack of the checkbox field '{}'. Stacks: 'Checked', 'Unchecked'.",
+                    field.name
+                )),
+            },
+            (FieldKind::Checkbox(_), Mode::ToNames) => Ok(match v {
+                "true" => "Checked".into(),
+                "false" => "Unchecked".into(),
+                other => other.to_string(),
+            }),
+            _ => Ok(v.to_string()),
+        }
     }
 
     fn row_color(&self, rc: &mut Value) -> Result<(), String> {
@@ -778,13 +961,10 @@ pub fn merge_config(base: &Value, patch: &Value) -> Value {
 }
 
 /// A view from the API with its config in names, for the model.
-pub fn view_for_model(table: &Table, view: &Value) -> Value {
+pub fn view_for_model(table: &Table, view: &Value, people: &People) -> Value {
     let mut v = view.clone();
     if let Some(cfg) = v.get_mut("config") {
-        let x = Xlate {
-            table,
-            mode: Mode::ToNames,
-        };
+        let x = Xlate::new(table, Mode::ToNames).with_people(people);
         let _ = x.config(cfg);
         prune_defaults(cfg);
     }
@@ -1053,12 +1233,7 @@ mod tests {
             "kanban": {"stack_field_id": "Status", "stack_order": ["Done", "Todo"]},
             "row_color": {"mode": "by_select", "field": "Status"}
         });
-        Xlate {
-            table: &t,
-            mode: Mode::ToIds,
-        }
-        .config(&mut cfg)
-        .unwrap();
+        Xlate::new(&t, Mode::ToIds).config(&mut cfg).unwrap();
         assert_eq!(
             cfg["filter"]["items"][0],
             json!({"field_id": "fld2", "op": "is", "value": "selB"})
@@ -1071,12 +1246,7 @@ mod tests {
         assert_eq!(cfg["row_color"]["field_id"], "fld2");
         assert!(cfg["row_color"].get("field").is_none());
 
-        Xlate {
-            table: &t,
-            mode: Mode::ToNames,
-        }
-        .config(&mut cfg)
-        .unwrap();
+        Xlate::new(&t, Mode::ToNames).config(&mut cfg).unwrap();
         assert_eq!(cfg["filter"]["items"][0]["value"], "Done");
         assert_eq!(cfg["filter"]["items"][0]["field_id"], "Status");
         assert_eq!(cfg["kanban"]["stack_order"], json!(["Done", "Todo"]));
@@ -1086,10 +1256,7 @@ mod tests {
     #[test]
     fn unknown_names_and_keys_are_explained() {
         let t = table();
-        let x = Xlate {
-            table: &t,
-            mode: Mode::ToIds,
-        };
+        let x = Xlate::new(&t, Mode::ToIds);
         let e = x
             .config(&mut json!({"sorts": [{"field": "Nope"}]}))
             .unwrap_err();

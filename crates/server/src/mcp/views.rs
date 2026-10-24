@@ -12,8 +12,8 @@ use serde_json::{Map, Value, json};
 
 use super::McpCtx;
 use super::resolve::{
-    Mode, Xlate, find_table, find_view, load_people, load_schema, merge_config, pick_many,
-    value_for_model, view_for_model,
+    Mode, People, Xlate, find_field, find_table, find_view, load_people, load_schema, merge_config,
+    pick_many, value_for_model, view_for_model,
 };
 use super::support::*;
 use super::tools::{ToolDef, ToolResult};
@@ -25,7 +25,7 @@ const VIEW_TYPES: &[&str] = &[
 const DEFAULT_ROWS: usize = 50;
 const MAX_ROWS: usize = 200;
 
-const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|one_week_ago|one_week_from_now|one_month_ago|one_month_from_now|exact_date, date}|{mode: number_of_days_ago|number_of_days_from_now|past_number_of_days|next_number_of_days, days}|{mode: past_week|past_month|past_year|next_week|next_month|next_year|this_calendar_month|this_calendar_year} (the last two groups are for is_within). Relative modes (today, tomorrow, past_week, ...) are calendar days in the VIEWER's time zone, not the server's or UTC: the app sends the browser's zone, query_view uses its timezone argument, else the token owner's profile time zone, else UTC. Date-only fields are compared as calendar dates; date-times in the field's own time zone if it has one, else the viewer's. exact_date is the calendar day as written). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels; a group on a date field also takes granularity: day|week|month|quarter|year, default day, bucketed in the viewer's time zone like date filters). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. description_field_id (at the top of the config, for every view type, not inside kanban or the other sections): a text field read as each record's description under its title (kanban, gallery and list show an excerpt; calendar and timeline show it on hover). kanban: {stack_field_id (a single select, user or checkbox field), cover_field_id, hide_empty_stacks, stack_order: [choice names]}. calendar: {date_field_id, end_field_id}. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id, group_field_id, dependency_field_id, scale: day|week|month|quarter|year, label_width: the left column's width in pixels, 80 to 480}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME.";
+const CONFIG_HELP: &str = "View configuration (all parts optional). filter: {conjunction: and|or, items: [{field_id: <field name>, op, value} | nested {conjunction, items}]}, ops: is, is_not, is_empty, is_not_empty, contains, does_not_contain, starts_with, ends_with, lt, lte, gt, gte, is_any_of, is_none_of, has_any_of, has_all_of, has_none_of, is_exactly, is_before, is_after, is_on_or_before, is_on_or_after, is_within (select values are choice names; dates take {mode: today|tomorrow|yesterday|one_week_ago|one_week_from_now|one_month_ago|one_month_from_now|exact_date, date}|{mode: number_of_days_ago|number_of_days_from_now|past_number_of_days|next_number_of_days, days}|{mode: past_week|past_month|past_year|next_week|next_month|next_year|this_calendar_month|this_calendar_year} (the last two groups are for is_within). Relative modes (today, tomorrow, past_week, ...) are calendar days in the VIEWER's time zone, not the server's or UTC: the app sends the browser's zone, query_view uses its timezone argument, else the token owner's profile time zone, else UTC. Date-only fields are compared as calendar dates; date-times in the field's own time zone if it has one, else the viewer's. exact_date is the calendar day as written). sorts and groups: [{field_id: <name>, direction: asc|desc}] (groups: up to 3 levels; a group on a date field also takes granularity: day|week|month|quarter|year, default day, bucketed in the viewer's time zone like date filters). hidden_fields and field_order: lists of field names. field_widths and summaries: objects keyed by field name (summaries: one of empty, filled, unique, percent_empty, percent_filled, percent_unique, sum, average, median, min, max, range, std_dev, checked, unchecked, percent_checked, percent_unchecked, earliest_date, latest_date, date_range_days). row_height: short|medium|tall|extra_tall. frozen_columns: number. row_color: {mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}. description_field_id (at the top of the config, for every view type, not inside kanban or the other sections): a text field read as each record's description under its title (kanban, gallery and list show an excerpt; calendar and timeline show it on hover). kanban: {stack_field_id (a single select, a user field that holds one person, or a checkbox field), cover_field_id, hide_empty_stacks, stack_order: [stack names, left to right: choice names for a single select, person names (or emails) for a user field, \"Checked\" / \"Unchecked\" for a checkbox; \"Uncategorized\" is the stack of cards with no value (the web app saves it as an empty string, and get_view shows it as \"Uncategorized\"); stacks you leave out follow the listed ones]}. calendar: {date_field_id, end_field_id}: both must be date fields (a date, created time or last modified time field, or a formula or rollup that returns a date) and the end must differ from the start; leave end_field_id out for single-day items. gallery: {cover_field_id, cover_crop}. timeline: {start_field_id, end_field_id (date fields as for the calendar, different from each other), group_field_id (swimlanes), dependency_field_id (a link field whose records are in this same table; it draws the arrows), scale: day|week|month|quarter|year, label_width: the left column's width in pixels, 80 to 480}. form: {title, description, fields: [{field_id, required, label, help}], submit_label, success_message, redirect_url, show_submit_another}. Every *_field_id and filter/sort `field_id` accepts a field NAME. A calendar, timeline or kanban field of the wrong type is refused with an error naming the field and the types that work.";
 
 pub fn definitions() -> Vec<ToolDef> {
     let view_types = enumeration(VIEW_TYPES, "View type.");
@@ -111,7 +111,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "query_view",
             "Query a view",
-            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. When a view fits the question (get_project_schema lists them), read it instead of building the same filter in list_records. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset.",
+            "Read the rows of a view exactly as the web app shows them: the view's filter, sort and grouping applied, hidden fields left out, computed fields included. When a view fits the question (get_project_schema lists them), read it instead of building the same filter in list_records. Returns records keyed by field NAME in view order, group headers (depth, field, label, start, count) for grouped views, and the total. Page with offset. To see what is on a calendar or timeline for a window (this week, next month) pass `from` and `to`: the same overlap rule the app uses for the days it shows.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -122,6 +122,10 @@ pub fn definitions() -> Vec<ToolDef> {
                     "offset": integer("Index of the first row to return (default 0).", 0, 10_000_000),
                     "include_empty": boolean("Return visible fields with no value as null (default false: they are left out of a record's `fields`). `columns` always lists every visible field."),
                     "timezone": string("IANA time zone (for example America/Chicago) that decides what \"today\" means for relative date filters (today, tomorrow, past_week, ...) and which day, month or year a date-time is grouped under. Default: the time zone on your profile (set it with api_request PATCH /api/auth/me {timezone}), else UTC."),
+                    "from": string("First day of a date range, YYYY-MM-DD (with `to`). Only records whose dates fall in the range are returned, as a calendar or timeline shows a window: a record is in when its span from start to end overlaps the range, one with a single date counts as that day, one with no date is left out. The dates come from the view's calendar or timeline settings, or from `date_field`."),
+                    "to": string("Last day of the date range, YYYY-MM-DD, included (the same day as `from` for one day). Needs `from`."),
+                    "date_field": string("Date field (name or id) the range is read from, and the start of each record's span. Default: the view's calendar date field or timeline start field; needed for other view types."),
+                    "end_field": string("Optional date field (name or id) that ends each record's span. Default: the view's calendar or timeline end field."),
                 }),
                 &["project_id", "view"],
             ),
@@ -160,8 +164,22 @@ struct ViewArg {
 }
 
 /// The API's view JSON for a model, config in names.
-fn present(table: &Table, view: &Value) -> Value {
-    view_for_model(table, view)
+fn present(table: &Table, view: &Value, people: &People) -> Value {
+    view_for_model(table, view, people)
+}
+
+/// The project's people when the table has a user field: a kanban stacked by one names its
+/// stacks by person.
+async fn people_for(ctx: &McpCtx, base_id: &str, table: &Table) -> People {
+    let has_user = table
+        .fields
+        .iter()
+        .any(|f| matches!(f.kind, ob_core::field::FieldKind::User(_)));
+    if has_user {
+        load_people(ctx, base_id).await
+    } else {
+        People::default()
+    }
 }
 
 fn view_json(v: &View) -> Value {
@@ -174,7 +192,10 @@ async fn get_view(ctx: &McpCtx, a: ViewArg) -> ToolResult {
         Err(e) => return e,
     };
     match find_view(&schema, a.table.as_deref(), &a.view) {
-        Ok((table, view)) => ToolResult::ok(json!({ "view": present(table, &view_json(view)) })),
+        Ok((table, view)) => {
+            let people = people_for(ctx, &a.base_id, table).await;
+            ToolResult::ok(json!({ "view": present(table, &view_json(view), &people) }))
+        }
         Err(e) => e,
     }
 }
@@ -194,13 +215,19 @@ struct CreateView {
     config: Option<Value>,
 }
 
-fn translate(table: &Table, config: &mut Value) -> Result<(), ToolResult> {
-    Xlate {
-        table,
-        mode: Mode::ToIds,
-    }
-    .config(config)
-    .map_err(ToolResult::error)
+/// Field and choice names in a config to ids. `stack_field` is the kanban stack field the view
+/// already has (an update that only sets `stack_order` reads it against that field).
+fn translate(
+    table: &Table,
+    people: &People,
+    stack_field: Option<&str>,
+    config: &mut Value,
+) -> Result<(), ToolResult> {
+    Xlate::new(table, Mode::ToIds)
+        .with_people(people)
+        .with_stack_field(stack_field)
+        .config(config)
+        .map_err(ToolResult::error)
 }
 
 async fn create_view(ctx: &McpCtx, a: CreateView) -> ToolResult {
@@ -223,8 +250,9 @@ async fn create_view(ctx: &McpCtx, a: CreateView) -> ToolResult {
     body.insert("name".into(), json!(a.name));
     body.insert("type".into(), json!(a.view_type));
     body.insert("personal".into(), json!(a.personal.unwrap_or(false)));
+    let people = people_for(ctx, &a.base_id, table).await;
     if let Some(mut config) = a.config.filter(|c| !c.is_null()) {
-        if let Err(e) = translate(table, &mut config) {
+        if let Err(e) = translate(table, &people, None, &mut config) {
             return e;
         }
         body.insert("config".into(), config);
@@ -238,7 +266,7 @@ async fn create_view(ctx: &McpCtx, a: CreateView) -> ToolResult {
     )
     .await
     {
-        Ok(view) => ToolResult::ok(json!({ "view": present(table, &view) })),
+        Ok(view) => ToolResult::ok(json!({ "view": present(table, &view, &people) })),
         Err(e) => e,
     }
 }
@@ -278,8 +306,14 @@ async fn update_view(ctx: &McpCtx, a: UpdateView) -> ToolResult {
     if let Some(l) = a.locked {
         body.insert("locked".into(), json!(l));
     }
+    let people = people_for(ctx, &a.base_id, table).await;
     if let Some(mut patch) = a.config.filter(|c| !c.is_null()) {
-        if let Err(e) = translate(table, &mut patch) {
+        if let Err(e) = translate(
+            table,
+            &people,
+            view.config.kanban.stack_field_id.as_deref(),
+            &mut patch,
+        ) {
             return e;
         }
         let current = serde_json::to_value(&view.config).unwrap_or(Value::Null);
@@ -287,7 +321,7 @@ async fn update_view(ctx: &McpCtx, a: UpdateView) -> ToolResult {
     }
     let path = format!("/api/views/{}", encode_segment(&view.id));
     match fetch(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {
-        Ok(updated) => ToolResult::ok(json!({ "view": present(table, &updated) })),
+        Ok(updated) => ToolResult::ok(json!({ "view": present(table, &updated, &people) })),
         Err(e) => e,
     }
 }
@@ -392,6 +426,70 @@ struct QueryView {
     include_empty: bool,
     #[serde(default)]
     timezone: Option<String>,
+    #[serde(default)]
+    from: Option<String>,
+    #[serde(default)]
+    to: Option<String>,
+    #[serde(default)]
+    date_field: Option<String>,
+    #[serde(default)]
+    end_field: Option<String>,
+}
+
+/// The `range` of a view query for `from` / `to`: the date fields come from the arguments, else
+/// from the view's calendar or timeline settings.
+fn date_range(table: &Table, view: &View, a: &QueryView) -> Result<Option<Value>, ToolResult> {
+    let (from, to) = match (a.from.as_deref(), a.to.as_deref()) {
+        (None, None) => {
+            if a.date_field.is_some() || a.end_field.is_some() {
+                return Err(ToolResult::error(
+                    "date_field and end_field need a date range: give `from` and `to` too.",
+                ));
+            }
+            return Ok(None);
+        }
+        (Some(f), Some(t)) => (f.trim(), t.trim()),
+        _ => {
+            return Err(ToolResult::error(
+                "Give both `from` and `to` (YYYY-MM-DD); use the same day for one day.",
+            ));
+        }
+    };
+    let config = &view.config;
+    let (default_start, default_end) = match view.view_type {
+        ViewType::Calendar => (
+            &config.calendar.date_field_id,
+            &config.calendar.end_field_id,
+        ),
+        ViewType::Timeline => (
+            &config.timeline.start_field_id,
+            &config.timeline.end_field_id,
+        ),
+        _ => (&None, &None),
+    };
+    let start = match a.date_field.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(name) => find_field(table, name)?.id.clone(),
+        None => default_start.clone().ok_or_else(|| {
+            ToolResult::error(format!(
+                "View '{}' has no date field to read the range from: give `date_field`{}.",
+                view.name,
+                match view.view_type {
+                    ViewType::Calendar | ViewType::Timeline =>
+                        " or set the view's date fields with update_view",
+                    _ => "",
+                }
+            ))
+        })?,
+    };
+    let end = match a.end_field.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(name) => Some(find_field(table, name)?.id.clone()),
+        // Only the view's own start field goes with the view's own end field.
+        None if a.date_field.is_none() => default_end.clone(),
+        None => None,
+    };
+    Ok(Some(
+        json!({ "field_id": start, "end_field_id": end, "from": from, "to": to }),
+    ))
 }
 
 /// Field ids shown by the view, in display order: `field_order` first, the rest in table order,
@@ -431,11 +529,18 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
     };
     let offset = a.offset.unwrap_or(0);
     let mut body = json!({ "offset": offset, "limit": limit });
-    if let Some(s) = a.search.filter(|s| !s.trim().is_empty()) {
+    if let Some(s) = a.search.as_ref().filter(|s| !s.trim().is_empty()) {
         body["search"] = json!(s);
     }
-    if let Some(tz) = a.timezone.filter(|t| !t.trim().is_empty()) {
+    if let Some(tz) = a.timezone.as_ref().filter(|t| !t.trim().is_empty()) {
         body["timezone"] = json!(tz);
+    }
+    let range = match date_range(table, view, &a) {
+        Ok(r) => r,
+        Err(e) => return e,
+    };
+    if let Some(r) = &range {
+        body["range"] = r.clone();
     }
     let path = format!("/api/views/{}/query", encode_segment(&view.id));
     let res = match fetch(ctx, "POST", &path, None, Some(body)).await {
@@ -509,6 +614,14 @@ async fn query_view(ctx: &McpCtx, a: QueryView) -> ToolResult {
         "count": returned,
         "records": records,
     });
+    if let Some(r) = &range {
+        out["range"] = json!({
+            "from": r["from"],
+            "to": r["to"],
+            "date_field": name_of(r["field_id"].as_str().unwrap_or("")),
+            "end_field": r["end_field_id"].as_str().map(name_of),
+        });
+    }
     if !groups.is_empty() {
         out["groups"] = json!(groups);
     }

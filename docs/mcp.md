@@ -332,9 +332,11 @@ are names or ids.
 | `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
 | `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
 | `get_record` | any | One record; takes `include_empty` like `list_records` |
-| `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices |
+| `create_records` | write | 1-10 records per call; `typecast` (default true) converts values and creates select choices. New records go to the bottom of the table's manual order, or to `position` `top` / `bottom`, or right `after_record_id` / `before_record_id` (at most one of the three; several records keep the order you list them in). Same as `POST /api/tables/{id}/records` with `after_record_id` / `before_record_id` |
 | `update_records` | write | 1-10 records; only the given fields change; `null` clears |
 | `delete_records` | write | 1-10 records, to the trash |
+| `move_records` | write | Reorder records in the table's manual order (the order grid, list and gallery views show when they have no sort): up to 100 records, in the order given, to `position` `top` / `bottom` or right `after_record_id` / `before_record_id` (give exactly one). Only the order changes; no history entry, no automations. Same as `POST /api/tables/{id}/records/move` (`top` is "before the first record") |
+| `duplicate_records` | write | 1-10 records: each copy goes right after its original and gets its values except computed fields, which are worked out again; answers `duplicated: [{original_id, id}]`. Same as `POST /api/tables/{id}/records/duplicate` (up to 100, all or nothing), which the web app can use |
 | `list_comments` / `add_comment` | any / write | Comments on a record, in Markdown like rich text; `@[Name](usrXXXX)` mentions notify people (see [Mentioning people](#mentioning-people)) |
 
 ### Workspaces and people
@@ -400,13 +402,32 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
 | `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |
-| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters |
+| `query_view` | any | Rows as the app shows them: filter, sort and grouping applied, hidden fields left out, group headers, totals, paging; `include_empty: true` returns a row's unset visible fields as `null`. Optional `timezone` (IANA name) decides what "today" means for relative date filters. Optional `from` and `to` (`YYYY-MM-DD`, both included; the same day for one day) return only what a calendar or timeline shows for that window: a record is in when its span from start to end overlaps the range, one with a single date counts as that day, one with no date is left out. The dates are the view's calendar or timeline fields, or `date_field` / `end_field` (needed for other view types); the answer repeats them in `range`. Same as the `range` of `POST /api/views/{id}/query` |
 
 A view configuration is the REST API's `ViewConfig`; wherever it wants a field id you
 may write the field name, filter and sort entries may use `field` instead of
 `field_id`, and select filters and kanban stack orders take choice names. Unknown keys
 are rejected with the list of valid ones. `update_view` replaces only the parts you
 send (settings objects merge key by key; `null` resets a part).
+
+**Kanban stack order.** `kanban.stack_order` lists the stacks left to right by name:
+choice names for a single select, person names (an email or user id also works) for a
+user field, `Checked` / `Unchecked` for a checkbox. The stack of cards with no value is
+called `Uncategorized` (the web app saves it as an empty string; `""` is accepted too, and
+`get_view` shows it as `Uncategorized`), so the order read from `get_view` can be passed
+back to `update_view` unchanged, even when a person rearranged the board in the app. An
+update that sets only `stack_order` reads it against the view's saved stack field. Stacks
+left out follow the listed ones.
+
+**Field types are checked.** A calendar `date_field_id` / `end_field_id` and a timeline
+`start_field_id` / `end_field_id` must be date fields (date, created time, last modified
+time, or a formula or rollup that returns a date), and an end must differ from its start;
+a timeline `dependency_field_id` must be a link field to the same table; a kanban
+`stack_field_id` must be a single select, a user field that holds one person, or a
+checkbox. `create_view` and `update_view` (and the same REST calls) refuse anything else
+with an error naming the field and its type, instead of saving a view the app cannot
+draw. A reference the view already had in that place is left alone when you change
+something else.
 
 **Relative date filters and time zones.** In a filter, a date value like
 `{mode: "today"}` (also `tomorrow`, `yesterday`, `one_week_ago`,
@@ -450,8 +471,8 @@ needs only read access.
 
 | Tool | Needs | What it does |
 |---|---|---|
-| `list_trash` | any | Deleted records, fields, tables and views of a project (creator role); a workspace's deleted projects; your deleted workspaces |
-| `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace |
+| `list_trash` | any | Deleted records, fields, tables and views of a project (creator role; an editor sees the records they deleted themselves and their own personal views); a workspace's deleted projects; your deleted workspaces |
+| `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace. Editors can restore the records they deleted themselves; other people's records, fields, tables and shared views need the creator role |
 | `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values |
 | `list_activity` | any | What changed lately across all your projects (or one workspace, project, table or person; one kind): who created, changed, deleted or restored which record with field names and readable values, and the comments, newest first; `before` pages it |
 | `list_notifications` / `mark_notifications_read` | any / write | Your notifications; mark some or all read |

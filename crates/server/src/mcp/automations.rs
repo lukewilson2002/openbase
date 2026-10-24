@@ -199,10 +199,7 @@ fn table_ref<'a>(
 
 fn filter_to_ids(table: &Table, filter: &mut Value) -> Result<(), String> {
     let mut wrapper = json!({ "filter": filter.take() });
-    let x = Xlate {
-        table,
-        mode: Mode::ToIds,
-    };
+    let x = Xlate::new(table, Mode::ToIds);
     let res = x.config(&mut wrapper);
     *filter = wrapper["filter"].take();
     res

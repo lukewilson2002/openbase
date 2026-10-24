@@ -15,12 +15,13 @@
 use std::collections::{HashMap, HashSet};
 
 use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
-use ob_core::field::{COLORS, Field};
+use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
 use ob_core::view::{Filter, FilterItem, FormConfig, FormField, ViewConfig};
 use rusqlite::{Transaction, params};
 
 use crate::db::now_ms;
+use crate::engine::query::is_date_like;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
@@ -429,7 +430,82 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
         }
     }
     check_form(&config.form, &known, stale)?;
+    check_slot_types(fields, config, stale)?;
     fields_engine::validate_view_config_semantics(fields, config, stale)
+}
+
+/// The fields a calendar, timeline or kanban reads must be of a type the view can draw: dates
+/// for the calendar and timeline (the end differing from the start), a link to the same table
+/// for timeline dependencies and a single select, single user or checkbox to stack a kanban by.
+/// A reference the saved config already held in the same place is left alone (see [`Stale`]),
+/// so a view whose field changed type can still be saved with its other changes.
+fn check_slot_types(fields: &[Field], config: &ViewConfig, stale: &Stale) -> AppResult<()> {
+    let find = |id: &Option<String>| {
+        id.as_deref()
+            .and_then(|id| fields.iter().find(|f| f.id == id))
+    };
+    let table_id = fields.first().map(|f| f.table_id.as_str());
+    let describe = |f: &Field| format!("'{}' is a {} field", f.name, f.field_type().label());
+    let dates = |what: &str, id: &Option<String>| -> AppResult<()> {
+        match find(id) {
+            Some(f) if !is_date_like(f) && !stale.field(what, &f.id) => {
+                Err(AppError::bad_request(format!(
+                    "{what} must be a date field (a date, created time, last modified time, or a formula or rollup that returns a date), but {}",
+                    describe(f)
+                )))
+            }
+            _ => Ok(()),
+        }
+    };
+    let differ = |what: &str, start: &Option<String>, end: &Option<String>| -> AppResult<()> {
+        match (find(start), find(end)) {
+            (Some(s), Some(e)) if s.id == e.id && !stale.field(what, &e.id) => {
+                Err(AppError::bad_request(format!(
+                    "{what} must be a different field from the start: '{}' is both; leave the end empty for single-day items",
+                    s.name
+                )))
+            }
+            _ => Ok(()),
+        }
+    };
+    dates("calendar date field", &config.calendar.date_field_id)?;
+    dates("calendar end field", &config.calendar.end_field_id)?;
+    differ(
+        "calendar end field",
+        &config.calendar.date_field_id,
+        &config.calendar.end_field_id,
+    )?;
+    dates("timeline start field", &config.timeline.start_field_id)?;
+    dates("timeline end field", &config.timeline.end_field_id)?;
+    differ(
+        "timeline end field",
+        &config.timeline.start_field_id,
+        &config.timeline.end_field_id,
+    )?;
+    if let Some(f) = find(&config.timeline.dependency_field_id) {
+        let self_link =
+            matches!(&f.kind, FieldKind::Link(l) if Some(l.linked_table_id.as_str()) == table_id);
+        if !self_link && !stale.field("timeline dependency field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "timeline dependency field must be a link field to records of the same table, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.kanban.stack_field_id) {
+        let stackable = match &f.kind {
+            FieldKind::SingleSelect(_) | FieldKind::Checkbox(_) => true,
+            FieldKind::User(o) => !o.multiple,
+            _ => false,
+        };
+        if !stackable && !stale.field("kanban stack field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "kanban stack field must be a single select, a user field that holds one person, or a checkbox, but {}",
+                describe(f)
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn check_filter(filter: &Filter, check: &dyn Fn(&str, &str) -> AppResult<()>) -> AppResult<()> {
@@ -519,7 +595,6 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ob_core::field::FieldKind;
     use ob_core::view::{Condition, Conjunction, Direction, FilterOp, Sort};
 
     fn field(id: &str, kind: FieldKind) -> Field {
@@ -564,7 +639,8 @@ mod tests {
 
     #[test]
     fn unknown_fields_are_rejected_everywhere() {
-        let f = fields();
+        let mut f = fields();
+        f.push(field("s", FieldKind::SingleSelect(Default::default())));
         let mut c = ViewConfig::default();
         assert!(validate_config(&f, &c).is_ok());
         c.sorts = vec![Sort {
@@ -578,8 +654,91 @@ mod tests {
         c.hidden_fields.clear();
         c.kanban.stack_field_id = Some("zzz".into());
         assert!(validate_config(&f, &c).is_err());
-        c.kanban.stack_field_id = Some("a".into());
+        c.kanban.stack_field_id = Some("s".into());
         assert!(validate_config(&f, &c).is_ok());
+    }
+
+    #[test]
+    fn calendar_timeline_and_kanban_fields_must_have_the_right_type() {
+        let mut f = fields();
+        f.push(field("s", FieldKind::SingleSelect(Default::default())));
+        f.push(field("d", FieldKind::Date(Default::default())));
+        f.push(field("e", FieldKind::Date(Default::default())));
+        f.push(field(
+            "l",
+            FieldKind::Link(ob_core::field::LinkOptions {
+                linked_table_id: "tbl".into(),
+                inverse_field_id: "l2".into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        ));
+        f.push(field(
+            "lo",
+            FieldKind::Link(ob_core::field::LinkOptions {
+                linked_table_id: "other".into(),
+                inverse_field_id: "lo2".into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        ));
+        f.push(field(
+            "m",
+            FieldKind::User(ob_core::field::UserOptions {
+                multiple: true,
+                notify: false,
+            }),
+        ));
+        f.push(field("u", FieldKind::User(Default::default())));
+        f.push(field("k", FieldKind::Checkbox(Default::default())));
+        let err = |c: &ViewConfig| validate_config(&f, c).unwrap_err().to_string();
+
+        let mut c = ViewConfig::default();
+        c.timeline.start_field_id = Some("a".into());
+        assert!(
+            err(&c).contains("timeline start field must be a date field"),
+            "{}",
+            err(&c)
+        );
+        assert!(err(&c).contains("'a' is a Text field"));
+        c.timeline.start_field_id = Some("d".into());
+        c.timeline.end_field_id = Some("b".into());
+        assert!(err(&c).contains("timeline end field must be a date field"));
+        c.timeline.end_field_id = Some("d".into());
+        assert!(err(&c).contains("different field"));
+        c.timeline.end_field_id = Some("e".into());
+        assert!(validate_config(&f, &c).is_ok());
+        c.timeline.dependency_field_id = Some("a".into());
+        assert!(err(&c).contains("link field to records of the same table"));
+        c.timeline.dependency_field_id = Some("lo".into());
+        assert!(err(&c).contains("same table"));
+        c.timeline.dependency_field_id = Some("l".into());
+        assert!(validate_config(&f, &c).is_ok());
+
+        let mut c = ViewConfig::default();
+        c.calendar.date_field_id = Some("b".into());
+        assert!(err(&c).contains("calendar date field must be a date field"));
+        c.calendar.date_field_id = Some("d".into());
+        assert!(validate_config(&f, &c).is_ok());
+
+        let mut c = ViewConfig::default();
+        for bad in ["a", "m", "b"] {
+            c.kanban.stack_field_id = Some(bad.into());
+            assert!(err(&c).contains("kanban stack field must be"), "{bad}");
+        }
+        for ok in ["s", "u", "k"] {
+            c.kanban.stack_field_id = Some(ok.into());
+            assert!(validate_config(&f, &c).is_ok(), "{ok}");
+        }
+
+        // A reference the saved config held in the same place is forgiven.
+        let mut old = ViewConfig::default();
+        old.kanban.stack_field_id = Some("a".into());
+        let stale = Stale::of(&old);
+        assert!(validate_config_with(&f, &old, &stale).is_ok());
+        let mut other = ViewConfig::default();
+        other.kanban.stack_field_id = Some("b".into());
+        assert!(validate_config_with(&f, &other, &stale).is_err());
     }
 
     #[test]
