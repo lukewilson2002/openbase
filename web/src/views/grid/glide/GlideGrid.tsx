@@ -39,6 +39,7 @@ import { MARKER_START_INDEX, installMarkerNumbering, setRowNumbering } from "./m
 import { createRenderer, measureRecordCell } from "./renderers";
 import { isFocusSelectAfterPress, type Press } from "./focusSelect";
 import { gridTheme } from "./theme";
+import { LONG_PRESS_MS, LONG_PRESS_TOLERANCE_PX, cellAtPoint } from "./longPress";
 
 installMarkerNumbering();
 
@@ -189,7 +190,14 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         pr.current.onSelectionChange(toInfo(next));
         gridRef.current?.scrollTo(col, row, "both");
       },
-      clearSelection: () => setSelection(EMPTY_SELECTION),
+      clearSelection: () => {
+        setSelection(EMPTY_SELECTION);
+        pr.current.onSelectionChange(toInfo(EMPTY_SELECTION));
+      },
+      cellBounds: (col, row) => {
+        const b = gridRef.current?.getBounds(col, row);
+        return b ? screenRect(b) : null;
+      },
       invalidate: () => setPaint((n) => n + 1),
     }),
     [],
@@ -286,7 +294,77 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     [showPin],
   );
 
-  const onVisibleRegionChanged = useCallback((range: Rectangle) => pr.current.onVisibleRowsChange(range.y, range.y + range.height - 1), []);
+  // The keyboard and a long press open the record menu themselves; the browser's own context menu event
+  // that may follow them is not a second request.
+  const menuOpenedAt = useRef(0);
+  const visibleRegion = useRef({ y: 0, height: 0 });
+  const onVisibleRegionChanged = useCallback((range: Rectangle) => {
+    visibleRegion.current = { y: range.y, height: range.height };
+    pr.current.onVisibleRowsChange(range.y, range.y + range.height - 1);
+  }, []);
+
+  // A long press of a finger opens the row menu (a mouse has the right button, the keyboard the menu key).
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    let timer: number | null = null;
+    let start: { x: number; y: number } | null = null;
+    let fired = false;
+    const cancel = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      start = null;
+    };
+    const fire = () => {
+      timer = null;
+      if (!start) return;
+      const { x, y } = start;
+      const hit = cellAtPoint((c, r) => gridRef.current?.getBounds(c, r), visibleRegion.current, pr.current.columns.length, x, y);
+      start = null;
+      if (!hit) return;
+      fired = true;
+      const sel = selectionRef.current;
+      const inSelection = sel.rows.hasIndex(hit.row) || (sel.current && sel.current.range.y <= hit.row && hit.row < sel.current.range.y + sel.current.range.height);
+      if (!inSelection) {
+        const next: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [hit.col, hit.row], range: { x: hit.col, y: hit.row, width: 1, height: 1 }, rangeStack: [] } };
+        setSelection(next);
+        pr.current.onSelectionChange(toInfo(next));
+      }
+      menuOpenedAt.current = performance.now();
+      pr.current.onCellContextMenu(hit, { x, y, width: 1, height: 1 });
+    };
+    const onStart = (e: TouchEvent) => {
+      cancel();
+      fired = false;
+      const t = e.touches[0];
+      if (e.touches.length !== 1 || !t) return;
+      start = { x: t.clientX, y: t.clientY };
+      timer = window.setTimeout(fire, LONG_PRESS_MS);
+    };
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (start && t && Math.hypot(t.clientX - start.x, t.clientY - start.y) > LONG_PRESS_TOLERANCE_PX) cancel();
+    };
+    // The lift that ends a long press is not a tap: Glide must not select the cell or open its editor.
+    const onEnd = (e: TouchEvent) => {
+      cancel();
+      if (!fired) return;
+      fired = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    wrap.addEventListener("touchstart", onStart, { passive: true });
+    wrap.addEventListener("touchmove", onMove, { passive: true });
+    wrap.addEventListener("touchend", onEnd, { capture: true });
+    wrap.addEventListener("touchcancel", onEnd, { capture: true });
+    return () => {
+      cancel();
+      wrap.removeEventListener("touchstart", onStart);
+      wrap.removeEventListener("touchmove", onMove);
+      wrap.removeEventListener("touchend", onEnd, { capture: true });
+      wrap.removeEventListener("touchcancel", onEnd, { capture: true });
+    };
+  }, []);
 
   const onCellsEdited = useCallback((items: readonly EditListItem[]) => {
     const edits: CellEdit[] = [];
@@ -487,14 +565,16 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       }}
       onColumnMoved={props.canReorderColumns ? (from, to) => pr.current.onColumnMove(from, to) : undefined}
       onRowMoved={props.canReorderRows ? (from, to) => pr.current.onRowMove(from, to) : undefined}
-      onHeaderMenuClick={(col, bounds) => pr.current.onHeaderMenu(col, screenRect(bounds))}
+      onHeaderMenuClick={(col, bounds) => col < pr.current.columns.length && pr.current.onHeaderMenu(col, screenRect(bounds))}
       onHeaderContextMenu={(col, ev) => {
         ev.preventDefault();
-        pr.current.onHeaderMenu(col, screenRect(ev.bounds));
+        // The "Add field" header past the last column has no menu.
+        if (col < pr.current.columns.length) pr.current.onHeaderMenu(col, screenRect(ev.bounds));
       }}
       onMouseMove={onMouseMove}
       onCellContextMenu={(cell, ev) => {
         ev.preventDefault();
+        if (performance.now() - menuOpenedAt.current < 600) return;
         pr.current.onCellContextMenu({ col: cell[0], row: cell[1] }, { x: ev.bounds.x + ev.localEventX, y: ev.bounds.y + ev.localEventY, width: 1, height: 1 });
       }}
       onCellClicked={onCellClicked}
@@ -502,6 +582,19 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         if (col >= pr.current.columns.length) pr.current.onAddField();
       }}
       onKeyDown={(e) => {
+        // The menu key (or Shift+F10) opens the record menu of the focused cell, or of the first selected row.
+        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+          const row = e.location?.[1] ?? selectionRef.current.rows.first();
+          const col = Math.min(e.location?.[0] ?? 0, Math.max(0, pr.current.columns.length - 1));
+          const b = row === undefined ? undefined : gridRef.current?.getBounds(col, row);
+          if (row !== undefined && b) {
+            e.cancel();
+            e.preventDefault();
+            menuOpenedAt.current = performance.now();
+            pr.current.onCellContextMenu({ col, row }, { x: b.x + Math.min(24, b.width / 2), y: b.y + b.height / 2, width: 1, height: 1 });
+            return;
+          }
+        }
         const handled = pr.current.onKeyDown({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, cell: e.location ? { col: e.location[0], row: e.location[1] } : null });
         if (handled) e.cancel();
       }}

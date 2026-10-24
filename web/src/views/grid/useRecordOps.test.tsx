@@ -8,7 +8,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { createQueryClient } from "@/providers";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
 import { mockApi } from "@/test/utils";
-import { UndoStack } from "./undo";
+import { UndoStack, type UndoOp } from "./undo";
 import type { GridData } from "./useGridData";
 import { useRecordOps } from "./useRecordOps";
 
@@ -36,7 +36,8 @@ function fakeData(): GridData & { upserted: TableRecord[][] } {
 
 function setup() {
   const data = fakeData();
-  const stack = new UndoStack();
+  const rowsChanged = { n: 0 };
+  const stack = new UndoStack<UndoOp>();
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false } });
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -44,8 +45,8 @@ function setup() {
       <ToastProvider>{children}</ToastProvider>
     </QueryClientProvider>
   );
-  const hook = renderHook(() => useRecordOps({ tableId: "tbl1", fields: [name], data, stack, canEdit: true }), { wrapper });
-  return { hook, data, stack };
+  const hook = renderHook(() => useRecordOps({ tableId: "tbl1", fields: [name], data, stack, canEdit: true, onRowsChanged: () => void rowsChanged.n++ }), { wrapper });
+  return { hook, data, stack, rowsChanged };
 }
 
 const created = (ids: string[]): RecordsResponse => ({ records: ids.map((id) => makeRecord({}, id)) });
@@ -144,5 +145,71 @@ describe("useRecordOps against the server's record contract", () => {
     await act(async () => void (await hook.result.current.applyChanges([{ recordId: "rec1", fieldId: "fld_name", before: "before", after: "after" }], "Edit cell")));
     expect(api.calls[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "after" } }] });
     expect(data.upserted.at(-1)).toEqual([saved]);
+  });
+
+  it("duplicates in one request and one undo step, and tells the grid its rows changed", async () => {
+    const api = mockApi({ "POST /api/tables/tbl1/records/duplicate": { status: 201, json: created(["recC1", "recC2", "recC3"]) } });
+    const { hook, stack, rowsChanged } = setup();
+    let out: TableRecord[] = [];
+    await act(async () => {
+      out = await hook.result.current.duplicateRecords(["rec1", "rec2", "rec3"]);
+    });
+    expect(out.map((r) => r.id)).toEqual(["recC1", "recC2", "recC3"]);
+    expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")).toHaveLength(1);
+    expect(api.calls[0]!.body).toEqual({ ids: ["rec1", "rec2", "rec3"] });
+    expect(stack.peekUndo()).toMatchObject({ kind: "create", ids: ["recC1", "recC2", "recC3"] });
+    expect(rowsChanged.n).toBe(1);
+  });
+
+  it("a delete tells the grid its rows changed, and so does its undo", async () => {
+    mockApi({ "DELETE /api/tables/tbl1/records": { status: 204 }, "POST /api/tables/tbl1/records/restore": created(["rec1"]) });
+    const { hook, rowsChanged } = setup();
+    await act(async () => void (await hook.result.current.deleteRecords(["rec1"])));
+    expect(rowsChanged.n).toBe(1);
+    await act(async () => hook.result.current.undo());
+    expect(rowsChanged.n).toBe(2);
+  });
+
+  it("moves a record back to where it was when undone", async () => {
+    const api = mockApi({ "POST /api/tables/tbl1/records/move": { records: [makeRecord({}, "rec7")] } });
+    const { hook, stack } = setup();
+    await act(async () => void (await hook.result.current.moveRecords(["rec7"], { beforeId: "rec1" }, { afterId: "rec5" })));
+    expect(stack.peekUndo()).toMatchObject({ kind: "move", ids: ["rec7"], before: { afterId: "rec5" }, after: { beforeId: "rec1" } });
+    await act(async () => hook.result.current.undo());
+    expect(api.callsTo("POST /api/tables/tbl1/records/move").at(-1)!.body).toEqual({ ids: ["rec7"], before_id: null, after_id: "rec5" });
+  });
+
+  it("collected steps become one undo entry (a paste that adds records and fills cells)", async () => {
+    mockApi({
+      "POST /api/tables/tbl1/records": { status: 201, json: created(["recNew"]) },
+      "PATCH /api/tables/tbl1/records": { records: [makeRecord({ fld_name: "x" }, "rec1")] },
+    });
+    const { hook, stack } = setup();
+    const steps: UndoOp[] = [];
+    await act(async () => {
+      await hook.result.current.createRecords({ values: [{ fld_name: "n" }], collect: steps });
+      await hook.result.current.applyChanges([{ recordId: "rec1", fieldId: "fld_name", before: null, after: "x" }], "Paste into 1 cell", { collect: steps });
+    });
+    expect(stack.canUndo).toBe(false);
+    act(() => hook.result.current.commit(steps, "Paste"));
+    expect(stack.peekUndo()).toMatchObject({ kind: "group", ops: [{ kind: "create" }, { kind: "edit" }] });
+    expect(hook.result.current.history).toMatchObject({ canUndo: true, undoLabel: "Paste" });
+  });
+
+  it("keeps what was saved before a batch failed undoable", async () => {
+    let calls = 0;
+    mockApi({
+      "POST /api/tables/tbl1/records": () => {
+        calls++;
+        return calls === 1 ? { status: 201, json: created(Array.from({ length: 500 }, (_, i) => `rec${i}`)) } : { status: 500, json: { error: { code: "internal", message: "boom" } } };
+      },
+    });
+    const { hook, stack } = setup();
+    let out: TableRecord[] = [];
+    await act(async () => {
+      out = await hook.result.current.createRecords({ count: 501 });
+    });
+    expect(out).toHaveLength(500);
+    expect(stack.peekUndo()).toMatchObject({ kind: "create" });
   });
 });

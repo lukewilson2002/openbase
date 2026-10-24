@@ -1,8 +1,8 @@
 /** Context menus of the grid: column header, row, and summary bar. */
-import { ArrowDownAZ, ArrowLeftToLine, ArrowRightToLine, ArrowUpZA, CopyPlus, Eye, EyeOff, Filter, Group, Maximize2, Pencil, Pin, PinOff, Rows3, Trash2, Type } from "lucide-react";
+import { ArrowDownAZ, ArrowLeft, ArrowLeftToLine, ArrowRight, ArrowRightToLine, ArrowUpZA, CopyPlus, Eye, EyeOff, Filter, Group, Maximize2, Pencil, Pin, PinOff, Rows3, Trash2, Type } from "lucide-react";
 import type { Aggregation, Field, Table, ViewConfig } from "@/api/types";
 import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { addFilterCondition, addSortLike, isGroupable, isSortable, setFrozenColumns, setHiddenField, sortOnly } from "@/components/viewbar/config";
+import { addFilterCondition, addSortLike, isGroupable, isSortable, moveVisibleField, setFrozenColumns, setHiddenField, sortOnly } from "@/components/viewbar/config";
 import { AGGREGATION_LABELS, aggregationsFor } from "@/lib/cells/aggregations";
 import { isFilterable } from "@/lib/cells/filters";
 import { kindClassOf } from "@/lib/cells/kinds";
@@ -44,10 +44,11 @@ export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFi
   const field = spec?.field;
   const [asc, desc] = field ? sortLabels(field) : ["", ""];
   const frozenHere = config.frozen_columns === index && index > 0;
+  // The "Add field" header past the last column has no field: it has no menu either.
+  if (!field || !spec) return null;
   return (
-    <AnchoredMenu anchor={at} onClose={onClose} label={field ? `Column menu for ${field.name}` : "Column menu"}>
-      {field && spec && (
-        <>
+    <AnchoredMenu anchor={at} onClose={onClose} label={`Column menu for ${field.name}`}>
+      <>
           <DropdownMenuLabel>{field.name}</DropdownMenuLabel>
           <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "name")}>
             <Pencil aria-hidden className="size-4" /> Rename field
@@ -79,6 +80,12 @@ export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFi
             <Group aria-hidden className="size-4" /> Group by this field
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={spec.isPrimary || index <= 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, -1))}>
+            <ArrowLeft aria-hidden className="size-4" /> Move left
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={spec.isPrimary || index >= columns.length - 1} onSelect={() => cfg.update((c) => moveVisibleField(c, table, field.id, 1))}>
+            <ArrowRight aria-hidden className="size-4" /> Move right
+          </DropdownMenuItem>
           {index > 0 && (
             <DropdownMenuItem onSelect={() => cfg.update((c) => setFrozenColumns(c, frozenHere ? 0 : index))}>
               {frozenHere ? <PinOff aria-hidden className="size-4" /> : <Pin aria-hidden className="size-4" />}
@@ -92,7 +99,6 @@ export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFi
             <Trash2 aria-hidden className="size-4" /> Delete field
           </DropdownMenuItem>
         </>
-      )}
     </AnchoredMenu>
   );
 }
@@ -102,6 +108,8 @@ export interface RowMenuProps {
   canEdit: boolean;
   count: number;
   canInsert: boolean;
+  /** Why Insert is off (the view is sorted, grouped or searched), shown under the items. */
+  insertNote?: string;
   onClose: () => void;
   onExpand: () => void;
   onInsert: (where: "above" | "below") => void;
@@ -109,7 +117,7 @@ export interface RowMenuProps {
   onDelete: () => void;
 }
 
-export function RowMenu({ at, canEdit, count, canInsert, onClose, onExpand, onInsert, onDuplicate, onDelete }: RowMenuProps) {
+export function RowMenu({ at, canEdit, count, canInsert, insertNote, onClose, onExpand, onInsert, onDuplicate, onDelete }: RowMenuProps) {
   const many = count > 1;
   return (
     <AnchoredMenu anchor={at} onClose={onClose} label="Record menu">
@@ -123,6 +131,7 @@ export function RowMenu({ at, canEdit, count, canInsert, onClose, onExpand, onIn
       <DropdownMenuItem disabled={!canEdit || !canInsert} onSelect={() => onInsert("below")}>
         <Rows3 aria-hidden className="size-4" /> Insert record below
       </DropdownMenuItem>
+      {canEdit && !canInsert && insertNote && <p className="max-w-60 px-2 pb-1 text-xs text-muted">{insertNote}</p>}
       <DropdownMenuItem disabled={!canEdit} onSelect={onDuplicate}>
         <CopyPlus aria-hidden className="size-4" /> Duplicate {many ? `${count} records` : "record"}
       </DropdownMenuItem>

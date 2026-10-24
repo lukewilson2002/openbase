@@ -4,9 +4,9 @@ import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, PEOPLE, makeRecord } from "@/test/fields";
 import type { GridColumnSpec } from "./adapter";
 import { toColumnSpecs } from "./cellModels";
-import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
+import { countClearCells, linkKey, planClear, planFill, planPaste, selectionRectangles, summariseProblems, type GridReader } from "./gridOps";
 
-const fields: Field[] = [ALL_FIELDS.text, ALL_FIELDS.number, ALL_FIELDS.single_select, ALL_FIELDS.checkbox, ALL_FIELDS.formula, ALL_FIELDS.link];
+const fields: Field[] = [ALL_FIELDS.text, ALL_FIELDS.number, ALL_FIELDS.single_select, ALL_FIELDS.checkbox, ALL_FIELDS.formula, ALL_FIELDS.link, ALL_FIELDS.attachment, ALL_FIELDS.user];
 const columns: GridColumnSpec[] = toColumnSpecs(fields, fields[0]!.id, {}, {});
 const records: TableRecord[] = [
   makeRecord({ fld_text: "one", fld_number: 1, fld_single_select: "chs1", fld_checkbox: true }, "r1"),
@@ -116,5 +116,58 @@ describe("planFill", () => {
   it("skips unchanged cells", () => {
     const plan = planFill(reader(), { x: 0, y: 0, width: 1, height: 1 }, { x: 0, y: 0, width: 1, height: 1 }, parse, DEFAULT_CTX);
     expect(plan.changes).toEqual([]);
+  });
+});
+
+describe("planPaste with cells that cannot be pasted", () => {
+  const at = (name: string) => columns.findIndex((c) => c.field.type === name);
+
+  it("pastes the cells that fit and plans nothing for attachment cells", () => {
+    const att = at("attachment");
+    const line = fields.map((f) => (f.type === "text" ? "kept" : f.type === "attachment" ? "photo.png" : ""));
+    const plan = planPaste(reader(), { col: 0, row: 1 }, [line.slice(0, att + 1)], { parse });
+    expect(plan.changes.some((c) => c.fieldId === "fld_text" && c.after === "kept")).toBe(true);
+    expect(plan.changes.some((c) => c.fieldId === ALL_FIELDS.attachment.id)).toBe(false);
+    expect(plan.errors).toEqual([`${ALL_FIELDS.attachment.name}: Attachments cannot be set from text`]);
+  });
+
+  it("names the computed fields it left alone", () => {
+    const plan = planPaste(reader(), { col: 0, row: 0 }, [["a", "1", "", "", "x"]], { parse });
+    expect(plan.readOnlyFields).toEqual([ALL_FIELDS.formula.name]);
+  });
+
+  it("skips a link name that matches several records instead of picking one", () => {
+    const col = at("link");
+    const linkField = ALL_FIELDS.link as Extract<Field, { type: "link" }>;
+    const linkIds = new Map([["acme", "recA"], ["solo", "recS"]]);
+    const ambiguous = { links: new Set([linkKey(linkField.options.linked_table_id, "Acme")]), users: new Set<string>() };
+    const plan = planPaste(reader(), { col, row: 0 }, [["Acme"], ["Solo"]], { parse: { ...parse, linkIds }, linkNames: new Map([["recS", "Solo"]]), ambiguous });
+    expect(plan.errors).toEqual([`${linkField.name}: "Acme" matches more than one record`]);
+    expect(plan.changes.map((c) => c.recordId)).toEqual(["r2"]);
+  });
+
+  it("skips a person's name that two collaborators share, but not their email", () => {
+    const col = at("user");
+    const ambiguous = { links: new Set<string>(), users: new Set([PEOPLE[0]!.name.toLowerCase()]) };
+    const plan = planPaste(reader(), { col, row: 0 }, [[PEOPLE[0]!.name], [PEOPLE[0]!.email]], { parse, ambiguous });
+    expect(plan.errors).toEqual([`${ALL_FIELDS.user.name}: "${PEOPLE[0]!.name}" matches more than one person`]);
+    expect(plan.changes).toHaveLength(1);
+  });
+});
+
+describe("summariseProblems", () => {
+  it("counts equal problems and cuts the list", () => {
+    expect(summariseProblems(["a", "a", "a", "b"])).toEqual(["a (3 cells)", "b"]);
+    expect(summariseProblems(["a", "b", "c", "d", "e"])).toEqual(["a", "b", "c", "and 2 more kinds of problem"]);
+  });
+});
+
+describe("countClearCells", () => {
+  it("counts editable columns by record rows", () => {
+    const isRecordRow = (row: number) => row !== 0; // row 0 is a group header
+    const cols = columns; // the formula column is read only
+    const editable = cols.filter((c) => !c.readOnly).length;
+    expect(countClearCells([{ x: 0, y: 0, width: cols.length, height: 4 }], cols, 4, isRecordRow)).toBe(editable * 3);
+    expect(countClearCells([{ x: 0, y: 0, width: 1, height: 100 }], cols, 4, isRecordRow)).toBe(3);
   });
 });

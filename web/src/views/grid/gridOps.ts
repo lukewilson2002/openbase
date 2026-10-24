@@ -3,9 +3,10 @@
  * interface, so they are unit-tested without a canvas. Each returns the `CellChange`s to apply
  * (view values, with the previous value for undo) plus any problems found.
  */
-import type { TableRecord } from "@/api/types";
+import type { Field, TableRecord } from "@/api/types";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
-import { parseText, jsonEqual, type ParseCtx } from "@/lib/cells/parse";
+import { linkNames, parseText, jsonEqual, type ParseCtx } from "@/lib/cells/parse";
+import { splitList } from "@/lib/cells/text";
 import { isEmptyValue, toView } from "@/lib/cells/wire";
 import type { GridColumnSpec, GridPoint, GridRange, GridSelectionInfo } from "./adapter";
 import { cellValueOf } from "./cellModels";
@@ -30,6 +31,30 @@ export interface PlanResult {
 export interface PastePlan extends PlanResult {
   /** Values (wire form, by field id) for records to create when the paste runs past the last row. */
   newRecords: Record<string, unknown>[];
+  /** Names of computed fields in the pasted block: their cells are left as they are. */
+  readOnlyFields: string[];
+}
+
+/** Names the pasted text cannot pick out one thing for: they are skipped, never guessed. */
+export interface Ambiguity {
+  /** `linkKey(linkedTableId, name)` of names that match more than one record of the linked table. */
+  links: ReadonlySet<string>;
+  /** Lower-cased names shared by more than one collaborator. */
+  users: ReadonlySet<string>;
+}
+
+export const linkKey = (linkedTableId: string, name: string) => `${linkedTableId}\u0000${name.trim().toLowerCase()}`;
+
+/** The first name in a pasted link or person cell that matches several, or null. */
+function ambiguousName(field: Field, text: string, amb: Ambiguity | undefined): string | null {
+  if (!amb) return null;
+  if (field.type === "link") return linkNames(text).find((n) => amb.links.has(linkKey(field.options.linked_table_id, n))) ?? null;
+  if (field.type === "user") {
+    // Read as parseText reads it: a list when it has commas or an address, else one name.
+    const tokens = text.includes(",") || text.includes("@") ? splitList(text) : [text.trim()];
+    return tokens.map((t) => t.trim()).find((t) => amb.users.has(t.toLowerCase())) ?? null;
+  }
+  return null;
 }
 
 function beforeOf(rec: TableRecord, col: GridColumnSpec): unknown {
@@ -45,6 +70,8 @@ export interface PasteOptions {
   linkNames?: LinkNames;
   /** The selected rectangle; a single pasted value fills all of it. */
   selection?: GridRange | null;
+  /** Names that match several records or people: those cells are skipped and reported. */
+  ambiguous?: Ambiguity;
 }
 
 /** Expand a 1x1 clipboard over the selection. */
@@ -60,6 +87,7 @@ export function planPaste(reader: GridReader, target: GridPoint, input: readonly
   const changes: CellChange[] = [];
   const errors: string[] = [];
   const newRecords: Record<string, unknown>[] = [];
+  const readOnlyFields = new Set<string>();
   let row = target.row;
   const pending = new Map<number, Record<string, unknown>>();
 
@@ -77,8 +105,17 @@ export function planPaste(reader: GridReader, target: GridPoint, input: readonly
     const fresh: Record<string, unknown> = {};
     for (let c = 0; c < line.length; c++) {
       const col = reader.columns[target.col + c];
-      if (!col || col.readOnly) continue;
+      if (!col) continue;
+      if (col.readOnly) {
+        readOnlyFields.add(col.field.name);
+        continue;
+      }
       const text = line[c]!;
+      const unsure = ambiguousName(col.field, text, opts.ambiguous);
+      if (unsure) {
+        errors.push(`${col.field.name}: "${unsure}" matches more than one ${col.field.type === "link" ? "record" : "person"}`);
+        continue;
+      }
       const res = parseText(col.field, text, opts.parse);
       if (!res.ok) {
         errors.push(`${col.field.name}: ${res.error}`);
@@ -96,7 +133,7 @@ export function planPaste(reader: GridReader, target: GridPoint, input: readonly
     row++;
   }
   for (const [, v] of [...pending].sort((a, b) => a[0] - b[0])) newRecords.push(v);
-  return { changes: changes.filter((c) => !jsonEqual(c.before, c.after)), errors, newRecords };
+  return { changes: changes.filter((c) => !jsonEqual(c.before, c.after)), errors, newRecords, readOnlyFields: [...readOnlyFields] };
 }
 
 /** Rectangles covered by a selection: ranges, plus whole rows and whole columns. */
@@ -166,4 +203,29 @@ export function planFill(reader: GridReader, src: GridRange, dest: GridRange, pa
     }
   }
   return { changes, errors };
+}
+
+/**
+ * Problems for a toast: the same message once with how many cells it hit, the first few kinds, and a
+ * count of the rest ("Date: "x" is not a recognised date" 3 cells).
+ */
+export function summariseProblems(problems: readonly string[], show = 3): string[] {
+  const counts = new Map<string, number>();
+  for (const p of problems) counts.set(p, (counts.get(p) ?? 0) + 1);
+  const lines = [...counts].map(([text, n]) => (n > 1 ? `${text} (${n} cells)` : text));
+  return lines.length > show ? [...lines.slice(0, show), `and ${lines.length - show} more kinds of problem`] : lines;
+}
+
+/** How many cells clearing these rectangles would empty at most: editable columns by record rows, overlaps counted twice. */
+export function countClearCells(rects: readonly GridRange[], columns: readonly GridColumnSpec[], rowCount: number, isRecordRow: (row: number) => boolean): number {
+  let cells = 0;
+  for (const rect of rects) {
+    let cols = 0;
+    for (let c = rect.x; c < Math.min(rect.x + rect.width, columns.length); c++) if (c >= 0 && !columns[c]!.readOnly) cols++;
+    if (cols === 0) continue;
+    let rows = 0;
+    for (let r = Math.max(0, rect.y); r < Math.min(rect.y + rect.height, rowCount); r++) if (isRecordRow(r)) rows++;
+    cells += cols * rows;
+  }
+  return cells;
 }

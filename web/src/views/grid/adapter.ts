@@ -102,7 +102,10 @@ export interface GridHandle {
   focus(): void;
   scrollToRow(row: number): void;
   selectCell(col: number, row: number): void;
+  /** Nothing selected any more (the host is told through `onSelectionChange`). */
   clearSelection(): void;
+  /** Where a cell is on screen, or null when it is not drawn. */
+  cellBounds(col: number, row: number): ScreenRect | null;
   /** Redraw every visible cell (cell models changed). */
   invalidate(): void;
 }
