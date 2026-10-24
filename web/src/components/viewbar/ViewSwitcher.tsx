@@ -181,8 +181,8 @@ export function ViewSwitcher({ schema, table, view, className }: { schema: BaseS
                   >
                     <TypeIcon aria-hidden className="size-4 shrink-0 text-muted" />
                     <span className="min-w-0 flex-1 truncate">{shown.name}</span>
-                    <span aria-hidden data-more="" className="shrink-0 text-xs text-muted">+{more}</span>
                     {shown.id === view.id && <Check aria-hidden className="size-4 shrink-0 text-primary-mark" />}
+                    <span aria-hidden data-more="" className="shrink-0 text-xs text-muted">+{more}</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent aria-label={heading} aria-labelledby={undefined} className="w-60" onFocusOutside={stayWhileMenuOpen} onPointerDownOutside={stayWhileMenuOpen} onInteractOutside={stayWhileMenuOpen}>
                     {g.views.map((v) => (
