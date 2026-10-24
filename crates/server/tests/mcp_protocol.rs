@@ -783,6 +783,8 @@ async fn tools_listed_depend_on_the_token() {
         "create_records",
         "update_records",
         "delete_records",
+        "move_records",
+        "duplicate_records",
         "add_comment",
         "create_project",
         "rename_project",
