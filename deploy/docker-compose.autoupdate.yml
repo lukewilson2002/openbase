@@ -37,7 +37,7 @@
 
 services:
   watchtower:
-    image: nickfedor/watchtower:1.23.0
+    image: nickfedor/watchtower:1.23.2
     restart: unless-stopped
     environment:
       # Six fields, with seconds: second minute hour day month weekday.
