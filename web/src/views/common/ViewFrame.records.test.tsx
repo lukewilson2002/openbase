@@ -50,7 +50,7 @@ function setup(role = "editor", records = [rec("r1", {}), rec("r2", {}), rec("r3
 describe("record views", () => {
   it("adds a record that starts as the filter says, and throws it away when its panel closes untouched", async () => {
     const user = userEvent.setup();
-    const { api } = setup("editor", undefined, { "POST /api/tables/tbl1/records": { records: [rec("new1", { [F.status.id]: "s3" })] }, "DELETE /api/tables/tbl1/records": null });
+    const { api } = setup("editor", undefined, { "POST /api/tables/tbl1/records": { records: [rec("new1", { [F.status.id]: "s3" })] }, "POST /api/tables/tbl1/records/new1/discard": { discarded: true } });
     await screen.findByRole("button", { name: "r1" });
     await user.click(screen.getAllByRole("button", { name: "Add record" })[0]!);
     await screen.findByRole("dialog");
@@ -58,8 +58,7 @@ describe("record views", () => {
     // The first Escape leaves the title being edited, the second closes the panel.
     await user.keyboard("{Escape}");
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1));
-    expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["new1"] });
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(1));
   });
 
   it("keeps a record added and then changed in its panel", async () => {

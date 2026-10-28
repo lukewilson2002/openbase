@@ -686,6 +686,19 @@ text is left out.
   `has_header`; creates a new table with inferred field types and imports every
   row, again atomically.
 
+### Discarding an untouched new record (internal API)
+
+`POST /api/tables/{id}/records/{rid}/discard` (Editor; no body) takes back a record nobody
+touched, for good and without a trace: the row and its history entry are deleted, nothing goes
+to the trash, and other clients get the same live update as for a delete. Answer
+`200 {"discarded": true}`. When any condition fails the record is left as it is and the answer
+is `200 {"discarded": false}`: the caller created it, less than 24 hours ago; its only history
+entry is that creation and it was not changed since; it has no comments; it has no link or
+attachment values; and no other record links to it. Notifications that name it are removed too;
+automations that ran when it was created are not undone. The web app calls it when the panel of
+a brand-new, still empty record closes; agents reach it through `api_request` (`api_reference`
+lists it).
+
 ---
 
 ## 5. Aggregation (group-by)

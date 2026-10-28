@@ -2,7 +2,8 @@
 //!
 //! Write endpoints (Editor role): `POST|PATCH|DELETE /api/tables/{id}/records`
 //! (batch), `POST /api/tables/{id}/records/restore`,
-//! `POST /api/tables/{id}/records/move` and `POST /api/tables/{id}/records/duplicate`.
+//! `POST /api/tables/{id}/records/move`, `POST /api/tables/{id}/records/duplicate` and
+//! `POST /api/tables/{id}/records/{rid}/discard`.
 //! All writes go through `engine::write` in one transaction and events are
 //! published after it commits.
 //!
@@ -53,6 +54,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/tables/{id}/records/restore", post(restore))
         .route("/api/tables/{id}/records/move", post(move_records))
         .route("/api/tables/{id}/records/duplicate", post(duplicate))
+        .route("/api/tables/{id}/records/{rid}/discard", post(discard))
         .route("/api/tables/{id}/records/lookup", get(lookup))
         .route("/api/tables/{id}/records/get", post(get_many))
         .route("/api/tables/{id}/records/{rid}", get(get_one))
@@ -265,6 +267,31 @@ async fn duplicate(
         publish_outcome(&state, &headers, &who, outcome);
     }
     Ok((StatusCode::CREATED, Json(RecordsResponse { records })))
+}
+
+/// `POST /api/tables/{id}/records/{rid}/discard`: take back a record nobody has touched, for
+/// good and without a trace (no trash entry, no history). Answers `{"discarded": true}`, or
+/// `{"discarded": false}` with the record left as it is when it was not created by the caller
+/// in the last 24 hours, was edited or commented on, or is linked to or from. Automations that
+/// ran when the record was created are not undone.
+async fn discard(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path((table_id, record_id)): Path<(String, String)>,
+) -> AppResult<Json<serde_json::Value>> {
+    let who = actor.clone();
+    let outcome = state
+        .db
+        .write(move |tx| {
+            let ctx = editor_ctx(tx, &actor, &table_id)?;
+            write::discard_record(tx, &ctx, &table_id, &record_id)
+        })
+        .await?;
+    if let Some(outcome) = &outcome {
+        publish_outcome(&state, &headers, &who, outcome);
+    }
+    Ok(Json(serde_json::json!({ "discarded": outcome.is_some() })))
 }
 
 /// Most records one duplicate request copies.

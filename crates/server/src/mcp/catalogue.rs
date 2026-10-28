@@ -596,6 +596,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "201 {records: Record[]} (the copies, in the order of ids)",
     ),
     e(
+        POST,
+        "/api/tables/{id}/records/{rid}/discard",
+        "records",
+        "editor",
+        Write,
+        "Take back a record you just created and nobody touched: it is removed for good, with no trash entry and no history. Only if you created it in the last 24 hours, it was never edited or commented on, and nothing links to or from it; otherwise nothing happens.",
+        NO_BODY,
+        "{discarded: boolean}",
+    ),
+    e(
         GET,
         "/api/tables/{id}/records/lookup",
         "records",

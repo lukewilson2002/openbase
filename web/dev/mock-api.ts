@@ -1222,6 +1222,17 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       return send(res, 204), true;
     }
   }
+  if ((g = /^\/api\/tables\/([^/]+)\/records\/([^/]+)\/discard$/.exec(p)) && m === "POST") {
+    const r = records.get(g[2]!);
+    if (!r || r.deleted) return err(res, 404, "not_found", "record not found"), true;
+    // Untouched: never edited since it was created.
+    const untouched = r.updated_at === r.created_at;
+    if (untouched) {
+      records.delete(r.id);
+      emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: [], updated: [], deleted: [r.id] } });
+    }
+    return send(res, 200, { discarded: untouched }), true;
+  }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/restore$/.exec(p))) {
     const out: Obj[] = [];
     for (const id of body.ids ?? []) {

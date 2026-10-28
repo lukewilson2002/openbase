@@ -188,25 +188,34 @@ describe("useRecordWrites", () => {
   describe("discardIfUntouched", () => {
     const record = (values: Record<string, unknown>) => makeRecord(values, "new1");
 
-    it("deletes a record nothing was typed into, and forgets its undo step", async () => {
-      const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({})] }, "GET /api/tables/tbl1/records/new1": record({}), "DELETE /api/tables/tbl1/records": null });
+    it("discards a record nothing was typed into, and forgets its undo step", async () => {
+      const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({})] }, "GET /api/tables/tbl1/records/new1": record({}), "POST /api/tables/tbl1/records/new1/discard": { discarded: true } });
       const { result } = harness();
       await act(async () => void (await result.current.create({})));
       expect(result.current.history.canUndo).toBe(true);
       let gone = false;
       await act(async () => void (gone = await result.current.discardIfUntouched("new1")));
       expect(gone).toBe(true);
-      expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["new1"] });
+      expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(1);
+      expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
       expect(result.current.history.canUndo).toBe(false);
     });
 
+    it("keeps the record when the server says it was touched", async () => {
+      mockApi({ "POST /api/tables/tbl1/records": { records: [record({})] }, "GET /api/tables/tbl1/records/new1": record({}), "POST /api/tables/tbl1/records/new1/discard": { discarded: false } });
+      const { result } = harness();
+      await act(async () => void (await result.current.create({})));
+      await act(async () => expect(await result.current.discardIfUntouched("new1")).toBe(false));
+      expect(result.current.history.canUndo).toBe(true);
+    });
+
     it("keeps a record that was changed, and one it did not create", async () => {
-      const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({ f_status: "s1" })] }, "GET /api/tables/tbl1/records/new1": record({ f_status: "s1", f_name: "Typed" }), "DELETE /api/tables/tbl1/records": null });
+      const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({ f_status: "s1" })] }, "GET /api/tables/tbl1/records/new1": record({ f_status: "s1", f_name: "Typed" }) });
       const { result } = harness();
       await act(async () => void (await result.current.create({ f_status: "s1" })));
       await act(async () => expect(await result.current.discardIfUntouched("new1")).toBe(false));
       await act(async () => expect(await result.current.discardIfUntouched("r1")).toBe(false));
-      expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
+      expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(0);
       expect(result.current.history.canUndo).toBe(true);
     });
   });

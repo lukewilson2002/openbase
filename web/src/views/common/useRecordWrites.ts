@@ -429,8 +429,14 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
       try {
         const now = await recordsApi.get(tableId, recordId);
         if (!jsonEqual(writableValues(fields, now.values as Record<string, unknown>), made.values)) return false;
+        const snap = snapshot();
         mutateCaches((d) => removeRecords(d, new Set([recordId])));
-        await recordsApi.remove(tableId, [recordId]);
+        // The server removes it for good (no trash, no history) unless it was touched meanwhile.
+        if (!(await recordsApi.discard(tableId, recordId)).discarded) {
+          rollback(snap);
+          settle(true);
+          return false;
+        }
       } catch {
         // Not there, or not removable: it stays, as before.
         settle(true);
@@ -440,7 +446,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
       settle(true);
       return true;
     },
-    [qc, tableId, fields, mutateCaches, stack, settle],
+    [qc, tableId, fields, snapshot, mutateCaches, rollback, stack, settle],
   );
 
   // --- History --------------------------------------------------------------------------------
