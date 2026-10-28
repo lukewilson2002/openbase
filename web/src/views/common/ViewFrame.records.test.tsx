@@ -71,7 +71,7 @@ describe("record views", () => {
         current = rec("new1", { [F.status.id]: "s3", [F.name.id]: "Typed" });
         return { records: [current] };
       },
-      "DELETE /api/tables/tbl1/records": null,
+      "POST /api/tables/tbl1/records/new1/discard": { discarded: true },
     });
     await screen.findByRole("button", { name: "r1" });
     await user.click(screen.getAllByRole("button", { name: "Add record" })[0]!);
@@ -81,7 +81,7 @@ describe("record views", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await new Promise((r) => setTimeout(r, 150));
-    expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
+    expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(0);
   });
 
   it("asks before deleting several selected records, and Ctrl+Z brings them back", async () => {
