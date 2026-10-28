@@ -309,20 +309,39 @@ function CalendarInner(props: ViewProps) {
   );
   const [dragging, setDragging] = useState(false);
   const [overZone, setOverZone] = useState(false);
+  // The record of the event being dragged, until its drag has been dealt with.
+  const dragged = useRef<string | null>(null);
   // While an event is dragged, the column shows whether the pointer is over it.
   useEffect(() => {
     if (!dragging) return;
     const move = (e: MouseEvent | TouchEvent) => setOverZone(inside(zone.current, pointOf(e)));
+    // Let go over the column: FullCalendar would first slide its preview back to the day it came from and
+    // only then report the drag's end, so the preview is hidden and the dates cleared at once.
+    const up = (e: MouseEvent | TouchEvent) => {
+      if (!startWritable || !dragged.current || !inside(zone.current, pointOf(e))) return;
+      // The preview is FullCalendar's fixed copy of the event (the event itself, hidden while dragged, is left alone).
+      for (const el of document.querySelectorAll<HTMLElement>(".fc-event-dragging")) if (el.style.position === "fixed") el.style.visibility = "hidden";
+      releasedOnZone.current = true;
+      unschedule(dragged.current);
+      dragged.current = null;
+    };
     document.addEventListener("mousemove", move);
     document.addEventListener("touchmove", move, { passive: true });
+    document.addEventListener("mouseup", up, true);
+    document.addEventListener("touchend", up, true);
     return () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("touchmove", move);
+      document.removeEventListener("mouseup", up, true);
+      document.removeEventListener("touchend", up, true);
       setOverZone(false);
     };
-  }, [dragging]);
+  }, [dragging, startWritable, unschedule]);
   const onEventDragStop = (arg: { event: { extendedProps: Record<string, unknown> }; jsEvent: MouseEvent }) => {
     setDragging(false);
+    // Already unscheduled when it was let go (see above).
+    if (!dragged.current) return;
+    dragged.current = null;
     releasedOnZone.current = startWritable && inside(zone.current, pointOf(arg.jsEvent));
     if (releasedOnZone.current) unschedule(String(arg.event.extendedProps.recordId));
   };
@@ -484,8 +503,9 @@ function CalendarInner(props: ViewProps) {
                 arg.jsEvent.preventDefault();
                 setup.openRecord(String(arg.event.extendedProps.recordId));
               }}
-              eventDragStart={() => {
+              eventDragStart={(arg) => {
                 releasedOnZone.current = false;
+                dragged.current = String(arg.event.extendedProps.recordId);
                 setDragging(true);
               }}
               eventDragStop={onEventDragStop}

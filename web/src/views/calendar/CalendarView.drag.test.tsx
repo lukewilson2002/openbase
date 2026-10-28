@@ -56,6 +56,22 @@ describe("dragging an event back to the unscheduled column", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
   });
 
+  it("clears the dates as soon as it is let go over the column, not after FullCalendar's slide back", async () => {
+    const { api } = await setup();
+    const mirror = document.createElement("div");
+    mirror.className = "fc-event-dragging";
+    mirror.style.position = "fixed";
+    document.body.append(mirror);
+    act(() => fc.props.eventDragStart!({ event }));
+    act(() => void document.dispatchEvent(new MouseEvent("mouseup", { clientX: 900, clientY: 100 })));
+    expect(mirror.style.visibility).toBe("hidden");
+    await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
+    // FullCalendar's own report of the drag's end, once its slide back is over, changes nothing more.
+    act(() => fc.props.eventDragStop!(at(900)));
+    expect(api.callsTo(PATCH)).toHaveLength(1);
+    mirror.remove();
+  });
+
   it("leaves an event let go over the calendar to FullCalendar's move", async () => {
     const { api } = await setup();
     act(() => fc.props.eventDragStart!({ event }));
