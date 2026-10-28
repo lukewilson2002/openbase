@@ -27,6 +27,7 @@ export interface GridColumnSpec {
 export type CellModel =
   | { kind: "loading" }
   | { kind: "blank" }
+  | { kind: "add" }
   | { kind: "group"; headerIndex: number; depth: number; label: string; count: number; collapsed: boolean }
   | { kind: "summary"; fieldId: string; label: string; text: string }
   | RecordCellModel;
@@ -163,6 +164,8 @@ export interface GridAdapterProps {
   onHeaderMenu(index: number, bounds: ScreenRect): void;
   onCellContextMenu(point: GridPoint, bounds: ScreenRect): void;
   onGroupToggle(headerIndex: number): void;
+  /** An add row was clicked (the host adds a record into the group it closes). */
+  onAddRow(row: number): void;
   onSummaryClick(col: number, bounds: ScreenRect): void;
   onExpand(row: number): void;
   onSelectionChange(sel: GridSelectionInfo): void;

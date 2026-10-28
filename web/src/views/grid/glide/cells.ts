@@ -12,6 +12,7 @@ import type { CellModel, RecordCellModel } from "../adapter";
 /** Payload of every custom cell the grid draws. */
 export type ObData =
   | { ob: "cell"; model: RecordCellModel; pending?: { json?: unknown; text?: string } }
+  | { ob: "add" }
   | { ob: "group"; model: Extract<CellModel, { kind: "group" }> }
   | { ob: "summary"; model: Extract<CellModel, { kind: "summary" }> };
 
@@ -63,6 +64,11 @@ export function toGridCell(model: CellModel): GridCell {
     case "blank":
       cell = BLANK;
       break;
+    case "add": {
+      const a: ObCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: "", readonly: true, data: { ob: "add" } };
+      cell = a;
+      break;
+    }
     case "group": {
       const g: ObCell = { kind: GridCellKind.Custom, allowOverlay: false, copyData: model.label, readonly: true, data: { ob: "group", model } };
       cell = g;

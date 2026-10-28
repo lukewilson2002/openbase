@@ -144,6 +144,16 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const [paint, setPaint] = useState(0);
+  // The row under the pointer: an add row is drawn dim until it is this one, and a canvas has no :hover.
+  const hoverRow = useRef<number | null>(null);
+  const hoverAt = useCallback((row: number | null) => {
+    const prev = hoverRow.current;
+    if (prev === row) return;
+    hoverRow.current = row;
+    // Only the first cell of an add row changes with the pointer.
+    const cells = [prev, row].filter((r): r is number => r !== null && pr.current.getCell(0, r).kind === "add").map((r) => ({ cell: [0, r] as Item }));
+    if (cells.length > 0) gridRef.current?.updateCells(cells);
+  }, []);
 
   useEffect(ensurePortal, []);
   // Which number the marker column shows in each display row (none for group headers and the summary row).
@@ -167,6 +177,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       createRenderer(() => ({
         searchTerm: pr.current.searchTerm,
         dark: pr.current.dark,
+        hoveredRow: () => hoverRow.current,
         isSelected: (c, r) => {
           const cell = selectionRef.current.current?.cell;
           return !!cell && cell[0] === c && cell[1] === r;
@@ -484,7 +495,8 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
 
   const onCellClicked = useCallback((cell: Item, ev: { bounds: Rectangle; isDoubleClick?: boolean }) => {
     const model = pr.current.getCell(cell[0], cell[1]);
-    if (model.kind === "group") pr.current.onGroupToggle(model.headerIndex);
+    if (cell[0] >= 0 && pr.current.getCell(0, cell[1]).kind === "add") pr.current.onAddRow(cell[1]);
+    else if (model.kind === "group") pr.current.onGroupToggle(model.headerIndex);
     else if (model.kind === "summary") pr.current.onSummaryClick(cell[0], screenRect(ev.bounds));
   }, []);
 
@@ -513,6 +525,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       className="relative h-full w-full"
       onPointerLeave={() => {
         // Off the grid altogether, the canvas reports no more moves.
+        hoverAt(null);
         if (hoveredLink.current === null) return;
         hoveredLink.current = null;
         pr.current.onLinkHover?.(null);
@@ -582,6 +595,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         if (col < pr.current.columns.length) pr.current.onHeaderMenu(col, screenRect(ev.bounds));
       }}
       onMouseMove={onMouseMove}
+      onItemHovered={(args) => hoverAt(args.kind === "cell" ? args.location[1] : null)}
       onCellContextMenu={(cell, ev) => {
         ev.preventDefault();
         if (performance.now() - menuOpenedAt.current < 600) return;

@@ -3,7 +3,7 @@
  * move, and the undo/redo executor. Cell values in `CellChange` are *view* values (links as
  * `[{id,name}]`); they are converted with `toWire` at the API boundary.
  */
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -45,6 +45,8 @@ export interface RecordOps {
   moveRecords(ids: readonly string[], target: { beforeId?: string; afterId?: string }, previous?: Placement): Promise<boolean>;
   /** Record the steps collected for one gesture as a single undo entry, with a toast offering Undo when `message` is given. */
   commit(ops: UndoOp[], label: string, message?: ToastMessage): void;
+  /** How many cell saves are on their way. */
+  saving(): number;
   history: RecordHistory;
   undo(): Promise<void>;
   redo(): Promise<void>;
@@ -59,6 +61,8 @@ export interface RecordOpsParams {
   canEdit: boolean;
   /** Records were added or removed (a delete, a copy, an undo of either): row positions, and a selection made of them, no longer hold. */
   onRowsChanged?: () => void;
+  /** Records got a cell change (an edit, paste, fill, clear, or the undo and redo of one), whatever became of it. */
+  onEdited?: (recordIds: readonly string[]) => void;
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -69,10 +73,12 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace("{n}", n.toLocaleString()));
 
-export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, onRowsChanged }: RecordOpsParams): RecordOps {
+export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, onRowsChanged, onEdited }: RecordOpsParams): RecordOps {
   const qc = useQueryClient();
   const toast = useToast();
   const fieldById = useMemo(() => new Map(fields.map((f) => [f.id, f] as const)), [fields]);
+  const inFlight = useRef(0);
+  const saving = useCallback(() => inFlight.current, []);
 
   const invalidate = useCallback(
     (touchesLinks: boolean) => {
@@ -107,6 +113,7 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
         case "edit": {
           const changes = dir === "undo" ? invertChanges(op.changes) : op.changes;
           const patches = toPatches(changes, "redo");
+          onEdited?.(patches.map((p) => p.id));
           for (const p of patches) data.patchValues(p.id, p.values);
           await writePatches(patches);
           invalidate(op.changes.some((c) => fieldById.get(c.fieldId)?.type === "link"));
@@ -155,7 +162,7 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
         }
       }
     },
-    [data, writePatches, invalidate, fieldById, tableId, onRowsChanged, qc, baseId],
+    [data, writePatches, invalidate, fieldById, tableId, onRowsChanged, onEdited, qc, baseId],
   );
 
   const undo = useCallback(async () => {
@@ -220,12 +227,14 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
       if (effective.length === 0) return true;
       const normalised = effective.map((c) => ({ ...c, before: c.before ?? null, after: c.after ?? null }));
       const patches = toPatches(effective, "redo");
+      onEdited?.(patches.map((p) => p.id));
       const previous: TableRecord[] = [];
       for (const p of patches) {
         const prev = data.patchValues(p.id, p.values);
         if (prev) previous.push(prev);
       }
       const saved = new Set<string>();
+      inFlight.current++;
       try {
         // Big edits go in batches: the ones that were saved before a batch failed stay saved, and stay undoable.
         for (const part of chunk(patches, BATCH)) {
@@ -240,12 +249,14 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
           invalidate(true);
         }
         return false;
+      } finally {
+        inFlight.current--;
       }
       record({ kind: "edit", label, changes: normalised }, opts?.collect);
       invalidate(effective.some((c) => fieldById.get(c.fieldId)?.type === "link"));
       return true;
     },
-    [canEdit, data, writePatches, toast, record, invalidate, fieldById],
+    [canEdit, data, writePatches, toast, record, invalidate, fieldById, onEdited],
   );
 
   const moveRecords = useCallback<RecordOps["moveRecords"]>(
@@ -376,5 +387,5 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
     [stack, revision, undo, redo],
   );
 
-  return { applyChanges, createRecords, duplicateRecords, deleteRecords, deleteField, moveRecords, commit, history, undo, redo };
+  return { applyChanges, createRecords, duplicateRecords, deleteRecords, deleteField, moveRecords, commit, saving, history, undo, redo };
 }

@@ -47,14 +47,16 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { jsonEqual, linkNames, parseText, type ParseCtx } from "@/lib/cells/parse";
-import { isEmptyValue } from "@/lib/cells/wire";
+import { isEmptyValue, writableValues } from "@/lib/cells/wire";
 import type { ViewProps } from "../types";
 import type { CellEdit, CellModel, EditorHostProps, GridAdapterProps, GridColumnSpec, GridHandle, GridPoint, GridRange, GridSelectionInfo, ScreenRect } from "./adapter";
 import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
 import { frozenColumnCount, usePrimaryPinned } from "./usePrimaryPinned";
-import { BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
+import { ADD, BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
 import { countClearCells, linkKey, planClear, planFill, planPaste, selectionRectangles, summariseProblems, type Ambiguity, type GridReader } from "./gridOps";
 import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
+import { floatingAddGroup, newRecordValues } from "./addRows";
+import { discardIfUntouched, type Fresh } from "./freshRows";
 import { PAGE_SIZE, buildRowMap, groupPathKeys } from "./rowMap";
 import { UndoStack, type CellChange, type UndoOp } from "./undo";
 import { useGridData } from "./useGridData";
@@ -65,6 +67,9 @@ const EMPTY_SELECTION: GridSelectionInfo = { cell: null, ranges: [], rows: [], c
 const NO_ROWS: readonly number[] = [];
 /** Clearing more cells than this asks first (a Delete over a column or Ctrl+A would empty a whole table). */
 const CLEAR_CONFIRM_CELLS = 50;
+/** Where the focus can go without leaving the grid: its cell editors and the menus and dialogs it opens (they hang off the page's body). */
+const STILL_IN_GRID = "#portal, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox'], [data-radix-popper-content-wrapper]";
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /** Pages fetched at once when the records of a selection have to be loaded. */
 const LOAD_PAGES_AT_ONCE = 4;
 
@@ -117,7 +122,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // this device, so folding a group survives a reload and a visit to another view.
   const [collapsed, toggleCollapsed, replaceCollapsed] = usePersistedSet(`ob-grid-collapsed:${view.id}`);
   const pathKeys = useMemo(() => groupPathKeys(data.groups), [data.groups]);
-  const rowMap = useMemo(() => buildRowMap(data.total, data.groups, collapsed), [data.total, data.groups, collapsed]);
+  const rowMap = useMemo(() => buildRowMap(data.total, data.groups, collapsed, canEdit), [data.total, data.groups, collapsed, canEdit]);
   const rowMapRef = useRef(rowMap);
   rowMapRef.current = rowMap;
   const grouped = data.groups.length > 0;
@@ -166,6 +171,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         const s = summaryText(col);
         return factory.summary(col, s.label, s.text);
       }
+      if (map.isAddRow(row)) return col === 0 ? ADD : BLANK;
       const gi = map.groupAt(row);
       if (gi >= 0) {
         const g = dataRef.current.groups[gi];
@@ -205,7 +211,14 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const selectionRef = useRef<GridSelectionInfo>(EMPTY_SELECTION);
   // Records came or went (a delete, a copy, an undo of either): the rows a selection named hold other records now.
   const onRowsChanged = useCallback(() => gridRef.current?.clearSelection(), []);
-  const ops = useRecordOps({ baseId: schema.id, tableId: table.id, fields: table.fields, data, stack, canEdit, onRowsChanged });
+  // Records this grid added that nothing has been put into yet, with what they were made with.
+  const fresh = useRef(new Map<string, Fresh>());
+  // The ones that were changed in some way, even when put back.
+  const touched = useRef(new Set<string>());
+  const onEdited = useCallback((ids: readonly string[]) => {
+    for (const id of ids) if (fresh.current.has(id)) touched.current.add(id);
+  }, []);
+  const ops = useRecordOps({ baseId: schema.id, tableId: table.id, fields: table.fields, data, stack, canEdit, onRowsChanged, onEdited });
   const opsRef = useRef(ops);
   opsRef.current = ops;
 
@@ -214,11 +227,13 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   useEffect(
     () =>
       qc.getMutationCache().subscribe((event) => {
-        if (event.type !== "updated" || event.action.type !== "success") return;
+        if (event.type !== "updated") return;
         const { mutation } = event;
         const key = mutation.options.mutationKey;
         if (key?.[0] !== "record-save" || key[1] !== table.id) return;
         const vars = mutation.state.variables as { recordId: string; field: Field; value: unknown } | undefined;
+        if (vars?.recordId) onEdited([vars.recordId]);
+        if (event.action.type !== "success") return;
         const prev = (mutation.state.context as { prev?: TableRecord } | undefined)?.prev;
         if (!vars || !prev) return;
         const before = prev.values[vars.field.id] ?? null;
@@ -226,7 +241,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         if (jsonEqual(before, after)) return;
         stack.push({ kind: "edit", label: `Edit ${vars.field.name}`, changes: [{ recordId: vars.recordId, fieldId: vars.field.id, before, after }] });
       }),
-    [qc, table.id, stack],
+    [qc, table.id, stack, onEdited],
   );
 
   const parseCtx = useCallback((linkIds?: ReadonlyMap<string, string>): ParseCtx => ({ timeZone, users: people, linkIds }), [timeZone, people]);
@@ -281,7 +296,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const onPaste = useCallback(
     (target: GridPoint, rows: readonly (readonly string[])[]) => {
       // The summary row is not data: pasting there must not create records.
-      if (target.row >= rowMapRef.current.length || !canEdit) return;
+      if (target.row >= rowMapRef.current.length || rowMapRef.current.isAddRow(target.row) || !canEdit) return;
       void (async () => {
         const rd = readerRef.current;
         const lastRow = Math.min(rd.rowCount - 1, target.row + rows.length + 200);
@@ -654,28 +669,69 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [],
   );
 
-  const addRecord = useCallback(async () => {
-    const before = reveal.current?.before ?? selectionRef.current;
-    const focused = document.activeElement;
-    const created = await opsRef.current.createRecords({});
-    if (created.length === 0) return;
-    if (reveal.current) window.clearTimeout(reveal.current.timer);
-    const timer = window.setTimeout(() => {
-      reveal.current = null;
-      if (selectionRef.current !== before) return;
-      const idx = dataRef.current.indexOf(created[0]!.id);
-      const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.length - 1;
-      if (row >= 0) {
-        gridRef.current?.scrollToRow(row);
-        gridRef.current?.selectCell(0, row);
-        // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
-        // grid, or the new row looks selected while typing goes to the button, and a click on that
-        // already selected cell would not move the focus either.
-        if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
-      }
-    }, 400);
-    reveal.current = { timer, before };
+  /** Add a record the grid will take back again if it is left untouched. Resolves with the new record, or null. */
+  const createFresh = useCallback(
+    async (opts: { values: Record<string, unknown>; afterRecordId?: string; beforeRecordId?: string }): Promise<TableRecord | null> => {
+      const steps: UndoOp[] = [];
+      const [rec] = await opsRef.current.createRecords({ values: [opts.values], afterRecordId: opts.afterRecordId, beforeRecordId: opts.beforeRecordId, collect: steps });
+      if (!rec) return null;
+      opsRef.current.commit(steps, "Add record");
+      fresh.current.set(rec.id, { values: writableValues(table.fields, rec.values as Record<string, unknown>), op: steps[0] ?? null });
+      return rec;
+    },
+    [table.fields],
+  );
+
+  // The selection moves by itself in a few places (the new row, a selection kept in step with a row
+  // that went away); those moves are not the person leaving a row.
+  const selectingBySelf = useRef(false);
+  const selectQuietly = useCallback((move: () => void) => {
+    selectingBySelf.current = true;
+    try {
+      move();
+    } finally {
+      selectingBySelf.current = false;
+    }
   }, []);
+
+  /** Add a record (into group `group` of the group headers, when given; the end of the table otherwise) and select it. */
+  const addRecord = useCallback(
+    async (target: { group?: number } = {}) => {
+      const before = reveal.current?.before ?? selectionRef.current;
+      const focused = document.activeElement;
+      const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, target.group ?? -1, me.data?.id ?? null);
+      const created = await createFresh({ values });
+      if (!created) return;
+      if (reveal.current) window.clearTimeout(reveal.current.timer);
+      const timer = window.setTimeout(() => {
+        reveal.current = null;
+        if (selectionRef.current !== before) return;
+        const idx = dataRef.current.indexOf(created.id);
+        // Without the page that has it yet, an ungrouped record is the last one.
+        const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.rowOfRecord(dataRef.current.total - 1);
+        if (row >= 0) {
+          gridRef.current?.scrollToRow(row);
+          selectQuietly(() => gridRef.current?.selectCell(0, row));
+          // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
+          // grid, or the new row looks selected while typing goes to the button, and a click on that
+          // already selected cell would not move the focus either.
+          if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
+        }
+      }, 400);
+      reveal.current = { timer, before };
+    },
+    [table.fields, queryConfig.filter, me.data?.id, createFresh, selectQuietly],
+  );
+
+  /** The group the floating Add adds into: that of the selected row, else the one at the top of what is on screen. */
+  const floatingGroup = useCallback((): number => {
+    const sel = selectionRef.current;
+    const gi = floatingAddGroup(rowMapRef.current, dataRef.current.groups, sel.cell?.row ?? sel.rows[0] ?? null, visibleRows.current?.[0] ?? null);
+    // Adding into a folded group would hide the new record: unfold it.
+    const key = gi >= 0 ? groupPathKeys(dataRef.current.groups)[gi] : undefined;
+    if (key && collapsedRef.current.has(key)) toggleCollapsed(key);
+    return gi;
+  }, [toggleCollapsed]);
 
   const insertRecord = useCallback(
     async (row: number, where: "above" | "below") => {
@@ -683,11 +739,88 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       if (!rec) return;
       // Rows below the new one move down: a selection of rows would name other records.
       if (selectionRef.current.rows.length > 0) gridRef.current?.clearSelection();
-      if (where === "below") await opsRef.current.createRecords({ afterRecordId: rec.id });
-      else await opsRef.current.createRecords({ beforeRecordId: rec.id });
+      const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, -1, me.data?.id ?? null);
+      await createFresh(where === "below" ? { values, afterRecordId: rec.id } : { values, beforeRecordId: rec.id });
     },
-    [recordAtRow],
+    [recordAtRow, table.fields, queryConfig.filter, me.data?.id, createFresh],
   );
+
+  // ---- untouched new rows go away ---------------------------------------------------------------
+  // A record added here and left empty when the person clicks off is taken back, as if it had never
+  // been added: no toast, nothing in the trash or the history, and no step left in Undo.
+  const openIdRef = useRef(openRecordId);
+  openIdRef.current = openRecordId;
+  const takeBack = useCallback(
+    async (id: string, made: Fresh) => {
+      const idx = dataRef.current.indexOf(id);
+      const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : -1;
+      const gone = await discardIfUntouched(id, made, {
+        fields: table.fields,
+        touched: (x) => touched.current.has(x),
+        saving: () => opsRef.current.saving(),
+        load: (x) => recordsApi.get(table.id, x),
+        discard: (x) => recordsApi.discard(table.id, x),
+        sleep,
+      });
+      touched.current.delete(id);
+      if (!gone) return;
+      if (made.op) stack.drop(made.op);
+      void qc.invalidateQueries({ queryKey: ["records"] });
+      // The rows under it move up: keep what is selected on the same records.
+      const sel = selectionRef.current;
+      if (row < 0) return;
+      const range = sel.ranges[0];
+      if (sel.cell && sel.rows.length === 0 && sel.columns.length === 0 && sel.ranges.length === 1 && range?.width === 1 && range.height === 1) {
+        if (sel.cell.row > row) selectQuietly(() => gridRef.current?.selectCell(sel.cell!.col, sel.cell!.row - 1));
+      } else if (sel.rows.some((r) => r > row) || sel.ranges.some((r) => r.y + r.height - 1 > row)) selectQuietly(() => gridRef.current?.clearSelection());
+    },
+    [table.fields, table.id, stack, qc, selectQuietly],
+  );
+
+  /** Take back the new records that are no longer selected (`leaving`: all of them, the grid is being left). */
+  const sweepFresh = useCallback(
+    (leaving = false) => {
+      if (fresh.current.size === 0) return;
+      const sel = selectionRef.current;
+      for (const [id, made] of [...fresh.current]) {
+        if (id === openIdRef.current) continue;
+        if (!leaving) {
+          const idx = dataRef.current.indexOf(id);
+          // Not known yet (its page has not arrived): it cannot be told apart from the selection.
+          if (idx < 0) continue;
+          const row = rowMapRef.current.rowOfRecord(idx);
+          if (sel.columns.length > 0 || (row >= 0 && (sel.rows.includes(row) || sel.ranges.some((r) => row >= r.y && row < r.y + r.height)))) continue;
+        }
+        fresh.current.delete(id);
+        void takeBack(id, made);
+      }
+    },
+    [takeBack],
+  );
+  const sweepRef = useRef(sweepFresh);
+  sweepRef.current = sweepFresh;
+
+  // A record panel closing leaves the record it was on, if the selection is elsewhere.
+  useEffect(() => {
+    if (!openRecordId) sweepRef.current();
+  }, [openRecordId]);
+
+  // Focus going to somewhere else in the page, or the grid going away, leaves every new row.
+  useEffect(() => {
+    const wrap = wrapperRef.current;
+    if (!wrap) return;
+    const onFocusOut = (e: FocusEvent) => {
+      const to = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+      // Within the grid's own page area, in one of its pop-ups, or the window itself losing focus.
+      if (to ? wrap.contains(to) || to.closest(STILL_IN_GRID) : !document.hasFocus()) return;
+      sweepRef.current(true);
+    };
+    wrap.addEventListener("focusout", onFocusOut);
+    return () => {
+      wrap.removeEventListener("focusout", onFocusOut);
+      sweepRef.current(true);
+    };
+  }, []);
 
   /** The display rows a menu opened on `fromRow` acts on: the selected rows, or the rows of the selected cells, or that row. */
   const rowsForMenu = useCallback((fromRow: number): number[] => {
@@ -726,6 +859,10 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           onGroupToggle(group);
           return true;
         }
+        if (map.isAddRow(k.cell.row)) {
+          void addRecord({ group: map.addGroupAt(k.cell.row) });
+          return true;
+        }
         if (k.cell.row === map.length) {
           const at = gridRef.current?.cellBounds(k.cell.col, k.cell.row);
           if (at) setSumMenu({ col: k.cell.col, at });
@@ -734,7 +871,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       }
       return false;
     },
-    [onExpand, onGroupToggle],
+    [onExpand, onGroupToggle, addRecord],
   );
 
   // Undo/redo also work while focus sits on the toolbar or footer instead of the canvas.
@@ -870,11 +1007,14 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       if (rowMapRef.current.recordIndexAt(point.row) >= 0) setRowMenu({ row: point.row, col: point.col, at, rows: rowsForMenu(point.row) });
     },
     onGroupToggle,
+    onAddRow: (row) => void addRecord({ group: rowMapRef.current.addGroupAt(row) }),
     onSummaryClick: (col, at) => setSumMenu({ col, at }),
     onExpand,
     onSelectionChange: (sel) => {
       selectionRef.current = sel;
       setSelectedRows((cur) => (sel.rows.length === 0 && cur.length === 0 ? cur : sel.rows));
+      // Resting on an add row is not leaving a new row: someone adding a few in a row keeps them all.
+      if (!selectingBySelf.current && !(sel.cell && rowMapRef.current.isAddRow(sel.cell.row))) sweepFresh();
     },
     onKeyDown: onGridKey,
     canAddField: canManageFields,
@@ -924,7 +1064,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchInputRef={searchInputRef}
           onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
-          onAdd={canEdit ? () => void addRecord() : undefined}
+          onAdd={canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined}
         />
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>

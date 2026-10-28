@@ -219,36 +219,139 @@ describe("GridView: groups", () => {
 
   it("folds a group from the keyboard and remembers it", async () => {
     const { unmount } = setup({ recs: four, groups });
-    await waitFor(() => expect(grid().rowCount).toBe(6));
+    // Two headers, four records, and the add row that closes each group.
+    await waitFor(() => expect(grid().rowCount).toBe(8));
     expect(grid().getCell(0, 0).kind).toBe("group");
     let handled = false;
     act(() => {
       handled = grid().onKeyDown({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, cell: { col: 0, row: 0 } });
     });
     expect(handled).toBe(true);
-    await waitFor(() => expect(grid().rowCount).toBe(4));
+    await waitFor(() => expect(grid().rowCount).toBe(5));
     unmount();
     setup({ recs: four, groups });
-    await waitFor(() => expect(grid().rowCount).toBe(4));
+    await waitFor(() => expect(grid().rowCount).toBe(5));
   });
 
   it("collapses and expands every group from the footer", async () => {
     const user = userEvent.setup();
     setup({ recs: four, groups });
-    await waitFor(() => expect(grid().rowCount).toBe(6));
+    await waitFor(() => expect(grid().rowCount).toBe(8));
     await user.click(screen.getByRole("button", { name: "Collapse all" }));
     await waitFor(() => expect(grid().rowCount).toBe(2));
     await user.click(screen.getByRole("button", { name: "Expand all" }));
-    await waitFor(() => expect(grid().rowCount).toBe(6));
+    await waitFor(() => expect(grid().rowCount).toBe(8));
   });
 
   it("opens a summary cell's menu from the keyboard", async () => {
     setup({ recs: four, groups });
-    await waitFor(() => expect(grid().rowCount).toBe(6));
+    await waitFor(() => expect(grid().rowCount).toBe(8));
     act(() => {
-      grid().onKeyDown({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, cell: { col: 1, row: 6 } });
+      grid().onKeyDown({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, cell: { col: 1, row: 8 } });
     });
     expect(await screen.findByRole("menu", { name: "Summary options" })).toBeInTheDocument();
+  });
+});
+
+describe("GridView: add rows and new rows", () => {
+  const groups: GroupHeader[] = [
+    { depth: 0, field_id: F.status.id, key: "s1", value: "s1", label: "Todo", count: 2, start: 0 },
+    { depth: 0, field_id: F.status.id, key: "s2", value: "s2", label: "Doing", count: 2, start: 2 },
+  ];
+  const four = records.slice(0, 4);
+  const made = rec("new1", {});
+  const routes = {
+    "POST /api/tables/tbl1/records": { status: 201, json: { records: [made] } },
+    "GET /api/tables/tbl1/records/new1": made,
+    "POST /api/tables/tbl1/records/new1/discard": { discarded: true },
+  };
+  /** The focus goes to somewhere else on the page. */
+  const clickOff = () => act(() => void screen.getByTestId("canvas").dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: document.body })));
+
+  it("adds from the floating Add into the group of the selected cell, else the group in view, else the end", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({ recs: four, groups, routes });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    const sent = () => api.callsTo("POST /api/tables/tbl1/records").map((c) => (c.body as { records: { values: unknown }[] }).records[0]!.values);
+    act(() => grid().onSelectionChange(selection({ cell: { col: 1, row: 6 }, ranges: [{ x: 1, y: 6, width: 1, height: 1 }] })));
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0]).toEqual({ [F.status.id]: "s2" });
+    // Nothing selected: the rows at the top of the screen are in the second group.
+    act(() => grid().onSelectionChange(selection({})));
+    act(() => grid().onVisibleRowsChange(5, 7));
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(sent()).toHaveLength(2));
+    expect(sent()[1]).toEqual({ [F.status.id]: "s2" });
+    act(() => grid().onVisibleRowsChange(0, 3));
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(sent()).toHaveLength(3));
+    expect(sent()[2]).toEqual({ [F.status.id]: "s1" });
+  });
+
+  it("closes each group with a row that adds into that group", async () => {
+    const { api } = setup({ recs: four, groups, routes });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    expect(grid().getCell(0, 3).kind).toBe("add");
+    expect(grid().getCell(1, 3).kind).toBe("blank");
+    expect(grid().rowNumber(3)).toBeNull();
+    act(() => grid().onAddRow(7));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect((api.callsTo("POST /api/tables/tbl1/records")[0]!.body as { records: { values: unknown }[] }).records[0]!.values).toEqual({ [F.status.id]: "s2" });
+  });
+
+  it("adds from the keyboard on an add row, and never pastes into one", async () => {
+    const { api } = setup({ recs: four, groups, routes: { ...routes, "PATCH /api/tables/tbl1/records": { records: [] } } });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    act(() => void grid().onPaste({ col: 0, row: 3 }, [["x"]]));
+    let handled = false;
+    act(() => {
+      handled = grid().onKeyDown({ key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, cell: { col: 0, row: 3 } });
+    });
+    expect(handled).toBe(true);
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect((api.callsTo("POST /api/tables/tbl1/records")[0]!.body as { records: { values: unknown }[] }).records).toEqual([{ values: { [F.status.id]: "s1" } }]);
+  });
+
+  it("shows no add rows to someone who cannot edit", async () => {
+    const view = viewWithConfig("viw1", "grid", {});
+    renderView(GridView, { schema: projectSchema("viewer", [view]), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records: four, groups }) } as never });
+    await waitFor(() => expect(grid().rowCount).toBe(6));
+    expect([0, 1, 2, 3, 4, 5].some((r) => grid().getCell(0, r).kind === "add")).toBe(false);
+  });
+
+  it("takes an untouched new row back silently when the focus leaves, and forgets its Undo step", async () => {
+    const { api } = setup({ recs: four, groups, routes });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    act(() => grid().onAddRow(3));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Undo: Add record/ })).toBeEnabled());
+    // Wait for the page that has the new row to be known, then click off.
+    clickOff();
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Undo/ })).toBeDisabled());
+    expect(screen.queryByText(/deleted/i)).toBeNull();
+    expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
+  });
+
+  it("keeps a new row something was written into", async () => {
+    const { api } = setup({ recs: four, groups, routes: { ...routes, "GET /api/tables/tbl1/records/new1": rec("new1", { [F.name.id]: "Hello" }) } });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    act(() => grid().onAddRow(3));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    clickOff();
+    await waitFor(() => expect(api.callsTo("GET /api/tables/tbl1/records/new1")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /^Undo: Add record/ })).toBeEnabled();
+  });
+
+  it("keeps a new row when the server says it is no longer untouched", async () => {
+    const { api } = setup({ recs: four, groups, routes: { ...routes, "POST /api/tables/tbl1/records/new1/discard": { discarded: false } } });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    act(() => grid().onAddRow(3));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    clickOff();
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: /^Undo: Add record/ })).toBeEnabled();
   });
 });
 
