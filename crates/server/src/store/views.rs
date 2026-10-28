@@ -15,12 +15,16 @@
 use std::collections::{HashMap, HashSet};
 
 use ob_core::api::schema::{CreateView, DuplicateView, UpdateView, View};
-use ob_core::field::{COLORS, Field};
+use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
-use ob_core::view::{Filter, FilterItem, FormConfig, FormField, ViewConfig};
+use ob_core::query::compile_filter;
+use ob_core::view::{
+    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ListConfig, ViewConfig, ViewType,
+};
 use rusqlite::{Transaction, params};
 
 use crate::db::now_ms;
+use crate::engine::query::is_date_like;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
@@ -68,13 +72,36 @@ pub fn default_form_config(fields: &[Field]) -> FormConfig {
             .filter(|f| !f.field_type().is_computed())
             .map(|f| FormField {
                 field_id: f.id.clone(),
-                required: false,
-                label: None,
-                help: None,
+                ..Default::default()
             })
             .collect(),
         ..FormConfig::default()
     }
+}
+
+/// The gallery config a new gallery starts with: the table's first attachment field as its cover,
+/// cropped to fill the card (a gallery with no cover is a wall of text cards). `None` when the table
+/// has no attachment field.
+pub fn default_gallery_config(fields: &[Field]) -> Option<GalleryConfig> {
+    fields
+        .iter()
+        .find(|f| matches!(f.kind, FieldKind::Attachment(_)))
+        .map(|f| GalleryConfig {
+            cover_field_id: Some(f.id.clone()),
+            cover_crop: true,
+        })
+}
+
+/// The list config a new list starts with: the table's first checkbox field as its prefix, so a
+/// to-do list shows its tick boxes from the start. `None` when the table has no checkbox field.
+pub fn default_list_config(fields: &[Field]) -> Option<ListConfig> {
+    fields
+        .iter()
+        .find(|f| matches!(f.kind, FieldKind::Checkbox(_)))
+        .map(|f| ListConfig {
+            prefix_field_id: Some(f.id.clone()),
+            parent_field_id: None,
+        })
 }
 
 /// Create a view in `table_id`.
@@ -94,17 +121,33 @@ pub fn create(
     let name = schema::validate_name(&input.name, "view")?;
     ensure_view_capacity(tx, table_id)?;
     let fields = schema::table_fields(tx, table_id)?;
-    let config = match &input.config {
+    let mut config = match &input.config {
         Some(c) => c.clone(),
         None => {
             let mut c = ViewConfig::default();
-            if input.view_type == ob_core::view::ViewType::Form {
+            if input.view_type == ViewType::Form {
                 c.form = default_form_config(&fields);
             }
             c
         }
     };
+    // A gallery whose config says nothing about the gallery gets the cover a person would choose.
+    if input.view_type == ViewType::Gallery
+        && config.gallery == GalleryConfig::default()
+        && let Some(gallery) = default_gallery_config(&fields)
+    {
+        config.gallery = gallery;
+    }
+    // The same for a list and its prefix.
+    if input.view_type == ViewType::List
+        && config.list == ListConfig::default()
+        && let Some(list) = default_list_config(&fields)
+    {
+        config.list = list;
+    }
+    normalize_form(&mut config.form);
     validate_config(&fields, &config)?;
+    check_form_notify(tx, &table.base_id, &config.form, None)?;
     let view = View {
         id: new_id(ob_core::ids::VIEW),
         table_id: table.id.clone(),
@@ -125,8 +168,12 @@ pub fn create(
 /// shown fields and their order, the filter, or the form (fields, texts,
 /// redirect). Widths, sorts, colours and the like are not.
 fn changes_exposure(old: &ViewConfig, new: &ViewConfig) -> bool {
-    let key =
-        |c: &ViewConfig| serde_json::json!([c.hidden_fields, c.field_order, c.filter, c.form]);
+    // Who a form notifies is not something a visitor sees.
+    let key = |c: &ViewConfig| {
+        let mut form = c.form.clone();
+        form.notify_user_ids.clear();
+        serde_json::json!([c.hidden_fields, c.field_order, c.filter, form])
+    };
     key(old) != key(new)
 }
 
@@ -227,10 +274,19 @@ pub fn update(
     }
     if let Some(config) = &patch.config {
         let fields = schema::table_fields(tx, &row.view.table_id)?;
-        validate_config_with(&fields, config, &Stale::of(&row.view.config))?;
+        let mut config = config.clone();
+        normalize_form(&mut config.form);
+        validate_config_with(&fields, &config, &Stale::of(&row.view.config))?;
+        let table = live_table(tx, &row.view.table_id)?;
+        check_form_notify(
+            tx,
+            &table.base_id,
+            &config.form,
+            Some(&row.view.config.form),
+        )?;
         tx.execute(
             "UPDATE views SET config = ?2 WHERE id = ?1",
-            params![view_id, serde_json::to_string(config)?],
+            params![view_id, serde_json::to_string(&config)?],
         )?;
     }
     if let Some(locked) = patch.locked {
@@ -428,8 +484,106 @@ fn validate_config_with(fields: &[Field], config: &ViewConfig, stale: &Stale) ->
             check(id, what)?;
         }
     }
-    check_form(&config.form, &known, stale)?;
+    check_form(&config.form, fields, &known, stale)?;
+    check_slot_types(fields, config, stale)?;
     fields_engine::validate_view_config_semantics(fields, config, stale)
+}
+
+/// The fields a calendar, timeline or kanban reads must be of a type the view can draw: dates
+/// for the calendar and timeline (the end differing from the start), a link to the same table
+/// for timeline dependencies and a single select, single user or checkbox to stack a kanban by.
+/// A reference the saved config already held in the same place is left alone (see [`Stale`]),
+/// so a view whose field changed type can still be saved with its other changes.
+fn check_slot_types(fields: &[Field], config: &ViewConfig, stale: &Stale) -> AppResult<()> {
+    let find = |id: &Option<String>| {
+        id.as_deref()
+            .and_then(|id| fields.iter().find(|f| f.id == id))
+    };
+    let table_id = fields.first().map(|f| f.table_id.as_str());
+    let describe = |f: &Field| format!("'{}' is a {} field", f.name, f.field_type().label());
+    let dates = |what: &str, id: &Option<String>| -> AppResult<()> {
+        match find(id) {
+            Some(f) if !is_date_like(f) && !stale.field(what, &f.id) => {
+                Err(AppError::bad_request(format!(
+                    "{what} must be a date field (a date, created time, last modified time, or a formula or rollup that returns a date), but {}",
+                    describe(f)
+                )))
+            }
+            _ => Ok(()),
+        }
+    };
+    let differ = |what: &str, start: &Option<String>, end: &Option<String>| -> AppResult<()> {
+        match (find(start), find(end)) {
+            (Some(s), Some(e)) if s.id == e.id && !stale.field(what, &e.id) => {
+                Err(AppError::bad_request(format!(
+                    "{what} must be a different field from the start: '{}' is both; leave the end empty for single-day items",
+                    s.name
+                )))
+            }
+            _ => Ok(()),
+        }
+    };
+    dates("calendar date field", &config.calendar.date_field_id)?;
+    dates("calendar end field", &config.calendar.end_field_id)?;
+    differ(
+        "calendar end field",
+        &config.calendar.date_field_id,
+        &config.calendar.end_field_id,
+    )?;
+    dates("timeline start field", &config.timeline.start_field_id)?;
+    dates("timeline end field", &config.timeline.end_field_id)?;
+    differ(
+        "timeline end field",
+        &config.timeline.start_field_id,
+        &config.timeline.end_field_id,
+    )?;
+    if let Some(f) = find(&config.timeline.dependency_field_id) {
+        let self_link =
+            matches!(&f.kind, FieldKind::Link(l) if Some(l.linked_table_id.as_str()) == table_id);
+        if !self_link && !stale.field("timeline dependency field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "timeline dependency field must be a link field to records of the same table, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.list.prefix_field_id) {
+        let prefix = match &f.kind {
+            FieldKind::SingleSelect(_) | FieldKind::Checkbox(_) => true,
+            FieldKind::User(o) => !o.multiple,
+            _ => false,
+        };
+        if !prefix && !stale.field("list prefix field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "list prefix field must be a checkbox, a single select, or a user field that holds one person, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.list.parent_field_id) {
+        let self_link =
+            matches!(&f.kind, FieldKind::Link(l) if Some(l.linked_table_id.as_str()) == table_id);
+        if !self_link && !stale.field("list parent field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "list parent field must be a link field to records of the same table, but {}",
+                describe(f)
+            )));
+        }
+    }
+    if let Some(f) = find(&config.kanban.stack_field_id) {
+        let stackable = match &f.kind {
+            FieldKind::SingleSelect(_) | FieldKind::Checkbox(_) => true,
+            FieldKind::User(o) => !o.multiple,
+            _ => false,
+        };
+        if !stackable && !stale.field("kanban stack field", &f.id) {
+            return Err(AppError::bad_request(format!(
+                "kanban stack field must be a single select, a user field that holds one person, or a checkbox, but {}",
+                describe(f)
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn check_filter(filter: &Filter, check: &dyn Fn(&str, &str) -> AppResult<()>) -> AppResult<()> {
@@ -467,7 +621,145 @@ fn walk_filter(
     Ok(())
 }
 
-fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -> AppResult<()> {
+/// Most people one form can notify.
+const MAX_FORM_NOTIFY: usize = 50;
+/// Prefix of the ids of a form's headings and paragraphs.
+const BLOCK_ID_PREFIX: &str = "blk";
+
+/// Tidy a form before it is checked and saved: the blocks (headings, paragraphs) get ids of their
+/// own when they come without one and are never required, and the list of people to notify has
+/// no repeats.
+pub fn normalize_form(form: &mut FormConfig) {
+    for f in &mut form.fields {
+        if f.block.is_some() {
+            f.required = false;
+            if f.field_id.trim().is_empty() {
+                f.field_id = new_id(BLOCK_ID_PREFIX);
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    form.notify_user_ids.retain(|u| seen.insert(u.clone()));
+}
+
+/// The people a form notifies must be members of the project. Ones the saved form already
+/// listed are left alone (someone may have left since).
+pub fn check_form_notify(
+    conn: &rusqlite::Connection,
+    base_id: &str,
+    form: &FormConfig,
+    saved: Option<&FormConfig>,
+) -> AppResult<()> {
+    if form.notify_user_ids.len() > MAX_FORM_NOTIFY {
+        return Err(AppError::bad_request(format!(
+            "a form can notify at most {MAX_FORM_NOTIFY} people"
+        )));
+    }
+    for id in &form.notify_user_ids {
+        if saved.is_some_and(|s| s.notify_user_ids.contains(id)) {
+            continue;
+        }
+        let active: bool = conn
+            .query_row("SELECT is_active FROM users WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap_or(false);
+        if !active || crate::perm::base_role(conn, id, base_id)?.is_none() {
+            return Err(AppError::bad_request(format!(
+                "'{id}' is not a member of this project, so the form cannot notify them"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `filter` without the conditions `skip` says to leave out, and without the groups that leaves
+/// empty.
+fn without_conditions(filter: &Filter, skip: &dyn Fn(&ob_core::view::Condition) -> bool) -> Filter {
+    let items = filter
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            FilterItem::Condition(c) => (!skip(c)).then(|| item.clone()),
+            FilterItem::Group(g) => {
+                let g = without_conditions(g, skip);
+                (!g.items.is_empty()).then_some(FilterItem::Group(g))
+            }
+        })
+        .collect();
+    Filter {
+        conjunction: filter.conjunction,
+        items,
+    }
+}
+
+/// Check the show-if of the form entry `entry` (the `index`th): its conditions read questions
+/// above it that a form can test, with operators and operands that suit them. Conditions the
+/// saved form already had stay valid even when the field has changed since.
+fn check_show_if(
+    show_if: &Filter,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    fields: &[Field],
+    known: &HashMap<&str, &Field>,
+    stale: &Stale,
+) -> AppResult<()> {
+    let kept = without_conditions(show_if, &|c| stale.show_if_condition(&entry.field_id, c));
+    if let Some(e) = first_show_if_problem(&kept, entry, earlier, known) {
+        return Err(e);
+    }
+    compile_filter(&kept, fields).map_err(AppError::bad_request)?;
+    Ok(())
+}
+
+fn first_show_if_problem(
+    filter: &Filter,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    known: &HashMap<&str, &Field>,
+) -> Option<AppError> {
+    filter.items.iter().find_map(|item| match item {
+        FilterItem::Condition(c) => show_if_problem(c, entry, earlier, known),
+        FilterItem::Group(g) => first_show_if_problem(g, entry, earlier, known),
+    })
+}
+
+fn show_if_problem(
+    c: &ob_core::view::Condition,
+    entry: &FormField,
+    earlier: &HashSet<&str>,
+    known: &HashMap<&str, &Field>,
+) -> Option<AppError> {
+    let Some(source) = known.get(c.field_id.as_str()) else {
+        return Some(AppError::bad_request(format!(
+            "a show-if of the form refers to an unknown field '{}'",
+            c.field_id
+        )));
+    };
+    let on = entry.field_id.as_str();
+    if !earlier.contains(c.field_id.as_str()) {
+        return Some(AppError::bad_request(format!(
+            "'{}' can only be shown depending on a question above it in the form, and '{}' is not above it",
+            known.get(on).map_or(on, |f| f.name.as_str()),
+            source.name
+        )));
+    }
+    if !crate::store::sharing::show_if_source_ok(source) {
+        return Some(AppError::bad_request(format!(
+            "'{}' is a {} field, which a form cannot test: use a text, number, rating, checkbox or select question",
+            source.name,
+            source.field_type().label()
+        )));
+    }
+    None
+}
+
+fn check_form(
+    form: &FormConfig,
+    fields: &[Field],
+    known: &HashMap<&str, &Field>,
+    stale: &Stale,
+) -> AppResult<()> {
     if form.title.chars().count() > limits::MAX_NAME_LEN
         || form.submit_label.chars().count() > limits::MAX_NAME_LEN
         || form.description.chars().count() > limits::MAX_DESCRIPTION_LEN
@@ -487,7 +779,28 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
         }
     }
     let mut seen = HashSet::new();
+    // The questions above the entry being checked (blocks cannot be asked about).
+    let mut earlier: HashSet<&str> = HashSet::new();
     for f in &form.fields {
+        for text in [&f.label, &f.help].into_iter().flatten() {
+            if text.chars().count() > limits::MAX_DESCRIPTION_LEN {
+                return Err(AppError::bad_request("form field text is too long"));
+            }
+        }
+        if f.block.is_some() {
+            if f.field_id.trim().is_empty() || known.contains_key(f.field_id.as_str()) {
+                return Err(AppError::bad_request(
+                    "a form heading or text needs an id of its own, not a field's",
+                ));
+            }
+            if !seen.insert(f.field_id.as_str()) {
+                return Err(AppError::bad_request("a form field is listed twice"));
+            }
+            if let Some(show_if) = &f.show_if {
+                check_show_if(show_if, f, &earlier, fields, known, stale)?;
+            }
+            continue;
+        }
         let forgiven = stale.field("form", &f.field_id);
         let Some(field) = known.get(f.field_id.as_str()) else {
             if forgiven {
@@ -507,11 +820,22 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
         if !seen.insert(f.field_id.as_str()) {
             return Err(AppError::bad_request("a form field is listed twice"));
         }
-        for text in [&f.label, &f.help].into_iter().flatten() {
-            if text.chars().count() > limits::MAX_DESCRIPTION_LEN {
-                return Err(AppError::bad_request("form field text is too long"));
-            }
+        // The public form never collects link or user fields, so a "required" there would be
+        // enforced for signed-in editors only: it is refused (one the saved form already had stays).
+        if f.required
+            && !stale.field("form required", &f.field_id)
+            && !crate::store::sharing::is_public_form_type(field)
+        {
+            return Err(AppError::bad_request(format!(
+                "'{}' is a {} field, which public forms cannot collect, so it cannot be required in the form",
+                field.name,
+                field.field_type().label()
+            )));
         }
+        if let Some(show_if) = &f.show_if {
+            check_show_if(show_if, f, &earlier, fields, known, stale)?;
+        }
+        earlier.insert(f.field_id.as_str());
     }
     Ok(())
 }
@@ -519,7 +843,6 @@ fn check_form(form: &FormConfig, known: &HashMap<&str, &Field>, stale: &Stale) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ob_core::field::FieldKind;
     use ob_core::view::{Condition, Conjunction, Direction, FilterOp, Sort};
 
     fn field(id: &str, kind: FieldKind) -> Field {
@@ -564,7 +887,8 @@ mod tests {
 
     #[test]
     fn unknown_fields_are_rejected_everywhere() {
-        let f = fields();
+        let mut f = fields();
+        f.push(field("s", FieldKind::SingleSelect(Default::default())));
         let mut c = ViewConfig::default();
         assert!(validate_config(&f, &c).is_ok());
         c.sorts = vec![Sort {
@@ -578,8 +902,91 @@ mod tests {
         c.hidden_fields.clear();
         c.kanban.stack_field_id = Some("zzz".into());
         assert!(validate_config(&f, &c).is_err());
-        c.kanban.stack_field_id = Some("a".into());
+        c.kanban.stack_field_id = Some("s".into());
         assert!(validate_config(&f, &c).is_ok());
+    }
+
+    #[test]
+    fn calendar_timeline_and_kanban_fields_must_have_the_right_type() {
+        let mut f = fields();
+        f.push(field("s", FieldKind::SingleSelect(Default::default())));
+        f.push(field("d", FieldKind::Date(Default::default())));
+        f.push(field("e", FieldKind::Date(Default::default())));
+        f.push(field(
+            "l",
+            FieldKind::Link(ob_core::field::LinkOptions {
+                linked_table_id: "tbl".into(),
+                inverse_field_id: "l2".into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        ));
+        f.push(field(
+            "lo",
+            FieldKind::Link(ob_core::field::LinkOptions {
+                linked_table_id: "other".into(),
+                inverse_field_id: "lo2".into(),
+                single: false,
+                picker_view_id: None,
+            }),
+        ));
+        f.push(field(
+            "m",
+            FieldKind::User(ob_core::field::UserOptions {
+                multiple: true,
+                notify: false,
+            }),
+        ));
+        f.push(field("u", FieldKind::User(Default::default())));
+        f.push(field("k", FieldKind::Checkbox(Default::default())));
+        let err = |c: &ViewConfig| validate_config(&f, c).unwrap_err().to_string();
+
+        let mut c = ViewConfig::default();
+        c.timeline.start_field_id = Some("a".into());
+        assert!(
+            err(&c).contains("timeline start field must be a date field"),
+            "{}",
+            err(&c)
+        );
+        assert!(err(&c).contains("'a' is a Text field"));
+        c.timeline.start_field_id = Some("d".into());
+        c.timeline.end_field_id = Some("b".into());
+        assert!(err(&c).contains("timeline end field must be a date field"));
+        c.timeline.end_field_id = Some("d".into());
+        assert!(err(&c).contains("different field"));
+        c.timeline.end_field_id = Some("e".into());
+        assert!(validate_config(&f, &c).is_ok());
+        c.timeline.dependency_field_id = Some("a".into());
+        assert!(err(&c).contains("link field to records of the same table"));
+        c.timeline.dependency_field_id = Some("lo".into());
+        assert!(err(&c).contains("same table"));
+        c.timeline.dependency_field_id = Some("l".into());
+        assert!(validate_config(&f, &c).is_ok());
+
+        let mut c = ViewConfig::default();
+        c.calendar.date_field_id = Some("b".into());
+        assert!(err(&c).contains("calendar date field must be a date field"));
+        c.calendar.date_field_id = Some("d".into());
+        assert!(validate_config(&f, &c).is_ok());
+
+        let mut c = ViewConfig::default();
+        for bad in ["a", "m", "b"] {
+            c.kanban.stack_field_id = Some(bad.into());
+            assert!(err(&c).contains("kanban stack field must be"), "{bad}");
+        }
+        for ok in ["s", "u", "k"] {
+            c.kanban.stack_field_id = Some(ok.into());
+            assert!(validate_config(&f, &c).is_ok(), "{ok}");
+        }
+
+        // A reference the saved config held in the same place is forgiven.
+        let mut old = ViewConfig::default();
+        old.kanban.stack_field_id = Some("a".into());
+        let stale = Stale::of(&old);
+        assert!(validate_config_with(&f, &old, &stale).is_ok());
+        let mut other = ViewConfig::default();
+        other.kanban.stack_field_id = Some("b".into());
+        assert!(validate_config_with(&f, &other, &stale).is_err());
     }
 
     #[test]
@@ -644,9 +1051,7 @@ mod tests {
         assert!(validate_config(&f, &c).is_ok());
         c.form.fields.push(FormField {
             field_id: "c".into(),
-            required: false,
-            label: None,
-            help: None,
+            ..Default::default()
         });
         assert!(validate_config(&f, &c).is_err(), "computed field in form");
     }

@@ -33,7 +33,7 @@ afterEach(() => {
 const records = [rec("r1", { [F.start.id]: "2026-03-10", [F.status.id]: "s1" }), rec("r2", { [F.start.id]: "2026-03-11" })];
 
 const CASES: [string, ComponentType<ViewProps>, ReturnType<typeof viewWithConfig>][] = [
-  ["kanban", KanbanView, viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [] } })],
+  ["kanban", KanbanView, viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, cover_fit: false } })],
   ["gallery", GalleryView, viewWithConfig("viw1", "gallery", { gallery: { cover_field_id: null, cover_crop: false } })],
   ["calendar", CalendarView, viewWithConfig("viw1", "calendar", { calendar: { date_field_id: F.start.id, end_field_id: null } })],
   ["timeline", TimelineView, viewWithConfig("viw1", "timeline", { timeline: { start_field_id: F.start.id, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" } })],

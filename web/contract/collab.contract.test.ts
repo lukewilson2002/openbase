@@ -302,7 +302,8 @@ describe("trash across the base", () => {
     const trash = parse("TrashListing", await w.owner.run(() => api.trash.forBase(w.baseId)));
     expect(trash.items.find((i) => i.id === t.id)).toMatchObject({ kind: "table", name: "Trashable" });
     expect(trash.items.find((i) => i.id === t.id)!.deleted_at).toBeGreaterThan(0);
-    expectError(await failure(editor.run(() => api.trash.forBase(w.baseId))), 403, "forbidden");
+    // Editors see only the records they deleted themselves (audit #5), never tables.
+    expect(parse("TrashListing", await editor.run(() => api.trash.forBase(w.baseId))).items.map((i) => i.id)).not.toContain(t.id);
     expectError(await failure(editor.run(() => api.trash.restore({ kind: "table", id: t.id }))), 403, "forbidden");
     expect(parse("RestoreResponse", await w.owner.run(() => api.trash.restore({ kind: "table", id: t.id })))).toEqual({ ok: true, restored_field_ids: [] });
     expectError(await failure(w.owner.run(() => api.trash.restore({ kind: "table", id: t.id }))), 409, "conflict");

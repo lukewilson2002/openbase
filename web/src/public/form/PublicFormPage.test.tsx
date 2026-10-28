@@ -205,28 +205,43 @@ describe("a form that cannot be shown", () => {
 });
 
 describe("the redirect after submitting", () => {
-  it("goes to the configured address after the message", async () => {
+  function stubLocation() {
     const assign = vi.fn();
     const real = window.location;
     vi.stubGlobal("location", { ...real, assign, pathname: real.pathname, search: real.search, origin: real.origin });
+    return assign;
+  }
+
+  it("goes to the configured address at once, in place of the message and without another-response button", async () => {
+    const assign = stubLocation();
     const user = userEvent.setup();
     open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, { ...form, redirect_url: "https://example.com/thanks" });
     await fillRequired(user);
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
-    await screen.findByText("You are on the list!");
-    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://example.com/thanks"), { timeout: 3000 });
+    await screen.findByText("Taking you on…");
+    expect(assign).toHaveBeenCalledWith("https://example.com/thanks");
+    expect(screen.queryByText("You are on the list!")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit another response" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "https://example.com/thanks");
+  });
+
+  it("puts the new record's id into {record_id}", async () => {
+    const assign = stubLocation();
+    const user = userEvent.setup();
+    open({ "POST /api/public/forms/tok_abc/submit": { ok: true, record_id: "rec_9/x" } }, { ...form, redirect_url: "https://example.com/thanks?id={record_id}" });
+    await fillRequired(user);
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("Taking you on…");
+    expect(assign).toHaveBeenCalledWith("https://example.com/thanks?id=rec_9%2Fx");
   });
 
   it("ignores an address that is not http or https", async () => {
-    const assign = vi.fn();
-    const real = window.location;
-    vi.stubGlobal("location", { ...real, assign, pathname: real.pathname, search: real.search, origin: real.origin });
+    const assign = stubLocation();
     const user = userEvent.setup();
     open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, { ...form, redirect_url: "javascript:alert(1)" });
     await fillRequired(user);
     await user.click(screen.getByRole("button", { name: "Sign me up" }));
     await screen.findByText("You are on the list!");
-    await new Promise((r) => setTimeout(r, 1500));
     expect(assign).not.toHaveBeenCalled();
   });
 });
@@ -246,5 +261,100 @@ describe("icons on a public form", () => {
     await screen.findByRole("heading", { name: "Join the waitlist" });
     expect(document.querySelector("form header svg")).toBeNull();
     expect(document.querySelector("form header")).toHaveTextContent("Studio / Leads");
+  });
+});
+
+describe("sections and conditional questions", () => {
+  const plan = { id: "f_plan", label: "Plan", help: null, required: false, type: "single_select" as const, options: { choices: [{ id: "c1", name: "Free", color: "gray" }, { id: "c2", name: "Pro", color: "blue" }] } };
+  const proOnly = { conjunction: "and" as const, items: [{ field_id: "f_plan", op: "is" as const, value: "c2" }] };
+  const conditional: PublicForm = {
+    ...form,
+    fields: [
+      { id: "f_name", label: "Your name", help: null, required: true, type: "text", options: { multiline: false } },
+      plan,
+      { id: "blk_h", label: "About Pro", help: null, required: false, type: "text", options: {}, block: "heading", show_if: proOnly },
+      { id: "blk_t", label: "", help: "Pro includes priority support.", required: false, type: "text", options: {}, block: "text", show_if: proOnly },
+      { id: "f_why", label: "Why Pro?", help: null, required: true, type: "text", options: { multiline: false }, show_if: proOnly },
+    ],
+  };
+
+  it("draws headings and text, and shows a question only while its condition holds", async () => {
+    const user = userEvent.setup();
+    const { api } = open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, conditional);
+    await user.type(await screen.findByLabelText(/Your name/), "Ada");
+    expect(screen.queryByLabelText(/Why Pro/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "About Pro" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Pro includes priority support.")).not.toBeInTheDocument();
+
+    // Hidden and required: sending is not blocked, and nothing about it is sent.
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("You are on the list!");
+    expect(api.callsTo("POST /api/public/forms/tok_abc/submit")[0]!.body).toEqual({ values: { f_name: "Ada" } });
+    await user.click(screen.getByRole("button", { name: "Submit another response" }));
+
+    await user.type(await screen.findByLabelText(/Your name/), "Ada");
+    await user.selectOptions(screen.getByLabelText("Plan"), "c2");
+    expect(screen.getByRole("heading", { name: "About Pro" })).toBeInTheDocument();
+    expect(screen.getByText("Pro includes priority support.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    expect(await screen.findByText("This field is required.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Why Pro/), "Speed");
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("You are on the list!");
+    expect(api.callsTo("POST /api/public/forms/tok_abc/submit")[1]!.body).toEqual({ values: { f_name: "Ada", f_plan: "c2", f_why: "Speed" } });
+  });
+
+  it("goes back to hiding the question when the answer changes", async () => {
+    const user = userEvent.setup();
+    open({}, conditional);
+    await user.selectOptions(await screen.findByLabelText("Plan"), "c2");
+    expect(screen.getByLabelText(/Why Pro/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Plan"), "c1");
+    expect(screen.queryByLabelText(/Why Pro/)).not.toBeInTheDocument();
+  });
+});
+
+describe("defaults and the address", () => {
+  const withDefaults: PublicForm = {
+    ...form,
+    fields: [
+      { id: "f_name", label: "Customer", help: "Who is asking", required: true, type: "text", options: { multiline: false }, default: "Acme" },
+      { id: "f_size", label: "Team size", help: null, required: false, type: "number", options: { precision: 0, allow_negative: false }, default: 5 },
+      { id: "f_plan", label: "Plan", help: null, required: false, type: "single_select", options: { choices: [{ id: "c1", name: "Free", color: "gray" }, { id: "c2", name: "Pro", color: "blue" }] } },
+      { id: "f_ref", label: "Ticket", help: null, required: true, type: "text", options: { multiline: false } },
+    ],
+  };
+
+  it("starts a field with its default, which the visitor can change", async () => {
+    const user = userEvent.setup();
+    const { api } = open({ "POST /api/public/forms/tok_abc/submit": { ok: true } }, withDefaults);
+    expect(await screen.findByLabelText(/Customer/)).toHaveValue("Acme");
+    expect(screen.getByLabelText("Team size")).toHaveValue("5");
+    await user.type(screen.getByLabelText(/Ticket/), "T-1");
+    await user.clear(screen.getByLabelText("Team size"));
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("You are on the list!");
+    expect(api.callsTo("POST /api/public/forms/tok_abc/submit")[0]!.body).toEqual({ values: { f_name: "Acme", f_ref: "T-1" } });
+  });
+
+  it("is prefilled from the address, and fields can be taken off the page but are still sent", async () => {
+    const user = userEvent.setup();
+    const { api } = open(
+      { "POST /api/public/forms/tok_abc/submit": { ok: true } },
+      withDefaults,
+      "/form/tok_abc?prefill_Customer=Globex&prefill_Plan=pro&prefill_Ticket=T-42&hide_Ticket=true&hide_Customer&hide_Plan=true",
+    );
+    await screen.findByLabelText("Team size");
+    expect(screen.queryByLabelText(/Ticket/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Customer/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Plan")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign me up" }));
+    await screen.findByText("You are on the list!");
+    expect(api.callsTo("POST /api/public/forms/tok_abc/submit")[0]!.body).toEqual({ values: { f_name: "Globex", f_size: 5, f_plan: "c2", f_ref: "T-42" } });
+  });
+
+  it("keeps a required field on the page when the address hides it without a value", async () => {
+    open({}, withDefaults, "/form/tok_abc?hide_Ticket=true");
+    expect(await screen.findByLabelText(/Ticket/)).toBeInTheDocument();
   });
 });

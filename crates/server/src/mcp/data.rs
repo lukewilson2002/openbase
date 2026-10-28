@@ -15,9 +15,10 @@ use serde_json::{Map, Value, json};
 use super::McpCtx;
 use super::api::{self, ApiCall};
 use super::catalogue;
-use super::resolve::pick_many;
+use super::resolve::{find_table, load_schema, pick_many};
 use super::support::*;
 use super::tools::{Level, ToolDef, ToolResult};
+use crate::engine::write::CreateOpts;
 use crate::error::AppError;
 use crate::perm::{self, Role};
 use crate::store::{bases, schema};
@@ -32,6 +33,11 @@ const MAX_RECORDS: usize = 200;
 /// `limit` of `aggregate_records`: default and maximum number of groups.
 const DEFAULT_GROUPS_RETURNED: usize = 200;
 const MAX_GROUPS_RETURNED: usize = 1000;
+/// Most records one `move_records` call moves.
+const MAX_MOVE: usize = 100;
+const POSITION: &str = "Where in the table's manual order the new records go: \"top\" or \"bottom\" (default bottom). Not together with after_record_id / before_record_id.";
+const AFTER_RECORD: &str = "Put the new records right after this record in the manual order.";
+const BEFORE_RECORD: &str = "Put the new records right before this record in the manual order.";
 /// Names listed in a "valid names" hint.
 const MAX_HINT_NAMES: usize = 40;
 
@@ -185,7 +191,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_records",
             "Create records",
-            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. Rich text is Markdown: it can embed an uploaded file of the same project with the `markdown` line upload_attachment returns (other projects' files are refused; external images are never shown). To mention someone write @[Name](usrXXXX) with their user id from list_collaborators: they get a notification once the text is saved on a record (only people newly mentioned in that cell, never you, only people who can see the project; a mention inside `code` is just text). With typecast (default true) values are converted leniently and new select choices are created.",
+            "Create 1-10 records. Each record is {\"fields\": {\"Field name\": value}}. Value shapes follow the Airtable API: text, number, checkbox true/false, date 'YYYY-MM-DD' or ISO datetime, single select 'Choice', multiple select ['A','B'], linked records as an array of record ids (results show linked records as {id, name}). Computed fields cannot be set. Rich text is Markdown: it can embed an uploaded file of the same project with the `markdown` line upload_attachment returns (other projects' files are refused; external images are never shown). To mention someone write @[Name](usrXXXX) with their user id from list_collaborators: they get a notification once the text is saved on a record (only people newly mentioned in that cell, never you, only people who can see the project; a mention inside `code` is just text). With typecast (default true) values are converted leniently and new select choices are created. New records go to the bottom of the table's manual order unless you give `position` (\"top\" or \"bottom\"), `after_record_id` or `before_record_id` (at most one of them); several records keep the order you list them in.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -203,8 +209,60 @@ pub fn definitions() -> Vec<ToolDef> {
                         }
                     },
                     "typecast": { "type": "boolean", "description": "Convert values leniently and create missing select choices (default true)." },
+                    "position": enumeration(&["top", "bottom"], POSITION),
+                    "after_record_id": string(AFTER_RECORD),
+                    "before_record_id": string(BEFORE_RECORD),
                 }),
                 &["project_id", "table", "records"],
+            ),
+            Level::Write,
+            false,
+            false,
+            false,
+        ),
+        tool(
+            "move_records",
+            "Move records",
+            "Put records in a new place in the table's manual order (the order grid, list and gallery views show when they have no sort): to the top or bottom, or right before / after another record. Give exactly one of `position`, `after_record_id` and `before_record_id`. The records you list keep the order you list them in. Only the order changes, not their values; a view with a sort shows its own order. Moving a card between kanban stacks is update_records on the stack field.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "record_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": MAX_MOVE,
+                        "items": { "type": "string" },
+                        "description": "Ids of the records to move (at most 100), in the order they should end up."
+                    },
+                    "position": enumeration(&["top", "bottom"], "Move them to the top or the bottom of the table."),
+                    "after_record_id": string("Put them right after this record (not one of the moved records)."),
+                    "before_record_id": string("Put them right before this record (not one of the moved records)."),
+                }),
+                &["project_id", "table", "record_ids"],
+            ),
+            Level::Write,
+            false,
+            false,
+            true,
+        ),
+        tool(
+            "duplicate_records",
+            "Duplicate records",
+            "Copy 1-10 records: each copy is placed right after its original and gets the original's values, except computed fields (formulas, lookups, rollups, counts, created / modified time and by, autonumber, buttons), which are worked out again. Returns the new record ids next to the originals'; read them with get_record.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "record_ids": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": MAX_BATCH,
+                        "items": { "type": "string" },
+                        "description": "Ids of the records to copy (at most 10)."
+                    },
+                }),
+                &["project_id", "table", "record_ids"],
             ),
             Level::Write,
             false,
@@ -452,6 +510,8 @@ async fn run_other(ctx: &McpCtx, name: &str, args: Value) -> ToolResult {
         "create_records" => with_args!(CreateArgs, create_records),
         "update_records" => with_args!(UpdateArgs, update_records),
         "delete_records" => with_args!(DeleteArgs, delete_records),
+        "move_records" => with_args!(MoveArgs, move_records),
+        "duplicate_records" => with_args!(DuplicateArgs, duplicate_records),
         "list_comments" => with_args!(RecordArg, list_comments),
         "add_comment" => with_args!(CommentArgs, add_comment),
         "api_reference" => with_args!(ReferenceArgs, api_reference),
@@ -952,6 +1012,12 @@ struct CreateArgs {
     records: Vec<NewRecordArg>,
     #[serde(default)]
     typecast: Option<bool>,
+    #[serde(default)]
+    position: Option<String>,
+    #[serde(default)]
+    after_record_id: Option<String>,
+    #[serde(default)]
+    before_record_id: Option<String>,
 }
 
 fn check_batch(n: usize, what: &str) -> Result<(), ToolResult> {
@@ -975,6 +1041,21 @@ async fn create_records(ctx: &McpCtx, a: CreateArgs) -> ToolResult {
     if let Err(e) = require_editor(ctx, &a.base_id).await {
         return e;
     }
+    let (before, after) = match placement(
+        ctx,
+        &a.base_id,
+        &a.table,
+        &[],
+        a.position.as_deref(),
+        a.after_record_id,
+        a.before_record_id,
+        false,
+    )
+    .await
+    {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
     let new = a.records.into_iter().map(|r| r.fields).collect();
     let out = records::create_records(
         &ctx.state,
@@ -986,12 +1067,183 @@ async fn create_records(ctx: &McpCtx, a: CreateArgs) -> ToolResult {
         a.typecast.unwrap_or(true),
         false,
         true,
+        CreateOpts {
+            after_record_id: after,
+            before_record_id: before,
+        },
     )
     .await;
     match out {
         Ok(created) => ToolResult::ok(json!({ "created": created, "count": created.len() })),
         Err(e) => v1_failure(ctx, e, &a.base_id, Some(&a.table)).await,
     }
+}
+
+/// Resolve where records go in the manual order into `(before_id, after_id)`; both `None` means
+/// the bottom. `top` becomes "before the first record that is not being moved". With `required`
+/// one of the three options must be given.
+#[allow(clippy::too_many_arguments)]
+async fn placement(
+    ctx: &McpCtx,
+    base_id: &str,
+    table: &str,
+    moving: &[String],
+    position: Option<&str>,
+    after: Option<String>,
+    before: Option<String>,
+    required: bool,
+) -> Result<(Option<String>, Option<String>), ToolResult> {
+    let given = [position.is_some(), after.is_some(), before.is_some()]
+        .into_iter()
+        .filter(|g| *g)
+        .count();
+    if given > 1 {
+        return Err(ToolResult::error(
+            "Give only one of position, after_record_id and before_record_id.",
+        ));
+    }
+    if given == 0 && required {
+        return Err(ToolResult::error(
+            "Say where to put them: position (\"top\" or \"bottom\"), after_record_id or before_record_id.",
+        ));
+    }
+    match position {
+        None => Ok((before, after)),
+        Some("bottom") => Ok((None, None)),
+        Some("top") => {
+            require_editor(ctx, base_id).await?;
+            let schema = load_schema(ctx, base_id).await?;
+            let table_id = find_table(&schema, table)?.id.clone();
+            let skip: Vec<String> = moving.to_vec();
+            let first = ctx
+                .state
+                .db
+                .read(move |c| {
+                    let mut stmt = c.prepare(
+                        "SELECT id FROM records WHERE table_id = ?1 AND deleted_at IS NULL
+                         ORDER BY position, id LIMIT ?2",
+                    )?;
+                    let ids = stmt
+                        .query_map(rusqlite::params![table_id, skip.len() as i64 + 1], |r| {
+                            r.get::<_, String>(0)
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(ids.into_iter().find(|id| !skip.contains(id)))
+                })
+                .await
+                .map_err(|e| app_error(&e))?;
+            Ok((first, None))
+        }
+        Some(other) => Err(ToolResult::error(format!(
+            "position must be \"top\" or \"bottom\" (got {other:?}); to put records next to one record use after_record_id or before_record_id."
+        ))),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MoveArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    table: String,
+    record_ids: Vec<String>,
+    #[serde(default)]
+    position: Option<String>,
+    #[serde(default)]
+    after_record_id: Option<String>,
+    #[serde(default)]
+    before_record_id: Option<String>,
+}
+
+async fn move_records(ctx: &McpCtx, a: MoveArgs) -> ToolResult {
+    if a.record_ids.is_empty() {
+        return ToolResult::error("Send at least one record to move.");
+    }
+    if a.record_ids.len() > MAX_MOVE {
+        return ToolResult::error(format!(
+            "You can move at most {MAX_MOVE} records per call (got {}); split them into several calls.",
+            a.record_ids.len()
+        ));
+    }
+    if let Err(e) = require_editor(ctx, &a.base_id).await {
+        return e;
+    }
+    let (before, after) = match placement(
+        ctx,
+        &a.base_id,
+        &a.table,
+        &a.record_ids,
+        a.position.as_deref(),
+        a.after_record_id,
+        a.before_record_id,
+        true,
+    )
+    .await
+    {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let table_id = match find_table(&schema, &a.table) {
+        Ok(t) => t.id.clone(),
+        Err(e) => return e,
+    };
+    let body = json!({ "ids": a.record_ids, "before_id": before, "after_id": after });
+    let path = table_path(&table_id, "/records/move");
+    match fetch(ctx, "POST", &path, None, Some(body)).await {
+        Ok(_) => ToolResult::ok(json!({
+            "moved": a.record_ids,
+            "count": a.record_ids.len(),
+            "note": "Only the manual order changed. Views with a sort show their own order.",
+        })),
+        Err(e) => e,
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DuplicateArgs {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    table: String,
+    record_ids: Vec<String>,
+}
+
+async fn duplicate_records(ctx: &McpCtx, a: DuplicateArgs) -> ToolResult {
+    if let Err(e) = check_batch(a.record_ids.len(), "duplicate") {
+        return e;
+    }
+    if let Err(e) = require_editor(ctx, &a.base_id).await {
+        return e;
+    }
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let table_id = match find_table(&schema, &a.table) {
+        Ok(t) => t.id.clone(),
+        Err(e) => return e,
+    };
+    let body = json!({ "ids": a.record_ids });
+    let path = table_path(&table_id, "/records/duplicate");
+    let created = match fetch(ctx, "POST", &path, None, Some(body)).await {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let copies: Vec<&str> = created["records"]
+        .as_array()
+        .map(|rs| rs.iter().filter_map(|r| r["id"].as_str()).collect())
+        .unwrap_or_default();
+    let pairs: Vec<Value> = a
+        .record_ids
+        .iter()
+        .zip(&copies)
+        .map(|(original, copy)| json!({ "original_id": original, "id": copy }))
+        .collect();
+    ToolResult::ok(json!({ "duplicated": pairs, "count": pairs.len() }))
 }
 
 #[derive(Deserialize)]

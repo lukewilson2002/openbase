@@ -786,6 +786,7 @@ fn create_in(
     target: &Target,
     new: Vec<Map<String, Json>>,
     mode: Mode,
+    opts: &CreateOpts,
 ) -> V1Result<(write::WriteOutcome, Vec<V1Record>)> {
     let (table, fields) = resolve_table(
         tx,
@@ -801,7 +802,7 @@ fn create_in(
         });
     }
     let ctx = editor_ctx(tx, &target.actor, mode.typecast)?;
-    let outcome = write::create_records(tx, &ctx, &table.id, records, &CreateOpts::default())?;
+    let outcome = write::create_records(tx, &ctx, &table.id, records, opts)?;
     let ids = outcome.target().created.to_vec();
     let rendered = render_after(
         tx,
@@ -849,6 +850,7 @@ pub async fn create(
         body.typecast,
         body.return_by_id,
         false,
+        CreateOpts::default(),
     )
     .await?;
     Ok(AxumJson(records_body(batch, &mut rendered)))
@@ -867,6 +869,7 @@ pub async fn create_records(
     typecast: bool,
     by_id: bool,
     link_names: bool,
+    opts: CreateOpts,
 ) -> V1Result<Vec<V1Record>> {
     let mode = Mode {
         typecast,
@@ -878,7 +881,7 @@ pub async fn create_records(
     let t = target(state, actor, base_id, table_ref);
     let (outcome, rendered) = state
         .db
-        .write_as(move |tx| create_in(tx, &t, new, mode))
+        .write_as(move |tx| create_in(tx, &t, new, mode, &opts))
         .await?;
     publish(state, headers, &who, &outcome);
     Ok(rendered)

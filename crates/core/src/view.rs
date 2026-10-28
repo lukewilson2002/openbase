@@ -251,6 +251,16 @@ pub struct KanbanConfig {
     pub hide_empty_stacks: bool,
     /// Stack (choice id / user id / "true"/"false"/"" for uncategorized) display order.
     pub stack_order: Vec<String>,
+    /// Stacks left off the board in this view (same keys as `stack_order`); their cards stay in
+    /// the table and are still found by search and filters.
+    pub hidden_stacks: Vec<String>,
+    /// Stacked by a person: a stack for every collaborator, even those without cards. Off: only
+    /// the people who hold cards get one.
+    pub show_all_people: bool,
+    /// Most non-empty fields a card shows (absent = 6).
+    pub card_field_limit: Option<u32>,
+    /// Cover images fit inside their box (true) instead of cropping to fill it (false).
+    pub cover_fit: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -269,6 +279,18 @@ pub struct GalleryConfig {
     pub cover_field_id: Option<FieldId>,
     /// Crop (true) or fit (false) cover images.
     pub cover_crop: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(default)]
+pub struct ListConfig {
+    /// Checkbox, single select or user (one person) field drawn at the start of every row and
+    /// editable there: tick items off without opening them.
+    pub prefix_field_id: Option<FieldId>,
+    /// Link field whose records are in this same table: a record links to its parent, and the
+    /// list nests it under that parent (sub-items). Only the first linked record counts as parent.
+    pub parent_field_id: Option<FieldId>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -311,11 +333,30 @@ pub struct FormConfig {
     /// Only http(s) URLs are accepted.
     pub redirect_url: Option<String>,
     pub show_submit_another: bool,
+    /// People who get a notification (and an email when the server can send mail) for every
+    /// response that comes in through the form's public link. Project members only.
+    pub notify_user_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// What a layout entry of a form is, in place of a question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[serde(rename_all = "snake_case")]
+pub enum FormBlock {
+    /// A section heading: `label` is its text.
+    Heading,
+    /// A paragraph of explanatory text: `help` is its text.
+    Text,
+}
+
+/// One entry of a form: a question about a table field, or (with `block`) a heading or a
+/// paragraph between questions.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct FormField {
+    /// The table field asked for. A block has an id of its own (`blk...`, made when the form is
+    /// saved if it is left out) that no field uses.
+    #[serde(default)]
     pub field_id: FieldId,
     #[serde(default)]
     pub required: bool,
@@ -324,6 +365,13 @@ pub struct FormField {
     pub label: Option<String>,
     #[serde(default)]
     pub help: Option<String>,
+    /// Show this entry only when the answers given so far (the entries above it) meet the
+    /// condition; otherwise it is left out, its answer is ignored and it is not required.
+    #[serde(default)]
+    pub show_if: Option<Filter>,
+    /// Set for a heading or a paragraph of text instead of a question.
+    #[serde(default)]
+    pub block: Option<FormBlock>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -354,6 +402,7 @@ pub struct ViewConfig {
     pub kanban: KanbanConfig,
     pub calendar: CalendarConfig,
     pub gallery: GalleryConfig,
+    pub list: ListConfig,
     pub timeline: TimelineConfig,
     pub form: FormConfig,
 }

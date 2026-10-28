@@ -16,7 +16,7 @@ use serde_json::Value as Json;
 
 use crate::api::records::GroupHeader;
 use crate::field::FieldType;
-use crate::view::ViewType;
+use crate::view::{Filter, FormBlock, ViewType};
 
 /// What a share link exposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -133,6 +133,17 @@ pub struct PublicViewConfig {
     pub description_field_id: Option<String>,
     #[serde(default)]
     pub kanban_hide_empty_stacks: bool,
+    /// Stack keys in the view's order, and the stacks it leaves off the board. Empty for
+    /// person stacks, whose keys are user ids a public viewer does not see.
+    #[serde(default)]
+    pub kanban_stack_order: Vec<String>,
+    #[serde(default)]
+    pub kanban_hidden_stacks: Vec<String>,
+    #[serde(default)]
+    pub kanban_card_field_limit: Option<u32>,
+    /// Kanban covers are fitted whole rather than cropped.
+    #[serde(default)]
+    pub kanban_cover_fit: bool,
     #[serde(default)]
     pub gallery_cover_field_id: Option<String>,
     #[serde(default)]
@@ -206,6 +217,18 @@ pub struct PublicFormField {
     pub field_type: FieldType,
     /// Type options: select choices, rating max, number precision, ...
     pub options: Json,
+    /// What the field starts with (its default as a value to submit), so a visitor sees what an
+    /// untouched box would otherwise get.
+    #[serde(default)]
+    pub default: Option<Json>,
+    /// Shown only while the answers given above it meet this condition (field ids are those of the
+    /// form's other inputs; one that is not among them counts as unanswered).
+    #[serde(default)]
+    pub show_if: Option<Filter>,
+    /// Set for a heading (`label` is its text) or a paragraph (`help` is its text): not an input,
+    /// `type` is `text` and `options` empty, and nothing is submitted for it.
+    #[serde(default)]
+    pub block: Option<FormBlock>,
 }
 
 /// `GET /api/public/forms/{token}`.

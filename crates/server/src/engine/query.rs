@@ -428,13 +428,18 @@ fn fixed_zone(field: &Field) -> Option<Tz> {
     name.parse().ok()
 }
 
-fn is_date_like(field: &Field) -> bool {
+/// Whether a field holds one date per record (what a calendar, a timeline and a date range read).
+pub fn is_date_like(field: &Field) -> bool {
+    let date = |t: &ob_core::value::ResultType| {
+        matches!(
+            t,
+            ob_core::value::ResultType::Date | ob_core::value::ResultType::DateTime
+        )
+    };
     match &field.kind {
         FieldKind::Date(_) | FieldKind::CreatedTime(_) | FieldKind::LastModifiedTime(_) => true,
-        FieldKind::Formula(o) => matches!(
-            o.result_type,
-            ob_core::value::ResultType::Date | ob_core::value::ResultType::DateTime
-        ),
+        FieldKind::Formula(o) => date(&o.result_type),
+        FieldKind::Rollup(o) => date(&o.result_type),
         _ => false,
     }
 }

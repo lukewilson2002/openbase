@@ -8,4 +8,13 @@ export type PublicViewConfig = { field_widths: { [key in string]: number }, froz
 /**
  * Stack field of a kanban view.
  */
-kanban_stack_field_id?: string | null, kanban_cover_field_id?: string | null, description_field_id?: string | null, kanban_hide_empty_stacks: boolean, gallery_cover_field_id?: string | null, calendar_date_field_id?: string | null, calendar_end_field_id?: string | null, timeline_start_field_id?: string | null, timeline_end_field_id?: string | null, timeline_group_field_id?: string | null, };
+kanban_stack_field_id?: string | null, kanban_cover_field_id?: string | null, description_field_id?: string | null, kanban_hide_empty_stacks: boolean, 
+/**
+ * Stack keys in the view's order, and the stacks it leaves off the board. Empty for
+ * person stacks, whose keys are user ids a public viewer does not see.
+ */
+kanban_stack_order: Array<string>, kanban_hidden_stacks: Array<string>, kanban_card_field_limit?: number | null, 
+/**
+ * Kanban covers are fitted whole rather than cropped.
+ */
+kanban_cover_fit: boolean, gallery_cover_field_id?: string | null, calendar_date_field_id?: string | null, calendar_end_field_id?: string | null, timeline_start_field_id?: string | null, timeline_end_field_id?: string | null, timeline_group_field_id?: string | null, };

@@ -2,7 +2,8 @@
  * Press-and-hold before a touch drag, for drags built on pointer events (the timeline's bars and
  * lanes). A mouse or pen drags as soon as it is pressed. A finger has to rest for a moment first:
  * moving straight away is a swipe, and the browser scrolls instead (the element must allow panning,
- * not `touch-none`). Once the hold has started a drag, the page stops scrolling under the finger.
+ * not `touch-none`). Once the hold has started a drag, the page stops scrolling under the finger; a
+ * chart that is wider than the screen scrolls itself when the drag reaches its edge (see the timeline).
  *
  * dnd-kit boards (kanban) get the same rule from its TouchSensor with these constants.
  */

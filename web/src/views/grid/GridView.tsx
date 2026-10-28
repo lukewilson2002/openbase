@@ -14,7 +14,7 @@ import { useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { recordKeys, recordsApi, schemaApi } from "@/api/records";
+import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDialog";
@@ -25,10 +25,15 @@ import { FloatingRecordPeek, linkedTableOf, type FloatingPeekTarget } from "@/co
 import { LINKED_PARAM, RecordPanel, formatTrail } from "@/views/common/RecordPanel";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { ViewBar } from "@/components/viewbar/ViewBar";
 import { itemsLabel } from "@/views/common/cardFields";
+import { SelectionBar } from "@/views/common/SelectionBar";
+import { usePersistedSet } from "@/views/common/usePersistedSet";
+import { deleteRecordsText } from "@/components/record/deleteText";
+import { Redo2, Undo2 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { EmptyRecords } from "@/views/common/EmptyRecords";
@@ -41,21 +46,35 @@ import { personColors } from "@/lib/colors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
-import { linkNames, parseText, type ParseCtx } from "@/lib/cells/parse";
+import { jsonEqual, linkNames, parseText, type ParseCtx } from "@/lib/cells/parse";
+import { isEmptyValue, writableValues } from "@/lib/cells/wire";
 import type { ViewProps } from "../types";
 import type { CellEdit, CellModel, EditorHostProps, GridAdapterProps, GridColumnSpec, GridHandle, GridPoint, GridRange, GridSelectionInfo, ScreenRect } from "./adapter";
 import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
 import { frozenColumnCount, usePrimaryPinned } from "./usePrimaryPinned";
-import { BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
-import { planClear, planFill, planPaste, selectionRectangles, type GridReader } from "./gridOps";
+import { ADD, BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
+import { countClearCells, linkKey, planClear, planFill, planPaste, selectionRectangles, summariseProblems, type Ambiguity, type GridReader } from "./gridOps";
 import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
-import { buildRowMap, groupPathKeys } from "./rowMap";
-import { UndoStack, type CellChange } from "./undo";
+import { floatingAddGroup, newRecordValues } from "./addRows";
+import { discardIfUntouched, type Fresh } from "./freshRows";
+import { PAGE_SIZE, buildRowMap, groupPathKeys } from "./rowMap";
+import { UndoStack, type CellChange, type UndoOp } from "./undo";
 import { useGridData } from "./useGridData";
 import { useRecordOps } from "./useRecordOps";
 import { useViewConfig } from "./useViewConfig";
 
 const EMPTY_SELECTION: GridSelectionInfo = { cell: null, ranges: [], rows: [], columns: [] };
+const NO_ROWS: readonly number[] = [];
+/** Clearing more cells than this asks first (a Delete over a column or Ctrl+A would empty a whole table). */
+const CLEAR_CONFIRM_CELLS = 50;
+/** Where the focus can go without leaving the grid: its cell editors and the menus and dialogs it opens (they hang off the page's body). */
+const STILL_IN_GRID = "#portal, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox'], [data-radix-popper-content-wrapper]";
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Pages fetched at once when the records of a selection have to be loaded. */
+const LOAD_PAGES_AT_ONCE = 4;
+/** How long a new row is waited for before it is selected, and how many times it is looked for. */
+const REVEAL_MS = 400;
+const REVEAL_TRIES = 6;
 
 export default function GridView(props: ViewProps) {
   // Everything that is per-view (undo history, scroll, selection, search) resets with the view.
@@ -94,6 +113,10 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const debouncedSearch = useDebounced(search.trim(), 250);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const debouncedRef = useRef(debouncedSearch);
+  debouncedRef.current = debouncedSearch;
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ---- data ------------------------------------------------------------------------------------
@@ -102,12 +125,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const dataRef = useRef(data);
   dataRef.current = data;
 
-  // Collapsed group headers (by path key); a different query starts expanded.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const groupKey = useMemo(() => JSON.stringify(queryConfig.groups), [queryConfig.groups]);
-  useEffect(() => setCollapsed(new Set()), [groupKey]);
+  // Collapsed group headers (by path key, which names the field and its value): remembered per view on
+  // this device, so folding a group survives a reload and a visit to another view.
+  const [collapsed, toggleCollapsed, replaceCollapsed] = usePersistedSet(`ob-grid-collapsed:${view.id}`);
   const pathKeys = useMemo(() => groupPathKeys(data.groups), [data.groups]);
-  const rowMap = useMemo(() => buildRowMap(data.total, data.groups, collapsed), [data.total, data.groups, collapsed]);
+  const rowMap = useMemo(() => buildRowMap(data.total, data.groups, collapsed, canEdit), [data.total, data.groups, collapsed, canEdit]);
   const rowMapRef = useRef(rowMap);
   rowMapRef.current = rowMap;
   const grouped = data.groups.length > 0;
@@ -156,6 +178,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         const s = summaryText(col);
         return factory.summary(col, s.label, s.text);
       }
+      if (map.isAddRow(row)) return col === 0 ? ADD : BLANK;
       const gi = map.groupAt(row);
       if (gi >= 0) {
         const g = dataRef.current.groups[gi];
@@ -190,12 +213,43 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   readerRef.current = reader;
 
   // ---- operations ------------------------------------------------------------------------------
-  const stack = useMemo(() => new UndoStack(), []);
-  const ops = useRecordOps({ tableId: table.id, fields: table.fields, data, stack, canEdit });
-  const opsRef = useRef(ops);
-  opsRef.current = ops;
+  const stack = useMemo(() => new UndoStack<UndoOp>(), []);
   const gridRef = useRef<GridHandle>(null);
   const selectionRef = useRef<GridSelectionInfo>(EMPTY_SELECTION);
+  // Records came or went (a delete, a copy, an undo of either): the rows a selection named hold other records now.
+  const onRowsChanged = useCallback(() => gridRef.current?.clearSelection(), []);
+  // Records this grid added that nothing has been put into yet, with what they were made with.
+  const fresh = useRef(new Map<string, Fresh>());
+  // The ones that were changed in some way, even when put back.
+  const touched = useRef(new Set<string>());
+  const onEdited = useCallback((ids: readonly string[]) => {
+    for (const id of ids) if (fresh.current.has(id)) touched.current.add(id);
+  }, []);
+  const ops = useRecordOps({ baseId: schema.id, tableId: table.id, fields: table.fields, data, stack, canEdit, onRowsChanged, onEdited });
+  const opsRef = useRef(ops);
+  opsRef.current = ops;
+
+  // What is typed into the record panel is saved by the panel itself: put it on the same undo stack, so
+  // Ctrl/Cmd+Z reverts the last thing done, not an older edit made in the grid.
+  useEffect(
+    () =>
+      qc.getMutationCache().subscribe((event) => {
+        if (event.type !== "updated") return;
+        const { mutation } = event;
+        const key = mutation.options.mutationKey;
+        if (key?.[0] !== "record-save" || key[1] !== table.id) return;
+        const vars = mutation.state.variables as { recordId: string; field: Field; value: unknown } | undefined;
+        if (vars?.recordId) onEdited([vars.recordId]);
+        if (event.action.type !== "success") return;
+        const prev = (mutation.state.context as { prev?: TableRecord } | undefined)?.prev;
+        if (!vars || !prev) return;
+        const before = prev.values[vars.field.id] ?? null;
+        const after = isEmptyValue(vars.value) ? null : vars.value;
+        if (jsonEqual(before, after)) return;
+        stack.push({ kind: "edit", label: `Edit ${vars.field.name}`, changes: [{ recordId: vars.recordId, fieldId: vars.field.id, before, after }] });
+      }),
+    [qc, table.id, stack, onEdited],
+  );
 
   const parseCtx = useCallback((linkIds?: ReadonlyMap<string, string>): ParseCtx => ({ timeZone, users: people, linkIds }), [timeZone, people]);
 
@@ -243,17 +297,22 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [recordAtRow, timeZone, people, toast],
   );
 
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
+  const [confirmClear, setConfirmClear] = useState<{ sel: GridSelectionInfo; cells: number } | null>(null);
+
   const onPaste = useCallback(
     (target: GridPoint, rows: readonly (readonly string[])[]) => {
       // The summary row is not data: pasting there must not create records.
-      if (target.row >= rowMapRef.current.length || !canEdit) return;
+      if (target.row >= rowMapRef.current.length || rowMapRef.current.isAddRow(target.row) || !canEdit) return;
       void (async () => {
         const rd = readerRef.current;
         const lastRow = Math.min(rd.rowCount - 1, target.row + rows.length + 200);
         await loadRows(target.row, lastRow);
-        // Link cells paste primary-field text: resolve the names to record ids first.
+        // Link cells paste primary-field text: resolve the names to record ids first. A name that matches
+        // several records is not guessed at: those cells are skipped and reported.
         const linkIds = new Map<string, string>();
         const names = new Map<string, string>();
+        const sameName = new Set<string>();
         const wanted = new Map<string, Set<string>>(); // linked table -> names
         rows.forEach((line) =>
           line.forEach((text, c) => {
@@ -268,11 +327,19 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         try {
           for (const [tableId, set] of wanted) {
             for (const name of set) {
-              const found = await recordsApi.lookup(tableId, name, { limit: 10 });
-              const hit = found.records.find((r) => r.name.toLowerCase() === name.toLowerCase());
-              if (hit) {
-                linkIds.set(name.toLowerCase(), hit.id);
-                names.set(hit.id, hit.name);
+              const found = await recordsApi.lookup(tableId, name, { limit: 50 });
+              const hits = found.records.filter((r) => r.name.toLowerCase() === name.toLowerCase());
+              if (hits.length > 1) sameName.add(linkKey(tableId, name));
+              else if (hits[0]) {
+                // Names are resolved by text alone: the same name in two linked tables would hand one of them the other's record.
+                const taken = linkIds.get(name.toLowerCase());
+                if (taken && taken !== hits[0].id) {
+                  sameName.add(linkKey(tableId, name));
+                  for (const other of wanted.keys()) sameName.add(linkKey(other, name));
+                } else {
+                  linkIds.set(name.toLowerCase(), hits[0].id);
+                  names.set(hits[0].id, hits[0].name);
+                }
               }
             }
           }
@@ -280,35 +347,120 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           toast.error(e, "Could not look up linked records");
           return;
         }
+        // Several collaborators can share a name too.
+        const seenNames = new Set<string>();
+        const sharedNames = new Set<string>();
+        for (const u of people) {
+          const n = u.name.trim().toLowerCase();
+          if (seenNames.has(n)) sharedNames.add(n);
+          seenNames.add(n);
+        }
+        const ambiguous: Ambiguity = { links: sameName, users: sharedNames };
         const sel = selectionRef.current.ranges[0] ?? null;
-        const plan = planPaste(rd, target, rows, { parse: parseCtx(linkIds), linkNames: names, selection: sel });
-        if (plan.errors.length > 0) {
-          toast.toast({ title: "Paste cancelled: some values do not fit their fields", description: plan.errors.slice(0, 3).join("\n"), variant: "error", durationMs: 9000 });
+        const plan = planPaste(rd, target, rows, { parse: parseCtx(linkIds), linkNames: names, selection: sel, ambiguous });
+        // What fits is pasted; what does not is left as it was, and said so.
+        const problems = summariseProblems(plan.errors);
+        if (plan.readOnlyFields.length > 0) problems.push(`${plan.readOnlyFields.slice(0, 3).join(", ")}${plan.readOnlyFields.length > 3 ? " and more" : ""}: computed fields are left as they are`);
+        const skipped = plan.errors.length;
+        const steps: UndoOp[] = [];
+        // Unknown select options need creating first (creators only); the server enforces who may.
+        const created = plan.newRecords.length > 0 ? await opsRef.current.createRecords({ values: plan.newRecords, collect: steps }) : [];
+        const total = plan.changes.length;
+        if (total > 0) await opsRef.current.applyChanges(plan.changes, total === 1 ? "Paste" : `Paste into ${total} cells`, { collect: steps });
+        if (steps.length === 0) {
+          if (problems.length > 0) toast.toast({ title: "Nothing was pasted", description: problems.join("\n"), variant: "error", durationMs: 9000 });
           return;
         }
-        // Unknown select options need creating first (creators only); the server enforces who may.
-        const total = plan.changes.length;
-        if (plan.newRecords.length > 0) {
-          const created = await opsRef.current.createRecords({ values: plan.newRecords });
-          if (created.length > 0) toast.toast({ title: `Added ${created.length} new record${created.length === 1 ? "" : "s"}`, variant: "success" });
-        }
-        if (total > 0) await opsRef.current.applyChanges(plan.changes, total === 1 ? "Paste" : `Paste into ${total} cells`);
+        const pieces = [total > 0 && `Pasted into ${total.toLocaleString()} ${total === 1 ? "cell" : "cells"}`, created.length > 0 && `added ${created.length.toLocaleString()} ${created.length === 1 ? "record" : "records"}`].filter(Boolean) as string[];
+        const title = pieces.join(", ").replace(/^./, (c) => c.toUpperCase());
+        opsRef.current.commit(steps, "Paste", problems.length > 0 ? { title, description: `${skipped > 0 ? `Skipped ${skipped.toLocaleString()} ${skipped === 1 ? "cell" : "cells"}:\n` : ""}${problems.join("\n")}` } : title);
       })();
     },
-    [loadRows, parseCtx, toast, canEdit],
+    [loadRows, parseCtx, toast, canEdit, people],
   );
 
-  const onClear = useCallback(
-    (sel: GridSelectionInfo) => {
-      void (async () => {
-        const rd = readerRef.current;
-        const rects = selectionRectangles(sel, rd.columns.length, rd.rowCount);
-        for (const r of rects) await loadRows(r.y, r.y + r.height - 1);
-        const plan = planClear(readerRef.current, rects);
-        await opsRef.current.applyChanges(plan.changes, plan.changes.length === 1 ? "Clear cell" : `Clear ${plan.changes.length} cells`);
-      })();
+  /** Ids of the records shown in these display rows, loading the pages they are on first. */
+  const idsOfRows = useCallback(async (rows: readonly number[]): Promise<{ ids: string[]; missing: number }> => {
+    const map = rowMapRef.current;
+    const indexes = rows.map((r) => map.recordIndexAt(r)).filter((i) => i >= 0);
+    const pages = [...new Set(indexes.map((i) => Math.floor(i / PAGE_SIZE)))];
+    for (let i = 0; i < pages.length; i += LOAD_PAGES_AT_ONCE) {
+      await Promise.all(pages.slice(i, i + LOAD_PAGES_AT_ONCE).map((p) => dataRef.current.loadRange(p * PAGE_SIZE, p * PAGE_SIZE)));
+    }
+    const ids: string[] = [];
+    let missing = 0;
+    for (const i of indexes) {
+      const rec = dataRef.current.getRecord(i);
+      if (rec) ids.push(rec.id);
+      else missing++;
+    }
+    return { ids, missing };
+  }, []);
+
+  /** The records of these rows, or null (with a word on screen) when some could not be loaded: nothing is done to a part of a selection. */
+  const recordsOfRows = useCallback(
+    async (rows: readonly number[], doing: string): Promise<string[] | null> => {
+      if (rows.length > PAGE_SIZE) toast.toast({ title: `Loading ${rows.length.toLocaleString()} records…`, durationMs: 3000 });
+      const { ids, missing } = await idsOfRows(rows);
+      if (missing > 0) {
+        toast.toast({ title: `Nothing was ${doing}`, description: `${missing.toLocaleString()} of the selected records could not be loaded. Try again.`, variant: "error" });
+        return null;
+      }
+      return ids;
+    },
+    [idsOfRows, toast],
+  );
+
+  const deleteRows = useCallback(
+    async (rows: readonly number[]) => {
+      if (!canEdit || rows.length === 0) return;
+      const ids = await recordsOfRows(rows, "deleted");
+      if (!ids || ids.length === 0) return;
+      // One record goes at once (the toast offers Undo); several ask first, with their count.
+      if (ids.length === 1) void opsRef.current.deleteRecords(ids);
+      else setConfirmDelete({ ids });
+    },
+    [canEdit, recordsOfRows],
+  );
+
+  const duplicateRows = useCallback(
+    async (rows: readonly number[]) => {
+      if (!canEdit || rows.length === 0) return;
+      const ids = await recordsOfRows(rows, "duplicated");
+      if (ids && ids.length > 0) await opsRef.current.duplicateRecords(ids);
+    },
+    [canEdit, recordsOfRows],
+  );
+
+  const clearCells = useCallback(
+    async (sel: GridSelectionInfo) => {
+      const rd = readerRef.current;
+      const rects = selectionRectangles(sel, rd.columns.length, rd.rowCount);
+      for (const r of rects) await loadRows(r.y, r.y + r.height - 1);
+      const plan = planClear(readerRef.current, rects);
+      const n = plan.changes.length;
+      const steps: UndoOp[] = [];
+      if (await opsRef.current.applyChanges(plan.changes, n === 1 ? "Clear cell" : `Clear ${n} cells`, { collect: steps })) {
+        opsRef.current.commit(steps, `Clear ${n} cells`, n > 1 ? `Cleared ${n.toLocaleString()} cells` : undefined);
+      }
     },
     [loadRows],
+  );
+
+  // Delete and Backspace: on rows picked with their checkboxes they delete the records; on cells they empty them.
+  const onClear = useCallback(
+    (sel: GridSelectionInfo) => {
+      if (!canEdit) return;
+      if (sel.rows.length > 0) {
+        void deleteRows(sel.rows);
+        return;
+      }
+      const rd = readerRef.current;
+      const cells = countClearCells(selectionRectangles(sel, rd.columns.length, rd.rowCount), rd.columns, rd.rowCount, rd.isRecordRow);
+      if (cells > CLEAR_CONFIRM_CELLS) setConfirmClear({ sel, cells });
+      else void clearCells(sel);
+    },
+    [canEdit, deleteRows, clearCells],
   );
 
   const onFill = useCallback(
@@ -387,14 +539,19 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const rec = recordAtRow(from);
       const target = recordAtRow(to);
       if (!rec || !target || rec.id === target.id) return;
-      void opsRef.current.moveRecords([rec.id], to > from ? { afterId: target.id } : { beforeId: target.id });
+      // Where it was, for Undo: right after the record above it, or right before the one below.
+      const above = from > 0 ? recordAtRow(from - 1) : undefined;
+      const below = recordAtRow(from + 1);
+      const previous = above ? { afterId: above.id } : below ? { beforeId: below.id } : undefined;
+      void opsRef.current.moveRecords([rec.id], to > from ? { afterId: target.id } : { beforeId: target.id }, previous);
     },
     [recordAtRow],
   );
 
   // ---- menus and dialogs -----------------------------------------------------------------------
   const [colMenu, setColMenu] = useState<{ index: number; at: ScreenRect } | null>(null);
-  const [rowMenu, setRowMenu] = useState<{ row: number; col: number; at: ScreenRect } | null>(null);
+  /** `rows`: the display rows the menu acts on (the selection when the row is in it), counting the ones not loaded yet. */
+  const [rowMenu, setRowMenu] = useState<{ row: number; col: number; at: ScreenRect; rows: number[] } | null>(null);
   const [sumMenu, setSumMenu] = useState<{ col: number; at: ScreenRect } | null>(null);
   /**
    * Close a context menu and hand the keyboard back to the grid. The menus hang off an invisible
@@ -406,7 +563,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     gridRef.current?.focus();
   }, []);
   const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
   const [confirmField, setConfirmField] = useState<Field | null>(null);
   // A field inserted next to another one is placed once the refetched schema contains it.
   const [pendingPlace, setPendingPlace] = useState<{ id: string; relativeTo: { fieldId: string; side: "left" | "right" } } | null>(null);
@@ -425,14 +581,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const onGroupToggle = useCallback(
     (headerIndex: number) => {
       const key = pathKeys[headerIndex];
-      if (!key) return;
-      setCollapsed((cur) => {
-        const next = new Set(cur);
-        if (!next.delete(key)) next.add(key);
-        return next;
-      });
+      if (key) toggleCollapsed(key);
     },
-    [pathKeys],
+    [pathKeys, toggleCollapsed],
   );
 
   // ---- expanded record -------------------------------------------------------------------------
@@ -477,24 +628,40 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [setSearchParams],
   );
 
-  /** Neighbouring record ids in grid order (for prev/next in the expanded record). */
-  const neighbours = useMemo(() => {
-    if (!openRecordId) return { prev: null as string | null, next: null as string | null };
+  /** Record indexes of the rows before and after the open record in grid order (-1: none), skipping group headers and folded groups. */
+  const neighbourIndexes = useMemo(() => {
+    const none = { prev: -1, next: -1 };
+    if (!openRecordId) return none;
     const idx = data.indexOf(openRecordId);
-    if (idx < 0) return { prev: null, next: null };
-    const row = rowMap.rowOfRecord(idx);
-    const find = (dir: 1 | -1): string | null => {
+    const row = idx < 0 ? -1 : rowMap.rowOfRecord(idx);
+    if (row < 0) return none;
+    const find = (dir: 1 | -1): number => {
       for (let r = row + dir; r >= 0 && r < rowMap.length; r += dir) {
-        const rec = recordAtRow(r);
-        if (rec) return rec.id;
-        if (rowMap.recordIndexAt(r) >= 0) return null; // not loaded yet
+        const i = rowMap.recordIndexAt(r);
+        if (i >= 0) return i;
       }
-      return null;
+      return -1;
     };
     return { prev: find(-1), next: find(1) };
     // `data.version` changes when pages arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRecordId, data.version, rowMap, recordAtRow]);
+  }, [openRecordId, data.version, rowMap]);
+  /** Neighbouring record ids in grid order (for prev/next in the expanded record); null until their page has arrived. */
+  const neighbours = useMemo(
+    () => ({
+      prev: neighbourIndexes.prev >= 0 ? (dataRef.current.getRecord(neighbourIndexes.prev)?.id ?? null) : null,
+      next: neighbourIndexes.next >= 0 ? (dataRef.current.getRecord(neighbourIndexes.next)?.id ?? null) : null,
+    }),
+    // `data.version` changes when pages arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [neighbourIndexes, data.version],
+  );
+  // Stepping through the records must not stop where the loaded pages do: the pages of the records on
+  // either side of the open one are fetched, and the buttons enable themselves when they arrive. (Not
+  // `ensureRange`: that is the range on screen, which a refresh keeps.)
+  useEffect(() => {
+    for (const i of [neighbourIndexes.prev, neighbourIndexes.next]) if (i >= 0 && !dataRef.current.getRecord(i)) void dataRef.current.loadRange(i, i);
+  }, [neighbourIndexes, data.version]);
 
   // ---- add / delete rows -----------------------------------------------------------------------
   // The new row is selected and scrolled into view once its page has arrived, unless the person has
@@ -509,48 +676,192 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [],
   );
 
-  const addRecord = useCallback(async () => {
-    const before = reveal.current?.before ?? selectionRef.current;
-    const focused = document.activeElement;
-    const created = await opsRef.current.createRecords({});
-    if (created.length === 0) return;
-    if (reveal.current) window.clearTimeout(reveal.current.timer);
-    const timer = window.setTimeout(() => {
-      reveal.current = null;
-      if (selectionRef.current !== before) return;
-      const idx = dataRef.current.indexOf(created[0]!.id);
-      const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.length - 1;
-      if (row >= 0) {
+  /** Add a record the grid will take back again if it is left untouched. Resolves with the new record, or null. */
+  const createFresh = useCallback(
+    async (opts: { values: Record<string, unknown>; afterRecordId?: string; beforeRecordId?: string }): Promise<TableRecord | null> => {
+      const steps: UndoOp[] = [];
+      const [rec] = await opsRef.current.createRecords({ values: [opts.values], afterRecordId: opts.afterRecordId, beforeRecordId: opts.beforeRecordId, collect: steps });
+      if (!rec) return null;
+      opsRef.current.commit(steps, "Add record");
+      fresh.current.set(rec.id, { values: writableValues(table.fields, rec.values as Record<string, unknown>), op: steps[0] ?? null });
+      return rec;
+    },
+    [table.fields],
+  );
+
+  // The selection moves by itself in a few places (the new row, a selection kept in step with a row
+  // that went away); those moves are not the person leaving a row.
+  const selectingBySelf = useRef(false);
+  const selectQuietly = useCallback((move: () => void) => {
+    selectingBySelf.current = true;
+    try {
+      move();
+    } finally {
+      selectingBySelf.current = false;
+    }
+  }, []);
+
+  /** Add a record (into group `group` of the group headers, when given; the end of the table otherwise) and select it. */
+  const addRecord = useCallback(
+    async (target: { group?: number } = {}) => {
+      const focused = document.activeElement;
+      const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, target.group ?? -1, me.data?.id ?? null);
+      // Groups are known by their path, which outlasts the rows moving around.
+      const groupKey = target.group !== undefined && target.group >= 0 ? groupPathKeys(dataRef.current.groups)[target.group] : undefined;
+      // A search would hide the new, empty record: show everything again first, so it can be typed into.
+      if (searchRef.current.trim() !== "") {
+        selectQuietly(() => gridRef.current?.clearSelection());
+        setSearch("");
+        for (let waited = 0; (debouncedRef.current !== "" || dataRef.current.loading) && waited < 3000; waited += 50) await sleep(50);
+      }
+      const before = reveal.current?.before ?? selectionRef.current;
+      const created = await createFresh({ values });
+      if (!created) return;
+      if (reveal.current) window.clearTimeout(reveal.current.timer);
+      // Its page may take a moment to arrive: look again a few times. Until then scroll to where it
+      // will be (the end of its group, or of the table) to load it, but never select a row that is
+      // another record.
+      let tries = 0;
+      const look = () => {
+        if (selectionRef.current !== before) return void (reveal.current = null);
+        const idx = dataRef.current.indexOf(created.id);
+        const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : -1;
+        if (row < 0) {
+          const map = rowMapRef.current;
+          const gi = groupKey ? groupPathKeys(dataRef.current.groups).indexOf(groupKey) : -1;
+          let end = -1;
+          if (gi >= 0) {
+            for (let r = 0; r < map.length && end < 0; r++) if (map.isAddRow(r) && map.addGroupAt(r) === gi) end = r;
+          } else if (!grouped && dataRef.current.total > 0) end = map.rowOfRecord(dataRef.current.total - 1);
+          if (end >= 0) gridRef.current?.scrollToRow(end);
+          if (++tries < REVEAL_TRIES) reveal.current = { timer: window.setTimeout(look, REVEAL_MS), before };
+          else reveal.current = null;
+          return;
+        }
+        reveal.current = null;
         gridRef.current?.scrollToRow(row);
-        gridRef.current?.selectCell(0, row);
+        selectQuietly(() => gridRef.current?.selectCell(0, row));
         // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
         // grid, or the new row looks selected while typing goes to the button, and a click on that
         // already selected cell would not move the focus either.
         if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
-      }
-    }, 400);
-    reveal.current = { timer, before };
-  }, []);
+      };
+      reveal.current = { timer: window.setTimeout(look, REVEAL_MS), before };
+    },
+    [table.fields, queryConfig.filter, me.data?.id, createFresh, selectQuietly, grouped],
+  );
+
+  /** The group the floating Add adds into: that of the selected row, else the one at the top of what is on screen. */
+  const floatingGroup = useCallback((): number => {
+    const sel = selectionRef.current;
+    const gi = floatingAddGroup(rowMapRef.current, dataRef.current.groups, sel.cell?.row ?? sel.rows[0] ?? null, visibleRows.current?.[0] ?? null);
+    // Adding into a folded group would hide the new record: unfold it.
+    const key = gi >= 0 ? groupPathKeys(dataRef.current.groups)[gi] : undefined;
+    if (key && collapsedRef.current.has(key)) toggleCollapsed(key);
+    return gi;
+  }, [toggleCollapsed]);
 
   const insertRecord = useCallback(
     async (row: number, where: "above" | "below") => {
       const rec = recordAtRow(row);
       if (!rec) return;
-      if (where === "below") await opsRef.current.createRecords({ afterRecordId: rec.id });
-      else await opsRef.current.createRecords({ beforeRecordId: rec.id });
+      // Rows below the new one move down: a selection of rows would name other records.
+      if (selectionRef.current.rows.length > 0) gridRef.current?.clearSelection();
+      const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, -1, me.data?.id ?? null);
+      await createFresh(where === "below" ? { values, afterRecordId: rec.id } : { values, beforeRecordId: rec.id });
     },
-    [recordAtRow],
+    [recordAtRow, table.fields, queryConfig.filter, me.data?.id, createFresh],
   );
 
-  const selectedRecordIds = useCallback((fromRow: number): string[] => {
+  // ---- untouched new rows go away ---------------------------------------------------------------
+  // A record added here and left empty when the person clicks off is taken back, as if it had never
+  // been added: no toast, nothing in the trash or the history, and no step left in Undo.
+  const openIdRef = useRef(openRecordId);
+  openIdRef.current = openRecordId;
+  const takeBack = useCallback(
+    async (id: string, made: Fresh) => {
+      const idx = dataRef.current.indexOf(id);
+      const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : -1;
+      const gone = await discardIfUntouched(id, made, {
+        fields: table.fields,
+        touched: (x) => touched.current.has(x),
+        saving: () => opsRef.current.saving(),
+        load: (x) => recordsApi.get(table.id, x),
+        discard: (x) => recordsApi.discard(table.id, x),
+        sleep,
+      });
+      touched.current.delete(id);
+      if (!gone) return;
+      if (made.op) stack.drop(made.op);
+      void qc.invalidateQueries({ queryKey: ["records"] });
+      // The rows under it move up: keep what is selected on the same records.
+      const sel = selectionRef.current;
+      if (row < 0) return;
+      const range = sel.ranges[0];
+      if (sel.cell && sel.rows.length === 0 && sel.columns.length === 0 && sel.ranges.length === 1 && range?.width === 1 && range.height === 1) {
+        if (sel.cell.row > row) selectQuietly(() => gridRef.current?.selectCell(sel.cell!.col, sel.cell!.row - 1));
+      } else if (sel.rows.some((r) => r > row) || sel.ranges.some((r) => r.y + r.height - 1 > row)) selectQuietly(() => gridRef.current?.clearSelection());
+    },
+    [table.fields, table.id, stack, qc, selectQuietly],
+  );
+
+  /** Take back the new records that are no longer selected (`leaving`: all of them, the grid is being left). */
+  const sweepFresh = useCallback(
+    (leaving = false) => {
+      if (fresh.current.size === 0) return;
+      const sel = selectionRef.current;
+      for (const [id, made] of [...fresh.current]) {
+        if (id === openIdRef.current) continue;
+        if (!leaving) {
+          const idx = dataRef.current.indexOf(id);
+          // Not on screen: while the new row is still being looked for it may yet be selected;
+          // after that (a filter hides it, say) it cannot be what the person is working on.
+          if (idx < 0 && reveal.current) continue;
+          const row = rowMapRef.current.rowOfRecord(idx);
+          if (sel.columns.length > 0 || (row >= 0 && (sel.rows.includes(row) || sel.ranges.some((r) => row >= r.y && row < r.y + r.height)))) continue;
+        }
+        fresh.current.delete(id);
+        void takeBack(id, made);
+      }
+    },
+    [takeBack],
+  );
+  const sweepRef = useRef(sweepFresh);
+  sweepRef.current = sweepFresh;
+
+  // A record panel closing leaves the record it was on, if the selection is elsewhere.
+  useEffect(() => {
+    if (!openRecordId) sweepRef.current();
+  }, [openRecordId]);
+
+  // Focus going to somewhere else in the page, or the grid going away, leaves every new row.
+  useEffect(() => {
+    const wrap = wrapperRef.current;
+    if (!wrap) return;
+    const onFocusOut = (e: FocusEvent) => {
+      const to = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+      // Within the grid's own page area, in one of its pop-ups, or the window itself losing focus.
+      if (to ? wrap.contains(to) || to.closest(STILL_IN_GRID) : !document.hasFocus()) return;
+      sweepRef.current(true);
+    };
+    wrap.addEventListener("focusout", onFocusOut);
+    return () => {
+      wrap.removeEventListener("focusout", onFocusOut);
+      sweepRef.current(true);
+    };
+  }, []);
+
+  /** The display rows a menu opened on `fromRow` acts on: the selected rows, or the rows of the selected cells, or that row. */
+  const rowsForMenu = useCallback((fromRow: number): number[] => {
     const sel = selectionRef.current;
     const rows = new Set<number>();
     if (sel.rows.includes(fromRow)) sel.rows.forEach((r) => rows.add(r));
     else if (sel.ranges.some((r) => fromRow >= r.y && fromRow < r.y + r.height)) {
       for (const r of sel.ranges) for (let y = r.y; y < r.y + r.height; y++) rows.add(y);
     } else rows.add(fromRow);
-    return [...rows].map((r) => recordAtRow(r)?.id).filter((id): id is string => !!id);
-  }, [recordAtRow]);
+    // Group headers and the summary row are not records.
+    return [...rows].filter((r) => rowMapRef.current.recordIndexAt(r) >= 0).sort((a, b) => a - b);
+  }, []);
 
   // ---- keyboard --------------------------------------------------------------------------------
   const onGridKey = useCallback<GridAdapterProps["onKeyDown"]>(
@@ -569,9 +880,27 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         onExpand(k.cell.row);
         return true;
       }
+      // Enter, Space and F2 fold a group from its header and open the summary menu from a summary cell.
+      if (k.cell && !mod && !k.shiftKey && !k.altKey && (k.key === "Enter" || k.key === " " || k.key === "F2")) {
+        const map = rowMapRef.current;
+        const group = map.groupAt(k.cell.row);
+        if (group >= 0) {
+          onGroupToggle(group);
+          return true;
+        }
+        if (map.isAddRow(k.cell.row)) {
+          void addRecord({ group: map.addGroupAt(k.cell.row) });
+          return true;
+        }
+        if (k.cell.row === map.length) {
+          const at = gridRef.current?.cellBounds(k.cell.col, k.cell.row);
+          if (at) setSumMenu({ col: k.cell.col, at });
+          return true;
+        }
+      }
       return false;
     },
-    [onExpand],
+    [onExpand, onGroupToggle, addRecord],
   );
 
   // Undo/redo also work while focus sits on the toolbar or footer instead of the canvas.
@@ -661,6 +990,14 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   }, []);
 
   // ---- render ----------------------------------------------------------------------------------
+  // Rows picked with their checkboxes, and how many records that is (the ones not loaded yet count too).
+  const [selectedRows, setSelectedRows] = useState<readonly number[]>(NO_ROWS);
+  const selectedRecordRows = useMemo(() => selectedRows.filter((r) => rowMap.recordIndexAt(r) >= 0), [selectedRows, rowMap]);
+  const insertNote = useMemo(() => {
+    const why = [queryConfig.sorts.length > 0 && "sorted", grouped && "grouped", debouncedSearch !== "" && "filtered by a search"].filter(Boolean);
+    return why.length === 0 ? undefined : `Records cannot be inserted at a place while the view is ${why.join(" and ")}. Remove that to insert above or below.`;
+  }, [queryConfig.sorts.length, grouped, debouncedSearch]);
+  const history = ops.history;
   const dark = resolved === "dark";
   const total = data.total;
   const rowCountForGrid = rowMap.length;
@@ -680,7 +1017,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     canEdit,
     canReorderRows: reorderable,
     canReorderColumns: true,
-    version: data.version + (collapsed.size > 0 ? 1 : 0) + (hasSummary ? (aggregations.dataUpdatedAt % 1000) : 0),
+    version: data.version + collapsed.size + (hasSummary ? (aggregations.dataUpdatedAt % 1000) : 0),
     getCell,
     onVisibleRowsChange,
     onCommitEdits,
@@ -691,15 +1028,22 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     onColumnResize,
     onColumnMove,
     onRowMove,
-    onHeaderMenu: (index, at) => setColMenu({ index, at }),
+    onHeaderMenu: (index, at) => {
+      // The "Add field" header past the last column has no menu.
+      if (columnsRef.current[index]) setColMenu({ index, at });
+    },
     onCellContextMenu: (point, at) => {
-      if (rowMapRef.current.recordIndexAt(point.row) >= 0) setRowMenu({ row: point.row, col: point.col, at });
+      if (rowMapRef.current.recordIndexAt(point.row) >= 0) setRowMenu({ row: point.row, col: point.col, at, rows: rowsForMenu(point.row) });
     },
     onGroupToggle,
+    onAddRow: (row) => void addRecord({ group: rowMapRef.current.addGroupAt(row) }),
     onSummaryClick: (col, at) => setSumMenu({ col, at }),
     onExpand,
     onSelectionChange: (sel) => {
       selectionRef.current = sel;
+      setSelectedRows((cur) => (sel.rows.length === 0 && cur.length === 0 ? cur : sel.rows));
+      // Resting on an add row is not leaving a new row: someone adding a few in a row keeps them all.
+      if (!selectingBySelf.current && !(sel.cell && rowMapRef.current.isAddRow(sel.cell.row))) sweepFresh();
     },
     onKeyDown: onGridKey,
     canAddField: canManageFields,
@@ -749,7 +1093,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           searchInputRef={searchInputRef}
           onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
-          onAdd={canEdit ? () => void addRecord() : undefined}
+          onAdd={canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined}
         />
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
@@ -772,6 +1116,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
               <GlideGrid ref={gridRef} {...gridProps} />
             </div>
           )}
+          {canEdit && selectedRecordRows.length > 0 && (
+            <SelectionBar count={selectedRecordRows.length} onDuplicate={() => void duplicateRows(selectedRecordRows)} onDelete={() => void deleteRows(selectedRecordRows)} onClear={() => gridRef.current?.clearSelection()} />
+          )}
           {data.loading && total === 0 && (
             <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center">
               <Spinner className="size-5" label="Loading records" />
@@ -789,7 +1136,29 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
             {debouncedSearch ? " found" : ""}
           </span>
           {grouped && <span className="hidden sm:inline">· grouped</span>}
-          {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
+          {grouped && (
+            <span className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={() => replaceCollapsed(pathKeys)} disabled={pathKeys.every((k) => collapsed.has(k))}>
+                Collapse all
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => replaceCollapsed([])} disabled={!pathKeys.some((k) => collapsed.has(k))}>
+                Expand all
+              </Button>
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-1">
+            {cfg.saving && <span className="mr-2 text-xs">Saving view…</span>}
+            {canEdit && (
+              <>
+                <IconButton label={`Undo${history.undoLabel ? `: ${history.undoLabel}` : ""} (Ctrl/Cmd+Z)`} size="sm" disabled={!history.canUndo} onClick={() => void history.undo()}>
+                  <Undo2 aria-hidden className="size-4" />
+                </IconButton>
+                <IconButton label={`Redo${history.redoLabel ? `: ${history.redoLabel}` : ""} (Ctrl/Cmd+Shift+Z)`} size="sm" disabled={!history.canRedo} onClick={() => void history.redo()}>
+                  <Redo2 aria-hidden className="size-4" />
+                </IconButton>
+              </>
+            )}
+          </span>
         </div>
         </div>
       </div>
@@ -814,19 +1183,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         onClose={() => closeMenu(setRowMenu)}
         onExpand={() => rowMenu && onExpand(rowMenu.row)}
         onInsert={(where) => rowMenu && void insertRecord(rowMenu.row, where)}
-        onDuplicate={() => {
-          if (!rowMenu) return;
-          const recs = selectedRecordIds(rowMenu.row).map((id) => data.getRecord(data.indexOf(id))).filter((r): r is TableRecord => !!r);
-          void opsRef.current.duplicateRecords(recs);
-        }}
-        onDelete={() => {
-          if (!rowMenu) return;
-          const ids = selectedRecordIds(rowMenu.row);
-          if (ids.length > 1) setConfirmDelete({ ids });
-          else void opsRef.current.deleteRecords(ids);
-        }}
-        count={rowMenu ? selectedRecordIds(rowMenu.row).length : 1}
+        onDuplicate={() => rowMenu && void duplicateRows(rowMenu.rows)}
+        onDelete={() => rowMenu && void deleteRows(rowMenu.rows)}
+        count={rowMenu?.rows.length ?? 1}
         canInsert={reorderable}
+        insertNote={insertNote}
       />
       <SummaryMenu
         at={sumMenu?.at ?? null}
@@ -853,24 +1214,34 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         open={!!confirmField}
         onOpenChange={(o) => !o && setConfirmField(null)}
         title={`Delete field "${confirmField?.name ?? ""}"?`}
-        description="The field and its values are removed from every view. You can restore it from the trash."
+        description="The field and its values are removed from every view. Undo brings it back, as does the trash."
         confirmLabel="Delete field"
         destructive
         onConfirm={async () => {
           if (!confirmField) return;
-          await schemaApi.deleteField(confirmField.id);
-          await qc.invalidateQueries({ queryKey: keys.base(schema.id) });
+          await opsRef.current.deleteField(confirmField);
         }}
       />
       <ConfirmDialog
         open={!!confirmDelete}
         onOpenChange={(o) => !o && setConfirmDelete(null)}
-        title={`Delete ${confirmDelete?.ids.length ?? 0} records?`}
-        description="They are moved to the trash. Press Ctrl/Cmd+Z to undo."
-        confirmLabel="Delete records"
+        title={deleteRecordsText(role, confirmDelete?.ids.length ?? 0).title}
+        description={deleteRecordsText(role, confirmDelete?.ids.length ?? 0).description}
+        confirmLabel={`Delete ${(confirmDelete?.ids.length ?? 0).toLocaleString()} records`}
         destructive
         onConfirm={async () => {
           if (confirmDelete) await opsRef.current.deleteRecords(confirmDelete.ids);
+        }}
+      />
+      <ConfirmDialog
+        open={!!confirmClear}
+        onOpenChange={(o) => !o && setConfirmClear(null)}
+        title={`Clear ${(confirmClear?.cells ?? 0).toLocaleString()} cells?`}
+        description="Their values are emptied and the records stay. Press Undo right after to bring the values back."
+        confirmLabel="Clear cells"
+        destructive
+        onConfirm={async () => {
+          if (confirmClear) await clearCells(confirmClear.sel);
         }}
       />
       <FloatingRecordPeek at={linkHover} format={format} emails={emails} role={role} />
@@ -891,7 +1262,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           currentUserId={me.data?.id ?? null}
           collaborators={people}
           onDeleteRecord={(id) => opsRef.current.deleteRecords([id])}
-          onDuplicateRecord={async (rec) => (await opsRef.current.duplicateRecords([rec]))[0]}
+          onDuplicateRecord={async (rec) => (await opsRef.current.duplicateRecords([rec.id]))[0]}
         />
       )}
     </EditorEnvProvider>

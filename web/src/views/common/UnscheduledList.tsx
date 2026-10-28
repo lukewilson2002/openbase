@@ -4,9 +4,13 @@
  * there are. The calendar attaches FullCalendar's own drag helper (`attachDrag`); elsewhere
  * (`nativeDrag`) an item is an HTML drag carrying its record id as `RECORD_DRAG_TYPE`. Nothing here
  * imports FullCalendar, so a view without a calendar does not load its styles.
+ *
+ * On a phone (`stacked`) there is no room beside the view: the closed column becomes a pill over the
+ * bottom of it, and the open one a full-width sheet under it (the view shrinks to make room, so every
+ * day stays in reach to drop on).
  */
-import { useEffect, useRef } from "react";
-import { ChevronsLeft, ChevronsRight, GripVertical } from "lucide-react";
+import { useEffect, useRef, type Ref } from "react";
+import { ChevronsLeft, ChevronsRight, ChevronDown, GripVertical, Inbox } from "lucide-react";
 import type { Field, Table, TableRecord } from "@/api/types";
 import { RecordSummary } from "@/components/record/RecordSummary";
 import { RecordPeek } from "@/components/record/linked/LinkedRecords";
@@ -45,13 +49,17 @@ export interface UnscheduledListProps {
   hint?: string;
   /** Something dragged over the column will be unscheduled when dropped (a timeline bar): it shows it takes it. */
   dropActive?: boolean;
+  /** Phone layout (see the file comment). The list's parent must be positioned, and a column of flex items when stacked. */
+  stacked?: boolean;
+  /** The column's outer element, for a view that tests where a dragged item was dropped. */
+  zoneRef?: Ref<HTMLElement>;
   onOpen(recordId: string): void;
 }
 
 const columnBg = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
 const dropClass = "bg-primary-soft ring-2 ring-inset ring-ring";
 
-export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, table, role, format, emails, loading, truncated, draggable, nativeDrag, attachDrag, hint, dropActive = false, onOpen }: UnscheduledListProps) {
+export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, table, role, format, emails, loading, truncated, draggable, nativeDrag, attachDrag, hint, dropActive = false, stacked = false, zoneRef, onOpen }: UnscheduledListProps) {
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     // The list is not mounted while loading or folded, so those re-run this once it is.
@@ -72,12 +80,29 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
     );
 
   if (!open) {
+    const label = count === null ? "Show unscheduled records" : `Show unscheduled records, ${count}`;
+    if (stacked) {
+      return (
+        <button
+          ref={zoneRef as Ref<HTMLButtonElement>}
+          type="button"
+          onClick={onToggle}
+          aria-expanded={false}
+          aria-label={label}
+          className={cn("absolute bottom-3 left-3 z-10 flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[0.8125rem] font-semibold shadow-pop", dropActive && dropClass)}
+        >
+          <Inbox aria-hidden className="size-4 text-muted" />
+          Unscheduled{count === null ? "" : ` · ${count}`}
+        </button>
+      );
+    }
     return (
       <button
+        ref={zoneRef as Ref<HTMLButtonElement>}
         type="button"
         onClick={onToggle}
         aria-expanded={false}
-        aria-label={count === null ? "Show unscheduled records" : `Show unscheduled records, ${count}`}
+        aria-label={label}
         className={cn("flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line py-3 text-[0.8125rem] font-semibold text-muted hover:bg-hover hover:text-fg", columnBg, dropActive && dropClass)}
       >
         <ChevronsLeft aria-hidden className="size-4" />
@@ -87,16 +112,27 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
   }
 
   return (
-    <aside aria-label="Unscheduled records" data-drop-active={dropActive || undefined} className={cn("flex w-52 shrink-0 flex-col border-l border-line", columnBg, dropActive && dropClass)}>
+    <aside
+      ref={zoneRef as Ref<HTMLElement>}
+      aria-label="Unscheduled records"
+      data-drop-active={dropActive || undefined}
+      data-stacked={stacked || undefined}
+      className={cn(
+        "flex shrink-0 flex-col",
+        stacked ? "max-h-[40%] border-t border-line" : "w-52 border-l border-line",
+        columnBg,
+        dropActive && dropClass,
+      )}
+    >
       <div className="flex items-start gap-1.5 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-3 pl-3.5 pr-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-[0.875rem] font-[650]">
             Unscheduled {count !== null && <span className="font-semibold text-muted">{count}</span>}
           </h3>
-          <p className="mt-0.5 text-xs leading-snug text-muted">{draggable ? (hint ?? "Drag a record onto a day to give it a date.") : "Records without a date."}</p>
+          <p className="mt-0.5 text-xs leading-snug text-muted">{draggable ? (hint ?? (stacked ? "Hold a record, then drag it onto a day to give it a date." : "Drag a record onto a day to give it a date.")) : "Records without a date."}</p>
         </div>
         <IconButton label="Hide unscheduled records" size="sm" noTooltip aria-expanded onClick={onToggle}>
-          <ChevronsRight aria-hidden className="size-4" />
+          {stacked ? <ChevronDown aria-hidden className="size-4" /> : <ChevronsRight aria-hidden className="size-4" />}
         </IconButton>
       </div>
       {loading ? (
@@ -104,7 +140,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
           <Spinner className="size-4" label="Loading unscheduled records" />
         </div>
       ) : (
-        <ul ref={list} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2.5">
+        <ul ref={list} className={cn("flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2.5", stacked && "pb-[max(0.625rem,env(safe-area-inset-bottom))] max-md:pb-16")}>
           {records.map((r) => {
             const title = cardTitle(primary, r, format);
             return (

@@ -1274,6 +1274,94 @@ pub fn delete_records(
     w.finish()
 }
 
+// --------------------------------------------------------------- discard
+
+/// How long after its creation a record can still be taken back with [`discard_record`].
+pub const DISCARD_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// Take back a record nobody has touched: remove it for good, with its history, as if it had
+/// never been created. Unlike [`delete_records`] nothing lands in the trash.
+///
+/// It is removed only when the caller created it less than [`DISCARD_WINDOW_MS`] ago, its only
+/// history entry is that creation, `updated_at` still equals `created_at`, it has no comments
+/// (deleted ones included), no attachment or link cell of its own, and no other record links
+/// to it. Otherwise nothing changes and the answer is `None`. Notifications that name the
+/// record go with it. Automations that already ran when it was created are not undone, and
+/// their run logs keep the record id.
+pub fn discard_record(
+    tx: &Transaction,
+    ctx: &WriteCtx,
+    table_id: &str,
+    id: &str,
+) -> AppResult<Option<WriteOutcome>> {
+    let w = Writer::begin(tx, ctx, table_id)?;
+    let conn = w.conn();
+    let Some(row) = records::get(conn, id)? else {
+        return Err(AppError::not_found(format!("record {id}")));
+    };
+    if row.table_id != table_id || row.deleted_at.is_some() {
+        return Err(AppError::not_found(format!("record {id}")));
+    }
+    let Some(actor) = ctx.actor_str() else {
+        return Ok(None);
+    };
+    if row.created_by.as_deref() != Some(actor)
+        || ctx.now_ms() - row.created_at > DISCARD_WINDOW_MS
+        || row.updated_at != row.created_at
+    {
+        return Ok(None);
+    }
+    // One history entry, the creation (by the caller).
+    let (entries, creates): (i64, i64) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(kind = 'create' AND user_id IS ?2), 0)
+         FROM record_history WHERE record_id = ?1",
+        rusqlite::params![id, actor],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    if entries != 1 || creates != 1 {
+        return Ok(None);
+    }
+    let commented: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM comments WHERE record_id = ?1)",
+        [id],
+        |r| r.get(0),
+    )?;
+    if commented {
+        return Ok(None);
+    }
+    // Its own link and attachment cells; links from other records in the project.
+    let holds_refs = schema::table_fields(conn, table_id)?.iter().any(|f| {
+        matches!(f.kind, FieldKind::Link(_) | FieldKind::Attachment(_))
+            && row.data.get(&f.id).is_some_and(|v| match v {
+                Json::Array(a) => !a.is_empty(),
+                Json::Null => false,
+                _ => true,
+            })
+    });
+    if holds_refs {
+        return Ok(None);
+    }
+    let linked: bool = conn.query_row(
+        "SELECT EXISTS (
+             SELECT 1 FROM records r JOIN tables t ON t.id = r.table_id
+             WHERE t.base_id = ?2 AND r.id != ?1 AND instr(r.data, ?1) > 0)",
+        rusqlite::params![id, w.table.base_id],
+        |r| r.get(0),
+    )?;
+    if linked {
+        return Ok(None);
+    }
+    conn.execute("DELETE FROM record_history WHERE record_id = ?1", [id])?;
+    conn.execute(
+        "DELETE FROM notifications WHERE instr(payload, ?1) > 0",
+        [id],
+    )?;
+    conn.execute("DELETE FROM records WHERE id = ?1", [id])?;
+    let mut out = WriteOutcome::new(&w.table.base_id, table_id);
+    out.table_mut(table_id).deleted.push(id);
+    Ok(Some(out))
+}
+
 // ---------------------------------------------------------------- restore
 
 /// Bring trashed records back. Their computed fields are recalculated and the

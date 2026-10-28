@@ -604,7 +604,10 @@ be shared. At most 20 links per view. Passwords are stored as Argon2id hashes.
 A public link follows its view's live configuration, so while a view has an
 enabled link, changing the shown fields, their order, the filter or the form
 needs the Creator role (403 for Editors; widths, sorts, colours and renames
-stay open to Editors).
+stay open to Editors). `GET /api/views/{id}/share-status` answers `{"enabled": bool}` for
+Editors, so a client can tell that the form is read-only for them. A form field
+of a link or user field cannot be `required` (public forms never collect them;
+the save is refused with 400, unless the saved form already had it required).
 
 Public endpoints take no credentials; the token in the URL is the capability.
 A password-protected link wants the header `X-Share-Password` (401
@@ -623,8 +626,38 @@ length). Unattached public-form uploads are deleted after 2 hours.
 | `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
 | `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
-| `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
+| `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user) and answers `{"ok": true, "record_id"}` (a form's `redirect_url` may contain `{record_id}`, which the page replaces). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
 | `POST /api/public/forms/{token}/attachments` | multipart `file` for an attachment field of the form (at most 25 MB, further capped by the upload limit) |
+
+### Form logic, prefill and notifications
+
+The form config (`views.config.form`) is a list of **entries**: a question (`{field_id, required, label, help}`)
+or, with `block`, a heading (`{block: "heading", label}`) or a paragraph (`{block: "text", help}`). A block's
+`field_id` is made by the server (`blk...`) when left out. `GET /api/public/forms/{token}` lists the entries in
+order; a block has `block` set (and `type` `text`, `options` `{}`), nothing is submitted for it, and one with no
+text is left out.
+
+- **Show-if.** Any entry may have `show_if`, a view filter (`{conjunction, items: [{field_id, op, value}]}`) on
+  the questions above it, of type text, number, currency, percent, rating, checkbox, single or multiple select
+  (400 otherwise, or when the field is below it; a condition the saved form already had is left alone). While it
+  does not hold the entry is hidden: on submit its answer is ignored (not even validated), it is not required, and
+  it gives no answer to the entries below it. The rules are those of view filters: a condition with an empty
+  operand is ignored, `is_not` / `does_not_contain` / `is_none_of` / `has_none_of` are met by an unanswered
+  question, comparisons are not. The public definition carries each `show_if` (conditions on fields the table no
+  longer has are dropped), so the page can evaluate it as the visitor answers.
+- **Defaults and descriptions.** Each public form field has `default` (text, number and percent fields) that the
+  page starts with, and `help` is the form's own help, else the field's description. A question that is shown but
+  left empty (a default cleared) is written empty instead of getting the default; fields the form does not ask
+  for still get theirs.
+- **Prefill.** The public page reads `?prefill_<Field>=<value>` and `?hide_<Field>=true` from its address, for
+  example `/form/shr_...?prefill_Customer=Acme&prefill_Priority=High&hide_Customer=true`. `<Field>` is the
+  question's label (any case; `+` or `%20` for spaces) or its field id. Values: text as it is; numbers as
+  digits; dates `2026-03-01` (`2026-03-01T14:30` with a time); a single select by option name; a multiple select
+  by option names separated by commas or repeated; a checkbox `true` / `false`; a rating a number. Values that do
+  not fit are ignored. A hidden field is still sent with the answers; a required field with no value is never hidden.
+- **Notifications.** `form.notify_user_ids` lists project members who get a `form_response` notification (and an
+  email when SMTP is set up, within the hourly email budget) for each response that arrives through the public link
+  (400 for anyone who is not a member). Changing only this list is open to Editors even while the link is on.
 
 ---
 
@@ -652,6 +685,19 @@ length). Unattached public-form uploads are deleted after 2 hours.
 - `POST /api/bases/{id}/import` (Creator): multipart `file`, optional `name`,
   `has_header`; creates a new table with inferred field types and imports every
   row, again atomically.
+
+### Discarding an untouched new record (internal API)
+
+`POST /api/tables/{id}/records/{rid}/discard` (Editor; no body) takes back a record nobody
+touched, for good and without a trace: the row and its history entry are deleted, nothing goes
+to the trash, and other clients get the same live update as for a delete. Answer
+`200 {"discarded": true}`. When any condition fails the record is left as it is and the answer
+is `200 {"discarded": false}`: the caller created it, less than 24 hours ago; its only history
+entry is that creation and it was not changed since; it has no comments; it has no link or
+attachment values; and no other record links to it. Notifications that name it are removed too;
+automations that ran when it was created are not undone. The web app calls it when the panel of
+a brand-new, still empty record closes; agents reach it through `api_request` (`api_reference`
+lists it).
 
 ---
 

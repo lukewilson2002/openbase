@@ -6,6 +6,7 @@ import type { FormConfig } from "./FormConfig";
 import type { GalleryConfig } from "./GalleryConfig";
 import type { Group } from "./Group";
 import type { KanbanConfig } from "./KanbanConfig";
+import type { ListConfig } from "./ListConfig";
 import type { RowColor } from "./RowColor";
 import type { RowHeight } from "./RowHeight";
 import type { Sort } from "./Sort";
@@ -38,4 +39,4 @@ wrap_headers: boolean,
  * their label/value fields), the full text on hover there and on
  * calendar events and timeline bars. Optional; any text field will do.
  */
-description_field_id?: string | null, kanban: KanbanConfig, calendar: CalendarConfig, gallery: GalleryConfig, timeline: TimelineConfig, form: FormConfig, };
+description_field_id?: string | null, kanban: KanbanConfig, calendar: CalendarConfig, gallery: GalleryConfig, list: ListConfig, timeline: TimelineConfig, form: FormConfig, };

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
@@ -31,7 +31,7 @@ async function keyboardDrag(user: ReturnType<typeof userEvent.setup>, card: HTML
 }
 
 const board = (patch: Record<string, unknown> = {}, over = {}) =>
-  viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], ...patch } }, over);
+  viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, cover_fit: false, ...patch } }, over);
 
 const records = [
   rec("r1", { [F.status.id]: "s1", [F.effort.id]: 5 }),
@@ -108,7 +108,7 @@ describe("KanbanView", () => {
     const label = field("formula", { expression: "{Name}", result_type: "text" }, { id: "f_label", name: "Label" });
     const total = field("formula", { expression: "1", result_type: "number" }, { id: "f_total", name: "Total" });
     // The description is the view's, not the board's: it sits beside `kanban` in the config.
-    const described = (id: string) => viewWithConfig("viw1", "kanban", { description_field_id: id, kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [] } });
+    const described = (id: string) => viewWithConfig("viw1", "kanban", { description_field_id: id, kanban: { stack_field_id: F.status.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, cover_fit: false } });
     const long = "First line of the notes.\n\n   Second   paragraph with more words than fit on three lines of a narrow card.";
 
     function setupNotes(view: ReturnType<typeof board>, values: Record<string, unknown> = {}) {
@@ -274,6 +274,25 @@ describe("KanbanView", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
   });
 
+  it("adds from the toolbar to the stack of the card last focused", async () => {
+    const user = userEvent.setup();
+    const created = rec("r9", { [F.status.id]: "s2" });
+    const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
+    (await screen.findByRole("button", { name: "R3" })).focus();
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
+  });
+
+  it("makes the stack Add button quiet until it is pointed at, focused or touched", async () => {
+    setup("editor");
+    const label = (await screen.findByRole("button", { name: "Add card to Doing" })).querySelector("span")!;
+    expect(label.className).toMatch(/\bopacity-50\b/);
+    expect(label.className).toContain("group-hover/add:opacity-100");
+    expect(label.className).toContain("group-focus-visible/add:opacity-100");
+    expect(label.className).toContain("pointer-coarse:opacity-100");
+  });
+
   it("adds to Uncategorized without a value", async () => {
     const user = userEvent.setup();
     const created = rec("r9", {});
@@ -338,5 +357,305 @@ describe("KanbanView", () => {
     await user.click(screen.getByRole("button", { name: /Search records/ }));
     await user.type(screen.getByRole("searchbox", { name: "Search records" }), "docs");
     await waitFor(() => expect(asked.some((a) => a.search === "docs")).toBe(true));
+  });
+  describe("person stacks", () => {
+    const byOwner = (patch: Record<string, unknown> = {}) =>
+      viewWithConfig("viw1", "kanban", { kanban: { stack_field_id: F.owner.id, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, cover_fit: false, ...patch } as never });
+    const owned = [rec("r1", { [F.owner.id]: ["usr1"] }), rec("r2", { [F.owner.id]: ["usr9"] }), rec("r3", {})];
+
+    it("names people, never their ids, and only draws stacks for people who hold cards", async () => {
+      setup("editor", byOwner(), {}, { records: owned });
+      await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
+      expect(screen.getAllByRole("listitem").map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Uncategorized", "Stack: Ada Lovelace", "Stack: Former member"]);
+      expect(screen.queryByText(/usr9/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Stacks follow the people with cards/)).toBeInTheDocument();
+    });
+
+    it("says so where Add a stack would be, and not to turn on a setting you cannot change", async () => {
+      setup("viewer", byOwner(), {}, { records: owned });
+      await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
+      expect(screen.getByText("Stacks follow the people with cards.")).toBeInTheDocument();
+    });
+
+    it("draws a stack for everyone when the setting asks for it, and saves the setting", async () => {
+      const user = userEvent.setup();
+      const view = byOwner();
+      const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) }, { records: owned });
+      await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
+      expect(screen.queryByRole("listitem", { name: "Stack: Grace Hopper" })).not.toBeInTheDocument();
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await user.click(await screen.findByRole("checkbox", { name: "Show everyone, even people with no cards" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { show_all_people: boolean } } }).config.kanban.show_all_people).toBe(true);
+    });
+  });
+
+  describe("stack menu", () => {
+    const saves = (view = board()) => ({ "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const savedKanban = (api: ReturnType<typeof setup>["api"], n = 0) => (api.callsTo("PATCH /api/views/viw1")[n]!.body as { config: { kanban: Record<string, unknown> } }).config.kanban;
+
+    it("hides a stack for this view and brings it back from the end of the board", async () => {
+      const user = userEvent.setup();
+      const view = board();
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Doing" });
+      await user.click(screen.getByRole("button", { name: "Options for Doing" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Hide stack" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api).hidden_stacks).toEqual(["s2"]);
+    });
+
+    it("leaves hidden stacks off the board and brings one back from the end of it", async () => {
+      const user = userEvent.setup();
+      const view = board({ hidden_stacks: ["s2", "s3"] });
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      expect(screen.queryByRole("listitem", { name: "Stack: Doing" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("listitem", { name: "Stack: Done" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "2 hidden stacks" }));
+      await user.click(await screen.findByRole("menuitem", { name: /Show Doing/ }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api).hidden_stacks).toEqual(["s3"]);
+    });
+
+    it("starts with every stack showing when the board is stacked by another field", async () => {
+      const user = userEvent.setup();
+      const view = board({ hidden_stacks: ["", "s2"] });
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Stack cards by" }), F.owner.id);
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api)).toMatchObject({ stack_field_id: F.owner.id, stack_order: [], hidden_stacks: [] });
+    });
+
+    it("can hide a populated Uncategorized stack too", async () => {
+      const user = userEvent.setup();
+      const view = board();
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Uncategorized" });
+      await user.click(screen.getByRole("button", { name: "Options for Uncategorized" }));
+      expect(screen.queryByRole("menuitem", { name: "Rename stack" })).not.toBeInTheDocument();
+      await user.click(await screen.findByRole("menuitem", { name: "Hide stack" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api).hidden_stacks).toEqual([""]);
+    });
+
+    it("renames, recolours and deletes the choice for people who manage fields", async () => {
+      const user = userEvent.setup();
+      const { api } = setup("creator", board(), {
+        "PATCH /api/fields/f_status": (c: { body: { options: { choices: unknown[] } } }) => ({ ...F.status, options: { choices: c.body.options.choices } }),
+      });
+      const choices = () => (api.callsTo("PATCH /api/fields/f_status").at(-1)!.body as { type: string; options: { choices: { id: string; name: string; color: string }[] } }).options.choices;
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+
+      await user.click(screen.getByRole("button", { name: "Options for Todo" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Rename stack" }));
+      const input = await screen.findByRole("textbox", { name: "Stack name" });
+      await user.clear(input);
+      await user.type(input, "Backlog{Enter}");
+      await waitFor(() => expect(api.callsTo("PATCH /api/fields/f_status")).toHaveLength(1));
+      expect(choices().map((c) => c.name)).toEqual(["Backlog", "Doing", "Done"]);
+      expect(choices()[0]!.id).toBe("s1"); // the same choice, so its cards stay in it
+
+      await user.click(screen.getByRole("button", { name: "Options for Doing" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Change colour" }));
+      await user.click(await screen.findByRole("radio", { name: "Red" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/fields/f_status")).toHaveLength(2));
+      expect(choices().find((c) => c.id === "s2")!.color).toBe("red");
+
+      await user.click(screen.getByRole("button", { name: "Options for Done" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Delete stack" }));
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent(/No cards here use it/);
+      await user.click(screen.getByRole("button", { name: "Delete stack" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/fields/f_status")).toHaveLength(3));
+      expect(choices().map((c) => c.id)).toEqual(["s1", "s2"]);
+    });
+
+    it("offers none of these to editors, who cannot change the field's choices", async () => {
+      const user = userEvent.setup();
+      setup("editor");
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.click(screen.getByRole("button", { name: "Options for Todo" }));
+      await screen.findByRole("menuitem", { name: "Collapse stack" });
+      for (const name of ["Rename stack", "Change colour", "Delete stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+      expect(screen.getByText(/Adding a stack adds an option to the field/)).toBeInTheDocument();
+    });
+
+    it("drags a header to reorder the stacks with one save, keeping the hidden ones in place", async () => {
+      const view = board({ hidden_stacks: ["s2"] });
+      const { api } = setup("editor", view, saves(view));
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      // Uncategorized, Todo, Done are shown (Doing is hidden): drag Uncategorized past Todo.
+      const header = screen.getByRole("heading", { name: "Uncategorized" }).parentElement!;
+      fireEvent.mouseDown(header, { button: 0, clientX: 100, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 130, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 400, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 410, clientY: 10 });
+      await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+      fireEvent.mouseUp(document);
+      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+      expect(savedKanban(api).stack_order).toEqual(["s1", "", "s2", "s3"]);
+      await act(async () => void (await new Promise((r) => setTimeout(r, 60)))); // dnd-kit swallows the click after a drag for a moment
+    });
+
+    it("lets people who cannot change the view collapse stacks only", async () => {
+      const user = userEvent.setup();
+      setup("viewer");
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.click(screen.getByRole("button", { name: "Options for Todo" }));
+      await screen.findByRole("menuitem", { name: "Collapse stack" });
+      for (const name of ["Hide stack", "Move left", "Rename stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("clearing a value", () => {
+    it("drops a card on an Uncategorized stack that exists only while dragging, and writes null", async () => {
+      const user = userEvent.setup();
+      const full = [rec("r1", { [F.status.id]: "s1" }), rec("r3", { [F.status.id]: "s2" })];
+      const { api } = setup("editor", board(), { "PATCH /api/tables/tbl1/records": { records: [rec("r1", {})] }, "POST /api/tables/tbl1/records/move": { records: [] } }, { records: full });
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      expect(screen.queryByRole("listitem", { name: "Stack: Uncategorized" })).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "R1" }).focus();
+      await user.keyboard(" ");
+      await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+      expect(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).toHaveTextContent("Drop a card here to clear its Status.");
+      for (const k of ["{ArrowRight}", "{ArrowRight}", "{ArrowRight}"]) {
+        await user.keyboard(k);
+        await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+      }
+      await user.keyboard(" ");
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "r1", values: { f_status: null } }] });
+    });
+  });
+
+  describe("selecting cards", () => {
+    const withTwoDeletes = (server = { records: [...records] }) =>
+      setup("editor", board(), { "DELETE /api/tables/tbl1/records": undefined, "PATCH /api/tables/tbl1/records": { records: [] } } as never, server);
+
+    it("deletes a single card at once with Delete, with an Undo in the toast", async () => {
+      const user = userEvent.setup();
+      const server = { records: [...records] };
+      const { api } = setup(
+        "editor",
+        board(),
+        {
+          "DELETE /api/tables/tbl1/records": (c: { body: { ids: string[] } }) => {
+            server.records = server.records.filter((r) => !c.body.ids.includes(r.id));
+            return {};
+          },
+        },
+        server,
+      );
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      screen.getByRole("button", { name: "R3" }).focus();
+      await user.keyboard("{Delete}");
+      await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r3"] });
+      expect(await screen.findByText("Record deleted")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "R3" })).not.toBeInTheDocument();
+    });
+
+    it("asks before deleting a selection, then deletes all of it", async () => {
+      const user = userEvent.setup();
+      const { api } = setup("editor", board(), { "DELETE /api/tables/tbl1/records": {} });
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.keyboard("{Control>}");
+      await user.click(screen.getByRole("button", { name: "R1" }));
+      await user.click(screen.getByRole("button", { name: "R2" }));
+      await user.keyboard("{/Control}");
+      await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Delete" }));
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent("Delete 2 records?");
+      expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(0);
+      await user.click(within(dialog).getByRole("button", { name: "Delete 2 records" }));
+      await waitFor(() => expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1));
+      expect(api.callsTo("DELETE /api/tables/tbl1/records")[0]!.body).toEqual({ ids: ["r1", "r2"] });
+      await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Selected records" })).not.toBeInTheDocument());
+    });
+
+    it("duplicates the selection through the duplicate endpoint", async () => {
+      const user = userEvent.setup();
+      const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records/duplicate": { records: [rec("c1", {}), rec("c2", {})] } });
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.keyboard("{Control>}");
+      await user.click(screen.getByRole("button", { name: "R1" }));
+      await user.click(screen.getByRole("button", { name: "R3" }));
+      await user.keyboard("{/Control}");
+      await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Duplicate" }));
+      await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")).toHaveLength(1));
+      expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")[0]!.body).toEqual({ ids: ["r1", "r3"] });
+    });
+
+    it("moves the selection to a stack, one write per card", async () => {
+      const user = userEvent.setup();
+      const { api } = withTwoDeletes();
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      await user.keyboard("{Control>}");
+      await user.click(screen.getByRole("button", { name: "R1" }));
+      await user.click(screen.getByRole("button", { name: "R2" }));
+      await user.keyboard("{/Control}");
+      await user.click(within(screen.getByRole("toolbar", { name: "Selected records" })).getByRole("button", { name: "Move to" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Done" }));
+      await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(2));
+      expect(api.callsTo("PATCH /api/tables/tbl1/records").map((c) => (c.body as { records: unknown[] }).records)).toEqual([[{ id: "r1", values: { f_status: "s3" } }], [{ id: "r2", values: { f_status: "s3" } }]]);
+      expect(await screen.findByText("2 cards moved to Done")).toBeInTheDocument();
+    });
+
+    it("viewers can open cards but cannot select or delete them", async () => {
+      const user = userEvent.setup();
+      setup("viewer", board(), { "GET /api/tables/tbl1/records/r3": records[2]! });
+      await screen.findByRole("listitem", { name: "Stack: Todo" });
+      screen.getByRole("button", { name: "R3" }).focus();
+      await user.keyboard("{Delete}x");
+      expect(screen.queryByRole("toolbar", { name: "Selected records" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "R3" })).toBeInTheDocument();
+    });
+  });
+
+  describe("card settings", () => {
+    const extra = ["f_a", "f_b", "f_c", "f_d"].map((id, i) => field("text", { multiline: false }, { id, name: `Extra ${i + 1}` }));
+    const crowded = (patch: Record<string, unknown> = {}) => {
+      const view = board(patch);
+      const schema = projectSchema("editor", [view]);
+      schema.tables[0]!.fields = [...schema.tables[0]!.fields, ...extra];
+      const row = rec("r1", { [F.status.id]: "s1", [F.effort.id]: 5, ...Object.fromEntries(extra.map((f, i) => [f.id, `value ${i + 1}`])) });
+      const api = renderView(KanbanView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records: [row] }), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never });
+      return api;
+    };
+
+    it("shows as many fields as the view asks for, six by default", async () => {
+      const six = crowded();
+      const card = await screen.findByRole("button", { name: "R1" });
+      expect(card.querySelectorAll("dt")).toHaveLength(5); // Effort + 4 extras; the stack field is left out
+      six.unmount();
+      crowded({ card_field_limit: 3 });
+      expect((await screen.findByRole("button", { name: "R1" })).querySelectorAll("dt")).toHaveLength(3);
+    });
+
+    it("saves the number of fields and the cover fit from the View settings", async () => {
+      const user = userEvent.setup();
+      const api = crowded({ cover_field_id: F.cover.id }).api;
+      await screen.findByRole("button", { name: "R1" });
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Fields on a card" }), "10");
+      await user.selectOptions(screen.getByRole("combobox", { name: "Cover image fit" }), "fit");
+      // Quick changes are saved together.
+      await waitFor(() => {
+        const last = api.callsTo("PATCH /api/views/viw1").at(-1)!.body as { config: { kanban: { card_field_limit: number; cover_fit: boolean } } };
+        expect(last.config.kanban).toMatchObject({ card_field_limit: 10, cover_fit: true });
+      });
+    });
+
+    it("explains the cover fit setting is waiting for a cover", async () => {
+      const user = userEvent.setup();
+      crowded();
+      await screen.findByRole("button", { name: "R1" });
+      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      expect(await screen.findByRole("combobox", { name: "Cover image fit" })).toBeDisabled();
+      expect(screen.getByText("Choose a cover image first.")).toBeInTheDocument();
+    });
   });
 });

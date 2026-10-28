@@ -540,3 +540,40 @@ describe("ViewBar grouping by a date", () => {
     expect(applied(props).groups).toEqual([{ field_id: "fld_created", direction: "desc", granularity: "month" }]);
   });
 });
+
+describe("Hide fields: order", () => {
+  const f = (n: number) => ({ ...ALL_FIELDS.text, id: `fld_${n}`, name: `Field ${n}` });
+  const four = makeTable([f(1), f(2), f(3), f(4)], { primary_field_id: "fld_1" });
+
+  async function open(over: Partial<ViewConfig> = {}) {
+    const { view, config } = withConfig(over);
+    const props = renderBar({ table: four, view, config, canConfigure: true });
+    await userEvent.click(screen.getByRole("button", { name: /Hide fields|hidden field/ }));
+    return props;
+  }
+  /** The config the last `update` call produces from the one on screen. */
+  const applied = (update: ViewBarProps["update"], config: ViewConfig) => (vi.mocked(update).mock.calls.at(-1)![0] as (c: ViewConfig) => ViewConfig)(config);
+
+  it("moves a field up or down from its row, never above the primary field", async () => {
+    const props = await open();
+    expect(screen.getByRole("button", { name: "Move Field 2 up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move Field 4 down" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Move Field 3 up" }));
+    expect(applied(props.update, props.config).field_order).toEqual(["fld_1", "fld_3", "fld_2", "fld_4"]);
+    await userEvent.click(screen.getByRole("button", { name: "Move Field 2 down" }));
+    expect(applied(props.update, props.config).field_order).toEqual(["fld_1", "fld_3", "fld_2", "fld_4"]);
+  });
+
+  it("has a drag handle on every field but the primary one", async () => {
+    await open();
+    expect(screen.getByRole("button", { name: "Drag Field 4 to reorder" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Drag Field 1 to reorder" })).not.toBeInTheDocument();
+  });
+
+  it("offers no reordering while the list is filtered by the search box", async () => {
+    await open();
+    await userEvent.type(screen.getByRole("textbox", { name: "Find a field" }), "Field 3");
+    expect(screen.queryByRole("button", { name: /^Move Field/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Drag Field/ })).not.toBeInTheDocument();
+  });
+});

@@ -11,6 +11,86 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ## [Unreleased]
 
+### Added
+
+- **Select, delete and undo in every view.** Kanban, gallery, list, calendar and timeline now
+  have what the grid had: Shift/Ctrl/Cmd-click to select several cards or rows, ⌘A / Ctrl+A,
+  a bar with the count and **Delete**, **Duplicate** and **Clear**, the **Delete** key, and a
+  record menu on right-click or the menu key. Deleting several records asks first with the count.
+  Moves, edits, new records and deletes can be undone with ⌘Z / Ctrl+Z (redo with ⇧⌘Z, Ctrl+Y),
+  and a toast after a delete or a drop has **Undo**. The grid shows **Undo** and **Redo** buttons.
+- **New records fit the view.** A record added in a filtered or grouped view starts with the
+  values that keep it there (the filter's "is" conditions, the group, stack or lane). One added
+  and closed without typing anything is dropped again.
+- **Kanban:** drag stack headers to reorder them; the stack menu can rename, recolour, hide (for
+  this view) and delete a stack; while dragging there is always a **No value** stack to clear a
+  card's value. Person stacks show names, and only people with cards unless **Show everyone, even
+  people with no cards** is on. Cards can show more or fewer fields, and covers can be fitted instead of cropped.
+- **Calendar:** a **Day** layout; the layout, the date and the first day of the week are kept;
+  drag an event onto **Unscheduled**, or press Delete on a focused event, to clear its dates; on a
+  phone the unscheduled records open as a sheet under the days.
+- **Timeline:** dragging near an edge scrolls the chart; bigger handles on touch screens; swim
+  lanes list every choice or collaborator, not only the ones in view; Alt+Shift+arrows move the
+  start, T jumps to today, + and − zoom, [ and ] page, and a bar can be added to a lane from the
+  keyboard. Draw a dependency by dragging from a bar's dot to another bar (or L from the
+  keyboard), and select an arrow to remove it; broken dependencies are named on the bar.
+- **Gallery and list:** arrow keys move between cards and rows; drag to reorder when the view has
+  no sort (and between groups of a list, which changes the group's value). A new gallery uses the
+  table's first attachment field as its cover. Cards say "+N more" when they hold more fields than
+  they show.
+- **List rows can be ticked off and nested.** Choose a **Prefix field** (a checkbox, single
+  select or one-person field shown at the start of each row and editable there) and **Sub-items**
+  (a link to the same table): rows nest under their parent, Tab and Shift+Tab indent and outdent, and
+  parents fold.
+- **Forms:** show a question only when an earlier answer matches (**Show if**); headings and text
+  between questions; field defaults are filled in and field descriptions are used as help; a public
+  form link can prefill and hide fields with `?prefill_<Field>=…&hide_<Field>=true`; **Notify me
+  of new responses** (and other people) by notification, and email when the server can send it;
+  the redirect after submitting can include `{record_id}`. Enter submits **Fill in form** from a
+  one-line field and ⌘/Ctrl+Enter from anywhere; an error moves focus to the field.
+- **Agents and the API:** `move_records` and `duplicate_records` (`POST …/records/move` and
+  `…/records/duplicate`), a `position` (`top`, `bottom`, after or before a record) on
+  `create_records`, and `from` / `to` on `query_view` for what a calendar or timeline shows in a
+  date range. Form `show_if`, blocks and `notify_user_ids`, and the new kanban and list settings,
+  are set with `update_view`.
+
+### Changed
+
+- **Delete deletes.** Delete or Backspace on selected grid rows now deletes the records (with
+  Undo) instead of emptying their cells; clearing a large range of cells asks first. On the
+  timeline, Delete on a selected bar deletes its record; **U** (or dragging it onto
+  **Unscheduled**) takes it off the timeline as Delete did before.
+- **Editors can restore what they deleted.** Editors see the records they deleted themselves in
+  the project's trash and can restore them (`list_trash` and `restore_from_trash` too); everything
+  else in the trash still needs the creator role.
+- A public form's submit answers `{ok: true, record_id}`.
+- A form can no longer make a link or person field required when its public link cannot ask it.
+- `create_view` and `update_view` refuse calendar, timeline and kanban settings that name a field
+  of the wrong type (an end equal to its start, a dependency that is not a link to the same
+  table…). A kanban `stack_order` read from `get_view` (with `Uncategorized`) can be written back.
+- A shared (public) board follows the view's stack order, hidden stacks, card field count and
+  cover fit. Person stacks keep their natural order there, since their keys are user ids.
+
+### Fixed
+
+- Pickers in forms and the record panel show a pick at once; Tab and Enter commit and move on in
+  person, link, choice and attachment cells; the rating keys step instead of clearing.
+- Pasting a block that includes an attachment column or one bad cell pastes the cells that fit
+  and says what was skipped; a pasted name that matches several records is not linked to the
+  first one.
+- Group headers and summaries in the grid work from the keyboard and stay folded after a reload;
+  columns move from their menu and from **Hide fields**.
+- The record panel's previous and next go past the rows loaded so far and skip folded groups.
+- A calendar event with a date-only end no longer grows a day when dragged by hours.
+- A timeline drop from **Unscheduled** keeps an existing end date; records with only an end, or an
+  end before the start, are drawn and can be repaired by dragging; a failed drop puts the record
+  back; moving a bar to another lane never overwrites the date it was dragged to; the today line
+  moves at midnight.
+- A form's builder is read-only for editors while its public link is on, instead of saving and
+  snapping back; removed questions keep their settings when added back; the preview no longer
+  creates choices or uploads files; switching between two forms of a table starts the second
+  one fresh.
+
 ## [0.8.0] - 2026-10-21
 
 ### Added

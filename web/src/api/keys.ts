@@ -57,6 +57,8 @@ export const keys = {
   search: (q: string, limit?: number, scope?: { workspace?: string; base?: string }) => ["search", q, limit ?? null, scope?.workspace ?? null, scope?.base ?? null] as const,
   /** Share links of one view (Creators). */
   shares: (viewId: string) => ["shares", viewId] as const,
+  /** Whether the view has an enabled link (under `shares`, so changing a link refreshes it). */
+  shareStatus: (viewId: string) => ["shares", viewId, "status"] as const,
   /** Automations of a base, and (under the same prefix) each one's run pages. */
   automations: (baseId: string) => ["automations", baseId] as const,
   automationRuns: (automationId: string) => ["automation-runs", automationId] as const,

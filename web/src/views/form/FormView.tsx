@@ -47,12 +47,25 @@ export default function FormView(props: ViewProps) {
   const links = useQuery({ queryKey: keys.shares(view.id), queryFn: () => sharesApi.list(view.id), enabled: isCreator && !view.personal });
   const link = links.data?.find((l) => l.enabled && l.kind === "form");
   const address = link ? publicLink(link, window.location.origin) : null;
+  // The public link follows the live form, so while it is on only a creator may change the form (the server
+  // refuses an editor's save). Editors cannot list links; they ask whether one is on.
+  const linkStatus = useQuery({ queryKey: keys.shareStatus(view.id), queryFn: () => sharesApi.status(view.id), enabled: canFill && !isCreator && cfg.canConfigure && !view.personal });
+  const linkLocked = !isCreator && cfg.canConfigure && linkStatus.data?.enabled === true;
+  const canBuild = cfg.canConfigure && !linkLocked;
 
   const setForm = useCallback(
     (next: FormConfig) => {
       cfg.update((c) => ({ ...c, form: cleanForm(pruneForm(next, table)) }));
     },
     [cfg, table],
+  );
+
+  /** A field the form view hides is shown on the public form again. */
+  const showPublic = useCallback(
+    (fieldId: string) => {
+      cfg.update((c) => ({ ...c, hidden_fields: c.hidden_fields.filter((id) => id !== fieldId) }));
+    },
+    [cfg],
   );
 
   const copy = async () => {
@@ -66,7 +79,7 @@ export default function FormView(props: ViewProps) {
   };
 
   const modes = [
-    { value: "build" as const, label: cfg.canConfigure ? "Build" : "Form" },
+    { value: "build" as const, label: canBuild ? "Build" : "Form" },
     ...(canFill ? [{ value: "fill" as const, label: "Fill in form" }] : []),
   ];
 
@@ -118,7 +131,7 @@ export default function FormView(props: ViewProps) {
           </div>
         </div>
         {mode === "build" ? (
-          <FormBuilder setup={setup} onChange={setForm} />
+          <FormBuilder setup={setup} onChange={setForm} linkLocked={linkLocked} onShowPublic={showPublic} />
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-4 md:py-8">
             <FormFill setup={setup} />

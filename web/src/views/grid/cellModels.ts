@@ -10,6 +10,8 @@ import type { CellModel, GridColumnSpec, RecordCellModel } from "./adapter";
 
 export const LOADING: CellModel = { kind: "loading" };
 export const BLANK: CellModel = { kind: "blank" };
+/** The "Add" of an add row, drawn in its first column. */
+export const ADD: CellModel = { kind: "add" };
 
 /**
  * The value of a field in a record. System fields normally arrive in `values`; when the server

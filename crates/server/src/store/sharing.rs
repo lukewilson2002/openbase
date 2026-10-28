@@ -17,8 +17,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ob_core::api::records::Record;
 use ob_core::api::sharing::{PublicField, PublicRecord, PublicViewConfig, ShareKind, ShareLink};
-use ob_core::field::{Field, FieldKind};
-use ob_core::view::{FormField, ViewConfig, ViewType};
+use ob_core::field::{Field, FieldKind, FieldType};
+use ob_core::query::{MapRow, QueryCtx, compile_filter, matches};
+use ob_core::view::{Filter, FilterItem, FormBlock, FormField, ViewConfig, ViewType};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use serde_json::{Value as Json, json};
 
@@ -280,24 +281,148 @@ pub fn is_public_form_type(field: &Field) -> bool {
         && !matches!(field.kind, FieldKind::Link(_) | FieldKind::User(_))
 }
 
-/// The form's inputs: entries of `config.form.fields` whose field is live,
-/// collectable and not hidden in the view, in form order (first mention wins).
-pub fn form_fields(config: &ViewConfig, fields: &[Field]) -> Vec<(FormField, Field)> {
+/// One entry of a public form: a question about a table field, or a heading or paragraph.
+#[derive(Debug, Clone)]
+pub enum FormItem {
+    Question(FormField, Box<Field>),
+    Block(FormField, FormBlock),
+}
+
+impl FormItem {
+    pub fn entry(&self) -> &FormField {
+        match self {
+            FormItem::Question(e, _) | FormItem::Block(e, _) => e,
+        }
+    }
+}
+
+/// The form's entries as a public visitor gets them, in form order (first mention wins): the
+/// questions whose field is live, collectable and not hidden in the view, and the blocks.
+pub fn form_items(config: &ViewConfig, fields: &[Field]) -> Vec<FormItem> {
     let hidden: HashSet<&str> = config.hidden_fields.iter().map(String::as_str).collect();
     let by_id: HashMap<&str, &Field> = fields.iter().map(|f| (f.id.as_str(), f)).collect();
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for entry in &config.form.fields {
+        if let Some(block) = entry.block {
+            // A heading or paragraph with nothing written in it is not shown.
+            let text = match block {
+                FormBlock::Heading => &entry.label,
+                FormBlock::Text => &entry.help,
+            };
+            if text.as_deref().is_some_and(|t| !t.trim().is_empty())
+                && seen.insert(entry.field_id.as_str())
+            {
+                out.push(FormItem::Block(entry.clone(), block));
+            }
+            continue;
+        }
         if hidden.contains(entry.field_id.as_str()) || !seen.insert(entry.field_id.as_str()) {
             continue;
         }
         if let Some(f) = by_id.get(entry.field_id.as_str())
             && is_public_form_type(f)
         {
-            out.push((entry.clone(), (*f).clone()));
+            out.push(FormItem::Question(entry.clone(), Box::new((*f).clone())));
         }
     }
     out
+}
+
+/// The form's inputs: entries of `config.form.fields` whose field is live,
+/// collectable and not hidden in the view, in form order (first mention wins).
+pub fn form_fields(config: &ViewConfig, fields: &[Field]) -> Vec<(FormField, Field)> {
+    form_items(config, fields)
+        .into_iter()
+        .filter_map(|item| match item {
+            FormItem::Question(e, f) => Some((e, *f)),
+            FormItem::Block(..) => None,
+        })
+        .collect()
+}
+
+/// A show-if without the conditions on fields the table no longer has (they count as met), or
+/// `None` when nothing is left to check or what is left cannot be evaluated against the fields'
+/// current types (a form never hides an entry on a condition that no longer makes sense).
+pub fn effective_show_if(show_if: Option<&Filter>, fields: &[Field]) -> Option<Filter> {
+    fn prune(filter: &Filter, fields: &[Field]) -> Filter {
+        let items = filter
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                FilterItem::Condition(c) => fields
+                    .iter()
+                    .any(|f| f.id == c.field_id)
+                    .then(|| item.clone()),
+                FilterItem::Group(g) => {
+                    let g = prune(g, fields);
+                    (!g.items.is_empty()).then_some(FilterItem::Group(g))
+                }
+            })
+            .collect();
+        Filter {
+            conjunction: filter.conjunction,
+            items,
+        }
+    }
+    let pruned = prune(show_if?, fields);
+    let compiled = compile_filter(&pruned, fields).ok()?;
+    (!compiled.is_trivial()).then_some(pruned)
+}
+
+/// Whether an entry with this show-if (from [`effective_show_if`]) is shown, given the stored
+/// values of the questions above it that were shown themselves. Same rules as the filters of
+/// views: a negative operator meets an unanswered question, a comparison does not.
+pub fn show_if_holds(
+    show_if: &Filter,
+    fields: &[Field],
+    answers: &serde_json::Map<String, Json>,
+) -> bool {
+    let Ok(compiled) = compile_filter(show_if, fields) else {
+        return true;
+    };
+    let ctx = QueryCtx::new(chrono::Utc::now(), chrono_tz::Tz::UTC);
+    let row = MapRow {
+        id: "",
+        data: answers,
+    };
+    matches(&compiled, &row, &ctx, &ob_core::cell::NoNames)
+}
+
+/// Whether a form entry may be shown or hidden depending on this question's answer: the kinds
+/// whose answer the public form and the web app test the same way (text, number, rating,
+/// checkbox and select questions).
+pub fn show_if_source_ok(field: &Field) -> bool {
+    is_public_form_type(field)
+        && matches!(
+            field.kind,
+            FieldKind::Text(_)
+                | FieldKind::RichText(_)
+                | FieldKind::Email(_)
+                | FieldKind::Url(_)
+                | FieldKind::Phone(_)
+                | FieldKind::Number(_)
+                | FieldKind::Currency(_)
+                | FieldKind::Percent(_)
+                | FieldKind::Rating(_)
+                | FieldKind::Checkbox(_)
+                | FieldKind::SingleSelect(_)
+                | FieldKind::MultipleSelect(_)
+        )
+}
+
+/// What a field starts with in a form: its default as a value to submit (text, number and percent
+/// fields have one).
+pub fn form_default(field: &Field) -> Option<Json> {
+    match &field.kind {
+        FieldKind::Text(o) => o
+            .default
+            .clone()
+            .filter(|d| !d.is_empty())
+            .map(Json::String),
+        FieldKind::Number(o) | FieldKind::Percent(o) => o.default.map(|d| json!(d)),
+        _ => None,
+    }
 }
 
 // ------------------------------------------------------ public rendering
@@ -337,16 +462,25 @@ pub fn public_field(field: &Field) -> PublicField {
     }
 }
 
-/// Layout-relevant parts of a view config, restricted to `visible` field ids.
-pub fn public_config(config: &ViewConfig, visible: &HashSet<&str>) -> PublicViewConfig {
-    let keep = |id: &Option<String>| -> Option<String> {
-        id.clone().filter(|i| visible.contains(i.as_str()))
+/// Layout-relevant parts of a view config, restricted to the `visible` fields.
+pub fn public_config(config: &ViewConfig, visible: &[Field]) -> PublicViewConfig {
+    let ids: HashSet<&str> = visible.iter().map(|f| f.id.as_str()).collect();
+    let keep =
+        |id: &Option<String>| -> Option<String> { id.clone().filter(|i| ids.contains(i.as_str())) };
+    let stack_field =
+        keep(&config.kanban.stack_field_id).and_then(|id| visible.iter().find(|f| f.id == id));
+    // Person stacks are keyed by user id, which a public viewer never sees.
+    let stack_keys = |keys: &Vec<String>| -> Vec<String> {
+        match stack_field {
+            Some(f) if f.field_type() != FieldType::User => keys.clone(),
+            _ => Vec::new(),
+        }
     };
     PublicViewConfig {
         field_widths: config
             .field_widths
             .iter()
-            .filter(|(id, _)| visible.contains(id.as_str()))
+            .filter(|(id, _)| ids.contains(id.as_str()))
             .map(|(k, v)| (k.clone(), *v))
             .collect::<BTreeMap<_, _>>(),
         frozen_columns: config.frozen_columns,
@@ -354,6 +488,10 @@ pub fn public_config(config: &ViewConfig, visible: &HashSet<&str>) -> PublicView
         kanban_cover_field_id: keep(&config.kanban.cover_field_id),
         description_field_id: keep(&config.description_field_id),
         kanban_hide_empty_stacks: config.kanban.hide_empty_stacks,
+        kanban_stack_order: stack_keys(&config.kanban.stack_order),
+        kanban_hidden_stacks: stack_keys(&config.kanban.hidden_stacks),
+        kanban_card_field_limit: config.kanban.card_field_limit,
+        kanban_cover_fit: config.kanban.cover_fit,
         gallery_cover_field_id: keep(&config.gallery.cover_field_id),
         calendar_date_field_id: keep(&config.calendar.date_field_id),
         calendar_end_field_id: keep(&config.calendar.end_field_id),
@@ -488,8 +626,7 @@ mod tests {
         let entry = |id: &str| FormField {
             field_id: id.into(),
             required: id == "a",
-            label: None,
-            help: None,
+            ..Default::default()
         };
         config.form.fields = vec![
             entry("b"),
@@ -532,5 +669,35 @@ mod tests {
             }),
         );
         assert_eq!(public_options(&link), json!({ "single": true }));
+    }
+
+    #[test]
+    fn public_config_carries_kanban_layout_but_not_person_stack_keys() {
+        let status = field(
+            "fld_status",
+            FieldKind::SingleSelect(ob_core::field::SelectOptions::default()),
+        );
+        let owner = field(
+            "fld_owner",
+            FieldKind::User(ob_core::field::UserOptions::default()),
+        );
+        let mut config = ViewConfig::default();
+        config.kanban.stack_field_id = Some("fld_status".into());
+        config.kanban.stack_order = vec!["selB".into(), "selA".into()];
+        config.kanban.hidden_stacks = vec!["selC".into()];
+        config.kanban.card_field_limit = Some(3);
+        config.kanban.cover_fit = true;
+        let public = public_config(&config, &[status.clone(), owner.clone()]);
+        assert_eq!(public.kanban_stack_order, vec!["selB", "selA"]);
+        assert_eq!(public.kanban_hidden_stacks, vec!["selC"]);
+        assert_eq!(public.kanban_card_field_limit, Some(3));
+        assert!(public.kanban_cover_fit);
+
+        config.kanban.stack_field_id = Some("fld_owner".into());
+        config.kanban.stack_order = vec!["usr1".into()];
+        config.kanban.hidden_stacks = vec!["usr2".into()];
+        let public = public_config(&config, &[status, owner]);
+        assert!(public.kanban_stack_order.is_empty());
+        assert!(public.kanban_hidden_stacks.is_empty());
     }
 }

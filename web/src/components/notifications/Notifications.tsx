@@ -6,7 +6,7 @@
 import { useMemo, type ComponentProps } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, Mail, UserCheck, Zap } from "lucide-react";
+import { AtSign, Bell, ClipboardList, Mail, UserCheck, Zap } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -95,7 +95,7 @@ export function NotificationsRow({ open, className, ...props }: { open: boolean 
   );
 }
 
-const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, invite: Mail, automation: Zap, other: Bell };
+const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, invite: Mail, automation: Zap, form_response: ClipboardList, other: Bell };
 
 /**
  * The panel's content: a heading with "Mark all as read", then the notifications, newest first.

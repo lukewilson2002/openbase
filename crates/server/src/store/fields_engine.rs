@@ -373,8 +373,32 @@ impl Stale {
         }
         for f in &config.form.fields {
             out.add("form", &f.field_id);
+            if f.required {
+                out.add("form required", &f.field_id);
+            }
+            if let Some(show_if) = &f.show_if {
+                out.add_show_if(&f.field_id, show_if);
+            }
         }
         out
+    }
+
+    fn add_show_if(&mut self, entry: &str, filter: &Filter) {
+        for item in &filter.items {
+            match item {
+                FilterItem::Condition(c) => {
+                    if let Some(key) = show_if_key(entry, c) {
+                        self.0.insert(key);
+                    }
+                }
+                FilterItem::Group(g) => self.add_show_if(entry, g),
+            }
+        }
+    }
+
+    /// Did the old form give the entry `entry` this very show-if condition?
+    pub fn show_if_condition(&self, entry: &str, c: &Condition) -> bool {
+        show_if_key(entry, c).is_some_and(|k| self.0.contains(&k))
     }
 
     fn add(&mut self, slot: &str, id: &str) {
@@ -406,6 +430,12 @@ impl Stale {
     }
 }
 
+fn show_if_key(entry: &str, c: &Condition) -> Option<String> {
+    serde_json::to_string(c)
+        .ok()
+        .map(|json| format!("show if\0{entry}\0{json}"))
+}
+
 fn condition_key(c: &Condition) -> Option<String> {
     serde_json::to_string(c)
         .ok()
@@ -414,7 +444,7 @@ fn condition_key(c: &Condition) -> Option<String> {
 
 /// The single-field slots of a config with the label the validator reports
 /// them under.
-pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10] {
+pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 12] {
     [
         ("kanban stack field", config.kanban.stack_field_id.as_ref()),
         ("kanban cover field", config.kanban.cover_field_id.as_ref()),
@@ -428,6 +458,8 @@ pub fn config_slots(config: &ViewConfig) -> [(&'static str, Option<&String>); 10
             "gallery cover field",
             config.gallery.cover_field_id.as_ref(),
         ),
+        ("list prefix field", config.list.prefix_field_id.as_ref()),
+        ("list parent field", config.list.parent_field_id.as_ref()),
         (
             "timeline start field",
             config.timeline.start_field_id.as_ref(),

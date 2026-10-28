@@ -66,7 +66,14 @@ export const recordsApi = {
   update: (tableId: string, body: UpdateRecords) => http.patch<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
   /** DELETE with a JSON body of ids (soft delete: restorable from the trash); answers 204. */
   remove: (tableId: string, ids: string[]) => request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } }),
+  /**
+   * Take back a record the caller has just added and never changed, leaving no trace (no trash, no
+   * history). Answers `{discarded: false}` when it is no longer untouched, so it stays.
+   */
+  discard: (tableId: string, recordId: string) => http.post<{ discarded: boolean }>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {}),
   restore: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids }),
+  /** Copy records, each right after its original (computed fields are left to recalculate); answers the copies in order. At most 100 ids. */
+  duplicate: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/duplicate`, { ids }),
   move: (tableId: string, body: MoveRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/move`, body),
   /** Link picker candidates: `q` matches the primary field's text, and that of `fields` too. */
   lookup: (tableId: string, q: string, opts: { limit?: number; viewId?: string | null; fields?: readonly string[]; signal?: AbortSignal } = {}) =>

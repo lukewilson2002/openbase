@@ -8,6 +8,7 @@ import {
   addFilterCondition,
   addSortLike,
   moveField,
+  moveVisibleField,
   moveSortLike,
   queryRelevantKey,
   removeSortLike,
@@ -42,6 +43,29 @@ describe("resolveFieldOrder", () => {
   });
 });
 
+describe("freezing while fields are hidden or shown", () => {
+  // f1 | f2 f3 frozen | f4
+  const frozen = (): ViewConfig => ({ ...empty(), frozen_columns: 2 });
+  it("hiding a column before the line keeps the line after the same column", () => {
+    const c = setHiddenField(frozen(), table, "f2", true);
+    expect(c.frozen_columns).toBe(1);
+    expect(ids(resolveFieldOrder(table, c).visible).slice(0, 1 + c.frozen_columns)).toEqual(["f1", "f3"]);
+  });
+  it("hiding a column after the line leaves it", () => {
+    expect(setHiddenField(frozen(), table, "f4", true).frozen_columns).toBe(2);
+  });
+  it("showing a column before the line freezes it with the others, so the line stays put", () => {
+    const hidden = { ...frozen(), hidden_fields: ["f2"], frozen_columns: 1 };
+    expect(setHiddenField(hidden, table, "f2", false).frozen_columns).toBe(2);
+  });
+  it("hiding every frozen column unfreezes", () => {
+    expect(setAllHidden(frozen(), table, true).frozen_columns).toBe(0);
+  });
+  it("does nothing while nothing is frozen", () => {
+    expect(setHiddenField(empty(), table, "f2", true).frozen_columns).toBe(0);
+  });
+});
+
 describe("hiding and ordering", () => {
   it("toggles hidden fields and ignores the primary", () => {
     const c = setHiddenField(empty(), table, "f2", true);
@@ -60,9 +84,24 @@ describe("hiding and ordering", () => {
     expect(moveField(empty(), table, "f1", "f3")).toEqual(empty());
     expect(moveField(empty(), table, "f2", "f1")).toEqual(empty());
   });
-  it("persists a dragged visible order and keeps hidden fields after it", () => {
+  it("persists a dragged visible order and keeps hidden fields in their slots", () => {
     const base = { ...empty(), hidden_fields: ["f3"] };
-    expect(reorderVisible(base, table, ["f1", "f4", "f2"]).field_order).toEqual(["f1", "f4", "f2", "f3"]);
+    // f3 was third of four: it stays third, so showing it again puts it back where it was.
+    expect(reorderVisible(base, table, ["f1", "f4", "f2"]).field_order).toEqual(["f1", "f4", "f3", "f2"]);
+    expect(reorderVisible(base, table, ["f1", "f2", "f4"]).field_order).toEqual(["f1", "f2", "f3", "f4"]);
+  });
+  it("ignores an order that is not a permutation of the visible fields", () => {
+    const base = { ...empty(), hidden_fields: ["f3"] };
+    expect(reorderVisible(base, table, ["f1", "f4"])).toBe(base);
+    expect(reorderVisible(base, table, ["f1", "f2", "f3"])).toBe(base);
+  });
+  it("moves a shown field one place, never past the primary or the ends", () => {
+    const base = { ...empty(), hidden_fields: ["f3"] };
+    expect(moveVisibleField(base, table, "f4", -1).field_order).toEqual(["f1", "f4", "f3", "f2"]);
+    expect(moveVisibleField(base, table, "f2", 1).field_order).toEqual(["f1", "f4", "f3", "f2"]);
+    expect(moveVisibleField(base, table, "f2", -1)).toBe(base);
+    expect(moveVisibleField(base, table, "f4", 1)).toBe(base);
+    expect(moveVisibleField(base, table, "f1", 1)).toBe(base);
   });
   it("sets widths (with a floor), frozen columns, row height and summaries", () => {
     expect(setFieldWidth(empty(), "f2", 10.4).field_widths).toEqual({ f2: 40 });

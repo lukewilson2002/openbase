@@ -138,11 +138,12 @@ function emptyConfig(): Obj {
     summaries: {},
     wrap_headers: false,
     description_field_id: null,
-    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [] },
+    kanban: { stack_field_id: null, cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false },
     calendar: { date_field_id: null, end_field_id: null },
     gallery: { cover_field_id: null, cover_crop: false },
+    list: { prefix_field_id: null, parent_field_id: null },
     timeline: { start_field_id: null, end_field_id: null, group_field_id: null, dependency_field_id: null, scale: "week" },
-    form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false },
+    form: { title: "", description: "", fields: [], submit_label: "", success_message: "", redirect_url: null, show_submit_another: false, notify_user_ids: [] },
   };
 }
 
@@ -156,16 +157,17 @@ const views: Obj[] = [
     table_id: T_PROJECTS,
     name: "Board",
     type: "kanban",
-    config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [] }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
+    config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_done"], kanban: { stack_field_id: "fld_j_status", cover_field_id: "fld_j_cover", hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false }, row_color: { mode: "by_select", field_id: "fld_j_team" } },
     personal: false,
     locked: false,
   },
-  { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [] }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
+  { id: "viw12", table_id: T_PROJECTS, name: "Board by team", type: "kanban", config: { ...emptyConfig(), kanban: { stack_field_id: "fld_j_team", cover_field_id: null, hide_empty_stacks: false, stack_order: [], hidden_stacks: [], show_all_people: false, card_field_limit: null, cover_fit: false }, sorts: [{ field_id: "fld_j_name", direction: "asc" }] }, personal: false, locked: false },
   { id: "viw13", table_id: T_PROJECTS, name: "Gallery", type: "gallery", config: { ...emptyConfig(), description_field_id: "fld_j_summary", hidden_fields: ["fld_j_deps", "fld_j_blocks"], gallery: { cover_field_id: "fld_j_cover", cover_crop: true } }, personal: false, locked: false },
   { id: "viw14", table_id: T_PROJECTS, name: "Calendar", type: "calendar", config: { ...emptyConfig(), description_field_id: "fld_j_summary", calendar: { date_field_id: "fld_j_start", end_field_id: "fld_j_end" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
   { id: "viw15", table_id: T_PROJECTS, name: "Review calendar", type: "calendar", config: { ...emptyConfig(), calendar: { date_field_id: "fld_j_review", end_field_id: null } }, personal: false, locked: false },
   { id: "viw16", table_id: T_PROJECTS, name: "Timeline", type: "timeline", config: { ...emptyConfig(), description_field_id: "fld_j_summary", timeline: { start_field_id: "fld_j_start", end_field_id: "fld_j_end", group_field_id: "fld_j_team", dependency_field_id: "fld_j_deps", scale: "week" }, row_color: { mode: "by_select", field_id: "fld_j_status" } }, personal: false, locked: false },
-  { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), description_field_id: "fld_j_summary", groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover"] }, personal: false, locked: false },
+  { id: "viw17", table_id: T_PROJECTS, name: "Outline", type: "list", config: { ...emptyConfig(), description_field_id: "fld_j_summary", groups: [{ field_id: "fld_j_status", direction: "asc" }, { field_id: "fld_j_team", direction: "asc" }], hidden_fields: ["fld_j_deps", "fld_j_blocks", "fld_j_review", "fld_j_cover", "fld_j_done"], list: { prefix_field_id: "fld_j_done", parent_field_id: null } }, personal: false, locked: false },
+  { id: "viw19", table_id: T_PROJECTS, name: "Sub-items", type: "list", config: { ...emptyConfig(), hidden_fields: ["fld_j_blocks", "fld_j_review", "fld_j_cover"], list: { prefix_field_id: "fld_j_done", parent_field_id: "fld_j_deps" } }, personal: false, locked: false },
   { id: "viw18", table_id: T_PROJECTS, name: "Unconfigured board", type: "kanban", config: emptyConfig(), personal: false, locked: false },
   // Every table's default grid: listed apart from its views, the layout of its records.
   ...[T_TASKS, T_PEOPLE, T_PROJECTS].map((t) => ({ id: `viw_default_${t}`, table_id: t, name: "Default grid", type: "grid", config: emptyConfig(), personal: false, locked: false, is_default: true })),
@@ -913,6 +915,9 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     ws.members[item.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
     return send(res, 200, { ok: true, restored_field_ids: [] }), true;
   }
+  if ((g = /^\/api\/views\/([^/]+)\/share-status$/.exec(p)) && m === "GET") {
+    return send(res, 200, { enabled: shares.some((x) => x.view_id === g![1] && x.enabled) }), true;
+  }
   if ((g = /^\/api\/views\/([^/]+)\/shares$/.exec(p))) {
     if (m === "GET") return send(res, 200, shares.filter((x) => x.view_id === g![1])), true;
     if (m === "POST") {
@@ -1216,6 +1221,17 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       emit({ client_id: clientId, event: { kind: "records_changed", table_id: table, created: [], updated: [], deleted: body.ids } });
       return send(res, 204), true;
     }
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/records\/([^/]+)\/discard$/.exec(p)) && m === "POST") {
+    const r = records.get(g[2]!);
+    if (!r || r.deleted) return err(res, 404, "not_found", "record not found"), true;
+    // Untouched: never edited since it was created.
+    const untouched = r.updated_at === r.created_at;
+    if (untouched) {
+      records.delete(r.id);
+      emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: [], updated: [], deleted: [r.id] } });
+    }
+    return send(res, 200, { discarded: untouched }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/restore$/.exec(p))) {
     const out: Obj[] = [];

@@ -6,7 +6,7 @@
  * visible window are queried (`QueryRequest.range`); the window grows as you scroll toward its edges.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import type { DateRange, Field, TimelineScale, ViewConfig } from "@/api/types";
 import { isGroupable } from "@/components/viewbar/config";
 import { IconButton } from "@/components/ui/icon-button";
@@ -25,19 +25,31 @@ import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect, ViewSettings } from "../common/ViewSettings";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
-import { DAY_MS, isDateLike, isWritableDate, padRange, recordSpan, wallNow, wallYmd, type Span } from "../common/wallTime";
+import { DAY_MS, isDateLike, isWritableDate, padRange, wallNow, wallYmd } from "../common/wallTime";
+import { linkRefs } from "@/lib/cells/kinds";
 import { cardFields, cardTitle, fieldsToShow, itemsLabel } from "../common/cardFields";
 import { DescriptionSelect, setDescriptionField, useDescriptionField, type DescriptionSource } from "../common/description";
 import type { ViewProps } from "../types";
-import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, rangeTitle, stepScale, type Axis, type DragMode } from "./geometry";
-import { NO_LANE, createWrites, dragWrites, groupIntoLanes, lanesFromGroups, spanLabel, type Lane } from "./lanes";
+import { PX_PER_DAY, SCALES, SCALE_LABELS, dayNumber, dependencyEdges, dragSpan, extendAxis, makeAxis, rangeTitle, skippedDependencies, stepScale, type Axis, type DragMode, type TimelineSpan } from "./geometry";
+import { NO_LANE, createWrites, dragWrites, dropWrites, groupIntoLanes, lanesFromGroups, spanLabel, timelineSpan, type Lane } from "./lanes";
 import { TimelineChart, type ChartLane, type TimelineBar, type TimelineChartHandle } from "./TimelineChart";
+import { useWallNow } from "./useWallNow";
 
 /** The window never grows past about a century of days. */
 const MAX_WINDOW_DAYS = 40_000;
 
 export default function TimelineView(props: ViewProps) {
   return <TimelineInner key={props.view.id} {...props} />;
+}
+
+/** Why some of a timeline's dates cannot be changed: calculated fields (created time, modified time, formulas) are read-only. */
+function datesNote(start: Field, end: Field | undefined): string | undefined {
+  const startFixed = !isWritableDate(start);
+  const endFixed = !!end && !isWritableDate(end);
+  if (startFixed && endFixed) return `The start (${start.name}) and end (${end.name}) dates are calculated, so they can't be changed here: bars can't be moved or resized, and Add makes a record to fill in.`;
+  if (startFixed) return `The start date (${start.name}) is calculated, so bars can't be moved, and Add makes a record to fill in.${end ? ` You can still change the end (${end.name}) by dragging a bar's right edge.` : ""}`;
+  if (endFixed) return `The end date (${end.name}) is calculated, so only the start can be changed here: drag a bar or its left edge.`;
+  return undefined;
 }
 
 function setTimeline(c: ViewConfig, patch: Partial<ViewConfig["timeline"]>): ViewConfig {
@@ -68,6 +80,7 @@ function TimelineInner(props: ViewProps) {
   const [localScale, setLocalScale] = useState<TimelineScale | null>(null);
   const scale: TimelineScale = cfg.canConfigure ? tl.scale : (localScale ?? tl.scale);
 
+  const nowMs = useWallNow(timeZone);
   const today = dayNumber(wallNow(timeZone));
   const [axis, setAxis] = useState<Axis>(() => makeAxis(scale, today));
   const [focus, setFocus] = useState<{ day: number; nonce: number; align: "start" } | null>({ day: today, nonce: 1, align: "start" });
@@ -96,6 +109,16 @@ function TimelineInner(props: ViewProps) {
   // Records dropped on the timeline leave the list at once, before the refetch lands (and a record
   // the list still has once it has a date is left out too); an id is forgotten once the list no longer has it.
   const [placedIds, setPlacedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const forgetPlaced = useCallback(
+    (recordId: string) =>
+      setPlacedIds((s) => {
+        if (!s.has(recordId)) return s;
+        const next = new Set(s);
+        next.delete(recordId);
+        return next;
+      }),
+    [],
+  );
   useEffect(() => {
     const present = new Set((undated.data?.records ?? []).map((r) => r.id));
     setPlacedIds((s) => {
@@ -103,6 +126,7 @@ function TimelineInner(props: ViewProps) {
       return kept.length === s.size ? s : new Set(kept);
     });
   }, [undated.data]);
+  const undatedById = useMemo(() => new Map((undated.data?.records ?? []).map((r) => [r.id, r])), [undated.data]);
   const startId = fields?.start.field.id;
   const unscheduled = useMemo(() => (undated.data?.records ?? []).filter((r) => !placedIds.has(r.id) && (!startId || r.values[startId] == null || r.values[startId] === "")), [undated.data, placedIds, startId]);
   // Like the calendar's: remembered per view on a desktop (open until folded); a phone opens it when asked.
@@ -113,30 +137,64 @@ function TimelineInner(props: ViewProps) {
   const toggleUnscheduled = () => (desktop ? toggleFolded(view.id) : setPhoneOpen((o) => !o));
 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
+  // Only plain date fields can be written; created time, modified time and formulas are calculated.
+  // What is writable still works: a calculated end leaves the bars movable, a calculated start leaves the ends.
   const canEditDates = setup.canEdit && isWritableDate(fields?.start.field);
-  const endWritable = !fields?.end || isWritableDate(fields.end.field);
+  const canEditEnd = setup.canEdit && !!fields?.end && isWritableDate(fields.end.field);
+  const dateNote = setup.canEdit && fields ? datesNote(fields.start.field, fields.end?.field) : undefined;
 
   // ---- bars, lanes, dependencies -----------------------------------------------------------------
   const spans = useMemo(() => {
-    const m = new Map<string, Span>();
+    const m = new Map<string, TimelineSpan>();
     if (!fields || !data) return m;
     for (const r of data.records) {
-      const s = recordSpan(r.values, { id: fields.start.field.id, opts: fields.start.opts }, fields.end && { id: fields.end.field.id, opts: fields.end.opts }, timeZone);
+      const s = timelineSpan(r.values, fields, timeZone);
       if (s) m.set(r.id, s);
     }
     return m;
   }, [fields, data, timeZone]);
 
   const edges = useMemo(() => (depField && data ? dependencyEdges(data.records, depField.id, spans) : []), [depField, data, spans]);
-  const violatedTargets = useMemo(() => new Set(edges.filter((e) => e.violated).map((e) => e.toId)), [edges]);
+  const violatedEdges = useMemo(() => edges.filter((e) => e.violated), [edges]);
+  // Dependencies with no arrow: the other record has no dates, or is outside the loaded window.
+  const undrawnDependencies = useMemo(() => (depField && data ? skippedDependencies(data.records, depField.id, spans) : 0), [depField, data, spans]);
+  const titleById = useMemo(() => new Map((data?.records ?? []).map((r) => [r.id, cardTitle(primary, r, setup.format)] as const)), [data, primary, setup.format]);
+  // What a violated dependency says in the bars' names (a colour alone is not enough): who each bar clashes with.
+  const dependencyHints = useMemo(() => {
+    const names = (ids: string[]) => {
+      const t = ids.map((id) => titleById.get(id) ?? "another record");
+      return t.length > 3 ? `${t.slice(0, 3).join(", ")} and ${t.length - 3} more` : t.length > 1 ? `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}` : t[0]!;
+    };
+    const before = new Map<string, string[]>();
+    const after = new Map<string, string[]>();
+    for (const e of violatedEdges) {
+      before.set(e.toId, [...(before.get(e.toId) ?? []), e.fromId]);
+      after.set(e.fromId, [...(after.get(e.fromId) ?? []), e.toId]);
+    }
+    const out = new Map<string, string>();
+    for (const id of new Set([...before.keys(), ...after.keys()])) {
+      const parts: string[] = [];
+      const preds = before.get(id);
+      const succs = after.get(id);
+      if (preds) parts.push(`Dependency overlap: it starts before ${names(preds)} ends.`);
+      if (succs) parts.push(`Dependency overlap: it ends after ${names(succs)} starts.`);
+      out.set(id, parts.join(" "));
+    }
+    return out;
+  }, [violatedEdges, titleById]);
+  const violatedTargets = useMemo(() => new Set(violatedEdges.map((e) => e.toId)), [violatedEdges]);
 
-  const grouped = !!groupField || (data?.groups.length ?? 0) > 0;
+  // The lanes of a choice or person field are all its choices or all the base's collaborators, not just those with bars in the
+  // window; the view's own grouping, with nothing in the window, still has them.
+  const viewGroupField = table.fields.find((f) => f.id === cfg.queryConfig.groups[0]?.field_id);
   const laneModels = useMemo<Lane[]>(() => {
     if (!data) return [{ ...NO_LANE }];
-    if (groupField) return groupIntoLanes(data.records, groupField, setup.format);
-    if (data.groups.length > 0) return lanesFromGroups(data.records, data.groups);
-    return [{ ...NO_LANE, records: data.records }];
-  }, [data, groupField, setup.format]);
+    if (groupField) return groupIntoLanes(data.records, groupField, setup.format, setup.people);
+    if (data.groups.length > 0) return lanesFromGroups(data.records, data.groups, table.fields.find((f) => f.id === data.groups[0]!.field_id), setup.people);
+    const empty = viewGroupField ? lanesFromGroups([], [], viewGroupField, setup.people) : [];
+    return empty.length > 0 ? empty : [{ ...NO_LANE, records: data.records }];
+  }, [data, groupField, viewGroupField, table.fields, setup.format, setup.people]);
+  const grouped = !!groupField || (data?.groups.length ?? 0) > 0 || laneModels.some((l) => l.fieldId !== undefined);
 
   // The left column names each record, so the bar can say its dates; the first other field that
   // has a value (who it is for) sits quietly beside the name.
@@ -156,15 +214,19 @@ function TimelineInner(props: ViewProps) {
   );
   const hasSorts = cfg.queryConfig.sorts.length > 0;
   const chartLanes = useMemo<ChartLane[]>(() => {
-    const barOf = (r: (typeof laneModels)[number]["records"][number], span: Span, label?: string): TimelineBar => ({
+    const barOf = (r: (typeof laneModels)[number]["records"][number], span: TimelineSpan, label?: string): TimelineBar => ({
       id: r.id,
       title: cardTitle(primary, r, setup.format),
       label,
       span,
       color: data?.colors[r.id],
-      canMove: canEditDates && endWritable,
-      canResize: canEditDates && endWritable && span.hasEnd && !!fields?.end,
+      // A record with only an end moves that end; any other moves its start (and its end with it, when that can be written).
+      canMove: span.endOnly ? canEditEnd : canEditDates,
+      // The end edge also gives a milestone (no end, or one before the start) its end.
+      canResize: canEditEnd && !span.endOnly,
+      canResizeStart: canEditDates && span.hasEnd,
       violated: violatedTargets.has(r.id),
+      hint: [span.reversed ? "Its end is before its start. Drag its right edge to set the end." : span.endOnly ? "It has no start date." : undefined, dependencyHints.get(r.id)].filter(Boolean).join(" ") || undefined,
     });
     if (!grouped) {
       const dated = (data?.records ?? []).filter((r) => spans.has(r.id));
@@ -188,7 +250,7 @@ function TimelineInner(props: ViewProps) {
         return span ? [barOf(r, span)] : [];
       }),
     }));
-  }, [grouped, laneModels, spans, primary, setup.format, data, canEditDates, endWritable, fields?.end, violatedTargets, sideFields, hasSorts]);
+  }, [grouped, laneModels, spans, primary, setup.format, data, canEditDates, canEditEnd, violatedTargets, dependencyHints, sideFields, hasSorts]);
   const showLabels = !grouped || chartLanes.length > 1 || chartLanes.some((l) => l.lane.label !== "");
 
   // ---- axis and scale ------------------------------------------------------------------------------
@@ -218,29 +280,25 @@ function TimelineInner(props: ViewProps) {
     (recordId: string, mode: DragMode, days: number, toLane?: string) => {
       const span = spans.get(recordId);
       if (!span || !fields) return;
-      const values: Record<string, unknown> = days !== 0 ? dragWrites(span, dragSpan(span, mode, days), mode, fields, timeZone) : {};
+      const after = dragSpan(span, mode, days);
+      const values: Record<string, unknown> = days !== 0 || span.reversed ? dragWrites(span, after, mode, fields, timeZone) : {};
       // Into another swim lane: the lane's value. A field with several values keeps the others; only
-      // the one that drew it in its old lane (its first) becomes the new lane's.
+      // the one that drew it in its old lane (its first) becomes the new lane's. A date the drag just
+      // wrote (the lanes group by the start or end field) is kept: the drop day, not the lane's first day.
       const lane = toLane !== undefined ? laneModels.find((l) => l.key === toLane) : undefined;
       const record = recordById.get(recordId);
-      if (lane?.fieldId && lane.value !== undefined && record) {
+      if (lane?.fieldId && lane.value !== undefined && record && !(lane.fieldId in values)) {
         const cur = record.values[lane.fieldId];
         const idOf = (x: unknown) => (x && typeof x === "object" ? (x as { id?: unknown }).id : x);
-        if (Array.isArray(cur) && Array.isArray(lane.value) && cur.length > 1) {
-          const target = lane.value[0];
-          values[lane.fieldId] = [target, ...cur.slice(1).filter((x) => idOf(x) !== idOf(target))];
+        if (Array.isArray(cur) && cur.length > 1 && (lane.value === null || Array.isArray(lane.value))) {
+          const target = Array.isArray(lane.value) ? lane.value[0] : undefined;
+          values[lane.fieldId] = target === undefined ? cur.slice(1) : [target, ...cur.slice(1).filter((x) => idOf(x) !== idOf(target))];
         } else values[lane.fieldId] = lane.value;
       }
-      if (Object.keys(values).length > 0) void writes.update(recordId, values);
+      if (Object.keys(values).length === 0) return;
+      void writes.update(recordId, values, toLane !== undefined ? { label: "Move bar", toast: `Moved to ${lane?.label || "(Empty)"}` } : { label: mode === "move" ? "Move bar" : "Resize bar" });
     },
     [spans, fields, timeZone, writes, laneModels, recordById],
-  );
-  const create = useCallback(
-    async (values: Record<string, unknown>) => {
-      const rec = await writes.create(values);
-      if (rec) setup.openNewRecord(rec.id);
-    },
-    [writes, setup],
   );
   const onCreate = useCallback(
     (laneKey: string, fromDay: number, toDay: number) => {
@@ -248,46 +306,71 @@ function TimelineInner(props: ViewProps) {
       const values: Record<string, unknown> = createWrites(fromDay, toDay, fields, timeZone);
       const lane = laneModels.find((l) => l.key === laneKey);
       if (lane?.fieldId && lane.value !== undefined && lane.value !== null && !(lane.fieldId in values)) values[lane.fieldId] = lane.value;
-      void create(values);
+      void setup.addRecord(values);
     },
-    [fields, timeZone, laneModels, create],
+    [fields, timeZone, laneModels, setup],
   );
 
-  // A record dragged in from the unscheduled column: dated on that day (its end the same day), and
-  // moved into the lane it was dropped on when lanes come from a field.
+  // A record dragged in from the unscheduled column: given that day as its start (an end it has is
+  // kept when it is not before the start, else the end is that day too), and moved into the lane it
+  // was dropped on when lanes come from a field. If the write fails it is back in the column.
   const onDropRecord = useCallback(
     (recordId: string, laneKey: string, day: number) => {
       if (!fields) return;
-      const values: Record<string, unknown> = createWrites(day, day, fields, timeZone);
+      const values: Record<string, unknown> = dropWrites(day, undatedById.get(recordId)?.values ?? {}, fields, timeZone);
       const lane = laneModels.find((l) => l.key === laneKey);
       if (lane?.fieldId && lane.value !== undefined && !(lane.fieldId in values)) values[lane.fieldId] = lane.value;
       setPlacedIds((s) => new Set(s).add(recordId));
-      void writes.update(recordId, values);
+      void writes.update(recordId, values, { label: "Schedule record", toast: `Scheduled for ${spanLabel({ startMs: day * DAY_MS, endMs: day * DAY_MS, startDateOnly: true, hasEnd: false })}` }).then((ok) => {
+        if (!ok) forgetPlaced(recordId);
+      });
     },
-    [fields, timeZone, laneModels, writes],
+    [fields, timeZone, laneModels, writes, undatedById, forgetPlaced],
   );
-
-  // A bar taken off the timeline (Delete, or dropped on the unscheduled column): its dates cleared, it
-  // goes back to the unscheduled records.
+  // A bar taken off the timeline (U, or dropped on the unscheduled column): its dates cleared (the ones that
+  // can be written), it goes back to the unscheduled records, and Undo puts the dates back.
   const onUnschedule = useCallback(
     (recordId: string) => {
       if (!fields) return;
-      const values: Record<string, unknown> = { [fields.start.field.id]: null };
-      if (fields.end) values[fields.end.field.id] = null;
-      setPlacedIds((s) => {
-        const next = new Set(s);
-        next.delete(recordId);
-        return next;
-      });
-      void writes.update(recordId, values);
+      const values: Record<string, unknown> = {};
+      if (isWritableDate(fields.start.field)) values[fields.start.field.id] = null;
+      if (fields.end && isWritableDate(fields.end.field)) values[fields.end.field.id] = null;
+      if (Object.keys(values).length === 0) return;
+      forgetPlaced(recordId);
+      void writes.update(recordId, values, { label: "Unschedule record", toast: "Moved to Unscheduled" });
     },
-    [fields, writes],
+    [fields, writes, forgetPlaced],
+  );
+  const onDeleteBar = useCallback((recordId: string) => setup.actions.requestDelete([recordId]), [setup.actions]);
+  // Dependencies are the successor's link field: it lists the records it comes after.
+  const dependsOn = useCallback((recordId: string) => (depField ? linkRefs(recordById.get(recordId)?.values[depField.id]) : []), [depField, recordById]);
+  const onLink = useCallback(
+    (fromId: string, toId: string) => {
+      if (!depField) return;
+      const cur = dependsOn(toId);
+      if (cur.some((x) => x.id === fromId)) return;
+      const ref = { id: fromId, name: titleById.get(fromId) ?? fromId };
+      // A field that holds one link is given this one instead of the old.
+      const next = depField.type === "link" && depField.options.single ? [ref] : [...cur, ref];
+      void writes.update(toId, { [depField.id]: next }, { label: "Add dependency", toast: `${titleById.get(toId) || "Record"} now comes after ${ref.name || "the other record"}` });
+    },
+    [depField, dependsOn, titleById, writes],
+  );
+  const onUnlink = useCallback(
+    (fromId: string, toId: string) => {
+      if (!depField) return;
+      void writes.update(toId, { [depField.id]: dependsOn(toId).filter((x) => x.id !== fromId) }, { label: "Remove dependency", toast: "Dependency removed" });
+    },
+    [depField, dependsOn, writes],
   );
   const unscheduleZone = useRef<HTMLDivElement>(null);
   const [overUnscheduled, setOverUnscheduled] = useState(false);
 
   // ---- toolbar -------------------------------------------------------------------------------------
-  const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
+  const note = [cfg.canConfigure ? undefined : "You do not have permission to change this view.", dateNote].filter(Boolean).join(" ") || undefined;
+  // Lanes come from the Swimlanes setting, or else the toolbar's grouping, never both.
+  const groupingIgnored = !!groupField && (data?.groups.length ?? 0) > 0;
+  const groupingName = table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name;
   const settings = (
     <ViewSettings note={note}>
       <FieldSelect label="Start date field" fields={dateFields} value={fields?.start.field.id ?? ""} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
@@ -299,7 +382,7 @@ function TimelineInner(props: ViewProps) {
         disabled={!cfg.canConfigure || !fields}
         onChange={(id) => cfg.update((c) => setTimeline(c, { end_field_id: id }))}
       />
-      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint="Without a field, the view's grouping (if any) makes the lanes." />
+      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint={groupingIgnored ? `The view is also grouped${groupingName ? ` by ${groupingName}` : ""}, but swimlanes take over here: that grouping is not used for the lanes. Choose no swimlanes to use it.` : "Without a field, the view's grouping (if any) makes the lanes."} />
       <FieldSelect
         label="Dependencies"
         fields={selfLinks}
@@ -319,8 +402,42 @@ function TimelineInner(props: ViewProps) {
     </ViewSettings>
   );
 
-  const addToday = fields && canEditDates ? () => void create(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone)) : undefined;
+  const addToday = fields && canEditDates ? () => void setup.addRecord(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone)) : undefined;
+  // The bar focus was last on (pressing the toolbar's Add moves it away); focus on the chart elsewhere forgets it.
+  const lastBar = useRef<string | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (!(e.target instanceof Element)) return;
+      const bar = e.target.closest<HTMLElement>("[data-bar]");
+      if (bar) lastBar.current = bar.dataset.recordId ?? null;
+      else if (e.target.closest("[data-testid='timeline-scroller']")) lastBar.current = null;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+  // The toolbar's Add goes to the lane of the focused bar, else to no lane in particular; both start today.
+  const addInView = addToday
+    ? () => {
+        const id = lastBar.current;
+        const lane = id ? laneModels.find((l) => l.records.some((r) => r.id === id)) : undefined;
+        if (!lane) return addToday();
+        const today = dayNumber(wallNow(timeZone));
+        onCreate(lane.key, today, today);
+      }
+    : undefined;
   const pageLabel = SCALE_LABELS[scale].toLowerCase();
+
+  // What to say when no bar is in the window: what the person can do, and where the other records are.
+  const unscheduledCount = undated.data?.total ?? unscheduled.length;
+  const elsewhere = (counted.data?.total ?? 0) - (data?.total ?? 0) - unscheduledCount;
+  const emptyMessage = (
+    <>
+      No records with dates in this range.
+      {elsewhere > 0 && " Other records are dated outside it: use Today or the arrows to find them."}
+      {unscheduledCount > 0 && ` ${unscheduledCount.toLocaleString()} ${unscheduledCount === 1 ? "record has" : "records have"} no start date${canEditDates ? `: drag ${unscheduledCount === 1 ? "it" : "them"} in from the Unscheduled column.` : ", and are listed in the Unscheduled column."}`}
+      {canEditDates && " Drag across a lane to add one."}
+    </>
+  );
 
   let body: React.ReactNode;
   if (!fields) {
@@ -351,7 +468,7 @@ function TimelineInner(props: ViewProps) {
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
-          <button type="button" onClick={goToday} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+          <button type="button" onClick={goToday} title="Go to today (T)" className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
             Today
           </button>
           {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
@@ -366,6 +483,24 @@ function TimelineInner(props: ViewProps) {
           </div>
           {records.fetching && <Spinner className="size-4" label="Loading records" />}
           <SegmentedSwitch label="Timeline scale" className="ml-auto" value={scale} options={SCALE_OPTIONS} onChange={changeScale} />
+          {dateNote && (
+            <p role="status" className="flex basis-full items-start gap-1.5 text-xs text-muted">
+              <Info aria-hidden className="mt-px size-3.5 shrink-0" /> {dateNote}
+            </p>
+          )}
+          {groupingIgnored && (
+            <p role="status" className="flex basis-full flex-wrap items-center gap-x-1.5 text-xs text-muted">
+              <Info aria-hidden className="mt-px size-3.5 shrink-0" />
+              <span>
+                The lanes come from the Swimlanes setting ({groupField!.name}), so the view's grouping{groupingName ? ` by ${groupingName}` : ""} is not used here.
+              </span>
+              {cfg.canConfigure && (
+                <button type="button" onClick={() => cfg.update((c) => setTimeline(c, { group_field_id: null }))} className="font-semibold text-fg underline hover:no-underline">
+                  Use the grouping instead
+                </button>
+              )}
+            </p>
+          )}
         </div>
         <TimelineChart
           ref={chart}
@@ -373,12 +508,14 @@ function TimelineInner(props: ViewProps) {
           scale={scale}
           lanes={lanesToDraw}
           edges={edges}
-          nowMs={wallNow(timeZone)}
+          nowMs={nowMs}
           showLabels={showLabels}
           labelHeading={grouped ? (groupField?.name ?? table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name) : primary?.name}
           labelWidth={tl.label_width}
           onLabelWidth={cfg.canConfigure ? (w) => cfg.update((c) => setTimeline(c, { label_width: w })) : undefined}
-          canCreate={canEditDates && endWritable}
+          canCreate={canEditDates}
+          createSpansDays={canEditEnd}
+          emptyMessage={emptyMessage}
           focus={focus}
           loading={records.loading}
           fitContent
@@ -393,8 +530,12 @@ function TimelineInner(props: ViewProps) {
             centerDay.current = d;
           }}
           onVisibleDays={onVisibleDays}
-          onDropRecord={canEditDates && endWritable ? onDropRecord : undefined}
-          onUnschedule={canEditDates && endWritable ? onUnschedule : undefined}
+          onDropRecord={canEditDates ? onDropRecord : undefined}
+          onUnschedule={canEditDates ? onUnschedule : undefined}
+          onDelete={setup.actions.canEdit ? onDeleteBar : undefined}
+          onLink={depField && setup.canEdit ? onLink : undefined}
+          onUnlink={depField && setup.canEdit ? onUnlink : undefined}
+          onToday={goToday}
           unscheduleZone={unscheduleZone}
           onOverUnschedule={setOverUnscheduled}
         />
@@ -415,10 +556,10 @@ function TimelineInner(props: ViewProps) {
               emails={setup.emails}
               loading={undated.loading}
               truncated={!!undated.data?.truncated}
-              draggable={canEditDates && endWritable}
+              draggable={canEditDates}
               nativeDrag
               dropActive={overUnscheduled}
-              hint="Drag a record onto the timeline to give it a date, or a bar here to clear its dates."
+              hint={canEditDates ? "Drag a record onto the timeline to give it a date, or a bar here to clear its dates (or press U on a selected bar)." : setup.canEdit ? "These records have no start date. The start date is calculated, so they cannot be scheduled here." : "These records have no start date."}
               onOpen={setup.openRecord}
             />
           </div>
@@ -435,7 +576,8 @@ function TimelineInner(props: ViewProps) {
       layout={fields ? "hug" : "bare"}
       features={{ group: true, rowHeight: false }}
       toolbarSetting={settings}
-      onAdd={addToday ?? (!fields && setup.canEdit ? () => void create({}) : undefined)}
+      // With dates that cannot be written, Add still makes a record, left blank for the person to fill in.
+      onAdd={addInView ?? (setup.canEdit ? () => void setup.addRecord({}) : undefined)}
       footer={
         fields ? (
           <>
@@ -444,7 +586,24 @@ function TimelineInner(props: ViewProps) {
                 {itemsLabel(total)}
               </span>
             )}
-            {depField && edges.some((e) => e.violated) && <span className="text-danger">{edges.filter((e) => e.violated).length} dependencies overlap</span>}
+            {depField && violatedEdges.length > 0 && (
+              <span className="flex flex-wrap items-baseline gap-x-1.5 text-danger">
+                <span>
+                  {violatedEdges.length} {violatedEdges.length === 1 ? "dependency overlaps" : "dependencies overlap"}
+                </span>
+                {violatedEdges.slice(0, 3).map((e) => (
+                  <button key={`${e.fromId}>${e.toId}`} type="button" onClick={() => setup.openRecord(e.toId)} title={`${titleById.get(e.toId)} starts before ${titleById.get(e.fromId)} ends`} className="underline hover:no-underline">
+                    {titleById.get(e.toId) || "Untitled"} after {titleById.get(e.fromId) || "Untitled"}
+                  </button>
+                ))}
+                {violatedEdges.length > 3 && <span>and {violatedEdges.length - 3} more</span>}
+              </span>
+            )}
+            {depField && undrawnDependencies > 0 && (
+              <span role="status">
+                {undrawnDependencies} {undrawnDependencies === 1 ? "dependency has" : "dependencies have"} no arrow: the other record has no dates or is outside this window.
+              </span>
+            )}
             {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this window.</span>}
             {records.error && !data && <span role="alert">Could not load records: {records.error.message}</span>}
             {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}

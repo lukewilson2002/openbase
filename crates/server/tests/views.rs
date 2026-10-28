@@ -62,6 +62,82 @@ async fn every_view_type_can_be_created_with_default_config() {
 }
 
 #[tokio::test]
+async fn new_galleries_cover_with_the_first_attachment_field() {
+    let f = Fixture::new().await;
+    // No attachment field yet: nothing to cover with.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Bare", "type": "gallery" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], Value::Null);
+
+    let first = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Photo", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let second = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Scan", "type": "attachment", "options": {} }),
+        )
+        .await;
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Pictures", "type": "gallery" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], first["id"]);
+    assert_eq!(r.body["config"]["gallery"]["cover_crop"], true);
+
+    // A config that says nothing about the gallery gets the same cover; one that does is kept.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Filtered", "type": "gallery", "config": { "frozen_columns": 1 } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], first["id"]);
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Chosen", "type": "gallery",
+                    "config": { "gallery": { "cover_field_id": second["id"] } } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], second["id"]);
+    assert_eq!(r.body["config"]["gallery"]["cover_crop"], false);
+
+    // Other view types are left alone.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Board", "type": "kanban" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["gallery"]["cover_field_id"], Value::Null);
+}
+
+#[tokio::test]
 async fn new_forms_default_to_all_editable_fields_in_order() {
     let f = Fixture::new().await;
     f.add_field(
@@ -1092,4 +1168,84 @@ async fn a_timeline_keeps_its_label_width_within_bounds() {
             .await
             .assert_status(400);
     }
+}
+
+#[tokio::test]
+async fn new_lists_prefix_with_the_first_checkbox_field() {
+    let f = Fixture::new().await;
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Bare", "type": "list" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["list"]["prefix_field_id"], Value::Null);
+
+    let done = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Done", "type": "checkbox", "options": {} }),
+        )
+        .await;
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "To do", "type": "list" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["list"]["prefix_field_id"], done["id"]);
+}
+
+#[tokio::test]
+async fn list_prefix_and_parent_fields_are_checked() {
+    let f = Fixture::new().await;
+    let done = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Done", "type": "checkbox", "options": {} }),
+        )
+        .await;
+    let parent = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Parent", "type": "link",
+                    "options": { "linked_table_id": f.table_id, "single": true } }),
+        )
+        .await;
+    let other = f.add_table("Other").await;
+    let foreign = f
+        .add_field(
+            &f.table_id,
+            json!({ "name": "Elsewhere", "type": "link",
+                    "options": { "linked_table_id": other["id"] } }),
+        )
+        .await;
+    let url = views_url(&f);
+    let make = |list: Value| json!({ "name": "L", "type": "list", "config": { "list": list } });
+    for bad in [
+        json!({ "prefix_field_id": f.primary_id }),
+        json!({ "parent_field_id": f.primary_id }),
+        json!({ "parent_field_id": foreign["id"] }),
+        json!({ "parent_field_id": done["id"] }),
+        json!({ "prefix_field_id": "fldNOPE" }),
+    ] {
+        let r = f.app.post(&f.owner, &url, make(bad.clone())).await;
+        assert_eq!(r.status.as_u16(), 400, "{bad}");
+    }
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &url,
+            make(json!({ "prefix_field_id": done["id"], "parent_field_id": parent["id"] })),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["list"]["parent_field_id"], parent["id"]);
 }

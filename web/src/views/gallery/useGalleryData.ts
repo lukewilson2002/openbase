@@ -1,12 +1,16 @@
 /**
- * Paged records for the gallery: `POST /api/views/{id}/query` with a growing offset (infinite
- * scroll). Cached under `["records", tableId, viewId, "query", ...]` so live events refetch the
- * loaded pages.
+ * Records for the gallery, loaded as far as the person has scrolled: the first `GALLERY_PAGE`, and
+ * another page each time more are asked for (infinite scroll). The loaded records are one
+ * `ViewRecordsData` under `["records", tableId, viewId, "query", ..., limit]`, the same shape the other
+ * views cache, so the shared optimistic writes (edits, drops, deletes, undo) and the live-event
+ * refetch work on them as they do everywhere else. A bigger limit is a new query that shows the
+ * smaller one while it loads, so the cards already on screen stay put.
  */
-import { useMemo } from "react";
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { recordKeys, recordsApi } from "@/api/records";
-import type { QueryResponse, TableRecord, TransientConfig } from "@/api/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { recordKeys } from "@/api/records";
+import type { TableRecord, TransientConfig } from "@/api/types";
+import { fetchAllRecords } from "../common/useViewRecords";
 
 export const GALLERY_PAGE = 60;
 
@@ -22,43 +26,51 @@ export interface GalleryData {
 }
 
 export function useGalleryData(p: { tableId: string; viewId: string; configKey: string; search: string; timeZone: string; transient?: TransientConfig | null }): GalleryData {
-  const q = useInfiniteQuery({
-    queryKey: [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "gallery", p.timeZone, p.transient ?? null],
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }): Promise<QueryResponse> =>
-      recordsApi.query(p.viewId, { offset: pageParam, limit: GALLERY_PAGE, search: p.search || null, timezone: p.timeZone, ...(p.transient ? { transient: p.transient } : {}) }, signal),
-    getNextPageParam: (last, pages) => {
-      const loaded = pages.reduce((n, pg) => n + pg.records.length, 0);
-      return last.records.length > 0 && loaded < last.total ? loaded : undefined;
-    },
+  const qc = useQueryClient();
+  const transient = p.transient ?? null;
+  // The override is compared by value: a new object with the same parts is the same query.
+  const transientKey = JSON.stringify(transient);
+  const base = useMemo(
+    () => [...recordKeys.viewQuery(p.tableId, p.viewId, p.configKey, p.search), "gallery", p.timeZone, JSON.parse(transientKey) as TransientConfig | null],
+    [p.tableId, p.viewId, p.configKey, p.search, p.timeZone, transientKey],
+  );
+  const baseId = JSON.stringify(base);
+  // How many records to load for this query; a different query (another search, filter...) starts over.
+  const [asked, setAsked] = useState({ baseId, limit: GALLERY_PAGE });
+  const limit = asked.baseId === baseId ? asked.limit : GALLERY_PAGE;
+
+  const q = useQuery({
+    queryKey: [...base, limit],
+    queryFn: ({ signal }) => fetchAllRecords(p.viewId, { search: p.search, timeZone: p.timeZone, transient }, limit, signal),
     placeholderData: keepPreviousData,
   });
-  return useMemo(() => {
-    const pages = q.data?.pages ?? [];
-    const seen = new Set<string>();
-    const records: TableRecord[] = [];
-    const colors: Record<string, string> = {};
-    for (const pg of pages) {
-      Object.assign(colors, pg.colors ?? {});
-      for (const r of pg.records) {
-        // A write between page fetches can shift rows so one appears twice.
-        if (!seen.has(r.id)) {
-          seen.add(r.id);
-          records.push(r);
-        }
-      }
-    }
-    return {
-      records,
-      total: pages[pages.length - 1]?.total ?? 0,
-      colors,
+
+  // Once the bigger query has its records the smaller ones are only stale copies of them: the shared
+  // writes patch every cached copy and read a record's neighbours from the first they find.
+  const settled = q.isSuccess && !q.isPlaceholderData;
+  useEffect(() => {
+    if (settled) qc.removeQueries({ queryKey: base, predicate: (query) => query.queryKey[query.queryKey.length - 1] !== limit });
+  }, [qc, base, limit, settled]);
+
+  const data = q.data;
+  const loaded = data?.records.length ?? 0;
+  const hasMore = !!data && loaded < data.total;
+  const loadMore = useCallback(() => {
+    if (!hasMore || q.isFetching) return;
+    setAsked({ baseId, limit: Math.max(limit, loaded) + GALLERY_PAGE });
+  }, [hasMore, q.isFetching, baseId, limit, loaded]);
+
+  return useMemo(
+    () => ({
+      records: data?.records ?? [],
+      total: data?.total ?? 0,
+      colors: data?.colors ?? {},
       loading: q.isPending,
-      loadingMore: q.isFetchingNextPage,
-      hasMore: !!q.hasNextPage,
+      loadingMore: q.isPlaceholderData && q.isFetching,
+      hasMore,
       error: q.error,
-      loadMore: () => {
-        if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
-      },
-    };
-  }, [q.data, q.isPending, q.isFetchingNextPage, q.hasNextPage, q.error, q.fetchNextPage]);
+      loadMore,
+    }),
+    [data, q.isPending, q.isPlaceholderData, q.isFetching, hasMore, q.error, loadMore],
+  );
 }

@@ -33,9 +33,9 @@ function Cover({ record, field, fit, height }: { record: TableRecord; field: Fie
   );
 }
 
-export function PublicCard({ record, fields, color, coverFit = "cover", coverHeight = 120 }: { record: TableRecord; fields: CardFields; color?: string; coverFit?: "cover" | "contain"; coverHeight?: number }) {
+export function PublicCard({ record, fields, color, coverFit = "cover", coverHeight = 120, fieldLimit }: { record: TableRecord; fields: CardFields; color?: string; coverFit?: "cover" | "contain"; coverHeight?: number; fieldLimit?: number }) {
   const { format } = useShare();
-  const shown = fieldsToShow(fields.rest, record, format);
+  const shown = fieldsToShow(fields.rest, record, format, fieldLimit);
   const descValue = fields.description ? record.values[fields.description.id] : undefined;
   const description = useMemo(() => descriptionText(fields.description, descValue, format), [fields.description, descValue, format]);
   return (
@@ -101,8 +101,22 @@ export function PublicGallery({ records, fields, colors, fit }: { records: reado
 }
 
 /** A board of read-only stacks. The stack field must be a single select, single user or checkbox. */
-export function PublicKanban({ stackField, hideEmpty, records, fields, colors }: { stackField: Field; hideEmpty: boolean; records: readonly TableRecord[]; fields: CardFields; colors: Readonly<Record<string, string>> }) {
-  const stacks = useMemo(() => (stackKind(stackField) ? buildStacks(stackField, records, { stackOrder: [], hideEmpty, people: [] }) : []), [stackField, records, hideEmpty]);
+export function PublicKanban({ stackField, hideEmpty, stackOrder = [], hiddenStacks = [], cardFieldLimit, coverFit = false, records, fields, colors }: {
+  stackField: Field;
+  hideEmpty: boolean;
+  /** The view's stack order and hidden stacks (the server leaves these empty for person stacks). */
+  stackOrder?: readonly string[];
+  hiddenStacks?: readonly string[];
+  cardFieldLimit?: number;
+  coverFit?: boolean;
+  records: readonly TableRecord[];
+  fields: CardFields;
+  colors: Readonly<Record<string, string>>;
+}) {
+  const stacks = useMemo(
+    () => (stackKind(stackField) ? buildStacks(stackField, records, { stackOrder, hideEmpty, hiddenStacks, people: [] }) : []),
+    [stackField, records, hideEmpty, stackOrder, hiddenStacks],
+  );
   return (
     <div role="list" aria-label="Stacks" className="flex items-start gap-3 overflow-x-auto pb-3">
       {stacks.map((stack) => (
@@ -117,7 +131,7 @@ export function PublicKanban({ stackField, hideEmpty, records, fields, colors }:
           <ul className="flex flex-col gap-2 px-2 pb-2" aria-label={`Cards in ${stack.label}`}>
             {stack.records.slice(0, 100).map((r) => (
               <li key={r.id}>
-                <PublicCard record={r} fields={fields} color={colors[r.id]} />
+                <PublicCard record={r} fields={fields} color={colors[r.id]} coverFit={coverFit ? "contain" : "cover"} fieldLimit={cardFieldLimit} />
               </li>
             ))}
             {stack.records.length === 0 && <li className="px-2 py-3 text-center text-xs text-faint">No cards</li>}

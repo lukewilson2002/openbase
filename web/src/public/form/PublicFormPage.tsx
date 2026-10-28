@@ -2,20 +2,22 @@
  * `/form/:token` (and `/f/:token`): a public form. No account, no app shell, no redirect to the
  * login page. Loads `GET /api/public/forms/{token}`, asks for the password when the link has one
  * (kept in memory), validates before sending, uploads files through the form's own endpoint, and
- * ends with the success message, an optional "Submit another response" and an optional redirect.
+ * ends with the success message and an optional "Submit another response", or, when the form has a
+ * redirect address, goes straight there (the address may carry the new record's id).
  */
 import { EntityLabel } from "@/components/icons/EntityIcon";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useParams } from "react-router";
-import { CircleCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useLocation, useParams } from "react-router";
 import { publicApi } from "@/api/sharing";
 import type { AttachmentRef, PublicForm } from "@/api/types";
+import { FormDone } from "@/components/forms/FormDone";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/layouts";
-import { describeSubmitError, safeRedirect } from "@/lib/publicErrors";
+import { describeSubmitError } from "@/lib/publicErrors";
 import { browserTimeZone } from "@/lib/format";
-import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE } from "@/lib/forms/formConfig";
-import { buildSubmission, emptyInput, hasAnyValue, type FormInput } from "@/lib/forms/publicValues";
+import { DEFAULT_SUBMIT_LABEL, DEFAULT_SUCCESS_MESSAGE, redirectAfterSubmit } from "@/lib/forms/formConfig";
+import { readPrefill, type Prefill } from "@/lib/forms/prefill";
+import { buildSubmission, hasAnyValue, initialInput, shownFields, type FormInput } from "@/lib/forms/publicValues";
 import { PasswordPrompt, PublicLoading, PublicProblemScreen, PublicShell } from "../PublicShell";
 import { usePublicLoad } from "../usePublicLoad";
 import { PublicFieldInput } from "./PublicFieldInput";
@@ -30,26 +32,29 @@ export default function PublicFormPage() {
   return <FilledForm token={token} password={load.password} form={state.data} />;
 }
 
-function initialInputs(form: PublicForm): Record<string, FormInput> {
-  return Object.fromEntries(form.fields.map((f) => [f.id, emptyInput(f)]));
+/** What each input starts with: the address's prefill, else the field's default, else nothing. */
+function initialInputs(form: PublicForm, prefill: Prefill): Record<string, FormInput> {
+  return Object.fromEntries(form.fields.filter((f) => !f.block).map((f) => [f.id, prefill.values[f.id] ?? initialInput(f)]));
 }
 
 function FilledForm({ token, password, form }: { token: string; password: string | null; form: PublicForm }) {
-  const [inputs, setInputs] = useState<Record<string, FormInput>>(() => initialInputs(form));
+  const { search } = useLocation();
+  // The address can start fields off with a value and take some off the page (see lib/forms/prefill).
+  const prefill = useMemo(() => readPrefill(form.fields, search), [form.fields, search]);
+  const [inputs, setInputs] = useState<Record<string, FormInput>>(() => initialInputs(form, prefill));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // Set once the answers were sent: the id of the new record (it can be part of the redirect address).
+  const [done, setDone] = useState<{ recordId: string | null } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const redirect = safeRedirect(form.redirect_url);
+  const redirect = done ? redirectAfterSubmit(form.redirect_url, done.recordId) : null;
 
-  // The visitor sees the message first; a configured redirect follows right after.
+  // A form with a redirect address sends people there at once, in place of the message.
   useEffect(() => {
-    if (!done || !redirect) return;
-    const t = setTimeout(() => window.location.assign(redirect), 1200);
-    return () => clearTimeout(t);
-  }, [done, redirect]);
+    if (redirect) window.location.assign(redirect);
+  }, [redirect]);
 
   const set = useCallback((id: string, value: FormInput) => {
     setInputs((cur) => ({ ...cur, [id]: value }));
@@ -89,8 +94,8 @@ function FilledForm({ token, password, form }: { token: string; password: string
     }
     setSubmitting(true);
     try {
-      await publicApi.submitForm(token, values, password);
-      setDone(true);
+      const sent = await publicApi.submitForm(token, values, password);
+      setDone({ recordId: sent?.record_id ?? null });
     } catch (err) {
       setFailure(describeSubmitError(err));
     } finally {
@@ -99,31 +104,29 @@ function FilledForm({ token, password, form }: { token: string; password: string
   };
 
   if (done) {
+    const another = () => {
+      setInputs(initialInputs(form, prefill));
+      setErrors({});
+      setFailure(null);
+      setDone(null);
+    };
     return (
       <PublicShell>
-        <div role="status" className="mx-auto mt-6 flex w-full flex-col items-center gap-3 rounded-lg border border-line bg-surface p-8 text-center shadow-sm">
-          <CircleCheck aria-hidden className="size-9 text-success" />
-          <h1 className="text-xl">{form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}</h1>
-          {redirect && <p className="text-[0.8125rem] text-muted">Taking you on…</p>}
-          {form.show_submit_another && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setInputs(initialInputs(form));
-                setErrors({});
-                setFailure(null);
-                setDone(false);
-              }}
-            >
-              Submit another response
-            </Button>
-          )}
-        </div>
+        {redirect ? (
+          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
+        ) : (
+          <FormDone level={1} className="mt-6 rounded-lg shadow-sm" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? another : undefined} />
+        )}
       </PublicShell>
     );
   }
 
-  const anyRequired = form.fields.some((f) => f.required);
+  // What the visitor sees: the entries whose show-if holds for the answers above them, without the fields the address hides.
+  const timeZone = browserTimeZone();
+  const shown = shownFields(form.fields, inputs, { timeZone });
+  const visible = form.fields.filter((f) => shown.has(f.id) && !prefill.hidden.has(f.id));
+  const questions = form.fields.filter((f) => !f.block);
+  const anyRequired = visible.some((f) => !f.block && f.required);
   return (
     <PublicShell>
       <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate aria-label={form.title} className="flex flex-col gap-6 rounded-lg border border-line bg-surface p-5 shadow-sm sm:p-7">
@@ -135,19 +138,19 @@ function FilledForm({ token, password, form }: { token: string; password: string
           {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] text-muted">{form.description}</p>}
           {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
         </header>
-        {form.fields.length === 0 ? (
+        {questions.length === 0 ? (
           <Notice>This form has no questions yet.</Notice>
         ) : (
           <div className="flex flex-col gap-5">
-            {form.fields.map((f) => (
-              <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />
-            ))}
+            {visible.map((f) =>
+              f.block ? <PublicFormBlock key={f.id} field={f} /> : <PublicFieldInput key={f.id} field={f} value={inputs[f.id]} error={errors[f.id]} disabled={submitting} onChange={(v) => set(f.id, v)} upload={upload} />,
+            )}
           </div>
         )}
         {failure && <Notice tone="error">{failure}</Notice>}
         {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
         <div className="flex items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={form.fields.length === 0 || uploading > 0}>
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={questions.length === 0 || uploading > 0}>
             {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
           </Button>
           {uploading > 0 && <span className="text-[0.8125rem] text-muted">Waiting for the upload to finish…</span>}
@@ -155,4 +158,10 @@ function FilledForm({ token, password, form }: { token: string; password: string
       </form>
     </PublicShell>
   );
+}
+
+/** A heading or a paragraph between the questions. */
+export function PublicFormBlock({ field }: { field: PublicForm["fields"][number] }) {
+  if (field.block === "heading") return <h2 className="mt-2 border-b border-line pb-1.5 text-lg font-semibold">{field.label}</h2>;
+  return <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{field.help}</p>;
 }

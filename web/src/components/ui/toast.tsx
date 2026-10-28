@@ -10,6 +10,8 @@ export interface ToastOptions {
   variant?: ToastVariant;
   /** 0 keeps the toast until dismissed. */
   durationMs?: number;
+  /** A button on the toast ("Undo"); the toast closes when it is pressed. */
+  action?: { label: string; onClick: () => void };
 }
 
 interface ToastItem extends ToastOptions {
@@ -81,6 +83,18 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
         <p className="text-[0.8125rem] font-medium">{item.title}</p>
         {item.description && <p className="mt-0.5 break-words text-xs text-muted">{item.description}</p>}
       </div>
+      {item.action && (
+        <button
+          type="button"
+          onClick={() => {
+            onDismiss(id);
+            item.action!.onClick();
+          }}
+          className="-my-1 shrink-0 rounded px-2 py-1 text-[0.8125rem] font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
+        >
+          {item.action.label}
+        </button>
+      )}
       <button
         type="button"
         aria-label="Dismiss"

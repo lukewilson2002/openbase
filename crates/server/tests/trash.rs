@@ -184,14 +184,14 @@ async fn at_most_a_thousand_trashed_records_are_listed() {
 }
 
 #[tokio::test]
-async fn listing_the_trash_requires_creator() {
+async fn listing_the_trash_requires_editor() {
     for role in ALL_ROLES {
         let f = Fixture::new().await;
         let u = f.base_guest("g@example.com", role);
         let r = trash(&f, &u).await;
         assert_eq!(
             r.status.as_u16(),
-            if role >= Role::Creator { 200 } else { 403 },
+            if role >= Role::Editor { 200 } else { 403 },
             "{role:?}"
         );
     }
@@ -768,4 +768,82 @@ async fn deleted_workspaces_are_listed_for_their_owners_to_restore() {
         .get(&f.owner, &format!("/api/workspaces/{}/trash", f.ws))
         .await
         .assert_status(200);
+}
+
+async fn delete_record_as(f: &Fixture, c: &common::Client, id: &str) {
+    f.app
+        .request(
+            c,
+            "DELETE",
+            &format!("/api/tables/{}/records", f.table_id),
+            Some(json!({ "ids": [id] })),
+        )
+        .await
+        .assert_status(204);
+}
+
+#[tokio::test]
+async fn editors_list_and_restore_the_records_they_deleted_themselves() {
+    let f = Fixture::new().await;
+    let editor = f.base_guest("ed@example.com", Role::Editor);
+    let other = f.base_guest("ed2@example.com", Role::Editor);
+    let viewer = f.base_guest("v@example.com", Role::Viewer);
+    let mine = f.insert_record(&f.table_id, json!({ &f.primary_id: "Mine" }));
+    let theirs = f.insert_record(&f.table_id, json!({ &f.primary_id: "Theirs" }));
+    let owners = f.insert_record(&f.table_id, json!({ &f.primary_id: "Owner's" }));
+    delete_record_as(&f, &editor, &mine).await;
+    delete_record_as(&f, &other, &theirs).await;
+    delete_record_as(&f, &f.owner, &owners).await;
+
+    // The per-base listing and the one trash show an editor only their own deletions.
+    let r = trash(&f, &editor).await;
+    r.assert_status(200);
+    assert_eq!(
+        items(&r),
+        vec![("record".into(), mine.clone(), "Mine".into())]
+    );
+    let all = f.app.get(&editor, "/api/trash").await;
+    all.assert_status(200);
+    assert_eq!(all.body["items"].as_array().unwrap().len(), 1);
+    assert_eq!(all.body["items"][0]["id"], mine.as_str());
+    // A creator sees every record.
+    let creator = f.base_guest("cr@example.com", Role::Creator);
+    assert_eq!(items(&trash(&f, &creator).await).len(), 3);
+    assert_eq!(items(&trash(&f, &f.owner).await).len(), 3);
+    // The kind filter works for editors too.
+    let only = f.app.get(&editor, "/api/trash?kind=table").await;
+    assert_eq!(only.body["items"].as_array().unwrap().len(), 0);
+
+    // Restoring: their own yes, other people's no, a viewer's nothing.
+    restore(&f, &editor, "record", &theirs)
+        .await
+        .assert_status(403);
+    restore(&f, &editor, "record", &owners)
+        .await
+        .assert_status(403);
+    restore(&f, &viewer, "record", &mine)
+        .await
+        .assert_status(403);
+    restore(&f, &editor, "record", &mine)
+        .await
+        .assert_status(200);
+    assert!(items(&trash(&f, &editor).await).is_empty());
+    assert_eq!(f.record_data(&mine), json!({ &f.primary_id: "Mine" }));
+    // The creator still restores everything.
+    restore(&f, &creator, "record", &theirs)
+        .await
+        .assert_status(200);
+    restore(&f, &creator, "record", &owners)
+        .await
+        .assert_status(200);
+
+    // Tables, fields and shared views stay with creators.
+    let t2 = f.add_table("Second").await;
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{}", sid(&t2["id"])))
+        .await
+        .assert_status(200);
+    restore(&f, &editor, "table", sid(&t2["id"]))
+        .await
+        .assert_status(403);
 }

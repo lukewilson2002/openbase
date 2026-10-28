@@ -2,10 +2,12 @@
 //!
 //! Write endpoints (Editor role): `POST|PATCH|DELETE /api/tables/{id}/records`
 //! (batch), `POST /api/tables/{id}/records/restore`,
-//! `POST /api/tables/{id}/records/move`. All writes go through `engine::write`
-//! in one transaction and events are published after it commits.
+//! `POST /api/tables/{id}/records/move`, `POST /api/tables/{id}/records/duplicate` and
+//! `POST /api/tables/{id}/records/{rid}/discard`.
+//! All writes go through `engine::write` in one transaction and events are
+//! published after it commits.
 //!
-//! Responses: create (201), update, restore and move answer
+//! Responses: create (201), update, restore, move and duplicate answer
 //! `RecordsResponse` (the affected records, in request order); delete answers
 //! 204 (batches are all-or-nothing, so the request's ids are the deleted ids).
 //!
@@ -51,6 +53,8 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/tables/{id}/records/restore", post(restore))
         .route("/api/tables/{id}/records/move", post(move_records))
+        .route("/api/tables/{id}/records/duplicate", post(duplicate))
+        .route("/api/tables/{id}/records/{rid}/discard", post(discard))
         .route("/api/tables/{id}/records/lookup", get(lookup))
         .route("/api/tables/{id}/records/get", post(get_many))
         .route("/api/tables/{id}/records/{rid}", get(get_one))
@@ -195,6 +199,115 @@ async fn move_records(
         .await?;
     publish_outcome(&state, &headers, &who, &outcome);
     Ok(Json(RecordsResponse { records }))
+}
+
+/// `POST /api/tables/{id}/records/duplicate`: copy records, each right after its original in
+/// manual order. Computed fields are not copied (they are recalculated); empty values stay
+/// empty. Answers the copies in the order of `ids`. All or nothing.
+async fn duplicate(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(table_id): Path<String>,
+    ApiJson(body): ApiJson<RecordIds>,
+) -> AppResult<(StatusCode, Json<RecordsResponse>)> {
+    let who = actor.clone();
+    let (outcomes, records) = state
+        .db
+        .write(move |tx| {
+            let ctx = editor_ctx(tx, &actor, &table_id)?;
+            if body.ids.is_empty() {
+                return Err(AppError::bad_request("at least one record id is required"));
+            }
+            if body.ids.len() > DUPLICATE_MAX {
+                return Err(AppError::bad_request(format!(
+                    "a request can duplicate at most {DUPLICATE_MAX} records"
+                )));
+            }
+            let fields = crate::store::schema::table_fields(tx, &table_id)?;
+            let originals = record_store::load_dtos(tx, &table_id, &body.ids, ctx.timezone)?;
+            let mut outcomes = Vec::new();
+            let mut copies = Vec::new();
+            for id in &body.ids {
+                let original = originals
+                    .iter()
+                    .find(|r| &r.id == id)
+                    .ok_or_else(|| AppError::not_found(format!("record {id}")))?;
+                let mut values = std::collections::BTreeMap::new();
+                for f in fields.iter().filter(|f| !f.field_type().is_computed()) {
+                    let Some(v) = original.values.get(&f.id) else {
+                        continue;
+                    };
+                    let v = if matches!(f.kind, ob_core::field::FieldKind::Link(_)) {
+                        link_ids(v)
+                    } else {
+                        v.clone()
+                    };
+                    values.insert(f.id.clone(), v);
+                }
+                let opts = CreateOpts {
+                    after_record_id: Some(id.clone()),
+                    before_record_id: None,
+                };
+                let outcome = write::create_records(
+                    tx,
+                    &ctx,
+                    &table_id,
+                    vec![ob_core::api::records::NewRecord { values }],
+                    &opts,
+                )?;
+                copies.extend(outcome.target().created.to_vec());
+                outcomes.push(outcome);
+            }
+            let records = record_store::load_dtos(tx, &table_id, &copies, ctx.timezone)?;
+            Ok((outcomes, records))
+        })
+        .await?;
+    for outcome in &outcomes {
+        publish_outcome(&state, &headers, &who, outcome);
+    }
+    Ok((StatusCode::CREATED, Json(RecordsResponse { records })))
+}
+
+/// `POST /api/tables/{id}/records/{rid}/discard`: take back a record nobody has touched, for
+/// good and without a trace (no trash entry, no history). Answers `{"discarded": true}`, or
+/// `{"discarded": false}` with the record left as it is when it was not created by the caller
+/// in the last 24 hours, was edited or commented on, or is linked to or from. Automations that
+/// ran when the record was created are not undone.
+async fn discard(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path((table_id, record_id)): Path<(String, String)>,
+) -> AppResult<Json<serde_json::Value>> {
+    let who = actor.clone();
+    let outcome = state
+        .db
+        .write(move |tx| {
+            let ctx = editor_ctx(tx, &actor, &table_id)?;
+            write::discard_record(tx, &ctx, &table_id, &record_id)
+        })
+        .await?;
+    if let Some(outcome) = &outcome {
+        publish_outcome(&state, &headers, &who, outcome);
+    }
+    Ok(Json(serde_json::json!({ "discarded": outcome.is_some() })))
+}
+
+/// Most records one duplicate request copies.
+pub const DUPLICATE_MAX: usize = 100;
+
+/// A link value as a write accepts it: read as `[{id, name}]`, written as record ids.
+fn link_ids(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(|i| i.get("id").cloned().unwrap_or_else(|| i.clone()))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 async fn get_one(

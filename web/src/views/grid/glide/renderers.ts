@@ -20,6 +20,8 @@ export interface RendererContext {
   dark: boolean;
   /** Whether the cell at this display position is the focused cell. */
   isSelected(col: number, row: number): boolean;
+  /** The display row the pointer is over, if any (the add rows light up with it). */
+  hoveredRow(): number | null;
   onExpand(row: number): void;
   onOpenUrl(url: string): void;
 }
@@ -248,6 +250,20 @@ function drawGroup(args: DrawArgs<ObCell>, rc: RendererContext): void {
   if (labelX + w + 8 < rect.x + rect.width) ctx.fillText(String(m.count), labelX + w + 8, rect.y + rect.height / 2 + 0.5);
 }
 
+/** A pointer that cannot hover (a finger) never sees the add row light up: it stays readable. */
+const hoverless = (): boolean => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(hover: none)").matches;
+
+/** The quiet "+ Add" closing a group: muted until the row is under the pointer (or selected). */
+function drawAdd(args: DrawArgs<ObCell>, rc: RendererContext): void {
+  const { ctx, rect, theme } = args;
+  const lit = args.highlighted || rc.hoveredRow() === args.row;
+  ctx.globalAlpha = lit ? 1 : hoverless() ? 0.7 : 0.45;
+  ctx.font = theme.baseFontFull;
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = lit ? theme.textMedium : theme.textLight;
+  ctx.fillText("+ Add", rect.x + theme.cellHorizontalPadding, rect.y + rect.height / 2 + 0.5);
+}
+
 function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
   const { ctx, rect, theme } = args;
   const data = args.cell.data;
@@ -344,7 +360,8 @@ export function createRenderer(getContext: () => RendererContext): CustomRendere
       ctx.rect(rect.x, rect.y, rect.width, rect.height);
       ctx.clip();
       const data = cell.data;
-      if (data.ob === "group") drawGroup(args, rc);
+      if (data.ob === "add") drawAdd(args, rc);
+      else if (data.ob === "group") drawGroup(args, rc);
       else if (data.ob === "summary") drawSummary(args, rc);
       else {
         const m = data.model;

@@ -333,8 +333,9 @@ async fn permission_errors_say_whether_the_role_or_the_token_is_missing() {
         )
         .await;
     assert!(e.contains("creator role"), "{e}");
-    let e = editor.fails("list_trash", json!({"base_id": b})).await;
-    assert!(e.contains("creator role"), "{e}");
+    // An editor sees the trash too, but only their own deletions: nothing yet.
+    let listed = editor.call("list_trash", json!({"base_id": b})).await;
+    assert_eq!(listed["items"], json!([]));
     // Manage token, but only a creator on the workspace: owner-only actions are refused.
     let (_, creator) = r
         .teammate(

@@ -5,4 +5,9 @@ export type FormConfig = { title: string, description: string, fields: Array<For
 /**
  * Only http(s) URLs are accepted.
  */
-redirect_url?: string | null, show_submit_another: boolean, };
+redirect_url?: string | null, show_submit_another: boolean, 
+/**
+ * People who get a notification (and an email when the server can send mail) for every
+ * response that comes in through the form's public link. Project members only.
+ */
+notify_user_ids: Array<string>, };

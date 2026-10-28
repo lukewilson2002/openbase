@@ -35,6 +35,8 @@ export const MAX_CSV_BYTES = 20 * 1024 * 1024;
 
 export const sharesApi = {
   list: (viewId: string) => http.get<ShareLink[]>(`/api/views/${enc(viewId)}/shares`),
+  /** Whether the view has an enabled link: open to editors, who cannot list the links themselves. */
+  status: (viewId: string) => http.get<{ enabled: boolean }>(`/api/views/${enc(viewId)}/share-status`),
   create: (viewId: string, body: CreateShare) => http.post<ShareLink>(`/api/views/${enc(viewId)}/shares`, body),
   /** `password: null` removes the password, a string sets it, leaving it out keeps it. */
   update: (id: string, body: UpdateShare) => http.patch<ShareLink>(`/api/shares/${enc(id)}`, body),
@@ -52,9 +54,9 @@ function publicOpts(password: string | null | undefined, signal?: AbortSignal): 
 
 export const publicApi = {
   form: (token: string, password?: string | null, signal?: AbortSignal) => http.get<PublicForm>(`/api/public/forms/${enc(token)}`, publicOpts(password, signal)),
-  /** Creates one record anonymously. Values are keyed by the field ids of `PublicForm.fields`. */
+  /** Creates one record anonymously (`record_id` is its id). Values are keyed by the field ids of `PublicForm.fields`. */
   submitForm: (token: string, values: FormSubmission["values"], password?: string | null) =>
-    http.post<{ ok: boolean }>(`/api/public/forms/${enc(token)}/submit`, { values } satisfies FormSubmission, publicOpts(password)),
+    http.post<{ ok: boolean; record_id?: string | null }>(`/api/public/forms/${enc(token)}/submit`, { values } satisfies FormSubmission, publicOpts(password)),
   /** Uploads a file for an attachment field of the form; the answer goes into the submission. */
   uploadFormFile: (token: string, file: File, password?: string | null, signal?: AbortSignal) => {
     const body = new FormData();

@@ -297,6 +297,7 @@ describe("a public form", () => {
       success_message: "Thank you",
       redirect_url: "https://example.com/thanks",
       show_submit_another: true,
+      notify_user_ids: [],
     };
     formView = parse("View", await w.owner.run(() => api.views.update(created.id, { config: { ...created.config, form } })));
     link = await share(formView, "form");
@@ -318,7 +319,7 @@ describe("a public form", () => {
   it("creates a record anonymously from the submitted values", async () => {
     const before = parse("QueryResponse", await w.owner.run(() => recordsApi.query(grid.id, { limit: 0 }))).total;
     const res = await anon.run(() => publicApi.submitForm(link.token, { [name]: "Web visitor", [email]: "visitor@example.com", [qty]: "7", [status]: choice["Done"]! }));
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true, record_id: expect.any(String) });
     const after = parse("QueryResponse", await w.owner.run(() => recordsApi.query(grid.id, { search: "Web visitor" })));
     expect(after.total).toBe(1);
     const created = after.records[0]!;
@@ -359,7 +360,7 @@ describe("a public form", () => {
     expectError(await failure(anon.run(() => publicApi.uploadFormFile(locked.token, new File(["x"], "x.txt")))), 401, "share_password_required");
     parse("AttachmentRef", await anon.run(() => publicApi.uploadFormFile(locked.token, new File(["x"], "x.txt"), "form pass")));
     expectError(await failure(anon.run(() => publicApi.submitForm(locked.token, { [name]: "N" }))), 401, "share_password_required");
-    expect(await anon.run(() => publicApi.submitForm(locked.token, { [name]: "With pass" }, "form pass"))).toEqual({ ok: true });
+    expect(await anon.run(() => publicApi.submitForm(locked.token, { [name]: "With pass" }, "form pass"))).toMatchObject({ ok: true });
   });
 
   it("stops accepting submissions from one address after 20 in a short time, with a clear 429", async () => {
@@ -369,7 +370,7 @@ describe("a public form", () => {
     const e = await failure(eager.run(() => publicApi.submitForm(l.token, { [name]: "One too many" })));
     expectError(e, 429, "too_many_requests");
     // Another visitor is not affected.
-    expect(await visitor("other").run(() => publicApi.submitForm(l.token, { [name]: "Fine" }))).toEqual({ ok: true });
+    expect(await visitor("other").run(() => publicApi.submitForm(l.token, { [name]: "Fine" }))).toMatchObject({ ok: true });
   });
 
   it("closes the form when the link is switched off, mid-session", async () => {

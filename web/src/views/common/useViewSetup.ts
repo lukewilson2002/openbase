@@ -3,12 +3,12 @@
  * formatting and editing environment, the view config (saved through `useViewConfig`), search,
  * record writes and the `?record=` URL parameter of the expanded record.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import type { Collaborator, TransientConfig, ViewConfig } from "@/api/types";
+import type { Collaborator, TableRecord, TransientConfig, ViewConfig } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import type { EditorEnv } from "@/components/record/editors/env";
 import { useDebounced } from "@/components/record/editors/useDebounced";
@@ -20,6 +20,7 @@ import { personColors } from "@/lib/colors";
 import type { FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
 import type { ViewProps } from "../types";
+import { useRecordActions, type RecordActions } from "./useRecordActions";
 import { useRecordWrites, type RecordWrites } from "./useRecordWrites";
 
 export interface ViewSetup extends ViewProps {
@@ -49,10 +50,21 @@ export interface ViewSetup extends ViewProps {
   /** Search text after the typing pause: use this in queries. */
   debouncedSearch: string;
   writes: RecordWrites;
+  /** Delete and duplicate for cards and rows (the confirmation for several is drawn by `ViewFrame`). */
+  actions: RecordActions;
   openRecordId: string | null;
   openRecord(recordId: string | null): void;
-  /** Opens a record the person just added: its first field starts being edited. */
+  /**
+   * Opens a record the person just added: its first field starts being edited, and the record is
+   * thrown away again when its panel closes with nothing changed (see `RecordWrites.discardIfUntouched`).
+   */
   openNewRecord(recordId: string): void;
+  /**
+   * The way a view adds a record: creates it (starting from the values of the view's filter, then
+   * `values`, e.g. the stack or group it is added to) and opens it for typing. Resolves with the record,
+   * or null when it was not created (also while an earlier add is still on its way).
+   */
+  addRecord(values?: Record<string, unknown>, opts?: { afterRecordId?: string }): Promise<TableRecord | null>;
   /** The record that was just added, while it is the one open. */
   newRecordId: string | null;
 }
@@ -83,7 +95,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const [searchOpen, setSearchOpen] = useState(false);
   const debouncedSearch = useDebounced(search.trim(), 250);
 
-  const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit });
+  const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
+  const actions = useRecordActions({ writes, role, canEdit });
 
   const openRecordId = searchParams.get("record");
   const openRecord = useCallback(
@@ -102,21 +115,46 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     },
     [setSearchParams],
   );
-  // Which record was added a moment ago, so its expanded form starts in edit mode; opening any other record forgets it.
+  // Which record was added a moment ago, so its expanded form starts in edit mode. It is forgotten (and thrown
+  // away if nothing was typed in it) once another record, or none, is open.
   const [newId, setNewId] = useState<string | null>(null);
-  const openRecordOrForget = useCallback(
-    (recordId: string | null) => {
-      setNewId((cur) => (cur === recordId ? cur : null));
-      openRecord(recordId);
-    },
-    [openRecord],
-  );
+  // The address changes a moment after `newId` is set: the record counts as opened only once it showed up there.
+  const sawNewOpen = useRef(false);
+  const newIdRef = useRef<string | null>(null);
+  newIdRef.current = newId;
+  const { discardIfUntouched } = writes;
+  useEffect(() => {
+    if (!newId) {
+      sawNewOpen.current = false;
+      return;
+    }
+    if (openRecordId === newId) {
+      sawNewOpen.current = true;
+      return;
+    }
+    if (sawNewOpen.current) {
+      sawNewOpen.current = false;
+      setNewId(null);
+      void discardIfUntouched(newId);
+    }
+  }, [openRecordId, newId, discardIfUntouched]);
   const openNewRecord = useCallback(
     (recordId: string) => {
+      const earlier = newIdRef.current;
+      if (earlier && earlier !== recordId) void discardIfUntouched(earlier);
+      sawNewOpen.current = false;
       setNewId(recordId);
       openRecord(recordId);
     },
-    [openRecord],
+    [openRecord, discardIfUntouched],
+  );
+  const addRecord = useCallback<ViewSetup["addRecord"]>(
+    async (values = {}, opts) => {
+      const created = await writes.create(values, opts);
+      if (created) openNewRecord(created.id);
+      return created;
+    },
+    [writes, openNewRecord],
   );
 
   return {
@@ -142,9 +180,11 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     setSearchOpen,
     debouncedSearch,
     writes,
+    actions,
     openRecordId,
-    openRecord: openRecordOrForget,
+    openRecord,
     openNewRecord,
+    addRecord,
     newRecordId: newId,
   };
 }
