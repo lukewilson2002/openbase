@@ -73,6 +73,16 @@ describe("ListView", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
   });
 
+  it("adds from the toolbar to the group of the row last focused", async () => {
+    const user = userEvent.setup();
+    const created = rec("r9", {});
+    const { api } = setup("editor", outline, { records, groups }, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
+    (await screen.findByRole("treeitem", { name: /^R3(,|$)/ })).focus();
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
+  });
+
   it("shows a flat list with an add button when the view has no groups", async () => {
     const user = userEvent.setup();
     const flat = viewWithConfig("viw1", "list", {});

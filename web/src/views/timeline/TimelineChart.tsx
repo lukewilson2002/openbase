@@ -943,10 +943,13 @@ export function TimelineChart(props: TimelineChartProps) {
             <button
               type="button"
               onClick={props.onAddRow}
-              className="sticky left-0 z-20 flex h-full shrink-0 items-center gap-1.5 border-r border-line bg-surface px-3.5 text-left text-[0.875rem] text-muted hover:bg-hover hover:text-fg"
+              className="group/add sticky left-0 z-20 flex h-full shrink-0 items-center gap-1.5 border-r border-line bg-surface px-3.5 text-left text-[0.875rem] text-muted hover:bg-hover hover:text-fg"
               style={{ width: Math.max(labelW, 120) }}
             >
-              <Plus aria-hidden className="size-[15px]" /> Add
+              {/* Quiet until the button is pointed at or focused (always shown on touch, which cannot hover). */}
+              <span className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+                <Plus aria-hidden className="size-[15px]" /> Add
+              </span>
             </button>
           </div>
         )}

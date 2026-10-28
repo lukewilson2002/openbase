@@ -16,7 +16,7 @@
  * Space drops it and Escape cancels; Enter opens the record, X selects it, Delete deletes it. Keys on a link
  * inside a card are the link's own.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type MutableRefObject } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -99,6 +99,8 @@ export interface KanbanBoardProps {
   onReorderStacks?: (keys: string[]) => void;
   onDrop(plan: DropPlan): void;
   onAddCard(key: string): void;
+  /** Filled with a function giving the stack the toolbar's Add adds to: the focused card's, the selection's, else the first one in view (null: none to say). */
+  addTargetRef?: MutableRefObject<(() => string | null) | null>;
   /** Adds a stack (a new choice of the stack field); omitted where that is not possible or allowed. */
   onAddStack?: (name: string) => Promise<void>;
   /** Why a stack cannot be added here, shown where the add button would be. */
@@ -367,6 +369,35 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const targetsOf = (id: string): string[] => (sel.has(id) ? [...sel.ids] : [id]);
   const moveTargets = [...shownStacks, ...(clearStack ? [clearStack] : [])];
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastStack = useRef<string | null>(null);
+  const { addTargetRef } = props;
+  useEffect(() => {
+    if (!addTargetRef) return;
+    addTargetRef.current = () => {
+      const list = listRef.current;
+      if (!list) return null;
+      const keyOf = (el: Element | null | undefined) => el?.closest<HTMLElement>("[data-stack-key]")?.dataset.stackKey ?? null;
+      // The stack focus last was in (pressing the toolbar's Add moves it away), if it is still drawn.
+      const focused = lastStack.current !== null ? [...list.querySelectorAll<HTMLElement>("[data-stack-key]")].find((el) => el.dataset.stackKey === lastStack.current) : undefined;
+      if (focused) return lastStack.current;
+      for (const id of sel.ids) {
+        const card = [...list.querySelectorAll<HTMLElement>("[data-record-id]")].find((el) => el.dataset.recordId === id);
+        const key = keyOf(card);
+        if (key !== null) return key;
+      }
+      // The first stack whose right edge is still on screen.
+      const left = list.getBoundingClientRect().left;
+      for (const stack of list.querySelectorAll<HTMLElement>("[data-stack-key]")) {
+        if (stack.getBoundingClientRect().right >= left) return stack.dataset.stackKey ?? null;
+      }
+      return null;
+    };
+    return () => {
+      addTargetRef.current = null;
+    };
+  });
+
   return (
     <DndContext
       sensors={sensors}
@@ -378,7 +409,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       accessibility={{ announcements, screenReaderInstructions: { draggable: SCREEN_READER_INSTRUCTIONS } }}
     >
       <div className="relative h-full">
-        <div className="flex h-full items-start gap-3 overflow-x-auto p-3 md:p-4" role="list" aria-label="Stacks" onKeyDown={onBoardKeyDown}>
+        <div ref={listRef} className="flex h-full items-start gap-3 overflow-x-auto p-3 md:p-4" role="list" aria-label="Stacks" onKeyDown={onBoardKeyDown} onFocus={(e) => { lastStack.current = e.target.closest<HTMLElement>("[data-stack-key]")?.dataset.stackKey ?? lastStack.current; }}>
           <SortableContext items={shownStacks.map((s) => `${STACK_PREFIX}${s.key}`)} strategy={horizontalListSortingStrategy}>
             {shownStacks.map((stack, i) => (
               <StackColumn
@@ -571,9 +602,12 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
           type="button"
           aria-label={`Add card to ${stack.label}`}
           onClick={() => p.onAddCard(stack.key)}
-          className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-[0.875rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
+          className="group/add flex h-9 items-center gap-1.5 rounded-lg px-2 text-[0.875rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
         >
-          <Plus aria-hidden className="size-[15px]" /> Add
+          {/* Quiet until the button is pointed at or focused (always shown on touch, which cannot hover). */}
+          <span className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+            <Plus aria-hidden className="size-[15px]" /> Add
+          </span>
         </button>
       ) : (
         <span />

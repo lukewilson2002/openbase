@@ -274,6 +274,25 @@ describe("KanbanView", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
   });
 
+  it("adds from the toolbar to the stack of the card last focused", async () => {
+    const user = userEvent.setup();
+    const created = rec("r9", { [F.status.id]: "s2" });
+    const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
+    (await screen.findByRole("button", { name: "R3" })).focus();
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
+  });
+
+  it("makes the stack Add button quiet until it is pointed at, focused or touched", async () => {
+    setup("editor");
+    const label = (await screen.findByRole("button", { name: "Add card to Doing" })).querySelector("span")!;
+    expect(label.className).toMatch(/\bopacity-50\b/);
+    expect(label.className).toContain("group-hover/add:opacity-100");
+    expect(label.className).toContain("group-focus-visible/add:opacity-100");
+    expect(label.className).toContain("pointer-coarse:opacity-100");
+  });
+
   it("adds to Uncategorized without a value", async () => {
     const user = userEvent.setup();
     const created = rec("r9", {});

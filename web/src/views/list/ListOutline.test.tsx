@@ -126,6 +126,19 @@ describe("ListOutline", () => {
     expect(props.onToggle).toHaveBeenCalledWith(`${status.id}:chs1`);
   });
 
+  it("ends an ungrouped list with a quiet Add line, shown in full on hover, focus and touch", async () => {
+    const user = userEvent.setup();
+    const { props } = outline({ groups: [] });
+    const add = screen.getByRole("treeitem", { name: "Add record" });
+    const label = add.querySelector("span")!;
+    expect(label.className).toMatch(/\bopacity-50\b/);
+    expect(label.className).toContain("group-hover/add:opacity-100");
+    expect(label.className).toContain("group-focus-visible/add:opacity-100");
+    expect(label.className).toContain("pointer-coarse:opacity-100");
+    await user.click(add);
+    expect(props.onAdd).toHaveBeenCalledWith({});
+  });
+
   it("adds a record inside a group with that group's value, and not for readers", async () => {
     const user = userEvent.setup();
     const { props, unmount } = outline();
@@ -136,6 +149,19 @@ describe("ListOutline", () => {
     unmount();
     outline({ canEdit: false });
     expect(screen.queryByRole("treeitem", { name: /^Add record to/ })).not.toBeInTheDocument();
+  });
+
+  it("tells the toolbar's Add which group focus was last in", async () => {
+    const user = userEvent.setup();
+    const addTargetRef = { current: null as (() => Record<string, unknown>) | null };
+    outline({ addTargetRef });
+    expect(addTargetRef.current!()).toEqual({ [status.id]: "chs1" }); // nothing focused: the group at the top
+    await user.click(head("Todo"));
+    screen.getByRole("treeitem", { name: "Add record to (Empty)" }).focus();
+    expect(addTargetRef.current!()).toEqual({});
+    screen.getByRole("treeitem", { name: "Add record to Todo" }).focus();
+    (document.activeElement as HTMLElement).blur();
+    expect(addTargetRef.current!()).toEqual({ [status.id]: "chs1" }); // blurred by pressing Add: still the last one
   });
 
   it("opens a record on click and on Enter, but leaves links alone", async () => {
@@ -492,6 +518,7 @@ describe("ListOutline sub-items", () => {
       ["Wire", "3", null],
       ["Build", "2", null],
       ["Ship", "1", null],
+      ["Add record", "1", null],
     ]);
     expect(row("Build")).toHaveAttribute("aria-posinset", "2");
     expect(row("Build")).toHaveAttribute("aria-setsize", "2");

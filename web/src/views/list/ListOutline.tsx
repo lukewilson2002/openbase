@@ -16,7 +16,7 @@
  * manual order, into the next group when it passes the end of its own. Rows can also be dragged:
  * above or below another row, or onto a group's heading to put the row first in that group.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { DndContext, MouseSensor, TouchSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -134,6 +134,8 @@ export interface ListOutlineProps {
   onReorder?(recordId: string, plan: DropPlan | "blocked"): void | Promise<unknown>;
   /** The record open in the panel: its row is brought into view, even past the first rows of its group. */
   reveal?: string | null;
+  /** Filled with a function giving the values for a record added "here": the group in focus, in the selection, or at the top of the scrolled view. */
+  addTargetRef?: MutableRefObject<(() => Record<string, unknown>) | null>;
 }
 
 /** The rows of one group that holds records, as they are drawn. */
@@ -197,7 +199,7 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   // Sub-items indent inside the title column, so the values of every row still line up.
   const titleWidth = TITLE_PX + (p.prefix ? 28 : 0) + (nested ? NEST_PX : 0);
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} className={cn("group/row relative motion-reduce:transition-none!", isDragging && "z-20 bg-surface shadow-pop")}>
+    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} data-leaf={leaf.path} className={cn("group/row relative motion-reduce:transition-none!", isDragging && "z-20 bg-surface shadow-pop")}>
       <div
         role="treeitem"
         {...u.roving.itemProps(`r:${record.id}`)}
@@ -312,14 +314,23 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   );
 }
 
+/** The nearest ancestor that scrolls, if any. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let up = el?.parentElement; up; up = up.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(up).overflowY)) return up;
+  }
+  return null;
+}
+
 /** A line of the tree that does something when it is chosen (Add, Show more, Retry): a tree item too. */
-function ActionRow({ navKey, level, indent, label, onActivate, u, children, className }: { navKey: string; level: number; indent: number; label: string; onActivate(): void; u: Ui; children: ReactNode; className?: string }) {
+function ActionRow({ navKey, level, indent, label, onActivate, u, children, className, leafPath }: { leafPath?: string; navKey: string; level: number; indent: number; label: string; onActivate(): void; u: Ui; children: ReactNode; className?: string }) {
   return (
     <div
       role="treeitem"
       {...u.roving.itemProps(navKey)}
       aria-level={level}
       aria-label={label}
+      data-leaf={leafPath}
       onClick={onActivate}
       style={{ paddingLeft: indent }}
       className={cn(`flex w-full cursor-pointer items-center gap-1.5 pr-4 text-left outline-none hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`, className)}
@@ -368,17 +379,21 @@ function Records({ leaf, u }: { leaf: Leaf; u: Ui }) {
           No records
         </div>
       )}
-      {node && p.canEdit && (
+      {p.canEdit && (
         <ActionRow
           navKey={`a:${leaf.path}`}
+          leafPath={leaf.path}
           level={leaf.depth + 1}
           indent={leaf.indent - 2}
-          label={`Add record to ${node.header.label}`}
-          onActivate={() => p.onAdd(groupDefaults(node))}
+          label={node ? `Add record to ${node.header.label}` : "Add record"}
+          onActivate={() => p.onAdd(node ? groupDefaults(node) : {})}
           u={u}
-          className="h-10 text-[0.875rem] text-muted hover:text-fg pointer-coarse:h-11"
+          className="group/add h-10 text-[0.875rem] text-muted hover:text-fg pointer-coarse:h-11"
         >
-          <Plus aria-hidden className="size-[15px]" /> Add
+          {/* Quiet until the row is pointed at or focused (always shown on touch, which cannot hover). */}
+          <span className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+            <Plus aria-hidden className="size-[15px]" /> Add
+          </span>
         </ActionRow>
       )}
     </>
@@ -499,7 +514,7 @@ export function ListOutline(p: ListOutlineProps) {
       const waiting = leaf.loaded < leaf.needed;
       if (waiting && p.rowStatus === "error") keys.push(`x:${leaf.path}`);
       if (!waiting && leaf.remaining > 0) keys.push(`m:${leaf.path}`);
-      if (leaf.node && p.canEdit) keys.push(`a:${leaf.path}`);
+      if (p.canEdit) keys.push(`a:${leaf.path}`);
     }
     return { navKeys: keys, rowAt };
   }, [entries, p.rowStatus, p.canEdit]);
@@ -510,6 +525,46 @@ export function ListOutline(p: ListOutlineProps) {
   useEffect(() => {
     for (const e of entries) if (e.kind === "leaf" && e.leaf.loaded < e.leaf.needed) onNeedRows?.(e.leaf.path, e.leaf.needed);
   }, [entries, onNeedRows]);
+
+  // "Add" of the toolbar adds to the group being worked in: the focused row's, else the selection's, else the first one in view.
+  const { addTargetRef } = p;
+  const lastAt = useRef<string | null>(null);
+  useEffect(() => {
+    if (!addTargetRef) return;
+    addTargetRef.current = () => {
+      const nodes = new Map<string, GroupNode | null>();
+      for (const e of entries) {
+        if (e.kind === "group") nodes.set(e.row.node.path, e.row.node);
+        else nodes.set(e.leaf.path, e.leaf.node);
+      }
+      const root = roving.containerRef.current;
+      const defaults = (path: string | undefined) => {
+        const node = path === undefined ? null : nodes.get(path);
+        return node ? groupDefaults(node) : null;
+      };
+      const at = (el: Element) => {
+        const d = el.closest<HTMLElement>("[data-leaf],[data-group]")?.dataset;
+        return d ? defaults(d.leaf ?? d.group) : null;
+      };
+      // Where focus last was in the list (pressing the toolbar's Add moves it away).
+      const focused = defaults(lastAt.current ?? undefined);
+      if (focused) return focused;
+      for (const id of p.selection?.ids ?? []) {
+        const hit = rowAt.get(id);
+        const d = hit && defaults(hit.leaf.path);
+        if (d) return d;
+      }
+      // The first group whose end is still on screen.
+      const top = scrollParent(root)?.getBoundingClientRect().top ?? 0;
+      for (const el of root?.querySelectorAll<HTMLElement>("[data-leaf],[data-group]") ?? []) {
+        if (el.getBoundingClientRect().bottom >= top) return at(el) ?? {};
+      }
+      return {};
+    };
+    return () => {
+      addTargetRef.current = null;
+    };
+  });
 
   const draggable = !!p.onReorder && p.canEdit;
   const u: Ui = {
@@ -760,7 +815,7 @@ export function ListOutline(p: ListOutlineProps) {
   };
 
   const body = (
-    <div ref={roving.containerRef} role="tree" aria-label={grouped ? "Grouped records" : "Records"} aria-multiselectable={p.selection ? true : undefined} onKeyDown={onKeyDown}>
+    <div ref={roving.containerRef} role="tree" aria-label={grouped ? "Grouped records" : "Records"} aria-multiselectable={p.selection ? true : undefined} onKeyDown={onKeyDown} onFocus={(e) => { const d = e.target.closest<HTMLElement>("[data-leaf],[data-group]")?.dataset; if (d) lastAt.current = d.leaf ?? d.group ?? null; }}>
       {entries.map((e) => (e.kind === "group" ? <GroupHeading key={`g:${e.row.node.path}`} row={e.row} u={u} /> : <Records key={`r:${e.leaf.path}`} leaf={e.leaf} u={u} />))}
     </div>
   );

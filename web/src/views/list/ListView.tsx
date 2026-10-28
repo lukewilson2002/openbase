@@ -101,6 +101,7 @@ function ListInner(props: ViewProps) {
   // Rows can be put in a new place only where the view keeps them in manual order.
   const reorderable = setup.canEdit && cfg.queryConfig.sorts.length === 0;
 
+  const addTarget = useRef<(() => Record<string, unknown>) | null>(null);
   const add = async (defaults: Record<string, unknown>) => {
     await setup.addRecord(defaults);
   };
@@ -186,6 +187,7 @@ function ListInner(props: ViewProps) {
         onToggle={toggle}
         onOpen={setup.openRecord}
         onAdd={(defaults) => void add(defaults)}
+        addTargetRef={addTarget}
         selection={sel}
         onDelete={(ids) => actions.requestDelete(ids, sel.clear)}
         onRecordMenu={(id, anchor, tree) => setMenu({ id, anchor, tree })}
@@ -229,7 +231,7 @@ function ListInner(props: ViewProps) {
           ? [{ id: "fold-all", label: "Fold all groups", icon: <ChevronsDownUp aria-hidden />, checked: allFolded, onToggle: (on) => replace(on ? paths : []) }]
           : undefined
       }
-      onAdd={setup.canEdit ? () => void add({}) : undefined}
+      onAdd={setup.canEdit ? () => void add(addTarget.current?.() ?? {}) : undefined}
       footer={
         <>
           <span aria-live="polite">

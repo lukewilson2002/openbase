@@ -3,7 +3,7 @@
  * from the view query (filter, sorts, colours, search), so the toolbar behaves as in the grid;
  * drops write the stack field (and the manual order when the view has no sorts) optimistically.
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/api/keys";
@@ -103,6 +103,7 @@ function KanbanInner(props: ViewProps) {
     [stackField, writes, stackLabel],
   );
 
+  const addTarget = useRef<(() => string | null) | null>(null);
   const addCard = useCallback(
     async (key: string) => {
       // null clears what the view's filter would have filled in: a card added to Uncategorized has no value.
@@ -294,6 +295,7 @@ function KanbanInner(props: ViewProps) {
         clearStack={clearStack}
         onDrop={onDrop}
         onAddCard={(key) => void addCard(key)}
+        addTargetRef={addTarget}
         onAddStack={onAddStack}
         addStackNote={addStackNote}
         onOpen={setup.openRecord}
@@ -336,7 +338,7 @@ function KanbanInner(props: ViewProps) {
           onToggle: (on) => cfg.update((c) => setKanban(c, { hide_empty_stacks: on })),
         },
       ]}
-      onAdd={setup.canEdit ? () => void addCard(stacks[0]?.key ?? "") : undefined}
+      onAdd={setup.canEdit ? () => void addCard(addTarget.current?.() ?? stacks[0]?.key ?? "") : undefined}
       footer={footer}
     >
       {body}

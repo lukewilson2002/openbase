@@ -294,6 +294,16 @@ describe("TimelineView", () => {
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_start: "2026-03-12", f_end: "2026-03-12" } }] });
   });
 
+  it("adds from the toolbar to the swim lane of the bar last focused, dated today", async () => {
+    const u = user();
+    const created = rec("r9", {});
+    const { api } = setup("editor", tl({ group_field_id: F.status.id }), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
+    (await screen.findByRole("button", { name: /^R3, / })).focus();
+    await u.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_start: "2026-03-12", f_status: "s2" } }] });
+  });
+
   describe("records with odd dates", () => {
     const dropOn = (item: Element) => {
       const data = new Map<string, string>();

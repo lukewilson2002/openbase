@@ -403,6 +403,28 @@ function TimelineInner(props: ViewProps) {
   );
 
   const addToday = fields && canEditDates ? () => void setup.addRecord(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone)) : undefined;
+  // The bar focus was last on (pressing the toolbar's Add moves it away); focus on the chart elsewhere forgets it.
+  const lastBar = useRef<string | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (!(e.target instanceof Element)) return;
+      const bar = e.target.closest<HTMLElement>("[data-bar]");
+      if (bar) lastBar.current = bar.dataset.recordId ?? null;
+      else if (e.target.closest("[data-testid='timeline-scroller']")) lastBar.current = null;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+  // The toolbar's Add goes to the lane of the focused bar, else to no lane in particular; both start today.
+  const addInView = addToday
+    ? () => {
+        const id = lastBar.current;
+        const lane = id ? laneModels.find((l) => l.records.some((r) => r.id === id)) : undefined;
+        if (!lane) return addToday();
+        const today = dayNumber(wallNow(timeZone));
+        onCreate(lane.key, today, today);
+      }
+    : undefined;
   const pageLabel = SCALE_LABELS[scale].toLowerCase();
 
   // What to say when no bar is in the window: what the person can do, and where the other records are.
@@ -555,7 +577,7 @@ function TimelineInner(props: ViewProps) {
       features={{ group: true, rowHeight: false }}
       toolbarSetting={settings}
       // With dates that cannot be written, Add still makes a record, left blank for the person to fill in.
-      onAdd={addToday ?? (setup.canEdit ? () => void setup.addRecord({}) : undefined)}
+      onAdd={addInView ?? (setup.canEdit ? () => void setup.addRecord({}) : undefined)}
       footer={
         fields ? (
           <>
