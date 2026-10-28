@@ -72,6 +72,9 @@ const STILL_IN_GRID = "#portal, [role='dialog'], [role='alertdialog'], [role='me
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /** Pages fetched at once when the records of a selection have to be loaded. */
 const LOAD_PAGES_AT_ONCE = 4;
+/** How long a new row is waited for before it is selected, and how many times it is looked for. */
+const REVEAL_MS = 400;
+const REVEAL_TRIES = 6;
 
 export default function GridView(props: ViewProps) {
   // Everything that is per-view (undo history, scroll, selection, search) resets with the view.
@@ -110,6 +113,10 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const debouncedSearch = useDebounced(search.trim(), 250);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const debouncedRef = useRef(debouncedSearch);
+  debouncedRef.current = debouncedSearch;
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ---- data ------------------------------------------------------------------------------------
@@ -697,30 +704,51 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   /** Add a record (into group `group` of the group headers, when given; the end of the table otherwise) and select it. */
   const addRecord = useCallback(
     async (target: { group?: number } = {}) => {
-      const before = reveal.current?.before ?? selectionRef.current;
       const focused = document.activeElement;
       const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, target.group ?? -1, me.data?.id ?? null);
+      // Groups are known by their path, which outlasts the rows moving around.
+      const groupKey = target.group !== undefined && target.group >= 0 ? groupPathKeys(dataRef.current.groups)[target.group] : undefined;
+      // A search would hide the new, empty record: show everything again first, so it can be typed into.
+      if (searchRef.current.trim() !== "") {
+        selectQuietly(() => gridRef.current?.clearSelection());
+        setSearch("");
+        for (let waited = 0; (debouncedRef.current !== "" || dataRef.current.loading) && waited < 3000; waited += 50) await sleep(50);
+      }
+      const before = reveal.current?.before ?? selectionRef.current;
       const created = await createFresh({ values });
       if (!created) return;
       if (reveal.current) window.clearTimeout(reveal.current.timer);
-      const timer = window.setTimeout(() => {
-        reveal.current = null;
-        if (selectionRef.current !== before) return;
+      // Its page may take a moment to arrive: look again a few times. Until then scroll to where it
+      // will be (the end of its group, or of the table) to load it, but never select a row that is
+      // another record.
+      let tries = 0;
+      const look = () => {
+        if (selectionRef.current !== before) return void (reveal.current = null);
         const idx = dataRef.current.indexOf(created.id);
-        // Without the page that has it yet, an ungrouped record is the last one.
-        const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : rowMapRef.current.rowOfRecord(dataRef.current.total - 1);
-        if (row >= 0) {
-          gridRef.current?.scrollToRow(row);
-          selectQuietly(() => gridRef.current?.selectCell(0, row));
-          // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
-          // grid, or the new row looks selected while typing goes to the button, and a click on that
-          // already selected cell would not move the focus either.
-          if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
+        const row = idx >= 0 ? rowMapRef.current.rowOfRecord(idx) : -1;
+        if (row < 0) {
+          const map = rowMapRef.current;
+          const gi = groupKey ? groupPathKeys(dataRef.current.groups).indexOf(groupKey) : -1;
+          let end = -1;
+          if (gi >= 0) {
+            for (let r = 0; r < map.length && end < 0; r++) if (map.isAddRow(r) && map.addGroupAt(r) === gi) end = r;
+          } else if (!grouped && dataRef.current.total > 0) end = map.rowOfRecord(dataRef.current.total - 1);
+          if (end >= 0) gridRef.current?.scrollToRow(end);
+          if (++tries < REVEAL_TRIES) reveal.current = { timer: window.setTimeout(look, REVEAL_MS), before };
+          else reveal.current = null;
+          return;
         }
-      }, 400);
-      reveal.current = { timer, before };
+        reveal.current = null;
+        gridRef.current?.scrollToRow(row);
+        selectQuietly(() => gridRef.current?.selectCell(0, row));
+        // The keyboard is still on the "Add" button (or nowhere) that was used: hand it to the
+        // grid, or the new row looks selected while typing goes to the button, and a click on that
+        // already selected cell would not move the focus either.
+        if (document.activeElement === focused || document.activeElement === document.body) gridRef.current?.focus();
+      };
+      reveal.current = { timer: window.setTimeout(look, REVEAL_MS), before };
     },
-    [table.fields, queryConfig.filter, me.data?.id, createFresh, selectQuietly],
+    [table.fields, queryConfig.filter, me.data?.id, createFresh, selectQuietly, grouped],
   );
 
   /** The group the floating Add adds into: that of the selected row, else the one at the top of what is on screen. */
@@ -786,8 +814,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         if (id === openIdRef.current) continue;
         if (!leaving) {
           const idx = dataRef.current.indexOf(id);
-          // Not known yet (its page has not arrived): it cannot be told apart from the selection.
-          if (idx < 0) continue;
+          // Not on screen: while the new row is still being looked for it may yet be selected;
+          // after that (a filter hides it, say) it cannot be what the person is working on.
+          if (idx < 0 && reveal.current) continue;
           const row = rowMapRef.current.rowOfRecord(idx);
           if (sel.columns.length > 0 || (row >= 0 && (sel.rows.includes(row) || sel.ranges.some((r) => row >= r.y && row < r.y + r.height)))) continue;
         }
