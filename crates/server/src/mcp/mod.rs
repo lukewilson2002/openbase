@@ -45,6 +45,7 @@ pub mod catalogue;
 pub mod data;
 pub mod files;
 pub mod history;
+pub mod home;
 pub mod inbox;
 pub mod people;
 pub mod resolve;
@@ -116,6 +117,7 @@ Credentials, sessions, API tokens, password resets, 2FA and the SMTP password ca
 pub fn definitions() -> Vec<tools::ToolDef> {
     let mut all = data::definitions();
     all.extend(search::definitions());
+    all.extend(home::definitions());
     all.extend(people::definitions());
     all.extend(schema::definitions());
     all.extend(views::definitions());
@@ -131,6 +133,9 @@ pub fn definitions() -> Vec<tools::ToolDef> {
 /// Run the tool `name` (its level was already checked against the token).
 pub async fn run(ctx: &McpCtx, name: &str, args: Value) -> tools::ToolResult {
     if let Some(r) = search::run(ctx, name, &args).await {
+        return r;
+    }
+    if let Some(r) = home::run(ctx, name, &args).await {
         return r;
     }
     if let Some(r) = people::run(ctx, name, &args).await {
