@@ -13,14 +13,14 @@ import { Inbox, Menu, PanelLeft } from "lucide-react";
 import { BrandMark, Logo } from "@/components/Logo";
 import { NotificationsPanel, NotificationsRow, useUnreadCount } from "@/components/notifications/Notifications";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { SearchBarProvider, SearchButton, type SearchHere } from "./SearchEverything";
 import { useSidebarPrefs } from "./sidebarPrefs";
 import { DockedSidebar, SidebarDrawer, SidebarLink } from "./Sidebar";
 
-/** Tailwind's `md` (raised to 1024px in styles/index.css): from here up the desktop layout, with the menu docked beside the page. */
-export const DESKTOP_QUERY = "(min-width: 1024px)";
+// Tailwind's `md` (raised to 1024px in styles/index.css): from here up the desktop layout, with the menu docked beside the page.
+export { DESKTOP_QUERY };
 
 interface MenuControl {
   open: () => void;
