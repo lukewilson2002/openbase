@@ -522,7 +522,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "viewer",
         Read,
         "Records of a view with its filter, sorts and groups applied, plus optional search and per-request overrides. A POST that only reads.",
-        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, transient?: {filter?, sorts?, groups?}}",
+        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, week_start? (0 Sunday, 1 Monday; for calendar-week date filters, default your profile's), transient?: {filter?, sorts?, groups?}}",
         "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors}",
     ),
     e(
@@ -532,7 +532,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "viewer",
         Read,
         "Group a table's records and compute aggregates per group in the database (no paging through records): count, sum, avg, min, max. Narrow with a view and/or an Airtable formula. A POST that only reads.",
-        "{group_by?: [field name or id] (at most 3), aggregates?: [{function: count|sum|avg|min|max, field? (name or id; not for plain count), alias?}] (default one count), view?, filter_by_formula?, sort?: [{by: alias or group_by field, direction?: asc|desc}], limit? (default 1000, max 10000), timezone?}",
+        "{group_by?: [field name or id] (at most 3), aggregates?: [{function: count|sum|avg|min|max, field? (name or id; not for plain count), alias?}] (default one count), view?, filter_by_formula?, sort?: [{by: alias or group_by field, direction?: asc|desc}], limit? (default 1000, max 10000), timezone?, week_start?}",
         "{group_by: [name], groups: [{group: {field name: value (select/link/user as names, dates as YYYY-MM-DD, empty = null)}, aggregates: {alias: value}}], total_groups, truncated, record_count}",
     ),
     e(
@@ -542,7 +542,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "viewer",
         Read,
         "The summary-bar aggregations configured on a view.",
-        "query: timezone?, search?, transient? (JSON)",
+        "query: timezone?, week_start? (0 Sunday, 1 Monday), search?, transient? (JSON)",
         "{values: {field_id: value}}",
     ),
     e(
@@ -1175,7 +1175,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         Read,
         "The signed-in user's profile.",
         NO_BODY,
-        "User {id, email, name, is_admin, timezone, totp_enabled, intro_seen, accent}",
+        "User {id, email, name, is_admin, timezone, totp_enabled, intro_seen, accent, week_start}",
     ),
     e(
         PATCH,
@@ -1183,8 +1183,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "account",
         "-",
         Manage,
-        "Change the display name, time zone or accent colour (the app's primary colour: blue, cyan, teal, green, yellow, orange, red, pink, purple or gray; \"\" for the default, blue), or mark the introduction as seen.",
-        "{name?, timezone?, accent?, intro_seen?}",
+        "Change the display name, time zone or accent colour (the app's primary colour: blue, cyan, teal, green, yellow, orange, red, pink, purple or gray; \"\" for the default, blue), set the first day of the week (week_start: 0 Sunday, 1 Monday; the calendar-week date filters start their weeks on it), or mark the introduction as seen.",
+        "{name?, timezone?, accent?, week_start?, intro_seen?}",
         "User",
     ),
     e(

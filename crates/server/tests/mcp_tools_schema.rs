@@ -1368,3 +1368,114 @@ async fn query_view_resolves_relative_dates_in_the_timezone_argument() {
             .contains("unknown timezone")
     );
 }
+
+#[tokio::test]
+async fn query_view_takes_the_week_start_argument_else_the_profile_week_start() {
+    use chrono::{Datelike, Days};
+    let r = Rig::new().await;
+    let a = &r.agent;
+    let b = r.base.as_str();
+    r.table("Events").await;
+    r.field("Events", "On", "date", json!({})).await;
+    // Dated around the Sunday-start week that holds today (S): the Saturday before, S, S+1,
+    // S+6 and S+7. Sunday and Monday weeks hold different events on any day.
+    let today = chrono::Utc::now().date_naive();
+    let s = today - Days::new(u64::from(today.weekday().num_days_from_sunday()));
+    let offsets = [
+        ("sat0", -1i64),
+        ("sun1", 0),
+        ("mon1", 1),
+        ("sat1", 6),
+        ("sun2", 7),
+    ];
+    let day = |d: i64| {
+        if d >= 0 {
+            s + Days::new(d as u64)
+        } else {
+            s - Days::new(d.unsigned_abs())
+        }
+    };
+    let records: Vec<_> = offsets
+        .iter()
+        .map(|(n, d)| json!({"fields": {"Name": n, "On": day(*d).to_string()}}))
+        .collect();
+    r.records("Events", json!(records)).await;
+    a.call(
+        "create_view",
+        json!({"base_id": b, "table": "Events", "name": "This week", "type": "grid",
+               "config": {"filter": {"items": [
+                   {"field_id": "On", "op": "is_within", "value": {"mode": "this_calendar_week"}}]}}}),
+    )
+    .await;
+    let names = |q: &serde_json::Value| -> Vec<String> {
+        q["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rec| rec["fields"]["Name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let expected = |monday: bool| -> Vec<String> {
+        let back = if monday {
+            (today.weekday().num_days_from_monday()) as i64
+        } else {
+            i64::from(today.weekday().num_days_from_sunday())
+        };
+        let first = today - Days::new(back as u64);
+        let last = first + Days::new(6);
+        offsets
+            .iter()
+            .filter(|(_, d)| first <= day(*d) && day(*d) <= last)
+            .map(|(n, _)| n.to_string())
+            .collect()
+    };
+    let q = |extra: serde_json::Value| {
+        let mut args = json!({"base_id": b, "view": "This week", "timezone": "UTC"});
+        for (k, v) in extra.as_object().unwrap() {
+            args[k] = v.clone();
+        }
+        args
+    };
+    // Sunday unless told otherwise.
+    assert_eq!(
+        names(&a.call("query_view", q(json!({}))).await),
+        expected(false)
+    );
+    assert_eq!(
+        names(&a.call("query_view", q(json!({"week_start": 1}))).await),
+        expected(true)
+    );
+    assert_ne!(expected(false), expected(true));
+
+    // The profile's week start is set through api_request and used when the call names none.
+    let res = a
+        .call(
+            "api_request",
+            json!({"method": "PATCH", "path": "/api/auth/me", "body": {"week_start": 1}}),
+        )
+        .await;
+    assert_eq!(res["status"], 200, "{res}");
+    assert_eq!(res["body"]["week_start"], 1);
+    assert_eq!(
+        names(&a.call("query_view", q(json!({}))).await),
+        expected(true)
+    );
+    assert_eq!(
+        names(&a.call("query_view", q(json!({"week_start": 0}))).await),
+        expected(false)
+    );
+    assert!(
+        a.fails(
+            "api_request",
+            json!({"method": "PATCH", "path": "/api/auth/me", "body": {"week_start": 3}}),
+        )
+        .await
+        .contains("week_start must be 0 (Sunday) or 1 (Monday)")
+    );
+    // The argument is checked against 0 and 1 before the call is made.
+    assert!(
+        !a.fails("query_view", q(json!({"week_start": 2})))
+            .await
+            .is_empty()
+    );
+}
