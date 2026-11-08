@@ -8,6 +8,7 @@ import { Link } from "react-router";
 import { Check, ChevronDown, ChevronRight, ChevronUp, CopyPlus, Ellipsis, History, Link2, MessageSquare, Share2, Trash2 } from "lucide-react";
 import type { BaseSchema, Table } from "@/api/types";
 import { ColorMark } from "@/components/ui/color-mark";
+import { CountBadge } from "@/components/ui/count-badge";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { usePresence } from "@/hooks/usePresence";
@@ -128,11 +129,7 @@ export function RecordBar({ schema, table, title, collectionHref, saveState, pre
       <div className="flex shrink-0 items-center">
         <IconButton label={commentsLabel(commentCount)} aria-expanded={panel === "comments"} aria-controls={panelId} onClick={() => onPanel("comments")} className={cn("relative", panel === "comments" && "bg-primary-soft text-primary-ink")}>
           <Icon icon={MessageSquare} />
-          {commentCount > 0 && (
-            <span aria-hidden className="num absolute -right-0.5 -top-0.5 min-w-4 rounded-pill bg-primary px-1 text-center text-meta font-semibold leading-4 text-primary-fg">
-              {commentCount > 99 ? "99+" : commentCount}
-            </span>
-          )}
+          <CountBadge count={commentCount} />
         </IconButton>
         <IconButton label="History" aria-expanded={panel === "history"} aria-controls={panelId} onClick={() => onPanel("history")} className={cn(panel === "history" && "bg-primary-soft text-primary-ink")}>
           <Icon icon={History} />

@@ -19,6 +19,11 @@ export interface DialogProps {
   /** Buttons row rendered below the content. */
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  /**
+   * The body has no padding and does not scroll: it is a column of the dialog's height that lays itself out and
+   * scrolls what needs to (a thread with its box pinned under it).
+   */
+  flush?: boolean;
   /** The larger, airier look of the redesigned dialogs (Share): bigger title, no rule under it, more padding. */
   roomy?: boolean;
   /** `alertdialog` for a confirmation, which is read out as one and does not close on a tap outside it. */
@@ -70,7 +75,7 @@ export function Dialog(props: DialogProps) {
 }
 
 /** The pieces both layouts share, in the order the layouts rely on: header, body, footer. */
-function DialogParts({ title, description, children, footer, roomy, hideClose, fullScreen }: Pick<DialogProps, "title" | "description" | "children" | "footer" | "roomy" | "hideClose"> & { fullScreen?: boolean }) {
+function DialogParts({ title, description, children, footer, roomy, hideClose, flush, fullScreen }: Pick<DialogProps, "title" | "description" | "children" | "footer" | "roomy" | "hideClose" | "flush"> & { fullScreen?: boolean }) {
   // A dialog that is only a question has no rule under its title or above its buttons.
   const plain = !children;
   return (
@@ -92,7 +97,9 @@ function DialogParts({ title, description, children, footer, roomy, hideClose, f
           </D.Close>
         )}
       </div>
-      {children ? <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", roomy ? "px-4 pb-5 pt-4 sm:px-6 sm:pb-6" : "px-4 py-4")}>{children}</div> : null}
+      {children ? (
+        <div className={cn("min-h-0 flex-1", flush ? "flex flex-col" : cn("overflow-y-auto overscroll-contain", roomy ? "px-4 pb-5 pt-4 sm:px-6 sm:pb-6" : "px-4 py-4"))}>{children}</div>
+      ) : null}
       {footer && (
         <div className={cn("flex flex-wrap justify-end gap-2 px-4 py-3", !plain && "border-t border-line", fullScreen && "pb-[max(0.75rem,env(safe-area-inset-bottom))]")}>{footer}</div>
       )}
@@ -126,7 +133,7 @@ function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, d
             className,
           )}
         >
-          <DialogParts roomy={roomy} title={parts.title} description={parts.description} footer={parts.footer} hideClose={parts.hideClose}>{parts.children}</DialogParts>
+          <DialogParts roomy={roomy} title={parts.title} description={parts.description} footer={parts.footer} hideClose={parts.hideClose} flush={parts.flush}>{parts.children}</DialogParts>
         </D.Content>
       </D.Portal>
     </D.Root>
@@ -158,7 +165,7 @@ function FullScreenDialog({ open, onOpenChange, roomy = false, role, dismissOnOu
           style={{ top: visible.top, height: visible.height }}
           className={cn("ob-sheet-in fixed inset-x-0 z-50 flex flex-col bg-surface outline-none", className)}
         >
-          <DialogParts roomy={roomy} fullScreen title={parts.title} description={parts.description} footer={parts.footer} hideClose={parts.hideClose}>{parts.children}</DialogParts>
+          <DialogParts roomy={roomy} fullScreen title={parts.title} description={parts.description} footer={parts.footer} hideClose={parts.hideClose} flush={parts.flush}>{parts.children}</DialogParts>
         </D.Content>
       </D.Portal>
     </D.Root>

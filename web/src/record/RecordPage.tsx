@@ -34,13 +34,14 @@ import { copyToClipboard } from "@/lib/format";
 import { SheetModeContext } from "@/shell/menuItems";
 import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeader";
 import { discardNewRecord, isNewRecord } from "./newRecords";
-import { commentsLabel, RecordBar, RecordMoreItems, SaveStatus, type RecordActions, type RecordPanelKind } from "./RecordBar";
+import { commentsLabel, RecordBar, RecordMoreItems, SaveStatus, type RecordActions } from "./RecordBar";
 import { RecordHead } from "./RecordHead";
 import { PageSection } from "./PageSection";
 import { RecordProperties } from "./RecordProperties";
 import { titleModeOf } from "./properties";
 import { useRecordLayout } from "./useRecordLayout";
 import { usePageSave } from "./usePageSave";
+import { useRecordPanel } from "./useRecordPanel";
 import { combineSaveStates, useRecordSave } from "./useRecordSave";
 
 export interface RecordPageProps {
@@ -112,10 +113,10 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
   const titleMode = titleModeOf(primary);
   const title = record.data && primary ? displayText(primary, record.data.values[primary.id], format) || "Untitled record" : "Record";
 
-  const [panel, setPanel] = useState<RecordPanelKind | null>(null);
+  // Comments or History, remembered per device on a desktop (REC-7).
+  const { panel, opened: panelOpenedByPerson, toggle: togglePanel, set: setPanel } = useRecordPanel(desktop);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const togglePanel = useCallback((kind: RecordPanelKind) => setPanel((cur) => (cur === kind ? null : kind)), []);
 
   // A record added a moment ago starts with its title being edited, and is taken back if it is left empty.
   const justCreated = useMemo(() => isNewRecord(recordId), [recordId]);
@@ -220,14 +221,16 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
     [canEdit, duplicate, copyLink],
   );
 
-  const panelContent =
-    panel === "history" ? (
-      <HistoryPanel tableId={table.id} recordId={recordId} fields={table.fields} format={format} />
-    ) : (
-      <div className="h-full">
+  // A column of the panel's height, which each panel fills and scrolls in: the box under the thread stays in view.
+  const panelContent = (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      {panel === "history" ? (
+        <HistoryPanel tableId={table.id} recordId={recordId} fields={table.fields} format={format} />
+      ) : (
         <CommentsPanel recordId={recordId} collaborators={collaborators} currentUserId={currentUserId} canComment={canComment} timeZone={timeZone} upload={canEdit ? uploadToProject : undefined} />
-      </div>
-    );
+      )}
+    </div>
+  );
   const panelTitle = panel === "history" ? "History" : "Comments";
 
   // Enter in the title moves on to the page (the editor marks itself `data-record-page`); until it has one, to the first value.
@@ -281,7 +284,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
   );
 
   const phoneActions: PhoneAction[] = [
-    { id: "comments", label: commentsLabel(commentCount), icon: MessageSquare, onSelect: () => togglePanel("comments") },
+    { id: "comments", label: commentsLabel(commentCount), icon: MessageSquare, badge: commentCount, onSelect: () => togglePanel("comments") },
     { id: "share", label: "Share", icon: Share2, onSelect: () => void share() },
     { id: "more", label: "More", icon: Ellipsis, onSelect: () => setMoreOpen(true) },
   ];
@@ -321,14 +324,14 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
           </div>
         </div>
         {desktop && (
-          <SidePanel open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} id={panelId}>
+          <SidePanel open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} id={panelId} focusOnOpen={panelOpenedByPerson}>
             {panelContent}
           </SidePanel>
         )}
       </div>
       {!desktop && (
         <>
-          <Dialog open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle}>
+          <Dialog open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} flush>
             {panelContent}
           </Dialog>
           <SheetMenu open={moreOpen} onOpenChange={setMoreOpen} title="Record" doneLabel={null}>

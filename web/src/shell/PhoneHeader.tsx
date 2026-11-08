@@ -7,6 +7,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronLeft, Ellipsis, type LucideIcon } from "lucide-react";
+import { CountBadge } from "@/components/ui/count-badge";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { SheetMenu, SheetMenuGroup, SheetMenuRow } from "@/components/ui/sheet-menu";
@@ -25,6 +26,8 @@ export interface PhoneAction {
   onSelect?: () => void;
   /** Dimmed and inert, for an action the screen cannot take right now. */
   disabled?: boolean;
+  /** A count drawn on the button (Comments); the label carries it for assistive technology. */
+  badge?: number;
 }
 
 /** What the right side holds: the buttons, More and the search all count. */
@@ -58,8 +61,9 @@ function ActionButton({ action }: { action: PhoneAction }) {
       </IconButton>
     );
   return (
-    <IconButton label={action.label} onClick={action.onSelect} disabled={action.disabled}>
+    <IconButton label={action.label} onClick={action.onSelect} disabled={action.disabled} className={action.badge ? "relative" : undefined}>
       {glyph}
+      {action.badge ? <CountBadge count={action.badge} /> : null}
     </IconButton>
   );
 }

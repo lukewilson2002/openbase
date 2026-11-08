@@ -760,6 +760,22 @@ function logHistory(rec: Rec, kind: string, changes: Obj): void {
   history.set(rec.id, list);
 }
 
+// The first task has a thread and a history, so its page shows a count on Comments and the panels have something in them (REC-7).
+{
+  const first = [...records.values()].find((r) => r.table_id === T_TASKS);
+  if (first) {
+    const now = Date.now();
+    comments.push(
+      { id: newId("cmt"), record_id: first.id, user_id: USERS[1]!.id, user_name: USERS[1]!.name, body: "The export still times out. @[Ada Lovelace](usr1) could you take a look before Friday?", created_at: now - 3 * 3_600_000, updated_at: now - 3 * 3_600_000 },
+      { id: newId("cmt"), record_id: first.id, user_id: ME, user_name: "Ada Lovelace", body: "On it. I will **profile it** this afternoon.", created_at: now - 2 * 3_600_000, updated_at: now - 2 * 3_600_000 },
+    );
+    history.set(first.id, [
+      { id: 2, user_id: ME, user_name: "Ada Lovelace", kind: "update", changes: { fld_status: { old: "chs2", new: "chs4" }, fld_effort: { old: 3, new: 5 } }, created_at: now - 2 * 3_600_000 },
+      { id: 1, user_id: USERS[1]!.id, user_name: USERS[1]!.name, kind: "create", changes: { fld_name: { old: null, new: String(first.values.fld_name ?? "") } }, created_at: now - 26 * 3_600_000 },
+    ]);
+  }
+}
+
 function applyValues(rec: Rec, patch: Obj, clientId: string | undefined, kind = "update"): void {
   const changes: Obj = {};
   const fields = fieldsOf(rec.table_id);

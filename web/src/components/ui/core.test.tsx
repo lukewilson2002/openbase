@@ -7,6 +7,7 @@ import { Button } from "./button";
 import { CaptureChip } from "./capture-chip";
 import { Card } from "./card";
 import { ColorMark } from "./color-mark";
+import { CountBadge } from "./count-badge";
 import { EmptyState } from "./empty-state";
 import { FeedRow, FeedTile } from "./feed-row";
 import { FilterChip } from "./filter-chip";
@@ -439,5 +440,20 @@ describe("Skeleton", () => {
     expect(lines).toHaveLength(3);
     expect(lines[2]).toHaveClass("w-2/3");
     expect(lines[0]).toHaveClass("w-full");
+  });
+});
+
+describe("CountBadge", () => {
+  it("draws the count on a button, hidden from assistive technology because the button's name carries it", () => {
+    render(<CountBadge count={3} />);
+    const badge = screen.getByText("3");
+    expect(badge).toHaveAttribute("aria-hidden", "true");
+    expect(badge).toHaveClass("bg-primary", "rounded-pill");
+  });
+  it("is nothing for none, and caps a long count", () => {
+    const { container, rerender } = render(<CountBadge count={0} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<CountBadge count={250} />);
+    expect(screen.getByText("99+")).toBeInTheDocument();
   });
 });

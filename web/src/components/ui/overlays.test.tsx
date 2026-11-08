@@ -4,7 +4,7 @@ import { act, createEvent, fireEvent, render, screen, waitFor, within } from "@t
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { stubDesktop } from "@/test/utils";
+import { stubDesktop, stubPhone } from "@/test/utils";
 import { Button } from "./button";
 import { CommandPalette, type CommandGroup } from "./command-palette";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -417,6 +417,45 @@ describe("SidePanel", () => {
     await user.click(screen.getByRole("button", { name: "Close comments" }));
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+});
+
+describe("SidePanel opening by itself", () => {
+  it("leaves the keyboard where it is when it is told not to take it, and is still named and closable", async () => {
+    const user = userEvent.setup();
+    function Remembered() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button>Page</button>
+          <SidePanel open={open} onOpenChange={setOpen} title="Comments" focusOnOpen={false}>
+            <button>Reply</button>
+          </SidePanel>
+        </>
+      );
+    }
+    render(<Remembered />);
+    const panel = screen.getByRole("complementary", { name: "Comments" });
+    expect(panel).not.toHaveFocus();
+    expect(panel.contains(document.activeElement)).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Close comments" }));
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+});
+
+describe("Dialog with a flush body", () => {
+  it("lays the body out as a column of the dialog's height with no padding of its own, full screen on a phone", async () => {
+    stubPhone();
+    render(
+      <Dialog open onOpenChange={() => {}} title="Comments" flush>
+        <p>Thread</p>
+      </Dialog>,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Comments" });
+    expect(dialog).toHaveClass("inset-x-0");
+    const body = screen.getByText("Thread").parentElement!;
+    expect(body).toHaveClass("flex", "flex-col", "min-h-0", "flex-1");
+    expect(body).not.toHaveClass("px-4", "py-4", "overflow-y-auto");
   });
 });
 

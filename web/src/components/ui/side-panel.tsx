@@ -13,6 +13,11 @@ export interface SidePanelProps {
   id?: string;
   /** Buttons in the header, before the close button. */
   actions?: ReactNode;
+  /**
+   * Whether opening moves focus into the panel (yes, unless it opens by itself, as a remembered panel does when its
+   * page loads: the keyboard stays where the page put it).
+   */
+  focusOnOpen?: boolean;
   children?: ReactNode;
   className?: string;
 }
@@ -23,7 +28,7 @@ export interface SidePanelProps {
  * Escape, or its close button, closes it and returns focus to the control that opened it (A11Y-1). On a phone
  * the same content goes in a `Sheet` or a full-screen `Dialog`.
  */
-export function SidePanel({ open, onOpenChange, title, id, actions, children, className }: SidePanelProps) {
+export function SidePanel({ open, onOpenChange, title, id, actions, focusOnOpen = true, children, className }: SidePanelProps) {
   const titleId = useId();
   const presence = usePresence<HTMLElement>(open);
   const opener = useRef<HTMLElement | null>(null);
@@ -31,7 +36,7 @@ export function SidePanel({ open, onOpenChange, title, id, actions, children, cl
   useEffect(() => {
     if (!open) return;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    presence.ref.current?.focus({ preventScroll: true });
+    if (focusOnOpen) presence.ref.current?.focus({ preventScroll: true });
     return () => {
       const panel = presence.ref.current;
       const from = opener.current;
@@ -40,7 +45,7 @@ export function SidePanel({ open, onOpenChange, title, id, actions, children, cl
       const active = document.activeElement;
       if (from?.isConnected && (!active || active === document.body || panel?.contains(active))) from.focus({ preventScroll: true });
     };
-    // presence.ref is a stable ref object.
+    // presence.ref is a stable ref object. `focusOnOpen` is read as the panel opens: one that stays open is not pulled at again.
   }, [open, presence.ref]);
 
   if (!presence.mounted) return null;
