@@ -76,11 +76,15 @@ some projects who creates or duplicates a project gets it added to their list.
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` for a project without
   tables; by default it starts with "Table 1".
 - Every new table, a project's "Table 1" or one added with `POST /api/bases/{id}/tables`,
-  starts with just its primary field "Name" and a grid view; nothing else is added.
+  starts with its primary field "Name", a rich text field "Page" (the page of each record, which
+  every view of the table hides; "Page 2" and so on if a listed field already has that name)
+  and a grid view; nothing else is added. A new workspace starts with a top-level project named
+  after it, without tables.
   `POST /api/bases/{id}/tables` takes an optional `fields` array to create the rest in
   the same call: each entry has the shape of `POST /api/tables/{id}/fields` (`name`,
   `type`, `options`, `description`, `inverse_name`; `options` may be left out for the
-  type's defaults), created in order after "Name". It is all or nothing: if any entry is
+  type's defaults), created in order after "Name" (the page field comes after them). It is all
+  or nothing: if any entry is
   invalid the answer is 400 (or 409 for a name clash), the message begins with the
   entry (`fields[2] 'Status': ...`) and no table is created. A lookup, rollup or count
   may give a link field listed earlier (or "Name") as `options.link_field_id` by name;

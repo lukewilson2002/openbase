@@ -15,12 +15,13 @@ describe("workspaces", () => {
   let workspaceId = "";
   const name = `Workspace ${rand()}`;
 
-  it("creates a workspace (201) the creator owns, with no bases yet", async () => {
+  it("creates a workspace (201) the creator owns, with its top-level project", async () => {
     owner = await adminProfile();
     other = await newUser(owner, "outsider");
     const ws = parse("WorkspaceSummary", await owner.run(() => api.workspaces.create(name)));
     expect(owner.status).toBe(201);
-    expect(ws).toMatchObject({ name, role: "owner", bases: [] });
+    expect(ws).toMatchObject({ name, role: "owner" });
+    expect(ws.bases.map((b) => b.name)).toEqual([name]);
     workspaceId = ws.id;
   });
 

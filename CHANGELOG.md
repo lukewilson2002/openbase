@@ -13,6 +13,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **Upgrade to database schema 16 (a page for every table).** The server snapshots the database
+  first, as for every upgrade, and no value you entered changes. A table with exactly one rich
+  text property besides its title uses it as its page; every other table gets a new rich text
+  property called "Page" ("Page 2" and so on when the name is taken), hidden in all of its views
+  (not in tables in the trash or tables that already have 500 properties). A new table gets one
+  too, and a new workspace starts with a top-level project named after it; a workspace that had
+  no project gets one the same way. Tables are coloured in turn, each table that has a date
+  property called Due, Deadline, Date, When or Start (and a checkbox called Done or Complete) is
+  set up for the Home page, and each person gets a first day of the week (Sunday). The
+  Airtable-compatible API answers as before, except that a table lists its new Page property.
 - **Select, delete and undo in every view.** Kanban, gallery, list, calendar and timeline now
   have what the grid had: Shift/Ctrl/Cmd-click to select several cards or rows, ⌘A / Ctrl+A,
   a bar with the count and **Delete**, **Duplicate** and **Clear**, the **Delete** key, and a
