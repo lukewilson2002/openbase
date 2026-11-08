@@ -35,7 +35,10 @@ use crate::ids::FieldId;
 use crate::value::ResultType;
 
 pub use aggregate::{aggregate, aggregations_for};
-pub use dates::{uses_week_start, week_start_from};
+pub use dates::{
+    CellWhen, HOME_DAYS_AFTER, HOME_DAYS_BEFORE, cell_when, home_window, uses_week_start,
+    week_start_from,
+};
 pub use filter::{
     CompiledFilter, CompiledRowColor, compile_filter, compile_row_color, filter_ops_for, matches,
     row_color, row_color_compiled,

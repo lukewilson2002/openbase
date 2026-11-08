@@ -1,6 +1,6 @@
 //! Date filter operands: relative modes resolved to calendar days.
 
-use chrono::{Datelike, Days, Months, NaiveDate, Weekday};
+use chrono::{Datelike, Days, Months, NaiveDate, NaiveTime, Weekday};
 use chrono_tz::Tz;
 use serde_json::Value as Json;
 
@@ -159,15 +159,53 @@ pub(crate) fn resolve_range(
 /// The calendar day of a date cell: date-only values as stored; instants in
 /// the field's fixed zone, else `tz`.
 pub(crate) fn cell_day(field: &Field, stored: Option<&Json>, tz: Tz) -> Option<NaiveDate> {
+    cell_when(field, stored, tz).map(|w| w.day)
+}
+
+/// When a date cell falls: its calendar day and, for a date-time, the time of day on that day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CellWhen {
+    pub day: NaiveDate,
+    /// `None` for a date without a time.
+    pub time: Option<NaiveTime>,
+}
+
+/// [`cell_day`] with the time of day: a date-only value has none; an instant is read in the
+/// field's fixed zone, else `tz`. `None` when the cell is empty or not a date.
+pub fn cell_when(field: &Field, stored: Option<&Json>, tz: Tz) -> Option<CellWhen> {
     match crate::cell::to_value(field, stored, &crate::cell::NoNames) {
-        Value::Date(d) => Some(d),
+        Value::Date(day) => Some(CellWhen { day, time: None }),
         Value::DateTime(i) => {
             let zone = crate::cell::date_options_of(field)
                 .and_then(|o| o.timezone)
                 .and_then(|z| z.parse::<Tz>().ok())
                 .unwrap_or(tz);
-            Some(i.with_timezone(&zone).date_naive())
+            let local = i.with_timezone(&zone);
+            Some(CellWhen {
+                day: local.date_naive(),
+                time: Some(local.time()),
+            })
         }
         _ => None,
     }
+}
+
+/// How many days back Home looks for what is due (HOME-6).
+pub const HOME_DAYS_BEFORE: u32 = 30;
+/// How many days ahead Home looks for what is due (HOME-6).
+pub const HOME_DAYS_AFTER: u32 = 7;
+
+/// The days Home's "due soon" covers around `today`, both ends included: the past
+/// [`HOME_DAYS_BEFORE`] days to the next [`HOME_DAYS_AFTER`], resolved like the `is_within`
+/// operands of the same names.
+pub fn home_window(today: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
+    let before = DateOperand::PastNumberOfDays {
+        days: HOME_DAYS_BEFORE,
+    };
+    let after = DateOperand::NextNumberOfDays {
+        days: HOME_DAYS_AFTER,
+    };
+    let (from, _) = resolve_range(&before, today, Weekday::Sun)?;
+    let (_, to) = resolve_range(&after, today, Weekday::Sun)?;
+    Some((from, to))
 }

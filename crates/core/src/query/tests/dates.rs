@@ -1,11 +1,11 @@
 //! Date filters: relative operands with a fixed `now`, viewer and field
 //! zones, and days around DST transitions.
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde_json::{Value as Json, json};
 
 use super::*;
-use crate::query::{QueryCtx, compile_filter, matches};
+use crate::query::{QueryCtx, cell_when, compile_filter, home_window, matches};
 use crate::view::FilterOp::{self, *};
 
 fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
@@ -709,4 +709,63 @@ fn computed_and_system_dates() {
         mode("yesterday"),
         json!({"error": "#ERROR"})
     ));
+}
+
+fn when(field: &str, cell: Json, zone: &str) -> Option<(String, Option<String>)> {
+    let t = table();
+    let w = cell_when(&t[field], Some(&cell), zone.parse().unwrap())?;
+    Some((
+        w.day.to_string(),
+        w.time.map(|t| t.format("%H:%M").to_string()),
+    ))
+}
+
+#[test]
+fn a_cell_falls_on_a_day_and_a_date_time_on_a_time_of_that_day() {
+    // A date has no time and no zone.
+    assert_eq!(
+        when("fldDate", json!("2026-11-07"), "Asia/Tokyo"),
+        Some(("2026-11-07".into(), None))
+    );
+    // An instant is read in the viewer's zone: 23:30 UTC is already tomorrow in Tokyo and still
+    // today in Los Angeles.
+    let late = json!("2026-11-07T23:30:00.000Z");
+    assert_eq!(
+        when("fldDt", late.clone(), "Asia/Tokyo"),
+        Some(("2026-11-08".into(), Some("08:30".into())))
+    );
+    assert_eq!(
+        when("fldDt", late.clone(), "America/Los_Angeles"),
+        Some(("2026-11-07".into(), Some("15:30".into())))
+    );
+    // A field with a fixed zone shows its instants there, whoever looks.
+    assert_eq!(
+        when("fldDtTokyo", late, "America/Los_Angeles"),
+        Some(("2026-11-08".into(), Some("08:30".into())))
+    );
+    // Computed dates read the same way, and an empty or broken cell falls nowhere.
+    assert_eq!(
+        when("fldFDate", json!("2026-11-07"), "UTC"),
+        Some(("2026-11-07".into(), None))
+    );
+    assert_eq!(when("fldFDate", json!({"error": "#ERROR"}), "UTC"), None);
+    assert_eq!(when("fldDate", Json::Null, "UTC"), None);
+}
+
+#[test]
+fn homes_window_runs_thirty_days_back_to_a_week_ahead_and_includes_both_ends() {
+    let d = |s: &str| NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    assert_eq!(
+        home_window(d("2026-11-07")),
+        Some((d("2026-10-08"), d("2026-11-14")))
+    );
+    // Across a month and a year boundary, and a leap day.
+    assert_eq!(
+        home_window(d("2026-01-03")),
+        Some((d("2025-12-04"), d("2026-01-10")))
+    );
+    assert_eq!(
+        home_window(d("2028-03-01")),
+        Some((d("2028-01-31"), d("2028-03-08")))
+    );
 }
