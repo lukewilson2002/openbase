@@ -22,7 +22,7 @@ export interface FormSettingsProps {
   notifyReadOnly?: boolean;
 }
 
-const inputClass = "h-10 rounded-[10px] px-3 text-[0.875rem]";
+const inputClass = "h-control-lg px-3 text-ui";
 
 /** The redirect keeps what is typed while it is invalid; only a valid (or empty) address reaches the saved form. */
 function RedirectField({ value, readOnly, onValid }: { value: string; readOnly: boolean; onValid: (url: string | null) => void }) {
@@ -59,7 +59,7 @@ export function FormSettings({ form, title, readOnly, onChange, people = [], cur
   const [more, setMore] = useState(!!form.redirect_url || form.show_submit_another || form.notify_user_ids.some((id) => id !== currentUserId));
   return (
     <section aria-labelledby="form-settings-heading" className="flex flex-col gap-3.5">
-      <h3 id="form-settings-heading" className="text-[0.9375rem] font-bold">
+      <h3 id="form-settings-heading" className="text-h3">
         Form
       </h3>
       <Field label="Title">
@@ -67,7 +67,7 @@ export function FormSettings({ form, title, readOnly, onChange, people = [], cur
       </Field>
       <Field label="Description">
         {(ctl) => (
-          <Textarea {...ctl} rows={2} value={form.description} placeholder="Tell people what this form is for" maxLength={MAX_FORM_TEXT} disabled={readOnly} className="min-h-[62px] rounded-[10px] px-3 py-2 text-[0.875rem] leading-snug" onChange={(e) => set({ description: e.target.value })} />
+          <Textarea {...ctl} rows={2} value={form.description} placeholder="Tell people what this form is for" maxLength={MAX_FORM_TEXT} disabled={readOnly} className="min-h-16 px-3 py-2 text-ui" onChange={(e) => set({ description: e.target.value })} />
         )}
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -85,16 +85,16 @@ export function FormSettings({ form, title, readOnly, onChange, people = [], cur
           onCheckedChange={(on) => currentUserId && onChange(toggleNotify(form, currentUserId, on))}
           label="Notify me of new responses"
         />
-        <p className="pl-11 text-xs text-muted">Each response sent through the form's shared link shows up in your notifications, and in your email if this server can send mail.</p>
+        <p className="pl-11 text-meta text-muted">Each response sent through the form's shared link shows up in your notifications, and in your email if this server can send mail.</p>
       </div>
-      <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} className="-ml-1 flex items-center gap-1 self-start rounded-md px-1 py-0.5 text-[0.8125rem] font-medium text-muted hover:text-fg">
+      <button type="button" aria-expanded={more} onClick={() => setMore((m) => !m)} className="-ml-1 flex items-center gap-1 self-start rounded-md px-1 py-0.5 text-label font-medium text-muted hover:text-fg">
         <ChevronRight aria-hidden className={`size-4 transition-transform ${more ? "rotate-90" : ""}`} /> More options
       </button>
       {more && (
         <div className="flex flex-col gap-3 pl-5">
           {people.some((p) => p.id !== currentUserId) && (
             <fieldset className="flex flex-col gap-1">
-              <legend className="mb-1 text-[0.8125rem] font-medium">Also notify of new responses</legend>
+              <legend className="mb-1 text-label font-medium">Also notify of new responses</legend>
               {people
                 .filter((p) => p.id !== currentUserId)
                 .map((p) => (
@@ -105,7 +105,7 @@ export function FormSettings({ form, title, readOnly, onChange, people = [], cur
           <RedirectField value={form.redirect_url ?? ""} readOnly={readOnly} onValid={(url) => set({ redirect_url: url })} />
           <div className="flex flex-col gap-1">
             <Switch checked={form.show_submit_another} disabled={readOnly || !!form.redirect_url} onCheckedChange={(on) => set({ show_submit_another: on })} label="Offer “Submit another response” after submitting" />
-            {form.redirect_url && <p className="pl-11 text-xs text-muted">Not offered while the form goes to another address.</p>}
+            {form.redirect_url && <p className="pl-11 text-meta text-muted">Not offered while the form goes to another address.</p>}
           </div>
         </div>
       )}

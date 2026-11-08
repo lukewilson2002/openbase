@@ -52,6 +52,29 @@ function setup(role = "editor", view = board(), extraRoutes: Record<string, unkn
   };
 }
 
+describe("KanbanView: empty states (COL-9)", () => {
+  it("says there is nothing yet instead of a row of empty stacks, and New adds to the first stack", async () => {
+    const user = userEvent.setup();
+    const created = rec("r9", { [F.status.id]: "s1" });
+    const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { status: 201, json: { records: [created] } }, "GET /api/tables/tbl1/records/r9": created }, { records: [] });
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: /^Stack:/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+  });
+
+  it("says the filter is why when it matches nothing, and Reset clears it in the draft", async () => {
+    const user = userEvent.setup();
+    const view = board({}, {});
+    view.config.filter = { conjunction: "and", items: [{ field_id: F.status.id, op: "is", value: "s3" }] };
+    setup("viewer", view, {}, { records: [] });
+    expect(await screen.findByText("No records match these filters")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => expect(draftChanges()?.filter).toBeNull());
+  });
+});
+
 describe("KanbanView", () => {
   it("queries the view and stacks its records by the stack field", async () => {
     const { asked } = setup();

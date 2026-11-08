@@ -26,6 +26,7 @@ import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import type { DateRange, Field, TableRecord, ViewConfig } from "@/api/types";
 import { FIELD_TYPE_LABELS } from "@/components/ui/field-type-icon";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Field as FormField, Select } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -422,7 +423,6 @@ function CalendarInner(props: ViewProps) {
     body = (
       <ViewSetupState
         setup={setup}
-        picture="calendar"
         heading="Choose a date field"
         body="Pick the field that decides which day each record shows up on."
         emptyBody="This table has no date field yet."
@@ -439,16 +439,16 @@ function CalendarInner(props: ViewProps) {
     body = (
       <div className={cn("absolute inset-0 flex", !desktop && "flex-col")}>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
-            <button type="button" onClick={() => api()?.today()} className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2.5 pl-2.5 pr-3">
+            <Button size="sm" onClick={() => api()?.today()}>
               Today
-            </button>
+            </Button>
             {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
             <div className="flex items-center gap-0.5">
               <IconButton label={`Previous ${unit}`} size="sm" onClick={() => api()?.prev()}>
                 <ChevronLeft aria-hidden className="size-4" />
               </IconButton>
-              <h3 aria-live="polite" className="min-w-[10.5rem] text-center text-base font-bold tabular-nums">
+              <h3 aria-live="polite" className="min-w-[10.5rem] text-center text-h3 num">
                 {title}
               </h3>
               <IconButton label={`Next ${unit}`} size="sm" onClick={() => api()?.next()}>
@@ -460,7 +460,7 @@ function CalendarInner(props: ViewProps) {
             <SegmentedSwitch label="Calendar range" className="ml-auto" value={layout} options={LAYOUTS} onChange={(v) => api()?.changeView(viewType(v, grid, unit))} />
           </div>
           {reason && (
-            <p role="status" className="flex items-start gap-2 border-b border-line bg-warning-soft px-3 py-2 text-[0.8125rem] leading-snug">
+            <p role="status" className="flex items-start gap-2 border-b border-line bg-warning-soft px-3 py-2 text-label">
               <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
               {reason}
             </p>

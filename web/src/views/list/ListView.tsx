@@ -12,7 +12,7 @@ import type { MenuAnchor } from "@/components/ui/anchored-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import type { ViewRecordsData } from "../common/cache";
-import { cardFields, itemsLabel } from "../common/cardFields";
+import { cardFields, cardTitle, itemsLabel } from "../common/cardFields";
 import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { EmptyRecords } from "../common/EmptyRecords";
 import { RecordMenu } from "../common/RecordMenu";
@@ -138,6 +138,8 @@ function ListInner(props: ViewProps) {
     if (plan) void reorder(menu.id, plan);
   };
 
+  const menuRecord = menu ? data?.records.find((r) => r.id === menu.id) : undefined;
+  const menuTitle = menuRecord ? cardTitle(primary, menuRecord, setup.format) : "Record";
   const total = data?.total ?? 0;
   const allFolded = paths.length > 0 && paths.every((path) => collapsed.has(path));
 
@@ -157,7 +159,7 @@ function ListInner(props: ViewProps) {
   } else if (data && data.records.length === 0) {
     // One roomy message instead of the outline: its own "No records" row plus a message under it
     // read as the same thing said twice, squeezed against the card's edge.
-    body = <EmptyRecords searching={!!setup.debouncedSearch} onAdd={setup.canEdit ? () => void add({}) : undefined} />;
+    body = <EmptyRecords table={table} filtered={setup.filtered} onAdd={setup.canEdit ? () => void add({}) : undefined} onReset={setup.resetFilters} />;
   } else if (data) {
     body = (
       <ListOutline
@@ -240,6 +242,7 @@ function ListInner(props: ViewProps) {
       {sel.count > 0 && <SelectionBar count={sel.count} onDuplicate={() => duplicateIds(sel.ids)} onDelete={() => actions.requestDelete(sel.ids, sel.clear)} onClear={sel.clear} />}
       <RecordMenu
         anchor={menu?.anchor ?? null}
+        title={menuTitle}
         onClose={() => setMenu(null)}
         count={menuIds.length}
         canEdit={setup.canEdit}

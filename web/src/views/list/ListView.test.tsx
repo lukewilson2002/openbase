@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
@@ -108,9 +108,47 @@ describe("ListView", () => {
 
   it("shows one empty message, without the outline's own empty row, when there are no records", async () => {
     setup("editor", outline, { records: [], groups: [] });
-    expect(await screen.findByText("No records yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
     expect(screen.queryByText("No records")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New record" })).toBeInTheDocument();
+  });
+
+  it("says the filter is why when it shows nothing, and Reset shows every record again in a draft", async () => {
+    const user = userEvent.setup();
+    const filtered = viewWithConfig("viw1", "list", { ...outline.config, filter: { conjunction: "and", items: [{ field_id: F.status.id, op: "is", value: "s3" }] } });
+    const log: import("@/api/types").QueryRequest[] = [];
+    const server = { records: [] as ReturnType<typeof rec>[], groups: [] };
+    const answer = queryHandler(server, log);
+    renderView(ListView, { schema: projectSchema("viewer", [filtered]), viewId: "viw1", routes: { "POST /api/views/viw1/query": answer } as never });
+    expect(await screen.findByText("No records match these filters")).toBeInTheDocument();
+    // A record added here would not match and would seem to vanish: no New, but Reset, even for a viewer.
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    server.records = [rec("r1", {})];
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(await screen.findByRole("treeitem", { name: /^R1/ })).toBeInTheDocument();
+    expect(draftChanges()?.filter).toBeNull();
+    expect(log.at(-1)?.transient?.filter?.items).toEqual([]);
+  });
+
+  it("on a phone a hold that lets go without moving opens the row's action sheet", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderView(ListView, { schema: projectSchema("editor", [outline]), viewId: "viw1", phone: true, routes: { "POST /api/views/viw1/query": queryHandler({ records, groups }) } as never });
+      const row = await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
+      const touch = { pointerType: "touch", pointerId: 1, clientX: 40, clientY: 40, button: 0, isPrimary: true };
+      fireEvent.pointerDown(row, touch);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+      fireEvent.pointerUp(row, touch);
+      fireEvent.click(row);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(150)));
+      const sheet = within(await screen.findByRole("dialog", { name: "R1" }));
+      expect(sheet.getByRole("button", { name: "Open record" })).toBeInTheDocument();
+      expect(sheet.getByRole("button", { name: "Delete record" })).toBeInTheDocument();
+      // The press did not also open the record.
+      expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe("description", () => {

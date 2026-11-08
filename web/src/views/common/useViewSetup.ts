@@ -12,10 +12,11 @@ import type { Collaborator, TableRecord, TransientConfig, ViewConfig } from "@/a
 import { useMe } from "@/auth/useAuth";
 import type { EditorEnv } from "@/components/record/editors/env";
 import { useDebounced } from "@/components/record/editors/useDebounced";
-import { queryRelevantKey } from "@/components/viewbar/config";
+import { queryRelevantKey, setFilter } from "@/components/viewbar/config";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
 import { LINKED_PARAM } from "./RecordPanel";
+import { isFiltered } from "./filtered";
 import { personColors } from "@/lib/colors";
 import { linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
@@ -47,6 +48,10 @@ export interface ViewSetup extends ViewProps {
   setSearch(s: string): void;
   /** Search text after the typing pause: use this in queries. */
   debouncedSearch: string;
+  /** The filter or the search narrows the view: with no records it is "filtered to nothing", not an empty collection (COL-9). */
+  filtered: boolean;
+  /** Clears the draft's filter and the search ("Reset" in the empty state); the saved view is untouched. */
+  resetFilters(): void;
   writes: RecordWrites;
   /** Delete and duplicate for cards and rows (the confirmation for several is drawn by `ViewFrame`). */
   actions: RecordActions;
@@ -91,6 +96,13 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search.trim(), 250);
+
+  const filtered = isFiltered(cfg.config, debouncedSearch);
+  const { update: updateConfig } = cfg;
+  const resetFilters = useCallback(() => {
+    updateConfig((c) => setFilter(c, null));
+    setSearch("");
+  }, [updateConfig]);
 
   const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
   const actions = useRecordActions({ writes, role, canEdit });
@@ -174,6 +186,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     search,
     setSearch,
     debouncedSearch,
+    filtered,
+    resetFilters,
     writes,
     actions,
     openRecordId,

@@ -78,7 +78,7 @@ interface RowProps {
 /** Marks a row that is shown only for some answers; on a phone only the icon fits next to the row's controls. */
 function ConditionalBadge({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-xs text-muted", className)} title="Shown only when the answers above match">
+    <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-pill bg-subtle px-2 py-0.5 text-meta text-muted", className)} title="Shown only when the answers above match">
       <GitBranch aria-hidden className="size-3" /> <span className="max-sm:sr-only">Conditional</span>
     </span>
   );
@@ -90,9 +90,9 @@ function ShowIfEditor({ form, table, entry, name, readOnly, onChange }: { form: 
   const sources = showIfSources(form, table, place);
   return (
     <div className="flex flex-col gap-1.5 border-t border-line pt-2" data-testid={`show-if-${entry.field_id}`}>
-      <p className="text-xs font-medium text-muted">Show only if</p>
+      <p className="text-meta font-medium text-muted">Show only if</p>
       {sources.length === 0 && !entry.show_if ? (
-        <p className="text-xs text-muted">Put a text, number, rating, checkbox or select question above this one to show it only for some answers.</p>
+        <p className="text-meta text-muted">Put a text, number, rating, checkbox or select question above this one to show it only for some answers.</p>
       ) : (
         <FilterBuilder value={entry.show_if ?? null} onChange={onChange} fields={sources} collaborators={[]} readOnly={readOnly} emptyText="Always shown. Add a condition to show it only for some answers above." label={`Show ${name} only if`} />
       )}
@@ -116,10 +116,10 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-field-id={field.id}
       aria-label={`Form field ${field.name}`}
-      className={cn("rounded-[10px] border border-line bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
+      className={cn("rounded-md border border-line bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
     >
       {/* On a narrow screen the switch and remove button drop to a second line instead of squeezing the name out. */}
-      <div className="flex min-h-[46px] flex-wrap items-center gap-x-2.5 gap-y-1 px-1.5 py-0.5 pointer-coarse:min-h-[56px]">
+      <div className="flex min-h-row-table flex-wrap items-center gap-x-2.5 gap-y-1 px-1.5 py-0.5 pointer-coarse:min-h-row-feed-phone">
         <button
           type="button"
           aria-label={`Drag ${field.name} to reorder`}
@@ -136,14 +136,14 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
           aria-expanded={open}
           aria-label={`Edit ${field.name}`}
           onClick={() => setOpen((o) => !o)}
-          className="min-w-20 flex-1 truncate rounded text-left text-[0.875rem] font-medium hover:underline"
+          className="min-w-20 flex-1 truncate rounded text-left text-ui font-medium hover:underline"
           title="Change the label, help text and conditions"
         >
           {shownName}
         </button>
         {entry.show_if && <ConditionalBadge />}
         {!status.public && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs" title={status.message}>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-warning-soft px-2 py-0.5 text-meta" title={status.message}>
             <Lock aria-hidden className="size-3" /> <span className="max-sm:sr-only">Not public</span>
           </span>
         )}
@@ -153,7 +153,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
             aria-label={`Show ${field.name} on the public form`}
             title="Show this field on the public form"
             onClick={() => onShowPublic(field.id)}
-            className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
+            className="shrink-0 rounded-md px-2 py-0.5 text-meta font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
           >
             Show
           </button>
@@ -181,11 +181,11 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
       {open && (
         <div className="flex flex-col gap-2 border-t border-line px-3 py-2.5">
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-muted">
+            <label className="flex flex-col gap-1 text-meta text-muted">
               Label
-              <Input aria-label={`Label for ${field.name}`} value={entry.label ?? ""} placeholder={field.name} maxLength={255} disabled={readOnly} onChange={(e) => patch({ label: e.target.value })} className="text-[0.8125rem] text-fg" />
+              <Input aria-label={`Label for ${field.name}`} value={entry.label ?? ""} placeholder={field.name} maxLength={255} disabled={readOnly} onChange={(e) => patch({ label: e.target.value })} className="text-label text-fg" />
             </label>
-            <label className="flex flex-col gap-1 text-xs text-muted">
+            <label className="flex flex-col gap-1 text-meta text-muted">
               Help text
               <Textarea
                 aria-label={`Help text for ${field.name}`}
@@ -195,15 +195,15 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
                 maxLength={MAX_FORM_TEXT}
                 disabled={readOnly}
                 onChange={(e) => patch({ help: e.target.value })}
-                className="min-h-8 text-[0.8125rem] text-fg"
+                className="min-h-8 text-label text-fg"
               />
               {field.description?.trim() && !entry.help?.trim() && <span>The field's description is shown while this is empty.</span>}
             </label>
           </div>
           <MoveButtons name={field.name} index={index} count={count} readOnly={readOnly} form={form} onChange={onChange} />
           <ShowIfEditor form={form} table={table} entry={entry} name={field.name} readOnly={readOnly} onChange={(show_if) => patch({ show_if })} />
-          {!status.public && <p className="text-xs text-muted">{status.message}</p>}
-          {noRequired && <p className="text-xs text-muted">{noRequired}</p>}
+          {!status.public && <p className="text-meta text-muted">{status.message}</p>}
+          {noRequired && <p className="text-meta text-muted">{noRequired}</p>}
         </div>
       )}
     </li>
@@ -212,7 +212,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
 
 function MoveButtons({ name, index, count, readOnly, form, onChange }: { name: string; index: number; count: number; readOnly: boolean; form: FormConfig; onChange: (next: FormConfig) => void }) {
   return (
-    <div className="flex items-center gap-1 text-xs text-muted">
+    <div className="flex items-center gap-1 text-meta text-muted">
       <span className="mr-1">Order</span>
       <IconButton label={`Move ${name} up`} size="sm" noTooltip disabled={readOnly || index === 0} onClick={() => onChange(moveFormField(form, index, index - 1))}>
         <ArrowUp aria-hidden className="size-4" />
@@ -240,7 +240,7 @@ function BlockRow({ entry, index, count, readOnly, onChange, onRemove, form, tab
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-field-id={id}
       aria-label={`${kind} ${name}`}
-      className={cn("rounded-[10px] border border-dashed border-line-strong bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
+      className={cn("rounded-md border border-dashed border-line-strong bg-surface", isDragging && "relative z-10 opacity-80 shadow-pop")}
     >
       <div className="flex items-start gap-2.5 px-1.5 py-1.5">
         <button
@@ -258,9 +258,9 @@ function BlockRow({ entry, index, count, readOnly, onChange, onRemove, form, tab
         </span>
         <div className="min-w-0 flex-1">
           {entry.block === "heading" ? (
-            <Input aria-label={`Heading text`} value={entry.label ?? ""} placeholder="Heading" maxLength={255} disabled={readOnly} onChange={(e) => patch({ label: e.target.value })} className="text-[0.9375rem] font-semibold" />
+            <Input aria-label={`Heading text`} value={entry.label ?? ""} placeholder="Heading" maxLength={255} disabled={readOnly} onChange={(e) => patch({ label: e.target.value })} className="text-h3" />
           ) : (
-            <Textarea aria-label={`Text`} rows={2} value={entry.help ?? ""} placeholder="Some words for the people filling this in" maxLength={MAX_FORM_TEXT} disabled={readOnly} onChange={(e) => patch({ help: e.target.value })} className="text-[0.8125rem]" />
+            <Textarea aria-label={`Text`} rows={2} value={entry.help ?? ""} placeholder="Some words for the people filling this in" maxLength={MAX_FORM_TEXT} disabled={readOnly} onChange={(e) => patch({ help: e.target.value })} className="text-label" />
           )}
         </div>
         {entry.show_if && <ConditionalBadge className="mt-1.5" />}
@@ -325,14 +325,14 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
   return (
     <section aria-labelledby="form-fields-heading" className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="form-fields-heading" className="text-[0.9375rem] font-bold">
+        <h3 id="form-fields-heading" className="text-h3">
           Fields
         </h3>
-        <span className="text-[0.8125rem] text-muted">
+        <span className="text-label text-muted">
           {questions} in the form{computedCount > 0 ? `, ${computedCount} computed field${computedCount === 1 ? "" : "s"} cannot be asked` : ""}
         </span>
       </div>
-      {items.length === 0 && <p className="rounded-[10px] border border-dashed border-line-strong px-3 py-4 text-center text-[0.8125rem] text-muted">No fields yet. Add the fields this form should ask for.</p>}
+      {items.length === 0 && <p className="rounded-md border border-dashed border-line-strong px-3 py-4 text-center text-label text-muted">No fields yet. Add the fields this form should ask for.</p>}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <ul aria-label="Form fields" className="flex flex-col gap-2">
@@ -366,7 +366,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
               <button
                 type="button"
                 disabled={addable.length === 0}
-                className="-ml-1 flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-[0.875rem] text-muted hover:bg-hover hover:text-fg disabled:opacity-50 data-[state=open]:bg-hover"
+                className="-ml-1 flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-ui text-muted hover:bg-hover hover:text-fg disabled:opacity-50 data-[state=open]:bg-hover"
               >
                 <Plus aria-hidden className="size-[15px]" /> {addable.length === 0 ? "All fields are in the form" : "Add a field"}
               </button>
@@ -386,7 +386,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
           </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" className="flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-[0.875rem] text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover">
+              <button type="button" className="flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-ui text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover">
                 <Heading aria-hidden className="size-[15px]" /> Add a heading or text
               </button>
             </DropdownMenuTrigger>

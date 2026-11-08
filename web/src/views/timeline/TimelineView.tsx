@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import type { DateRange, Field, TimelineScale, ViewConfig } from "@/api/types";
 import { isGroupable } from "@/components/viewbar/config";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { displayText } from "@/lib/cells/format";
@@ -442,7 +443,6 @@ function TimelineInner(props: ViewProps) {
     body = (
       <ViewSetupState
         setup={setup}
-        picture="timeline"
         heading="Choose the dates"
         body="Pick when each record starts. Add an end date to draw bars; without one, each record is a diamond."
         emptyBody="This table has no date field yet."
@@ -464,16 +464,16 @@ function TimelineInner(props: ViewProps) {
     body = (
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-2.5 pl-2.5 pr-3">
-          <button type="button" onClick={goToday} title="Go to today (T)" className="h-8 rounded-lg border border-line bg-surface px-3 text-[0.8125rem] font-semibold hover:bg-hover pointer-coarse:h-10">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2.5 pl-2.5 pr-3">
+          <Button size="sm" onClick={goToday} title="Go to today (T)">
             Today
-          </button>
+          </Button>
           {/* The arrows step around the dates they change; the title keeps a width so › stays put. */}
           <div className="flex items-center gap-0.5">
             <IconButton label={`Earlier ${pageLabel}s`} size="sm" onClick={() => chart.current?.page(-1)}>
               <ChevronLeft aria-hidden className="size-4" />
             </IconButton>
-            <h3 className="min-w-[10.5rem] text-center text-base font-bold tabular-nums">{shown ? rangeTitle(shown.from, shown.last) : ""}</h3>
+            <h3 className="min-w-[10.5rem] text-center text-h3 num">{shown ? rangeTitle(shown.from, shown.last) : ""}</h3>
             <IconButton label={`Later ${pageLabel}s`} size="sm" onClick={() => chart.current?.page(1)}>
               <ChevronRight aria-hidden className="size-4" />
             </IconButton>
@@ -481,12 +481,12 @@ function TimelineInner(props: ViewProps) {
           {records.fetching && <Spinner className="size-4" label="Loading records" />}
           <SegmentedSwitch label="Timeline scale" className="ml-auto" value={scale} options={SCALE_OPTIONS} onChange={changeScale} />
           {dateNote && (
-            <p role="status" className="flex basis-full items-start gap-1.5 text-xs text-muted">
+            <p role="status" className="flex basis-full items-start gap-1.5 text-meta text-muted">
               <Info aria-hidden className="mt-px size-3.5 shrink-0" /> {dateNote}
             </p>
           )}
           {groupingIgnored && (
-            <p role="status" className="flex basis-full flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            <p role="status" className="flex basis-full flex-wrap items-center gap-x-1.5 text-meta text-muted">
               <Info aria-hidden className="mt-px size-3.5 shrink-0" />
               <span>
                 The lanes come from the Swimlanes setting ({groupField!.name}), so the view's grouping{groupingName ? ` by ${groupingName}` : ""} is not used here.

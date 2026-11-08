@@ -1,15 +1,19 @@
 /**
- * The menu of a card or row (right-click, or the keyboard's menu key): open it, select it, copy it,
- * move it to the start, delete it. When the record is part of a selection of several, copy and delete
- * act on all of them and say so.
+ * The menu of a card or row (right-click, the keyboard's menu key, or a hold on a touch screen, where it is
+ * a sheet): open it, select it, copy it, move it to the start, delete it. When the record is part of a
+ * selection of several, copy and delete act on all of them and say so.
  */
 import { ArrowUpToLine, SquareCheck, CopyPlus, CornerDownRight, IndentDecrease, IndentIncrease, Maximize2, Trash2 } from "lucide-react";
-import { AnchoredMenu, type MenuAnchor } from "@/components/ui/anchored-menu";
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import type { MenuAnchor } from "@/components/ui/anchored-menu";
+import { MenuGroups } from "@/shell/NavRowMenu";
+import { MenuItem } from "@/shell/menuItems";
+import { RecordActionMenu } from "./RecordActionMenu";
 
 export interface RecordMenuProps {
   anchor: MenuAnchor | null;
   onClose: () => void;
+  /** The record's name: the title of the sheet on a phone. */
+  title?: string;
   /** Records Duplicate and Delete act on: the selection when the record is in it, else just this one. */
   count: number;
   canEdit: boolean;
@@ -36,53 +40,61 @@ export function menuAnchorOf(e: { clientX: number; clientY: number; currentTarge
   return { x: e.clientX, y: e.clientY, width: 1, height: 1 };
 }
 
-export function RecordMenu({ anchor, onClose, count, canEdit, selected, onOpen, onToggleSelect, onDuplicate, onDelete, onMoveToStart, onIndent, onOutdent, onAddSub }: RecordMenuProps) {
+export function RecordMenu({ anchor, onClose, title = "Record", count, canEdit, selected, onOpen, onToggleSelect, onDuplicate, onDelete, onMoveToStart, onIndent, onOutdent, onAddSub }: RecordMenuProps) {
   const many = count > 1;
+  const nest = onIndent || onOutdent || onAddSub;
   return (
-    <AnchoredMenu anchor={anchor} onClose={onClose} label="Record menu">
-      <DropdownMenuItem onSelect={onOpen}>
-        <Maximize2 aria-hidden className="size-4" /> Open record
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={onToggleSelect}>
-        <SquareCheck aria-hidden className="size-4" /> {selected ? "Deselect" : "Select"}
-      </DropdownMenuItem>
-      {canEdit && (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onDuplicate}>
-            <CopyPlus aria-hidden className="size-4" /> Duplicate {many ? `${count} records` : "record"}
-          </DropdownMenuItem>
-          {onMoveToStart && (
-            <DropdownMenuItem onSelect={onMoveToStart}>
-              <ArrowUpToLine aria-hidden className="size-4" /> Move to start
-            </DropdownMenuItem>
-          )}
-          {(onIndent || onOutdent || onAddSub) && (
-            <>
-              <DropdownMenuSeparator />
-              {onAddSub && (
-                <DropdownMenuItem onSelect={onAddSub}>
-                  <CornerDownRight aria-hidden className="size-4" /> Add sub-item
-                </DropdownMenuItem>
-              )}
-              {onIndent && (
-                <DropdownMenuItem onSelect={onIndent}>
-                  <IndentIncrease aria-hidden className="size-4" /> Indent
-                </DropdownMenuItem>
-              )}
-              {onOutdent && (
-                <DropdownMenuItem onSelect={onOutdent}>
-                  <IndentDecrease aria-hidden className="size-4" /> Outdent
-                </DropdownMenuItem>
-              )}
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem danger onSelect={onDelete}>
-            <Trash2 aria-hidden className="size-4" /> Delete {many ? `${count} records` : "record"}
-          </DropdownMenuItem>
-        </>
-      )}
-    </AnchoredMenu>
+    <RecordActionMenu anchor={anchor} onClose={onClose} label="Record menu" title={title}>
+      <MenuGroups
+        groups={[
+          [
+            <MenuItem key="open" icon={Maximize2} onSelect={onOpen}>
+              Open record
+            </MenuItem>,
+            <MenuItem key="select" icon={SquareCheck} onSelect={onToggleSelect}>
+              {selected ? "Deselect" : "Select"}
+            </MenuItem>,
+          ],
+          canEdit
+            ? [
+                <MenuItem key="dup" icon={CopyPlus} onSelect={onDuplicate}>
+                  Duplicate {many ? `${count} records` : "record"}
+                </MenuItem>,
+                onMoveToStart && (
+                  <MenuItem key="start" icon={ArrowUpToLine} onSelect={onMoveToStart}>
+                    Move to start
+                  </MenuItem>
+                ),
+              ]
+            : [],
+          canEdit && nest
+            ? [
+                onAddSub && (
+                  <MenuItem key="sub" icon={CornerDownRight} onSelect={onAddSub}>
+                    Add sub-item
+                  </MenuItem>
+                ),
+                onIndent && (
+                  <MenuItem key="in" icon={IndentIncrease} onSelect={onIndent}>
+                    Indent
+                  </MenuItem>
+                ),
+                onOutdent && (
+                  <MenuItem key="out" icon={IndentDecrease} onSelect={onOutdent}>
+                    Outdent
+                  </MenuItem>
+                ),
+              ]
+            : [],
+          canEdit
+            ? [
+                <MenuItem key="del" icon={Trash2} danger onSelect={onDelete}>
+                  Delete {many ? `${count} records` : "record"}
+                </MenuItem>,
+              ]
+            : [],
+        ]}
+      />
+    </RecordActionMenu>
   );
 }

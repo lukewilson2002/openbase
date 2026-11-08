@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TableRecord } from "@/api/types";
 import { DEFAULT_CTX } from "@/lib/cells/format";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
+import { stubDesktop, stubPhone } from "@/test/utils";
 import { buildStacks, clearStack, stackValue, type DropPlan } from "./stacks";
 import { KanbanBoard, type KanbanBoardProps } from "./KanbanBoard";
 import { installBoardLayout, type BoardLayout } from "./boardLayout";
@@ -47,6 +48,8 @@ function board(over: Partial<KanbanBoardProps> = {}) {
 let layout: BoardLayout;
 beforeEach(() => {
   layout = installBoardLayout();
+  // jsdom matches no media query, which reads as a phone; most of these tests are about the desktop's bar and menus.
+  stubDesktop();
 });
 afterEach(() => layout.restore());
 
@@ -375,6 +378,49 @@ describe("KanbanBoard", () => {
       await user.keyboard("{Escape}");
       expect(screen.getByRole("toolbar")).toHaveTextContent("1 selected");
       expect(props.onDrop).not.toHaveBeenCalled();
+    });
+
+    it("on a phone the bar is the count and Actions, and the actions are a sheet with Move to a stack", async () => {
+      stubPhone();
+      const user = userEvent.setup();
+      const { props } = board();
+      await user.keyboard("{Control>}");
+      await user.click(screen.getByRole("button", { name: "Write docs" }));
+      await user.click(screen.getByRole("button", { name: "Fix bug" }));
+      await user.keyboard("{/Control}");
+      const bar = within(screen.getByRole("toolbar", { name: "Selected records" }));
+      expect(bar.getByText("2 selected")).toBeInTheDocument();
+      expect(bar.queryByRole("button", { name: "Duplicate" })).not.toBeInTheDocument();
+      await user.click(bar.getByRole("button", { name: "Actions" }));
+      const sheet = within(await screen.findByRole("dialog", { name: "2 selected" }));
+      await user.click(sheet.getByRole("button", { name: "Move to Done" }));
+      expect(props.onMoveRecords).toHaveBeenCalledWith(["r1", "r2"], "chs3", expect.any(Function));
+      await user.click(bar.getByRole("button", { name: "Actions" }));
+      await user.click(within(await screen.findByRole("dialog", { name: "2 selected" })).getByRole("button", { name: "Delete" }));
+      expect(props.onDeleteRecords).toHaveBeenCalledWith(["r1", "r2"], expect.any(Function));
+    });
+
+    it("on a phone a hold that lets go without moving opens the card's action sheet, with Move to each stack", async () => {
+      stubPhone();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const { props } = board();
+        const card = screen.getByRole("button", { name: "Ship it" });
+        const touch = { pointerType: "touch", pointerId: 1, clientX: 40, clientY: 40, button: 0, isPrimary: true };
+        fireEvent.pointerDown(card, touch);
+        await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+        fireEvent.pointerUp(card, touch);
+        fireEvent.click(card);
+        await act(async () => void (await vi.advanceTimersByTimeAsync(150)));
+        expect(props.onOpen).not.toHaveBeenCalled();
+        const sheet = within(await screen.findByRole("dialog", { name: "Ship it" }));
+        // The stack it is in is shown as the current one and cannot be chosen again.
+        expect(sheet.getByRole("button", { name: "Move to In progress" })).toBeDisabled();
+        fireEvent.click(sheet.getByRole("button", { name: "Move to Done" }));
+        expect(props.onMoveRecords).toHaveBeenLastCalledWith(["r3"], "chs3", expect.any(Function));
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("cannot select or delete without edit rights", async () => {

@@ -1,4 +1,5 @@
 /** Context menus of the grid: column header, row, and summary bar. */
+import { useContext, type ReactNode } from "react";
 import { ArrowDownAZ, ArrowLeft, ArrowLeftToLine, ArrowRight, ArrowRightToLine, ArrowUpZA, CopyPlus, Eye, EyeOff, Filter, Group, Maximize2, Pencil, Pin, PinOff, Rows3, Trash2, Type } from "lucide-react";
 import type { Aggregation, Field, Table, ViewConfig } from "@/api/types";
 import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -8,6 +9,9 @@ import { isFilterable } from "@/lib/cells/filters";
 import { kindClassOf } from "@/lib/cells/kinds";
 import type { GridColumnSpec, ScreenRect } from "./adapter";
 import { AnchoredMenu } from "@/components/ui/anchored-menu";
+import { MenuGroups } from "@/shell/NavRowMenu";
+import { MenuItem, SheetModeContext } from "@/shell/menuItems";
+import { RecordActionMenu } from "../common/RecordActionMenu";
 import type { ViewConfigApi } from "./useViewConfig";
 
 /** Labels for the two sort directions, by what the field holds. */
@@ -118,27 +122,41 @@ export interface RowMenuProps {
 export function RowMenu({ at, canEdit, count, canInsert, insertNote, onClose, onExpand, onInsert, onDuplicate, onDelete }: RowMenuProps) {
   const many = count > 1;
   return (
-    <AnchoredMenu anchor={at} onClose={onClose} label="Record menu">
-      <DropdownMenuItem onSelect={onExpand}>
-        <Maximize2 aria-hidden className="size-4" /> Expand record
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={!canEdit || !canInsert} onSelect={() => onInsert("above")}>
-        <Rows3 aria-hidden className="size-4" /> Insert record above
-      </DropdownMenuItem>
-      <DropdownMenuItem disabled={!canEdit || !canInsert} onSelect={() => onInsert("below")}>
-        <Rows3 aria-hidden className="size-4" /> Insert record below
-      </DropdownMenuItem>
-      {canEdit && !canInsert && insertNote && <p className="max-w-60 px-2 pb-1 text-xs text-muted">{insertNote}</p>}
-      <DropdownMenuItem disabled={!canEdit} onSelect={onDuplicate}>
-        <CopyPlus aria-hidden className="size-4" /> Duplicate {many ? `${count} records` : "record"}
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem danger disabled={!canEdit} onSelect={onDelete}>
-        <Trash2 aria-hidden className="size-4" /> Delete {many ? `${count} records` : "record"}
-      </DropdownMenuItem>
-    </AnchoredMenu>
+    // A dropdown at the pointer on a desktop; on a phone the hold that opened it shows a sheet.
+    <RecordActionMenu anchor={at} onClose={onClose} label="Record menu" title={many ? `${count} records` : "Record"}>
+      <MenuGroups
+        groups={[
+          [
+            <MenuItem key="expand" icon={Maximize2} onSelect={onExpand}>
+              Expand record
+            </MenuItem>,
+          ],
+          [
+            <MenuItem key="above" icon={Rows3} disabled={!canEdit || !canInsert} onSelect={() => onInsert("above")}>
+              Insert record above
+            </MenuItem>,
+            <MenuItem key="below" icon={Rows3} disabled={!canEdit || !canInsert} onSelect={() => onInsert("below")}>
+              Insert record below
+            </MenuItem>,
+            canEdit && !canInsert && insertNote && <MenuNote key="note">{insertNote}</MenuNote>,
+            <MenuItem key="dup" icon={CopyPlus} disabled={!canEdit} onSelect={onDuplicate}>
+              Duplicate {many ? `${count} records` : "record"}
+            </MenuItem>,
+          ],
+          [
+            <MenuItem key="del" icon={Trash2} danger disabled={!canEdit} onSelect={onDelete}>
+              Delete {many ? `${count} records` : "record"}
+            </MenuItem>,
+          ],
+        ]}
+      />
+    </RecordActionMenu>
   );
+}
+
+/** A line of explanation among a menu's items: a paragraph in a dropdown, a list item in a sheet. */
+function MenuNote({ children }: { children: ReactNode }) {
+  return useContext(SheetModeContext) ? <li className="px-2.5 py-1 text-meta text-muted">{children}</li> : <p className="max-w-60 px-2 pb-1 text-meta text-muted">{children}</p>;
 }
 
 export interface SummaryMenuProps {

@@ -19,12 +19,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
+import { useHoldMenu } from "@/lib/holdMenu";
 import type { FormatCtx } from "@/lib/cells/format";
 import { CardBody } from "../common/CardBody";
 import { cardFields, cardTitle, fieldsToShow, itemsLabel } from "../common/cardFields";
 import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { EmptyRecords } from "../common/EmptyRecords";
-import { menuAnchorOf, RecordMenu } from "../common/RecordMenu";
+import { RecordMenu } from "../common/RecordMenu";
 import { SelectionBar } from "../common/SelectionBar";
 import { useRecordSelection, type RecordSelection } from "../common/useRecordSelection";
 import { useRovingFocus, type RovingItemProps } from "../common/useRovingFocus";
@@ -185,6 +186,8 @@ function GalleryInner(props: ViewProps) {
 
   const menuRecordIds = menu ? (sel.has(menu.id) ? sel.ids : [menu.id]) : [];
   const menuIndex = menu ? recordIds.indexOf(menu.id) : -1;
+  const menuRecord = menu ? data.records.find((r) => r.id === menu.id) : undefined;
+  const menuTitle = menuRecord ? cardTitle(primary, menuRecord, setup.format) : "Record";
 
   const settings = (
     <>
@@ -198,7 +201,7 @@ function GalleryInner(props: ViewProps) {
       />
       <div className="flex flex-col gap-1">
         <Checkbox label="Crop cover images" checked={crop} disabled={!coverField} onCheckedChange={(on) => cfg.update((c) => setGallery(c, { cover_crop: on }))} />
-        <p className="text-xs text-muted">
+        <p className="text-meta text-muted">
           {coverField ? "On, a picture fills its space and loses its edges; off, the whole picture shows." : "Choose a cover above to set how pictures fit."}
         </p>
       </div>
@@ -232,7 +235,7 @@ function GalleryInner(props: ViewProps) {
             <Spinner className="size-5" label="Loading records" />
           </div>
         ) : data.error && data.records.length === 0 ? (
-          <p role="alert" className="pt-16 text-center text-[0.8125rem] text-muted">
+          <p role="alert" className="pt-16 text-center text-label text-muted">
             Could not load records: {data.error.message}
           </p>
         ) : (
@@ -264,8 +267,8 @@ function GalleryInner(props: ViewProps) {
             </DndContext>
             {data.records.length === 0 && (
               // Cards sit straight on the page, so the empty state gets a card of its own to sit in.
-              <div className="rounded-xl border border-line bg-surface">
-                <EmptyRecords searching={!!setup.debouncedSearch} onAdd={setup.canEdit ? () => void setup.addRecord() : undefined} />
+              <div className="rounded-lg border border-line bg-surface">
+                <EmptyRecords table={table} filtered={setup.filtered} onAdd={setup.canEdit ? () => void setup.addRecord() : undefined} onReset={setup.resetFilters} />
               </div>
             )}
             <div ref={sentinel} className={cn("flex items-center justify-center", (data.hasMore || data.loadingMore) && "h-16")}>
@@ -290,6 +293,7 @@ function GalleryInner(props: ViewProps) {
       </div>
       <RecordMenu
         anchor={menu?.anchor ?? null}
+        title={menuTitle}
         onClose={() => setMenu(null)}
         count={menuRecordIds.length}
         canEdit={setup.canEdit}
@@ -323,6 +327,8 @@ interface CardProps {
 
 function GalleryCard({ record: rec, primary, fields, coverField, descriptionField, crop, format, emails, color, sel, nav, draggable, onOpen, onMenu }: CardProps) {
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: rec.id, disabled: !draggable });
+  // A right-click, the menu key, or a hold on a touch screen that lets go without moving (a hold that moves is the drag).
+  const hold = useHoldMenu(onMenu);
   const title = cardTitle(primary, rec, format);
   const selected = sel.has(rec.id);
   const more = fieldsToShow(fields, rec, format, Infinity).length - GALLERY_FIELD_LIMIT;
@@ -347,13 +353,9 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
           if ((e.target as HTMLElement).closest("a")) return;
           if (!sel.handleClick(rec.id, e)) onOpen();
         }}
-        onContextMenu={(e) => {
-          if ((e.target as HTMLElement).closest("a")) return;
-          e.preventDefault();
-          onMenu(menuAnchorOf(e));
-        }}
+        {...hold}
         className={cn(
-          "relative block w-full cursor-pointer overflow-hidden rounded-xl border bg-surface text-left outline-none transition-[border-color,box-shadow] hover:border-primary-soft-line hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
+          "relative block w-full cursor-pointer overflow-hidden rounded-lg border bg-surface text-left outline-none transition-[border-color] hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ring",
           selected ? "border-primary ring-2 ring-primary hover:border-primary" : "border-line",
           draggable && "select-none",
         )}
@@ -373,7 +375,7 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
           limit={GALLERY_FIELD_LIMIT}
         />
         {more > 0 && (
-          <p data-more-fields className="-mt-2 px-4 pb-3 text-xs text-faint">
+          <p data-more-fields className="-mt-2 px-4 pb-3 text-meta text-faint">
             +{more} more {more === 1 ? "field" : "fields"}
           </p>
         )}
@@ -387,7 +389,7 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
         tabIndex={-1}
         onClick={() => sel.toggle(rec.id)}
         className={cn(
-          "absolute left-2 top-2 z-[2] flex size-6 items-center justify-center rounded-md border bg-surface shadow-sm transition-opacity pointer-coarse:size-8",
+          "absolute left-2 top-2 z-[2] flex size-6 items-center justify-center rounded-sm border bg-surface transition-opacity pointer-coarse:size-8",
           selected ? "border-primary bg-primary text-primary-fg opacity-100" : "border-line-strong text-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100 pointer-coarse:opacity-100",
           sel.count > 0 && "opacity-100",
         )}

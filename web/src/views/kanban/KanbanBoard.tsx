@@ -16,7 +16,7 @@
  * Space drops it and Escape cancels; Enter opens the record, X selects it, Delete deletes it. Keys on a link
  * inside a card are the link's own.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type MutableRefObject } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type MutableRefObject } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -41,7 +41,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, CopyPlus, EyeOff, Eye, Maximize2, MoreHorizontal, MoveRight, Palette, Pencil, Plus, SquareCheck, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import type { Field, TableRecord } from "@/api/types";
-import { AnchoredMenu, type MenuAnchor } from "@/components/ui/anchored-menu";
+import type { MenuAnchor } from "@/components/ui/anchored-menu";
 import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -58,12 +58,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { SheetMenuGroup, SheetMenuRow } from "@/components/ui/sheet-menu";
 import { StatusChip } from "@/components/ui/status-chip";
+import { MenuGroups } from "@/shell/NavRowMenu";
+import { MenuItem, SheetModeContext } from "@/shell/menuItems";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
+import { useHoldMenu } from "@/lib/holdMenu";
 import type { FormatCtx } from "@/lib/cells/format";
 import { CardBody } from "../common/CardBody";
 import { cardTitle, itemsLabel } from "../common/cardFields";
+import { RecordActionMenu } from "../common/RecordActionMenu";
 import { SelectionBar } from "../common/SelectionBar";
 import { useRecordSelection, type RecordSelection } from "../common/useRecordSelection";
 import { planDrop, type DropPlan, type Stack } from "./stacks";
@@ -438,6 +443,17 @@ export function KanbanBoard(props: KanbanBoardProps) {
         </div>
         {sel.count > 0 && (
           <SelectionBar
+            sheetActions={
+              moveTargets.length > 1 && (
+                <SheetMenuGroup>
+                  {moveTargets.map((s) => (
+                    <SheetMenuRow key={s.key} icon={MoveRight} onSelect={() => props.onMoveRecords([...sel.ids], s.key, sel.clear)}>
+                      Move to {s.label}
+                    </SheetMenuRow>
+                  ))}
+                </SheetMenuGroup>
+              )
+            }
             count={sel.count}
             onDuplicate={() => props.onDuplicateRecords([...sel.ids], sel.clear)}
             onDelete={deleteSelected}
@@ -466,6 +482,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       {menu && menuRecord && (
         <CardMenu
           anchor={menu.anchor}
+          title={cardTitle(props.primary, menuRecord, props.format)}
           onClose={() => setMenu(null)}
           count={targetsOf(menu.id).length}
           selected={sel.has(menu.id)}
@@ -842,6 +859,7 @@ function AddStack({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
 function CardMenu({
   anchor,
   onClose,
+  title,
   count,
   selected,
   canEdit,
@@ -855,6 +873,8 @@ function CardMenu({
 }: {
   anchor: MenuAnchor;
   onClose: () => void;
+  /** The card's title: the name of the sheet on a phone. */
+  title: string;
   /** Cards Duplicate, Delete and Move act on: the selection when the card is in it, else the card. */
   count: number;
   selected: boolean;
@@ -869,40 +889,66 @@ function CardMenu({
 }) {
   const many = count > 1;
   return (
-    <AnchoredMenu anchor={anchor} onClose={onClose} label="Card menu">
-      <DropdownMenuItem onSelect={onOpen}>
-        <Maximize2 aria-hidden className="size-4" /> Open record
-      </DropdownMenuItem>
-      {canEdit && (
-        <>
-          <DropdownMenuItem onSelect={onToggleSelect}>
-            <SquareCheck aria-hidden className="size-4" /> {selected ? "Deselect" : "Select"}
+    <RecordActionMenu anchor={anchor} onClose={onClose} label="Card menu" title={title}>
+      <MenuGroups
+        groups={[
+          [
+            <MenuItem key="open" icon={Maximize2} onSelect={onOpen}>
+              Open record
+            </MenuItem>,
+            canEdit && (
+              <MenuItem key="select" icon={SquareCheck} onSelect={onToggleSelect}>
+                {selected ? "Deselect" : "Select"}
+              </MenuItem>
+            ),
+          ],
+          canEdit
+            ? [
+                stacks.length > 1 && <MoveToStack key="move" stacks={stacks} currentKey={many ? undefined : currentKey} onMove={onMove} />,
+                <MenuItem key="dup" icon={CopyPlus} onSelect={onDuplicate}>
+                  Duplicate {many ? `${count} records` : "record"}
+                </MenuItem>,
+              ]
+            : [],
+          canEdit
+            ? [
+                <MenuItem key="del" icon={Trash2} danger onSelect={onDelete}>
+                  Delete {many ? `${count} records` : "record"}
+                </MenuItem>,
+              ]
+            : [],
+        ]}
+      />
+    </RecordActionMenu>
+  );
+}
+
+/** "Move to stack": a submenu in a dropdown, a section of rows in the phone's sheet. */
+function MoveToStack({ stacks, currentKey, onMove }: { stacks: readonly Pick<Stack, "key" | "label">[]; currentKey: string | undefined; onMove: (key: string) => void }) {
+  if (useContext(SheetModeContext)) {
+    return (
+      <>
+        {stacks.map((s) => (
+          <SheetMenuRow key={s.key} icon={MoveRight} selected={s.key === currentKey} disabled={s.key === currentKey} onSelect={() => onMove(s.key)}>
+            Move to {s.label}
+          </SheetMenuRow>
+        ))}
+      </>
+    );
+  }
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <MoveRight aria-hidden className="size-4" /> Move to stack
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="max-h-[min(20rem,var(--ob-avail))]">
+        {stacks.map((s) => (
+          <DropdownMenuItem key={s.key} disabled={s.key === currentKey} onSelect={() => onMove(s.key)}>
+            {s.key === currentKey && <Check aria-hidden className="size-3.5" />} {s.label}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          {stacks.length > 1 && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <MoveRight aria-hidden className="size-4" /> Move to stack
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="max-h-[min(20rem,var(--ob-avail))]">
-                {stacks.map((s) => (
-                  <DropdownMenuItem key={s.key} disabled={!many && s.key === currentKey} onSelect={() => onMove(s.key)}>
-                    {s.key === currentKey && !many && <Check aria-hidden className="size-3.5" />} {s.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          <DropdownMenuItem onSelect={onDuplicate}>
-            <CopyPlus aria-hidden className="size-4" /> Duplicate {many ? `${count} records` : "record"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem danger onSelect={onDelete}>
-            <Trash2 aria-hidden className="size-4" /> Delete {many ? `${count} records` : "record"}
-          </DropdownMenuItem>
-        </>
-      )}
-    </AnchoredMenu>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -915,6 +961,8 @@ function KanbanCard({
   ...p
 }: { record: TableRecord; selection: RecordSelection; tabStop: boolean; onFocusCard(id: string): void; onCardMenu(id: string, anchor: MenuAnchor): void } & KanbanBoardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: record.id, disabled: !p.canEdit });
+  // A right-click, the menu key, or a hold that lets go without moving (a hold that moves is the drag).
+  const hold = useHoldMenu((anchor) => onCardMenu(record.id, anchor));
   const title = cardTitle(p.primary, record, p.format);
   const selected = sel.has(record.id);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -971,11 +1019,7 @@ function KanbanCard({
       onFocus={() => onFocusCard(record.id)}
       onKeyDown={onKeyDown}
       onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        const r = e.currentTarget.getBoundingClientRect();
-        onCardMenu(record.id, e.clientX || e.clientY ? { x: e.clientX, y: e.clientY, width: 1, height: 1 } : { x: r.left + 12, y: r.top + 12, width: 1, height: 1 });
-      }}
+      {...hold}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left outline-none transition-[border-color] hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ring",

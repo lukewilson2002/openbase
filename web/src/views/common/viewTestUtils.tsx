@@ -7,7 +7,7 @@ import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, 
 import { keys } from "@/api/keys";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
-import { USER, makeView, mockApi, stubDesktop, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
+import { USER, makeView, mockApi, stubDesktop, stubPhone, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
 import { readDraft } from "../drafts/store";
 import type { ViewProps } from "../types";
 import { AddRecordProvider, useAddRecord } from "./addRecord";
@@ -84,7 +84,7 @@ function Where() {
   return <output data-testid="where">{l.pathname + l.search}</output>;
 }
 
-export function renderView(Component: ComponentType<ViewProps>, opts: { schema: BaseSchema; viewId: string; routes?: Record<string, Handler>; route?: string; timeZone?: string }): RenderedView {
+export function renderView(Component: ComponentType<ViewProps>, opts: { schema: BaseSchema; viewId: string; routes?: Record<string, Handler>; route?: string; timeZone?: string; phone?: boolean }): RenderedView {
   const api = mockApi({
     "GET /api/auth/me": { ...USER, timezone: "UTC" },
     "GET /api/bases/app1/collaborators": [
@@ -97,7 +97,8 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
   const view = table.views.find((v) => v.id === opts.viewId)!;
   // jsdom matches no media query, so View options would open as a phone's sheet; these tests reach for it
   // as the popover a desktop shows.
-  stubDesktop();
+  if (opts.phone) stubPhone();
+  else stubDesktop();
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false, staleTime: 0, gcTime: 0 } });
   // The shell has loaded the user before any view renders; without this the time zone would change mid-test.

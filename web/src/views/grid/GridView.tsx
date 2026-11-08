@@ -41,8 +41,9 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { useRegisterAddRecord } from "@/views/common/addRecord";
 import { EmptyRecords } from "@/views/common/EmptyRecords";
+import { isFiltered } from "@/views/common/filtered";
 import { viewHugAreaClass, viewHugCardClass, viewHugFooterClass } from "@/views/common/ViewFrame";
-import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setSummary } from "@/components/viewbar/config";
+import { queryRelevantKey, reorderVisible, resolveFieldOrder, ROW_HEIGHT_PX, setFieldWidth, setFilter, setSummary } from "@/components/viewbar/config";
 import { useDebounced } from "@/components/record/editors/useDebounced";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
@@ -121,6 +122,12 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   searchRef.current = search;
   const debouncedRef = useRef(debouncedSearch);
   debouncedRef.current = debouncedSearch;
+  // "Reset" of the empty state: the draft shows every record again; the saved view keeps its filter.
+  const updateConfig = cfg.update;
+  const resetFilters = useCallback(() => {
+    updateConfig((c) => setFilter(c, null));
+    setSearch("");
+  }, [updateConfig]);
 
   // ---- data ------------------------------------------------------------------------------------
   const configKey = useMemo(() => queryRelevantKey(queryConfig), [queryConfig]);
@@ -1128,7 +1135,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           )}
           {empty && (
             <div className="border-t border-line">
-              <EmptyRecords searching={!!debouncedSearch} onAdd={canEdit ? () => void addRecord() : undefined} />
+              <EmptyRecords table={table} filtered={isFiltered(config, debouncedSearch)} onAdd={canEdit ? () => void addRecord() : undefined} onReset={resetFilters} />
             </div>
           )}
         </div>

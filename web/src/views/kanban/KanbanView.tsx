@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { Spinner } from "@/components/ui/spinner";
 import { cardFields } from "../common/cardFields";
 import { CARD_PROPERTY_LIMIT } from "../common/CardProperties";
+import { EmptyRecords } from "../common/EmptyRecords";
 import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
@@ -241,7 +242,6 @@ function KanbanInner(props: ViewProps) {
     body = (
       <ViewSetupState
         setup={setup}
-        picture="kanban"
         heading="Choose how to stack cards"
         body="Pick a field. Each of its values becomes a stack you can drag cards between."
         emptyBody="This table has no single select, person or checkbox field to stack cards by yet."
@@ -264,6 +264,15 @@ function KanbanInner(props: ViewProps) {
     body = (
       <div role="alert" className="flex h-full items-center justify-center p-6 text-[0.8125rem] text-muted">
         Could not load cards: {records.error.message}
+      </div>
+    );
+  } else if (data && data.records.length === 0) {
+    // The stacks of a board with nothing on it would only repeat "+ New" under each; one message says it once.
+    const first = stacks[0];
+    body = (
+      // Cards sit straight on the page, so the message gets a card of its own to sit in.
+      <div className="m-3 rounded-lg border border-line bg-surface md:m-4">
+        <EmptyRecords table={table} filtered={setup.filtered} onAdd={setup.canEdit ? () => void (first ? addCard(first.key) : setup.addRecord()) : undefined} onReset={setup.resetFilters} />
       </div>
     );
   } else {

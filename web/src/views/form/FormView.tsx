@@ -124,7 +124,7 @@ export default function FormView(props: ViewProps) {
             </DropdownMenu>
           )}
           <div className="ml-auto flex items-center gap-2">
-            {cfg.saving && <span className="text-xs text-muted">Saving…</span>}
+            {cfg.saving && <span className="text-meta text-muted">Saving…</span>}
             <ViewOptions
               schema={setup.schema}
               table={table}
@@ -144,7 +144,6 @@ export default function FormView(props: ViewProps) {
               <>
                 <Button
                   variant="secondary"
-                  className="h-[38px] rounded-[10px] px-3.5 font-semibold"
                   disabled={!canShareView(role, view)}
                   title={view.personal ? "Personal views cannot be shared" : "Create a public link to this form"}
                   onClick={() => setSharing(true)}

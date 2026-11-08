@@ -7,7 +7,7 @@
  * attention, and what happens afterwards (message, redirect, submit another) is what the public
  * page does.
  */
-import { EntityLabel } from "@/components/icons/EntityIcon";
+import { ColorMark } from "@/components/ui/color-mark";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
@@ -104,7 +104,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
       setResetKey((k) => k + 1);
       setDone(null);
     };
-    const shape = "max-w-[600px] rounded-[14px] shadow-[0_10px_28px_rgb(15_20_30/0.06)]";
+    const shape = "max-w-[600px] rounded-lg";
     return redirect ? (
       <FormDone className={shape} message="Taking you on…" note={<a href={redirect} className="text-primary-text underline">Continue</a>} />
     ) : (
@@ -113,7 +113,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
         message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE}
         note={
           <span className="inline-flex items-center gap-1.5">
-            The record was added to <EntityLabel icon={table.icon}>{table.name}</EntityLabel>.
+            The record was added to <ColorMark hue={table.color} name={table.name} size={8} /> {table.name}.
           </span>
         }
         onAnother={form.show_submit_another ? another : undefined}
@@ -139,7 +139,7 @@ export function FormFill({ setup }: { setup: ViewSetup }) {
             {failure && <Notice tone="error">{failure}</Notice>}
             {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
             <div>
-              <Button variant="primary" size="lg" className="h-11 rounded-[10px] px-[22px] font-[650]" loading={submitting} disabled={entries.length === 0} onClick={() => void submit()}>
+              <Button variant="primary" size="lg" loading={submitting} disabled={entries.length === 0} onClick={() => void submit()}>
                 {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
               </Button>
             </div>

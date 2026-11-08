@@ -150,6 +150,55 @@ describe("GridView: selection bar", () => {
   });
 });
 
+describe("GridView: empty states (COL-9)", () => {
+  it("says there is nothing yet under the header, with New record", async () => {
+    const { api } = setup({ recs: [], routes: { "POST /api/tables/tbl1/records": { status: 201, json: { records: [rec("n1", {})] } }, "GET /api/tables/tbl1/records/n1": rec("n1", {}) } });
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "New record" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+  });
+
+  it("says the filter is why when it matches nothing, and Reset shows every record again as a draft", async () => {
+    const user = userEvent.setup();
+    const view = viewWithConfig("viw1", "grid", { filter: { conjunction: "and", items: [{ field_id: F.status.id, op: "is", value: "s3" }] } });
+    const server = { records: [] as typeof records, groups: undefined };
+    renderView(GridView, { schema: projectSchema("viewer", [view]), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler(server) } as never });
+    expect(await screen.findByText("No records match these filters")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    server.records = records;
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await loaded();
+    expect(screen.queryByText("No records match these filters")).not.toBeInTheDocument();
+    expect(draftChanges()?.filter).toBeNull();
+  });
+});
+
+describe("GridView: selection on a phone", () => {
+  it("is the count and Actions, with Duplicate and Delete in a sheet", async () => {
+    const user = userEvent.setup();
+    const view = viewWithConfig("viw1", "grid", {});
+    const { api } = renderView(GridView, { schema: projectSchema("editor", [view]), viewId: "viw1", phone: true, routes: { "POST /api/views/viw1/query": queryHandler({ records }), "POST /api/tables/tbl1/records/duplicate": { status: 201, json: { records: [rec("c1", {})] } } } as never });
+    await loaded();
+    act(() => grid().onSelectionChange(selection({ rows: [0, 1] })));
+    const bar = await screen.findByRole("toolbar", { name: "Selected records" });
+    expect(within(bar).queryByRole("button", { name: "Duplicate" })).not.toBeInTheDocument();
+    await user.click(within(bar).getByRole("button", { name: "Actions" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "2 selected" }));
+    await user.click(sheet.getByRole("button", { name: "Duplicate" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")).toHaveLength(1));
+  });
+
+  it("shows a row's menu as a sheet", async () => {
+    const view = viewWithConfig("viw1", "grid", {});
+    renderView(GridView, { schema: projectSchema("editor", [view]), viewId: "viw1", phone: true, routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never });
+    await loaded();
+    act(() => grid().onCellContextMenu({ col: 0, row: 1 }, { x: 5, y: 5, width: 1, height: 1 }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Record" }));
+    expect(sheet.getByRole("button", { name: "Expand record" })).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "Delete record" })).toBeInTheDocument();
+  });
+});
+
 describe("GridView: record menu", () => {
   it("says why Insert is off while the view is searched", async () => {
     const user = userEvent.setup();

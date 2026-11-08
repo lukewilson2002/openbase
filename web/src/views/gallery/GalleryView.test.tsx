@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
@@ -32,6 +32,15 @@ describe("GalleryView", () => {
     expect(within(card).getByText("2.00")).toBeInTheDocument();
     expect(document.querySelector("[data-record-id='r2'] [data-row-color='green']")).not.toBeNull();
     expect(screen.getByText("2 items")).toBeInTheDocument();
+  });
+
+  it("draws a card as a bordered card of radius 12 with no shadow, and the cover takes the card's top corners", async () => {
+    setup();
+    const card = await screen.findByRole("button", { name: "R1" });
+    expect(card).toHaveClass("rounded-lg", "border", "border-line");
+    expect(card.className).not.toMatch(/shadow/);
+    // The cover follows the card's radius, so it is 12 as well.
+    expect(card.querySelector("img")!.parentElement).toHaveClass("rounded-t-[inherit]");
   });
 
   it("draws a cover only on cards whose record has a picture", async () => {
@@ -102,16 +111,81 @@ describe("GalleryView", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("?record=r2");
   });
 
-  it("says so when there are no records, with an Add for editors only", async () => {
+  it("says so when there are no records, with a New button for editors only", async () => {
     setup("editor", gallery(), []);
-    expect(await screen.findByText("No records yet.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New record" })).toBeInTheDocument();
   });
 
-  it("offers viewers no Add when there are no records", async () => {
+  it("offers viewers no New when there are no records", async () => {
     setup("viewer", gallery(), []);
-    expect(await screen.findByText("No records yet.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+  });
+
+  it("says the filter is why when it shows nothing, and Reset clears it in the draft", async () => {
+    const user = userEvent.setup();
+    const view = viewWithConfig("viw1", "gallery", { filter: { conjunction: "and", items: [{ field_id: F.status.id, op: "is", value: "s3" }] }, gallery: { cover_field_id: null, cover_crop: false } });
+    setup("editor", view, []);
+    expect(await screen.findByText("No records match these filters")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New record" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(await screen.findByText("No records yet")).toBeInTheDocument();
+    expect(draftChanges()?.filter).toBeNull();
+  });
+});
+
+describe("GalleryView on a phone", () => {
+  const touch = (x = 50, y = 50) => ({ pointerType: "touch", pointerId: 1, clientX: x, clientY: y, button: 0, isPrimary: true });
+  const phone = () => renderView(GalleryView, { schema: projectSchema("editor", [gallery()]), viewId: "viw1", phone: true, routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never });
+
+  it("opens the card's action sheet when a hold lets go without moving, and does not open the record", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      phone();
+      const card = await screen.findByRole("button", { name: "R2" });
+      fireEvent.pointerDown(card, touch());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+      expect(screen.queryByRole("dialog", { name: "R2" })).not.toBeInTheDocument();
+      fireEvent.pointerUp(card, touch());
+      fireEvent.click(card);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(150)));
+      const sheet = within(await screen.findByRole("dialog", { name: "R2" }));
+      expect(sheet.getByRole("button", { name: "Open record" })).toBeInTheDocument();
+      expect(sheet.getByRole("button", { name: "Delete record" })).toBeInTheDocument();
+      expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens no sheet for a hold that then moves (the drag)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      phone();
+      const card = await screen.findByRole("button", { name: "R2" });
+      fireEvent.pointerDown(card, touch());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+      fireEvent.pointerMove(card, touch(50, 90));
+      fireEvent.pointerUp(card, touch(50, 90));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a selection as the count and Actions, with the bulk actions in a sheet", async () => {
+    const user = userEvent.setup();
+    phone();
+    await screen.findByRole("button", { name: "R1" });
+    await user.click(screen.getByRole("checkbox", { name: "Select R1" }));
+    const bar = within(screen.getByRole("toolbar", { name: "Selected records" }));
+    expect(bar.getByText("1 selected")).toBeInTheDocument();
+    await user.click(bar.getByRole("button", { name: "Actions" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "1 selected" }));
+    expect(sheet.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
+    expect(sheet.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 });
 

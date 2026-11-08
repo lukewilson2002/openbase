@@ -18,14 +18,14 @@ import type { ViewSetup } from "./useViewSetup";
  * A view's body: on a desktop a rounded card on the page's grey, under the filter bar; on a phone it
  * runs edge to edge, where a margin would cost a column of the grid.
  */
-export const viewBodyClass = "relative min-h-0 flex-1 border-t border-line bg-surface md:mx-4 md:mt-4 md:overflow-hidden md:rounded-xl md:border";
+export const viewBodyClass = "relative min-h-0 flex-1 border-t border-line bg-surface md:mx-4 md:mt-4 md:overflow-hidden md:rounded-lg md:border";
 /**
  * The count line under a view ("4 items"): a bar on a phone, plain text under the card on a desktop.
  * On a phone the bar is the bottom of the screen: it stays above the home indicator and clear of the
  * rounded corners.
  */
 export const viewFooterClass =
-  "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-[0.8125rem] text-muted max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))] max-md:px-5 md:border-t-0 md:bg-transparent md:px-5";
+  "flex min-h-9 shrink-0 flex-wrap items-center gap-3 border-t border-line bg-subtle px-3 py-1 text-label text-muted max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))] max-md:px-5 md:border-t-0 md:bg-transparent md:px-5";
 
 /**
  * A list or grid edge to edge under the filter bar, with no frame around it, as tall as its content (a
@@ -91,7 +91,7 @@ export function ViewFrame({ setup, recordIds, features, layoutSettings, property
     body = (
       <div className="relative min-h-0 flex-1 overflow-auto">
         {children}
-        {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-[0.8125rem] text-muted md:px-5 max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
+        {footer && <div className="flex flex-wrap items-center gap-3 px-4 pb-4 text-label text-muted md:px-5 max-md:pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>
     );
   } else {

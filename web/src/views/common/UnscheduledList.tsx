@@ -55,7 +55,8 @@ export interface UnscheduledListProps {
   onOpen(recordId: string): void;
 }
 
-const columnBg = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
+// The column is the page's quiet grey, beside the surface the days are drawn on.
+const columnBg = "bg-bg";
 const dropClass = "bg-primary-soft ring-2 ring-inset ring-ring";
 
 export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, table, format, emails, loading, truncated, draggable, nativeDrag, attachDrag, hint, dropActive = false, stacked = false, zoneRef, onOpen }: UnscheduledListProps) {
@@ -88,7 +89,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
           onClick={onToggle}
           aria-expanded={false}
           aria-label={label}
-          className={cn("absolute bottom-3 left-3 z-10 flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[0.8125rem] font-semibold shadow-pop", dropActive && dropClass)}
+          className={cn("absolute bottom-3 left-3 z-10 flex h-10 items-center gap-2 rounded-pill border border-line bg-surface px-3.5 text-label font-semibold shadow-pop", dropActive && dropClass)}
         >
           <Inbox aria-hidden className="size-4 text-muted" />
           Unscheduled{count === null ? "" : ` · ${count}`}
@@ -102,7 +103,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
         onClick={onToggle}
         aria-expanded={false}
         aria-label={label}
-        className={cn("flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line py-3 text-[0.8125rem] font-semibold text-muted hover:bg-hover hover:text-fg", columnBg, dropActive && dropClass)}
+        className={cn("flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line py-3 text-label font-semibold text-muted hover:bg-hover hover:text-fg", columnBg, dropActive && dropClass)}
       >
         <ChevronsLeft aria-hidden className="size-4" />
         <span className="[writing-mode:vertical-rl]">Unscheduled{count === null ? "" : ` · ${count}`}</span>
@@ -123,12 +124,12 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
         dropActive && dropClass,
       )}
     >
-      <div className="flex items-start gap-1.5 border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))] py-3 pl-3.5 pr-2">
+      <div className="flex items-start gap-1.5 border-b border-line py-3 pl-3.5 pr-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-[0.875rem] font-[650]">
+          <h3 className="text-ui font-semibold">
             Unscheduled {count !== null && <span className="font-semibold text-muted">{count}</span>}
           </h3>
-          <p className="mt-0.5 text-xs leading-snug text-muted">{draggable ? (hint ?? (stacked ? "Hold a record, then drag it onto a day to give it a date." : "Drag a record onto a day to give it a date.")) : "Records without a date."}</p>
+          <p className="mt-0.5 text-meta text-muted">{draggable ? (hint ?? (stacked ? "Hold a record, then drag it onto a day to give it a date." : "Drag a record onto a day to give it a date.")) : "Records without a date."}</p>
         </div>
         <IconButton label="Hide unscheduled records" size="sm" noTooltip aria-expanded onClick={onToggle}>
           {stacked ? <ChevronDown aria-hidden className="size-4" /> : <ChevronsRight aria-hidden className="size-4" />}
@@ -159,7 +160,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
                     : undefined
                 }
                 className={cn(
-                  "flex select-none items-start gap-1.5 rounded-lg border border-line bg-surface py-2 pl-1.5 pr-2.5 transition-[border-color,box-shadow] hover:border-primary-soft-line hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)]",
+                  "flex select-none items-start gap-1.5 rounded-lg border border-line bg-surface py-2 pl-1.5 pr-2.5 transition-[border-color] hover:border-line-strong",
                   draggable && "cursor-grab",
                 )}
               >
@@ -168,7 +169,7 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
                   r,
                   <RecordSummary
                     title={
-                      <button type="button" onClick={() => onOpen(r.id)} className="max-w-full truncate text-left text-[0.8125rem] font-semibold hover:underline">
+                      <button type="button" onClick={() => onOpen(r.id)} className="max-w-full truncate text-left text-label font-semibold hover:underline">
                         {title}
                       </button>
                     }
@@ -183,8 +184,8 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
               </li>
             );
           })}
-          {records.length === 0 && <li className="px-1 py-4 text-center text-xs text-faint">Every record has a date.</li>}
-          {truncated && <li className="px-1 py-2 text-center text-xs text-muted">Showing the first records only.</li>}
+          {records.length === 0 && <li className="px-1 py-4 text-center text-meta text-faint">Every record has a date.</li>}
+          {truncated && <li className="px-1 py-2 text-center text-meta text-muted">Showing the first records only.</li>}
         </ul>
       )}
     </aside>

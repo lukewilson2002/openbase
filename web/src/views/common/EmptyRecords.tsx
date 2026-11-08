@@ -1,23 +1,41 @@
 import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { newRecordLabel, pluralize, recordNoun } from "@/lib/recordNoun";
+
+export interface EmptyRecordsProps {
+  /** The collection, for what it calls its records ("clients"). */
+  table: { record_noun?: string | null };
+  /** The view's filter or search is why nothing shows. */
+  filtered: boolean;
+  /** Adds a record; omitted for people who cannot. */
+  onAdd?: () => void;
+  /** Clears the draft's filter and search. */
+  onReset?: () => void;
+  className?: string;
+}
 
 /**
- * What a list or gallery shows with nothing in it: one message with room around it, and a quiet
- * Add for people who can add. Searching says so, and offers no Add, since a new record would not
- * match the search and would seem to vanish.
+ * What a view shows with no record in it (COL-9): "No clients yet" with New client, or, when the view's
+ * filter or search is why, "No clients match these filters" with Reset. A filtered view offers no New: a
+ * record added there would not match and would seem to vanish.
  */
-export function EmptyRecords({ searching, onAdd }: { searching: boolean; onAdd?: () => void }) {
+export function EmptyRecords({ table, filtered, onAdd, onReset, className }: EmptyRecordsProps) {
+  const plural = pluralize(recordNoun(table));
+  if (filtered) {
+    return <EmptyState className={className} title={`No ${plural} match these filters`} action={onReset && <Button onClick={onReset}>Reset</Button>} />;
+  }
   return (
-    <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-      <p className="text-[0.875rem] text-muted">{searching ? "No records match your search." : "No records yet."}</p>
-      {onAdd && !searching && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="flex h-9 items-center gap-1.5 rounded-md px-3 text-[0.875rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
-        >
-          <Plus aria-hidden className="size-[15px]" /> Add
-        </button>
-      )}
-    </div>
+    <EmptyState
+      className={className}
+      title={`No ${plural} yet`}
+      action={
+        onAdd && (
+          <Button variant="primary" onClick={onAdd}>
+            <Plus aria-hidden className="size-4" /> {newRecordLabel(table)}
+          </Button>
+        )
+      }
+    />
   );
 }

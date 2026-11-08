@@ -70,19 +70,19 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
-          <h3 className="line-clamp-2 break-words text-[0.9375rem] font-[650]">{title}</h3>
+          <h3 className="line-clamp-2 break-words text-ui font-semibold">{title}</h3>
           {description && (
             <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
-              <p data-card-description className="-mt-1 line-clamp-3 break-words text-[0.875rem] leading-[1.45] text-muted">
+              <p data-card-description className="-mt-1 line-clamp-3 break-words text-ui text-muted">
                 {description}
               </p>
             </DescriptionHover>
           )}
           {shown.map((f) => (
             <div key={f.id} className="min-w-0">
-              <p className="mb-[3px] truncate text-xs text-faint">{f.name}</p>
+              <p className="mb-0.5 truncate text-meta text-faint">{f.name}</p>
               <div className="flex min-h-5 items-center">
-                <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="line-clamp-3 text-[0.875rem]" markdown={false} />
+                <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="line-clamp-3 text-ui" markdown={false} />
               </div>
             </div>
           ))}

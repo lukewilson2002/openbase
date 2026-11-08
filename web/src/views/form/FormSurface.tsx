@@ -94,7 +94,7 @@ function FieldBlock({
   return (
     <div className="flex flex-col gap-1.5" role="group" aria-labelledby={labelId} data-field-id={field.id}>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span id={labelId} className="text-[0.875rem] font-semibold">
+        <span id={labelId} className="text-ui font-semibold">
           {label}
           {entry.required && (
             <span aria-hidden className="ml-0.5 text-danger">
@@ -103,14 +103,14 @@ function FieldBlock({
           )}
         </span>
         {internalOnlyNote && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2 py-0.5 text-xs text-muted" title={internalOnlyNote}>
+          <span className="inline-flex items-center gap-1 rounded-pill bg-subtle px-2 py-0.5 text-meta text-muted" title={internalOnlyNote}>
             <Lock aria-hidden className="size-3" /> Signed-in editors only
           </span>
         )}
       </div>
-      {help && <p className="whitespace-pre-wrap text-[0.8125rem] text-muted">{help}</p>}
+      {help && <p className="whitespace-pre-wrap text-label text-muted">{help}</p>}
       {inert && field.type === "attachment" ? (
-        <p className="rounded-md border border-dashed border-line-strong px-3 py-2 text-[0.8125rem] text-muted">
+        <p className="rounded-md border border-dashed border-line-strong px-3 py-2 text-label text-muted">
           Files cannot be added in the preview.
         </p>
       ) : (
@@ -127,7 +127,7 @@ function FieldBlock({
         />
       )}
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="text-meta text-danger">
           {error}
         </p>
       )}
@@ -176,30 +176,30 @@ export function FormSurface({
           : undefined
       }
       className={cn(
-        "mx-auto flex w-full max-w-[600px] flex-col gap-[18px] rounded-[14px] border border-line bg-surface px-5 py-6 shadow-[0_10px_28px_rgb(15_20_30/0.06)] sm:px-8 sm:pb-[30px] sm:pt-7",
+        "mx-auto flex w-full max-w-[600px] flex-col gap-4 rounded-lg border border-line bg-surface px-5 py-6 sm:px-8 sm:pb-8 sm:pt-7",
         className,
       )}
     >
       {banner}
       <header className="flex flex-col gap-1.5">
-        <h2 className="text-[1.375rem] leading-tight tracking-[-0.01em]">{form.title.trim() || title}</h2>
-        {form.description.trim() && <p className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">{form.description}</p>}
-        {anyRequired && <p className="text-xs text-muted">Fields marked * are required.</p>}
+        <h2 className="text-h2">{form.title.trim() || title}</h2>
+        {form.description.trim() && <p className="whitespace-pre-wrap text-read text-muted">{form.description}</p>}
+        {anyRequired && <p className="text-meta text-muted">Fields marked * are required.</p>}
       </header>
       {questions.length === 0 ? (
-        <p className="rounded-md bg-subtle px-3 py-4 text-center text-[0.8125rem] text-muted">
+        <p className="rounded-md bg-subtle px-3 py-4 text-center text-label text-muted">
           {asked === 0 ? "This form has no fields yet." : "None of this form's fields are collected by the public form."}
         </p>
       ) : (
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-4">
           {items.map((item) => {
             if (item.kind === "block") {
               return item.block === "heading" ? (
-                <h3 key={item.entry.field_id} className="mt-1 border-b border-line pb-1.5 text-[1.0625rem] font-semibold">
+                <h3 key={item.entry.field_id} className="mt-1 border-b border-line pb-1.5 text-h3">
                   {blockText(item.entry)}
                 </h3>
               ) : (
-                <p key={item.entry.field_id} className="whitespace-pre-wrap text-[0.9375rem] leading-normal text-muted">
+                <p key={item.entry.field_id} className="whitespace-pre-wrap text-read text-muted">
                   {blockText(item.entry)}
                 </p>
               );

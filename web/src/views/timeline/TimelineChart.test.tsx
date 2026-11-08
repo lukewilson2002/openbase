@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -116,10 +118,10 @@ describe("TimelineChart", () => {
   it("shades weekends where a day is wide enough to see them", () => {
     const { container, unmount } = chart();
     // March 2026 to May 2026 has 13 weekends (the axis starts on Sunday Mar 1, the tail of one).
-    expect(container.querySelectorAll("[class*='--bg)_55%']").length).toBe(14);
+    expect(container.querySelectorAll("[data-weekend]").length).toBe(14);
     unmount();
     const coarse = chart({ scale: "quarter" });
-    expect(coarse.container.querySelectorAll("[class*='--bg)_55%']").length).toBe(0);
+    expect(coarse.container.querySelectorAll("[data-weekend]").length).toBe(0);
   });
 
   it("names records in the left column and draws their bars with the given label", async () => {
@@ -242,6 +244,18 @@ describe("TimelineChart", () => {
     rerender(<TimelineChart {...props} lanes={[]} emptyMessage="Nothing here, but a record is far away." />);
     expect(screen.getByRole("status")).toHaveTextContent("Nothing here, but a record is far away.");
     expect(screen.getByRole("img", { name: "Today" })).toBeInTheDocument();
+  });
+
+  it("draws today as a dashed line in the accent, from tokens only", () => {
+    chart();
+    expect(screen.getByRole("img", { name: "Today" })).toHaveClass("ob-tl-today");
+    const css = readFileSync(resolve(process.cwd(), "src/views/timeline/timeline.css"), "utf8");
+    const rule = /\.ob-tl-today\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    // A gradient of dashes and gaps, in --primary: a dashed line a border cannot draw at this weight.
+    expect(rule).toContain("repeating-linear-gradient");
+    expect(rule).toContain("var(--primary)");
+    expect(rule).toContain("transparent");
+    expect(rule).not.toMatch(/#|rgb|hsl/);
   });
 
   it("takes a bar dropped on the unscheduled column off the timeline", () => {

@@ -32,11 +32,11 @@ import { displayShapeOf, selectChoicesOf } from "@/lib/cells/kinds";
 import { swatchColor } from "@/lib/cells/palette";
 import { isWritable } from "@/lib/cells/wire";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
+import { useHoldMenu } from "@/lib/holdMenu";
 import { holdClicks } from "@/shell/sortable";
 import { cardTitle, descriptionText } from "../common/cardFields";
 import { CardProperties, cardProperties } from "../common/CardProperties";
 import { DescriptionHover } from "../common/description";
-import { menuAnchorOf } from "../common/RecordMenu";
 import type { RecordSelection } from "../common/useRecordSelection";
 import { useRovingFocus, type RovingFocus } from "../common/useRovingFocus";
 import { RowPrefix } from "./RowPrefix";
@@ -186,6 +186,8 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   const folded = row.children > 0 && !!p.folded?.has(record.id);
   const { setNodeRef, listeners, transform, transition, isDragging, isOver } = useSortable({ id: record.id, disabled: !u.draggable, data: { group: leaf.path } });
   const drag = useContext(DragCtx);
+  // A right-click, the menu key, or a hold on a touch screen that lets go without moving (a hold that moves is the drag).
+  const hold = useHoldMenu((anchor) => p.onRecordMenu?.(record.id, anchor, u.treeOf(record.id)), !!p.onRecordMenu);
   // Another group's row under the dragged one: dropping here puts the row in that group, above this one.
   const joining = isOver && drag.activeId !== null && drag.activeId !== record.id && drag.activeGroup !== leaf.path;
   const prefixValue = p.prefix ? record.values[p.prefix.id] : undefined;
@@ -216,11 +218,7 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
           if ((e.target as HTMLElement).closest("a")) return;
           if (!sel?.handleClick(record.id, e)) p.onOpen(record.id);
         }}
-        onContextMenu={(e) => {
-          if (!p.onRecordMenu || (e.target as HTMLElement).closest("a")) return;
-          e.preventDefault();
-          p.onRecordMenu(record.id, menuAnchorOf(e), u.treeOf(record.id));
-        }}
+        {...hold}
         className={cn(
           // A card: the row is its own bordered surface, so a record reads as one thing.
           "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 outline-none hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",

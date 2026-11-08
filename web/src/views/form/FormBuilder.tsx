@@ -119,7 +119,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
 
       <section
         aria-label="Form settings"
-        className={cn("min-h-0 flex-1 overflow-y-auto rounded-xl border border-line bg-surface px-5 py-[18px] lg:w-[440px] lg:flex-none", pane === "preview" && "max-lg:hidden")}
+        className={cn("min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-surface px-5 py-4 lg:w-[440px] lg:flex-none", pane === "preview" && "max-lg:hidden")}
       >
         <div className="flex flex-col gap-3.5">
           {readOnly && (
@@ -132,14 +132,14 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
             </Notice>
           )}
           <FormSettings form={form} title={view.name} readOnly={readOnly} onChange={onChange} people={people} currentUserId={setup.currentUserId} notifyReadOnly={!cfg.canEditForm} />
-          <div aria-hidden className="my-0.5 h-px bg-[color-mix(in_srgb,var(--line)_60%,var(--surface))]" />
+          <div aria-hidden className="my-0.5 h-px bg-line" />
           <FormFieldList form={form} table={table} hiddenFields={config.hidden_fields} readOnly={readOnly} onChange={onChange} onShowPublic={onShowPublic} />
         </div>
       </section>
 
       <section aria-label="Live preview" className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-y-auto", pane === "edit" && "max-lg:hidden")}>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
-          <p className="flex items-center gap-2 text-[0.875rem]">
+          <p className="flex items-center gap-2 text-ui">
             <Eye aria-hidden className="size-4 text-muted" />
             <strong className="font-semibold">Live preview</strong>
             <span className="text-muted">· Nothing you type here is saved.</span>
@@ -157,9 +157,9 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
         {sent ? (
           <div className="mx-auto flex w-full max-w-[560px] flex-col items-center gap-2">
             {form.redirect_url ? (
-              <FormDone className="rounded-[14px] shadow-[0_10px_28px_rgb(15_20_30/0.06)]" message="Visitors are sent to another address" note={<span className="break-all">{form.redirect_url}</span>} />
+              <FormDone className="max-w-[560px] rounded-lg" message="Visitors are sent to another address" note={<span className="break-all">{form.redirect_url}</span>} />
             ) : (
-              <FormDone className="rounded-[14px] shadow-[0_10px_28px_rgb(15_20_30/0.06)]" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? again : undefined} />
+              <FormDone className="max-w-[560px] rounded-lg" message={form.success_message.trim() || DEFAULT_SUCCESS_MESSAGE} onAnother={form.show_submit_another ? again : undefined} />
             )}
             <Button variant="ghost" onClick={() => setSent(false)}>
               Back to the form
@@ -206,7 +206,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
                 <div className="flex flex-col gap-3">
                   {Object.keys(errors).length > 0 && <Notice tone="error">Some answers need attention. Check the fields marked above.</Notice>}
                   <div>
-                    <Button variant="primary" size="lg" className="h-11 rounded-[10px] px-[22px] font-[650]" title="Try the form: nothing is sent or saved" onClick={trySubmit}>
+                    <Button variant="primary" size="lg" title="Try the form: nothing is sent or saved" onClick={trySubmit}>
                       {form.submit_label.trim() || DEFAULT_SUBMIT_LABEL}
                     </Button>
                   </div>

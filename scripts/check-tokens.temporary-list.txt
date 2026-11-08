@@ -9,11 +9,3 @@ components/accountMenu.tsx
 components/layouts.tsx
 onboarding/IntroOverlay.tsx
 onboarding/illustrations.tsx
-views/calendar/calendar.css
-views/common/UnscheduledList.tsx
-views/common/ViewSetupState.tsx
-views/form/FormBuilder.tsx
-views/form/FormFill.tsx
-views/form/FormSurface.tsx
-views/gallery/GalleryView.tsx
-views/timeline/TimelineChart.tsx
