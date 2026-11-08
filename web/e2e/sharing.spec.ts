@@ -132,16 +132,13 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   let formViewId = "";
   let link = "";
 
-  await test.step("creates a form view from the view list's Add view", async () => {
-    await openView(page);
-    await page.getByRole("button", { name: "View: Grid" }).click();
-    await page.getByRole("menuitem", { name: "Add view" }).click();
-    await page.getByRole("menu", { name: "Add view" }).getByRole("menuitem", { name: /^Form/ }).click();
-    const dialog = page.getByRole("dialog", { name: "New form view" });
-    await dialog.getByLabel("Name").fill("Contact form");
-    await dialog.getByRole("button", { name: "Create view" }).click();
+  await test.step("opens a form view (made through the API: a view is made by Save as view from a draft)", async () => {
+    const made = await page.request.post(`/api/tables/${fx.tableId}/views`, { data: { name: "Contact form", type: "form", personal: false, config: null }, headers: CSRF });
+    expect(made.ok(), `create the form view: ${made.status()}`).toBeTruthy();
+    formViewId = ((await made.json()) as { id: string }).id;
+    await page.goto(`/base/${fx.baseId}/${fx.tableId}/${formViewId}`);
+    await expect(page.getByRole("tab", { name: "Contact form" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("heading", { name: "Form", exact: true })).toBeVisible();
-    formViewId = new URL(page.url()).pathname.split("/").pop()!;
     // A new form starts with every editable field.
     const t = await table(page.request);
     const created = t.views.find((v) => v.id === formViewId)!;

@@ -135,19 +135,19 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await newCollection.getByRole("button", { name: "Create collection" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    // A new table opens in its default grid, its only view: the view button names it, not a named view.
-    await expect(page.getByRole("button", { name: "View: Default grid" })).toBeVisible();
+    // A new table opens in its default grid, its only view: its tab reads "All" and the collection's name.
+    await expect(page.getByRole("tab", { name: "All table 1" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab")).toHaveCount(1);
     const defaultId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
     expect((await loadTable()).views.map((v) => [v.id, v.is_default])).toEqual([[defaultId, true]]);
-    // A shared grid of its own, named after its type, keeps the filter and sort the steps below save.
-    await page.getByRole("button", { name: "View: Default grid" }).click();
-    await page.getByRole("menuitem", { name: "Add view" }).click();
-    await page.getByRole("menu", { name: "Add view" }).getByRole("menuitem", { name: /^Grid/ }).click();
-    const dialog = page.getByRole("dialog", { name: "New grid view" });
-    await expect(dialog.getByLabel("Name")).toHaveValue("Grid");
-    await dialog.getByRole("button", { name: "Create view" }).click();
-    await expect(page).not.toHaveURL(new RegExp(`/${defaultId}$`));
-    viewId = /\/(viw[^/?]+)/.exec(page.url())![1]!;
+    // A shared grid of its own, named after its type, keeps the filter and sort the steps below save. There is no
+    // Add view: a view is made by Save as view from a draft (views.spec), so this one is made through the API.
+    const made = await page.request.post(`/api/tables/${/\/(tbl[^/]+)\//.exec(page.url())![1]}/views`, { data: { name: "Grid", type: "grid", personal: false, config: null }, headers: CSRF });
+    expect(made.ok(), `create the grid view: ${made.status()}`).toBeTruthy();
+    viewId = ((await made.json()) as { id: string }).id;
+    await page.reload();
+    await page.getByRole("tab", { name: "Grid" }).click();
+    await expect(page).toHaveURL(new RegExp(`/${viewId}$`));
     const workspaces = await api<{ name: string; bases: { id: string; name: string }[] }[]>(page, "/api/workspaces");
     expect(workspaces.find((w) => w.name === "Journey workspace")?.bases.map((b) => b.name)).toEqual(["Journey base"]);
   });
@@ -290,6 +290,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
     await page.getByLabel("Operator").selectOption("gte");
     await page.getByLabel("Value").fill("20");
+    // The value reaches the filter after a short pause: closing the popover before that drops it, as in the first round.
+    await expect(page.getByText("2 items")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /^Sort/ }).click();
     await page.getByRole("button", { name: "Add sort" }).click();

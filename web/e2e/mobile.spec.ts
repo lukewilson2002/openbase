@@ -139,13 +139,23 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
     await expectFits(page, "collection");
   });
 
-  await test.step("the collection's header has a back link naming the Collections tab, and the search", async () => {
+  await test.step("the collection's header has a back link naming the Collections tab, Share, + and the search, and a 12-character name fits whole", async () => {
+    // The name that did not fit between the buttons in Phase 3 now has the whole row under the bar.
+    const renamed = await page.request.patch(`/api/tables/${table.id}`, { data: { name: "Archive 2025" }, headers: CSRF });
+    expect(renamed.ok(), `rename the collection: ${renamed.status()}`).toBeTruthy();
+    await page.reload();
     const header = page.getByRole("main").locator("header").first();
     const back = header.getByRole("link", { name: "Back to Collections" });
     await expect(back).toHaveAttribute("href", `/workspace/${ws.id}/collections`);
     await expect(header.getByRole("button", { name: "Share" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "New record" })).toBeVisible();
     await expect(header.getByRole("button", { name: "Search everything" })).toBeVisible();
     await expectTouchTargets(header.getByRole("button").or(header.getByRole("link")), "collection header");
+    const title = page.getByRole("heading", { level: 1, name: "Archive 2025" });
+    await expect(title).toBeVisible();
+    expect(await title.locator("span.truncate").evaluate((el) => el.scrollWidth - el.clientWidth), "the title is cut off").toBeLessThanOrEqual(0);
+    await expect(page.getByRole("tab", { name: "All archive 2025" })).toBeVisible();
+    await expectFits(page, "collection header");
     await expect(tabs.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
     // The header's search opens the search over the screen.
     await header.getByRole("button", { name: "Search everything" }).tap();

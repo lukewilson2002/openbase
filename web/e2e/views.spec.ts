@@ -444,7 +444,7 @@ test.describe("menu order", () => {
     await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[2]!.id}`));
   });
 
-  test("moves a collection with the keyboard through its row menu, and a view through the view switcher's options", async ({ page }) => {
+  test("moves a collection with the keyboard through its row menu, and a view through its tab's menu", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
     const list = page.getByRole("list", { name: "Collections in Order E2E" });
@@ -454,7 +454,7 @@ test.describe("menu order", () => {
     await expect(list.getByRole("link")).toHaveText([/^Alpha/, /^Charlie/, /^Bravo/]);
     await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Alpha", "Charlie", "Bravo"]);
 
-    // The sidebar lists collections only: the views are in the toolbar's list, where they are also put in order.
+    // The sidebar lists collections only: the views are the collection's tabs, where they are also put in order.
     await expect(page.getByRole("button", { name: /^Show views of/ })).toHaveCount(0);
     const viewNames = async () =>
       (await call<{ tables: { id: string; views: { name: string; is_default?: boolean }[] }[] }>(page.request, "get", `/api/bases/${tree.baseId}`)).tables
@@ -467,10 +467,8 @@ test.describe("menu order", () => {
     const after = [...before];
     after.splice(before.indexOf("Gallery") - 1, 2, "Gallery", "Cards");
 
-    await page.getByRole("button", { name: /^View: / }).click();
-    const views = page.getByRole("menu", { name: "Views of Alpha" });
-    await views.getByRole("menuitem", { name: "Gallery" }).click({ button: "right" });
-    await page.getByRole("menu", { name: "Options for Gallery" }).getByRole("menuitem", { name: "Move up" }).click();
+    await page.getByRole("tablist", { name: "Views of Alpha" }).getByRole("tab", { name: "Gallery" }).click({ button: "right" });
+    await page.getByRole("menu", { name: "Options for Gallery" }).getByRole("menuitem", { name: "Move left" }).click();
     await expect.poll(viewNames).toEqual(after);
     // Still so once the page is loaded again.
     await page.reload();
