@@ -956,6 +956,7 @@ async fn aggregate_records(ctx: &McpCtx, a: AggregateArgs) -> ToolResult {
         sort: a.sort.unwrap_or_default(),
         limit: Some(limit),
         timezone: None,
+        week_start: None,
     };
     match aggregate::aggregate_for(
         &ctx.state,

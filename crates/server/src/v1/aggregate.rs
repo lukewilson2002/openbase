@@ -307,6 +307,7 @@ pub fn aggregate_in(
         };
         let q = QueryRequest {
             timezone: req.timezone.clone().filter(|t| !t.trim().is_empty()),
+            week_start: req.week_start,
             ..Default::default()
         };
         let entry = query::query_ids(conn, cache, versions, &actor.user_id, view_ref, &q)?;

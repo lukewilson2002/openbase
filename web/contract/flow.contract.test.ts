@@ -134,6 +134,15 @@ describe("login, logout and the profile", () => {
     expectError(e, 400, "bad_request");
   });
 
+  it("sets the first day of the week, Sunday or Monday only", async () => {
+    const monday = parse("User", await asAdmin(() => api.auth.updateMe({ week_start: 1 })));
+    expect(monday.week_start).toBe(1);
+    expect(parse("User", await asAdmin(() => api.auth.me())).week_start).toBe(1);
+    expectError(await failure(asAdmin(() => api.auth.updateMe({ week_start: 2 }))), 400, "bad_request");
+    const sunday = parse("User", await asAdmin(() => api.auth.updateMe({ week_start: 0 })));
+    expect(sunday.week_start).toBe(0);
+  });
+
   it("changes the password and keeps the current session", async () => {
     const e = await failure(asAdmin(() => api.auth.changePassword({ current_password: "not it", new_password: `pw-${rand()}-${rand()}` })));
     expectError(e, 403, "forbidden");

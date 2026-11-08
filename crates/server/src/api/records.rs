@@ -15,7 +15,7 @@
 //! Read endpoints (Viewer), backed by `engine::query`:
 //! `POST /api/views/{id}/query`,
 //! `POST /api/tables/{id}/aggregate` (group-by: count, sum, avg, min, max per group),
-//! `GET /api/views/{id}/aggregations?timezone=&search=&transient=`,
+//! `GET /api/views/{id}/aggregations?timezone=&week_start=&search=&transient=`,
 //! `GET /api/tables/{id}/records/{rid}`,
 //! `POST /api/tables/{id}/records/get` (several records by id: linked-record previews),
 //! `GET /api/tables/{id}/records/lookup?q=&limit=&view_id=&fields=` (link picker) and
@@ -440,6 +440,9 @@ struct AggregationsParams {
     /// IANA zone for relative dates in the view filter.
     #[serde(default)]
     timezone: Option<String>,
+    /// First day of the week for calendar-week dates: 0 Sunday, 1 Monday.
+    #[serde(default)]
+    week_start: Option<i32>,
     /// Summarise only records matching this search (same semantics as the
     /// `search` of a view query).
     #[serde(default)]
@@ -489,7 +492,7 @@ async fn aggregate(
     Ok(Json(response))
 }
 
-/// `GET /api/views/{id}/aggregations?timezone=&search=&transient=`.
+/// `GET /api/views/{id}/aggregations?timezone=&week_start=&search=&transient=`.
 async fn aggregations(
     State(state): State<AppState>,
     actor: Actor,
@@ -505,6 +508,7 @@ async fn aggregations(
             let view = query::visible_view(conn, &actor.user_id, &view_id)?;
             let opts = query::AggregationOpts {
                 timezone: params.timezone.as_deref(),
+                week_start: params.week_start,
                 search: params.search.as_deref(),
                 transient: transient.as_ref(),
             };

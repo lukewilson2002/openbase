@@ -1,6 +1,6 @@
 //! CSV export and import.
 //!
-//! - `GET  /api/views/{id}/export.csv?timezone=` (Viewer): the view's visible
+//! - `GET  /api/views/{id}/export.csv?timezone=&week_start=` (Viewer): the view's visible
 //!   fields in view order, its records in view order with filter, sort and
 //!   grouping applied. **Streamed** page by page from the query engine, so
 //!   memory stays flat however big the table is. UTF-8 with a BOM (Excel),
@@ -132,6 +132,9 @@ struct ExportParams {
     /// IANA zone for dates; defaults to the caller's profile zone.
     #[serde(default)]
     timezone: Option<String>,
+    /// First day of the week for calendar-week filters: 0 Sunday, 1 Monday.
+    #[serde(default)]
+    week_start: Option<i32>,
 }
 
 /// Everything the streaming loop needs after the first page.
@@ -223,6 +226,7 @@ async fn export(
     let cache = state.query_cache.clone();
     let versions = state.events.versions().clone();
     let tz_param = params.timezone.clone();
+    let week_start = params.week_start;
     let (first, view, fields, ids, timezone) = state
         .db
         .read(move |conn| {
@@ -240,6 +244,7 @@ async fn export(
                 };
             let req = QueryRequest {
                 timezone: Some(tz.name().to_string()),
+                week_start,
                 ..QueryRequest::default()
             };
             let ids = query::query_ids(conn, &cache, &versions, &actor.user_id, &view, &req)?;

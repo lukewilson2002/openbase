@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Weekday};
 use chrono_tz::Tz;
 use ob_core::api::automations::Trigger;
 use ob_core::cell::NoNames;
@@ -24,7 +24,7 @@ use super::RecordChanges;
 use super::store::{self, AutomationRow};
 use crate::db::now_ms;
 use crate::error::AppResult;
-use crate::store::schema;
+use crate::store::{schema, users};
 
 /// The record that fired a trigger, as it was when the event happened.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -253,8 +253,8 @@ impl Matcher {
     }
 }
 
-/// Filter context: "today" in the automation owner's time zone, "me" the
-/// user who made the change.
+/// Filter context: "today" and the first day of the week as the automation's creator has them,
+/// "me" the user who made the change.
 fn query_ctx(conn: &Connection, a: &AutomationRow, actor: Option<&str>, now: i64) -> QueryCtx {
     let tz = a
         .created_by
@@ -271,7 +271,11 @@ fn query_ctx(conn: &Connection, a: &AutomationRow, actor: Option<&str>, now: i64
         .and_then(|name| name.parse::<Tz>().ok())
         .unwrap_or(Tz::UTC);
     let at = DateTime::<Utc>::from_timestamp_millis(now).unwrap_or_else(Utc::now);
-    let ctx = QueryCtx::new(at, tz);
+    let week_start = a
+        .created_by
+        .as_deref()
+        .map_or(Weekday::Sun, |u| users::user_week_start(conn, u));
+    let ctx = QueryCtx::new(at, tz).with_week_start(week_start);
     match actor {
         Some(u) => ctx.with_user(u),
         None => ctx,

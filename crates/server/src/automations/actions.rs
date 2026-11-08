@@ -19,7 +19,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Weekday};
 use chrono_tz::Tz;
 use ob_core::api::automations::{Action, ActionStep, HttpMethod, StepLog, StepStatus};
 use ob_core::cell::{CellCtx, CellError, NoNames, normalize};
@@ -37,7 +37,7 @@ use super::writer::{self, AutomationCtx};
 use crate::error::{AppError, AppResult};
 use crate::perm;
 use crate::state::AppState;
-use crate::store::{notifications, schema};
+use crate::store::{notifications, schema, users};
 
 /// Record id handed to later steps in a dry run, where nothing is created.
 pub const DRY_RUN_RECORD_ID: &str = "rec_dry_run";
@@ -127,6 +127,8 @@ struct Snapshot {
     fields: Vec<Field>,
     data: Map<String, Json>,
     tz: Tz,
+    /// The first day of the week of the automation's creator, for calendar-week conditions.
+    week_start: Weekday,
 }
 
 impl Executor {
@@ -189,7 +191,7 @@ impl Executor {
                     (Some(row), Ok(compiled)) => Ok(matches(
                         &compiled,
                         row,
-                        &condition_ctx(snapshot.tz, trigger),
+                        &condition_ctx(snapshot.tz, snapshot.week_start, trigger),
                         &NoNames,
                     )),
                     (None, _) => Err("the condition needs a trigger record".to_string()),
@@ -297,7 +299,15 @@ impl Executor {
                     })
                     .and_then(|n| n.parse::<Tz>().ok())
                     .unwrap_or(Tz::UTC);
-                Ok(Snapshot { fields, data, tz })
+                let week_start = owner
+                    .as_deref()
+                    .map_or(Weekday::Sun, |u| users::user_week_start(conn, u));
+                Ok(Snapshot {
+                    fields,
+                    data,
+                    tz,
+                    week_start,
+                })
             })
             .await
     }
@@ -716,9 +726,9 @@ impl Executor {
 
 // ----------------------------------------------------------------- helpers
 
-fn condition_ctx(tz: Tz, trigger: &TriggerData) -> QueryCtx {
+fn condition_ctx(tz: Tz, week_start: Weekday, trigger: &TriggerData) -> QueryCtx {
     let now = DateTime::<Utc>::from_timestamp_millis(trigger.time).unwrap_or_else(Utc::now);
-    let ctx = QueryCtx::new(now, tz);
+    let ctx = QueryCtx::new(now, tz).with_week_start(week_start);
     match &trigger.user_id {
         Some(u) => ctx.with_user(u.clone()),
         None => ctx,

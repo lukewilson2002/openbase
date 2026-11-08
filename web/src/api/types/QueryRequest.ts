@@ -20,6 +20,11 @@ search?: string | null, range?: DateRange | null,
  */
 timezone?: string | null, 
 /**
+ * First day of the week for the calendar-week date filters: 0 = Sunday, 1 = Monday.
+ * Defaults to the user's profile `week_start`, then Sunday.
+ */
+week_start?: number | null, 
+/**
  * A one-off filter / sort / group override for this request only; see
  * [`TransientConfig`].
  */

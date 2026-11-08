@@ -558,3 +558,90 @@ async fn turning_an_automation_off_cancels_its_queued_runs() {
     assert!(run["error"].as_str().unwrap().contains("turned off"));
     assert_eq!(env.drain().await, 0);
 }
+
+#[tokio::test]
+async fn record_matches_weeks_start_on_the_week_start_of_the_automations_creator() {
+    use chrono::{Datelike, Days};
+    let env = Env::new().await;
+    let on = env
+        .f
+        .add_field(
+            env.table(),
+            json!({ "name": "On", "type": "date", "options": {} }),
+        )
+        .await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let filter = json!({ "conjunction": "and", "items": [
+        { "field_id": on, "op": "is_within", "value": { "mode": "this_calendar_week" } }
+    ] });
+    let a = env
+        .create("this week", env.trigger_matches(filter), one_notify(&env))
+        .await;
+    let id = a["id"].as_str().unwrap();
+
+    // Five records around the Sunday-start week that holds today (S): the Saturday before it,
+    // its Sunday and Monday, its Saturday and the Sunday after. A Sunday week and a Monday
+    // week hold different ones on any day.
+    let today = chrono::Utc::now().date_naive();
+    let s = today - Days::new(u64::from(today.weekday().num_days_from_sunday()));
+    let offsets = [-1i64, 0, 1, 6, 7];
+    let day = |d: i64| {
+        if d >= 0 {
+            s + Days::new(d as u64)
+        } else {
+            s - Days::new(d.unsigned_abs())
+        }
+    };
+    let mut offsets_per_start = Vec::new();
+    for (week_start, back) in [
+        (0, i64::from(today.weekday().num_days_from_sunday())),
+        (1, i64::from(today.weekday().num_days_from_monday())),
+    ] {
+        // The creator's profile decides, whoever made the change.
+        env.f
+            .app
+            .patch(
+                &env.f.owner,
+                "/api/auth/me",
+                json!({ "week_start": week_start }),
+            )
+            .await
+            .assert_status(200);
+        let first = today - Days::new(back as u64);
+        let last = first + Days::new(6);
+        let mut expected = Vec::new();
+        let mut inside = Vec::new();
+        let mut all = Vec::new();
+        for offset in offsets {
+            let r = env.rec(json!({ &on: day(offset).to_string() }));
+            if first <= day(offset) && day(offset) <= last {
+                expected.push(r.clone());
+                inside.push(offset);
+            }
+            all.push(r);
+        }
+        let refs: Vec<&str> = all.iter().map(String::as_str).collect();
+        env.fire_created(&refs);
+        let fired: Vec<String> = env
+            .runs(id)
+            .await
+            .iter()
+            .map(|r| {
+                r["trigger_data"]["record"]["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .filter(|rid| all.contains(rid))
+            .collect();
+        let mut fired_sorted = fired.clone();
+        fired_sorted.sort();
+        let mut expected_sorted = expected.clone();
+        expected_sorted.sort();
+        assert_eq!(fired_sorted, expected_sorted, "week_start {week_start}");
+        offsets_per_start.push(inside);
+    }
+    assert_ne!(offsets_per_start[0], offsets_per_start[1]);
+}

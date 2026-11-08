@@ -32,7 +32,7 @@
 //!
 //! `(view id, hash of the view config, search, range, timezone, base data
 //! version, [user id if the filter uses "me"], [today if it uses relative
-//! dates])`.
+//! dates], [the week start if it uses a calendar week])`.
 //!
 //! The base data version ([`DataVersions`]) goes up after every committed
 //! mutation (see `store::versions`), so a write invalidates every cached query
@@ -51,7 +51,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, Utc, Weekday};
 use chrono_tz::Tz;
 use ob_core::api::records::{
     AggregationsResponse, DateRange, GroupHeader, LinkRef, QueryRequest, QueryResponse, Record,
@@ -64,11 +64,11 @@ use ob_core::limits;
 use ob_core::query::{
     CompiledFilter, CompiledRowColor, OwnedRow, QueryCtx, Row, aggregate, aggregations_for,
     compile_filter, compile_row_color, group_day, group_spans, matches, matches_search,
-    row_color_compiled, search_needle, sort_rows_with_groups,
+    row_color_compiled, search_needle, sort_rows_with_groups, uses_week_start, week_start_from,
 };
 use ob_core::value::Value;
 use ob_core::view::{
-    Aggregation, Condition, Filter, FilterItem, Group, RowColor, Sort, ViewConfig,
+    Aggregation, Condition, DateOperand, Filter, FilterItem, Group, RowColor, Sort, ViewConfig,
 };
 use rusqlite::Connection;
 use serde_json::Value as Json;
@@ -78,6 +78,7 @@ use crate::error::{AppError, AppResult};
 use crate::store::links::NameCache;
 use crate::store::records::{self, RecordRow};
 use crate::store::schema::{self, TableRow, ViewRow};
+use crate::store::users;
 use crate::store::versions::DataVersions;
 
 /// Page size when the request names none.
@@ -136,6 +137,8 @@ struct CacheKey {
     user_id: Option<String>,
     /// Only when the filter uses relative dates.
     day: Option<NaiveDate>,
+    /// Only when the filter uses a calendar week.
+    week_start: Option<Weekday>,
 }
 
 struct Slot {
@@ -279,6 +282,7 @@ struct Plan {
     tz: Tz,
     uses_me: bool,
     uses_relative_dates: bool,
+    uses_week_start: bool,
 }
 
 struct RangeSpec {
@@ -325,6 +329,21 @@ fn viewer_timezone(conn: &Connection, user_id: &str, requested: Option<&str>) ->
     match requested.map(str::trim).filter(|s| !s.is_empty()) {
         Some(name) => parse_timezone(name),
         None => Ok(user_timezone(conn, user_id)),
+    }
+}
+
+/// The first day of the week for calendar-week filters: the request's (0 Sunday, 1 Monday), else
+/// the user's profile, else Sunday.
+fn viewer_week_start(
+    conn: &Connection,
+    user_id: &str,
+    requested: Option<i32>,
+) -> AppResult<Weekday> {
+    match requested {
+        Some(n) => {
+            Ok(week_start_from(i64::from(users::validate_week_start(n)?)).unwrap_or(Weekday::Sun))
+        }
+        None => Ok(users::user_week_start(conn, user_id)),
     }
 }
 
@@ -381,6 +400,10 @@ fn is_relative_operand(v: &Json) -> bool {
     v.get("mode")
         .and_then(Json::as_str)
         .is_some_and(|m| m != "exact_date")
+}
+
+fn is_week_operand(v: &Json) -> bool {
+    serde_json::from_value::<DateOperand>(v.clone()).is_ok_and(|o| uses_week_start(&o))
 }
 
 fn is_user_field(f: &Field) -> bool {
@@ -516,11 +539,12 @@ impl Plan {
         req: Option<&QueryRequest>,
         user_id: &str,
         tz: Tz,
+        week_start: Weekday,
     ) -> AppResult<Plan> {
         let fields = schema::table_fields(conn, table_id)?;
         let by_id: HashMap<FieldId, Field> =
             fields.iter().map(|f| (f.id.clone(), f.clone())).collect();
-        let (filter, uses_me, uses_relative_dates) = match &config.filter {
+        let (filter, uses_me, uses_relative_dates, uses_week_start) = match &config.filter {
             Some(f) => {
                 let clean = sanitize_filter(f, &by_id);
                 let compiled = compile_filter(&clean, &by_id)
@@ -531,9 +555,10 @@ impl Plan {
                     by_id.get(&c.field_id).is_some_and(is_user_field) && mentions_me(&c.value)
                 });
                 let rel = conds.iter().any(|c| is_relative_operand(&c.value));
-                (compiled, me, rel)
+                let week = conds.iter().any(|c| is_week_operand(&c.value));
+                (compiled, me, rel, week)
             }
-            None => (CompiledFilter::match_all(), false, false),
+            None => (CompiledFilter::match_all(), false, false, false),
         };
         // Lower-cased once here, not per row; also length-capped.
         let search = search_needle(req.and_then(|r| r.search.as_deref()).unwrap_or_default())
@@ -554,7 +579,9 @@ impl Plan {
             .and_then(|r| r.range.as_ref())
             .map(|r| RangeSpec::build(r, &by_id))
             .transpose()?;
-        let ctx = QueryCtx::new(Utc::now(), tz).with_user(user_id);
+        let ctx = QueryCtx::new(Utc::now(), tz)
+            .with_user(user_id)
+            .with_week_start(week_start);
         Ok(Plan {
             sorts: sortable(&by_id, &config.sorts, |s| &s.field_id),
             groups: sortable(&by_id, &config.groups, |g| &g.field_id)
@@ -571,6 +598,7 @@ impl Plan {
             tz,
             uses_me,
             uses_relative_dates,
+            uses_week_start,
         })
     }
 
@@ -825,8 +853,9 @@ fn scan(
     tests::before_version_read();
     let version = versions.current(&table.base_id);
     let tz = viewer_timezone(conn, user_id, req.timezone.as_deref())?;
+    let week_start = viewer_week_start(conn, user_id, req.week_start)?;
     let config = effective_config(conn, view, req.transient.as_ref())?;
-    let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz)?;
+    let plan = Plan::build(conn, table_id, &config, Some(req), user_id, tz, week_start)?;
 
     let key = CacheKey {
         view_id: view.view.id.clone(),
@@ -847,6 +876,7 @@ fn scan(
         day: plan
             .uses_relative_dates
             .then(|| plan.ctx.now.with_timezone(&tz).date_naive()),
+        week_start: plan.uses_week_start.then_some(week_start),
     };
     let entry = match cache.get(&key) {
         Some(hit) => {
@@ -1071,6 +1101,9 @@ fn row_colors(
 pub struct AggregationOpts<'a> {
     /// IANA zone for relative dates (default: the user's, then UTC).
     pub timezone: Option<&'a str>,
+    /// First day of the week for calendar-week dates: 0 Sunday, 1 Monday (default: the user's,
+    /// then Sunday).
+    pub week_start: Option<i32>,
     /// The same search as the grid's search box: only matching records are
     /// summarised.
     pub search: Option<&'a str>,
@@ -1088,13 +1121,14 @@ pub fn run_aggregations(
     opts: &AggregationOpts,
 ) -> AppResult<AggregationsResponse> {
     let tz = viewer_timezone(conn, user_id, opts.timezone)?;
+    let week_start = viewer_week_start(conn, user_id, opts.week_start)?;
     let table_id = view.view.table_id.as_str();
     let config = effective_config(conn, view, opts.transient)?;
     let req = QueryRequest {
         search: opts.search.map(str::to_string),
         ..QueryRequest::default()
     };
-    let plan = Plan::build(conn, table_id, &config, Some(&req), user_id, tz)?;
+    let plan = Plan::build(conn, table_id, &config, Some(&req), user_id, tz, week_start)?;
     // Summaries in field-id order, each with a usable aggregation.
     let summaries: Vec<(Field, Aggregation)> = config
         .summaries
@@ -1151,8 +1185,9 @@ pub fn lookup_candidates(
 ) -> AppResult<Vec<LinkRef>> {
     let table = schema::live_table(conn, table_id)?;
     let tz = user_timezone(conn, user_id);
+    let week_start = users::user_week_start(conn, user_id);
     let config = view.map(|v| v.view.config.clone()).unwrap_or_default();
-    let plan = Plan::build(conn, table_id, &config, None, user_id, tz)?;
+    let plan = Plan::build(conn, table_id, &config, None, user_id, tz, week_start)?;
     let primary = plan
         .by_id
         .get(&table.primary_field_id)
@@ -1362,6 +1397,7 @@ mod tests {
             version,
             user_id: None,
             day: None,
+            week_start: None,
         }
     }
 
