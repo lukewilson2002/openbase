@@ -2,7 +2,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { EventSourceLike } from "@/api/events";
-import { useBaseEvents } from "./useBaseEvents";
+import { COUNT_REFRESH_MS, useBaseEvents } from "./useBaseEvents";
 import { usePresence } from "./usePresence";
 
 class Fake implements EventSourceLike {
@@ -47,6 +47,49 @@ describe("useBaseEvents", () => {
 
     unmount();
     expect(source.closed).toBe(true);
+  });
+
+  it("refreshes the sidebar's collections on a schema change, and its counts (at most every few seconds) when others add or delete records", () => {
+    vi.useFakeTimers();
+    try {
+      const qc = new QueryClient();
+      const spy = vi.spyOn(qc, "invalidateQueries");
+      const source = new Fake();
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <Probe source={source} />
+        </QueryClientProvider>,
+      );
+      const records = (created: string[], updated: string[], deleted: string[]) =>
+        source.emit("records_changed", { base_id: "app1", client_id: "other", event: { kind: "records_changed", table_id: "tbl1", created, updated, deleted } });
+      const workspaces = () => spy.mock.calls.filter((c) => JSON.stringify(c[0]) === JSON.stringify({ queryKey: ["workspaces"] })).length;
+
+      // An edit changes no count.
+      records([], ["rec1"], []);
+      vi.advanceTimersByTime(10_000);
+      expect(workspaces()).toBe(0);
+
+      // A burst of adds is one refresh, a moment later.
+      records(["rec2"], [], []);
+      records(["rec3"], [], []);
+      records([], [], ["rec2"]);
+      expect(workspaces()).toBe(0);
+      vi.advanceTimersByTime(COUNT_REFRESH_MS);
+      expect(workspaces()).toBe(1);
+      vi.advanceTimersByTime(10_000);
+      expect(workspaces()).toBe(1);
+
+      source.emit("schema_changed", { base_id: "app1", client_id: "other", event: { kind: "schema_changed", table_id: null } });
+      expect(workspaces()).toBe(2);
+
+      // Leaving the folder drops a refresh still waiting.
+      records(["rec4"], [], []);
+      unmount();
+      vi.advanceTimersByTime(10_000);
+      expect(workspaces()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps who is viewing from the presence frames, refetches nothing for them, and forgets them on unmount", async () => {

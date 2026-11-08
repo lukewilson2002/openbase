@@ -152,8 +152,9 @@ export function queryKeysForEvent(env: EventEnvelope): (readonly unknown[])[] {
     case "records_changed":
       return [keys.records(ev.table_id)];
     case "schema_changed":
-      // Schema changes can alter what record queries return (new fields, view config).
-      return [keys.base(env.base_id), ["records"]];
+      // Schema changes can alter what record queries return (new fields, view config), and the
+      // sidebar draws the folder's collections (names, colors, order) from the workspaces list.
+      return [keys.base(env.base_id), ["records"], keys.workspaces];
     case "comments_changed":
       return [keys.comments(ev.record_id)];
     case "base_changed":
