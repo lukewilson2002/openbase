@@ -359,6 +359,95 @@ test("View options switches the layout as a draft: the tab keeps its own, a relo
   });
 });
 
+test("the Form tile is a draft with a changes bar, and Save as view makes the form a view that opens its builder (COL-5, COL-6)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fx = await seed(page.request);
+  await page.goto(`/base/${fx.topId}/${fx.tableId}/${fx.views.open}`);
+  await expect(page.locator("canvas[data-testid='data-grid-canvas']").first()).toBeVisible();
+
+  await test.step("the Form layout shows the changes bar, where Reset puts the grid back", async () => {
+    await page.getByRole("button", { name: "View options" }).click();
+    await page.getByRole("dialog", { name: "View options" }).getByRole("group", { name: "Layout" }).getByRole("button", { name: "Form" }).click();
+    // The panel is handed over to the Form layout's own View options; close that one.
+    await expect(page.getByRole("toolbar", { name: "Form toolbar" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "View options" })).toBeHidden();
+    await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(page.locator("canvas[data-testid='data-grid-canvas']").first()).toBeVisible();
+  });
+
+  await test.step("Save as view turns the draft into a form view and opens its builder", async () => {
+    await page.getByRole("button", { name: "View options" }).click();
+    await page.getByRole("dialog", { name: "View options" }).getByRole("group", { name: "Layout" }).getByRole("button", { name: "Form" }).click();
+    await expect(page.getByRole("toolbar", { name: "Form toolbar" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "View options" })).toBeHidden();
+    await page.getByRole("button", { name: "Save as view", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Save as view" });
+    await dialog.getByRole("textbox", { name: "Name" }).fill("Intake form");
+    await dialog.getByRole("button", { name: "Save as view" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("tab", { name: "Intake form" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("region", { name: "Form preview" })).toBeVisible();
+    expect((await fx.load()).views.find((v) => v.name === "Intake form")).toBeTruthy();
+  });
+});
+
+test("focus stays on the page: Escape from Save as view returns to its button, Reset hands focus to the filter bar, and Ctrl+F in the dialog stays in it (A11Y-1)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fx = await seed(page.request);
+  await page.goto(`/base/${fx.topId}/${fx.tableId}/${fx.views.open}`);
+  const bar = page.getByRole("combobox", { name: "Filter or search" });
+  await bar.fill("name contains north");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+
+  await test.step("Save as view: the name has focus, Ctrl+F types nowhere else, Escape returns to the button", async () => {
+    const opener = page.getByRole("button", { name: "Save as view", exact: true });
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Save as view" });
+    await expect(dialog.getByRole("textbox", { name: "Name" })).toBeFocused();
+    await page.keyboard.press("Control+f");
+    await page.keyboard.type("abc");
+    await expect(dialog).toBeVisible();
+    // The bar is hidden from assistive technology behind the dialog, so it is found with includeHidden.
+    await expect(page.getByRole("combobox", { name: "Filter or search", includeHidden: true })).toHaveValue("");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(opener).toBeFocused();
+  });
+
+  await test.step("Reset takes the bar away and focus goes to the filter bar, not the top of the page", async () => {
+    await page.getByRole("button", { name: "Reset" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText(/These changes are only for now/)).toBeHidden();
+    await expect(bar).toBeFocused();
+  });
+});
+
+test("Reset in the filtered-empty state goes back to the saved view and keeps its own filter (COL-9)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fx = await seed(page.request);
+  const table = await fx.load();
+  const saved = await send<{ id: string }>(page.request, "post", `/api/tables/${fx.tableId}/views`, {
+    name: "Not Northwind",
+    type: "grid",
+    personal: false,
+    config: { filter: { conjunction: "and", items: [{ field_id: table.primary_field_id, op: "does_not_contain", value: "Northwind" }] } },
+  });
+  await page.goto(`/base/${fx.topId}/${fx.tableId}/${saved.id}`);
+  await expect(page.getByText("2 items")).toBeVisible();
+
+  await page.getByRole("combobox", { name: "Filter or search" }).fill("zzzz");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/match these filters/)).toBeVisible();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(page.getByText("2 items")).toBeVisible();
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
+});
+
 test.describe("on a phone", () => {
   const { viewport, deviceScaleFactor, isMobile, hasTouch, userAgent } = devices["iPhone 13"];
   test.use({ viewport, deviceScaleFactor, isMobile, hasTouch, userAgent });
