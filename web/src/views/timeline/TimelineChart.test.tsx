@@ -110,6 +110,15 @@ describe("TimelineChart", () => {
     expect(screen.getByText("March 2026")).toBeInTheDocument();
   });
 
+  it("hides the tick label the Today pill would sit on, and no other", () => {
+    chart({ scale: "month" });
+    const ticks = [...document.querySelectorAll<HTMLElement>("[class*='border-l'][class*='border-t']")].filter((el) => /^[A-Z][a-z]{2} \d+$/.test(el.textContent ?? ""));
+    expect(ticks.length).toBeGreaterThan(3);
+    const hidden = ticks.filter((el) => el.classList.contains("opacity-0")).map((el) => el.textContent);
+    // Today is Sunday Mar 15 at 10 px a day: the label of Mar 9 runs into the pill's left end and Mar 16 starts under it.
+    expect(hidden).toEqual(["Mar 9", "Mar 16"]);
+  });
+
   it("leaves the today marker out when today is outside the window", () => {
     chart({ nowMs: ms(2027, 1, 1), scale: "month" });
     expect(document.querySelector("[data-today]")).toBeNull();

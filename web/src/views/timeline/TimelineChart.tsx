@@ -52,6 +52,10 @@ import { spanLabel, type Lane } from "./lanes";
 import "./timeline.css";
 
 const MAJOR_ROW = 30;
+/** What the Today label covers of the fine row: half its width, and where a tick's text starts (px-2) and about how wide a character is. */
+const TODAY_LABEL_HALF = 30;
+const TICK_LABEL_INSET = 8;
+const TICK_CHAR_PX = 7;
 const MINOR_ROW = 32;
 export const HEADER_HEIGHT = MAJOR_ROW + MINOR_ROW;
 /** The left column: wide enough for a record's name and who it is for; narrower on a phone. */
@@ -827,11 +831,14 @@ export function TimelineChart(props: TimelineChartProps) {
             )}
             {minor.map((t) => {
               const isToday = dayTicks && t.startDay === todayDay;
+              // The Today label sits over the fine row between ticks: a tick label under it would read as one word with it.
+              const tickX = xOfDay(t.startDay, axis);
+              const underToday = todayVisible && !dayTicks && tickX + TICK_LABEL_INSET < todayX + TODAY_LABEL_HALF && tickX + TICK_LABEL_INSET + t.label.length * TICK_CHAR_PX > todayX - TODAY_LABEL_HALF;
               return (
                 <div
                   key={`m${t.startDay}`}
-                  className={cn("absolute flex items-center overflow-hidden whitespace-nowrap border-l border-t text-meta text-muted", gridLine, dayTicks ? "justify-center" : "px-2")}
-                  style={{ left: xOfDay(t.startDay, axis), width: (t.endDay - t.startDay) * axis.pxPerDay, top: MAJOR_ROW, height: MINOR_ROW }}
+                  className={cn("absolute flex items-center overflow-hidden whitespace-nowrap border-l border-t text-meta text-muted", gridLine, dayTicks ? "justify-center" : "px-2", underToday && "opacity-0")}
+                  style={{ left: tickX, width: (t.endDay - t.startDay) * axis.pxPerDay, top: MAJOR_ROW, height: MINOR_ROW }}
                 >
                   {isToday ? (
                     <span data-today className="rounded-pill bg-primary px-2 py-0.5 font-semibold text-primary-fg" title="Today">

@@ -256,8 +256,8 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   const columns = useMemo<GridColumn[]>(() => {
     // A column without a width of its own is as wide as its content (`fitted`, below).
     const cols: GridColumn[] = props.columns.map((c) => ({ id: c.id, title: c.title, width: c.width ?? fitted[c.id] ?? FIT_PLACEHOLDER_WIDTH, icon: c.field.type, hasMenu: true }));
-    // An "Add field" column after the last field adds a field when its header is clicked.
-    if (props.canAddField) cols.push({ id: ADD_COLUMN_ID, title: "Add field", icon: ADD_ICON, width: 130 });
+    // An "Add property" column after the last property adds one when its header is clicked.
+    if (props.canAddField) cols.push({ id: ADD_COLUMN_ID, title: "Add property", icon: ADD_ICON, width: 144 });
     return cols;
   }, [props.columns, props.canAddField, fitted]);
 

@@ -166,6 +166,12 @@
     display: none;
   }
 }
+/* With the unscheduled sheet open the days share what it leaves, and a row shorter than a day number and "+1 more" lets the link spill into the row below: the month then scrolls instead. */
+@media (max-width: 1023px) {
+  .ob-calendar .fc-dayGridMonth-view .fc-daygrid-day-frame {
+    min-height: 3.25rem;
+  }
+}
 /* Week and day layouts of date-only fields: a row of tall day cells, with the room the hourly grid would use. */
 .ob-calendar .fc-dayGridWeek-view .fc-daygrid-day-top,
 .ob-calendar .fc-dayGridDay-view .fc-daygrid-day-top {
