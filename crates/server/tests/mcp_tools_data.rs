@@ -149,7 +149,7 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     let form = a
         .call(
             "create_share_link",
-            json!({"base_id": b, "view": "Intake", "password": "letmein"}),
+            json!({"base_id": b, "view": "Intake", "password": "letmein123"}),
         )
         .await["share_link"]
         .clone();

@@ -1202,7 +1202,7 @@ async fn shared_views_serve_attachments_through_the_share_token() {
     let att = f.upload("hello.txt", b"hello shared world").await;
     f.set(&t, &p.ids[0], json!({ &files: [att] })).await;
     let view = f.new_view(&t, "Pub", json!({})).await;
-    let share = f.share(&view, "view", Some("pw-1234")).await;
+    let share = f.share(&view, "view", Some("pw-12345")).await;
     let token = share["token"].as_str().unwrap().to_string();
     let att_url = format!("/api/attachments/{}/hello.txt", att["id"].as_str().unwrap());
 
@@ -1211,7 +1211,7 @@ async fn shared_views_serve_attachments_through_the_share_token() {
         &f.app,
         &format!("/api/public/shares/{token}/query"),
         json!({}),
-        "pw-1234",
+        "pw-12345",
     )
     .await;
     q.assert_status(200);
@@ -1229,11 +1229,11 @@ async fn shared_views_serve_attachments_through_the_share_token() {
     pub_get_pw(&f.app, &format!("{att_url}?share={token}"), "wrong")
         .await
         .assert_status(404);
-    let ok = pub_get_pw(&f.app, &format!("{att_url}?share={token}"), "pw-1234").await;
+    let ok = pub_get_pw(&f.app, &format!("{att_url}?share={token}"), "pw-12345").await;
     ok.assert_status(200);
     assert_eq!(ok.bytes, b"hello shared world");
     // A made-up token and a form token do not work.
-    pub_get_pw(&f.app, &format!("{att_url}?share=shr_made_up"), "pw-1234")
+    pub_get_pw(&f.app, &format!("{att_url}?share=shr_made_up"), "pw-12345")
         .await
         .assert_status(404);
     let form_view = f.view_of(&t, "Form", "form", json!({})).await;
@@ -1254,7 +1254,7 @@ async fn shared_views_serve_attachments_through_the_share_token() {
         )
         .await
         .assert_status(200);
-    pub_get_pw(&f.app, &format!("{att_url}?share={token}"), "pw-1234")
+    pub_get_pw(&f.app, &format!("{att_url}?share={token}"), "pw-12345")
         .await
         .assert_status(404);
 }
@@ -1462,7 +1462,7 @@ async fn attachment_password_guesses_are_rate_limited() {
     let files = id_of(&f.attachment_field(&t, "Files").await);
     let att = f.upload("a.txt", b"a").await;
     f.set(&t, &p.ids[0], json!({ &files: [att.clone()] })).await;
-    let token = f.share(&f.view_id, "view", Some("pw-1234")).await["token"]
+    let token = f.share(&f.view_id, "view", Some("pw-12345")).await["token"]
         .as_str()
         .unwrap()
         .to_string();
@@ -1479,5 +1479,5 @@ async fn attachment_password_guesses_are_rate_limited() {
     assert!(statuses[..limit].iter().all(|s| *s == 404), "{statuses:?}");
     assert!(statuses[limit..].iter().all(|s| *s == 429), "{statuses:?}");
     // Even the right password waits for the window.
-    pub_get_pw(&f.app, &url, "pw-1234").await.assert_status(429);
+    pub_get_pw(&f.app, &url, "pw-12345").await.assert_status(429);
 }

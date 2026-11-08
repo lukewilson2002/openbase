@@ -302,7 +302,6 @@ pub const SHARE_TOKEN_LIMIT: u32 = 2400;
 /// Password verifications per (client IP, token) per minute: the same bucket
 /// and limit as the public share endpoints in [`crate::api::sharing`], so
 /// guesses cannot be spread across the two.
-const SHARE_PASSWORD_LIMIT: u32 = crate::api::sharing::PASSWORD_LIMIT;
 const MINUTE: std::time::Duration = std::time::Duration::from_secs(60);
 /// Share decisions kept (view and file).
 const SHARE_DECISION_ENTRIES: usize = 4096;
@@ -521,13 +520,16 @@ async fn authorize(
         if given.is_empty() {
             return Err(not_found());
         }
-        state.limiter.check(
-            "share_password",
-            &format!("{}|{token}", client.ip),
-            SHARE_PASSWORD_LIMIT,
-            MINUTE,
-        )?;
-        if !crate::auth::password::verify_async(given, hash).await? {
+        if !crate::api::sharing::check_password(
+            state,
+            client,
+            &resolved.share.id,
+            &token,
+            &given,
+            hash,
+        )
+        .await?
+        {
             return Err(not_found());
         }
     }

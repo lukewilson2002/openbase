@@ -938,7 +938,7 @@ async fn uploads_are_rate_limited_and_protected_by_the_password() {
         .patch(
             &fm.p.f.owner,
             &format!("/api/shares/{}", fm.share_id),
-            json!({ "password": "up-pass" }),
+            json!({ "password": "upload-pass" }),
         )
         .await
         .assert_status(200);
@@ -956,7 +956,7 @@ async fn uploads_are_rate_limited_and_protected_by_the_password() {
         &fm.app().anon(),
         &fm.upload_path(),
         &[("file", Some("a.txt"), b"x")],
-        &[("x-share-password", "up-pass")],
+        &[("x-share-password", "upload-pass")],
     )
     .await
     .assert_status(200);

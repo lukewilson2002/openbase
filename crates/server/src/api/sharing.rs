@@ -82,8 +82,15 @@ pub const UPLOAD_MB_PER_IP: u32 = 200;
 pub const UPLOAD_MB_PER_BASE: u32 = 500;
 pub const UPLOAD_MB_GLOBAL: u32 = 1000;
 pub const UPLOAD_BYTES_WINDOW: Duration = Duration::from_secs(3600);
-/// Password length bounds for share links.
-pub const MIN_SHARE_PASSWORD: usize = 4;
+/// Wrong password guesses one link tolerates per [`GUESS_WINDOW`], from all client addresses
+/// together, before it refuses every guess for [`GUESS_LOCKOUT`]. The per-address limit above
+/// stops one client; this stops a guesser who has many addresses.
+pub const GUESS_CAP: u32 = 100;
+pub const GUESS_WINDOW: Duration = Duration::from_secs(3600);
+pub const GUESS_LOCKOUT: Duration = Duration::from_secs(15 * 60);
+/// Password length bounds for new share-link passwords. Passwords set when the minimum was 4
+/// keep working: the minimum is only checked when a password is set.
+pub const MIN_SHARE_PASSWORD: usize = 8;
 pub const MAX_SHARE_PASSWORD: usize = 256;
 
 const MINUTE: Duration = Duration::from_secs(60);
@@ -349,17 +356,40 @@ async fn authorize(
         if given.is_empty() {
             return Err(PublicError::PasswordRequired);
         }
-        state.limiter.check(
-            "share_password",
-            &format!("{}|{token}", client.ip),
-            PASSWORD_LIMIT,
-            MINUTE,
-        )?;
-        if !crate::auth::password::verify_async(given.to_string(), hash).await? {
+        if !check_password(state, client, &resolved.share.id, token, given, hash).await? {
             return Err(PublicError::PasswordInvalid);
         }
     }
     Ok(resolved)
+}
+
+/// Check a visitor's guess at a link's password: throttled per client, refused outright (429)
+/// while the link is locked by too many wrong guesses (a right password is refused too: the
+/// lockout does not look at what is sent), hashed in the anonymous pool of hashing slots, and
+/// counted against the link when wrong. Every place that accepts the password goes through
+/// here, so none of them is a way around the limits.
+pub async fn check_password(
+    state: &AppState,
+    client: &ClientInfo,
+    share_id: &str,
+    token: &str,
+    given: &str,
+    hash: String,
+) -> AppResult<bool> {
+    state.limiter.check(
+        "share_password",
+        &format!("{}|{token}", client.ip),
+        PASSWORD_LIMIT,
+        MINUTE,
+    )?;
+    // Counted as wrong before it is checked, so parallel guesses cannot all slip in ahead of
+    // the first recorded failure.
+    state.share_guesses.begin(share_id)?;
+    let ok = crate::auth::password::verify_anonymous_async(given.to_string(), hash).await;
+    if matches!(ok, Ok(true)) {
+        state.share_guesses.was_right(share_id);
+    }
+    ok
 }
 
 async fn public_view(
