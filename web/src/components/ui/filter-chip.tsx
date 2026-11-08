@@ -11,15 +11,18 @@ export interface FilterChipProps extends Omit<ComponentProps<"span">, "onClick">
   onRemove?: () => void;
   /** Accessible name of the remove button; "Remove <text>" by default. */
   removeLabel?: string;
+  /** The chip Backspace has picked: the next Backspace removes it. */
+  selected?: boolean;
 }
 
 /** A filter that is on, inside the filter bar: accent-soft fill and line, with its own remove button. */
-export function FilterChip({ children, onEdit, onRemove, removeLabel, className, ...props }: FilterChipProps) {
+export function FilterChip({ children, onEdit, onRemove, removeLabel, selected, className, ...props }: FilterChipProps) {
   const text = typeof children === "string" ? children : "";
   return (
     <span
+      data-selected={selected || undefined}
       className={cn(
-        "inline-flex max-w-full items-center gap-0.5 rounded-sm border border-primary-soft-line bg-primary-soft text-label font-medium text-primary-ink",
+        "inline-flex max-w-full items-center gap-0.5 rounded-sm border border-primary-soft-line bg-primary-soft text-label font-medium text-primary-ink data-[selected]:border-primary data-[selected]:ring-1 data-[selected]:ring-primary",
         className,
       )}
       {...props}
