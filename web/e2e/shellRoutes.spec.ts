@@ -25,6 +25,8 @@ interface Fixture {
   workspaceId: string;
   rootId: string;
   tableId: string;
+  /** The collection's default view. */
+  viewId: string;
   folderId: string;
   emptyFolderId: string;
 }
@@ -46,6 +48,8 @@ const ROUTES: Route[] = [
   { name: "/ leads to Home", path: () => "/", heading: "Home", lands: (f) => new RegExp(`/workspace/${f.workspaceId}$`) },
   { name: "Home", path: (f) => `/workspace/${f.workspaceId}`, heading: "Home" },
   { name: "Collection", path: (f) => `/base/${f.rootId}/${f.tableId}`, heading: "Tasks", lands: (f) => new RegExp(`/base/${f.rootId}/${f.tableId}/viw`) },
+  // The ledger's `/base/:baseId/:tableId/:viewId`: a view named in the address, which is not redirected.
+  { name: "Collection view", path: (f) => `/base/${f.rootId}/${f.tableId}/${f.viewId}`, heading: "Tasks" },
   { name: "Collection in a folder", path: (f) => `/base/${f.folderId}`, heading: "Plants", lands: (f) => new RegExp(`/base/${f.folderId}/tbl[^/]+/viw`) },
   { name: "Empty folder", path: (f) => `/base/${f.emptyFolderId}`, heading: "Archive" },
   {
@@ -85,12 +89,12 @@ async function seed(request: APIRequestContext): Promise<Fixture> {
   await skipIntro(request);
   const ws = await post<{ id: string }>(request, "/api/workspaces", { name: "Routes workspace" });
   const rootId = ((await (await request.get("/api/workspaces")).json()) as { id: string; root_base_id: string }[]).find((w) => w.id === ws.id)!.root_base_id;
-  const tasks = await post<{ id: string; primary_field_id: string }>(request, `/api/bases/${rootId}/tables`, { name: "Tasks" });
+  const tasks = await post<{ id: string; primary_field_id: string; views: { id: string }[] }>(request, `/api/bases/${rootId}/tables`, { name: "Tasks" });
   await post(request, `/api/tables/${tasks.id}/records`, { records: [{ values: { [tasks.primary_field_id]: "Send the quote" } }], typecast: true });
   const garden = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Garden", empty: true });
   await post(request, `/api/bases/${garden.id}/tables`, { name: "Plants" });
   const archive = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Archive", empty: true });
-  return { workspaceId: ws.id, rootId, tableId: tasks.id, folderId: garden.id, emptyFolderId: archive.id };
+  return { workspaceId: ws.id, rootId, tableId: tasks.id, viewId: tasks.views[0]!.id, folderId: garden.id, emptyFolderId: archive.id };
 }
 
 const menu = (page: Page) => page.getByRole("navigation", { name: "Main menu" });

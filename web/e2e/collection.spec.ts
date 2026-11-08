@@ -31,7 +31,7 @@ interface TableDto {
   home_date_field_id: string | null;
   done_field_id: string | null;
   fields: Field[];
-  views: { id: string; name: string; is_default: boolean; personal: boolean; locked: boolean }[];
+  views: { id: string; name: string; is_default: boolean; personal: boolean; locked: boolean; config?: { filter?: unknown } }[];
 }
 
 async function send<T>(request: APIRequestContext, method: "post" | "get" | "patch", path: string, data?: unknown): Promise<T> {
@@ -264,6 +264,98 @@ test("the tabs: default view first, a menu on a right-click, Move left, a drag, 
     await expect(page.getByRole("tab", { name: "Saved view number 6" })).toHaveAttribute("aria-selected", "true");
     // The strip does not scroll sideways or spill over the header.
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  });
+});
+
+test("a typed phrase becomes a chip and a draft that survives a reload, Reset takes it back, and Save as view makes it a view of its own (COL-3, COL-5)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fx = await seed(page.request);
+  await page.goto(`/base/${fx.topId}/${fx.tableId}/${fx.views.open}`);
+  const bar = page.getByRole("combobox", { name: "Filter or search" });
+  const chip = page.getByRole("button", { name: "Name contains north", exact: true });
+  const changes = page.getByText(/These changes are only for now/);
+  const savedFilter = async (name: string) => (await fx.load()).views.find((v) => v.name === name);
+
+  await test.step("a phrase and Enter apply a chip, and the changes bar counts what it shows", async () => {
+    await bar.fill("name contains north");
+    await expect(page.getByRole("option").first()).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(chip).toBeVisible();
+    await expect(page.getByText("Showing 1 of 3 records.")).toBeVisible();
+    await expect(changes).toBeVisible();
+    // Nothing is saved: the view as the server has it still has no filter.
+    expect((await savedFilter("Open deals"))?.config?.filter ?? null).toBeNull();
+  });
+
+  await test.step("the draft is still there after a reload", async () => {
+    await page.reload();
+    await expect(chip).toBeVisible();
+    await expect(changes).toBeVisible();
+  });
+
+  await test.step("Reset takes the draft back and the bar goes", async () => {
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(chip).toHaveCount(0);
+    await expect(changes).toBeHidden();
+    await page.reload();
+    await expect(chip).toHaveCount(0);
+    await expect(changes).toBeHidden();
+  });
+
+  await test.step("Save as view names the draft after its chips, and the view becomes a tab", async () => {
+    await bar.fill("name contains north");
+    await page.keyboard.press("Enter");
+    await expect(chip).toBeVisible();
+    await page.getByRole("button", { name: "Save as view", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Save as view" });
+    const name = dialog.getByRole("textbox", { name: "Name" });
+    await expect(name).toHaveValue(/north/i);
+    await name.fill("Northern clients");
+    await dialog.getByRole("radio", { name: "Everyone" }).check();
+    await dialog.getByRole("button", { name: "Save as view" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("tab", { name: "Northern clients" })).toHaveAttribute("aria-selected", "true");
+    // The new view carries the filter; the view it came from is as it was; the draft is spent.
+    await expect.poll(async () => (await savedFilter("Northern clients"))?.config?.filter ?? null).not.toBeNull();
+    expect((await savedFilter("Open deals"))?.config?.filter ?? null).toBeNull();
+    await expect(changes).toBeHidden();
+    await expect(page.getByText("1 item")).toBeVisible();
+  });
+});
+
+test("View options switches the layout as a draft: the tab keeps its own, a reload keeps the draft, only Save as view keeps the layout, and Reset goes back (COL-5, COL-6)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fx = await seed(page.request);
+  await page.goto(`/base/${fx.topId}/${fx.tableId}/${fx.views.open}`);
+  const grid = page.locator("canvas[data-testid='data-grid-canvas']");
+  const cards = page.getByRole("button", { name: "Northwind", exact: true });
+  await expect(grid.first()).toBeVisible();
+
+  await test.step("a tile of the Layout group switches the layout, and says which one is on", async () => {
+    const panel = page.getByRole("dialog", { name: "View options" });
+    await page.getByRole("button", { name: "View options" }).click();
+    await expect(panel.getByRole("button", { name: "Grid", pressed: true })).toBeVisible();
+    await panel.getByRole("group", { name: "Layout" }).getByRole("button", { name: "Gallery" }).click();
+    await expect(panel.getByRole("button", { name: "Gallery", pressed: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(cards).toBeVisible();
+    await expect(grid).toHaveCount(0);
+  });
+
+  await test.step("it is a draft: the tab is still the saved grid, and a different layout offers Save as view, not Update view", async () => {
+    await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save as view", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Update view" })).toHaveCount(0);
+    expect((await fx.load()).views.find((v) => v.id === fx.views.open)).toMatchObject({ name: "Open deals" });
+    await page.reload();
+    await expect(cards).toBeVisible();
+  });
+
+  await test.step("Reset puts the saved layout back", async () => {
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(grid.first()).toBeVisible();
+    await expect(cards).toHaveCount(0);
+    await expect(page.getByText(/These changes are only for now/)).toBeHidden();
   });
 });
 
