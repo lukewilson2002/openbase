@@ -42,7 +42,7 @@ all loaded only with the lazy grid chunk. The other views add @dnd-kit/core, @dn
 The rich long text editor adds Tiptap 3 (exact version 3.31.3, all `@tiptap/*` the same): core, pm, react, starter-kit,
 markdown (the official Markdown extension; it brings its own `marked` 17), and the extensions for blocks the starter kit
 lacks or that we adapt (list for task lists, table, blockquote, paragraph, hard-break, extensions for the placeholder).
-They load only with the editor chunk (`components/richtext/RichTextEditor`, imported with `React.lazy` by `FieldEditor`),
+They load only with the editor chunk (`components/richtext/RichTextEditor` and `PageEditor`, imported with `React.lazy` by `FieldEditor` and `PageSection`),
 so the shell and the views do not carry them; the value stays plain Markdown, rendered elsewhere by `Markdown.tsx` (marked 4).
 
 ## Commands
@@ -270,6 +270,31 @@ workspace (first run) `HomeShell` gives the `tab` header the avatar, because the
 avatar, one sentence, a `LinkChip` to the record and the time, with Mark all read at the top). In tests `stubPhone()` (`test/utils.tsx`) sets a
 phone-width media query.
 
+### The record's page (REC-5, `components/richtext/PageEditor.tsx`, `record/PageSection.tsx`)
+
+`PageEditor` is `RichTextEditor`'s Tiptap set (`extensions.ts`, plain Markdown stored) with no box, no toolbar and no expand button, at the
+page text size (`text-read`, `text-read-phone` below 1024 px). It adds what is typed instead of clicked:
+
+- `SlashMenu.tsx` (`useSlashMenu`, `SlashMenuList`) is the `/` block menu, with `slash.ts` (`SlashSuggest`, the same plugin shape as the
+  mention list: a `/` at the start of a block or after a space, at most 24 characters of query) and `blocks.ts` (the blocks, `matchBlocks`
+  by the start of any word, and how each is inserted). The editor keeps focus; rows are `ListboxOption`s and the editor points at the
+  highlighted one with `aria-activedescendant`. Linked records and View take a second step (the link property, or the saved view of the
+  folder, personal ones left out) and write ```` ```openbase ```` with one JSON object (`embedBlock`); a collection with just one skips it. Image or file
+  needs `upload`, and Property needs `onAddProperty` (creators): without them a row is listed disabled with its reason, or left out for files.
+- `PageOverlays.tsx`: `SelectionBubble` (desktop; bold, italic, strike, code, link over the selection) and `FormatBar` (phone; fixed on the
+  visual viewport's bottom edge through `useVisualViewport`, with the block menu docked on top of it, and the link form in place of the buttons).
+  Presses on them are cancelled before they move focus, so the selection and the keyboard stay. `LinkForm` has `noValidate`: `links.ts`
+  (`linkAddress`) decides what an address is, shared with the toolbar editor.
+- `LinkShortcut` (`slash.ts`) binds Ctrl-k and Cmd-k; handling the key makes ProseMirror call `preventDefault()`, which is what the command
+  palette waits for. The selection stays drawn while the form has the focus (Tiptap's `Selection` extension and `.ob-editor .selection`).
+
+`PageSection` (inside the record page, after the properties) draws the 1 px rule and the page: editors and up get the editor, viewers and
+commenters the `Markdown` renderer (nothing when empty), and creators of a collection with no Page property get "Add Page property"
+(`usePropertyRoles().addPage`, `POST /api/tables/{id}/body-field` with `create`). The text saves through `useRecordSave`'s `onSave` like any
+value, 800 ms after typing pauses (`useAutosave`), and when the editor loses focus; with no Page property the first save is `PUT
+.../records/{id}/page` (`usePageSave`), which makes "Page". `useRebuilds` decides when the editor is built again because the text changed
+under it (never for its own save coming back); the property rows use the same hook. The page has no focus ring of its own: the caret is its focus.
+
 ### The collection screen (COL-1, COL-2, COL-10, `src/base`)
 
 `BaseShell` draws, inside `main`: `CollectionHeader`, then `CollectionTabs`, then the open layout (`ViewHost`). Dialogs the header and tabs
@@ -401,7 +426,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the record page, comments, history, linked-record cards and previews (`linked/LinkedRecords.tsx`: `RecordPeek`, the hover preview, a bottom sheet on a phone, with Open page, a link where the record's page has an address; `FloatingRecordPeek` is the grid's; `editors/LinkEditor.tsx` is the link picker, a pop-over, or through `EditorShell`'s `sheetOnPhone` a bottom sheet on a phone) |
-| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `RecordHead` (tile and title, REC-2), `RecordProperties` (the property list, its folds and label menu, REC-3) with `properties.ts` (what is listed, folded or hidden), `useRecordFolds` and `useRecordLayout` (Hide from pages), `AddProperty` (the Add property box, REC-4) with `newProperty.ts` (the type a value gets, the chip's words, and the cell a value becomes, pure), `useRecordSave`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
+| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `RecordHead` (tile and title, REC-2), `RecordProperties` (the property list, its folds and label menu, REC-3) with `properties.ts` (what is listed, folded or hidden), `useRecordFolds` and `useRecordLayout` (Hide from pages), `AddProperty` (the Add property box, REC-4) with `newProperty.ts` (the type a value gets, the chip's words, and the cell a value becomes, pure), `PageSection` (the page under the properties, REC-5) with `usePageSave` and `useRebuilds`, `useRecordSave`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
 | `src/components/fields/` | The property dialog (`FieldDialog`, FLD-2) with options for all 28 types, and `PropertyTypeList`, the grouped type list with a description for each type (the dialog opens it inline or as a bottom sheet; the record page's Change type opens it in a popover or a sheet); `fieldKinds.ts` (defaults, validation, and `kindChange`, which says what a type change clears by the server's rules) with `useFilledCount` (how many records have a value, asked as the `filled` summary of the default view); `propertyRoles.ts` and `usePropertyRoles` (Use as title and Use as page, FLD-3 and FLD-4: the same calls Collection settings makes); `OptionsEditor` (link target with the note that other folders' collections can't be linked, lookup, rollup, count), `FormulaEditor` (`{Property}` autocomplete and the live check) and `SelectChoicesEditor` (choices keep their pastel chips; the color list is a bottom sheet on a phone, FLD-5 and FLD-6) |
 | `src/components/viewbar/` | The filter bar (`ViewFilterBar`), View options (`ViewOptions` and its screens), the filter builder, pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |

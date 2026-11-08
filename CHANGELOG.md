@@ -48,6 +48,18 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   grid header and on the record page (and in the collection's settings); a property whose type cannot be
   the title is dimmed with the reason. "Use as page" is on rich text properties. Deleting or retyping the
   page property leaves the collection without a page and refuses nothing, as before.
+- **The page of a record.** Under the properties and a thin rule, a record's page is the rich text
+  editor with no box and no toolbar, always ready to type in for editors and up. Markdown works as you
+  type (`# `, `- `, `1. `, `> `, three backticks, `**bold**`). `/` opens a menu of blocks: Heading 1 to 3,
+  Bulleted list, Numbered list, Checklist, Quote, Callout, Code block, Table, Divider, Image or file,
+  Linked records, View and Property (it opens Add property). Selecting text shows a bubble with bold,
+  italic, strike, code and link; Ctrl+K (Cmd+K) adds a link while the page has focus and the command
+  palette stays closed. On a phone a bar above the keyboard has the same controls, the lists' indent and
+  outdent and a + that opens the block menu. The page saves 800 ms after you stop typing, as an
+  ordinary save of the Page property, and the bar says Saving, Saved or Couldn't save. Linked records and
+  View write the embed's fenced `openbase` block with the property or view you pick; it reads as a code
+  block until embeds are drawn. Viewers and commenters read the page rendered. A collection with no Page
+  property offers creators "Add Page property"; an editor who types in one gets "Page" made by that first save.
 - **The link picker and the linked-record preview in the new look.** Picking records to link is a
   list of the collection's records with their description and labels, the highlighted row in the
   accent's soft fill; on a phone it is a bottom sheet with the search at the top, which opens with the
@@ -318,7 +330,7 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   you can add to), "New collection", "Go to Home" and "Open settings". It narrows to Everywhere,
   This workspace or This folder. Arrow keys move through the list, Enter runs the highlighted
   row (and waits while the results are for older text), and Escape closes it and puts focus back
-  where it was. The record page's editor will keep Ctrl K for links when it has focus. The extra
+  where it was. The record page's editor keeps Ctrl K for links while it has focus. The extra
   "other workspace or project" picker is gone.
 - **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
   the same person fold into one history entry while it is under ten minutes old: it keeps the
