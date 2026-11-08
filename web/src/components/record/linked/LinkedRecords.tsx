@@ -6,8 +6,8 @@
  *   labels) drawn from the linked table's grid layout (the grid lays out every record: see gridRecordLayout).
  *   A click on a card edits the field; its details on hover open the record when the host offers that
  *   (the record panel, with a way back).
- * - `RecordPeek`: hovering a card or a picker row with a mouse, or holding a finger on it, shows
- *   the linked record's full details beside it, read-only, with Open.
+ * - `RecordPeek`: hovering a card or a picker row with a mouse shows the linked record's details beside
+ *   it, read-only, with Open page; holding a finger on one shows them in a bottom sheet (PH-3).
  *
  * The records come from `POST /api/tables/{id}/records/get`, under the linked table's record keys,
  * so live changes to them refresh the cards.
@@ -18,7 +18,16 @@ import { HoverCard } from "radix-ui";
 import { ArrowUpRight } from "lucide-react";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { BaseSchema, Field, LinkRef, Table, TableRecord } from "@/api/types";
+import { Button } from "@/components/ui/button";
+import { ColorMark } from "@/components/ui/color-mark";
+import { menuSurfaceClass } from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
+import { usePortalHost } from "@/components/ui/portal-host";
+import { PropertyList, PropertyRow } from "@/components/ui/property-list";
+import { Sheet } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { resolveFieldOrder } from "@/components/viewbar/config";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { displayText, type FormatCtx } from "@/lib/cells/format";
 import { linkRefs } from "@/lib/cells/kinds";
@@ -99,51 +108,86 @@ export function titleOf(table: Table, record: TableRecord | undefined, fallback:
   return text || "Untitled record";
 }
 
-/** Fields and values in two columns, as the record preview shows them. */
-function FieldList({ fields, record, format, emails }: { fields: readonly Field[]; record: TableRecord; format: FormatCtx; emails?: ReadonlyMap<string, string> }) {
+/** The button that goes from a peek to the record's own page: a link where the page has an address (so it can be opened in a new tab), else a button. */
+function OpenPage({ onOpen, href }: { onOpen?: () => void; href?: string }) {
+  if (!onOpen && !href) return null;
+  const label = (
+    <>
+      Open page <Icon icon={ArrowUpRight} />
+    </>
+  );
+  if (href) {
+    return (
+      <Button asChild variant="secondary" size="sm">
+        <a
+          href={href}
+          onClick={
+            onOpen
+              ? (e) => {
+                  // A plain click goes through the router; the other ways of using a link take the address.
+                  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  onOpen();
+                }
+              : undefined
+          }
+        >
+          {label}
+        </a>
+      </Button>
+    );
+  }
   return (
-    <dl className="grid min-w-0 grid-cols-[minmax(4rem,auto)_minmax(0,1fr)] items-baseline gap-x-2.5 gap-y-1.5 text-[0.8125rem]">
-      {fields.map((f) => (
-        <div key={f.id} className="contents">
-          <dt className="max-w-[9rem] truncate text-muted">{f.name}</dt>
-          <dd className="min-w-0">
-            <CellValue field={f} value={record.values[f.id]} format={format} emails={emails} className="line-clamp-6" />
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <Button variant="secondary" size="sm" onClick={onOpen}>
+      {label}
+    </Button>
   );
 }
 
-/** A linked record's full details: every filled field of its grid's layout, read-only. */
-export function RecordPeekBody({ table, record, format, emails, onOpen }: { table: Table; record: TableRecord | undefined; format: FormatCtx; emails?: ReadonlyMap<string, string>; onOpen?: () => void }) {
+/**
+ * A linked record's details: its title and collection, then every filled property of its grid's layout as
+ * a `PropertyList`, read-only. `showOpen` is false where the caller puts Open page elsewhere (the sheet's footer).
+ */
+export function RecordPeekBody({ table, record, format, emails, onOpen, href, showOpen = true }: { table: Table; record: TableRecord | undefined; format: FormatCtx; emails?: ReadonlyMap<string, string>; onOpen?: () => void; href?: string; showOpen?: boolean }) {
   const fields = layoutFields(table).filter((f) => f.id !== table.primary_field_id);
   const filled = record ? fields.filter((f) => hasCardValue(f, record.values[f.id], format)) : [];
   const empty = fields.length - filled.length;
   return (
     // Links inside the preview are plain chips: a preview of a preview would never end.
     <InsidePeekProvider value>
-    <LinkedRecordsProvider value={null}>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="break-words text-[0.875rem] font-semibold">{titleOf(table, record, "", format)}</p>
-          <p className="text-xs text-faint">{table.name}</p>
+      <LinkedRecordsProvider value={null}>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-ui font-semibold">{titleOf(table, record, "", format)}</p>
+              <p className="mt-0.5 flex items-center gap-1.5 text-meta text-muted">
+                <ColorMark hue={table.color} name={table.name} size={8} />
+                <span className="truncate">{table.name}</span>
+              </p>
+            </div>
+            {showOpen && <OpenPage onOpen={onOpen} href={href} />}
+          </div>
+          {!record ? (
+            // Placeholders in the shape of the rows, not a spinner (the record is a moment away).
+            <div aria-busy="true" className="flex flex-col gap-2 py-1">
+              <span className="sr-only">Loading</span>
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ) : filled.length > 0 ? (
+            <PropertyList>
+              {filled.map((f) => (
+                <PropertyRow key={f.id} label={f.name} className="items-start py-1.5">
+                  <CellValue field={f} value={record.values[f.id]} format={format} emails={emails} className="line-clamp-6" />
+                </PropertyRow>
+              ))}
+            </PropertyList>
+          ) : (
+            <p className="text-label text-muted">Nothing else is filled in.</p>
+          )}
+          {record && empty > 0 && filled.length > 0 && <p className="text-meta text-faint">{empty === 1 ? "1 empty property" : `${empty} empty properties`}</p>}
         </div>
-        {onOpen && (
-          <button type="button" onClick={onOpen} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-line px-2 text-xs font-medium hover:bg-hover pointer-coarse:h-10">
-            Open <ArrowUpRight aria-hidden className="size-3.5" />
-          </button>
-        )}
-      </div>
-      {!record ? (
-        <p className="py-2 text-xs text-muted">Loading…</p>
-      ) : filled.length > 0 ? (
-        <FieldList fields={filled} record={record} format={format} emails={emails} />
-      ) : (
-        <p className="text-xs text-muted">Nothing else is filled in.</p>
-      )}
-      {record && empty > 0 && filled.length > 0 && <p className="text-xs text-faint">{empty === 1 ? "1 empty property" : `${empty} empty properties`}</p>}
-    </LinkedRecordsProvider>
+      </LinkedRecordsProvider>
     </InsidePeekProvider>
   );
 }
@@ -157,6 +201,7 @@ function PeekContent({
   format,
   emails,
   onOpen,
+  href,
   onClose,
   onPointerEnter,
   onPointerLeave,
@@ -168,12 +213,14 @@ function PeekContent({
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
   onOpen?: () => void;
+  href?: string;
   onClose: () => void;
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
 }) {
+  const host = usePortalHost();
   return (
-    <HoverCard.Portal>
+    <HoverCard.Portal container={host.container}>
       <HoverCard.Content
         side={side}
         align="start"
@@ -184,15 +231,16 @@ function PeekContent({
         onPointerDownOutside={onClose}
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
-        // Clicks inside stay inside: the field around the trigger must not start an edit.
+        // Clicks inside stay inside: the property around the trigger must not start an edit.
         onClick={(e) => e.stopPropagation()}
-        className="ob-fade-in z-[70] flex max-h-[min(28rem,70dvh)] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2.5 overflow-y-auto rounded-lg border border-line bg-surface p-3 text-fg shadow-pop"
+        className={cn("ob-pop-in z-[70] max-h-[min(28rem,70dvh)] w-[min(26rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain", menuSurfaceClass, "p-3")}
       >
         <RecordPeekBody
           table={table}
           record={record}
           format={format}
           emails={emails}
+          href={href}
           onOpen={
             onOpen
               ? () => {
@@ -214,7 +262,10 @@ export interface RecordPeekProps {
   record?: TableRecord;
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
+  /** Opens the record's page (Open page in the details). */
   onOpen?: () => void;
+  /** The address of the record's page, so Open page is a link that can be opened in a new tab. */
+  href?: string;
   side?: "top" | "right" | "bottom" | "left";
   /** Whether holding a finger on it opens the details (off where a held finger starts a drag). */
   touchHold?: boolean;
@@ -224,13 +275,18 @@ export interface RecordPeekProps {
 
 /**
  * Shows a record's details beside `children`: after a moment's hover with a mouse (Radix HoverCard,
- * which leaves touch alone), or after holding a finger on it. A press that opened the details is not
- * also a tap. A tap outside, Escape or moving the mouse away closes them.
+ * which leaves touch alone), or after holding a finger on it, which on a phone opens a bottom sheet (PH-3)
+ * with Open page at its foot. A press that opened the details is not also a tap. A tap outside, Escape or
+ * moving the mouse away closes them.
  */
-export function RecordPeek({ table, recordId, record, format, emails, onOpen, side = "right", touchHold = true, className, children }: RecordPeekProps) {
+export function RecordPeek({ table, recordId, record, format, emails, onOpen, href, side = "right", touchHold = true, className, children }: RecordPeekProps) {
+  const desktop = useMediaQuery(DESKTOP_QUERY);
   const [open, setOpen] = useState(false);
+  // How it was opened decides what it is: a held finger on a phone is a sheet, anything else the hover card.
+  const [asSheet, setAsSheet] = useState(false);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const opened = useRef(false);
+  const trigger = useRef<HTMLDivElement>(null);
   // Cards scrolling past a still pointer are not being pointed at: a preview asked for while a list
   // scrolls waits for it to stop, and opens then if the card is still pointed at (the mouse is on it,
   // or the keyboard's focus is in it).
@@ -238,13 +294,21 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, si
   const settle = useRef(() => {});
   useEffect(() => {
     watchScrolling();
+    // Radix's HoverCard trigger cancels every touchstart it hears, and React hears touches as passive, so the
+    // browser logs an error for each tap on a linked record. A touch is handled here (the long press below),
+    // so it never reaches Radix's handler: it is stopped on its way up to React's root.
+    const el = trigger.current;
+    const stopTouch = (e: Event) => e.stopPropagation();
+    el?.addEventListener("touchstart", stopTouch, { passive: true });
     return () => {
+      el?.removeEventListener("touchstart", stopTouch);
       clearTimeout(press.current?.timer);
       settle.current();
     };
   }, []);
   useEffect(() => {
-    if (!open) return;
+    // A sheet is not beside a card that can move away, so scrolling the page does not close it.
+    if (!open || asSheet) return;
     // An open preview goes when the list under it scrolls (its card is moving away), not when it is
     // the preview itself being scrolled.
     const onScroll = (e: Event) => {
@@ -252,13 +316,19 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, si
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     return () => window.removeEventListener("scroll", onScroll, { capture: true });
-  }, [open]);
+  }, [open, asSheet]);
   const onOpenChange = (next: boolean) => {
     settle.current();
     if (next && scrolledRecently()) {
-      settle.current = whenScrollSettles(() => (pointedAt.current.mouse || pointedAt.current.focus) && setOpen(true));
+      settle.current = whenScrollSettles(() => {
+        if (pointedAt.current.mouse || pointedAt.current.focus) {
+          setAsSheet(false);
+          setOpen(true);
+        }
+      });
       return;
     }
+    if (next) setAsSheet(false);
     setOpen(next);
   };
   const fetched = useQuery({ queryKey: recordKeys.record(table.id, recordId), queryFn: () => recordsApi.get(table.id, recordId), enabled: open && !record });
@@ -267,9 +337,10 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, si
     press.current = null;
   };
   return (
-    <HoverCard.Root open={open} onOpenChange={onOpenChange} openDelay={400} closeDelay={150}>
+    <HoverCard.Root open={open && !asSheet} onOpenChange={onOpenChange} openDelay={400} closeDelay={150}>
       <HoverCard.Trigger asChild>
         <div
+          ref={trigger}
           className={cn("select-none [-webkit-touch-callout:none]", className)}
           onPointerEnter={(e) => {
             if (e.pointerType === "mouse") pointedAt.current.mouse = true;
@@ -292,6 +363,7 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, si
               y: e.clientY,
               timer: setTimeout(() => {
                 opened.current = true;
+                setAsSheet(!desktop);
                 setOpen(true);
               }, LONG_PRESS_MS),
             };
@@ -315,7 +387,32 @@ export function RecordPeek({ table, recordId, record, format, emails, onOpen, si
           {children}
         </div>
       </HoverCard.Trigger>
-      <PeekContent side={side} sideOffset={8} table={table} record={record ?? fetched.data} format={format} emails={emails} onOpen={onOpen} onClose={() => setOpen(false)} />
+      <PeekContent side={side} sideOffset={8} table={table} record={record ?? fetched.data} format={format} emails={emails} onOpen={onOpen} href={href} onClose={() => setOpen(false)} />
+      {asSheet && (
+        <Sheet
+          open={open}
+          onOpenChange={setOpen}
+          title={titleOf(table, record ?? fetched.data, "", format)}
+          doneLabel="Close"
+          footer={
+            onOpen || href ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setOpen(false);
+                  onOpen?.();
+                }}
+              >
+                Open page <Icon icon={ArrowUpRight} />
+              </Button>
+            ) : undefined
+          }
+        >
+          <div data-record-peek="">
+            <RecordPeekBody table={table} record={record ?? fetched.data} format={format} emails={emails} showOpen={false} />
+          </div>
+        </Sheet>
+      )}
     </HoverCard.Root>
   );
 }
@@ -343,6 +440,7 @@ export function LinkedRecordCards({ field, value, format, emails, fallback, onCh
       format={format}
       emails={emails}
       onOpen={host?.open ? (id) => host.open!(table.id, id) : undefined}
+      hrefOf={host?.href ? (id) => host.href!(table.id, id) : undefined}
       onChange={onChange && ((next) => onChange(next.map((r) => refs.find((x) => x.id === r.id) ?? r)))}
     />
   );
@@ -362,8 +460,10 @@ export interface FloatingPeekTarget {
   table: Table;
   recordId: string;
   rect: { x: number; y: number; width: number; height: number };
-  /** Opens the record (Open in the preview). */
+  /** Opens the record (Open page in the preview). */
   open?: () => void;
+  /** The address of the record's page, so Open page is a link. */
+  href?: string;
 }
 
 /** `at` is what the pointer is over now; the preview keeps what it shows (its table too) until it moves on. */
@@ -408,7 +508,7 @@ export function FloatingRecordPeek({ at, format, emails }: { at: FloatingPeekTar
   }, []);
   const fetched = useQuery({ queryKey: recordKeys.record(shown?.table.id ?? "", shown?.recordId ?? ""), queryFn: () => recordsApi.get(shown!.table.id, shown!.recordId), enabled: !!shown });
   if (!shown) return null;
-  const { table, open } = shown;
+  const { table, open, href } = shown;
   const r = shown.rect;
   return (
     // Open while `shown`: the timers above decide, not Radix's own (it would close as the pointer
@@ -425,6 +525,7 @@ export function FloatingRecordPeek({ at, format, emails }: { at: FloatingPeekTar
         format={format}
         emails={emails}
         onOpen={open}
+        href={href}
         onClose={() => setShown(null)}
         onPointerEnter={() => {
           over.current = true;
@@ -467,7 +568,7 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
     setAll((a) => !a);
   };
   return (
-    <div className={cn("min-w-0 text-[0.8125rem]", className)}>
+    <div className={cn("min-w-0 text-label", className)}>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {shown.map((c, i) => {
           // Where the host can open a record (a record's page), its chips are links to the linked record's page.
@@ -482,7 +583,17 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
             />
           );
           return table && env?.schema && c.id ? (
-            <RecordPeek key={c.id} table={table} recordId={c.id} format={format} emails={emails} onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined} side="bottom" className="min-w-0 max-w-full">
+            <RecordPeek
+              key={c.id}
+              table={table}
+              recordId={c.id}
+              format={format}
+              emails={emails}
+              onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined}
+              href={host?.href ? host.href(table.id, c.id) : undefined}
+              side="bottom"
+              className="min-w-0 max-w-full"
+            >
               {chip}
             </RecordPeek>
           ) : (
@@ -490,12 +601,12 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
           );
         })}
         {more > 0 && (
-          <button type="button" onClick={toggle} className="shrink-0 text-xs text-muted hover:text-fg hover:underline">
+          <button type="button" onClick={toggle} className="inline-flex min-h-6 shrink-0 items-center rounded-xs px-1 text-meta text-muted hover:text-fg hover:underline max-md:min-h-control-touch">
             +{more} more
           </button>
         )}
         {all && chips.length > LINK_CHIPS_SHOWN && (
-          <button type="button" onClick={toggle} className="shrink-0 text-xs text-muted hover:text-fg hover:underline">
+          <button type="button" onClick={toggle} className="inline-flex min-h-6 shrink-0 items-center rounded-xs px-1 text-meta text-muted hover:text-fg hover:underline max-md:min-h-control-touch">
             Show less
           </button>
         )}

@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { Providers, createQueryClient } from "@/providers";
 import { RecordPage, type RecordPageProps } from "@/record/RecordPage";
 import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
-import { makeSchema, makeView, mockApi, stubDesktop } from "@/test/utils";
+import { makeSchema, makeView, mockApi, stubDesktop, stubPhone } from "@/test/utils";
 import { FloatingRecordPeek, RecordPeek, type FloatingPeekTarget } from "./LinkedRecords";
 import { EditorEnvProvider } from "../editors/env";
 import { LinkEditor } from "../editors/LinkEditor";
@@ -30,10 +30,11 @@ const schema = { ...makeSchema("owner"), tables: [tasks, setupTable] };
 const task = makeRecord({ fld_name: "Build the website", fld_requires: [{ id: "recD", name: "Buy the domain" }] }, "rec1");
 const domain = { ...makeRecord({ fld_title: "Buy the domain", fld_status: "chs3", fld_notes: "Registered at Porkbun", fld_due: "2026-10-01", fld_extra: "Renews yearly" }, "recD"), table_id: "tbl2" };
 
+// jsdom reads as a phone; the pop-overs and hover cards under test are the desktop's.
+beforeEach(() => stubDesktop());
 afterEach(() => vi.useRealTimers());
 
 function setup(over: Partial<RecordPageProps> = {}) {
-  stubDesktop();
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": task,
     "GET /api/records/rec1/comments": [],
@@ -112,8 +113,30 @@ describe("linked records on the record page", () => {
     fireEvent.pointerUp(card, { pointerType: "touch" });
     fireEvent.click(card);
     expect(props.onOpenLinked).not.toHaveBeenCalled();
-    await userEvent.click(within(peek).getByRole("button", { name: /Open/ }));
+    // Open page is a link to the record's own page, which a plain click takes through the router.
+    const open = within(peek).getByRole("link", { name: /Open page/ });
+    expect(open).toHaveAttribute("href", expect.stringContaining("recD"));
+    await userEvent.click(open);
     expect(props.onOpenLinked).toHaveBeenCalledWith("tbl2", "recD");
+  });
+
+  it("shows the whole linked record in a sheet on a phone, with Open page at its foot", async () => {
+    stubPhone();
+    const { props } = setup();
+    const card = await findCard();
+    vi.useFakeTimers();
+    fireEvent.pointerDown(card, { pointerType: "touch", clientX: 10, clientY: 10 });
+    act(() => vi.advanceTimersByTime(500));
+    vi.useRealTimers();
+    const sheet = await screen.findByRole("dialog", { name: "Buy the domain" });
+    expect(within(sheet).getAllByRole("term").map((t) => t.textContent)).toEqual(["Notes", "Status", "Extra"]);
+    // The sheet is the whole peek: no hover card beside the card as well.
+    expect(document.querySelectorAll("[data-record-peek]")).toHaveLength(1);
+    expect(within(sheet).getAllByRole("button", { name: /Open page/ })).toHaveLength(1);
+    fireEvent.pointerUp(card, { pointerType: "touch" });
+    await userEvent.click(within(sheet).getByRole("button", { name: /Open page/ }));
+    expect(props.onOpenLinked).toHaveBeenCalledWith("tbl2", "recD");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Buy the domain" })).toBeNull());
   });
 });
 
@@ -161,13 +184,77 @@ describe("the link picker", () => {
     // The pop-over finds and picks; the records picked are not listed again in it, nor can it clear them.
     expect(within(panel).queryByRole("list", { name: "Linked records in Requires" })).toBeNull();
     expect(within(panel).queryByRole("button", { name: "Clear" })).toBeNull();
-    await userEvent.click(within(await within(panel).findByRole("option", { name: /Pick a host/ })).getByRole("button"));
+    await userEvent.click(await within(panel).findByRole("option", { name: /Pick a host/ }));
     expect(within(field).getAllByRole("listitem").map((li) => li.textContent)).toEqual([expect.stringContaining("Buy the domain"), expect.stringContaining("Pick a host")]);
     // A card's ✕ removes it, and the pop-over stays open for more.
     await userEvent.click(within(field).getByRole("button", { name: "Remove Buy the domain" }));
     expect(onChange).toHaveBeenLastCalledWith({ json: [{ id: "recH", name: "Pick a host" }] });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Search Requires" })).toHaveFocus();
+  });
+});
+
+describe("the link picker's list", () => {
+  const env = { baseId: "app1", tableId: "tbl1", collaborators: PEOPLE, timeZone: "UTC", canCreateOptions: false, format: { timeZone: "UTC", userName: () => undefined }, currentUserId: "usr1", schema };
+  const picker = (onCommit = vi.fn()) =>
+    render(
+      <Providers client={createQueryClient()}>
+        <EditorEnvProvider value={env}>
+          <LinkEditor field={requires} value={[]} variant="form" onChange={vi.fn()} onCommit={onCommit} onCancel={vi.fn()} />
+        </EditorEnvProvider>
+      </Providers>,
+    );
+
+  it("lights the first record, moves with the arrows and the pointer, and Enter picks the lit one", async () => {
+    const domainB = { ...makeRecord({ fld_title: "Pick a host" }, "recH"), table_id: "tbl2" };
+    mockApi({
+      "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recD", name: "Buy the domain" }, { id: "recH", name: "Pick a host" }] },
+      "POST /api/tables/tbl2/records/get": { records: [domain, domainB] },
+    } as never);
+    const onCommit = vi.fn();
+    picker(onCommit);
+    await userEvent.click(screen.getByRole("button", { name: /Requires/ }));
+    const search = await screen.findByRole("combobox", { name: "Search Requires" });
+    const [first, second] = await screen.findAllByRole("option");
+    expect(first).toHaveAttribute("data-active", "true");
+    expect(search).toHaveAttribute("aria-activedescendant", first!.id);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(second).toHaveAttribute("data-active", "true");
+    expect(search).toHaveAttribute("aria-activedescendant", second!.id);
+    await userEvent.hover(first!);
+    expect(first).toHaveAttribute("data-active", "true");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    // A multiple link keeps picking; Enter with a record lit adds it, and the pop-over stays for more.
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("option", { name: /Pick a host/ })).toBeNull();
+  });
+
+  it("says when nothing matches, in a polite status", async () => {
+    mockApi({ "GET /api/tables/tbl2/records/lookup": { records: [] }, "POST /api/tables/tbl2/records/get": { records: [] } } as never);
+    picker();
+    await userEvent.click(screen.getByRole("button", { name: /Requires/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent("No more records to link.");
+    await userEvent.type(screen.getByRole("combobox", { name: "Search Requires" }), "zzz");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("No matching records."));
+  });
+
+  it("previews a record on hover with no way to leave the picker: its page opens from the cards, not from here", async () => {
+    mockApi({
+      "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recD", name: "Buy the domain" }] },
+      "POST /api/tables/tbl2/records/get": { records: [domain] },
+    } as never);
+    picker();
+    await userEvent.click(screen.getByRole("button", { name: /Requires/ }));
+    const option = await screen.findByRole("option");
+    await userEvent.hover(option);
+    const peek = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>("[data-record-peek]");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(within(peek).getAllByRole("term").map((t) => t.textContent)).toEqual(["Notes", "Status", "Extra"]);
+    expect(within(peek).queryByRole("button", { name: /Open page/ })).toBeNull();
+    expect(within(peek).queryByRole("link", { name: /Open page/ })).toBeNull();
   });
 });
 

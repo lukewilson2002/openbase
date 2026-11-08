@@ -11,11 +11,16 @@
  *   such as a link field's cards): the panel opens under it, and using it does not close the panel.
  *   In the grid, `anchor` is drawn over the cell in place of the bare anchor (it may be larger).
  *
- * `children` may be a function receiving `close`, which closes the pop-over (a no-op in the
- * grid, where committing closes Glide's overlay).
+ * `sheetOnPhone` (form variant) makes the panel a bottom sheet on a phone (PH-3) instead of a pop-over: the
+ * same button or anchor opens it, and Done closes it like Escape does a pop-over. Editors opt in as they move.
+ *
+ * `children` may be a function receiving `close`, which closes the pop-over or sheet (a no-op in the
+ * grid, where committing closes Glide's overlay) and `sheet`, whether it is one.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet } from "@/components/ui/sheet";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { useEditSession } from "./session";
 
@@ -32,11 +37,13 @@ export interface EditorShellProps {
   /** Form variant: the pop-over closed (by Escape or an outside click). */
   onDismiss?: () => void;
   width?: number;
-  children: ReactNode | ((api: { close: () => void }) => ReactNode);
+  /** Form variant: on a phone the panel is a bottom sheet, titled with `triggerLabel`. */
+  sheetOnPhone?: boolean;
+  children: ReactNode | ((api: { close: () => void; sheet: boolean }) => ReactNode);
   className?: string;
 }
 
-export function EditorShell({ variant, target, trigger, anchor, triggerLabel, onCancel, onDismiss, width = 320, children, className }: EditorShellProps) {
+export function EditorShell({ variant, target, trigger, anchor, triggerLabel, onCancel, onDismiss, width = 320, sheetOnPhone, children, className }: EditorShellProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const pressInAnchor = useRef(false);
   // A press anywhere starts with no note of the anchor (the document hears it before the anchor does).
@@ -49,8 +56,28 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
   }, [hasAnchor]);
   const session = useEditSession();
   const [open, setOpen] = useState(variant === "form" && !!session?.openOnMount);
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const asSheet = variant === "form" && !!sheetOnPhone && !desktop;
   const close = variant === "cell" ? () => {} : () => setOpen(false);
-  const body = typeof children === "function" ? children({ close }) : children;
+  const body = typeof children === "function" ? children({ close, sheet: asSheet }) : children;
+  const setPanelOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      onDismiss?.();
+      session?.popupClosed();
+    }
+  };
+  const triggerButton = (
+    <button
+      type="button"
+      aria-label={triggerLabel}
+      aria-haspopup={asSheet ? "dialog" : undefined}
+      onClick={asSheet ? () => setOpen(true) : undefined}
+      className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-left text-label hover:border-faint focus-visible:border-ring max-md:min-h-control-touch"
+    >
+      {trigger}
+    </button>
+  );
   const content = (
     <PopoverContent
       align="start"
@@ -111,29 +138,20 @@ export function EditorShell({ variant, target, trigger, anchor, triggerLabel, on
       </Popover>
     );
   }
+  if (asSheet) {
+    return (
+      <>
+        {anchor ? <div>{anchor({ open: () => setOpen(true) })}</div> : triggerButton}
+        {/* The sheet leaves focus off its fields on a touch screen, so the keyboard stays down until the search is tapped. */}
+        <Sheet open={open} onOpenChange={setPanelOpen} title={triggerLabel ?? "Choose"}>
+          {body}
+        </Sheet>
+      </>
+    );
+  }
   return (
-    <Popover
-      modal={false}
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          onDismiss?.();
-          session?.popupClosed();
-        }
-      }}
-    >
-      {ownAnchor ?? (
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={triggerLabel}
-          className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-left text-[0.8125rem] hover:border-faint focus-visible:border-ring"
-        >
-          {trigger}
-        </button>
-      </PopoverTrigger>
-      )}
+    <Popover modal={false} open={open} onOpenChange={setPanelOpen}>
+      {ownAnchor ?? <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>}
       {content}
     </Popover>
   );

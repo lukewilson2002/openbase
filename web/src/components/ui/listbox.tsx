@@ -44,6 +44,11 @@ export interface ListboxOptionProps {
   /** A second quiet line under the label (a snippet of the text that matched). */
   detail?: ReactNode;
   children: ReactNode;
+  /**
+   * The row is more than a one-line label (a record with its description and labels under its name): the
+   * children wrap and are not cut to a single line.
+   */
+  rich?: boolean;
   className?: string;
 }
 
@@ -51,7 +56,7 @@ export interface ListboxOptionProps {
  * One option of a listbox whose focus stays in the field above it. A press does not take focus off the field
  * (`onMouseDown` is cancelled), and the highlighted row scrolls into view as the keys move it.
  */
-export function ListboxOption({ id, active, onSelect, onHover, leading, hint, detail, children, className }: ListboxOptionProps) {
+export function ListboxOption({ id, active, onSelect, onHover, leading, hint, detail, children, rich, className }: ListboxOptionProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
@@ -66,10 +71,12 @@ export function ListboxOption({ id, active, onSelect, onHover, leading, hint, de
       onMouseDown={(e) => e.preventDefault()}
       onClick={onSelect}
       onMouseMove={onHover}
-      className={cn(menuRowClass, "cursor-pointer", className)}
+      className={cn(menuRowClass, "cursor-pointer", rich && "h-auto py-1.5", className)}
     >
       {leading}
-      {detail ? (
+      {rich ? (
+        <span className="min-w-0 flex-1">{children}</span>
+      ) : detail ? (
         <span className="min-w-0 flex-1 py-1.5">
           <span className="block truncate">{children}</span>
           <span className="line-clamp-2 text-meta text-muted">{detail}</span>

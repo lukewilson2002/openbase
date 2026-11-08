@@ -69,22 +69,22 @@ export function RecordSummary({ title, record, fields, descriptionField, format,
   return (
     <span className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
       {title}
-      {parts.description && <span className={cn("w-full break-words text-xs leading-snug text-muted", detailed ? "line-clamp-2" : "line-clamp-1")}>{parts.description}</span>}
+      {parts.description && <span className={cn("w-full break-words text-meta leading-snug text-muted", detailed ? "line-clamp-2" : "line-clamp-1")}>{parts.description}</span>}
       {parts.details.length > 0 && record && (
         // A link field here is a value among others: small chips, not cards of its own.
         <CompactLinksProvider value>
           {labels.length > 0 && (
             <span className="flex w-full min-w-0 flex-wrap items-center gap-1">
               {labels.map((f) => (
-                <CellValue key={f.id} field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="truncate text-xs" markdown={false} />
+                <CellValue key={f.id} field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="truncate text-meta" markdown={false} />
               ))}
             </span>
           )}
           {/* The other fields each on a line, named, as in a list: "Tasks" says what the chips after it are. */}
           {others.map((f) => (
-            <span key={f.id} className="flex w-full min-w-0 items-baseline gap-1.5 text-xs">
+            <span key={f.id} className="flex w-full min-w-0 items-baseline gap-1.5 text-meta">
               <span className="max-w-[40%] shrink-0 truncate text-faint">{f.name}</span>
-              <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="min-w-0 flex-1 truncate text-xs text-muted" markdown={false} />
+              <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="min-w-0 flex-1 truncate text-meta text-muted" markdown={false} />
             </span>
           ))}
         </CompactLinksProvider>

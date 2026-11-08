@@ -1,19 +1,22 @@
 /**
- * Link-to-another-record editor: search the linked table (`GET .../records/lookup?q=`) and pick one or
- * many. Where the project is known (the editing environment's schema), the records picked so far are
- * cards (`LinkedRecordList`: reordered by their grips, removed with ✕). In a form (the record panel, a
- * form view) they stay in the field just as when it is not edited; in the grid the cell opens out
- * into a box of them over the grid. Either way the pop-over under them only searches and picks (Done
- * in a form; in the grid a click elsewhere keeps the edit). Each result is a detailed
- * summary (a longer description and a few more fields) of its table's grid; the search matches those
- * fields too, and hovering a record (or holding a finger on it) shows the whole of it.
+ * Link-to-another-record editor, the link picker (FLD-5): search the linked collection
+ * (`GET .../records/lookup?q=`) and pick one or many. Where the folder is known (the editing environment's
+ * schema), the records picked so far are cards (`LinkedRecordList`: reordered by their grips, removed with
+ * the x). In a form (the record page, a form view) they stay in the property just as when it is not edited; in
+ * the grid the cell opens out into a box of them over the grid. Either way the pop-over under them only
+ * searches and picks (Done in a form; in the grid a click elsewhere keeps the edit). On a phone the pop-over is
+ * a bottom sheet (PH-3). Each result is a detailed summary (a longer description and a few more properties)
+ * of its collection's grid; the search matches those properties too, and hovering a record shows the whole
+ * of it (`RecordPeek`).
  */
-import { useId, useMemo, useRef, useState } from "react";
+import { Fragment, useId, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, LinkRef } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LinkChip } from "@/components/ui/link-chip";
+import { ListboxOption } from "@/components/ui/listbox";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { linkRefs } from "@/lib/cells/kinds";
@@ -158,20 +161,21 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
       target={target}
       onCancel={onCancel}
       width={table ? 380 : 340}
+      sheetOnPhone
       onDismiss={() => {
         if (variant === "form" && !single) commitUp({ json: selectedRef.current });
       }}
       triggerLabel={field.name}
-      trigger={selected.length > 0 ? selected.map((r) => <LinkChip key={r.id} name={r.name} />) : <span className="text-faint">Link records…</span>}
+      trigger={selected.length > 0 ? selected.map((r) => <LinkChip key={r.id} name={r.name} hue={table?.color} markName={table?.name} />) : <span className="text-faint">Link records…</span>}
       anchor={
         inPlace && variant === "cell"
           ? () => (
               // The cell opens out into its records, as many as there are (scrolling past a few).
               <div
                 style={{ width: Math.max(target?.width ?? 0, table ? 380 : 340) }}
-                className="max-h-72 overflow-y-auto overscroll-contain rounded-md border border-ring bg-surface p-1.5 shadow-pop"
+                className="max-h-72 overflow-y-auto overscroll-contain rounded-lg border border-ring bg-surface p-1.5 shadow-pop"
               >
-                {selected.length > 0 ? cards!(selected) : <p className="px-1.5 py-1 text-[0.8125rem] text-faint">No linked records yet.</p>}
+                {selected.length > 0 ? cards!(selected) : <p className="px-1.5 py-1 text-label text-faint">No linked records yet.</p>}
               </div>
             )
           : inPlace
@@ -191,7 +195,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                     open();
                   }
                 }}
-                className="outline-none focus-visible:ring-2 focus-visible:ring-ring flex min-h-8 w-full min-w-0 cursor-pointer flex-col justify-center rounded-md border border-ring px-2 py-1 pb-3 text-[0.8125rem] pointer-coarse:min-h-11"
+                className="flex min-h-8 w-full min-w-0 cursor-pointer flex-col justify-center rounded-md border border-ring px-2 py-1 pb-3 text-label outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-control-touch pointer-coarse:min-h-control-touch"
               >
                 {selected.length > 0 ? cards!(selected) : <span className="text-faint">Empty</span>}
               </div>
@@ -199,14 +203,14 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
           : undefined
       }
     >
-      {({ close }) => {
+      {({ close, sheet }) => {
         closeRef.current = close;
         return (
           <>
             {!inPlace && selected.length > 0 && (
-              // Without the project at hand there are no cards: the picked records are chips here, above the
+              // Without the folder at hand there are no cards: the picked records are chips here, above the
               // search, with their own height (never squeezed by the results), scrolling past a few.
-              <ul aria-label={`Linked records in ${field.name}`} className="flex max-h-36 shrink-0 flex-wrap gap-1 overflow-y-auto overscroll-contain border-b border-line p-1.5">
+              <ul aria-label={`Linked records in ${field.name}`} className={cn("flex max-h-36 shrink-0 flex-wrap gap-1 overflow-y-auto overscroll-contain p-2", sheet ? "px-0" : "border-b border-line")}>
                 {selected.map((r) => (
                   <li key={r.id}>
                     <LinkChip name={r.name} onRemove={() => set(selected.filter((x) => x.id !== r.id))} />
@@ -214,11 +218,13 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                 ))}
               </ul>
             )}
-            <div className="relative border-b border-line p-2">
-              <input
+            {/* On a sheet the search stays at the top while the list scrolls under it. */}
+            <div className={cn("relative shrink-0 p-2", sheet ? "sticky top-0 z-10 -mx-4 bg-surface px-4" : "border-b border-line")}>
+              <Input
                 ref={searchRef}
                 data-autofocus
-                autoFocus
+                // A sheet on a touch screen opens with the keyboard down: the list is there to be read first.
+                autoFocus={!sheet}
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -232,44 +238,42 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                 aria-activedescendant={total > 0 ? `${listId}-${active}` : undefined}
                 aria-label={`Search ${field.name}`}
                 placeholder="Search records"
-                className="h-8 w-full rounded-md border border-line-strong bg-surface px-2 text-[0.8125rem] outline-none focus:border-ring"
+                className="pr-8 max-md:h-control-touch"
               />
-              {results.isFetching && <Spinner className="absolute right-4 top-4 size-3.5" label="Searching" />}
+              {results.isFetching && <Spinner className={cn("absolute top-1/2 size-3.5 -translate-y-1/2", sheet ? "right-6" : "right-4")} label="Searching" />}
             </div>
-            <ul id={listId} role="listbox" aria-multiselectable={!single} aria-label="Records" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
+            <div id={listId} role="listbox" aria-multiselectable={!single} aria-label="Records" className={cn("min-h-0 flex-1 p-1.5", sheet ? "px-0" : "overflow-y-auto overscroll-contain")}>
               {candidates.map((r, i) => {
                 const rec = records.get(r.id);
-                const name = <span className="max-w-full truncate">{r.name || "Untitled"}</span>;
+                const name = <span className="max-w-full truncate text-ui font-medium">{r.name || "Untitled"}</span>;
+                // While choosing, a little more of each record than elsewhere, to be sure it is the right one.
                 const row = (
-                  <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => pick(r)} className={cn("flex w-full min-w-0 rounded px-2 py-1.5 text-left", i === active && "bg-hover")}>
-                    {/* While choosing, a little more of each record than elsewhere, to be sure it is the right one. */}
+                  <ListboxOption id={`${listId}-${i}`} active={i === active} rich onHover={() => setActive(i)} onSelect={() => pick(r)}>
                     {env ? <RecordSummary title={name} record={rec} fields={shownFields} format={env.format} detailed /> : name}
-                  </button>
+                  </ListboxOption>
                 );
-                return (
-                  <li key={r.id} id={`${listId}-${i}`} role="option" aria-selected={false}>
-                    {table && env ? (
-                      <RecordPeek table={table} recordId={r.id} record={rec} format={env.format} side="right">
-                        {row}
-                      </RecordPeek>
-                    ) : (
-                      row
-                    )}
-                  </li>
+                // The preview opens on hover. A finger meets a record's details in the row itself, and a sheet
+                // does not open another over itself.
+                return table && env ? (
+                  <RecordPeek key={r.id} table={table} recordId={r.id} record={rec} format={env.format} side="right" touchHold={false}>
+                    {row}
+                  </RecordPeek>
+                ) : (
+                  <Fragment key={r.id}>{row}</Fragment>
                 );
               })}
-              {results.isError && <li className="px-2 py-3 text-center text-[0.8125rem] text-danger">Could not search records.</li>}
-              {!results.isFetching && !results.isError && total === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{debounced ? "No matching records." : "No more records to link."}</li>}
-            </ul>
-            {/* In place, the cards above remove their records: the panel only finds new ones. */}
-            {(!inPlace || !single) && (
-              <div className="flex items-center justify-between gap-2 border-t border-line p-2">
+              {results.isError && <p role="status" className="px-2 py-3 text-center text-label text-danger">Could not search records.</p>}
+              {!results.isFetching && !results.isError && total === 0 && <p role="status" className="px-2 py-3 text-center text-label text-muted">{debounced ? "No matching records." : "No more records to link."}</p>}
+            </div>
+            {/* In place, the cards above remove their records: the panel only finds new ones. A sheet has its own Done. */}
+            {(!inPlace || (!single && !sheet)) && (
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line p-2">
                 {!inPlace && (
                   <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>
                     Clear
                   </Button>
                 )}
-                {!single && (
+                {!single && !sheet && (
                   <Button size="sm" variant="primary" className="ml-auto" onClick={() => commit({ json: selectedRef.current })}>
                     Done
                   </Button>

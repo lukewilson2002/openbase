@@ -1,8 +1,8 @@
 /**
- * A link field's records as cards in their order, the same whether the field is being edited or not:
- * each a `RecordSummary` with every field on hover (`RecordPeek`). Given `onChange`, a card can be
+ * A link property's records as cards in their order, the same whether the property is being edited or not:
+ * each a `RecordSummary` with every property on hover (`RecordPeek`). Given `onChange`, a card can be
  * dragged by its grip into another place (or moved with the keyboard on the grip: Space, the arrows,
- * Space) and removed with its ✕; the new list is reported at once.
+ * Space) and removed with its x; the new list is reported at once.
  */
 import type { ReactNode } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type Announcements, type DragEndEvent, type UniqueIdentifier } from "@dnd-kit/core";
@@ -10,6 +10,9 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, X } from "lucide-react";
 import type { Field, LinkRef, Table, TableRecord } from "@/api/types";
+import { Card } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/cn";
 import type { FormatCtx } from "@/lib/cells/format";
 import { RecordSummary } from "../RecordSummary";
@@ -25,14 +28,16 @@ export interface LinkedRecordListProps {
   fields: readonly Field[];
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
-  /** Opens a record (from its details on hover). */
+  /** Opens a record's page (from Open page in its details). */
   onOpen?: (recordId: string) => void;
+  /** The address of a record's page, so Open page is a link. */
+  hrefOf?: (recordId: string) => string;
   /** The records reordered or one removed; without it the cards only show. */
   onChange?: (refs: LinkRef[]) => void;
   className?: string;
 }
 
-export function LinkedRecordList({ fieldName, table, refs, records, fields, format, emails, onOpen, onChange, className }: LinkedRecordListProps) {
+export function LinkedRecordList({ fieldName, table, refs, records, fields, format, emails, onOpen, hrefOf, onChange, className }: LinkedRecordListProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   // Said by screen readers as a card is moved: its name and place, not its id.
   const nameOf = (id: UniqueIdentifier) => refs.find((r) => r.id === id)?.name || "Untitled";
@@ -52,7 +57,7 @@ export function LinkedRecordList({ fieldName, table, refs, records, fields, form
   const list = (
     <ul aria-label={`Linked records in ${fieldName}`} className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       {refs.map((r) => (
-        <Card
+        <LinkedCard
           key={r.id}
           refItem={r}
           table={table}
@@ -61,6 +66,7 @@ export function LinkedRecordList({ fieldName, table, refs, records, fields, form
           format={format}
           emails={emails}
           onOpen={onOpen ? () => onOpen(r.id) : undefined}
+          href={hrefOf?.(r.id)}
           sortable={!!onChange && refs.length > 1}
           onRemove={onChange ? () => onChange(refs.filter((x) => x.id !== r.id)) : undefined}
         />
@@ -78,7 +84,7 @@ export function LinkedRecordList({ fieldName, table, refs, records, fields, form
   );
 }
 
-function Card({
+function LinkedCard({
   refItem: r,
   table,
   record,
@@ -86,6 +92,7 @@ function Card({
   format,
   emails,
   onOpen,
+  href,
   sortable,
   onRemove,
 }: {
@@ -96,34 +103,29 @@ function Card({
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
   onOpen?: () => void;
+  href?: string;
   sortable: boolean;
   onRemove?: () => void;
 }) {
   const s = useSortable({ id: r.id, disabled: !sortable });
   const title = r.name || "Untitled";
   const grip: ReactNode = sortable && (
-    <button
-      type="button"
-      aria-label={`Move ${title}`}
-      {...s.attributes}
-      {...s.listeners}
-      className="-ml-1 mt-px inline-flex h-5 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:text-fg active:cursor-grabbing pointer-coarse:h-9 pointer-coarse:w-6"
-    >
-      <GripVertical aria-hidden className="size-3.5" />
-    </button>
+    <IconButton label={`Move ${title}`} size="sm" noTooltip className="-ml-1 cursor-grab touch-none active:cursor-grabbing" {...s.attributes} {...s.listeners}>
+      <Icon icon={GripVertical} />
+    </IconButton>
   );
   return (
     <li ref={s.setNodeRef} style={{ transform: CSS.Translate.toString(s.transform), transition: s.transition }} className={cn("min-w-0", s.isDragging && "relative z-10")}>
-      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} onOpen={onOpen} side="left" touchHold={!sortable}>
-        <div data-linked-record={r.id} className={cn("flex min-w-0 items-start gap-1.5 rounded-md border border-line bg-surface py-1.5 pr-1.5 text-left", sortable ? "pl-1.5" : "pl-2.5", s.isDragging && "shadow-pop")}>
+      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} onOpen={onOpen} href={href} side="left" touchHold={!sortable}>
+        <Card padded={false} data-linked-record={r.id} className={cn("flex min-w-0 items-start gap-1.5 py-1.5 pr-1.5 text-left", sortable ? "pl-1.5" : "pl-2.5", s.isDragging && "shadow-pop")}>
           {grip}
-          <RecordSummary title={<span className="max-w-full truncate text-[0.8125rem] font-medium text-primary-text">{title}</span>} record={record} fields={fields} format={format} emails={emails} className="flex-1" />
+          <RecordSummary title={<span className="max-w-full truncate text-label font-semibold text-primary-text">{title}</span>} record={record} fields={fields} format={format} emails={emails} className="flex-1 self-center" />
           {onRemove && (
-            <button type="button" aria-label={`Remove ${title}`} onClick={onRemove} className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-hover hover:text-fg pointer-coarse:size-9">
-              <X aria-hidden className="size-3.5" />
-            </button>
+            <IconButton label={`Remove ${title}`} size="sm" noTooltip onClick={onRemove}>
+              <Icon icon={X} />
+            </IconButton>
           )}
-        </div>
+        </Card>
       </RecordPeek>
     </li>
   );

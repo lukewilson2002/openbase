@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AttachmentRef } from "@/api/types";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, PEOPLE, field } from "@/test/fields";
-import { mockApi } from "@/test/utils";
+import { mockApi, stubDesktop, stubPhone } from "@/test/utils";
 import { AttachmentEditor } from "./AttachmentEditor";
 import { ChoiceEditor } from "./ChoiceEditor";
 import { EditorEnvProvider, type EditorEnv } from "./env";
@@ -81,17 +81,39 @@ describe("a pick shows at once while the editor stays mounted (a form)", () => {
   });
 
   it("single link shows the picked record and Clear empties it", async () => {
+    stubDesktop();
     mockApi({ "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recA", name: "Buy the domain" }] } } as never);
     const cb = callbacks();
     inEnv(<LinkEditor field={requires} value={[]} variant="form" {...cb} />);
     expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Link records…");
     await userEvent.click(screen.getByRole("button", { name: "Requires" }));
-    await userEvent.click(await screen.findByRole("button", { name: /Buy the domain/ }));
+    await userEvent.click(await screen.findByRole("option", { name: /Buy the domain/ }));
     expect(cb.onCommit).toHaveBeenCalledWith({ json: [{ id: "recA", name: "Buy the domain" }] }, undefined);
     expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Buy the domain");
     await userEvent.click(screen.getByRole("button", { name: "Requires" }));
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
     expect(screen.getByRole("button", { name: "Requires" })).toHaveTextContent("Link records…");
+  });
+});
+
+describe("the link picker on a phone", () => {
+  it("is a bottom sheet with the search at the top, Done closes it and the records are picked there", async () => {
+    stubPhone();
+    mockApi({ "GET /api/tables/tbl2/records/lookup": { records: [{ id: "recA", name: "Buy the domain" }, { id: "recB", name: "Pick a host" }] } } as never);
+    const cb = callbacks();
+    const many = { ...requires, options: { ...requires.options, single: false } } as typeof requires;
+    inEnv(<LinkEditor field={many} value={[]} variant="form" {...cb} />);
+    await userEvent.click(screen.getByRole("button", { name: "Requires" }));
+    const sheet = await screen.findByRole("dialog", { name: "Requires" });
+    // The sheet's own Done, not a second one in the list's footer; the keyboard stays down until the search is tapped.
+    expect(within(sheet).getAllByRole("button", { name: "Done" })).toHaveLength(1);
+    const search = within(sheet).getByRole("combobox", { name: "Search Requires" });
+    expect(search).not.toHaveFocus();
+    await userEvent.click(await within(sheet).findByRole("option", { name: /Buy the domain/ }));
+    await userEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+    expect(cb.onChange).toHaveBeenCalledWith({ json: [{ id: "recA", name: "Buy the domain" }] });
+    expect(cb.onCommit).toHaveBeenCalledWith({ json: [{ id: "recA", name: "Buy the domain" }] });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
