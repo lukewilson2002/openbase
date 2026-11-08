@@ -22,6 +22,7 @@ import type { BaseSchema } from "@/api/types";
 import { setFilter } from "./config";
 import { addCondition, advancedLabel, chipsOf, isFlat, removeCondition, replaceCondition } from "./filterChips";
 import { ConditionRow, FilterBuilder, useDraft } from "./FilterBuilder";
+import { registerFilterInput } from "./filterInput";
 
 export interface ViewFilterBarProps {
   schema: BaseSchema;
@@ -193,6 +194,11 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
     }
   };
 
+  useEffect(() => {
+    registerFilterInput(inputRef.current);
+    return () => registerFilterInput(null);
+  }, []);
+
   // `/` and Ctrl or Cmd+F. In the capture phase, so the grid's canvas does not take the key first.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -202,6 +208,9 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
       if (!find && !slash) return;
       const input = inputRef.current;
       if (!input) return;
+      // A modal dialog or sheet hides the page behind it from assistive technology: its focus stays inside, and the
+      // browser's own Find stays available. A menu is the same for the key that was meant for it.
+      if (find && (input.closest("[aria-hidden=true], [inert]") || (e.target instanceof HTMLElement && e.target.closest("[role=alertdialog], [role=menu]")))) return;
       e.preventDefault();
       e.stopPropagation();
       input.focus();

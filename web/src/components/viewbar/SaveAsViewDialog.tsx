@@ -2,7 +2,7 @@
  * Save as view (COL-5): names the draft and says who gets the new view, Only me or Everyone. Everyone is
  * for creators, as for any shared view; the name starts as the changes in plain words, so Enter is enough.
  */
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { errorMessage } from "@/api/client";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,26 @@ export interface SaveAsViewDialogProps {
 }
 
 export function SaveAsViewDialog({ open, onOpenChange, initialName, canShareWithEveryone, onSave }: SaveAsViewDialogProps) {
+  const nameInput = useRef<HTMLInputElement>(null);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Save as view" description="The changes become a view of their own. This view stays as it is." size="sm">
-      <SaveAsViewForm initialName={initialName} canShareWithEveryone={canShareWithEveryone} onSave={onSave} onDone={() => onOpenChange(false)} />
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Save as view"
+      description="The changes become a view of their own. This view stays as it is."
+      size="sm"
+      // Not an `autoFocus` on the input: that runs before the dialog notes which button opened it, so Escape would have nowhere to return to.
+      onOpenAutoFocus={(e) => {
+        e.preventDefault();
+        nameInput.current?.focus();
+      }}
+    >
+      <SaveAsViewForm nameInput={nameInput} initialName={initialName} canShareWithEveryone={canShareWithEveryone} onSave={onSave} onDone={() => onOpenChange(false)} />
     </Dialog>
   );
 }
 
-function SaveAsViewForm({ initialName, canShareWithEveryone, onSave, onDone }: Pick<SaveAsViewDialogProps, "initialName" | "canShareWithEveryone" | "onSave"> & { onDone: () => void }) {
+function SaveAsViewForm({ nameInput, initialName, canShareWithEveryone, onSave, onDone }: Pick<SaveAsViewDialogProps, "initialName" | "canShareWithEveryone" | "onSave"> & { nameInput: React.RefObject<HTMLInputElement | null>; onDone: () => void }) {
   const [name, setName] = useState(initialName);
   const [audience, setAudience] = useState<"me" | "everyone">("me");
   const [pending, setPending] = useState(false);
@@ -62,7 +74,7 @@ function SaveAsViewForm({ initialName, canShareWithEveryone, onSave, onDone }: P
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <Field label="Name">{(ctl) => <Input {...ctl} value={name} onChange={(e) => setName(e.target.value)} maxLength={255} autoFocus required />}</Field>
+      <Field label="Name">{(ctl) => <Input {...ctl} ref={nameInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={255} required />}</Field>
       <fieldset className="flex flex-col">
         <legend className="mb-1 text-label font-medium">Who sees it</legend>
         {option("me", "Only me", false, "A personal view.")}

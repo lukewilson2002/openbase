@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { stubDesktop, stubPhone } from "@/test/utils";
@@ -53,5 +54,51 @@ describe("SelectionBar", () => {
     const toolbar = screen.getByRole("toolbar", { name: "Selected records" });
     expect(within(toolbar).getByRole("button", { name: "Actions" }).className).toContain("max-md:h-control-touch");
     expect(within(toolbar).getByRole("button", { name: "Clear selection" }).className).toMatch(/control-touch|size-11|min-h-11|h-11/);
+  });
+});
+
+describe("SelectionBar when it leaves with the selection", () => {
+  function Host({ cleared }: { cleared?: () => void }) {
+    const [count, setCount] = useState(2);
+    return (
+      <div data-testid="view" className="relative">
+        <button type="button" data-nav="card-a" tabIndex={-1}>
+          Card A
+        </button>
+        <button type="button" data-nav="card-b" tabIndex={0}>
+          Card B
+        </button>
+        {count > 0 && (
+          <SelectionBar
+            count={count}
+            onDuplicate={vi.fn()}
+            onDelete={vi.fn()}
+            onClear={() => {
+              cleared?.();
+              setCount(0);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  it("hands focus to the view's tab stop when Clear selection goes, instead of to the page", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    render(<Host />);
+    await user.click(screen.getByRole("button", { name: /^Clear selection/ }));
+    await waitFor(() => expect(screen.queryByRole("toolbar")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Card B" })).toHaveFocus();
+  });
+
+  it("leaves focus alone when it had moved on to a card before the selection went", async () => {
+    stubDesktop();
+    render(<Host />);
+    screen.getByRole("button", { name: /^Clear selection/ }).focus();
+    screen.getByRole("button", { name: "Card A" }).focus();
+    fireEvent.click(screen.getByRole("button", { name: /^Clear selection/ }));
+    await waitFor(() => expect(screen.queryByRole("toolbar")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Card A" })).toHaveFocus();
   });
 });

@@ -4,15 +4,17 @@
  * view changed since you started." when the view was saved by someone else meanwhile. It stays mounted
  * and closed without a draft, so the change is announced. Save as view opens the dialog that names it.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { BaseSchema, Table, View } from "@/api/types";
 import { useToast } from "@/components/ui/toast";
+import { useFocusRescue } from "@/hooks/useFocusRescue";
 import { TemporaryChangesBar } from "@/components/ui/temporary-changes-bar";
 import { recordNounFor } from "@/lib/recordNoun";
 import { suggestViewName } from "@/views/drafts/name";
 import { useDraftCounts } from "@/views/drafts/useDraftCounts";
 import type { ViewConfigApi } from "@/views/grid/useViewConfig";
+import { filterInput } from "./filterInput";
 import { SaveAsViewDialog } from "./SaveAsViewDialog";
 
 export interface DraftBarProps {
@@ -33,9 +35,16 @@ export function DraftBar({ schema, table, view, cfg, search, timeZone }: DraftBa
   const counts = useDraftCounts({ tableId: table.id, view, cfg, search, timeZone });
   const name = useMemo(() => suggestViewName({ config: cfg.config, fields: table.fields, layout: cfg.layout, savedLayout: view.type, viewName: view.is_default ? `All ${table.name.toLowerCase()}` : view.name }), [cfg.config, cfg.layout, table.fields, table.name, view]);
 
+  // Reset and Update view take their buttons with them when the bar closes: focus goes up to the filter bar.
+  const root = useRef<HTMLDivElement>(null);
+  const rescue = useFocusRescue(root, (host) => filterInput() ?? host.querySelector<HTMLElement>("input, button, [href]"));
+  useEffect(() => {
+    if (!open) rescue();
+  }, [open, rescue]);
+
   return (
     <>
-      <div className={open ? "px-3 pt-2 md:px-4" : undefined}>
+      <div ref={root} className={open ? "px-3 pt-2 md:px-4" : undefined}>
         <TemporaryChangesBar
           open={open}
           shown={counts?.shown}

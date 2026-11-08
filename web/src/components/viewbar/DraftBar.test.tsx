@@ -198,3 +198,14 @@ describe("Save as view", () => {
     expect(within(dialog).getByRole("button", { name: "Save as view" })).toBeDisabled();
   });
 });
+
+describe("focus when the bar closes", () => {
+  it("goes to the filter bar when Reset takes the buttons away, instead of to the page", async () => {
+    const user = userEvent.setup();
+    setup("editor", { draft: filtered });
+    const reset = await screen.findByRole("button", { name: "Reset" });
+    await user.click(reset);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Filter or search" })).toHaveFocus();
+  });
+});

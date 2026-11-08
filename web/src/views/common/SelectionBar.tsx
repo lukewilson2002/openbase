@@ -5,11 +5,12 @@
  * way to let go, and the actions are a bottom sheet (PH-3): rows of 44 px, not a row of small buttons. Render
  * it only while `count > 0`.
  */
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { CopyPlus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { SheetMenu, SheetMenuGroup, SheetMenuRow } from "@/components/ui/sheet-menu";
+import { useFocusRescue } from "@/hooks/useFocusRescue";
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { SheetModeContext } from "@/shell/menuItems";
 
@@ -24,14 +25,24 @@ export interface SelectionBarProps {
   sheetActions?: ReactNode;
 }
 
+/** Where focus goes when the bar leaves with the selection: the view's tab stop (the card or row last focused), else the view itself. */
+function viewStop(host: HTMLElement): HTMLElement {
+  const stop = host.querySelector<HTMLElement>("[data-nav][tabindex='0'], canvas[tabindex]");
+  if (stop) return stop;
+  if (!host.hasAttribute("tabindex")) host.tabIndex = -1;
+  return host;
+}
+
 export function SelectionBar({ count, onDuplicate, onDelete, onClear, children, sheetActions }: SelectionBarProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
+  const root = useRef<HTMLDivElement>(null);
+  useFocusRescue(root, viewStop);
   const [sheet, setSheet] = useState(false);
   const label = `${count.toLocaleString()} selected`;
 
   if (!desktop) {
     return (
-      <div role="toolbar" aria-label="Selected records" className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3 max-md:bottom-16">
+      <div ref={root} role="toolbar" aria-label="Selected records" className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3 max-md:bottom-16">
         <div className="ob-slide-in pointer-events-auto flex items-center gap-1 rounded-lg border border-line bg-surface p-1 shadow-pop">
           <span aria-live="polite" className="px-2 text-label font-medium">
             {label}
@@ -61,7 +72,7 @@ export function SelectionBar({ count, onDuplicate, onDelete, onClear, children, 
   }
 
   return (
-    <div role="toolbar" aria-label="Selected records" className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
+    <div ref={root} role="toolbar" aria-label="Selected records" className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
       <div className="ob-slide-in pointer-events-auto flex items-center gap-1 rounded-lg border border-line bg-surface p-1 shadow-pop">
         <span aria-live="polite" className="px-2 text-label font-medium">
           {label}

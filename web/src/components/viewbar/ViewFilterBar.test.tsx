@@ -381,6 +381,24 @@ describe("ViewFilterBar shortcuts", () => {
     expect(down.defaultPrevented).toBe(true);
   });
 
+  it("leaves Ctrl+F to the browser while a modal hides the bar, and keeps focus where it is", async () => {
+    const bar = renderBar();
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    const inModal = document.createElement("input");
+    modal.append(inModal);
+    document.body.append(modal);
+    inModal.focus();
+    // What a Radix dialog does to everything outside it.
+    field_().closest("div[class]")!.parentElement!.setAttribute("aria-hidden", "true");
+    const down = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    inModal.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+    expect(inModal).toHaveFocus();
+    modal.remove();
+    void bar;
+  });
+
   it("leaves / alone where it is a character: in a text field, a text editor or a dialog", () => {
     renderBar();
     const input = document.createElement("input");
