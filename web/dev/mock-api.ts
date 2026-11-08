@@ -437,8 +437,18 @@ const tableOrder: { id: string }[] = [{ id: T_TASKS }, { id: T_PEOPLE }, { id: T
 
 const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fld_p_name", [T_PROJECTS]: "fld_j_name" };
 
-/** What the sidebar's Rename and Color menu items changed (`PATCH /api/tables/:id`). */
-const tableEdits: Record<string, { name?: string; color?: string }> = {};
+/** What the collection settings and the sidebar's Rename and Color menu items changed (`PATCH /api/tables/:id`, the primary-field and body-field endpoints). */
+const tableEdits: Record<string, { name?: string; color?: string; description?: string | null; record_noun?: string; body_field_id?: string | null; home_date_field_id?: string | null; done_field_id?: string | null }> = {};
+
+/** What the migration presets for the mock's tables: the page, the date Home shows records by, and the checkbox that marks one done. */
+const TABLE_PRESETS: Record<string, { body_field_id: string | null; home_date_field_id: string | null; done_field_id: string | null }> = {
+  [T_TASKS]: { body_field_id: "fld_notes", home_date_field_id: "fld_due", done_field_id: "fld_done" },
+  [T_PEOPLE]: { body_field_id: null, home_date_field_id: null, done_field_id: null },
+  [T_PROJECTS]: { body_field_id: "fld_j_summary", home_date_field_id: "fld_j_start", done_field_id: null },
+};
+
+/** The "Page" property a made collection gets when `body-field` is asked to create it. */
+const madePages = new Map<string, Obj>();
 
 /** Tables made while the mock runs (New collection, Duplicate): a primary "Name" property and a default grid, with no records. */
 const madeTables = new Map<string, { name: string; color: string }>();
@@ -454,16 +464,20 @@ function addTable(name: string, color?: string | null): string {
 }
 
 function tableDto(id: string): Obj {
+  const edit = tableEdits[id] ?? {};
+  const preset = TABLE_PRESETS[id] ?? { body_field_id: null, home_date_field_id: null, done_field_id: null };
   return {
     id,
     base_id: BASE_ID,
-    name: tableEdits[id]?.name ?? madeTables.get(id)?.name ?? (id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People"),
-    description: null,
+    name: edit.name ?? madeTables.get(id)?.name ?? (id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People"),
+    description: edit.description ?? null,
     primary_field_id: PRIMARY[id]!,
-    color: tableEdits[id]?.color ?? madeTables.get(id)?.color ?? (id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange"),
-    record_noun: "",
+    color: edit.color ?? madeTables.get(id)?.color ?? (id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange"),
+    record_noun: edit.record_noun ?? "",
     record_count: [...records.values()].filter((r) => r.table_id === id && !r.deleted).length,
-    body_field_id: null,
+    body_field_id: edit.body_field_id !== undefined ? edit.body_field_id : (madePages.get(id)?.id ?? preset.body_field_id),
+    home_date_field_id: edit.home_date_field_id !== undefined ? edit.home_date_field_id : preset.home_date_field_id,
+    done_field_id: edit.done_field_id !== undefined ? edit.done_field_id : preset.done_field_id,
     fields: fieldsOf(id),
     views: views.filter((v) => v.table_id === id),
   };
@@ -482,7 +496,7 @@ function baseDto(req: IncomingMessage): Obj {
 }
 
 function fieldsOf(table: string): Obj[] {
-  if (madeTables.has(table)) return [field(PRIMARY[table]!, "Name", "text", { multiline: false }, table)];
+  if (madeTables.has(table)) return [field(`fld_${table}_name`, "Name", "text", { multiline: false }, table), ...(madePages.has(table) ? [madePages.get(table)!] : [])];
   return table === T_TASKS ? taskFields : table === T_PROJECTS ? projectFields : peopleFields;
 }
 
@@ -814,7 +828,7 @@ function baseSummary(b: Obj, role: string): Obj {
   // Only the tracker has tables (see baseDto); the other mock bases are empty folders, like their pages.
   const tables = (b.id === BASE_ID ? tableOrder : []).map(({ id }) => {
     const t = tableDto(id);
-    return { id, name: t.name, icon: null, color: t.color, record_count: t.record_count, body_field_id: null, home_date_field_id: null, done_field_id: null, record_noun: "" };
+    return { id, name: t.name, icon: null, color: t.color, record_count: t.record_count, body_field_id: t.body_field_id, home_date_field_id: t.home_date_field_id, done_field_id: t.done_field_id, record_noun: t.record_noun };
   });
   return { ...b, role, people: basePeople(b), tables, is_top_level: ws.roots[b.workspace_id] === b.id };
 }
@@ -1172,10 +1186,52 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     return send(res, 200, { ok: true }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)$/.exec(p)) && m === "PATCH" && tableOrder.some((t) => t.id === g![1])) {
-    const edit = (tableEdits[g[1]!] ??= {});
-    if (typeof body.name === "string") edit.name = body.name;
+    const id = g[1]!;
+    const fields = fieldsOf(id);
+    const dateLike = (f: Obj) => ["date", "created_time", "last_modified_time"].includes(f.type) || (["formula", "rollup"].includes(f.type) && ["date", "date_time"].includes(f.options?.result_type));
+    // The same checks as the real route: a Home date is date-like, Done is a checkbox.
+    if (typeof body.home_date_field_id === "string" && !fields.some((f) => f.id === body.home_date_field_id && dateLike(f))) return err(res, 422, "validation_failed", "the Home date must be a date property of this collection"), true;
+    if (typeof body.done_field_id === "string" && !fields.some((f) => f.id === body.done_field_id && f.type === "checkbox")) return err(res, 422, "validation_failed", "the Done property must be a checkbox property of this collection"), true;
+    if (typeof body.color === "string" && !/^[a-z]+(_dark)?$/.test(body.color)) return err(res, 422, "validation_failed", "unknown color"), true;
+    if (typeof body.name === "string" && !body.name.trim()) return err(res, 422, "validation_failed", "a collection needs a name"), true;
+    const edit = (tableEdits[id] ??= {});
+    if (typeof body.name === "string") edit.name = body.name.trim();
     if (typeof body.color === "string") edit.color = body.color;
-    return send(res, 200, tableDto(g[1]!)), true;
+    if (typeof body.description === "string") edit.description = body.description.trim() || null;
+    if (typeof body.record_noun === "string") edit.record_noun = body.record_noun.trim();
+    // A property that is the title cannot also be the Home date or Done, as in the real store.
+    if ("home_date_field_id" in body) edit.home_date_field_id = body.home_date_field_id;
+    if ("done_field_id" in body) edit.done_field_id = body.done_field_id;
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: id } });
+    return send(res, 200, tableDto(id)), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/primary-field$/.exec(p)) && m === "POST" && tableOrder.some((t) => t.id === g![1])) {
+    const id = g[1]!;
+    const f = fieldsOf(id).find((x) => x.id === body.field_id);
+    if (!f) return err(res, 422, "validation_failed", "that property is not in this collection"), true;
+    if (["link", "attachment", "checkbox", "lookup", "rollup", "count", "button", "multiple_select", "rating"].includes(f.type)) return err(res, 422, "validation_failed", `a ${f.type} property cannot be the title`), true;
+    PRIMARY[id] = f.id;
+    const edit = (tableEdits[id] ??= {});
+    // Becoming the title clears a setting that named the property.
+    const dto = tableDto(id);
+    if (dto.home_date_field_id === f.id) edit.home_date_field_id = null;
+    if (dto.body_field_id === f.id) edit.body_field_id = null;
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: id } });
+    return send(res, 200, tableDto(id)), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/body-field$/.exec(p)) && m === "POST" && tableOrder.some((t) => t.id === g![1])) {
+    const id = g[1]!;
+    if (body.create === true && body.field_id === undefined) {
+      // Only a made collection can grow a Page here: the fixed tables' properties are fixed.
+      if (madeTables.has(id) && !madePages.has(id) && !tableDto(id).body_field_id) madePages.set(id, field(`fld_${id}_page`, "Page", "rich_text", {}, id));
+    } else if (body.field_id === null) {
+      (tableEdits[id] ??= {}).body_field_id = null;
+    } else if (typeof body.field_id === "string") {
+      if (!fieldsOf(id).some((f) => f.id === body.field_id && f.type === "rich_text")) return err(res, 422, "validation_failed", "the page must be a rich text property of this collection"), true;
+      (tableEdits[id] ??= {}).body_field_id = body.field_id;
+    } else return err(res, 400, "bad_request", "give field_id, or create: true"), true;
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: id } });
+    return send(res, 200, tableDto(id)), true;
   }
   if ((g = /^\/api\/bases\/([^/]+)\/tables$/.exec(p)) && m === "POST" && g[1] === BASE_ID) {
     const name = String(body.name ?? "").trim();
@@ -1280,6 +1336,23 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       return err(res, 400, "bad_request", "invalid transient parameter"), true;
     }
     return send(res, 200, aggregate(v, transient, url.searchParams.get("search") ?? "")), true;
+  }
+  if ((g = /^\/api\/views\/([^/]+)\/duplicate$/.exec(p)) && m === "POST") {
+    const v = views.find((x) => x.id === g![1]);
+    if (!v) return err(res, 404, "not_found", "view not found"), true;
+    if (v.is_default) return err(res, 422, "validation_failed", "the default grid cannot be duplicated"), true;
+    const copy = { ...v, id: `viw_made_${++madeViews}`, name: `${v.name} copy`, locked: false, config: structuredClone(v.config) };
+    views.splice(views.indexOf(v) + 1, 0, copy);
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: v.table_id } });
+    return send(res, 201, copy), true;
+  }
+  if ((g = /^\/api\/views\/([^/]+)$/.exec(p)) && m === "DELETE") {
+    const v = views.find((x) => x.id === g![1]);
+    if (!v) return err(res, 404, "not_found", "view not found"), true;
+    if (v.is_default) return err(res, 422, "validation_failed", "the default grid cannot be deleted"), true;
+    views.splice(views.indexOf(v), 1);
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: v.table_id } });
+    return send(res, 200, { ok: true }), true;
   }
   if ((g = /^\/api\/views\/([^/]+)$/.exec(p)) && m === "PATCH") {
     const v = views.find((x) => x.id === g![1]);
