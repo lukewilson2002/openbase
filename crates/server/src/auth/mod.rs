@@ -250,16 +250,10 @@ impl FromRequestParts<AppState> for ClientInfo {
     }
 }
 
-/// Resolve a session token to an actor. Expired, idle (see
-/// [`session::SESSION_IDLE_TIMEOUT_MS`]), 2FA-pending, or inactive-user sessions resolve to
-/// None. Reading does not refresh `last_seen_at`; callers that count as activity use
-/// [`lookup_session`] and [`stamp_session_use`].
-pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Actor>> {
-    Ok(lookup_session(conn, token)?.map(|(actor, _)| actor))
-}
-
-/// Like [`actor_from_session`], also returning the session's `last_seen_at` (for
-/// [`stamp_session_use`]).
+/// Resolve a session token to an actor and the session's `last_seen_at` (for
+/// [`stamp_session_use`]). Expired, idle (see [`session::SESSION_IDLE_TIMEOUT_MS`]),
+/// 2FA-pending, or inactive-user sessions resolve to None. Reading does not refresh
+/// `last_seen_at`: a caller that counts as activity must follow up with [`stamp_session_use`].
 pub fn lookup_session(conn: &Connection, token: &str) -> AppResult<Option<(Actor, i64)>> {
     let hash = hash_token(token);
     let now = now_ms();

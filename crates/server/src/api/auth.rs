@@ -347,7 +347,7 @@ async fn login_2fa(
     let outcome = state
         .db
         .write(move |tx| {
-            // actor_from_session rejects pending sessions by design; read it here.
+            // lookup_session rejects pending sessions by design; read it here.
             let uid: Option<String> = tx
                 .query_row(
                     "SELECT s.user_id FROM sessions s JOIN users u ON u.id = s.user_id
