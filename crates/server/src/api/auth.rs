@@ -24,7 +24,7 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::json;
 
 use crate::auth::password::{self, DUMMY_HASH};
-use crate::auth::{Actor, Capability, ClientInfo, SESSION_COOKIE, session, totp};
+use crate::auth::{Actor, Capability, ClientInfo, session, totp};
 use crate::db::now_ms;
 use crate::email;
 use crate::error::{AppError, AppResult};
@@ -333,7 +333,10 @@ async fn login_2fa(
         LOGIN_2FA_IP_PER_10_MIN,
         10 * MINUTE,
     )?;
-    let Some(raw) = jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) else {
+    let Some(raw) = jar
+        .get(state.config.session_cookie_name())
+        .map(|c| c.value().to_string())
+    else {
         return Ok(expired());
     };
     let pending_hash = hash_token(&raw);
@@ -420,7 +423,10 @@ async fn logout(
     client: ClientInfo,
     jar: CookieJar,
 ) -> AppResult<(CookieJar, Json<OkResponse>)> {
-    if let Some(raw) = jar.get(SESSION_COOKIE).map(|c| c.value().to_string()) {
+    if let Some(raw) = jar
+        .get(state.config.session_cookie_name())
+        .map(|c| c.value().to_string())
+    {
         let hash = hash_token(&raw);
         state
             .db
@@ -447,7 +453,11 @@ async fn logout(
             })
             .await?;
     }
-    Ok((jar.add(session::removal_cookie(&state.config)), ok()))
+    let mut jar = jar.add(session::removal_cookie(&state.config));
+    if let Some(old) = session::legacy_removal_cookie(&state.config) {
+        jar = jar.add(old);
+    }
+    Ok((jar, ok()))
 }
 
 async fn me(State(state): State<AppState>, actor: Actor) -> AppResult<Json<User>> {

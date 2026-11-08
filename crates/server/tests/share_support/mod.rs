@@ -39,14 +39,28 @@ pub fn multipart_body(parts: &[(&str, Option<&str>, &[u8])]) -> Vec<u8> {
 }
 
 pub fn auth(
-    mut req: axum::http::request::Builder,
+    req: axum::http::request::Builder,
     client: &Client,
 ) -> axum::http::request::Builder {
+    auth_named(req, client, openbase::auth::SESSION_COOKIE)
+}
+
+/// [`auth`] for an app whose cookie name depends on its configuration (an https public URL).
+pub fn auth_for(
+    app: &TestApp,
+    req: axum::http::request::Builder,
+    client: &Client,
+) -> axum::http::request::Builder {
+    auth_named(req, client, app.state.config.session_cookie_name())
+}
+
+fn auth_named(
+    mut req: axum::http::request::Builder,
+    client: &Client,
+    cookie_name: &str,
+) -> axum::http::request::Builder {
     if let Some(c) = &client.cookie {
-        req = req.header(
-            header::COOKIE,
-            format!("{}={}", openbase::auth::SESSION_COOKIE, c),
-        );
+        req = req.header(header::COOKIE, format!("{cookie_name}={c}"));
     }
     if let Some(t) = &client.bearer {
         req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
@@ -62,7 +76,7 @@ pub async fn post_multipart(
     parts: &[(&str, Option<&str>, &[u8])],
     extra: &[(&str, &str)],
 ) -> Response {
-    let mut req = auth(Request::builder().method("POST").uri(path), client).header(
+    let mut req = auth_for(app, Request::builder().method("POST").uri(path), client).header(
         header::CONTENT_TYPE,
         format!("multipart/form-data; boundary={BOUNDARY}"),
     );

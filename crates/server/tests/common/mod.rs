@@ -41,7 +41,9 @@ impl Response {
                 let s = v.to_str().ok()?;
                 let kv = s.split(';').next()?;
                 let (k, val) = kv.split_once('=')?;
-                (k == openbase::auth::SESSION_COOKIE && !val.is_empty()).then(|| val.to_string())
+                ((k == openbase::auth::SESSION_COOKIE || k == openbase::auth::SESSION_COOKIE_HOST)
+                    && !val.is_empty())
+                .then(|| val.to_string())
             })
     }
 
@@ -71,6 +73,15 @@ impl TestApp {
     }
 
     pub fn with_config(f: impl FnOnce(&mut Config)) -> TestApp {
+        Self::with_config_and_state(f, |_| {})
+    }
+
+    /// Like [`TestApp::with_config`], and `tweak` may replace parts of the state (a limiter with
+    /// a clock the test moves) before the router is built from it.
+    pub fn with_config_and_state(
+        f: impl FnOnce(&mut Config),
+        tweak: impl FnOnce(&mut AppState),
+    ) -> TestApp {
         let dir = tempfile::tempdir().unwrap();
         let mut config = Config::for_tests(dir.path());
         f(&mut config);
@@ -78,11 +89,12 @@ impl TestApp {
         // `config.smtp_host` or from the settings saved through the admin API.
         let mailer = Arc::new(CapturingMailer::default());
         let capture = mailer.clone();
-        let state = AppState::open_with_mail(
+        let mut state = AppState::open_with_mail(
             config,
             Arc::new(move |_| Ok(capture.clone() as Arc<dyn openbase::email::Mailer>)),
         )
         .unwrap();
+        tweak(&mut state);
         let router = openbase::http::router(state.clone());
         TestApp {
             state,
@@ -121,7 +133,7 @@ impl TestApp {
         if let Some(c) = &client.cookie {
             req = req.header(
                 header::COOKIE,
-                format!("{}={}", openbase::auth::SESSION_COOKIE, c),
+                format!("{}={}", self.state.config.session_cookie_name(), c),
             );
         }
         if let Some(t) = &client.bearer {
@@ -288,7 +300,7 @@ impl TestApp {
         if let Some(c) = &client.cookie {
             req = req.header(
                 header::COOKIE,
-                format!("{}={}", openbase::auth::SESSION_COOKIE, c),
+                format!("{}={}", self.state.config.session_cookie_name(), c),
             );
         }
         if let Some(t) = &client.bearer {

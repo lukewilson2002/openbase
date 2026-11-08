@@ -8,8 +8,14 @@ use crate::db::now_ms;
 use crate::error::AppResult;
 use crate::ids::{hash_token, new_token};
 
-/// Sessions last 30 days.
+/// Sessions last 30 days at most, however active they are.
 pub const SESSION_TTL_MS: i64 = 30 * 24 * 3600 * 1000;
+/// A session that has not been used for 14 days ends, even inside its 30 days.
+pub const SESSION_IDLE_TIMEOUT_MS: i64 = 14 * 24 * 3600 * 1000;
+/// `last_seen_at` is refreshed at most this often per session. The idle timeout is measured in
+/// days, so minute-level accuracy buys nothing, and each refresh is a write on the single
+/// writer; this bounds the cost of a busy tab to a few writes an hour.
+pub const SESSION_TOUCH_INTERVAL_MS: i64 = 10 * 60 * 1000;
 /// A session awaiting its second factor lasts 10 minutes.
 pub const PENDING_2FA_TTL_MS: i64 = 10 * 60 * 1000;
 
@@ -62,12 +68,28 @@ pub fn delete_all_for_user(
     Ok(())
 }
 
+/// Delete sessions past their 30-day end or idle for longer than the idle timeout.
 pub fn purge_expired(conn: &Connection) -> AppResult<usize> {
-    Ok(conn.execute("DELETE FROM sessions WHERE expires_at <= ?1", [now_ms()])?)
+    let now = now_ms();
+    Ok(conn.execute(
+        "DELETE FROM sessions WHERE expires_at <= ?1 OR last_seen_at <= ?2",
+        params![now, now - SESSION_IDLE_TIMEOUT_MS],
+    )?)
+}
+
+/// Record that the session behind `token_hash` was used, unless it was already recorded within
+/// [`SESSION_TOUCH_INTERVAL_MS`]. The condition is in the statement so that concurrent requests
+/// of one session write once.
+pub fn touch(conn: &Connection, token_hash: &str, now: i64) -> AppResult<()> {
+    conn.execute(
+        "UPDATE sessions SET last_seen_at = ?1 WHERE token_hash = ?2 AND last_seen_at < ?3",
+        params![now, token_hash, now - SESSION_TOUCH_INTERVAL_MS],
+    )?;
+    Ok(())
 }
 
 pub fn cookie(config: &Config, token: String) -> Cookie<'static> {
-    Cookie::build((super::SESSION_COOKIE, token))
+    Cookie::build((config.session_cookie_name(), token))
         .http_only(true)
         .secure(config.secure_cookies())
         .same_site(SameSite::Lax)
@@ -77,9 +99,21 @@ pub fn cookie(config: &Config, token: String) -> Cookie<'static> {
 }
 
 pub fn removal_cookie(config: &Config) -> Cookie<'static> {
-    Cookie::build((super::SESSION_COOKIE, ""))
+    removal(config.session_cookie_name(), config.secure_cookies())
+}
+
+/// Removal of the pre-`__Host-` cookie name, sent on logout over https so a browser that signed
+/// in before the rename does not keep a dead session token around for up to 30 days.
+pub fn legacy_removal_cookie(config: &Config) -> Option<Cookie<'static>> {
+    config
+        .public_https()
+        .then(|| removal(super::SESSION_COOKIE, true))
+}
+
+fn removal(name: &'static str, secure: bool) -> Cookie<'static> {
+    Cookie::build((name, ""))
         .http_only(true)
-        .secure(config.secure_cookies())
+        .secure(secure)
         .same_site(SameSite::Lax)
         .path("/")
         .max_age(time_duration(0))
