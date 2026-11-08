@@ -1,4 +1,8 @@
-/** Cover image, title, description and field list shared by kanban and gallery cards. */
+/**
+ * Cover image, title, description and properties shared by kanban and gallery cards. A kanban card is a
+ * List row on a card (title in 600, then its properties on one line, see CardProperties); a gallery card
+ * has the width for a label above each value.
+ */
 import { useMemo, useState } from "react";
 import { attachmentsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
@@ -8,6 +12,7 @@ import type { FormatCtx } from "@/lib/cells/format";
 import { swatchColor } from "@/lib/cells/palette";
 import { previewAlignTop } from "@/lib/filePreview";
 import { cardTitle, coverOf, descriptionText, fieldsToShow } from "./cardFields";
+import { CARD_PROPERTY_LIMIT, CardProperties } from "./CardProperties";
 import { DescriptionHover } from "./description";
 
 export interface CardBodyProps {
@@ -22,7 +27,7 @@ export interface CardBodyProps {
   coverFit?: "cover" | "contain";
   coverHeight?: number;
   /**
-   * `rows`: label and value side by side (kanban cards stay short in a narrow stack);
+   * `rows`: the title, then the properties on one line (kanban cards stay short in a narrow stack);
    * `stacked`: a small label above each value (gallery cards have the width for it).
    */
   layout?: "rows" | "stacked";
@@ -33,7 +38,7 @@ export interface CardBodyProps {
   limit?: number;
 }
 
-export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit }: CardBodyProps) {
+export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit = CARD_PROPERTY_LIMIT }: CardBodyProps) {
   const coverFile = coverOf(coverField, record);
   // A file without a preview (the server answers 404) shows no cover rather than a broken image.
   const [failedCover, setFailedCover] = useState<string | null>(null);
@@ -52,27 +57,16 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
         </div>
       )}
       {layout === "rows" ? (
-        <div className="px-3.5 py-3">
-          <h3 className="line-clamp-2 break-words text-[0.875rem] font-semibold">{title}</h3>
+        <div className="flex flex-col gap-1 px-3.5 py-3">
+          <h3 className="line-clamp-2 break-words text-ui font-semibold">{title}</h3>
           {description && (
             <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
-              <p data-card-description className="mt-1 line-clamp-3 break-words text-[0.8125rem] leading-[1.45] text-muted">
+              <p data-card-description className="line-clamp-3 break-words text-label text-muted">
                 {description}
               </p>
             </DescriptionHover>
           )}
-          {shown.length > 0 && (
-            <dl className="mt-2 grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2 gap-y-1 text-[0.8125rem]">
-              {shown.map((f) => (
-                <div key={f.id} className="contents">
-                  <dt className="truncate text-faint">{f.name}</dt>
-                  <dd className="min-w-0">
-                    <CellValue field={f} value={record.values[f.id] ?? null} format={format} emails={emails} className="line-clamp-2 text-[0.8125rem]" markdown={false} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
+          <CardProperties fields={shown} record={record} format={format} emails={emails} className="mt-0.5" />
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">

@@ -68,12 +68,13 @@ describe("KanbanView", () => {
     expect(screen.queryByText("4 items")).not.toBeInTheDocument();
   });
 
-  it("fills each coloured stack with its choice's colour instead of a dot; Uncategorized stays neutral", async () => {
+  it("names each stack with a status chip in its choice's colour, and leaves the stacks themselves neutral", async () => {
     setup();
     const doing = await screen.findByRole("listitem", { name: "Stack: Doing" });
-    expect(doing).toHaveClass("ob-hue-blue", "ob-fill");
-    expect(doing.querySelector(".ob-dot")).toBeNull();
-    expect(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).not.toHaveClass("ob-fill");
+    expect(within(screen.getByRole("heading", { name: "Doing" })).getByText("Doing").closest(".choice")).toHaveClass("choice-blue");
+    expect(doing).toHaveClass("bg-subtle");
+    expect(doing).not.toHaveClass("ob-fill");
+    expect(within(screen.getByRole("heading", { name: "Uncategorized" })).getByText("Uncategorized").closest(".choice")).toHaveClass("choice-gray");
   });
 
   it("shows the setup prompt when no stack field is chosen and keeps the choice as a draft", async () => {
@@ -153,14 +154,14 @@ describe("KanbanView", () => {
       expect(card.querySelector("[data-card-description]")!.textContent).toBe("Plan Buy milk & eggs one two");
       expect(card.querySelector("[data-card-description] a, [data-card-description] strong")).toBeNull();
       // Notes is not the description here, so it stays a row.
-      expect(within(card).getByText("Notes")).toBeInTheDocument();
+      expect(within(card).getByTitle("Notes")).toBeInTheDocument();
     });
 
     it("ignores a description field that is no longer text", async () => {
       setupNotes(described(total.id), { [total.id]: 3 });
       const card = await screen.findByRole("button", { name: "R1" });
       expect(card.querySelector("[data-card-description]")).toBeNull();
-      expect(within(card).getByText("Total")).toBeInTheDocument();
+      expect(within(card).getByTitle("Total")).toBeInTheDocument();
     });
   });
 
@@ -265,7 +266,7 @@ describe("KanbanView", () => {
       "POST /api/tables/tbl1/records": { records: [created] },
       "GET /api/tables/tbl1/records/r9": created,
     });
-    await user.click(await screen.findByRole("button", { name: "Add card to Doing" }));
+    await user.click(await screen.findByRole("button", { name: "New record in Doing" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ typecast: true, records: [{ values: { f_status: "s2" } }] });
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
@@ -283,8 +284,8 @@ describe("KanbanView", () => {
 
   it("makes the stack Add button quiet until it is pointed at, focused or touched", async () => {
     setup("editor");
-    const label = (await screen.findByRole("button", { name: "Add card to Doing" })).querySelector("span")!;
-    expect(label.className).toMatch(/\bopacity-50\b/);
+    const label = (await screen.findByRole("button", { name: "New record in Doing" })).querySelector("span")!;
+    expect(label.className).toMatch(/\bopacity-70\b/);
     expect(label.className).toContain("group-hover/add:opacity-100");
     expect(label.className).toContain("group-focus-visible/add:opacity-100");
     expect(label.className).toContain("pointer-coarse:opacity-100");
@@ -294,7 +295,7 @@ describe("KanbanView", () => {
     const user = userEvent.setup();
     const created = rec("r9", {});
     const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
-    await user.click(await screen.findByRole("button", { name: "Add card to Uncategorized" }));
+    await user.click(await screen.findByRole("button", { name: "New record in Uncategorized" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: {} }] });
   });
@@ -310,7 +311,7 @@ describe("KanbanView", () => {
   it("is read-only for viewers: no add buttons, cards are not draggable", async () => {
     setup("viewer");
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    expect(screen.queryByRole("button", { name: /^Add card to/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^New record in/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "R1" })).toHaveAttribute("aria-roledescription", "card");
   });
 
@@ -629,13 +630,13 @@ describe("KanbanView", () => {
       return api;
     };
 
-    it("shows as many fields as the view asks for, six by default", async () => {
-      const six = crowded();
+    it("shows as many properties as the view asks for, three on one line by default", async () => {
+      const three = crowded();
       const card = await screen.findByRole("button", { name: "R1" });
-      expect(card.querySelectorAll("dt")).toHaveLength(5); // Effort + 4 extras; the stack field is left out
-      six.unmount();
-      crowded({ card_field_limit: 3 });
-      expect((await screen.findByRole("button", { name: "R1" })).querySelectorAll("dt")).toHaveLength(3);
+      expect(card.querySelector("[data-card-properties]")!.children).toHaveLength(3); // Effort + 2 extras; the stack field is left out
+      three.unmount();
+      crowded({ card_field_limit: 5 });
+      expect((await screen.findByRole("button", { name: "R1" })).querySelector("[data-card-properties]")!.children).toHaveLength(5);
     });
 
     it("keeps the number of properties and the cover fit from View options as a draft", async () => {

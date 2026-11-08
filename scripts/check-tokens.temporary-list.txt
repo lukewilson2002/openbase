@@ -16,5 +16,4 @@ views/form/FormBuilder.tsx
 views/form/FormFill.tsx
 views/form/FormSurface.tsx
 views/gallery/GalleryView.tsx
-views/kanban/KanbanBoard.tsx
 views/timeline/TimelineChart.tsx

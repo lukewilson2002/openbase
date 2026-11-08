@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field as FormField, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Spinner } from "@/components/ui/spinner";
-import { CARD_FIELD_LIMIT, cardFields } from "../common/cardFields";
+import { cardFields } from "../common/cardFields";
+import { CARD_PROPERTY_LIMIT } from "../common/CardProperties";
 import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../common/description";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
@@ -21,6 +22,7 @@ import { useViewSetup } from "../common/useViewSetup";
 import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
+import { newRecordLabel } from "@/lib/recordNoun";
 import type { ViewProps } from "../types";
 import { KanbanBoard } from "./KanbanBoard";
 import { applyShownOrder, buildAllStacks, clearStack as clearStackFor, isStackField, moveStackKey, stackKind, stackValue, type DropPlan } from "./stacks";
@@ -192,7 +194,7 @@ function KanbanInner(props: ViewProps) {
         : kind === "checkbox"
           ? "A checkbox always has two stacks: checked and unchecked."
           : undefined;
-  const cardLimit = kanban.card_field_limit ?? CARD_FIELD_LIMIT;
+  const cardLimit = kanban.card_field_limit ?? CARD_PROPERTY_LIMIT;
   const limitOptions = [...new Set([...CARD_LIMITS, ALL_FIELDS_LIMIT, cardLimit])].sort((a, b) => a - b);
   const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [], hidden_stacks: [] }));
   const settings = (
@@ -273,6 +275,7 @@ function KanbanInner(props: ViewProps) {
         coverField={coverField}
         descriptionField={descriptionField}
         cardLimit={cardLimit}
+        newLabel={newRecordLabel(table)}
         coverFit={kanban.cover_fit ? "contain" : "cover"}
         format={setup.format}
         emails={setup.emails}

@@ -66,7 +66,7 @@ describe("ListView", () => {
     const user = userEvent.setup();
     const created = rec("r9", {});
     const { api } = setup("editor", outline, { records, groups }, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
-    await user.click(await screen.findByRole("treeitem", { name: "Add record to Grace Hopper" }));
+    await user.click(await screen.findByRole("treeitem", { name: "New record in Grace Hopper" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ typecast: true, records: [{ values: { f_status: "s1", f_owner: ["usr2"] } }] });
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
@@ -97,7 +97,7 @@ describe("ListView", () => {
     const user = userEvent.setup();
     setup("commenter", outline, { records, groups }, { "GET /api/tables/tbl1/records/r1": records[0]! });
     await screen.findByRole("tree");
-    expect(screen.queryByRole("treeitem", { name: /^Add record/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /^New record/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("treeitem", { name: /^R1(,|$)/ }));
     expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
     const dialog = await screen.findByRole("dialog");
@@ -249,7 +249,7 @@ describe("ListView selection, menu and order", () => {
     expect(screen.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toHaveTextContent("1");
     expect(screen.getByRole("treeitem", { name: /^Doing, \d+ records?$/ })).toHaveTextContent("2");
     // The rows follow the headings in the tree, so the order of the tree items says who is in which group.
-    expect(screen.getAllByRole("treeitem").map((b) => b.getAttribute("aria-label"))).toEqual(["Todo, 1 record", "R1", "Add record to Todo", "Doing, 2 records", "R2", "R3", "Add record to Doing"]);
+    expect(screen.getAllByRole("treeitem").map((b) => b.getAttribute("aria-label"))).toEqual(["Todo, 1 record", "R1", "New record in Todo", "Doing, 2 records", "R2", "R3", "New record in Doing"]);
   });
 });
 
@@ -460,6 +460,6 @@ describe("ListView groups past the record cap", () => {
     expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}(,|$)/ })[0]).toHaveAccessibleName("N5000");
     await user.click(screen.getByRole("treeitem", { name: "Show 30 more records" }));
     await waitFor(() => expect(screen.getAllByRole("treeitem", { name: /^N5\d{3}(,|$)/ })).toHaveLength(230));
-    expect(screen.getByRole("treeitem", { name: "Add record to Doing" })).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "New record in Doing" })).toBeInTheDocument();
   }, 20_000);
 });

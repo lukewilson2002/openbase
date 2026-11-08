@@ -23,6 +23,7 @@ import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { ViewFrame } from "../common/ViewFrame";
 import { FieldSelect } from "../common/FieldSelect";
+import { newRecordLabel } from "@/lib/recordNoun";
 import type { ViewProps } from "../types";
 import { ListOutline, type RowTreeActions } from "./ListOutline";
 import { allPaths, buildOutline, drawnIds, leafNodes, moveBetweenGroups, placeIndexes, planDrop, withTails, type DropPlan } from "./outline";
@@ -186,6 +187,7 @@ function ListInner(props: ViewProps) {
         onToggle={toggle}
         onOpen={setup.openRecord}
         onAdd={(defaults) => void add(defaults)}
+        newLabel={newRecordLabel(table)}
         addTargetRef={addTarget}
         selection={sel}
         onDelete={(ids) => actions.requestDelete(ids, sel.clear)}

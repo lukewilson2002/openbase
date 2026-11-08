@@ -58,10 +58,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { StatusChip } from "@/components/ui/status-chip";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import type { FormatCtx } from "@/lib/cells/format";
-import { accentHue } from "@/lib/colors";
 import { CardBody } from "../common/CardBody";
 import { cardTitle, itemsLabel } from "../common/cardFields";
 import { SelectionBar } from "../common/SelectionBar";
@@ -81,7 +81,7 @@ export interface KanbanBoardProps {
   fields: readonly Field[];
   coverField?: Field;
   descriptionField?: Field;
-  /** Most fields a card shows (the non-empty ones); the card's default when omitted. */
+  /** Most properties a card shows (the non-empty ones); three, as a List row, when omitted. */
   cardLimit?: number;
   /** How a cover fills its box: crop to fill, or fit inside. */
   coverFit?: "cover" | "contain";
@@ -98,6 +98,8 @@ export interface KanbanBoardProps {
   onReorderStacks?: (keys: string[]) => void;
   onDrop(plan: DropPlan): void;
   onAddCard(key: string): void;
+  /** What the + at the foot of a stack says: "New client", after the collection's record name. */
+  newLabel: string;
   /** Filled with a function giving the stack the header's New button adds to: the focused card's, the selection's, else the first one in view (null: none to say). */
   addTargetRef?: MutableRefObject<(() => string | null) | null>;
   /** Adds a stack (a new choice of the stack field); omitted where that is not possible or allowed. */
@@ -479,7 +481,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       )}
       <DragOverlay>
         {activeRecord ? (
-          <div data-drag-overlay className="relative cursor-grabbing overflow-hidden rounded-[10px] border border-primary bg-surface shadow-pop">
+          <div data-drag-overlay className="relative cursor-grabbing overflow-hidden rounded-lg border border-primary bg-surface shadow-pop">
             <CardBody
               record={activeRecord}
               primary={props.primary}
@@ -536,7 +538,13 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
 
   const header = (
     <div ref={setActivatorNodeRef} {...(reorderable ? listeners : {})} className={cn("flex min-h-8 items-center gap-2 pl-1.5 pr-0.5", reorderable && "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none]", isDragging && "cursor-grabbing")}>
-      <h2 className="min-w-0 flex-1 truncate text-[0.875rem] font-[650]">{stack.label}</h2>
+      <h2 className="min-w-0 text-ui font-semibold">
+        <StatusChip hue={stack.color ?? "gray"}>{stack.label}</StatusChip>
+      </h2>
+      <span className="min-w-0 flex-1 text-meta num text-muted">
+        <span aria-hidden>{ids.length.toLocaleString()}</span>
+        <span className="sr-only">{itemsLabel(ids.length)}</span>
+      </span>
       {isCollapsed && (
         <button
           type="button"
@@ -590,25 +598,18 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
     </div>
   );
 
-  const foot = (
-    <div className="flex min-h-9 items-center justify-between gap-2">
-      {p.canEdit && !isCollapsed ? (
-        <button
-          type="button"
-          aria-label={`Add card to ${stack.label}`}
-          onClick={() => p.onAddCard(stack.key)}
-          className="group/add flex h-9 items-center gap-1.5 rounded-lg px-2 text-[0.875rem] text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
-        >
-          {/* Quiet until the button is pointed at or focused (always shown on touch, which cannot hover). */}
-          <span className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
-            <Plus aria-hidden className="size-[15px]" /> Add
-          </span>
-        </button>
-      ) : (
-        <span />
-      )}
-      <span className="pr-2 text-[0.8125rem] text-muted">{itemsLabel(ids.length)}</span>
-    </div>
+  const foot = p.canEdit && !isCollapsed && (
+    <button
+      type="button"
+      aria-label={`${p.newLabel} in ${stack.label}`}
+      onClick={() => p.onAddCard(stack.key)}
+      className="group/add flex h-9 items-center gap-1.5 rounded-md px-2 text-ui text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
+    >
+      {/* Quiet until the button is pointed at or focused (always shown on touch, which cannot hover). */}
+      <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+        <Plus aria-hidden className="size-4" /> {p.newLabel}
+      </span>
+    </button>
   );
 
   return (
@@ -619,10 +620,9 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       data-stack-key={stack.key}
       style={{ transform: CSS.Translate.toString(transform), transition: transform ? transition : undefined, zIndex: isDragging ? 20 : undefined }}
       className={cn(
-        "flex max-h-full shrink-0 flex-col gap-2 rounded-xl p-2 outline-2 -outline-offset-2 transition-[outline-color]",
-        // A coloured choice fills its stack with its colour (no dot needed); the rest stay neutral.
-        stack.color ? `ob-hue-${accentHue(stack.color)} ob-fill` : "bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))]",
-        isCollapsed ? "w-48" : "w-[min(280px,85vw)]",
+        // The choice's colour is its chip in the header; the stack itself is the page's quiet grey.
+        "flex max-h-full shrink-0 flex-col gap-2 rounded-lg bg-subtle p-2 outline-2 -outline-offset-2 transition-[outline-color]",
+        isCollapsed ? "w-48" : "w-[min(17.5rem,85vw)]",
         isOver ? "outline-primary" : "outline-transparent",
         isDragging && "opacity-80 shadow-pop",
       )}
@@ -747,7 +747,7 @@ function ClearStack({ stack, fieldName, ids }: { stack: Stack; fieldName?: strin
       aria-label={`Stack: ${stack.label}`}
       data-stack-key={stack.key}
       className={cn(
-        "flex min-h-24 w-[min(280px,85vw)] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center text-[0.8125rem] text-muted",
+        "flex min-h-24 w-[min(17.5rem,85vw)] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed p-3 text-center text-label text-muted",
         isOver ? "border-primary bg-primary-soft" : "border-line-strong",
       )}
     >
@@ -763,7 +763,7 @@ function HiddenStacks({ stacks, onShow }: { stacks: readonly Stack[]; onShow: (k
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 text-[0.875rem] text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover">
+        <button type="button" className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-ui text-muted hover:bg-hover hover:text-fg data-[state=open]:bg-hover">
           <Eye aria-hidden className="size-[15px]" /> {stacks.length === 1 ? "1 hidden stack" : `${stacks.length} hidden stacks`}
         </button>
       </DropdownMenuTrigger>
@@ -794,7 +794,7 @@ function AddStack({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 text-[0.875rem] text-muted hover:bg-hover hover:text-fg"
+        className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-ui text-muted hover:bg-hover hover:text-fg"
       >
         <Plus aria-hidden className="size-[15px]" /> Add a stack
       </button>
@@ -814,7 +814,7 @@ function AddStack({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
     }
   };
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex w-[min(280px,85vw)] shrink-0 flex-col gap-2 rounded-xl bg-[color-mix(in_srgb,var(--line)_40%,var(--bg))] p-2">
+    <form onSubmit={(e) => void submit(e)} className="flex w-[min(17.5rem,85vw)] shrink-0 flex-col gap-2 rounded-lg bg-subtle p-2">
       <Input
         autoFocus
         aria-label="Name of the new stack"
@@ -978,7 +978,7 @@ function KanbanCard({
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative shrink-0 overflow-hidden rounded-[10px] border border-line bg-surface text-left shadow-[0_1px_2px_rgb(15_20_30/0.04)] outline-none transition-[border-color,box-shadow] hover:border-primary-soft-line hover:shadow-[0_4px_12px_rgb(15_20_30/0.08)] focus-visible:outline-2 focus-visible:outline-ring",
+        "group relative shrink-0 overflow-hidden rounded-lg border border-line bg-surface text-left outline-none transition-[border-color] hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ring",
         // Press and hold starts a drag on touch screens: no text selection or iOS callout on the way.
         p.canEdit ? "cursor-grab touch-manipulation select-none [-webkit-touch-callout:none]" : "cursor-pointer",
         selected && "border-primary ring-2 ring-primary",

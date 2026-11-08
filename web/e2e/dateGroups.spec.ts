@@ -115,7 +115,7 @@ test("the list groups by day, then by month and year from View options", async (
 test("a record added to a month group starts on the month's first day", async ({ page }) => {
   await call(page.request, "patch", `/api/views/${fx.list}`, { config: { groups: [{ field_id: fx.due, direction: "asc", granularity: "month" }] } });
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.list}`);
-  await page.getByRole("treeitem", { name: "Add record to October 2026" }).click();
+  await page.getByRole("treeitem", { name: "New record in October 2026" }).click();
   await expect(page).toHaveURL(/record=rec/);
   const id = new URL(page.url()).searchParams.get("record")!;
   const rec = await call<{ values: Record<string, unknown> }>(page.request, "get", `/api/tables/${fx.tableId}/records/${id}`);

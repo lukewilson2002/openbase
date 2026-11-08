@@ -33,6 +33,7 @@ function board(over: Partial<KanbanBoardProps> = {}) {
     onMoveStack: vi.fn(),
     onDrop: vi.fn(),
     onAddCard: vi.fn(),
+    newLabel: "New record",
     onOpen: vi.fn(),
     onDeleteRecords: vi.fn(),
     onDuplicateRecords: vi.fn(),
@@ -73,7 +74,7 @@ describe("KanbanBoard", () => {
     expect(todo.getAllByRole("button", { name: /Write docs|Fix bug/ })).toHaveLength(2);
     expect(todo.getByText("2 items")).toBeInTheDocument();
     expect(document.querySelector("[data-record-id='r1'] [data-row-color='red']")).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: /^Add card to/ })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /^New record in/ })).toHaveLength(3);
     expect(within(screen.getByRole("listitem", { name: "Stack: Done" })).getByText("No cards")).toBeInTheDocument();
   });
 
@@ -141,7 +142,7 @@ describe("KanbanBoard", () => {
   it("cannot drag when the role may not edit, but still opens cards and hides add buttons", async () => {
     const user = userEvent.setup();
     const { props } = board({ canEdit: false });
-    expect(screen.queryByRole("button", { name: /^Add card to/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^New record in/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Write docs" })).toHaveAttribute("aria-roledescription", "card");
     await keyboardDrag(user, screen.getByRole("button", { name: "Write docs" }), ["{ArrowRight}"]);
     await act(async () => {
@@ -157,7 +158,7 @@ describe("KanbanBoard", () => {
     expect(inProgress.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
     await user.click(inProgress.getByRole("button", { name: "Expand In progress" }));
     expect(props.onToggleCollapse).toHaveBeenCalledWith("chs2");
-    await user.click(screen.getByRole("button", { name: "Add card to Todo" }));
+    await user.click(screen.getByRole("button", { name: "New record in Todo" }));
     expect(props.onAddCard).toHaveBeenCalledWith("chs1");
     await user.click(screen.getByRole("button", { name: "Options for Todo" }));
     expect(await screen.findByRole("menuitem", { name: "Move left" })).toHaveAttribute("aria-disabled", "true");

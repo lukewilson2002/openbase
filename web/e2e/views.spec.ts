@@ -177,7 +177,7 @@ test.describe("kanban", () => {
 
   test("adds a card prefilled with the stack value and opens it", async ({ page }) => {
     await open(page, "kanban");
-    await page.getByRole("button", { name: "Add card to Done" }).click();
+    await page.getByRole("button", { name: "New record in Done" }).click();
     await expect(page).toHaveURL(/record=rec/);
     await expect(page.getByRole("dialog")).toBeVisible();
     const id = new URL(page.url()).searchParams.get("record")!;
@@ -197,9 +197,9 @@ test.describe("gallery and list", () => {
   test("the list groups by status with counts and adds a record inside a group", async ({ page }) => {
     await open(page, "list");
     await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
-    // A group header is a tree item named "<group>, <n> records"; each group ends in an "Add record to <group>" item.
+    // A group header is a tree item named "<group>, <n> records"; each group ends in a "New record in <group>" item.
     await expect(page.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toBeVisible();
-    await page.getByRole("treeitem", { name: "Add record to Todo" }).click();
+    await page.getByRole("treeitem", { name: "New record in Todo" }).click();
     await expect(page).toHaveURL(/record=rec/);
     const id = new URL(page.url()).searchParams.get("record")!;
     expect((await record(page, id)).values[fx.fields.status]).toBe(fx.choice.todo);

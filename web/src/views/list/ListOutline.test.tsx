@@ -38,6 +38,7 @@ function outline(over: Partial<ListOutlineProps> = {}) {
     onToggle: vi.fn(),
     onOpen: vi.fn(),
     onAdd: vi.fn(),
+    newLabel: "New record",
     ...over,
   };
   return { props, ...render(<ListOutline {...props} />) };
@@ -66,19 +67,30 @@ describe("ListOutline", () => {
     expect(headers[0]).toHaveAttribute("aria-expanded", "true");
     // Records sit under their group in order, with the number field shown when set.
     const first = row("Write docs");
-    expect(within(first).getByText("number")).toBeInTheDocument();
-    expect(within(first).getByText("3.00")).toBeInTheDocument();
+    // A property has no label on the card; its name is the tooltip.
+    expect(within(first).getByTitle("number")).toHaveTextContent("3.00");
     expect(first.querySelector("[data-row-color='red']")).not.toBeNull();
     expect(screen.getAllByRole("treeitem", { name: /^(Write docs|Fix bug|Ship it|Idea)(,|$)/ })).toHaveLength(4);
   });
 
-  it("shows every field the view shows that has a value, not just the first few, and leaves empty ones out", () => {
+  it("shows the first three properties that have a value, on one line, and leaves empty ones out", () => {
     const extra = [ALL_FIELDS.email!, ALL_FIELDS.url!, ALL_FIELDS.percent!, ALL_FIELDS.currency!];
-    const full = rec("r9", "Everything", { [num.id]: 3, [extra[0]!.id]: "a@b.co", [extra[1]!.id]: "https://example.com", [extra[2]!.id]: 0.5, [extra[3]!.id]: null });
+    const full = rec("r9", "Everything", { [num.id]: 3, [extra[0]!.id]: null, [extra[1]!.id]: "https://example.com", [extra[2]!.id]: 0.5, [extra[3]!.id]: "12" });
     outline({ records: [full], groups: [], fields: [num, ...extra] });
     const everything = row("Everything");
-    for (const f of [num, extra[0]!, extra[1]!, extra[2]!]) expect(within(everything).getByText(f.name)).toBeInTheDocument();
-    expect(within(everything).queryByText(extra[3]!.name)).not.toBeInTheDocument();
+    const line = everything.querySelector("[data-card-properties]")!;
+    expect([...line.children].map((c) => c.getAttribute("title"))).toEqual([num.name, extra[1]!.name, extra[2]!.name]);
+    expect(within(everything).queryByTitle(extra[0]!.name)).not.toBeInTheDocument();
+    expect(within(everything).queryByTitle(extra[3]!.name)).not.toBeInTheDocument();
+  });
+
+  it("sets the title in 600 and a number at the right end of the line in tabular figures", () => {
+    outline({ groups: [], fields: [status, num] });
+    const first = row("Write docs");
+    expect(within(first).getByText("Write docs")).toHaveClass("font-semibold");
+    const number = within(first).getByTitle("number");
+    expect(number).toHaveClass("num", "ml-auto");
+    expect(within(first).getByTitle(status.name)).not.toHaveClass("ml-auto");
   });
 
   it("fills a choice group's heading with its colour (no dot) and shows select values as bare pills", () => {
@@ -88,7 +100,7 @@ describe("ListOutline", () => {
     expect(heading.querySelector(".ob-dot")).toBeNull();
     const first = row("Write docs");
     expect(within(first).queryByText(status.name)).not.toBeInTheDocument();
-    expect(within(first).getByText("number")).toBeInTheDocument();
+    expect(within(first).getByTitle("number")).toBeInTheDocument();
   });
 
   it("puts the person's face on a person group", () => {
@@ -126,12 +138,12 @@ describe("ListOutline", () => {
     expect(props.onToggle).toHaveBeenCalledWith(`${status.id}:chs1`);
   });
 
-  it("ends an ungrouped list with a quiet Add line, shown in full on hover, focus and touch", async () => {
+  it("ends an ungrouped list with a quiet New record line, shown in full on hover, focus and touch", async () => {
     const user = userEvent.setup();
     const { props } = outline({ groups: [] });
-    const add = screen.getByRole("treeitem", { name: "Add record" });
+    const add = screen.getByRole("treeitem", { name: "New record" });
     const label = add.querySelector("span")!;
-    expect(label.className).toMatch(/\bopacity-50\b/);
+    expect(label.className).toMatch(/\bopacity-70\b/);
     expect(label.className).toContain("group-hover/add:opacity-100");
     expect(label.className).toContain("group-focus-visible/add:opacity-100");
     expect(label.className).toContain("pointer-coarse:opacity-100");
@@ -142,13 +154,13 @@ describe("ListOutline", () => {
   it("adds a record inside a group with that group's value, and not for readers", async () => {
     const user = userEvent.setup();
     const { props, unmount } = outline();
-    await user.click(screen.getByRole("treeitem", { name: "Add record to Todo" }));
+    await user.click(screen.getByRole("treeitem", { name: "New record in Todo" }));
     expect(props.onAdd).toHaveBeenCalledWith({ [status.id]: "chs1" });
-    await user.click(screen.getByRole("treeitem", { name: "Add record to (Empty)" }));
+    await user.click(screen.getByRole("treeitem", { name: "New record in (Empty)" }));
     expect(props.onAdd).toHaveBeenLastCalledWith({}); // blank group: nothing to prefill
     unmount();
     outline({ canEdit: false });
-    expect(screen.queryByRole("treeitem", { name: /^Add record to/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /^New record in/ })).not.toBeInTheDocument();
   });
 
   it("tells the toolbar's Add which group focus was last in", async () => {
@@ -157,9 +169,9 @@ describe("ListOutline", () => {
     outline({ addTargetRef });
     expect(addTargetRef.current!()).toEqual({ [status.id]: "chs1" }); // nothing focused: the group at the top
     await user.click(head("Todo"));
-    screen.getByRole("treeitem", { name: "Add record to (Empty)" }).focus();
+    screen.getByRole("treeitem", { name: "New record in (Empty)" }).focus();
     expect(addTargetRef.current!()).toEqual({});
-    screen.getByRole("treeitem", { name: "Add record to Todo" }).focus();
+    screen.getByRole("treeitem", { name: "New record in Todo" }).focus();
     (document.activeElement as HTMLElement).blur();
     expect(addTargetRef.current!()).toEqual({ [status.id]: "chs1" }); // blurred by pressing Add: still the last one
   });
@@ -201,13 +213,13 @@ describe("ListOutline keyboard", () => {
     expect(row("Write docs")).toHaveFocus();
     // After the group's rows comes its Add line, then the next heading.
     await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(screen.getByRole("treeitem", { name: "Add record to Todo" })).toHaveFocus();
+    expect(screen.getByRole("treeitem", { name: "New record in Todo" })).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(head("Done")).toHaveFocus();
     await user.keyboard("{ArrowUp}{ArrowUp}");
     expect(row("Fix bug")).toHaveFocus();
     await user.keyboard("{End}");
-    expect(screen.getByRole("treeitem", { name: "Add record to (Empty)" })).toHaveFocus();
+    expect(screen.getByRole("treeitem", { name: "New record in (Empty)" })).toHaveFocus();
     await user.keyboard("{ArrowUp}");
     expect(row("Idea")).toHaveFocus();
     await user.keyboard("{Home}");
@@ -412,7 +424,7 @@ describe("ListOutline tree", () => {
     expect(props.onToggle).toHaveBeenLastCalledWith(`${status.id}:chs3`);
     await user.keyboard(" ");
     expect(props.onToggle).toHaveBeenCalledTimes(3);
-    screen.getByRole("treeitem", { name: "Add record to Todo" }).focus();
+    screen.getByRole("treeitem", { name: "New record in Todo" }).focus();
     await user.keyboard("{Enter}");
     expect(props.onAdd).toHaveBeenCalledWith({ [status.id]: "chs1" });
   });
@@ -421,7 +433,7 @@ describe("ListOutline tree", () => {
     const many = Array.from({ length: ROWS_PER_GROUP + 3 }, (_, i) => rec(`m${i}`, `Row ${i}`, { [status.id]: "chs1" }));
     outline({ records: many, groups: [header(0, "chs1", "Todo", 0, many.length)] });
     expect(screen.getByRole("treeitem", { name: "Show 3 more records" })).toHaveAttribute("aria-level", "2");
-    expect(screen.getByRole("treeitem", { name: "Add record to Todo" })).toHaveAttribute("aria-level", "2");
+    expect(screen.getByRole("treeitem", { name: "New record in Todo" })).toHaveAttribute("aria-level", "2");
   });
 });
 
@@ -518,7 +530,7 @@ describe("ListOutline sub-items", () => {
       ["Wire", "3", null],
       ["Build", "2", null],
       ["Ship", "1", null],
-      ["Add record", "1", null],
+      ["New record", "1", null],
     ]);
     expect(row("Build")).toHaveAttribute("aria-posinset", "2");
     expect(row("Build")).toHaveAttribute("aria-setsize", "2");

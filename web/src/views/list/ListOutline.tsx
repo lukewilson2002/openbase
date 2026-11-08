@@ -16,13 +16,12 @@
  * manual order, into the next group when it passes the end of its own. Rows can also be dragged:
  * above or below another row, or onto a group's heading to put the row first in that group.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { DndContext, MouseSensor, TouchSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import type { Collaborator, Field, GroupHeader, LinkRef, TableRecord } from "@/api/types";
-import { CellValue } from "@/components/record/CellValue";
 import { Avatar } from "@/components/ui/avatar";
 import { type MenuAnchor } from "@/components/ui/anchored-menu";
 import { Spinner } from "@/components/ui/spinner";
@@ -34,7 +33,8 @@ import { swatchColor } from "@/lib/cells/palette";
 import { isWritable } from "@/lib/cells/wire";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { holdClicks } from "@/shell/sortable";
-import { cardTitle, descriptionText, fieldsToShow } from "../common/cardFields";
+import { cardTitle, descriptionText } from "../common/cardFields";
+import { CardProperties, cardProperties } from "../common/CardProperties";
 import { DescriptionHover } from "../common/description";
 import { menuAnchorOf } from "../common/RecordMenu";
 import type { RecordSelection } from "../common/useRecordSelection";
@@ -65,11 +65,10 @@ export const ROWS_PER_GROUP = 200;
 const LEVEL_PX = 20;
 const ROW_PAD = 16;
 const UNDER_CHEVRON = 30;
-/** Indent of a sub-item under its parent, and the width the title column starts with. */
+/** Indent of a sub-item under its parent. */
 const NEST_PX = 20;
 /** Levels of sub-items that indent further; deeper rows stay at the last indent. */
 const MAX_INDENTS = 6;
-const TITLE_PX = 190;
 
 /** What a row's menu and its Tab keys can do to where the row sits in the sub-item tree. */
 export interface RowTreeActions {
@@ -120,6 +119,8 @@ export interface ListOutlineProps {
   onOpen(recordId: string): void;
   /** Add a record starting with these field values (a group's values; empty when ungrouped). */
   onAdd(defaults: Record<string, unknown>): void;
+  /** What the row that adds a record says after its +: "New client", after the collection's record name. */
+  newLabel: string;
   /** Selecting rows: Ctrl/Cmd-click, Shift-click, Space and the tick boxes. Omit for a list that cannot select. */
   selection?: RecordSelection;
   /** Delete these records (the Delete key). */
@@ -170,19 +171,13 @@ const IDLE = { activeId: null as string | null, activeGroup: null as string | nu
 /** The row being dragged and the group it came from, for the drop markers. */
 const DragCtx = createContext(IDLE);
 
-/** Pills say what they are by their colour and wording; other values need their field's name. */
-const isPill = (f: Field) => {
-  const shape = displayShapeOf(f);
-  return shape === "select" || shape === "multi_select";
-};
-
 const ROW_BORDER = "border-b border-[color-mix(in_srgb,var(--line)_60%,var(--surface))]";
 
 function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   const { p } = u;
   const { record } = row;
-  // Every field the view shows that has something in it (Hide fields decides which); empty ones are left out.
-  const shown = fieldsToShow(p.fields, record, p.format, Infinity);
+  // The first few properties the view shows that have something in them (Properties decides which); empty ones are left out.
+  const shown = cardProperties(p.fields, record, p.format);
   const color = p.colors[record.id];
   const title = cardTitle(p.primary, record, p.format);
   const description = descriptionText(p.descriptionField, p.descriptionField ? record.values[p.descriptionField.id] : undefined, p.format);
@@ -196,10 +191,13 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
   const prefixValue = p.prefix ? record.values[p.prefix.id] : undefined;
   const label = rowLabel(title, [...(p.prefix ? [{ field: p.prefix, value: prefixValue }] : []), ...shown.map((f) => ({ field: f, value: record.values[f.id] }))], description, p.format);
   const nested = !!p.parentField;
-  // Sub-items indent inside the title column, so the values of every row still line up.
-  const titleWidth = TITLE_PX + (p.prefix ? 28 : 0) + (nested ? NEST_PX : 0);
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} data-leaf={leaf.path} className={cn("group/row relative motion-reduce:transition-none!", isDragging && "z-20 bg-surface shadow-pop")}>
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition, paddingLeft: leaf.indent }}
+      data-leaf={leaf.path}
+      className={cn("group/row relative pb-2 pr-4 motion-reduce:transition-none!", isDragging && "z-20")}
+    >
       <div
         role="treeitem"
         {...u.roving.itemProps(`r:${record.id}`)}
@@ -223,16 +221,17 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
           e.preventDefault();
           p.onRecordMenu(record.id, menuAnchorOf(e), u.treeOf(record.id));
         }}
-        style={{ paddingLeft: leaf.indent, "--title-w": `${titleWidth}px` } as CSSProperties}
         className={cn(
-          `relative flex min-h-11 cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 ${ROW_BORDER} py-2 pr-10 outline-none hover:bg-[color-mix(in_srgb,var(--bg)_70%,var(--surface))] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`,
-          selected && "bg-primary-soft hover:bg-primary-soft",
+          // A card: the row is its own bordered surface, so a record reads as one thing.
+          "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 outline-none hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          selected && "border-primary-soft-line bg-primary-soft hover:border-primary-soft-line",
           joining && "shadow-[inset_0_2px_0_var(--primary)]",
+          isDragging && "shadow-pop",
           u.draggable && "select-none",
         )}
       >
         {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 w-1" style={{ background: swatchColor(color) }} />}
-        <span className="flex w-full min-w-0 items-center gap-2 sm:w-(--title-w) sm:shrink-0">
+        <span className="flex min-w-0 items-center gap-2">
           {row.depth > 0 && <span aria-hidden className="shrink-0" style={{ width: Math.min(row.depth, MAX_INDENTS) * NEST_PX }} />}
           {nested && (
             <span
@@ -261,32 +260,21 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
               format={p.format}
             />
           )}
-          <span className="min-w-0 truncate text-[0.875rem] font-medium">{title}</span>
+          <span className="min-w-0 truncate text-ui font-semibold">{title}</span>
           {folded && (
-            <span aria-hidden className="shrink-0 rounded-full bg-hover px-1.5 text-xs tabular-nums text-muted">
+            <span aria-hidden className="shrink-0 rounded-pill bg-hover px-1.5 text-meta num text-muted">
               {row.children}
             </span>
           )}
         </span>
         {description && (
-          // Straight under the title on a phone (the title takes the whole line there); under the
-          // title and its fields on a wider screen, where they sit beside the title.
           <DescriptionHover field={p.descriptionField} record={record} title={title} format={p.format}>
-            <p data-row-description className="order-1 w-full min-w-0 line-clamp-2 break-words text-[0.8125rem] leading-[1.45] text-muted sm:order-3">
+            <p data-row-description className="line-clamp-2 min-w-0 break-words text-label text-muted">
               {description}
             </p>
           </DescriptionHover>
         )}
-        {shown.map((f) =>
-          isPill(f) ? (
-            <CellValue key={f.id} field={f} value={record.values[f.id] ?? null} format={p.format} emails={p.emails} className="order-2 min-w-0 text-[0.8125rem]" markdown={false} />
-          ) : (
-            <span key={f.id} className="order-2 flex min-w-0 max-w-72 items-center gap-1.5 text-[0.8125rem]">
-              <span className="shrink-0 text-faint">{f.name}</span>
-              <CellValue field={f} value={record.values[f.id] ?? null} format={p.format} emails={p.emails} className="truncate text-[0.8125rem]" markdown={false} />
-            </span>
-          ),
-        )}
+        <CardProperties fields={shown} record={record} format={p.format} emails={p.emails} />
         {sel && (
           // Inside the row, so a screen reader finds it with the row; it only selects.
           <button
@@ -385,14 +373,14 @@ function Records({ leaf, u }: { leaf: Leaf; u: Ui }) {
           leafPath={leaf.path}
           level={leaf.depth + 1}
           indent={leaf.indent - 2}
-          label={node ? `Add record to ${node.header.label}` : "Add record"}
+          label={node ? `${p.newLabel} in ${node.header.label}` : p.newLabel}
           onActivate={() => p.onAdd(node ? groupDefaults(node) : {})}
           u={u}
-          className="group/add h-10 text-[0.875rem] text-muted hover:text-fg pointer-coarse:h-11"
+          className="group/add h-10 text-ui text-muted hover:text-fg pointer-coarse:h-11"
         >
           {/* Quiet until the row is pointed at or focused (always shown on touch, which cannot hover). */}
-          <span className="flex items-center gap-1.5 opacity-50 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
-            <Plus aria-hidden className="size-[15px]" /> Add
+          <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
+            <Plus aria-hidden className="size-4" /> {p.newLabel}
           </span>
         </ActionRow>
       )}
