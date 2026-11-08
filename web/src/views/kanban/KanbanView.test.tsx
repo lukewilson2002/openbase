@@ -79,7 +79,7 @@ describe("KanbanView", () => {
   it("queries the view and stacks its records by the stack field", async () => {
     const { asked } = setup();
     expect(await screen.findByRole("listitem", { name: "Stack: Todo" })).toBeInTheDocument();
-    const stackLabels = screen.getAllByRole("listitem").map((s) => s.getAttribute("aria-label"));
+    const stackLabels = screen.getAllByRole("listitem", { name: /^Stack:/ }).map((s) => s.getAttribute("aria-label"));
     expect(stackLabels).toEqual(["Stack: Uncategorized", "Stack: Todo", "Stack: Doing", "Stack: Done"]);
     expect(within(screen.getByRole("listitem", { name: "Stack: Todo" })).getAllByRole("button", { name: /^R\d$/ })).toHaveLength(2);
     expect(within(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).getByRole("button", { name: "R4" })).toBeInTheDocument();
@@ -305,13 +305,21 @@ describe("KanbanView", () => {
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { f_status: "s2" } }] });
   });
 
-  it("makes the stack Add button quiet until it is pointed at, focused or touched", async () => {
+  it("holds only list items in the Stacks list, the buttons after the last stack included, and lets a scrolling card group take focus", async () => {
+    setup("creator");
+    await screen.findByRole("listitem", { name: "Stack: Todo" });
+    const list = screen.getByRole("list", { name: "Stacks" });
+    expect([...list.children].every((el) => el.getAttribute("role") === "listitem")).toBe(true);
+    expect(within(list).getByRole("button", { name: "Add a stack" })).toBeInTheDocument();
+    expect(within(list).getByRole("group", { name: "Cards in Todo" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("keeps the stack Add button at its full height and contrast: it is not dimmed and does not shrink under a tall stack", async () => {
     setup("editor");
-    const label = (await screen.findByRole("button", { name: "New record in Doing" })).querySelector("span")!;
-    expect(label.className).toMatch(/\bopacity-70\b/);
-    expect(label.className).toContain("group-hover/add:opacity-100");
-    expect(label.className).toContain("group-focus-visible/add:opacity-100");
-    expect(label.className).toContain("pointer-coarse:opacity-100");
+    const add = await screen.findByRole("button", { name: "New record in Doing" });
+    expect(add.className).toContain("shrink-0");
+    expect(add.className).toContain("pointer-coarse:h-11");
+    expect(add.querySelector("[class*='opacity-']")).toBeNull();
   });
 
   it("adds to Uncategorized without a value", async () => {
@@ -341,7 +349,7 @@ describe("KanbanView", () => {
   it("hides empty stacks and follows stack_order", async () => {
     setup("editor", board({ hide_empty_stacks: true, stack_order: ["s2", "s1"] }));
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    expect(screen.getAllByRole("listitem").map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Doing", "Stack: Todo", "Stack: Uncategorized"]);
+    expect(screen.getAllByRole("listitem", { name: /^Stack:/ }).map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Doing", "Stack: Todo", "Stack: Uncategorized"]);
   });
 
   it("notes when only the first records of a very large view are loaded", async () => {
@@ -386,7 +394,7 @@ describe("KanbanView", () => {
     it("names people, never their ids, and only draws stacks for people who hold cards", async () => {
       setup("editor", byOwner(), {}, { records: owned });
       await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
-      expect(screen.getAllByRole("listitem").map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Uncategorized", "Stack: Ada Lovelace", "Stack: Former member"]);
+      expect(screen.getAllByRole("listitem", { name: /^Stack:/ }).map((s) => s.getAttribute("aria-label"))).toEqual(["Stack: Uncategorized", "Stack: Ada Lovelace", "Stack: Former member"]);
       expect(screen.queryByText(/usr9/)).not.toBeInTheDocument();
       expect(screen.getByText(/Stacks follow the people with cards/)).toBeInTheDocument();
     });

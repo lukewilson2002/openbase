@@ -438,8 +438,21 @@ export function KanbanBoard(props: KanbanBoardProps) {
             ))}
           </SortableContext>
           {drag.activeId && clearStack && <ClearStack stack={clearStack} fieldName={props.fieldName} ids={items[clearStack.key] ?? []} />}
-          {props.onAddStack ? <AddStack onAdd={props.onAddStack} /> : props.addStackNote ? <p className="w-44 shrink-0 self-start px-2 py-2.5 text-xs text-muted">{props.addStackNote}</p> : null}
-          {props.hiddenStacks && props.hiddenStacks.length > 0 && props.onShowStack && <HiddenStacks stacks={props.hiddenStacks} onShow={props.onShowStack} />}
+          {/* A list holds list items only: the buttons after the last stack are items of their own. */}
+          {props.onAddStack ? (
+            <div role="listitem" className="shrink-0 self-start">
+              <AddStack onAdd={props.onAddStack} />
+            </div>
+          ) : props.addStackNote ? (
+            <p role="listitem" className="w-44 shrink-0 self-start px-2 py-2.5 text-xs text-muted">
+              {props.addStackNote}
+            </p>
+          ) : null}
+          {props.hiddenStacks && props.hiddenStacks.length > 0 && props.onShowStack && (
+            <div role="listitem" className="shrink-0 self-start">
+              <HiddenStacks stacks={props.hiddenStacks} onShow={props.onShowStack} />
+            </div>
+          )}
         </div>
         {sel.count > 0 && (
           <SelectionBar
@@ -620,12 +633,10 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       type="button"
       aria-label={`${p.newLabel} in ${stack.label}`}
       onClick={() => p.onAddCard(stack.key)}
-      className="group/add flex h-9 items-center gap-1.5 rounded-md px-2 text-ui text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
+      // shrink-0: a tall stack scrolls its cards, and the button keeps its height (44 px on touch) at the foot.
+      className="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2 text-ui text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11"
     >
-      {/* Quiet until the button is pointed at or focused (always shown on touch, which cannot hover). */}
-      <span className="flex items-center gap-1.5 opacity-70 transition-opacity group-hover/add:opacity-100 group-focus-visible/add:opacity-100 pointer-coarse:opacity-100">
-        <Plus aria-hidden className="size-4" /> {p.newLabel}
-      </span>
+      <Plus aria-hidden className="size-4" /> {p.newLabel}
     </button>
   );
 
@@ -648,7 +659,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
       {!isCollapsed && (
         <>
           <SortableContext items={visible} strategy={verticalListSortingStrategy}>
-            <div role="group" className="-mx-1 flex min-h-10 flex-col gap-2 overflow-y-auto px-1 py-px" aria-label={`Cards in ${stack.label}`}>
+            <div role="group" tabIndex={0} className="-mx-1 flex min-h-10 flex-col gap-2 overflow-y-auto px-1 py-px" aria-label={`Cards in ${stack.label}`}>
               {visible.map((id) => {
                 const rec = recordsById.get(id);
                 return rec ? <KanbanCard key={id} record={rec} selection={selection} tabStop={id === stopId} onFocusCard={onFocusCard} onCardMenu={onCardMenu} {...p} /> : null;
@@ -657,7 +668,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
             </div>
           </SortableContext>
           {hidden > 0 && (
-            <button type="button" onClick={onShowMore} className="rounded-lg py-1.5 text-xs text-muted hover:bg-hover">
+            <button type="button" onClick={onShowMore} className="shrink-0 rounded-lg py-1.5 text-xs text-muted hover:bg-hover pointer-coarse:py-3">
               Show {Math.min(hidden, CARDS_PER_STACK)} more ({hidden} hidden)
             </button>
           )}
