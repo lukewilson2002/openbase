@@ -15,6 +15,17 @@ export const menuAvailStyle = {
 } as CSSProperties;
 const availClass = "max-h-[var(--ob-avail)] overflow-y-auto overscroll-contain";
 
+/** The floating surface of a menu or popover: radius 12, 6 px padding, the shadow that marks things that float. */
+export const menuSurfaceClass = "z-50 max-w-[calc(100vw-1rem)] rounded-lg border border-line bg-surface p-1.5 shadow-pop";
+
+/**
+ * One row of a menu or of a list inside a popover: 40 px (44 on phone), radius 8, and the highlighted row
+ * (keyboard or pointer) in primary-soft. `data-[highlighted]` is Radix's; listboxes set `data-active`.
+ */
+export const menuRowClass =
+  "relative flex min-h-control-lg cursor-default select-none items-center gap-2 rounded-md px-2.5 text-ui text-fg no-underline outline-none max-md:min-h-control-touch pointer-coarse:min-h-control-touch " +
+  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-primary-soft data-[active=true]:bg-primary-soft";
+
 /** The menu's open state, so a trigger can open it on a tap (see `DropdownMenuTrigger`). */
 const OpenContext = createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
 
@@ -85,20 +96,14 @@ export function DropdownMenuContent({ className, style, sideOffset = 4, align = 
         collisionPadding={collisionPadding}
         align={align}
         style={{ ...menuAvailStyle, ...style }}
-        className={cn(
-          "ob-pop-in z-50 min-w-44 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-1 shadow-pop",
-          availClass,
-          className,
-        )}
+        className={cn("ob-pop-in min-w-44", menuSurfaceClass, availClass, className)}
         {...props}
       />
     </M.Portal>
   );
 }
 
-const itemClass =
-  "relative flex cursor-default select-none items-center gap-2 rounded px-2 py-1.5 text-[0.8125rem] text-fg no-underline outline-none pointer-coarse:py-2.5 " +
-  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-hover";
+const itemClass = menuRowClass;
 
 export function DropdownMenuItem({ className, danger, ...props }: ComponentProps<typeof M.Item> & { danger?: boolean }) {
   return <M.Item className={cn(itemClass, danger && "text-danger", className)} {...props} />;
@@ -106,8 +111,8 @@ export function DropdownMenuItem({ className, danger, ...props }: ComponentProps
 
 export function DropdownMenuRadioItem({ className, children, ...props }: ComponentProps<typeof M.RadioItem>) {
   return (
-    <M.RadioItem className={cn(itemClass, "pl-7", className)} {...props}>
-      <M.ItemIndicator className="absolute left-2 inline-flex">
+    <M.RadioItem className={cn(itemClass, "pl-8", className)} {...props}>
+      <M.ItemIndicator className="absolute left-2.5 inline-flex">
         <Check aria-hidden className="size-3.5" />
       </M.ItemIndicator>
       {children}
@@ -116,14 +121,14 @@ export function DropdownMenuRadioItem({ className, children, ...props }: Compone
 }
 
 export function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof M.Label>) {
-  return <M.Label className={cn("px-2 py-1 text-xs font-medium text-muted", className)} {...props} />;
+  return <M.Label className={cn("px-2.5 py-1 text-meta font-medium text-muted", className)} {...props} />;
 }
 
 export const DropdownMenuSub = M.Sub;
 
 export function DropdownMenuSubTrigger({ className, children, ...props }: ComponentProps<typeof M.SubTrigger>) {
   return (
-    <M.SubTrigger className={cn(itemClass, "data-[state=open]:bg-hover", className)} {...props}>
+    <M.SubTrigger className={cn(itemClass, "data-[state=open]:bg-primary-soft", className)} {...props}>
       {children}
       <ChevronRight aria-hidden className="ml-auto size-3.5 text-muted" />
     </M.SubTrigger>
@@ -137,7 +142,7 @@ export function DropdownMenuSubContent({ className, style, sideOffset = 4, colli
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         style={{ ...menuAvailStyle, ...style }}
-        className={cn("ob-pop-in z-50 min-w-40 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface p-1 shadow-pop", availClass, className)}
+        className={cn("ob-pop-in min-w-40", menuSurfaceClass, availClass, className)}
         {...props}
       />
     </M.Portal>
@@ -145,5 +150,5 @@ export function DropdownMenuSubContent({ className, style, sideOffset = 4, colli
 }
 
 export function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof M.Separator>) {
-  return <M.Separator className={cn("my-1 h-px bg-line", className)} {...props} />;
+  return <M.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} {...props} />;
 }

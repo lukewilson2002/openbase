@@ -20,6 +20,7 @@ describe("cn with the design tokens", () => {
     expect(cn("h-control-sm", "h-control-lg")).toBe("h-control-lg");
     expect(cn("px-4", "px-gutter")).toBe("px-gutter");
     expect(cn("w-64", "w-sidebar")).toBe("w-sidebar");
+    expect(cn("w-72", "w-panel")).toBe("w-panel");
     expect(cn("max-w-2xl", "max-w-record")).toBe("max-w-record");
   });
 

@@ -229,6 +229,7 @@
   --container-sidebar: 16rem; /* 256 */
   --container-record: 47.5rem; /* 760 max */
   --container-home: 60rem; /* 960 max */
+  --container-panel: 22.5rem; /* 360: the desktop side panel (comments, history) */
   --spacing-gutter: var(--gutter);
 
   /* Motion: entering eases out; every transition without its own duration takes the fast one. */
@@ -260,6 +261,9 @@
   --gutter-phone: 1rem;
   --gutter-desktop: 2.5rem;
   --gutter: var(--gutter-phone);
+
+  /* How much of the screen's bottom edge the phone tab bar covers. Toasts sit above it; the bar sets it when it is shown. */
+  --bottom-nav-height: 0rem;
 
   /*
    * ColorMark (DL-3): the solid rounded square that identifies a workspace, folder or collection. The
@@ -394,14 +398,27 @@
 /*
  * Dialog / popover animations (Radix data-state), on the motion tokens: fast for a fade, base for
  * popovers, menus and side panels, slow for sheets, drawers and dialogs, all on the enter curve.
+ * Leaving (data-state="closed") runs 30% faster than entering and ends where it started, so Radix
+ * keeps the element mounted until it is done.
  */
 @keyframes ob-fade-in {
   from {
     opacity: 0;
   }
 }
+@keyframes ob-fade-out {
+  to {
+    opacity: 0;
+  }
+}
 @keyframes ob-pop-in {
   from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+@keyframes ob-pop-out {
+  to {
     opacity: 0;
     transform: translateY(2px) scale(0.98);
   }
@@ -412,13 +429,41 @@
     transform: translateX(12px);
   }
 }
+@keyframes ob-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+@keyframes ob-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes ob-rise-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
 @keyframes ob-sheet-in {
   from {
     transform: translateY(100%);
   }
 }
+@keyframes ob-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
 @keyframes ob-drawer-in {
   from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes ob-drawer-out {
+  to {
     transform: translateX(-100%);
   }
 }
@@ -436,11 +481,39 @@
 .ob-slide-in {
   animation: ob-slide-in var(--duration-base) var(--ease-enter);
 }
+.ob-rise-in {
+  animation: ob-rise-in var(--duration-base) var(--ease-enter);
+}
 .ob-sheet-in {
   animation: ob-sheet-in var(--duration-slow) var(--ease-enter);
 }
 .ob-drawer-in {
   animation: ob-drawer-in var(--duration-slow) var(--ease-enter);
+}
+/* Dialogs scale in at the sheet duration (slow) rather than the popover one. */
+.ob-dialog-in {
+  animation: ob-pop-in var(--duration-slow) var(--ease-enter);
+}
+.ob-fade-in[data-state="closed"] {
+  animation: ob-fade-out var(--duration-fast-leave) var(--ease-enter) forwards;
+}
+.ob-pop-in[data-state="closed"] {
+  animation: ob-pop-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-slide-in[data-state="closed"] {
+  animation: ob-slide-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-rise-in[data-state="closed"] {
+  animation: ob-rise-out var(--duration-base-leave) var(--ease-enter) forwards;
+}
+.ob-sheet-in[data-state="closed"] {
+  animation: ob-sheet-out var(--duration-slow-leave) var(--ease-enter) forwards;
+}
+.ob-drawer-in[data-state="closed"] {
+  animation: ob-drawer-out var(--duration-slow-leave) var(--ease-enter) forwards;
+}
+.ob-dialog-in[data-state="closed"] {
+  animation: ob-pop-out var(--duration-slow-leave) var(--ease-enter) forwards;
 }
 .ob-spin {
   animation: ob-spin 0.8s linear infinite;
@@ -463,9 +536,20 @@
 @media (prefers-reduced-motion: reduce) {
   .ob-pop-in,
   .ob-slide-in,
+  .ob-rise-in,
   .ob-sheet-in,
-  .ob-drawer-in {
+  .ob-drawer-in,
+  .ob-dialog-in {
     animation: ob-fade-in var(--duration-fast) var(--ease-enter);
+  }
+  .ob-fade-in[data-state="closed"],
+  .ob-pop-in[data-state="closed"],
+  .ob-slide-in[data-state="closed"],
+  .ob-rise-in[data-state="closed"],
+  .ob-sheet-in[data-state="closed"],
+  .ob-drawer-in[data-state="closed"],
+  .ob-dialog-in[data-state="closed"] {
+    animation: ob-fade-out var(--duration-fast) var(--ease-enter) forwards;
   }
   .ob-spin {
     animation-duration: 2s;

@@ -134,6 +134,7 @@ describe("shape and size", () => {
     ["sidebar", 256],
     ["record", 760],
     ["home", 960],
+    ["panel", 360],
   ])("--container-%s is %dpx", (name, value) => expect(px(theme.get(`--container-${name}`))).toBe(value));
 
   it("steps spacing by 4 from 2 up to 64", () => {

@@ -60,7 +60,7 @@ export function SelectChoicesEditor({ choices, onChange }: SelectChoicesEditorPr
               <PopoverTrigger asChild>
                 <button type="button" aria-label={`Color of option ${c.name || i + 1}`} className={cn(choiceClass(c.color), "size-6 shrink-0 rounded-full border border-black/10")} />
               </PopoverTrigger>
-              <PopoverContent className="w-72">
+              <PopoverContent className="w-72 p-3">
                 <ColorSwatchPicker value={c.color} onChange={(color) => update(i, { color })} label={`Color of option ${c.name || i + 1}`} />
               </PopoverContent>
             </Popover>

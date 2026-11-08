@@ -164,7 +164,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={cn("flex w-80 flex-col gap-2", KEEP_GRID_EDITOR)}
+        className={cn("flex w-80 flex-col gap-2 p-3", KEEP_GRID_EDITOR)}
         onCloseAutoFocus={refocus(editor)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {

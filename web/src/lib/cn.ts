@@ -39,8 +39,9 @@ const twMerge = extendTailwindMerge({
         "sidebar",
         "record",
         "home",
+        "panel",
       ],
-      container: ["sidebar", "record", "home"],
+      container: ["sidebar", "record", "home", "panel"],
       ease: ["enter"],
     },
     classGroups: {
