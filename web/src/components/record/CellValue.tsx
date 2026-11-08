@@ -100,7 +100,7 @@ export function CellValue({ field, value, format, emails, className, markdown = 
             {files.map((f) => (
               <li key={f.id} title={f.filename}>
                 {linkFiles ? (
-                  <a href={attachmentsApi.downloadUrl(f.id, f.filename)} target="_blank" rel="noopener noreferrer" aria-label={f.filename} className="block">
+                  <a href={attachmentsApi.downloadUrl(f.id, f.filename)} target="_blank" rel="noopener noreferrer" aria-label={f.filename} className="block rounded-sm">
                     <AttachmentThumb file={f} size={48} />
                   </a>
                 ) : (
