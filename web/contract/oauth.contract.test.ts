@@ -12,7 +12,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { api } from "../src/api/endpoints";
-import { adminProfile, rand, seeded, type Profile } from "./support";
+import { adminProfile, expectError, failure, newUser, rand, seeded, type Profile } from "./support";
 import { parse, parseList } from "./typecheck";
 
 const MCP = `${seeded.baseUrl}/mcp`;
@@ -279,6 +279,151 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
     expect(v1.isError).toBe(true);
     expect(JSON.stringify(v1.content)).toContain("not available to apps connected through OAuth");
     await live.client.close();
+  });
+
+  describe("Change access", () => {
+    /** Connect a fresh app and approve it at `access`; returns it with a live SDK client. */
+    async function connected(label: string, access: "read" | "write" | "manage", baseIds: string[] | null = null) {
+      const p = new MemoryProvider(`${label} ${rand()}`);
+      const first = connectWith(p);
+      await expect(first.connect()).rejects.toBeInstanceOf(UnauthorizedError);
+      const { code } = await approve(p.authorizationUrl!, access, baseIds);
+      await first.transport.finishAuth(code);
+      const live = connectWith(p);
+      await live.connect();
+      const grant = parseList("GrantInfo", await admin.run(api.oauth.grants)).find((g) => g.client_name === p.clientMetadata.client_name)!;
+      return { p, live, grant };
+    }
+    const toolNames = async (c: Client) => (await c.listTools()).tools.map((t) => t.name);
+    const text = (r: unknown) => JSON.stringify((r as { content?: unknown }).content);
+    /** A tool call the way the SDK sends it, to see the status the endpoint answers without the SDK retrying. */
+    const rawCall = (accessToken: string, name: string, args: Record<string, unknown>) =>
+      fetch(MCP, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${accessToken}`, "mcp-protocol-version": "2025-06-18" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      });
+    const expectNeedsMoreAccess = async (accessToken: string, name: string, args: Record<string, unknown>) => {
+      const res = await rawCall(accessToken, name, args);
+      expect(res.status, name).toBe(403);
+      expect(res.headers.get("www-authenticate"), name).toContain('error="insufficient_scope"');
+    };
+
+    it("lets an app that was connected without full control delete once it is upgraded, with the token it already holds", async () => {
+      const ws = await admin.run(() => api.workspaces.create(`Upgrade ${rand()}`));
+      const folder = parse("BaseSchema", await admin.run(() => api.bases.create(ws.id, { name: "Folder", color: null, icon: null })));
+      const { p, live, grant } = await connected("SDK upgrade", "write");
+      const token = p.saved!.access_token;
+
+      // Read and write: it can build, but the manage tools are not offered and a delete is refused.
+      expect(grant).toMatchObject({ write: true, manage: false });
+      const before = await toolNames(live.client);
+      expect(before).toContain("create_table");
+      for (const name of ["delete_project", "delete_workspace", "create_workspace"]) expect(before, name).not.toContain(name);
+      await expectNeedsMoreAccess(token, "delete_project", { project_id: folder.id });
+      await expectNeedsMoreAccess(token, "create_workspace", { name: "Nope" });
+      expect((await admin.run(() => api.bases.get(folder.id))).id).toBe(folder.id);
+
+      // The person gives it full control from Account, AI assistants: no reconnect, the same access token.
+      const upgraded = parse("GrantInfo", await admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "manage" })));
+      expect(upgraded).toMatchObject({ id: grant.id, write: true, manage: true });
+      expect(parseList("GrantInfo", await admin.run(api.oauth.grants)).find((g) => g.id === grant.id)).toMatchObject({ write: true, manage: true });
+      expect(p.saved!.access_token).toBe(token);
+      expect(await toolNames(live.client)).toEqual(expect.arrayContaining(["delete_project", "delete_workspace", "create_workspace"]));
+
+      // Now it can delete the folder, and the delete can be undone from the trash.
+      const deleted = await live.client.callTool({ name: "delete_project", arguments: { project_id: folder.id } });
+      expect(deleted.isError, text(deleted)).toBeFalsy();
+      const receipt = deleted.structuredContent as { trashed: { kind: string; id: string }; restore_with: { tool: string; arguments: Record<string, unknown> } };
+      expect(receipt.trashed).toMatchObject({ kind: "project", id: folder.id });
+      expect(parseList("WorkspaceSummary", await admin.run(api.workspaces.list)).find((w) => w.id === ws.id)!.bases.map((b) => b.id)).not.toContain(folder.id);
+      const restored = await live.client.callTool({ name: receipt.restore_with.tool, arguments: receipt.restore_with.arguments });
+      expect(restored.isError, text(restored)).toBeFalsy();
+      expect((await admin.run(() => api.bases.get(folder.id))).id).toBe(folder.id);
+
+      // The top level stays protected, whatever the access.
+      const top = parseList("WorkspaceSummary", await admin.run(api.workspaces.list)).find((w) => w.id === ws.id)!.root_base_id!;
+      const topRefused = await live.client.callTool({ name: "delete_project", arguments: { project_id: top } });
+      expect(topRefused.isError).toBe(true);
+      expect(text(topRefused)).toContain("Make another folder the top level first, or delete the workspace");
+
+      // And down again: the next request is back to writing only.
+      const downgraded = parse("GrantInfo", await admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "write" })));
+      expect(downgraded).toMatchObject({ write: true, manage: false });
+      expect(await toolNames(live.client)).not.toContain("delete_project");
+      await expectNeedsMoreAccess(p.saved!.access_token, "delete_project", { project_id: folder.id });
+      const toRead = parse("GrantInfo", await admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "read" })));
+      expect(toRead).toMatchObject({ write: false, manage: false });
+      expect(await toolNames(live.client)).not.toContain("create_table");
+      await live.client.close();
+      await admin.run(() => api.workspaces.remove(ws.id));
+    });
+
+    it("writes the change to the audit log and refuses anything but the person's own session", async () => {
+      const { p, live, grant } = await connected("SDK audit", "write");
+      await admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "manage" }));
+      const entry = parse("AuditPage", await admin.run(() => api.admin.audit({ limit: 20 }))).entries.find((e) => e.action === "oauth_grant_update" && e.target === grant.id);
+      expect(entry?.detail).toMatchObject({ client: p.clientMetadata.client_name, from: "write", to: "manage" });
+
+      // The app cannot raise its own access: its token is refused on the REST API, and the endpoint is session-only.
+      const self = await fetch(`${seeded.baseUrl}/api/oauth/grants/${grant.id}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${p.saved!.access_token}`, "content-type": "application/json" },
+        body: JSON.stringify({ access: "manage" }),
+      });
+      expect(self.status).toBe(401);
+      const viaTool = await live.client.callTool({ name: "api_request", arguments: { method: "PATCH", path: `/api/oauth/grants/${grant.id}`, body: { access: "read" } } });
+      expect(viaTool.isError).toBe(true);
+      expect(parseList("GrantInfo", await admin.run(api.oauth.grants)).find((g) => g.id === grant.id)).toMatchObject({ write: true, manage: true });
+
+      // Without the CSRF header a cookie request is refused, so another site cannot do it for the person.
+      const noCsrf = await fetch(`${seeded.baseUrl}/api/oauth/grants/${grant.id}`, {
+        method: "PATCH",
+        headers: { cookie: browserCookie(), "content-type": "application/json" },
+        body: JSON.stringify({ access: "read" }),
+      });
+      expect(noCsrf.status).toBe(403);
+      await live.client.close();
+    });
+
+    it("answers a level it does not know, and a grant that is not the person's, with errors", async () => {
+      const { grant, live } = await connected("SDK errors", "write");
+      expectError(await failure(admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "root" }))), 400, "bad_request");
+      expectError(await failure(admin.run(() => api.oauth.changeGrantAccess("ogrNotAGrant", { access: "read" }))), 404, "not_found");
+      const other = await newUser(admin, "grant-thief");
+      expectError(await failure(other.run(() => api.oauth.changeGrantAccess(grant.id, { access: "manage" }))), 404, "not_found");
+      expect(parseList("GrantInfo", await admin.run(api.oauth.grants)).find((g) => g.id === grant.id)).toMatchObject({ manage: false });
+      await live.client.close();
+    });
+
+    it("does not give Full control to an app limited to some folders, but lets it be narrowed or widened up to writing", async () => {
+      const { grant, live } = await connected("SDK limited", "read", [baseId]);
+      const refused = await failure(admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "manage" })));
+      expectError(refused, 400, "bad_request");
+      expect(refused.message).toContain("limited to some projects");
+      const widened = parse("GrantInfo", await admin.run(() => api.oauth.changeGrantAccess(grant.id, { access: "write" })));
+      expect(widened).toMatchObject({ write: true, manage: false });
+      expect(widened.bases?.map((b) => b.id)).toEqual([baseId]);
+      await live.client.close();
+    });
+
+    it("gives more than the app asked for only when the person chooses it, and reports what was granted", async () => {
+      const p = new MemoryProvider(`SDK beyond ${rand()}`);
+      const first = connectWith(p);
+      await expect(first.connect()).rejects.toBeInstanceOf(UnauthorizedError);
+      expect(p.authorizationUrl!.searchParams.get("scope")).toBe("openbase:read openbase:write");
+      const { request, code } = await approve(p.authorizationUrl!, "manage");
+      // Every level is on offer, and the one preselected is what the app asked for.
+      expect(request).toMatchObject({ requested_access: "write", default_access: "write", max_access: "manage" });
+      await first.transport.finishAuth(code);
+      expect(p.saved!.scope?.split(" ").sort()).toEqual(["openbase:manage", "openbase:read", "openbase:write"]);
+      const entry = parse("AuditPage", await admin.run(() => api.admin.audit({ limit: 20 }))).entries.find((e) => e.action === "oauth_approve" && (e.detail as { client?: string } | null)?.client === p.clientMetadata.client_name);
+      expect(entry?.detail).toMatchObject({ access: "manage", requested: "write", beyond_request: true });
+      const live = connectWith(p);
+      await live.connect();
+      expect(await toolNames(live.client)).toContain("delete_workspace");
+      await live.client.close();
+    });
   });
 
   it("serves discovery documents readable from any origin", async () => {
