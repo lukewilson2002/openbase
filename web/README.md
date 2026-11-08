@@ -401,7 +401,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the record page, comments, history, linked-record cards and previews |
-| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
+| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `RecordHead` (tile and title, REC-2), `RecordProperties` (the property list, its folds and label menu, REC-3) with `properties.ts` (what is listed, folded or hidden), `useRecordFolds` and `useRecordLayout` (Hide from pages), `useRecordSave`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
 | `src/components/viewbar/` | The filter bar (`ViewFilterBar`), View options (`ViewOptions` and its screens), the filter builder, pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |

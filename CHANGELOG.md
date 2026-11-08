@@ -27,6 +27,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   notifications, history) land on the page, and a link followed while signed out comes back to it
   after sign-in. A linked record's chip opens its page. The expanded-record window and the stack of
   linked-record panels are gone.
+- **A record reads like a document.** The page starts with a tile in the collection's colour holding
+  the title's initials (the record's own picture when the first file in the collection's first file
+  property is an image), then the title, edited where it stands (Enter commits it and moves on).
+  Below it is a list of the properties that have a value, in the order of the collection's default
+  grid. Properties with nothing in them fold into "Show 2 empty properties", and properties the default
+  grid hides fold into "Show 1 hidden property"; both folds are remembered on this device. A value is
+  text until you click or tap it, then it is its editor, and it saves on its own. A property's name
+  opens its menu: creators get Rename, Edit property and Delete, and editors and up get Hide from pages
+  and Show on pages, which change the default grid's layout at once. Viewers see everything with
+  nothing to edit, and commenters can also comment. Files in a record are small bordered tiles.
 - **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
   page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
   records as chips with the colour of their collection, and each group ends in "+ New client" (the
