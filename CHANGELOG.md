@@ -158,6 +158,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   which opens your profile menu as a sheet; other screens have a back link that names the
   screen it leads to. The workspace switcher opens as a sheet on a phone. Home, the Collections
   tab and every collection have a search button in the header.
+- **Search is a command palette.** Ctrl K or Cmd K (or the search button, or the sidebar's
+  "Search everything") opens it from anywhere; it fills the screen on a phone. Results come in
+  groups: records (each with its collection's color mark), collections, folders, views and
+  workspaces, and comments last. Type "new record in", "new collection", "home" or "settings"
+  and the actions that fit appear below the results: "New record in Clients" (for collections
+  you can add to), "New collection", "Go to Home" and "Open settings". It narrows to Everywhere,
+  This workspace or This folder. Arrow keys move through the list, Enter runs the highlighted
+  row (and waits while the results are for older text), and Escape closes it and puts focus back
+  where it was. The record page's editor will keep Ctrl K for links when it has focus. The extra
+  "other workspace or project" picker is gone.
 - **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
   the same person fold into one history entry while it is under ten minutes old: it keeps the
   first old value, the latest new value and the time of the latest edit. Other fields, other

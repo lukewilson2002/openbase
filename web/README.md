@@ -202,8 +202,7 @@ projects into the top level and the folders the person can open (NAV-10: `GET /a
 
 `shell/SidebarContent.tsx` holds what the sidebar holds, top to bottom: `WorkspaceSwitcher` (the open workspace's 26 px mark, its name and "Switch
 workspace"; its menu starts with the OpenBase mark, lists the workspaces with a check on the open one, then New workspace and the open workspace's
-Rename, Color, Members, Invite people, Settings, History, Trash and Delete), the "Search everything" row (opens the header's search box; the command
-palette replaces it in NAV-9), Home, Notifications (a popover beside the docked sidebar) and Automations (creators), then `NavTree` (the top level's collections, then the folders, each folded open to its collections: `NavTables`
+Rename, Color, Members, Invite people, Settings, History, Trash and Delete), the "Search everything" row (opens the command palette), Home, Notifications (a popover beside the docked sidebar) and Automations (creators), then `NavTree` (the top level's collections, then the folders, each folded open to its collections: `NavTables`
 draws a folder's rows), then History, Trash (both filtered to the workspace), Workspace settings (owners) and `ProfileMenu`. `Sidebar.tsx` has only
 the docked frame (`DockedSidebar`) and `SidebarLayout`. One component serves the docked sidebar and the phone's Collections tab (`mode`: the tab
 leaves out the search row and the Home and Notifications rows, which the header and the bottom bar already have, and flows with the screen).
@@ -221,6 +220,20 @@ workspaces are dragged inside the switcher's menu, or moved with Alt+Up and Alt+
 the collapsed state are per device (`sidebarPrefs.ts`); Ctrl+\ (Cmd+\) folds it. The dialogs the rows open are `NavDialogs.tsx`, which sits
 around the page so they survive the menu or sheet that opened them closing; a collection's CSV import loads the folder's schema first, because the summaries carry no properties.
 
+### The command palette (NAV-9)
+
+`shell/SearchEverything.tsx` wires the core `CommandPalette` (`components/ui/command-palette.tsx`) to the app. `SearchBarProvider` (in
+`AppShell`) holds whether it is open and renders it, so the headers' `SearchButton`, the sidebar's row (`useOpenSearch()`) and Ctrl K or Cmd K open
+the same one; it is a full-screen sheet below 1024 px. Results come from `GET /api/search` (200 ms debounce, `workspace` or `base` for the scope),
+grouped records, collections, folders, views, workspaces, then comments; a record and a comment carry their collection's 8 px mark, and a
+collection's color comes from the sidebar's cached `GET /api/workspaces` (the search result has none). The top-level project is never listed as a
+folder, and "This folder" is offered only inside a real folder. Actions follow the results and are filtered by `actionMatches` (every typed word
+starts a word of the action's name): "New record in <collection>" (editors and up, at most five, within the scope), "New collection", "Go to
+Home", "Open settings" (the workspace's for owners, else the account's); with nothing typed the last three are suggested. The core component
+keeps focus in the field and drives the list (arrows wrap, Enter runs the highlighted row, Escape closes and returns focus); a `stale` group
+(results for text already typed past) is shown but Enter skips it. An editor that uses Ctrl K for itself (links in the rich text editor) must call
+`preventDefault()` on that key press: the palette's window listener leaves a handled key alone.
+
 ### The phone shell (NAV-7, NAV-8, PH-1, PH-2)
 
 Below 1024 px there is no sidebar and no drawer. `shell/bottomNav.tsx` is the 64 px bottom navigation (`<nav aria-label="Main menu">`, three
@@ -231,7 +244,7 @@ its address; any other full-screen screen calls `useHideBottomNav()` from `botto
 
 `shell/PhoneHeader.tsx` is the 56 px header (PH-2): `leading` (the workspace switcher on Home, or a `PhoneBackLink` naming the parent
 screen), an optional `h1`, then at most three 44 px buttons, as `PhoneAction`s: the search always has one (`SearchButton`, which opens the
-palette once NAV-9 lands), and when there are more actions than fit the rest go behind a More button (it counts as one of the three) that opens a
+command palette), and when there are more actions than fit the rest go behind a More button (it counts as one of the three) that opens a
 sheet. `ScreenHeader` renders it on a phone from its `phone` prop; `HomeShell` has a `variant`: `home` (the switcher and the avatar that opens the
 profile sheet), `tab` (the root of a tab: just its title) or `page` (a back link to the Collections tab, or to Home when there is no workspace).
 
