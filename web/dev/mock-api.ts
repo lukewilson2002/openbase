@@ -332,6 +332,32 @@ const trashedExtras: Obj[] = [
   { kind: "view", id: "viw_old", name: "Archive board", table_id: T_PROJECTS, deleted_at: Date.now() - 20 * 86_400_000 },
 ];
 
+/** Automations by project (`/api/bases/:id/automations`): enough for the workspace list and the editor's list to have rows. */
+const automationFixtures = (): Record<string, Obj[]> => {
+  const now = Date.now();
+  const make = (id: string, base_id: string, name: string, enabled: boolean, trigger: Obj): Obj => ({
+    id,
+    base_id,
+    name,
+    enabled,
+    trigger,
+    actions: [{ type: "notify", user_ids: [ME], message: name }],
+    next_run_at: trigger.type === "schedule" ? now + 86_400_000 : null,
+    webhook_token: null,
+    created_by: ME,
+    created_at: now - 20 * 86_400_000,
+    updated_at: now - 2 * 86_400_000,
+  });
+  return {
+    [BASE_ID]: [
+      make("aut1", BASE_ID, "Weekly digest", true, { type: "schedule", cron: "0 9 * * 1", timezone: "UTC" }),
+      make("aut2", BASE_ID, "Tell the team about new tasks", true, { type: "record_created", table_id: T_TASKS }),
+    ],
+    app2: [make("aut3", "app2", "Welcome new customers", false, { type: "webhook" })],
+  };
+};
+const automations = automationFixtures();
+
 // ---- activity feed (History page) ---------------------------------------------------------------
 
 let activity: Obj[] | null = null;
@@ -417,6 +443,10 @@ function tableDto(id: string): Obj {
     name: id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People",
     description: null,
     primary_field_id: PRIMARY[id]!,
+    color: id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange",
+    record_noun: "",
+    record_count: [...records.values()].filter((r) => r.table_id === id && !r.deleted).length,
+    body_field_id: null,
     fields: fieldsOf(id),
     views: views.filter((v) => v.table_id === id),
   };
@@ -430,7 +460,8 @@ let roleOverride: string | null = null;
 function baseDto(req: IncomingMessage): Obj {
   const cookie = /ob-mock-role=(\w+)/.exec(req.headers.cookie ?? "")?.[1];
   const b = ws.bases.find((x) => x.id === BASE_ID) ?? { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null };
-  return { ...b, role: roleOverride ?? cookie ?? "owner", tables: tableOrder.map((t) => tableDto(t.id)), people: basePeople(b), workspace_name: ws.workspaces.find((w) => w.id === b.workspace_id)?.name ?? "Acme" };
+  const home = ws.workspaces.find((w) => w.id === b.workspace_id);
+  return { ...b, role: roleOverride ?? cookie ?? "owner", tables: tableOrder.map((t) => tableDto(t.id)), people: basePeople(b), workspace_name: home?.name ?? "Acme", workspace_color: home?.color ?? "blue", is_top_level: ws.roots[b.workspace_id] === b.id };
 }
 
 function fieldsOf(table: string): Obj[] {
@@ -713,9 +744,11 @@ function workspaceFixtures() {
   const now = Date.now();
   return {
     workspaces: [
-      { id: "wsp1", name: "Acme", icon: "briefcase", role: "owner" },
-      { id: "wsp2", name: "Household", icon: "house", role: "owner" },
+      { id: "wsp1", name: "Acme", icon: "briefcase", color: "blue", role: "owner" },
+      { id: "wsp2", name: "Household", icon: "house", color: "teal", role: "owner" },
     ] as Obj[],
+    // Each workspace's top-level project (decision 1): its collections show directly under the workspace.
+    roots: { wsp1: BASE_ID, wsp2: "app5" } as Record<string, string>,
     bases: [
       { id: BASE_ID, workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: null },
       { id: "app2", workspace_id: "wsp1", name: "Customer relationships", color: "blue", icon: "users" },
@@ -755,17 +788,23 @@ function basePeople(b: Obj): Obj[] {
 
 function baseSummary(b: Obj, role: string): Obj {
   // Every mock base serves the same three tables (see baseDto).
-  const tables = tableOrder.map(({ id }) => ({ id, name: tableDto(id).name, icon: null }));
-  return { ...b, role, people: basePeople(b), tables };
+  const tables = tableOrder.map(({ id }) => {
+    const t = tableDto(id);
+    return { id, name: t.name, icon: null, color: t.color, record_count: t.record_count, body_field_id: null, home_date_field_id: null, done_field_id: null, record_noun: "" };
+  });
+  return { ...b, role, people: basePeople(b), tables, is_top_level: ws.roots[b.workspace_id] === b.id };
 }
 
 function workspaceList(): Obj[] {
   return ws.workspaces.map((w) => {
     const me = (ws.members[w.id] ?? []).find((m) => m.user_id === ME);
+    const bases = ws.bases.filter((b) => b.workspace_id === w.id && (!me || canOpen(me, b.id)));
+    const root = ws.roots[w.id];
     return {
       ...w,
       role: me?.role ?? w.role,
-      bases: ws.bases.filter((b) => b.workspace_id === w.id && (!me || canOpen(me, b.id))).map((b) => baseSummary(b, me?.role ?? w.role)),
+      bases: bases.map((b) => baseSummary(b, me?.role ?? w.role)),
+      root_base_id: bases.some((b) => b.id === root) ? root : null,
       member_count: (ws.members[w.id] ?? []).length,
       pending_invite_count: ws.invites.filter((i) => i.workspace_id === w.id && !i.accepted_at).length,
     };
@@ -811,8 +850,11 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     return send(res, 200, { ok: true }), true;
   }
   if (p === "/api/workspaces" && m === "POST") {
-    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, ...(body.color ? { color: body.color } : {}), role: "owner" };
+    const w = { id: newId("wsp"), name: body.name, icon: body.icon ?? null, color: body.color ?? "blue", role: "owner" };
     ws.workspaces.push(w);
+    const top = { id: newId("app"), workspace_id: w.id, name: body.name, color: w.color, icon: null };
+    ws.bases.push(top);
+    ws.roots[w.id] = top.id;
     ws.members[w.id] = [{ user_id: ME, name: "Ada Lovelace", email: "ada@example.com", role: "owner", all_bases: true, base_ids: [] }];
     return send(res, 201, workspaceList().find((x) => x.id === w.id)), true;
   }
@@ -1303,6 +1345,12 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     const expr = String(body.expression ?? "");
     return send(res, 200, expr.includes("(") && !expr.includes(")") ? { ok: false, error: "Unbalanced parentheses" } : { ok: true, result_type: "text", preview: "42" }), true;
   }
+  if ((g = /^\/api\/bases\/([^/]+)\/automations$/.exec(p)) && m === "GET") return send(res, 200, automations[g[1]!] ?? []), true;
+  if ((g = /^\/api\/automations\/([^/]+)$/.exec(p)) && m === "GET") {
+    const found = Object.values(automations).flat().find((a) => a.id === g![1]);
+    return found ? (send(res, 200, found), true) : (err(res, 404, "not_found", "automation not found"), true);
+  }
+  if ((g = /^\/api\/automations\/([^/]+)\/runs$/.exec(p)) && m === "GET") return send(res, 200, { runs: [], total: 0 }), true;
   // The inbox: private drafts (text and uploaded files), filed into a table as a record.
   if (p === "/api/inbox" && m === "GET") return send(res, 200, [...inbox].sort((a, b) => b.updated_at - a.updated_at)), true;
   if (p === "/api/inbox" && m === "POST") {
