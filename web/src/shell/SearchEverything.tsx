@@ -92,7 +92,8 @@ export function Highlight({ text, matches }: { text: string; matches?: readonly 
     if (m.start < at || m.end <= m.start || m.end > chars.length) continue;
     if (m.start > at) parts.push(chars.slice(at, m.start).join(""));
     parts.push(
-      <mark key={m.start} className="rounded-xs bg-primary-soft px-px text-fg">
+      // The line shade, not the soft one: the highlighted row is already primary-soft, and a match there would vanish.
+      <mark key={m.start} className="rounded-xs bg-primary-soft-line px-px text-fg">
         {chars.slice(m.start, m.end).join("")}
       </mark>,
     );
