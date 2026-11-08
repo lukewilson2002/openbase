@@ -71,8 +71,10 @@ What runs where:
 
 - `openbase` uses the image `ghcr.io/lukewilson2002/openbase:${OPENBASE_VERSION}`
   (default `latest`), built by the release workflow from `deploy/Dockerfile`: the web client
-  is built with Node 24, the server with `rust:1-bookworm` (the client embedded), and the final
-  image is `debian:bookworm-slim` with only the binary, CA certificates and time zone data.
+  is built with Node 26, the server with the Rust version pinned in `rust-toolchain.toml` (the
+  client embedded), and the final image is `debian:trixie-slim` (Debian 13) with only the binary,
+  CA certificates, time zone data and ffmpeg. The base images are pinned by digest in the
+  Dockerfile.
   Every image has provenance and SBOM attestations. It runs as the unprivileged user
   `openbase` (uid 10001), keeps its data in the `openbase-data` volume (mounted at
   `/data`), and has a built-in health check (`openbase healthcheck`, every 30 s).
@@ -142,7 +144,7 @@ docker compose exec openbase openbase --help
 
    (On a public repository you can also verify where it was built:
    `gh attestation verify openbase-$V-linux-$A.tar.gz --repo lukewilson2002/openbase`.)
-   Or build it yourself (needs Rust and Node 24):
+   Or build it yourself (needs Rust and Node 26):
 
    ```sh
    (cd web && npm ci --ignore-scripts && npm run build)

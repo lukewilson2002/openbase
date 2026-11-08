@@ -6,8 +6,9 @@
 #
 # Stage 1 (node) builds the React + TypeScript web client with Vite into
 # web/dist. Stage 2 (rust) builds the server, which embeds web/dist into the
-# binary. The last stage is a slim Debian runtime with only the binary, CA
-# certificates and time zone data: no Node and no Rust toolchain at runtime.
+# binary. The last stage is a slim Debian 13 (trixie) runtime with only the
+# binary, CA certificates, time zone data and ffmpeg: no Node and no Rust
+# toolchain at runtime.
 # The default target (`docker build` without --target) builds everything from
 # source and runs on any architecture Docker can build for (linux/amd64 and
 # linux/arm64 are the tested ones).
@@ -25,16 +26,17 @@
 #
 # People who build locally never need these.
 
-ARG NODE_IMAGE=node:24-bookworm-slim
-ARG RUST_IMAGE=rust:1-bookworm
-ARG RUNTIME_IMAGE=debian:bookworm-slim
+# The base images are written out in the FROM lines below, pinned by digest, so that Dependabot
+# (the docker ecosystem for /deploy) can propose updates for them. The tag is for people, the
+# digest is what is actually pulled: a re-tagged or compromised upstream image cannot reach a
+# build unnoticed.
 # Where the server build takes the web client from: `web-built` (built below by
 # Node, the default) or `web-prebuilt` (a ./.web-dist directory in the build
 # context, used by the release workflow).
 ARG WEB_DIST=web-built
 
 # ---------------------------------------------------------------- web client
-FROM ${NODE_IMAGE} AS web
+FROM node:26-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS web
 WORKDIR /src/web
 # Dependencies first, so source edits don't invalidate the npm layer.
 # --ignore-scripts: no install-time scripts from third-party packages.
@@ -54,15 +56,26 @@ COPY .web-dist/ /dist/
 FROM ${WEB_DIST} AS web-dist
 
 # -------------------------------------------------------------------- server
-FROM ${RUST_IMAGE} AS builder
+# Debian 12 on purpose: the binary links glibc 2.36, so the release tarballs also run on older
+# distributions. The runtime image below is newer, which is fine (glibc is backward compatible).
+# The tag is the Rust version of rust-toolchain.toml; the build stops below if the two differ.
+FROM rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c AS builder
 WORKDIR /src
 COPY . .
 # The server embeds web/dist at compile time (rust-embed).
 COPY --from=web-dist /dist ./web/dist
 # The repo's rust-toolchain.toml asks for the wasm32 target (not needed for the
 # server) and would make rustup download a second toolchain on every cold build.
-# Use the toolchain that ships in the rust image instead.
-RUN rm -f rust-toolchain.toml
+# Use the toolchain that ships in the rust image instead, after checking that it is
+# the version rust-toolchain.toml pins (so CI, developers and the image agree).
+RUN set -eu; \
+    pinned=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml); \
+    have=$(rustc --version | cut -d' ' -f2); \
+    if [ "$pinned" != "$have" ]; then \
+        echo "rust-toolchain.toml pins Rust $pinned but the builder image has $have: change the rust: tag in deploy/Dockerfile" >&2; \
+        exit 1; \
+    fi; \
+    rm -f rust-toolchain.toml
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     set -eux; \
@@ -75,11 +88,15 @@ FROM scratch AS binary
 COPY --from=builder /usr/local/bin/openbase /openbase
 
 # ------------------------------------------------------------------- runtime
-FROM ${RUNTIME_IMAGE} AS runtime-base
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS runtime-base
 
 # ffmpeg takes the first frame of uploaded videos as their preview.
+# `apt-get upgrade` because the digest-pinned base image is rebuilt by Debian only every
+# so often, so it can lag a published security fix by days (Trivy flagged zlib1g that way);
+# the packages come from Debian's signed security archive either way.
 RUN set -eux; \
     apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
     apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg; \
     rm -rf /var/lib/apt/lists/*; \
     groupadd --system --gid 10001 openbase; \

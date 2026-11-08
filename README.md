@@ -483,7 +483,7 @@ scope and security model).
 
 ## Building from source
 
-You need Rust (the version in `rust-toolchain.toml`, stable) and Node 24. The
+You need Rust (the exact version pinned in `rust-toolchain.toml`) and Node 26. The
 server embeds `web/dist` when it is compiled, so build the web client first:
 
 ```sh

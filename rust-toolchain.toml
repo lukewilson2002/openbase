@@ -1,4 +1,8 @@
+# An exact version, not "stable": every build uses the compiler the checks ran on, and a new Rust
+# release reaches the project through a reviewed commit instead of overnight on CI. Keep the
+# Docker builder image (deploy/Dockerfile, rust:<version>-...) on the same version; the Docker build
+# fails when they differ. Raise both together when a new stable comes out.
 [toolchain]
-channel = "stable"
+channel = "1.99.1"
 targets = ["wasm32-unknown-unknown"]
 components = ["rustfmt", "clippy"]

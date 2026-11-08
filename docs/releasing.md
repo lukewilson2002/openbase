@@ -208,12 +208,12 @@ visibility is separate and must be switched as in the setup steps.
 `OPENBASE_ARM64_BUILD` (repository variable; a manual run can override it per run):
 
 - **`native`** (default): the arm64 binary is compiled on GitHub's `ubuntu-24.04-arm` runner,
-  inside `rust:1-bookworm`, with the same Dockerfile and toolchain as the amd64 one. Simplest and
+  inside the Dockerfile's Rust builder image (Debian 12), the same as the amd64 one. Simplest and
   the most uniform. Needs the arm64 runner (public repositories).
 - **`cross`**: for private repositories without an arm64 runner. The arm64 binary is
   cross-compiled on the ordinary amd64 runner with `cargo-zigbuild` (Zig as the C compiler and
   linker) for `aarch64-unknown-linux-gnu.2.36`, i.e. against glibc 2.36, Debian 12's, which is what
-  the runtime image uses. As fast as a native build. The trade-off: the arm64 binary is produced by
+  the builder image uses (the Debian 13 runtime image runs it too). As fast as a native build. The trade-off: the arm64 binary is produced by
   a different toolchain path than the amd64 one (C code such as SQLite is compiled by `zig cc`
   instead of gcc), and the arm64 image is only *started* on the amd64 runner under QEMU for the
   smoke test, not run natively. It was verified here (zigbuild 0.23.4 with Zig 0.15.2: both

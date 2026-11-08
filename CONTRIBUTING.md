@@ -5,9 +5,16 @@ ready when CI is green.
 
 ## Setting up
 
-You need Rust (the `stable` channel; `rust-toolchain.toml` pins it), Node 24 and, for the
-end-to-end tests, Google Chrome. Nothing is downloaded for the tests: they use the Chrome you
-already have.
+You need Rust (rustup installs the exact version `rust-toolchain.toml` pins), Node 26 (the
+active LTS line), [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) for the dependency
+scan (`cargo install --locked cargo-deny` or `brew install cargo-deny`) and, for the end-to-end
+tests, Google Chrome. Nothing is downloaded for the tests: they use the Chrome you already have.
+
+The toolchains are pinned on purpose: Rust to an exact version (raise it in `rust-toolchain.toml`
+and in the `rust:` tag of `deploy/Dockerfile` together; the Docker build refuses a mismatch) and
+Node to the active LTS line (26 since 2026-10-28; Node 24 moved to maintenance on 2026-10-20). To
+move to the next LTS, change the Node version in CI, the release workflow, the Dockerfile, the
+README and here in one commit.
 
 ```sh
 git clone https://github.com/lukewilson2002/openbase
@@ -17,14 +24,18 @@ scripts/check.sh                        # the full local check
 OPENBASE_E2E=1 scripts/check.sh         # the same plus the Playwright end-to-end tests
 ```
 
-`scripts/check.sh` runs rustfmt, clippy with `-D warnings`, the Rust tests, the generated-file
-checks (TypeScript bindings, icon list, brand files), `tsc`, Vitest, the production web build and
-the live contract tests. Details and other scripts are in the
+`scripts/check.sh` runs rustfmt, clippy with `-D warnings`, `cargo deny check` (advisories,
+licences, bans, sources; policy in `deny.toml`), `npm audit --audit-level=high`, the Rust tests,
+the generated-file checks (TypeScript bindings, icon list, brand files), `tsc`, Vitest, the
+production web build and the live contract tests. The two audits need network access. Details and other scripts are in the
 [README](README.md#running-the-tests). If you change a Rust type that crosses the API, run
 `scripts/gen-types.sh` and commit the regenerated bindings.
 
 CI (`.github/workflows/ci.yml`) runs the same script and the end-to-end tests on every pull request
-and on every push to `main`. It never publishes anything.
+and on every push to `main`, plus a gitleaks scan of the git history and a Trivy scan of the Docker
+image (critical or high findings that have a fix fail it). It never publishes anything. To run those
+two yourself: `gitleaks git --redact .` and, after `docker build -f deploy/Dockerfile -t openbase:scan .`,
+`trivy image --severity CRITICAL,HIGH --ignore-unfixed openbase:scan`.
 
 ## Pull requests
 

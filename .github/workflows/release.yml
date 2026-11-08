@@ -24,7 +24,7 @@
 #
 # arm64 build (repository variable OPENBASE_ARM64_BUILD, or the input of a manual run):
 #   native  (default) arm64 is built on GitHub's arm64 runner (ubuntu-24.04-arm). Free for public
-#           repositories. The binary is compiled inside rust:1-bookworm, the same as the image.
+#           repositories. The binary is compiled inside the Dockerfile's Rust builder image (Debian 12).
 #   cross   arm64 is cross-compiled on the amd64 runner with cargo-zigbuild against glibc 2.36
 #           (Debian 12), for private repositories that have no arm64 runner. Same speed class as
 #           native, but the arm64 binary comes from a different compiler pipeline than the amd64
@@ -190,7 +190,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -241,7 +241,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # ---- the binary, native: compiled in rust:1-bookworm (glibc 2.36) by the Dockerfile
+      # ---- the binary, native: compiled in the Dockerfile's Rust builder image (Debian 12, glibc 2.36)
       - name: Build the binary (native)
         if: matrix.mode == 'native'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -277,7 +277,8 @@ jobs:
           set -euxo pipefail
           rm -rf web/dist
           cp -R .web-dist web/dist
-          # ".2.36" pins the glibc symbol versions to Debian 12's, which the runtime image uses.
+          # ".2.36" pins the glibc symbol versions to Debian 12's, the same as the native build
+          # (the Debian 13 runtime image runs them fine).
           cargo zigbuild --release --locked -p openbase --target aarch64-unknown-linux-gnu.2.36
           install -D -m 0755 target/aarch64-unknown-linux-gnu/release/openbase release-bin/arm64/openbase
 
