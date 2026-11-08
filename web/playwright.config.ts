@@ -81,8 +81,11 @@ export default defineConfig({
     // Search everything from inside a project, with match highlights and "This project"; a crowded
     // bar and a phone fold it into a button. Signs up its own users.
     { name: "search", testMatch: /search\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // The sidebar: structure and counts, folding, the collection and folder menus, the switcher with the brand and
+    // Ctrl+\. Signs up its own user.
+    { name: "sidebar", testMatch: /sidebar\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar"] },
   ],
 });

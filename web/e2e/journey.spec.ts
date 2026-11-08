@@ -128,10 +128,10 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     // It has no collections yet, and the page asks for the first one.
     baseId = topLevelId;
     await expect(page.getByRole("heading", { name: "No collections in Journey base yet" })).toBeVisible();
-    await expect(page.getByRole("list", { name: /^Tables in / }).getByText("No tables yet.")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main menu" }).getByText(/No collections yet/)).toBeVisible();
     await page.getByRole("button", { name: "New collection" }).click();
     const newCollection = page.getByRole("dialog", { name: "New collection" });
-    await newCollection.getByLabel("Name").fill("Table 1");
+    await newCollection.getByLabel("Collection name").fill("Table 1");
     await newCollection.getByRole("button", { name: "Create collection" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
@@ -154,11 +154,11 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   await test.step("renames the table", async () => {
     table = await loadTable();
-    await page.getByRole("button", { name: `Table options for ${table.name}` }).click();
-    await page.getByRole("menuitem", { name: "Rename table" }).click();
-    await page.getByRole("textbox", { name: "Name" }).fill("Projects");
+    await page.getByRole("button", { name: `Collection options for ${table.name}` }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    await page.getByRole("textbox", { name: "Collection name" }).fill("Projects");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: /^Projects/ })).toBeVisible();
     table = await loadTable();
     expect(table.name).toBe("Projects");
   });
@@ -314,35 +314,24 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("button", { name: "Log in" }).click();
     // The login returns to the page that was asked for.
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/${viewId}$`));
-    await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: /^Projects/ })).toBeVisible();
     await expect(page.getByText("2 items")).toBeVisible();
     expect((await records()).map((r) => r.values[table.primary_field_id])).toEqual(["Charlie", "Bravo"]);
   });
 
-  // Icons: picked from the full list for a table, shown in its tab and in the link field's target
-  // select, then for the base and the workspace (workspace page tiles).
-  await test.step("gives the table an icon from the full list; the tab shows it and the server keeps it", async () => {
-    await page.getByRole("button", { name: "Table options for Projects" }).click();
-    await page.getByRole("menuitem", { name: /Change icon/ }).click();
-    const dialog = page.getByRole("dialog", { name: "Table icon" });
-    // The 20 popular icons are on screen at once; anything else is found by name.
-    await expect(dialog.getByRole("group", { name: "Popular icons" }).getByRole("button")).toHaveCount(20);
-    await dialog.getByRole("searchbox", { name: "Search icons" }).fill("tractor");
-    await dialog.getByRole("group", { name: "Matching icons" }).getByRole("button", { name: "Tractor" }).click();
-    await expect(dialog).toBeHidden();
-    const tab = page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Projects" });
-    await expect(tab.locator("svg[data-icon='tractor']")).toBeVisible();
-    expect((await loadTable()).icon).toBe("tractor");
-    // It survives a reload (and is drawn from the lazily loaded set, not just the bundled 20).
-    await page.reload();
-    await expect(tab.locator("svg[data-icon='tractor']")).toBeVisible();
-  });
-
+  // The sidebar shows entity colors, never icons (decision 3); the icon columns stay in the API, and the link
+  // field's table picker (Properties, Phase 5) still draws them until it moves.
   await test.step("shows the table icons in the link field's target select", async () => {
+    const iconed = await page.request.patch(`/api/tables/${table.id}`, { data: { icon: "tractor" }, headers: CSRF });
+    expect(iconed.ok(), await iconed.text()).toBeTruthy();
     const created = await page.request.post(`/api/bases/${baseId}/tables`, { data: { name: "Clients", icon: "users" }, headers: CSRF });
     expect(created.ok(), await created.text()).toBeTruthy();
     const clients = (await created.json()) as { id: string };
-    await expect(page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Clients" }).locator("svg[data-icon='users']")).toBeVisible();
+    // The sidebar lists it by its color mark and name, and draws no icon.
+    const row = page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: /^Clients/ });
+    await page.reload();
+    await expect(row).toBeVisible();
+    await expect(row.locator("svg")).toHaveCount(0);
 
     await page.getByRole("button", { name: "More" }).click();
     await page.getByRole("menuitem", { name: "Add field" }).click();
@@ -364,30 +353,14 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect(link.options).toMatchObject({ linked_table_id: clients.id });
   });
 
-  await test.step("gives the project and the workspace icons from their menus; the menu shows them instead of the letters", async () => {
+  await test.step("colors the workspace from the switcher's menu, and the sidebar shows the color without a letter or icon", async () => {
     const menu = page.getByRole("navigation", { name: "Main menu" });
-    await menu.getByRole("button", { name: "Project options for Journey base" }).click();
-    await page.getByRole("menuitem", { name: /Change icon/ }).click();
-    await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Store" }).click();
-    // The menu's row shows the icon; the collection header names the place without one.
-    await expect(page.getByRole("heading", { level: 1 }).locator("[data-entity-tile]")).toHaveCount(0);
-    await expect(menu.getByRole("button", { name: "Journey base", exact: true }).locator("[data-entity-tile] svg[data-icon='store']")).toBeVisible();
-
-    await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();
-    await page.getByRole("menuitem", { name: /Change icon/ }).click();
-    await page.getByRole("group", { name: "Popular icons" }).getByRole("button", { name: "Briefcase" }).click();
-    const workspaceRow = menu.getByRole("button", { name: "Journey workspace", exact: true }).or(menu.getByRole("link", { name: "Journey workspace", exact: true }));
-    await expect(workspaceRow.locator("[data-entity-tile] svg[data-icon='briefcase']")).toBeVisible();
-    const workspaces = await api<{ name: string; icon: string | null; bases: { name: string; icon: string | null }[] }[]>(page, "/api/workspaces");
-    const ws = workspaces.find((w) => w.name === "Journey workspace")!;
-    expect(ws.icon).toBe("briefcase");
-    expect(ws.bases.find((b) => b.name === "Journey base")?.icon).toBe("store");
-
-    // Removing the icon brings the letter back.
-    await menu.getByRole("button", { name: "Workspace options for Journey workspace" }).click();
-    await page.getByRole("menuitem", { name: /Change icon/ }).click();
-    await page.getByRole("button", { name: "Remove icon" }).click();
-    await expect(workspaceRow.locator("[data-entity-tile]")).toContainText("J");
-    expect((await api<{ name: string; icon: string | null }[]>(page, "/api/workspaces")).find((w) => w.name === "Journey workspace")?.icon ?? null).toBeNull();
+    await menu.getByRole("button", { name: /^Journey workspace/ }).click();
+    await page.getByRole("menuitem", { name: "Color" }).click();
+    await page.getByRole("dialog", { name: "Workspace color" }).getByRole("radio", { name: "Purple", exact: true }).click();
+    await expect.poll(async () => (await api<{ name: string; color: string }[]>(page, "/api/workspaces")).find((w) => w.name === "Journey workspace")?.color).toBe("purple");
+    const mark = menu.getByRole("button", { name: /^Journey workspace/ }).locator(".ob-mark");
+    await expect(mark).toHaveClass(/ob-hue-purple/);
+    await expect(mark).toBeEmpty();
   });
 });

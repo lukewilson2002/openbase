@@ -102,7 +102,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
-    // In the project's menu, which a right-click on its row opens too.
+    // In the folder's menu, which a right-click on its row opens too.
     await page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: "Automations E2E", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Automations", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/automations$`));
@@ -154,7 +154,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
   });
 
   await test.step("adds a record in the grid", async () => {
-    await page.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).click();
+    await page.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).click();
     await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
     await expect(page.getByText("0 items")).toBeVisible();
     await page.getByRole("button", { name: "Add record" }).click();

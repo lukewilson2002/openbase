@@ -36,7 +36,7 @@ async function expectFits(page: Page, where: string): Promise<void> {
   expect(m.small, `${where}: text fields under 16px make iOS zoom in`).toEqual([]);
 }
 
-test("the project, the menu, its toolbar and the record panel fit a phone", async ({ page }) => {
+test("the folder, the menu, its toolbar and the record panel fit a phone", async ({ page }) => {
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -67,22 +67,24 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const inboxMenu = page.getByRole("dialog", { name: "Menu" });
   await expect(inboxMenu.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  // The workspace is open on its Home: unfold its project (names only fold), then open its table.
-  await inboxMenu.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("button", { name: "A base with a fairly long name", exact: true }).tap();
-  await inboxMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).tap();
+  // The workspace is open on its Home, its folder unfolded: open its collection.
+  await expect(inboxMenu.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
+  await inboxMenu.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).tap();
   await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
   await expectFits(page, "project");
 
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
-  await expect(drawer.getByRole("list", { name: "Projects in Mobile workspace" }).getByRole("button", { name: "A base with a fairly long name", exact: true })).toBeVisible();
+  const folder = drawer.getByRole("button", { name: "A base with a fairly long name", exact: true });
+  await expect(folder).toBeVisible();
   await expectFits(page, "menu drawer");
-  // Folding a row is not navigating: the drawer stays open.
-  await drawer.getByRole("button", { name: "Collapse A base with a fairly long name" }).tap();
+  // Folding a folder is not navigating: the drawer stays open.
+  await folder.tap();
   await expect(drawer).toBeVisible();
+  await expect(folder).toHaveAttribute("aria-expanded", "false");
   // Folded by hand is remembered on this device: open it again for the steps below.
-  await drawer.getByRole("button", { name: "Expand A base with a fairly long name" }).tap();
-  await expect(drawer.getByRole("list", { name: /^Tables in / })).toBeVisible();
+  await folder.tap();
+  await expect(drawer.getByRole("list", { name: /^Collections in / })).toBeVisible();
   await drawer.getByRole("button", { name: "Close menu" }).tap();
   await expect(drawer).toBeHidden();
 
@@ -97,13 +99,13 @@ test("the project, the menu, its toolbar and the record panel fit a phone", asyn
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
   expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
 
-  // The base's menu is the drawer; choosing a table closes it.
+  // The base's menu is the drawer; choosing a collection closes it.
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const baseMenu = page.getByRole("dialog", { name: "Menu" });
-  await expect(baseMenu.getByRole("list", { name: /^Tables in / })).toBeVisible();
-  await expect(baseMenu.getByRole("button", { name: "Collapse Mobile workspace" })).toBeVisible();
+  await expect(baseMenu.getByRole("list", { name: /^Collections in / })).toBeVisible();
+  await expect(baseMenu.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
   await expectFits(page, "base menu drawer");
-  await baseMenu.getByRole("list", { name: /^Tables in / }).getByRole("link", { name: "Table 1" }).tap();
+  await baseMenu.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).tap();
   await expect(baseMenu).toBeHidden();
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();
@@ -130,17 +132,16 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
   await skipIntro(page.request);
+  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Kitchen" }, headers: CSRF })).json();
 
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Create your first workspace" })).toBeVisible();
-  await expectFits(page, "first workspace");
-  await page.getByRole("button", { name: /^Show menu/ }).tap();
-  await page.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "New workspace" }).tap();
-  const create = page.getByRole("dialog", { name: "New workspace" });
-  await create.getByRole("textbox", { name: "Name" }).fill("Kitchen");
-  await create.getByRole("button", { name: "Choose icon" }).tap();
+  // The sidebar offers no icons (decision 3); the workspace's settings page still does until its own rebuild.
+  await page.goto(`/workspace/${ws.id}/settings`);
+  await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
+  await expectFits(page, "workspace settings");
+  const change = page.getByRole("button", { name: "Change icon…" });
+  await change.tap();
 
-  const sheet = page.getByRole("dialog", { name: "Choose icon" });
+  const sheet = page.getByRole("dialog", { name: "Workspace icon" });
   await expect(sheet.getByTestId("icon-list")).toBeVisible();
   const box = (await sheet.boundingBox())!;
   const screen = page.viewportSize()!;
@@ -153,13 +154,11 @@ test("the icon picker opens as a sheet that fits the screen, without the keyboar
   // Above the sheet is the backdrop.
   await page.touchscreen.tap(screen.width / 2, box.y / 2);
   await expect(sheet).toBeHidden();
-  await expect(create).toBeVisible();
-  await expect(create.getByRole("button", { name: "Choose icon" })).toBeFocused();
 
-  await create.getByRole("button", { name: "Choose icon" }).tap();
+  await change.tap();
   await sheet.getByRole("button", { name: "Truck" }).tap();
   await expect(sheet).toBeHidden();
-  await expect(create.getByRole("button", { name: "Change icon" })).toBeVisible();
+  await expect.poll(async () => ((await (await page.request.get("/api/workspaces")).json()) as { id: string; icon: string | null }[]).find((w) => w.id === ws.id)?.icon).toBe("truck");
 });
 
 /** A one-finger swipe from (x, y) by dy, sent as real touch events (Playwright only has taps). */
@@ -180,7 +179,7 @@ test("a swipe that starts on a menu button scrolls the menu and opens nothing; a
   expect(signup.ok(), await signup.text()).toBeTruthy();
   await skipIntro(page.request);
   const ws = await (await page.request.post("/api/workspaces", { data: { name: "Swipe workspace" }, headers: CSRF })).json();
-  // Enough projects that the drawer has to scroll.
+  // Enough folders that the drawer has to scroll.
   for (let i = 1; i <= 24; i++) {
     const res = await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: `Project ${String(i).padStart(2, "0")}`, empty: true }, headers: CSRF });
     expect(res.ok(), await res.text()).toBeTruthy();
@@ -189,14 +188,14 @@ test("a swipe that starts on a menu button scrolls the menu and opens nothing; a
   await page.goto("/");
   await page.getByRole("button", { name: /^Show menu/ }).tap();
   const drawer = page.getByRole("dialog", { name: "Menu" });
-  // `/` is the workspace's Home, so its projects are already listed.
-  await expect(drawer.getByRole("button", { name: "Project options for Project 24" })).toBeAttached();
+  // `/` is the workspace's Home, so its folders are already listed.
+  await expect(drawer.getByRole("button", { name: "Folder options for Project 24" })).toBeAttached();
   const scroller = drawer.locator("[data-sidebar-scroll]");
   await expect(scroller).toBeVisible();
   expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight), "the menu has to scroll for this test").toBeGreaterThan(100);
 
   // Start the swipe on a row's "…" button and drag up.
-  const more = drawer.getByRole("button", { name: "Project options for Project 05" });
+  const more = drawer.getByRole("button", { name: "Folder options for Project 05" });
   await more.scrollIntoViewIfNeeded();
   const box = (await more.boundingBox())!;
   const before = await scroller.evaluate((el) => el.scrollTop);
@@ -207,5 +206,5 @@ test("a swipe that starts on a menu button scrolls the menu and opens nothing; a
   // A tap on the same button opens its menu.
   await more.scrollIntoViewIfNeeded();
   await more.tap();
-  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Rename project/ })).toBeVisible();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Rename" })).toBeVisible();
 });

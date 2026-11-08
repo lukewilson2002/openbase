@@ -390,7 +390,7 @@ test.describe("trash and notifications", () => {
 });
 
 test.describe("menu order", () => {
-  /** A workspace with one project of three empty tables (Alpha, Bravo, Charlie) and, in Alpha, three shared views. */
+  /** A workspace with one folder of three empty collections (Alpha, Bravo, Charlie) and, in Alpha, three shared views. */
   async function seedTree(page: Page) {
     const req = page.request;
     const ws = await call<{ id: string }>(req, "post", "/api/workspaces", { name: `E2E order ${Date.now()}` });
@@ -402,48 +402,48 @@ test.describe("menu order", () => {
   }
   const tableNames = async (page: Page, baseId: string) => (await call<{ tables: { name: string }[] }>(page.request, "get", `/api/bases/${baseId}`)).tables.map((t) => t.name);
 
-  test("drags a table below another with the mouse, and the order is still there after a reload", async ({ page }) => {
+  test("drags a collection below another with the mouse, and the order is still there after a reload", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
-    const list = page.getByRole("list", { name: "Tables in Order E2E" });
-    await expect(list.getByRole("link")).toHaveText(["Alpha", "Bravo", "Charlie"]);
+    const list = page.getByRole("list", { name: "Collections in Order E2E" });
+    await expect(list.getByRole("link")).toHaveText([/^Alpha/, /^Bravo/, /^Charlie/]);
 
     // Alpha, picked up by its row, goes below Bravo: a few pixels first (a plain click must not drag), then to the target.
-    const alpha = (await list.getByRole("link", { name: "Alpha" }).boundingBox())!;
-    const bravo = (await list.getByRole("link", { name: "Bravo" }).boundingBox())!;
+    const alpha = (await list.getByRole("link", { name: /^Alpha/ }).boundingBox())!;
+    const bravo = (await list.getByRole("link", { name: /^Bravo/ }).boundingBox())!;
     await page.mouse.move(alpha.x + 40, alpha.y + alpha.height / 2);
     await page.mouse.down();
     await page.mouse.move(alpha.x + 40, alpha.y + alpha.height / 2 + 8, { steps: 3 });
     await page.mouse.move(alpha.x + 40, bravo.y + bravo.height * 0.8, { steps: 10 });
     await page.mouse.up();
 
-    await expect(list.getByRole("link")).toHaveText(["Bravo", "Alpha", "Charlie"]);
+    await expect(list.getByRole("link")).toHaveText([/^Bravo/, /^Alpha/, /^Charlie/]);
     await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Bravo", "Alpha", "Charlie"]);
     // The drop did not open the table it ended on.
     await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[0]!.id}`));
 
     await page.reload();
-    await expect(page.getByRole("list", { name: "Tables in Order E2E" }).getByRole("link")).toHaveText(["Bravo", "Alpha", "Charlie"]);
+    await expect(page.getByRole("list", { name: "Collections in Order E2E" }).getByRole("link")).toHaveText([/^Bravo/, /^Alpha/, /^Charlie/]);
   });
 
   test("a click on a row without moving still opens it", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
-    await page.getByRole("list", { name: "Tables in Order E2E" }).getByRole("link", { name: "Charlie" }).click();
+    await page.getByRole("list", { name: "Collections in Order E2E" }).getByRole("link", { name: /^Charlie/ }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${tree.baseId}/${tree.tables[2]!.id}`));
   });
 
-  test("moves a table with the keyboard through its row menu, and a view through the view switcher's options", async ({ page }) => {
+  test("moves a collection with the keyboard through its row menu, and a view through the view switcher's options", async ({ page }) => {
     const tree = await seedTree(page);
     await page.goto(`/base/${tree.baseId}/${tree.tables[0]!.id}`);
-    const list = page.getByRole("list", { name: "Tables in Order E2E" });
+    const list = page.getByRole("list", { name: "Collections in Order E2E" });
 
-    await list.getByRole("button", { name: "Table options for Charlie" }).click();
+    await list.getByRole("button", { name: "Collection options for Charlie" }).click();
     await page.getByRole("menuitem", { name: "Move up" }).click();
-    await expect(list.getByRole("link")).toHaveText(["Alpha", "Charlie", "Bravo"]);
+    await expect(list.getByRole("link")).toHaveText([/^Alpha/, /^Charlie/, /^Bravo/]);
     await expect.poll(() => tableNames(page, tree.baseId)).toEqual(["Alpha", "Charlie", "Bravo"]);
 
-    // The menu lists tables only: the views are in the toolbar's list, where they are also put in order.
+    // The sidebar lists collections only: the views are in the toolbar's list, where they are also put in order.
     await expect(page.getByRole("button", { name: /^Show views of/ })).toHaveCount(0);
     const viewNames = async () =>
       (await call<{ tables: { id: string; views: { name: string; is_default?: boolean }[] }[] }>(page.request, "get", `/api/bases/${tree.baseId}`)).tables

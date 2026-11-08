@@ -132,11 +132,11 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
   let formViewId = "";
   let link = "";
 
-  await test.step("creates a form view from the table menu's Add view", async () => {
+  await test.step("creates a form view from the view list's Add view", async () => {
     await openView(page);
-    await page.getByRole("list", { name: /^Tables in / }).getByRole("button", { name: /^Table options for / }).first().click();
+    await page.getByRole("button", { name: "View: Grid" }).click();
     await page.getByRole("menuitem", { name: "Add view" }).click();
-    await page.getByRole("menuitem", { name: /^Form/ }).click();
+    await page.getByRole("menu", { name: "Add view" }).getByRole("menuitem", { name: /^Form/ }).click();
     const dialog = page.getByRole("dialog", { name: "New form view" });
     await dialog.getByLabel("Name").fill("Contact form");
     await dialog.getByRole("button", { name: "Create view" }).click();
@@ -332,9 +332,8 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
 
   await test.step("New table from CSV: name from the file, preview, types inferred", async () => {
     await openView(page);
-    await page.getByRole("button", { name: "Project options for Sharing E2E" }).click();
-    await page.getByRole("menuitem", { name: "Add table" }).click();
-    await page.getByRole("menuitem", { name: /New table from CSV/ }).click();
+    await page.getByRole("button", { name: "Folder options for Sharing E2E" }).click();
+    await page.getByRole("menuitem", { name: "New collection from CSV" }).click();
     const dialog = page.getByRole("dialog", { name: "New table from CSV" });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "Customers 2026.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Age,Joined,Active\nAnn,30,2024-01-05,yes\nBob,41,2023-12-31,no\nCyd,29,2022-06-30,yes\n") });
     await expect(dialog.getByLabel("Table name")).toHaveValue("Customers 2026");
@@ -342,7 +341,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
     await dialog.getByRole("button", { name: "Create table" }).click();
     await expect(page).not.toHaveURL(new RegExp(fx.tableId));
     newTableId = new URL(page.url()).pathname.split("/")[3]!;
-    await expect(page.getByRole("link", { name: "Customers 2026" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: /^Customers 2026/ })).toBeVisible();
     const t = await table(page.request, newTableId);
     expect(t.fields.map((f) => [f.name, f.type])).toEqual(expect.arrayContaining([["Age", "number"], ["Joined", "date"], ["Active", "checkbox"]]));
     expect((await records(page.request, t.views[0]!.id)).total).toBe(3);
@@ -350,7 +349,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
 
   await test.step("Import CSV into an existing table: columns are matched, one is skipped", async () => {
     await openView(page);
-    await page.getByRole("button", { name: `Table options for ${fx.tableName}` }).click();
+    await page.getByRole("button", { name: `Collection options for ${fx.tableName}` }).click();
     await page.getByRole("menuitem", { name: /Import CSV/ }).click();
     const dialog = page.getByRole("dialog", { name: `Import CSV into ${fx.tableName}` });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "more.csv", mimeType: "text/csv", buffer: Buffer.from("Name;Qty;Comment\nDelta;12;hi\nEcho;4;there\n") });
@@ -369,7 +368,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
 
   await test.step("a file with a bad row is refused as a whole, with the row numbers", async () => {
     const before = (await records(page.request, fx.viewId)).total;
-    await page.getByRole("button", { name: `Table options for ${fx.tableName}` }).click();
+    await page.getByRole("button", { name: `Collection options for ${fx.tableName}` }).click();
     await page.getByRole("menuitem", { name: /Import CSV/ }).click();
     const dialog = page.getByRole("dialog", { name: `Import CSV into ${fx.tableName}` });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "bad.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Qty\nFine,1\nBroken,not a number\nNegative,-5\n") });
@@ -384,7 +383,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
   });
 
   await test.step("a file over 20 MB is refused on the spot", async () => {
-    await page.getByRole("button", { name: `Table options for ${fx.tableName}` }).click();
+    await page.getByRole("button", { name: `Collection options for ${fx.tableName}` }).click();
     await page.getByRole("menuitem", { name: /Import CSV/ }).click();
     const dialog = page.getByRole("dialog", { name: `Import CSV into ${fx.tableName}` });
     const big = Buffer.alloc(20 * 1024 * 1024 + 10, "a");
