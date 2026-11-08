@@ -118,7 +118,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     await dialog.getByRole("button", { name: "Create automation" }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/aut\\w+$`));
     automationId = page.url().split("/").pop()!;
-    // The table select is an icon-aware listbox (EntitySelect), not a native <select>.
+    // The table select is an color-mark listbox (EntitySelect), not a native <select>.
     await expect(page.getByRole("combobox", { name: "Table", exact: true })).toHaveText("Table 1");
     const stored = await call<{ enabled: boolean; trigger: unknown; actions: unknown[] }>(page.request, "get", `/api/automations/${automationId}`);
     expect(stored).toMatchObject({ enabled: false, trigger: { type: "record_created", table_id: fx.table1.id }, actions: [] });

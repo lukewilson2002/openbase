@@ -342,9 +342,9 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     expect((await records()).map((r) => r.values[table.primary_field_id])).toEqual(["Charlie", "Bravo"]);
   });
 
-  // The sidebar shows entity colors, never icons (decision 3); the icon columns stay in the API, and the link
-  // field's table picker (Properties, Phase 5) still draws them until it moves.
-  await test.step("shows the table icons in the link field's target select", async () => {
+  // The sidebar and the link property's collection picker show entity colors, never icons (decision 3); the icon
+  // columns stay in the API.
+  await test.step("shows the collection marks, not icons, in the link property's target select", async () => {
     const iconed = await page.request.patch(`/api/tables/${table.id}`, { data: { icon: "tractor" }, headers: CSRF });
     expect(iconed.ok(), await iconed.text()).toBeTruthy();
     const created = await page.request.post(`/api/bases/${baseId}/tables`, { data: { name: "Clients", icon: "users" }, headers: CSRF });
@@ -361,13 +361,17 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await dialog.getByLabel("Name", { exact: true }).fill("Client");
     await dialog.getByRole("option", { name: /^Link to another record/ }).click();
     const target = dialog.getByRole("combobox", { name: "Collection to link to" });
+    await expect(dialog.getByText("Collections in other folders can't be linked.")).toBeVisible();
     await target.click();
     const here = page.getByRole("option", { name: "Projects (this collection)" });
     const other = page.getByRole("option", { name: "Clients" });
-    await expect(here.locator("svg[data-icon='tractor']")).toBeVisible();
-    await expect(other.locator("svg[data-icon='users']")).toBeVisible();
+    await expect(here.locator(".ob-mark")).toBeVisible();
+    await expect(other.locator(".ob-mark")).toBeVisible();
+    await expect(here.locator("svg[data-icon='tractor']")).toHaveCount(0);
+    await expect(other.locator("svg[data-icon='users']")).toHaveCount(0);
     await other.click();
-    await expect(target.locator("svg[data-icon='users']")).toBeVisible();
+    await expect(target.locator(".ob-mark")).toBeVisible();
+    await expect(target.locator("svg[data-icon='users']")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Add property" }).click();
     await expect(dialog).toBeHidden();
     const link = (await loadTable()).fields.find((f) => f.name === "Client")!;
