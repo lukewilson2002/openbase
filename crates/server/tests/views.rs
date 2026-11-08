@@ -62,6 +62,55 @@ async fn every_view_type_can_be_created_with_default_config() {
 }
 
 #[tokio::test]
+async fn new_views_start_on_medium_rows_unless_the_config_says_otherwise() {
+    let f = Fixture::new().await;
+    // A view made without a config, and the default grid of a new table, start on Medium rows.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Plain", "type": "grid" }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["row_height"], "medium");
+    let made = f
+        .app
+        .post(
+            &f.owner,
+            &format!("/api/bases/{}/tables", f.base_id),
+            json!({ "name": "Clients" }),
+        )
+        .await;
+    made.assert_status(201);
+    let table = f.table(made.body["id"].as_str().unwrap()).await;
+    assert_eq!(table["views"][0]["config"]["row_height"], "medium");
+    // A config of its own is kept as sent: one that names no row height keeps the stored default
+    // (short), and one that names it gets what it asked for.
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Sent", "type": "grid", "config": { "frozen_columns": 1 } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["row_height"], "short");
+    let r = f
+        .app
+        .post(
+            &f.owner,
+            &views_url(&f),
+            json!({ "name": "Tall", "type": "grid", "config": { "row_height": "tall" } }),
+        )
+        .await;
+    r.assert_status(201);
+    assert_eq!(r.body["config"]["row_height"], "tall");
+}
+
+#[tokio::test]
 async fn new_galleries_cover_with_the_first_attachment_field() {
     let f = Fixture::new().await;
     // No attachment field yet: nothing to cover with.

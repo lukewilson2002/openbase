@@ -115,9 +115,11 @@ describe("who may change a shared view", () => {
 
   it("lets editors save the config of an unlocked shared view but not viewers", async () => {
     const view = (await viewsOf(editor)).find((v) => v.id === shared)!;
-    const config = { ...view.config, row_height: "medium" as const };
-    expect(parse("View", await editor.run(() => api.views.update(shared, { config }))).config.row_height).toBe("medium");
-    expectError(await failure(viewer.run(() => api.views.update(shared, { config: { ...config, row_height: "tall" } }))), 403, "forbidden");
+    // A view made without a config starts on Medium rows, so the editor's change is to Tall.
+    expect(view.config.row_height).toBe("medium");
+    const config = { ...view.config, row_height: "tall" as const };
+    expect(parse("View", await editor.run(() => api.views.update(shared, { config }))).config.row_height).toBe("tall");
+    expectError(await failure(viewer.run(() => api.views.update(shared, { config: { ...config, row_height: "extra_tall" } }))), 403, "forbidden");
   });
 
   it("locks a view: only creators change it afterwards, editors keep their personal copy options", async () => {

@@ -4,7 +4,7 @@
 use ob_core::api::schema::{DuplicateTable, Table, UpdateTable, View};
 use ob_core::field::{Field, FieldKind, TextOptions};
 use ob_core::limits;
-use ob_core::view::{ViewConfig, ViewType};
+use ob_core::view::{RowHeight, ViewConfig, ViewType};
 use rusqlite::{Connection, Transaction, params};
 
 use crate::db::now_ms;
@@ -138,7 +138,11 @@ pub fn create_without_page(
         table_id: table_id.clone(),
         name: DEFAULT_VIEW_NAME.to_string(),
         view_type: ViewType::Grid,
-        config: ViewConfig::default(),
+        // Medium rows (46 px), the design language's table row; views made before it keep theirs.
+        config: ViewConfig {
+            row_height: RowHeight::Medium,
+            ..ViewConfig::default()
+        },
         personal: false,
         locked: false,
         is_default: true,

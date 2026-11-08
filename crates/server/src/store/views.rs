@@ -19,7 +19,8 @@ use ob_core::field::{COLORS, Field, FieldKind};
 use ob_core::limits;
 use ob_core::query::compile_filter;
 use ob_core::view::{
-    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ListConfig, ViewConfig, ViewType,
+    Filter, FilterItem, FormConfig, FormField, GalleryConfig, ListConfig, RowHeight, ViewConfig,
+    ViewType,
 };
 use rusqlite::{Transaction, params};
 
@@ -143,6 +144,9 @@ pub fn create(
             let body = pages::body_field_id(tx, table_id)?;
             let mut c = ViewConfig {
                 hidden_fields: body.iter().cloned().collect(),
+                // Medium rows (46 px) are what a new view starts with; a config that names no row
+                // height (above) still means the stored default, short.
+                row_height: RowHeight::Medium,
                 ..ViewConfig::default()
             };
             if input.view_type == ViewType::Form {
