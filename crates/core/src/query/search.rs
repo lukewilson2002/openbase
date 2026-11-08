@@ -3,8 +3,8 @@
 use chrono_tz::Tz;
 
 use super::Row;
-use crate::cell::{NameResolver, display_text};
-use crate::field::Field;
+use crate::cell::{NameResolver, display_text, without_embeds};
+use crate::field::{Field, FieldKind};
 use crate::limits::MAX_SEARCH_LEN;
 
 /// Prepares a user's search text for [`matches_search`]: trimmed and
@@ -23,7 +23,8 @@ pub fn search_needle(query: &str) -> Result<String, String> {
 /// Whether any of `fields` (normally the view's visible fields) contains
 /// `needle` in its display text, ignoring case. `needle` must come from
 /// [`search_needle`] (already trimmed and lower-cased); an empty needle
-/// matches every row.
+/// matches every row. Embed blocks in rich text (see [`without_embeds`]) are
+/// configuration, not words, so they are not searched.
 pub fn matches_search(
     row: &dyn Row,
     fields: &[&Field],
@@ -35,8 +36,11 @@ pub fn matches_search(
         return true;
     }
     fields.iter().any(|f| {
-        display_text(f, row.get(&f.id), names, tz)
-            .to_lowercase()
-            .contains(needle)
+        let text = display_text(f, row.get(&f.id), names, tz);
+        let text = match f.kind {
+            FieldKind::RichText(_) => without_embeds(&text),
+            _ => text.into(),
+        };
+        text.to_lowercase().contains(needle)
     })
 }

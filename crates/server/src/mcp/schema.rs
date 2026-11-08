@@ -1224,7 +1224,7 @@ fn catalogue() -> Vec<TypeHelp> {
             "Rich text",
             false,
             "Anything written to be read: notes, summaries, descriptions, meeting minutes, articles, blog posts, documentation, instructions. It is Markdown: text formatting (bold, italics, headings, links, code), tables, lists and checklists, images and other embedded files, @mentions, quotes and more. Choose it over text for anything longer than a sentence",
-            "{} (no options; always multiline Markdown). It can embed files of the same project, see upload_attachment (`markdown`); an https:// image is shown only as a link; @[Name](usrXXXX) mentions a person (notified when the cell is saved)",
+            "{} (no options; always multiline Markdown). It can embed files of the same project, see upload_attachment (`markdown`); an https:// image is shown only as a link; @[Name](usrXXXX) mentions a person (notified when the cell is saved). It can embed a table of the record's linked records or of a view: a fenced code block with the info string openbase holding one JSON object, ```openbase {\"embed\":\"linked\",\"field\":\"fld...\"} ``` or ```openbase {\"embed\":\"view\",\"view\":\"viw...\",\"limit\":10} ``` (each part on its own line, ids not names; limit optional). Search ignores the content of such blocks and still finds the text around them",
             "Markdown string",
             json!({}),
         ),

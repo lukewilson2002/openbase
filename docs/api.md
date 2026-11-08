@@ -91,7 +91,8 @@ some projects who creates or duplicates a project gets it added to their list.
   break becomes a space, with it on line breaks are kept, and either way the text is shown
   as typed. `rich_text` is Markdown, always multiline, with no options: text formatting,
   tables, lists, images and other files, mentions of people (below) and more, for notes,
-  summaries, descriptions and articles. Changing a field
+  summaries, descriptions and articles; a page can also embed a record's linked records or
+  a view ([Embeds in rich text](#embeds-in-rich-text-internal-api)). Changing a field
   between them converts its values to show the same words: rich text becomes the plain
   text it shows (a mention reads `@Name`, a link its text, lines and list items kept), and
   plain text becomes Markdown with the characters that would be formatting escaped.
@@ -217,6 +218,7 @@ removes its history, and with it its entries here.
 text (the primary field and text, rich text, email, URL and phone fields) and comments, in
 everything the caller can open (the same access as opening each one; a token limited to some
 projects searches only those). Matching ignores case and finds the text anywhere in a word.
+Embed blocks in rich text are not searched ([Embeds in rich text](#embeds-in-rich-text-internal-api)).
 Names come first, then records, then comments (newest first); text that starts with `q` before
 text that only contains it.
 
@@ -306,6 +308,40 @@ whole file is sent. Bodies are streamed. Thumbnails support `Range` too.
 
 **External media is not embedded.** `![](https://...)`, or any address not starting with `/api/attachments/`,
 is shown by the web app as an ordinary link and never fetched by the browser; the editor does not create one. Raw HTML in the text never produces `<img>`, `<video>` or `<audio>` either: media only comes from plainly written Markdown image syntax.
+
+### Embeds in rich text (internal API)
+
+A page (a rich text value) can show a table of the record's linked records or the first records of a view.
+The embed is stored in the Markdown as a fenced code block whose info string is `openbase` and whose body is
+a single JSON object, so any client or agent can write one with an ordinary record write:
+
+````
+```openbase
+{"embed":"linked","field":"fldXXXXXXXXXXXXXX"}
+```
+
+```openbase
+{"embed":"view","view":"viwXXXXXXXXXXXXXX","limit":10}
+```
+````
+
+- `{"embed":"linked","field":"fld..."}` shows the records linked from the record through that link field
+  (`field` is one of the record's own link fields).
+- `{"embed":"view","view":"viw...","limit":10}` shows the first `limit` records of a saved view of the same
+  workspace, read-only; `limit` is optional (10 if left out). A personal view cannot be embedded, and a reader
+  who cannot open the view sees "You can't open this view".
+
+Nothing is stored beyond the text: the server does not check an embed when the value is saved, and a block
+that cannot be read (not one JSON object, an unknown `embed`, a malformed id) is shown by the web app as "This
+embed can't be shown" and keeps its text unchanged. Embeds come alive only in the Page of a record opened by a
+signed-in person; in public share pages, forms, comments, emails and grid cells they show as a static "Embedded
+view" box and fetch nothing.
+
+**Search skips embeds.** The content of a fenced block with the info string `openbase` is configuration, not
+words: the grid and `search` of a view query, `search_records` and `GET /api/search` ignore it in rich text
+fields (searching for `linked` or a field id does not find a page just because it embeds something), while the
+text around the block is searched as usual. Blocks with any other info string are ordinary code and are
+searched.
 
 ---
 
@@ -625,7 +661,7 @@ length). Unattached public-form uploads are deleted after 2 hours.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
-| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group overrides may only use visible fields (400 otherwise). `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
+| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group/row-color/summary overrides may only use visible fields (400 otherwise); a drafted `row_color` colours rows only when it is `by_select` on a visible field, like a saved one. `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
 | `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user) and answers `{"ok": true, "record_id"}` (a form's `redirect_url` may contain `{record_id}`, which the page replaces). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |

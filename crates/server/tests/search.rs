@@ -586,3 +586,56 @@ async fn results_say_where_they_matched_in_plain_text() {
         ["Ünï"]
     );
 }
+
+/// A page (rich text) that embeds records or a view, with words around the embeds.
+const PAGE_WITH_EMBEDS: &str = "Quarterly invoices overview\n\n\
+    ```openbase\n{\"embed\":\"linked\",\"field\":\"fldInvoiceLinks\"}\n```\n\n\
+    Open work below\n\n\
+    ```openbase\n{\"embed\":\"view\",\"view\":\"viwOpenWork\",\"limit\":10}\n```\n";
+
+#[tokio::test]
+async fn embed_blocks_in_rich_text_are_not_searched_but_the_text_around_them_is() {
+    let f = Fixture::new().await;
+    f.insert_record(
+        &f.table_id,
+        json!({ &f.primary_id: "Client page", &f.notes_id: PAGE_WITH_EMBEDS }),
+    );
+    // The JSON is configuration: its keys, values and ids find nothing.
+    for hidden in [
+        "embed",
+        "linked",
+        "fldInvoiceLinks",
+        "viwOpenWork",
+        "limit",
+        "openbase",
+    ] {
+        assert!(
+            found(&search(&f.app, &f.owner, &format!("q={hidden}")).await).is_empty(),
+            "{hidden}"
+        );
+    }
+    // The words before and after still do, with a snippet free of the JSON.
+    for words in ["invoices", "open work"] {
+        let r = search(
+            &f.app,
+            &f.owner,
+            &format!("q={}", words.replace(' ', "%20")),
+        )
+        .await;
+        assert_eq!(found(&r), [hit("record", "Client page")], "{words}");
+        let snippet = sid(&r.body["results"][0]["snippet"]);
+        assert!(
+            !snippet.contains("embed") && !snippet.contains("fld"),
+            "{snippet}"
+        );
+    }
+    // A code block with another info string is text like any other.
+    f.insert_record(
+        &f.table_id,
+        json!({ &f.primary_id: "Howto", &f.notes_id: "```json\n{\"embed\":\"linked\"}\n```\n" }),
+    );
+    assert_eq!(
+        found(&search(&f.app, &f.owner, "q=embed").await),
+        [hit("record", "Howto")]
+    );
+}

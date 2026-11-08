@@ -328,7 +328,7 @@ are names or ids.
 | `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`) |
 | `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
-| `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
+| `search_records` | any | Case-insensitive text search over all fields (embed blocks in rich text are skipped, see [Embedding records and views in rich text](#embedding-records-and-views-in-rich-text)); takes `include_empty` like `list_records` |
 | `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
 | `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
 | `get_record` | any | One record; takes `include_empty` like `list_records` |
@@ -554,6 +554,28 @@ The file must belong to the same project as the record (upload with that `projec
 fails with `attachment att... is not a file of this project`; for an inbox draft, upload without `project_id`
 and filing moves the file into the project. Images from other websites (`![](https://...)`) are never shown,
 only a link. Details and the serving rules: [docs/api.md](api.md#files-in-rich-text-internal-api).
+
+#### Embedding records and views in rich text
+
+A rich text value can embed a small table of the record's linked records or of a view's first records. Write
+a fenced code block with the info string `openbase` whose body is a single JSON object, on lines of its own
+in the value you write with `create_records` or `update_records`:
+
+````
+```openbase
+{"embed":"linked","field":"fldXXXXXXXXXXXXXX"}
+```
+
+```openbase
+{"embed":"view","view":"viwXXXXXXXXXXXXXX","limit":10}
+```
+````
+
+`field` is one of the record's own link fields and `view` a saved (not personal) view of the same workspace,
+both by **id** (`get_project_schema` lists them); `limit` is optional (10). The web app draws the table in the
+record's page; a block it cannot read is shown as plain text. Search ignores the content of these blocks
+(`search_records`, `search_everything`, the grid search) and still finds the text around them. Details:
+[docs/api.md](api.md#embeds-in-rich-text-internal-api).
 
 #### Mentioning people
 

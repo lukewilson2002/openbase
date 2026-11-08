@@ -106,7 +106,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "search_records",
             "Search records",
-            "Find records whose any field contains the text (case-insensitive). Same result shape as list_records (include_empty works the same).",
+            "Find records whose any field contains the text (case-insensitive). Same result shape as list_records (include_empty works the same). Embed blocks in rich text (fenced code with the info string openbase) are not searched; the text around them is.",
             object(
                 json!({
                     "project_id": string(BASE_ID),

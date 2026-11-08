@@ -24,6 +24,7 @@
 //! numbers become text for text fields, and out-of-range ratings clamp.
 
 mod convert;
+mod embed;
 mod normalize;
 pub(crate) mod parse;
 mod present;
@@ -35,6 +36,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 
 pub use convert::{choices_needed_for_conversion, convert};
+pub use embed::{EMBED_INFO, without_embeds};
 pub use normalize::{missing_choices, normalize, parse_text};
 pub use present::{display_text, to_value};
 
