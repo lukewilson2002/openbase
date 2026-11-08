@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutChips, type ChipDraw } from "./draw";
+import { chipFont, chipPadding, layoutChips, type ChipDraw } from "./draw";
 
 // A canvas whose text is 7 px a character, so widths are easy to check.
 const ctx = { font: "", measureText: (s: string) => ({ width: s.length * 7 }) } as unknown as CanvasRenderingContext2D;
@@ -32,5 +32,26 @@ describe("layoutChips", () => {
     expect(placed).toHaveLength(1);
     expect(placed[0]!.w).toBe(140 - 10 - 10 - 4 - 16);
     expect(more).toMatchObject({ count: 1, w: 16 });
+  });
+});
+
+describe("chips in the grid, as StatusChip and LinkChip draw them", () => {
+  it("sets a chip in 12 px medium weight and plain counts in 12 px regular, whatever the cell's font", () => {
+    expect(chipFont("14px sans-serif", "select")).toBe("500 12px sans-serif");
+    expect(chipFont("600 14px sans-serif", "link")).toBe("500 12px sans-serif");
+    expect(chipFont("14px sans-serif", "plain")).toBe("12px sans-serif");
+  });
+
+  it("pads a pill 8 px each side, a link chip 7 and its mark, a person's chip for the face", () => {
+    expect(chipPadding("select")).toBe(16);
+    expect(chipPadding("link")).toBe(14);
+    expect(chipPadding("link", true)).toBe(28);
+    expect(chipPadding("user")).toBe(30);
+  });
+
+  it("makes room for the collection's mark on a link chip that has one", () => {
+    const chips: ChipDraw[] = [{ text: "Alpha", kind: "link", color: "blue" }];
+    const { placed } = layoutChips(ctx, theme, { x: 0, y: 0, width: 300, height: 46 }, chips);
+    expect(placed[0]!.w).toBe(5 * 7 + 28);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FieldType } from "@/api/types";
 import { ALL_FIELDS, CHOICES, field } from "@/test/fields";
-import { chipItems, displayText, editText, formatDuration, formatGeneralNumber, formatNumber, type FormatCtx } from "./format";
+import { chipItems, displayText, editText, formatDuration, formatGeneralNumber, formatNumber, linkedColorIn, type FormatCtx } from "./format";
 
 const ctx: FormatCtx = { timeZone: "UTC", userName: (id) => ({ usr1: "Ada Lovelace", usr2: "Grace Hopper" })[id] };
 const text = (type: FieldType, value: unknown, c: FormatCtx = ctx) => displayText(ALL_FIELDS[type], value, c);
@@ -118,5 +118,23 @@ describe("chips and edit text", () => {
     expect(editText(ALL_FIELDS.percent, 0.125, ctx)).toBe("12.5%");
     expect(editText(ALL_FIELDS.duration, 5400, ctx)).toBe("1:30:00");
     expect(editText(ALL_FIELDS.text, "x", ctx)).toBe("x");
+  });
+});
+
+describe("linked collection colours", () => {
+  const tables = [{ id: "tbl2", color: "teal" }, { id: "tbl3", color: "red" }];
+
+  it("gives a link property the colour of the collection it points to, and nothing else", () => {
+    const linkedColor = linkedColorIn(tables);
+    expect(linkedColor(ALL_FIELDS.link!)).toBe("teal");
+    expect(linkedColor(field("link", { linked_table_id: "elsewhere", inverse_field_id: "x", single: false }))).toBeUndefined();
+    expect(linkedColor(ALL_FIELDS.text!)).toBeUndefined();
+  });
+
+  it("puts it on each linked record's chip, which the grid draws as the chip's mark", () => {
+    const chips = chipItems(ALL_FIELDS.link!, [{ id: "r1", name: "Launch" }, { id: "r2", name: "Docs" }], { ...ctx, linkedColor: linkedColorIn(tables) });
+    expect(chips).toEqual([{ text: "Launch", id: "r1", color: "teal" }, { text: "Docs", id: "r2", color: "teal" }]);
+    // Without the collections (a context that does not know them) the chip has no mark.
+    expect(chipItems(ALL_FIELDS.link!, [{ id: "r1", name: "Launch" }], ctx)[0]!.color).toBeUndefined();
   });
 });

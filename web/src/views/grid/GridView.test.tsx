@@ -15,7 +15,7 @@ const canvas = vi.hoisted(() => ({ props: null as unknown, clear: vi.fn() }));
 vi.mock("./glide/GlideGrid", async () => {
   const React = await import("react");
   return {
-    gridHeaderHeight: (wrap?: boolean) => (wrap ? 64 : 44),
+    gridHeaderHeight: (wrap?: boolean) => (wrap ? 56 : 44),
     GlideGrid: React.forwardRef(function FakeGrid(props: unknown, ref: React.ForwardedRef<unknown>) {
       canvas.props = props;
       React.useImperativeHandle(ref, () => ({

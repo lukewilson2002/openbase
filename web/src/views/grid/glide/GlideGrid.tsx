@@ -77,8 +77,9 @@ function storedMarkerWidth(): number {
 const ADD_COLUMN_ID = "__add_field__";
 export const GRID_HEADER_HEIGHT = 44;
 /** Room for two lines of a property name. */
-const WRAPPED_HEADER_HEIGHT = 64;
-const WRAPPED_LINE_HEIGHT = 18;
+const WRAPPED_HEADER_HEIGHT = 56;
+/** The header's 12 px text on a 16 px line (`text-meta`). */
+const WRAPPED_LINE_HEIGHT = 16;
 /** How tall the header row is: the view's Wrap headers setting makes it two lines. */
 export const gridHeaderHeight = (wrap: boolean | undefined): number => (wrap ? WRAPPED_HEADER_HEIGHT : GRID_HEADER_HEIGHT);
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */

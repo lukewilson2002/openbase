@@ -66,6 +66,19 @@ async function keyboardDrag(user: ReturnType<typeof userEvent.setup>, card: HTML
 }
 
 describe("KanbanBoard", () => {
+  it("names a stack with a status chip and its count, and ends it with '+ New <record name>'", () => {
+    board({ newLabel: "New client" });
+    const todo = within(screen.getByRole("listitem", { name: "Stack: Todo" }));
+    const heading = todo.getByRole("heading", { name: "Todo" });
+    expect(heading.querySelector(".choice")).toHaveTextContent("Todo");
+    expect(todo.getByText("2 items")).toBeInTheDocument();
+    const add = todo.getByRole("button", { name: "New client in Todo" });
+    expect(add).toHaveTextContent("New client");
+    // The count is in the header only; the foot no longer repeats it.
+    expect(todo.getAllByText("2 items")).toHaveLength(1);
+    expect(screen.getByRole("listitem", { name: "Stack: Todo" })).toHaveClass("w-[min(17.5rem,85vw)]");
+  });
+
   it("renders stacks in order with counts, cards, row colours and an add button per stack", () => {
     board();
     const stacksEl = screen.getAllByRole("listitem");
