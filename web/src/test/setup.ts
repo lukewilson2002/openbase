@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
+import { resetDraftStore } from "@/views/drafts/store";
 
 // jsdom lacks these browser APIs that Radix UI relies on.
 class ResizeObserverStub {
@@ -33,6 +34,8 @@ Range.prototype.getClientRects ??= () => ({ length: 0, item: () => null, [Symbol
 Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 
 beforeEach(() => {
+  // Drafts live in localStorage, cleared below, and in this module's memory.
+  resetDraftStore();
   window.history.replaceState(null, "", "/");
   try {
     sessionStorage.clear();
