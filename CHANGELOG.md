@@ -37,6 +37,17 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   opens its menu: creators get Rename, Edit property and Delete, and editors and up get Hide from pages
   and Show on pages, which change the default grid's layout at once. Viewers see everything with
   nothing to edit, and commenters can also comment. Files in a record are small bordered tiles.
+- **Add a property from a record.** Creators see "Add property" under a record's properties. It opens
+  a box with a Name and a Value; as you type the value, a chip says what type it looks like ("Date ·
+  Guessed from “Nov 14”") and Change type offers every type, links and choices included. Enter makes
+  the property, puts it last in the default grid and sets this record's value, so a rating written as
+  stars, a checkbox written as yes or a check mark and a date written as "Friday" all arrive as what they
+  mean. Escape cancels. A link, formula, lookup, rollup, count or button carries on in the property
+  dialog with the name filled in.
+- **Choose which property is the title or the page.** "Use as title" is in a property's menu in the
+  grid header and on the record page (and in the collection's settings); a property whose type cannot be
+  the title is dimmed with the reason. "Use as page" is on rich text properties. Deleting or retyping the
+  page property leaves the collection without a page and refuses nothing, as before.
 - **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
   page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
   records as chips with the colour of their collection, and each group ends in "+ New client" (the
@@ -189,6 +200,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   password prompt for 15 minutes by guessing wrongly 100 times.
 
 ### Changed
+
+- **The property dialog.** Adding and editing a property is a dialog on a desktop and a full-screen
+  sheet on a phone, with the type list in groups, a one-line description for each type, arrow-key
+  movement through the list and, on a phone, a bottom sheet of its own. Changing a type says how many
+  values it clears: every value when a property becomes computed or a link (the server clears those),
+  and up to that many when values are converted one by one; with nothing to take away it no longer asks
+  to be confirmed. Retyping the page property says it stops being the page.
+- **"Field" reads "property" in the rest of the interface** (and "table" reads "collection" where they
+  sat in the same sentence). The API, the MCP tools and stored data keep their names.
 
 - **Every change to a view is a draft until someone saves it.** Filtering, sorting, grouping,
   coloring, hiding or reordering properties, resizing or freezing columns, row height, summaries

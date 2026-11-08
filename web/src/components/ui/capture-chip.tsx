@@ -3,6 +3,8 @@ import { cn } from "@/lib/cn";
 import { ColorMark } from "./color-mark";
 
 export interface CaptureChipProps extends ComponentProps<"button"> {
+  /** A chip that says what was decided and has nothing to tap (the record page's "Date · Guessed from “Nov 14”"): a span, not a button. */
+  static?: boolean;
   /** A choice the capture box guessed, e.g. "Goes to Tasks"; tapping it opens the choices. */
   children: ReactNode;
   /** The dashed variant: no choice yet, tapping adds a property ("Add due date"). */
@@ -14,7 +16,15 @@ export interface CaptureChipProps extends ComponentProps<"button"> {
 }
 
 /** A pill that says what the app decided for a capture and lets you change it (30 px, 36 on phone). */
-export function CaptureChip({ children, dashed = false, hue, markName, className, type = "button", ...props }: CaptureChipProps) {
+export function CaptureChip({ children, dashed = false, static: fixed = false, hue, markName, className, type = "button", ...props }: CaptureChipProps) {
+  if (fixed) {
+    return (
+      <span className={cn("inline-flex h-control-sm shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border border-line bg-subtle px-3 text-label font-medium text-fg max-md:h-9", className)}>
+        {hue !== undefined && <ColorMark hue={hue} size={10} name={markName} />}
+        {children}
+      </span>
+    );
+  }
   return (
     <button
       type={type}

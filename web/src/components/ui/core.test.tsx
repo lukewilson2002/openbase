@@ -276,6 +276,11 @@ describe("CaptureChip", () => {
     render(<CaptureChip dashed>Add due date</CaptureChip>);
     expect(screen.getByRole("button")).toHaveClass("border-dashed");
   });
+  it("can be a plain statement with nothing to tap", () => {
+    render(<CaptureChip static>Date · Guessed from “Nov 14”</CaptureChip>);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("Date · Guessed from “Nov 14”")).toHaveClass("rounded-pill", "h-control-sm", "border-line");
+  });
   it("shows the target collection's 10 px mark", () => {
     const { container } = render(<CaptureChip hue="pink">Goes to Plans</CaptureChip>);
     expect(container.querySelector(".ob-mark-10.ob-hue-pink")).not.toBeNull();

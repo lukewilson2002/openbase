@@ -464,6 +464,15 @@ function addTable(name: string, color?: string | null): string {
   return id;
 }
 
+/** A page, Home date or Done property stops being one when its property goes or no longer has the right type (nothing is refused). */
+function clearStaleSettings(tableId: string, fieldId: string, type: string | null): void {
+  const dto = tableDto(tableId);
+  const edit = (tableEdits[tableId] ??= {});
+  if (dto.body_field_id === fieldId && type !== "rich_text") edit.body_field_id = null;
+  if (dto.home_date_field_id === fieldId && !(type && ["date", "created_time", "last_modified_time", "formula", "rollup"].includes(type))) edit.home_date_field_id = null;
+  if (dto.done_field_id === fieldId && type !== "checkbox") edit.done_field_id = null;
+}
+
 function tableDto(id: string): Obj {
   const edit = tableEdits[id] ?? {};
   const preset = TABLE_PRESETS[id] ?? { body_field_id: null, home_date_field_id: null, done_field_id: null };
@@ -1511,6 +1520,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
         f.type = body.type;
         f.options = body.options ?? {};
         if (f.type === "single_select" || f.type === "multiple_select") f.options.choices = (f.options.choices ?? []).map((c: Obj) => ({ ...c, id: c.id || newId("cho") }));
+        clearStaleSettings(f.table_id, f.id, f.type);
       }
       emit({ client_id: clientId, event: { kind: "schema_changed", table_id: f.table_id } });
       return send(res, 200, f), true;
@@ -1518,6 +1528,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (m === "DELETE") {
       const list = fieldsOf(f.table_id);
       list.splice(list.indexOf(f), 1);
+      clearStaleSettings(f.table_id, f.id, null);
       emit({ client_id: clientId, event: { kind: "schema_changed", table_id: f.table_id } });
       return send(res, 200, { ok: true, deleted_field_ids: [f.id] }), true;
     }

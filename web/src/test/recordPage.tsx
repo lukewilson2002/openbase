@@ -7,7 +7,7 @@ import { render } from "@testing-library/react";
 import { vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { useBaseSchema } from "@/base/useBaseSchema";
-import type { BaseSchema, Table, TableRecord, View, ViewConfig } from "@/api/types";
+import type { BaseSchema, Field, Table, TableRecord, View, ViewConfig } from "@/api/types";
 import { RecordPage, type RecordPageProps } from "@/record/RecordPage";
 import { Providers, createQueryClient } from "@/providers";
 import { recordLayoutView } from "@/views/grid/useViewConfig";
@@ -43,6 +43,7 @@ export function renderRecordPage({ table, record, role = "owner", layout = {}, r
   const view: View = { ...table.views[0]!, is_default: true, config: { ...table.views[0]!.config, ...layout } };
   let schema: BaseSchema = { ...base, tables: [{ ...table, views: [view] }, ...base.tables.filter((t) => t.id !== "tbl1")] };
   let current = record;
+  let made = 0;
   const api = mockApi({
     "GET /api/bases/app1": () => schema,
     "GET /api/workspaces": [],
@@ -52,6 +53,14 @@ export function renderRecordPage({ table, record, role = "owner", layout = {}, r
     [PATCH_RECORDS]: (call: { body: unknown }) => {
       current = { ...current, values: { ...current.values, ...(call.body as { records: { values: object }[] }).records[0]!.values } };
       return { records: [current] };
+    },
+    // A property made from the page joins the folder, as the server would: select choices get ids, and it goes last.
+    "POST /api/tables/tbl1/fields": (call: { body: unknown }) => {
+      const body = call.body as { name: string; description?: string | null; type: Field["type"]; options: { choices?: { id: string }[] } };
+      const choices = body.options.choices?.map((c, i) => ({ ...c, id: c.id || `chs_new${i}` }));
+      const created = { id: `fld_new${++made}`, table_id: "tbl1", name: body.name, description: body.description ?? null, type: body.type, options: choices ? { ...body.options, choices } : body.options } as Field;
+      schema = { ...schema, tables: schema.tables.map((t) => (t.id === "tbl1" ? { ...t, fields: [...t.fields, created] } : t)) };
+      return { status: 201, json: created };
     },
     [PATCH_VIEW]: (call: { body: unknown }) => {
       const config = (call.body as { config: ViewConfig }).config;

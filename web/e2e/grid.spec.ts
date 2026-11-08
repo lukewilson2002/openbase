@@ -450,6 +450,90 @@ test("the record's page edits its title where it stands, lists what the record h
   });
 });
 
+test("Add property on the record's page guesses a type from the value and puts the property last; Escape cancels; Use as title; a type change counts the values it clears", async ({ page }) => {
+  await gotoGrid(page);
+  await clickCell(page, "name", 2);
+  await page.keyboard.press("Shift+Space");
+  const recordId = openRecordId(page);
+  const main = page.getByRole("main", { name: "Record" });
+  const list = main.getByRole("region", { name: "Properties" });
+  await expect(list).toBeVisible();
+  const box = main.getByRole("group", { name: "Add property" });
+  type Table = { primary_field_id: string; fields: { id: string; name: string; type: string }[]; views: { is_default: boolean; config: { field_order: string[] } }[] };
+  const table = async () => ((await (await page.request.get(`/api/bases/${fx.baseId}`)).json()) as { tables: ({ id: string } & Table)[] }).tables.find((t) => t.id === fx.tableId)!;
+  const property = async (name: string) => (await table()).fields.find((f) => f.name === name);
+  const value = async (fieldId: string | undefined) => (fieldId ? ((await (await page.request.get(`/api/tables/${fx.tableId}/records/${recordId}`)).json()) as { values: Record<string, unknown> }).values[fieldId] : undefined);
+  const made: string[] = [];
+
+  try {
+    await test.step("Escape cancels the box, makes nothing and stays on the record", async () => {
+      await main.getByRole("button", { name: "Add property" }).click();
+      await box.getByRole("textbox", { name: "Name" }).fill("Nope");
+      await page.keyboard.press("Escape");
+      await expect(box).toBeHidden();
+      await expect(main.getByRole("button", { name: "Add property" })).toBeFocused();
+      expect(page.url()).toContain(recordId);
+      expect(await property("Nope")).toBeUndefined();
+    });
+
+    await test.step("a date is guessed from the value, made, put last and set on this record", async () => {
+      await main.getByRole("button", { name: "Add property" }).click();
+      await box.getByRole("textbox", { name: "Name" }).fill("Renewal");
+      await box.getByRole("textbox", { name: "Value" }).fill("2026-11-14");
+      await expect(box.getByText("Date · Guessed from “2026-11-14”")).toBeVisible();
+      await box.getByRole("textbox", { name: "Value" }).press("Enter");
+      await expect(box).toBeHidden();
+      await expect.poll(async () => (await property("Renewal"))?.type).toBe("date");
+      made.push((await property("Renewal"))!.id);
+      await expect.poll(async () => value((await property("Renewal"))?.id)).toBe("2026-11-14");
+      await expect(list.locator("dt").last()).toHaveText("Renewal");
+      // It is last in the order the default grid lays out.
+      const t = await table();
+      const order = [...t.views.find((v) => v.is_default)!.config.field_order, ...t.fields.map((f) => f.id)].filter((id, i, all) => all.indexOf(id) === i);
+      expect(order.at(-1)).toBe(made[0]);
+    });
+
+    await test.step("Change type overrides the guess", async () => {
+      await main.getByRole("button", { name: "Add property" }).click();
+      await box.getByRole("textbox", { name: "Name" }).fill("Code");
+      await box.getByRole("textbox", { name: "Value" }).fill("2024");
+      await expect(box.getByText(/^Number · Guessed from “2024”/)).toBeVisible();
+      await box.getByRole("button", { name: "Change type" }).click();
+      await page.getByRole("option", { name: /^Text/ }).first().click();
+      await expect(box.getByText("Text · You chose this type")).toBeVisible();
+      await box.getByRole("textbox", { name: "Value" }).press("Enter");
+      await expect.poll(async () => (await property("Code"))?.type).toBe("text");
+      made.push((await property("Code"))!.id);
+      await expect.poll(async () => value((await property("Code"))?.id)).toBe("2024");
+    });
+
+    await test.step("a type change says how many values it clears, and Cancel changes nothing", async () => {
+      await list.getByRole("button", { name: "Status", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Edit property" }).click();
+      const dialog = page.getByRole("dialog", { name: "Edit property" });
+      await dialog.getByRole("button", { name: /^Type/ }).click();
+      await dialog.getByRole("option", { name: /^Number/ }).click();
+      await expect(dialog.getByRole("status")).toContainText(/Up to \d+ values? may be cleared: the ones that don't fit\./);
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+      expect((await property("Status"))?.type).toBe("single_select");
+    });
+
+    await test.step("Use as title makes a property the title, and the title can go back", async () => {
+      const t = await table();
+      const name = t.primary_field_id;
+      await list.getByRole("button", { name: "Qty", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Use as title" }).click();
+      await expect.poll(async () => (await table()).primary_field_id).toBe((await property("Qty"))!.id);
+      await expect(main.getByRole("heading", { level: 1 })).toHaveAccessibleName("30");
+      const back = await page.request.post(`/api/tables/${fx.tableId}/primary-field`, { data: { field_id: name }, headers: CSRF });
+      expect(back.ok()).toBeTruthy();
+    });
+  } finally {
+    for (const id of made) await page.request.delete(`/api/fields/${id}`, { headers: CSRF });
+  }
+});
+
 test("an old ?record= link lands on the record's page", async ({ page }) => {
   await gotoGrid(page);
   await clickCell(page, "name", 2);

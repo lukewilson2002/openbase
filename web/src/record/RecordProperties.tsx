@@ -6,6 +6,7 @@
  *   properties"; both folds are kept per device.
  * - A value is shown as display text and turns into its form editor on a click or tap; it saves on its own.
  *   Computed values, and everything for viewers and commenters, are read-only.
+ * - "Add property" (creators) at the foot makes a new property from a name and a value (AddProperty).
  * - A property's name opens its menu. Creators: Rename, Edit property, Use as title, Use as page (rich text),
  *   Delete. Editors and up: Hide from pages, or Show on pages for one that is hidden, which edits the default
  *   view's layout at once.
@@ -31,6 +32,7 @@ import { isComputed, isMultilineText } from "@/lib/cells/kinds";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { ActionMenu, MenuItem, MenuSeparator } from "@/shell/menuItems";
+import { AddProperty } from "./AddProperty";
 import { foldLabel, hasValue, splitProperties, type TitleMode } from "./properties";
 import { useRecordFolds, type FoldKind } from "./useRecordFolds";
 import type { RecordLayout } from "./useRecordLayout";
@@ -206,7 +208,8 @@ export function RecordProperties({ schema, table, record, view, role, env, email
   // from under the cursor (and the focus the editor hands back to it).
   const pinned = useRef({ recordId: record.id, ids: new Set<string>() });
   if (pinned.current.recordId !== record.id) pinned.current = { recordId: record.id, ids: new Set() };
-  for (const f of table.fields) if (hasValue(f, record.values[f.id])) pinned.current.ids.add(f.id);
+  // A value that could not be saved is kept on its row too, with the reason, even when the property is empty.
+  for (const f of table.fields) if (hasValue(f, record.values[f.id]) || save.failed[f.id]) pinned.current.ids.add(f.id);
 
   const groups = useMemo(
     () => splitProperties({ table, layout: view?.config, values: record.values, title: titleMode, pinned: pinned.current.ids }),
@@ -267,6 +270,7 @@ export function RecordProperties({ schema, table, record, view, role, env, email
           {folds.hidden && <PropertyList id={hiddenId}>{groups.hidden.map((f) => row(f, true))}</PropertyList>}
         </>
       )}
+      {atLeast(role, "creator") && <AddProperty schema={schema} table={table} env={env} save={save} onSetup={(name, type) => setDialog({ mode: "create", name, type })} />}
       {dialog && <FieldDialog state={dialog} schema={schema} table={table} onOpenChange={(open) => !open && setDialog(null)} />}
       <ConfirmDialog
         open={!!deleting}

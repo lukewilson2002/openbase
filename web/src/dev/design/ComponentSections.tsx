@@ -340,6 +340,9 @@ export function CaptureChipSection() {
             Goes to Tasks
           </CaptureChip>
         </State>
+        <State label="Static">
+          <CaptureChip static>Date · Guessed from “Nov 14”</CaptureChip>
+        </State>
       </Gallery>
     </Section>
   );
