@@ -253,14 +253,10 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   await test.step("filters and sorts from the toolbar as a draft; Reset takes it back and Update view saves it", async () => {
-    await page.getByRole("button", { name: /^Filter/ }).click();
-    await page.getByRole("button", { name: "Add condition", exact: true }).click();
-    await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
-    await page.getByLabel("Operator").selectOption("gte");
-    await page.getByLabel("Value").fill("20");
+    await page.getByRole("combobox", { name: "Filter or search" }).fill("qty at least 20");
+    await page.keyboard.press("Enter");
     await expect(page.getByText("2 items")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: /^Filtered by / })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Qty is at least 20", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: /^Sort/ }).click();
     await page.getByRole("button", { name: "Add sort" }).click();
@@ -285,14 +281,9 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 
     // Again, and this time Update view writes it: the server applies the saved view, only Qty >= 20, biggest first.
-    await page.getByRole("button", { name: /^Filter/ }).click();
-    await page.getByRole("button", { name: "Add condition", exact: true }).click();
-    await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
-    await page.getByLabel("Operator").selectOption("gte");
-    await page.getByLabel("Value").fill("20");
-    // The value reaches the filter after a short pause: closing the popover before that drops it, as in the first round.
+    await page.getByRole("combobox", { name: "Filter or search" }).fill("qty at least 20");
+    await page.keyboard.press("Enter");
     await expect(page.getByText("2 items")).toBeVisible();
-    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /^Sort/ }).click();
     await page.getByRole("button", { name: "Add sort" }).click();
     await page.getByLabel("Field for sort 1").selectOption({ label: "Qty" });

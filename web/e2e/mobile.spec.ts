@@ -176,17 +176,35 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
   expect(add.y + add.height, "Add above the bottom navigation").toBeLessThanOrEqual(bar.y);
 
-  await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();
-  await expect(page.getByRole("searchbox", { name: "Search records" })).toBeFocused();
-  await expectFits(page, "search");
+  // The filter bar is under the tabs, full width and at least 44 px tall; its suggestions are a panel above the keyboard, not a popover.
+  const filterBar = page.getByRole("combobox", { name: "Filter or search" });
+  await expect(filterBar).toBeVisible();
+  expect((await filterBar.locator("xpath=..").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await filterBar.click();
+  await filterBar.fill("alpha");
+  const suggestions = page.getByRole("listbox", { name: "Suggestions" });
+  await expect(suggestions).toBeVisible();
+  // The panel slides in: wait for it to settle before measuring where it ends.
+  await expect.poll(async () => (await suggestions.boundingBox())!.y + (await suggestions.boundingBox())!.height, { message: "suggestions inside the screen" }).toBeLessThanOrEqual(viewport.height);
+  await expectTouchTargets(suggestions.getByRole("option"), "filter suggestions");
+  await expectFits(page, "filter suggestions");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Search for “alpha”", exact: true })).toBeVisible();
+  await expectFits(page, "search chip");
+  await page.getByRole("button", { name: "Remove Search for “alpha”" }).click();
+
+  // The nested builder is a sheet.
+  await filterBar.fill("x");
+  await page.getByRole("option", { name: "Advanced filter" }).click();
+  await page.getByRole("dialog", { name: "Advanced filter" }).getByRole("button", { name: "Add condition", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Operator" })).toBeVisible();
+  await expectFits(page, "advanced filter");
   await page.keyboard.press("Escape");
 
   // On a phone the tools are one menu behind a sliders button.
   await toolbar.getByRole("button", { name: /^Tools/ }).click();
-  await page.getByRole("menu", { name: "View tools" }).getByRole("menuitem", { name: "Filter" }).click();
-  await page.getByRole("button", { name: "Add condition", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Operator" })).toBeVisible();
-  await expectFits(page, "filter");
+  await expect(page.getByRole("menu", { name: "View tools" }).getByRole("menuitem", { name: "Sort" })).toBeVisible();
+  await expectFits(page, "tools");
   await page.keyboard.press("Escape");
 
   await page.goto(`/base/${base.id}/${table.id}?record=${recordId}`);

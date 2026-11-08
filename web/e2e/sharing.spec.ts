@@ -211,9 +211,10 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     expect(found.records[0]!.values).toMatchObject({ [fx.fields.name]: "Zed Visitor", [fx.fields.qty]: 9 });
     await openView(page);
     await expect(page.getByText("4 items")).toBeVisible();
-    // The grid is a canvas, so look for the record with the search box.
+    // The grid is a canvas, so look for the record with the filter bar's search.
     await page.keyboard.press("Control+F");
-    await page.getByRole("searchbox", { name: "Search records" }).fill("Zed");
+    await page.getByRole("combobox", { name: "Filter or search" }).fill("Zed");
+    await page.keyboard.press("Enter");
     await expect(page.getByText(/1 item found/)).toBeVisible();
   });
 });
@@ -420,11 +421,8 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   await g.getByRole("button", { name: "Add sort" }).click();
   await g.keyboard.press("Escape");
   await expect(g.getByRole("status").filter({ hasText: "These changes are only for now" })).toBeVisible();
-  await g.getByRole("button", { name: /^Filter/ }).click();
-  await g.getByRole("button", { name: "Add condition", exact: true }).click();
-  await g.getByLabel("Operator").selectOption("contains");
-  await g.getByLabel("Value").fill("Alp");
-  await g.keyboard.press("Escape");
+  await g.getByRole("combobox", { name: "Filter or search" }).fill("name contains Alp");
+  await g.keyboard.press("Enter");
   await expect(g.getByRole("button", { name: "Alpha" })).toBeVisible();
   await expect(g.getByRole("button", { name: "Bravo" })).toHaveCount(0);
 

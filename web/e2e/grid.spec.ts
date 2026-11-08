@@ -187,21 +187,54 @@ test("clears selected cells with Delete and fills down with Ctrl+D", async ({ pa
   await expect.poll(async () => (await rows(page))[2]!.qty).toBe(30);
 });
 
-test("filters by a text condition and shows the record count", async ({ page }) => {
+test("filters by a typed phrase and shows the record count", async ({ page }) => {
   await gotoGrid(page);
-  await page.getByRole("button", { name: /^Filter/ }).click();
-  await page.getByRole("button", { name: "Add condition", exact: true }).click();
-  await page.getByLabel("Operator").selectOption("contains");
-  await page.getByLabel("Value").fill("lph");
+  await page.getByRole("combobox", { name: "Filter or search" }).fill("name contains lph");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Name contains lph", exact: true })).toBeVisible();
   await expect(page.getByText("1 item")).toBeVisible();
   // A draft: the changes bar counts what the filter shows against what the view shows.
   await expect(page.getByText("Showing 1 of 5 records.")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /^Filtered by / }).click();
-  await page.getByRole("button", { name: "Remove condition" }).click();
+  await page.getByRole("button", { name: "Remove Name contains lph" }).click();
   await expect(page.getByText("5 items")).toBeVisible();
   // Undone by hand, the draft is gone and so is the bar.
   await expect(page.getByText(/These changes are only for now/)).toBeHidden();
+});
+
+test("a chip's editor changes its operator and value, and Backspace takes the last chip off", async ({ page }) => {
+  await gotoGrid(page);
+  const bar = page.getByRole("combobox", { name: "Filter or search" });
+  await bar.fill("name contains lph");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Name contains lph", exact: true }).click();
+  await page.getByLabel("Operator").selectOption("does_not_contain");
+  await expect(page.getByRole("button", { name: "Name doesn't contain lph", exact: true })).toBeVisible();
+  await expect(page.getByText("4 items")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Name doesn't contain lph", exact: true })).toBeFocused();
+  await bar.focus();
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await expect(page.getByRole("button", { name: /^Name / })).toHaveCount(0);
+  await expect(page.getByText("5 items")).toBeVisible();
+});
+
+test("the Advanced filter opens the nested builder, and a filter with OR is one chip", async ({ page }) => {
+  await gotoGrid(page);
+  const bar = page.getByRole("combobox", { name: "Filter or search" });
+  await bar.fill("x");
+  await page.getByRole("option", { name: "Advanced filter" }).click();
+  const group = page.getByRole("group", { name: "Advanced filter" });
+  await group.getByRole("button", { name: "Add condition", exact: true }).click();
+  await group.getByLabel("Operator").selectOption("contains");
+  await group.getByLabel("Value").fill("lph");
+  await group.getByRole("button", { name: "Add condition", exact: true }).click();
+  await group.getByLabel("Match all or any").selectOption("or");
+  await expect(page.getByRole("button", { name: "Advanced filter, 2 conditions", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(bar).toBeFocused();
+  await page.getByRole("button", { name: "Remove Advanced filter, 2 conditions" }).click();
+  await expect(page.getByText("5 items")).toBeVisible();
 });
 
 test("sorts by a field descending from the toolbar, as a draft the server computes", async ({ page }) => {
@@ -221,13 +254,22 @@ test("sorts by a field descending from the toolbar, as a draft the server comput
   await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
 
-test("searches with Ctrl+F", async ({ page }) => {
+test("Ctrl+F and / focus the filter bar, and its search suggestion searches every property", async ({ page }) => {
   await gotoGrid(page);
+  const bar = page.getByRole("combobox", { name: "Filter or search" });
   await page.keyboard.press("Control+F");
-  await page.getByRole("searchbox", { name: "Search records" }).fill("char");
+  await expect(bar).toBeFocused();
+  await bar.fill("char");
+  // Words that are no filter: the search is the one suggestion.
+  await expect(page.getByRole("option")).toHaveText(["Search every property for “char”", "Advanced filter"]);
+  await page.keyboard.press("Enter");
   await expect(page.getByText(/1 item found/)).toBeVisible();
-  await page.getByRole("searchbox", { name: "Search records" }).press("Escape");
+  await page.getByRole("button", { name: "Remove Search for “char”" }).click();
   await expect(page.getByText("5 items")).toBeVisible();
+  await page.locator("body").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("/");
+  await expect(bar).toBeFocused();
+  await expect(bar).toHaveValue("");
 });
 
 test("a click on a column's edge leaves its width alone; a drag resizes it as a draft that survives a reload and that Update view saves", async ({ page }) => {
