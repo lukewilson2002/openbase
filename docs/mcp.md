@@ -589,10 +589,14 @@ in the value you write with `create_records` or `update_records`:
 ````
 
 `field` is one of the record's own link fields and `view` a saved (not personal) view of the same workspace,
-both by **id** (`get_project_schema` lists them); `limit` is optional (10). The web app draws the table in the
-record's page; a block it cannot read is shown as plain text. Search ignores the content of these blocks
-(`search_records`, `search_everything`, the grid search) and still finds the text around them. Details:
-[docs/api.md](api.md#embeds-in-rich-text-internal-api).
+both by **id** (`get_project_schema` lists them); `limit` is optional (10, a whole number from 1 to 50).
+Write exactly these keys and nothing else, with the info string exactly `openbase` and the JSON alone in the
+block: a block that is not read as an embed (an extra key, a name where an id belongs, a limit out of range) is
+shown as "This embed can't be shown" and its text is left as you wrote it. The web app draws the table in the
+record's page for people who can open what it names; a reader who cannot open the view sees only "You can't
+open this view". Everywhere else rich text is shown (shared pages, comments, previews) it is a plain
+"Embedded view" box. Search ignores the content of these blocks (`search_records`, `search_everything`, the grid
+search) and still finds the text around them. Details: [docs/api.md](api.md#embeds-in-rich-text-internal-api).
 
 #### Mentioning people
 

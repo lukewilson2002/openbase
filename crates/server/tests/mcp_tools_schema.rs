@@ -345,6 +345,30 @@ async fn field_types_help_documents_every_type() {
     );
 }
 
+/// An agent learns how to write the page's embeds (REC-6) from the rich text help: the info string, both
+/// shapes, ids, the limit, and that nothing but those keys is read.
+#[tokio::test]
+async fn rich_text_help_says_how_to_write_embeds() {
+    let r = Rig::new().await;
+    let d = r
+        .agent
+        .call("field_types", json!({"type": "rich_text"}))
+        .await;
+    let value = d["options"].as_str().unwrap();
+    for word in [
+        "openbase",
+        "\"embed\":\"linked\"",
+        "\"embed\":\"view\"",
+        "ids not names",
+        "1 to 50",
+        "not personal",
+        "exactly those keys",
+        "This embed can't be shown",
+    ] {
+        assert!(value.contains(word), "{word} missing from: {value}");
+    }
+}
+
 /// The overview says what each type is for, and steers prose to rich text.
 #[tokio::test]
 async fn field_types_say_when_to_choose_text_or_rich_text() {

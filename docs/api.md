@@ -491,16 +491,30 @@ a single JSON object, so any client or agent can write one with an ordinary reco
 ````
 
 - `{"embed":"linked","field":"fld..."}` shows the records linked from the record through that link field
-  (`field` is one of the record's own link fields).
+  (`field` is one of the record's own link fields): the linked collection's title and its first three
+  visible properties for the first ten links, a caption such as "Invoices · linked to this client, 2",
+  an Open link to that collection filtered to this record, and, for editors, a "+ Link" row.
 - `{"embed":"view","view":"viw...","limit":10}` shows the first `limit` records of a saved view of the same
-  workspace, read-only; `limit` is optional (10 if left out). A personal view cannot be embedded, and a reader
-  who cannot open the view sees "You can't open this view".
+  workspace (the title and three properties of each), read-only, with an Open view link. `limit` is optional
+  (10 if left out) and a whole number from 1 to 50. A personal view cannot be embedded, and a reader who
+  cannot open the view (it is in a folder they cannot open, or it is another person's) sees "You can't open
+  this view" and nothing about its name or records: the server answers a view query only to people who can
+  open its folder, with 404 otherwise, for a view that does not exist as well.
+
+**What is read as an embed.** Reading is strict, so that a block means the same to every client: the info
+string is exactly `openbase`; the body is one JSON object, nothing around it; it has exactly the keys shown
+(`embed` and `field`, or `embed`, `view` and optionally `limit`; any other key makes it unreadable); `embed` is
+`"linked"` or `"view"`; the ids are `fld` or `viw` followed by letters and digits (a name is not an id, and a
+view id is not a field id); and `limit` is an integer in range. Ids are written as `get_project_schema` or
+`GET /api/bases/{id}` returns them. The JSON is never turned into HTML: the web app draws each embed with its
+own components from the checked ids and nothing else.
 
 Nothing is stored beyond the text: the server does not check an embed when the value is saved, and a block
-that cannot be read (not one JSON object, an unknown `embed`, a malformed id) is shown by the web app as "This
-embed can't be shown" and keeps its text unchanged. Embeds come alive only in the Page of a record opened by a
-signed-in person; in public share pages, forms, comments, emails and grid cells they show as a static "Embedded
-view" box and fetch nothing.
+that cannot be read (not one JSON object, an unknown `embed`, an extra key, a malformed id) is shown by the web
+app as "This embed can't be shown" and keeps its text unchanged. Embeds come alive only in the Page of a record
+opened by a signed-in person; in public share pages, forms, comments, grid cells and previews they show as a
+static "Embedded view" box and fetch nothing, and notification and email snippets read a block as the words
+"Embedded view".
 
 **Search skips embeds.** The content of a fenced block with the info string `openbase` is configuration, not
 words: the grid and `search` of a view query, `search_records` and `GET /api/search` ignore it in rich text
