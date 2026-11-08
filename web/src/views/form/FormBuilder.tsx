@@ -43,7 +43,7 @@ const noUpload = () => Promise.reject(new Error("Files cannot be added in the pr
 export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic }: FormBuilderProps) {
   const { table, view, config, cfg, timeZone, people } = setup;
   const form = config.form;
-  const readOnly = !cfg.canConfigure || linkLocked;
+  const readOnly = !cfg.canEditForm || linkLocked;
   const [publicOnly, setPublicOnly] = useState(false);
   const items = useMemo(() => liveItems(form, table), [form, table]);
   // The preview starts with the defaults, like the real forms. What was typed wins over them.
@@ -131,7 +131,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
                   : "You do not have permission to change this form."}
             </Notice>
           )}
-          <FormSettings form={form} title={view.name} readOnly={readOnly} onChange={onChange} people={people} currentUserId={setup.currentUserId} notifyReadOnly={!cfg.canConfigure} />
+          <FormSettings form={form} title={view.name} readOnly={readOnly} onChange={onChange} people={people} currentUserId={setup.currentUserId} notifyReadOnly={!cfg.canEditForm} />
           <div aria-hidden className="my-0.5 h-px bg-[color-mix(in_srgb,var(--line)_60%,var(--surface))]" />
           <FormFieldList form={form} table={table} hiddenFields={config.hidden_fields} readOnly={readOnly} onChange={onChange} onShowPublic={onShowPublic} />
         </div>

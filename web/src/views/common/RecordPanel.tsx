@@ -55,7 +55,7 @@ function useRecordTitle(table: Table, recordId: string, timeZone: string): strin
 }
 
 export function RecordPanel(props: ExpandedRecordProps) {
-  const { schema, table, recordId, role, timeZone } = props;
+  const { schema, table, recordId, timeZone } = props;
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,7 +111,7 @@ export function RecordPanel(props: ExpandedRecordProps) {
       table={top.table}
       recordId={top.recordId}
       view={undefined}
-      config={gridRecordLayout(top.table, role) ?? undefined}
+      config={gridRecordLayout(top.table) ?? undefined}
       prevId={null}
       nextId={null}
       onNavigate={() => {}}

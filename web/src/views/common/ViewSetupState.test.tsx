@@ -37,10 +37,10 @@ describe("ViewSetupState (a calendar without a date field)", () => {
     expect(screen.queryByRole("button", { name: "Add a date field" })).not.toBeInTheDocument();
   });
 
-  it("tells people who cannot change the view whom to ask", async () => {
+  it("lets people who cannot change the view pick the field too: the choice is a draft only they see", async () => {
     setup("viewer");
-    expect(await screen.findByText(/Ask someone who can edit this view to set it up/)).toBeInTheDocument();
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Show calendar" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Date field" })).toBeInTheDocument();
+    expect(screen.queryByText(/Ask someone who can edit this view/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show calendar" })).toBeInTheDocument();
   });
 });

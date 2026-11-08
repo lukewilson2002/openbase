@@ -1,8 +1,8 @@
 /**
  * Form view: a builder for people who may configure the view, a live preview, an internal
  * "Fill in form" mode for editors, and the share-link dialog (creators). The form lives in
- * `ViewConfig.form`; changes go through the same debounced `PATCH /api/views/{id}` as every
- * other view setting. The public side is `src/public/PublicFormPage.tsx`.
+ * `ViewConfig.form`. A public form follows the live form, so its changes are the one thing that is not a
+ * draft: they save as they are made (`cfg.saveNow`). The public side is `src/public/PublicFormPage.tsx`.
  *
  * The toolbar is the form's own: the table and view picker, Build | Fill in form, More (open or copy
  * the public link, download CSV) and Share form. Filter, sort and "Add" have nothing to do here.
@@ -40,7 +40,7 @@ export default function FormView(props: ViewProps) {
   const toast = useToast();
   const canFill = atLeast(role, "editor");
   const isCreator = atLeast(role, "creator");
-  const [mode, setMode] = useState<Mode>(cfg.canConfigure || !canFill ? "build" : "fill");
+  const [mode, setMode] = useState<Mode>(cfg.canEditForm || !canFill ? "build" : "fill");
   const [sharing, setSharing] = useState(false);
   const csv = useExportCsv(view, setup.timeZone);
   // Only creators manage links; for everyone else the list would be refused.
@@ -49,13 +49,13 @@ export default function FormView(props: ViewProps) {
   const address = link ? publicLink(link, window.location.origin) : null;
   // The public link follows the live form, so while it is on only a creator may change the form (the server
   // refuses an editor's save). Editors cannot list links; they ask whether one is on.
-  const linkStatus = useQuery({ queryKey: keys.shareStatus(view.id), queryFn: () => sharesApi.status(view.id), enabled: canFill && !isCreator && cfg.canConfigure && !view.personal });
-  const linkLocked = !isCreator && cfg.canConfigure && linkStatus.data?.enabled === true;
-  const canBuild = cfg.canConfigure && !linkLocked;
+  const linkStatus = useQuery({ queryKey: keys.shareStatus(view.id), queryFn: () => sharesApi.status(view.id), enabled: canFill && !isCreator && cfg.canEditForm && !view.personal });
+  const linkLocked = !isCreator && cfg.canEditForm && linkStatus.data?.enabled === true;
+  const canBuild = cfg.canEditForm && !linkLocked;
 
   const setForm = useCallback(
     (next: FormConfig) => {
-      cfg.update((c) => ({ ...c, form: cleanForm(pruneForm(next, table)) }));
+      cfg.saveNow((c) => ({ ...c, form: cleanForm(pruneForm(next, table)) }));
     },
     [cfg, table],
   );
@@ -63,7 +63,7 @@ export default function FormView(props: ViewProps) {
   /** A field the form view hides is shown on the public form again. */
   const showPublic = useCallback(
     (fieldId: string) => {
-      cfg.update((c) => ({ ...c, hidden_fields: c.hidden_fields.filter((id) => id !== fieldId) }));
+      cfg.saveNow((c) => ({ ...c, hidden_fields: c.hidden_fields.filter((id) => id !== fieldId) }));
     },
     [cfg],
   );

@@ -5,7 +5,7 @@ import type { QueryRequest } from "@/api/types";
 import { apiError } from "@/test/utils";
 import { field } from "@/test/fields";
 import { stubDesktop } from "@/test/utils";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import TimelineView from "./TimelineView";
 
 afterEach(() => {
@@ -156,38 +156,38 @@ describe("TimelineView", () => {
     expect(screen.queryByText("(Empty)")).not.toBeInTheDocument();
   });
 
-  it("changes the scale and saves it in the view", async () => {
+  it("changes the scale as a draft, for anyone", async () => {
     const u = user();
     const view = tl();
-    const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api } = setup("editor", view);
     await screen.findByRole("button", { name: /^R1, / });
     const scale = screen.getByRole("group", { name: "Timeline scale" });
     expect(within(scale).getByRole("button", { name: "Week" })).toHaveAttribute("aria-pressed", "true");
     await u.click(within(scale).getByRole("button", { name: "Month" }));
     expect(within(scale).getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
-    // Quick changes are saved together (debounced).
     await u.click(within(scale).getByRole("button", { name: "Quarter" }));
     expect(within(scale).getByRole("button", { name: "Quarter" })).toHaveAttribute("aria-pressed", "true");
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { timeline: { scale: string; start_field_id: string } } }).config.timeline).toMatchObject({ scale: "quarter", start_field_id: "f_start" });
+    // The latest choice is the draft; the view itself is not touched.
+    await waitFor(() => expect(draftChanges()?.timeline).toMatchObject({ scale: "quarter", start_field_id: "f_start" }));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
-  it("resizes the left column from its divider and saves the width in the view", async () => {
+  it("resizes the left column from its divider and keeps the width as a draft", async () => {
     stubDesktop();
     const u = user();
     const view = tl({ label_width: 260 });
-    const { api } = setup("creator", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api } = setup("creator", view);
     await screen.findByRole("button", { name: /^R1, / });
     const divider = screen.getByRole("separator", { name: "Resize the left column" });
     expect(divider).toHaveAttribute("aria-valuenow", "260");
     divider.focus();
     await u.keyboard("{ArrowRight}");
     expect(divider).toHaveAttribute("aria-valuenow", "276");
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { timeline: { label_width: number } } }).config.timeline.label_width).toBe(276);
+    await waitFor(() => expect(draftChanges()?.timeline?.label_width).toBe(276));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
-  it("keeps a viewer's scale choice local (nothing is saved)", async () => {
+  it("keeps a viewer's scale choice to themselves (nothing is saved)", async () => {
     const u = user();
     const { api } = setup("viewer");
     await screen.findByRole("button", { name: /^R1, / });
@@ -273,15 +273,15 @@ describe("TimelineView", () => {
   it("asks for a start field when none is set", async () => {
     const u = user();
     const view = viewWithConfig("viw1", "timeline", {});
-    const { api, asked } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api, asked } = setup("editor", view);
     expect(await screen.findByText("Choose the dates")).toBeInTheDocument();
     expect(asked).toHaveLength(0);
     // The likely start and end (the first two dates people fill in) are chosen already.
     expect(screen.getByRole("combobox", { name: "Start date" })).toHaveValue("f_start");
     expect(screen.getByRole("combobox", { name: /End date/ })).toHaveValue("f_end");
     await u.click(screen.getByRole("button", { name: "Show timeline" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { timeline: unknown } }).config.timeline).toMatchObject({ start_field_id: "f_start", end_field_id: "f_end" });
+    await waitFor(() => expect(draftChanges()?.timeline).toMatchObject({ start_field_id: "f_start", end_field_id: "f_end" }));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
   it("adds a record dated today from the toolbar and opens it", async () => {
@@ -441,12 +441,12 @@ describe("TimelineView", () => {
       const u = user();
       const view = tl({ group_field_id: F.status.id });
       const groups = [{ key: "u1", label: "Ada", field_id: F.owner.id, depth: 0, start: 0, count: 1, value: null }];
-      const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }), "POST /api/views/viw1/query": () => ({ total: 4, offset: 0, records, groups, colors: {} }) });
+      const { api } = setup("editor", view, { "POST /api/views/viw1/query": () => ({ total: 4, offset: 0, records, groups, colors: {} }) });
       await screen.findByRole("button", { name: /^R1, / });
       expect(screen.getByText(/The lanes come from the Swimlanes setting \(Status\), so the view's grouping by Owner is not used here\./)).toBeInTheDocument();
       await u.click(screen.getByRole("button", { name: "Use the grouping instead" }));
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { timeline: { group_field_id: unknown } } }).config.timeline.group_field_id).toBeNull();
+      await waitFor(() => expect(draftChanges()?.timeline?.group_field_id).toBeNull());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
     });
   });
 

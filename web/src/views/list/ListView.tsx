@@ -204,13 +204,12 @@ function ListInner(props: ViewProps) {
       layout="hug"
       features={{ rowHeight: false }}
       toolbarSetting={
-        <ViewSettings note={cfg.canConfigure ? undefined : "You do not have permission to change this view."}>
+        <ViewSettings>
           <FieldSelect
             label="Prefix field"
             fields={prefixFields}
             value={prefix?.id ?? ""}
             noneLabel="No prefix"
-            disabled={!cfg.canConfigure}
             onChange={(id) => cfg.update((c) => setList(c, { prefix_field_id: id }))}
             hint={prefixFields.length === 0 ? "Add a checkbox, single select or person field to show it at the start of each row." : "Shown at the start of each row and changed there: tick off a checkbox without opening the record."}
           />
@@ -219,11 +218,10 @@ function ListInner(props: ViewProps) {
             fields={parentFields}
             value={parentField?.id ?? ""}
             noneLabel="No sub-items"
-            disabled={!cfg.canConfigure}
             onChange={(id) => cfg.update((c) => setList(c, { parent_field_id: id }))}
             hint={parentFields.length === 0 ? "Add a link field to this table's own records to nest rows under their parent." : "Rows linked in this field sit under their parent. Tab indents a row and Shift+Tab outdents it."}
           />
-          <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
+          <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
         </ViewSettings>
       }
       moreToggles={
@@ -238,7 +236,6 @@ function ListInner(props: ViewProps) {
             {itemsLabel(total)}
             {setup.debouncedSearch ? " found" : ""}
           </span>
-          {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
         </>
       }
     >

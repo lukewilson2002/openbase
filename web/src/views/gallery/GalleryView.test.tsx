@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
 import { ALL_FIELDS } from "@/test/fields";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import GalleryView from "./GalleryView";
 import { GALLERY_PAGE } from "./useGalleryData";
 
@@ -43,13 +43,13 @@ describe("GalleryView", () => {
   it("keeps the cover and its fit together behind the toolbar's View button", async () => {
     const user = userEvent.setup();
     const view = gallery();
-    const { api } = setup("editor", view, records, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api } = setup("editor", view, records);
     await screen.findByRole("button", { name: "R1" });
     await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
     expect(await screen.findByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Crop cover images" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { gallery: { cover_crop: boolean } } }).config.gallery.cover_crop).toBe(true);
+    await waitFor(() => expect(draftChanges()?.gallery?.cover_crop).toBe(true));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
   it("says why the crop setting is off when the view has no cover", async () => {

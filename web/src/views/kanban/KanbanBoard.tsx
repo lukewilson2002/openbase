@@ -89,7 +89,6 @@ export interface KanbanBoardProps {
   emails: ReadonlyMap<string, string>;
   colors: Readonly<Record<string, string>>;
   canEdit: boolean;
-  canConfigure: boolean;
   /** The view sorts: cards cannot be reordered by hand. */
   hasSorts: boolean;
   collapsed: ReadonlySet<string>;
@@ -360,7 +359,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
   };
 
   const activeRecord = drag.activeId ? recordsById.get(drag.activeId) : undefined;
-  const reorderable = !!props.onReorderStacks && props.canConfigure && shownStacks.length > 1;
+  const reorderable = !!props.onReorderStacks && shownStacks.length > 1;
 
   // --- The card's menu and the bulk actions ------------------------------------------------------
 
@@ -559,20 +558,16 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
           <DropdownMenuItem onSelect={() => p.onToggleCollapse(stack.key)}>
             <ChevronsDownUp aria-hidden className="size-4" /> {isCollapsed ? "Expand stack" : "Collapse stack"}
           </DropdownMenuItem>
-          {p.canConfigure && (
-            <>
-              <DropdownMenuItem disabled={index === 0} onSelect={() => p.onMoveStack(stack.key, -1)}>
-                <ChevronLeft aria-hidden className="size-4" /> Move left
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={index === count - 1} onSelect={() => p.onMoveStack(stack.key, 1)}>
-                <ChevronRight aria-hidden className="size-4" /> Move right
-              </DropdownMenuItem>
-              {p.onHideStack && (
-                <DropdownMenuItem onSelect={() => p.onHideStack?.(stack.key)}>
-                  <EyeOff aria-hidden className="size-4" /> Hide stack
-                </DropdownMenuItem>
-              )}
-            </>
+          <DropdownMenuItem disabled={index === 0} onSelect={() => p.onMoveStack(stack.key, -1)}>
+            <ChevronLeft aria-hidden className="size-4" /> Move left
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={index === count - 1} onSelect={() => p.onMoveStack(stack.key, 1)}>
+            <ChevronRight aria-hidden className="size-4" /> Move right
+          </DropdownMenuItem>
+          {p.onHideStack && (
+            <DropdownMenuItem onSelect={() => p.onHideStack?.(stack.key)}>
+              <EyeOff aria-hidden className="size-4" /> Hide stack
+            </DropdownMenuItem>
           )}
           {isChoice && (
             <>

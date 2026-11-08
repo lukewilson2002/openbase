@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
 import { field } from "@/test/fields";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import ListView from "./ListView";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -126,11 +126,11 @@ describe("ListView", () => {
       return renderView(ListView, {
         schema,
         viewId: "viw1",
-        routes: { "POST /api/views/viw1/query": queryHandler(server), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never,
+        routes: { "POST /api/views/viw1/query": queryHandler(server) } as never,
       });
     }
 
-    it("is chosen in the toolbar and saved on the view", async () => {
+    it("is chosen in the toolbar and kept as a draft", async () => {
       const user = userEvent.setup();
       const { api } = setupNotes({});
       await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
@@ -140,8 +140,8 @@ describe("ListView", () => {
       const select = await screen.findByRole("combobox", { name: "Description" });
       expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No description", "Notes"]);
       await user.selectOptions(select, "f_notes");
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { description_field_id: string } }).config.description_field_id).toBe("f_notes");
+      await waitFor(() => expect(draftChanges()?.description_field_id).toBe("f_notes"));
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
     });
 
     it("reads an excerpt right under the title and leaves the field out of the row", async () => {
@@ -300,7 +300,6 @@ describe("ListView prefix", () => {
       viewId: "viw1",
       routes: {
         "POST /api/views/viw1/query": queryHandler({ records: recs, groups: [] }),
-        "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }),
         // The server holds the change back, so what the outline shows is the view's own doing.
         "PATCH /api/tables/tbl1/records": () => new Promise(() => undefined),
       } as never,
@@ -333,7 +332,7 @@ describe("ListView prefix", () => {
     expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(0);
   });
 
-  it("is chosen in the view's settings from the checkbox, choice and one-person fields, and saved", async () => {
+  it("is chosen in the view's settings from the checkbox, choice and one-person fields, and kept as a draft", async () => {
     const user = userEvent.setup();
     const { api } = setupPrefix({});
     await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
@@ -343,8 +342,8 @@ describe("ListView prefix", () => {
     // Status (a single select), Owner (one person) and Done; not the multi-link, date or attachment fields.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No prefix", "Status", "Owner", "Done"]);
     await user.selectOptions(select, "f_done");
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { list: unknown } }).config.list).toMatchObject({ prefix_field_id: "f_done" });
+    await waitFor(() => expect(draftChanges()?.list).toMatchObject({ prefix_field_id: "f_done" }));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 });
 
@@ -420,18 +419,18 @@ describe("ListView sub-items", () => {
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: { [F.deps.id]: ["r2"] } }] });
   });
 
-  it("is set in the view's settings from the table's links to its own records", async () => {
+  it("is set in the view's settings from the table's links to its own records, as a draft", async () => {
     const user = userEvent.setup();
     const flat = viewWithConfig("viw1", "list", {});
-    const { api } = setup("editor", flat, { records: tree, groups: [] }, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...flat, config: c.body.config }) });
+    const { api } = setup("editor", flat, { records: tree, groups: [] });
     await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
     expect(screen.getByRole("treeitem", { name: /^R2(,|$)/ })).toHaveAttribute("aria-level", "1");
     await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
     const select = await screen.findByRole("combobox", { name: "Sub-items" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No sub-items", "Depends on"]);
     await user.selectOptions(select, F.deps.id);
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { list: unknown } }).config.list).toMatchObject({ parent_field_id: F.deps.id });
+    await waitFor(() => expect(draftChanges()?.list).toMatchObject({ parent_field_id: F.deps.id }));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 });
 

@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
+import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewBar } from "@/components/viewbar/ViewBar";
 import { itemsLabel } from "@/views/common/cardFields";
 import { SelectionBar } from "@/views/common/SelectionBar";
@@ -140,8 +141,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const hasSummary = Object.keys(queryConfig.summaries).length > 0;
   const aggregations = useQuery({
     queryKey: recordKeys.aggregations(table.id, view.id, `${configKey}|${summaryKey}`, debouncedSearch),
-    // Only the filter of a local override matters to summaries.
-    queryFn: ({ signal }) => recordsApi.aggregations(view.id, { search: debouncedSearch, timezone: timeZone, transient: transient?.filter ? { filter: transient.filter } : null, signal }),
+    // The draft's filter and summaries: the server computes both, as for a saved view (BE-12).
+    queryFn: ({ signal }) => recordsApi.aggregations(view.id, { search: debouncedSearch, timezone: timeZone, transient, signal }),
     enabled: hasSummary,
     placeholderData: (prev) => prev,
   });
@@ -1079,10 +1080,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           view={view}
           role={role}
           config={config}
-          canConfigure={cfg.canConfigure}
-          hasLocalQuery={transient !== null}
-          onResetLocalQuery={cfg.resetTransient}
-          saving={cfg.saving}
           update={cfg.update}
           collaborators={people}
           currentUserId={me.data?.id ?? null}
@@ -1095,6 +1092,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           timeZone={timeZone}
           onAdd={canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined}
         />
+        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={debouncedSearch} timeZone={timeZone} />
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
@@ -1104,9 +1102,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
                 <Button size="sm" onClick={() => dataRef.current.refresh()}>
                   Try again
                 </Button>
-                {transient && (
-                  <Button size="sm" variant="secondary" onClick={cfg.resetTransient}>
-                    Reset my filters
+                {cfg.draft && (
+                  <Button size="sm" variant="secondary" onClick={cfg.reset}>
+                    Reset changes
                   </Button>
                 )}
               </div>
@@ -1147,7 +1145,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
             </span>
           )}
           <span className="ml-auto flex items-center gap-1">
-            {cfg.saving && <span className="mr-2 text-xs">Saving view…</span>}
             {canEdit && (
               <>
                 <IconButton label={`Undo${history.undoLabel ? `: ${history.undoLabel}` : ""} (Ctrl/Cmd+Z)`} size="sm" disabled={!history.canUndo} onClick={() => void history.undo()}>
@@ -1193,7 +1190,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         at={sumMenu?.at ?? null}
         field={sumMenu ? columns[sumMenu.col]?.field : undefined}
         current={sumMenu ? (queryConfig.summaries[columns[sumMenu.col]?.id ?? ""] ?? "none") : "none"}
-        canConfigure={cfg.canConfigure}
         onClose={() => closeMenu(setSumMenu)}
         onPick={(agg) => {
           const id = sumMenu ? columns[sumMenu.col]?.id : undefined;
@@ -1244,7 +1240,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           if (confirmClear) await clearCells(confirmClear.sel);
         }}
       />
-      <FloatingRecordPeek at={linkHover} format={format} emails={emails} role={role} />
+      <FloatingRecordPeek at={linkHover} format={format} emails={emails} />
       {openRecordId && (
         <RecordPanel
           schema={schema}

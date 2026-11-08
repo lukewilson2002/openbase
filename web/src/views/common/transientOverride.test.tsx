@@ -1,14 +1,14 @@
 /**
- * People who cannot save a view (viewers, commenters, editors of a locked view) can still filter,
- * sort and group in every view type: the override travels with each query, is marked "Not saved"
- * and can be reset. The grid has its own tests (useViewConfig, useGridData); these cover the views
- * that share ViewFrame, useViewRecords and the gallery's paged query.
+ * Everyone can filter, sort and group in every view type, and it is always a draft (COL-5): the settings
+ * travel with each query as a transient override, the changes bar says they are only for now, Reset drops
+ * them, and nothing is saved until someone presses Update view. The grid has its own tests (useViewConfig,
+ * useGridData); these cover the views that share ViewFrame, useViewRecords and the gallery's paged query.
  */
 import type { ComponentType } from "react";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { QueryRequest } from "@/api/types";
+import type { QueryRequest, ViewConfig } from "@/api/types";
 import { installBoardLayout, type BoardLayout } from "../kanban/boardLayout";
 import CalendarView from "../calendar/CalendarView";
 import GalleryView from "../gallery/GalleryView";
@@ -16,7 +16,7 @@ import KanbanView from "../kanban/KanbanView";
 import ListView from "../list/ListView";
 import TimelineView from "../timeline/TimelineView";
 import type { ViewProps } from "../types";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "./viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "./viewTestUtils";
 
 let layout: BoardLayout;
 beforeEach(() => {
@@ -50,41 +50,60 @@ const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
 /**
  * The calendar's unscheduled column and the timeline's "without a date" count ask with a transient
- * "start is empty" filter of their own; these tests are about the viewer's override, so they skip those.
+ * "start is empty" filter of their own; these tests are about the draft, so they skip those.
  */
-const viewerQueries = (asked: QueryRequest[]) => asked.filter((a) => !a.transient?.filter?.items.some((i) => "op" in i && i.op === "is_empty"));
+const viewQueries = (asked: QueryRequest[]) => asked.filter((a) => !a.transient?.filter?.items.some((i) => "op" in i && i.op === "is_empty"));
 
-describe.each(CASES)("%s view without save rights", (_name, Component, view) => {
-  it("sends a sort as a transient override, marks it Not saved and resets it", async () => {
+describe.each(CASES)("%s view", (_name, Component, view) => {
+  it("sends a sort as a transient override, says the change is only for now, and Reset takes it back", async () => {
     const u = user();
     const { asked, api } = setup(Component, view, "viewer");
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
-    expect(viewerQueries(asked).every((a) => !a.transient)).toBe(true);
-    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(viewQueries(asked).every((a) => !a.transient)).toBe(true);
+    expect(screen.queryByText(/These changes are only for now/)).not.toBeInTheDocument();
 
     await u.click(screen.getByRole("button", { name: /Sort/ }));
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
-    await waitFor(() => expect(viewerQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
-    expect(viewerQueries(asked).find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: expect.any(String) as string, direction: "asc" }] });
-    expect(await screen.findByText("Not saved")).toBeInTheDocument();
-    // The override is never saved to the view.
+    await waitFor(() => expect(viewQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
+    expect(viewQueries(asked).find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: expect.any(String) as string, direction: "asc" }] });
+    expect(await screen.findByText(/These changes are only for now/)).toBeInTheDocument();
+    // The draft is never saved to the view; a viewer has Reset only.
     expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Update view" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save as view" })).not.toBeInTheDocument();
 
-    const before = viewerQueries(asked).length;
+    const before = viewQueries(asked).length;
     await u.click(screen.getByRole("button", { name: "Reset" }));
-    await waitFor(() => expect(viewerQueries(asked).length).toBeGreaterThan(before));
-    expect(viewerQueries(asked).at(-1)!.transient).toBeUndefined();
-    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    await waitFor(() => expect(viewQueries(asked).length).toBeGreaterThan(before));
+    expect(viewQueries(asked).at(-1)!.transient).toBeUndefined();
+    expect(screen.queryByText(/These changes are only for now/)).not.toBeInTheDocument();
   });
 
-  it("does not use a transient override for editors, who save the view instead", async () => {
+  it("is a draft for editors too, until they press Update view", async () => {
     const u = user();
     const { asked, api } = setup(Component, view, "editor");
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
     await u.click(screen.getByRole("button", { name: /Sort/ }));
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
+    await waitFor(() => expect(viewQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
+    // No timer saves it.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+    expect(draftChanges()?.sorts).toHaveLength(1);
+    // The three buttons an editor has.
+    for (const name of ["Reset", "Update view", "Save as view"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+  });
+
+  it("Update view saves the draft to the view and the draft is gone", async () => {
+    const u = user();
+    const { asked, api } = setup(Component, view, "editor");
+    api.set("PATCH /api/views/viw1", (c: { body: unknown }) => ({ ...view, config: (c.body as { config: ViewConfig }).config }));
+    await waitFor(() => expect(asked.length).toBeGreaterThan(0));
+    await u.click(screen.getByRole("button", { name: /Sort/ }));
+    await u.click(await screen.findByRole("button", { name: "Add sort" }));
+    await u.click(await screen.findByRole("button", { name: "Update view" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect(viewerQueries(asked).every((a) => !a.transient)).toBe(true);
-    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: ViewConfig }).config.sorts).toHaveLength(1);
+    await waitFor(() => expect(draftChanges()).toBeUndefined());
   });
 });

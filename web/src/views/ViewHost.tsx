@@ -4,6 +4,8 @@ import type { BaseSchema, Table, View } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageSpinner } from "@/components/ui/spinner";
+import { draftLayout } from "./drafts/permissions";
+import { useViewDraft } from "./drafts/store";
 import { getViewComponent } from "./registry";
 
 class ViewErrorBoundary extends Component<{ children: ReactNode; resetKey: string }, { error: Error | null; key: string }> {
@@ -43,9 +45,14 @@ export interface ViewHostProps {
   view: View;
 }
 
-/** Extension point: renders the registered component for the view's type. */
+/**
+ * Extension point: renders the registered component for the view's layout: its own type, or the one this
+ * person's draft switched to (COL-5), which shows the same records in another layout. The component still
+ * gets the saved view, because the draft belongs to it.
+ */
 export function ViewHost({ schema, table, view }: ViewHostProps) {
-  const ViewComponent = getViewComponent(view.type);
+  const draft = useViewDraft(view.id);
+  const ViewComponent = getViewComponent(draftLayout(view, draft));
   return (
     <ViewErrorBoundary resetKey={view.id}>
       <Suspense fallback={<PageSpinner label="Loading view" />}>

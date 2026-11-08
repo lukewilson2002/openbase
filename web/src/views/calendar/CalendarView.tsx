@@ -376,14 +376,12 @@ function CalendarInner(props: ViewProps) {
 
   const api = () => calendar.current?.getApi();
   const chooseDate = (id: string | null) => cfg.update((c) => setCalendar(c, { date_field_id: id }));
-  const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const settings = (
-    <ViewSettings note={note}>
+    <ViewSettings>
       <FieldSelect
         label="Date field"
         fields={dateFields}
         value={fields?.start.field.id ?? ""}
-        disabled={!cfg.canConfigure}
         onChange={chooseDate}
         hint={fields && !isWritableDate(fields.start.field) ? `${FIELD_TYPE_LABELS[fields.start.field.type]} fields are filled in for you, so events cannot be moved or added on a day. Pick a date field you can edit to do that.` : undefined}
       />
@@ -392,14 +390,13 @@ function CalendarInner(props: ViewProps) {
         fields={dateFields.filter((f) => f.id !== fields?.start.field.id)}
         value={fields?.end?.field.id ?? ""}
         noneLabel="No end date"
-        disabled={!cfg.canConfigure || !fields}
+        disabled={!fields}
         onChange={(id) => cfg.update((c) => setCalendar(c, { end_field_id: id }))}
         hint={fields?.end && !isWritableDate(fields.end.field) ? `${FIELD_TYPE_LABELS[fields.end.field.type]} fields are worked out for you, so events cannot be moved or resized. Pick a date field you can edit to do that.` : "Shows records as ranges and lets you resize them."}
       />
       <DescriptionSelect
         candidates={descriptionFields}
         field={descriptionField}
-        disabled={!cfg.canConfigure}
         onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
         hint={descriptionFields.length === 0 ? "Add a text field to show a description with each event." : "A text field read in full when you point at an event."}
       />
@@ -525,7 +522,6 @@ function CalendarInner(props: ViewProps) {
           fields={desktop ? cardFieldList : []}
           descriptionField={desktop ? descriptionField : undefined}
           table={table}
-          role={setup.role}
           format={setup.format}
           emails={setup.emails}
           loading={all.loading}
@@ -544,11 +540,10 @@ function CalendarInner(props: ViewProps) {
 
   const data = records.data;
   const footer =
-    fields && (data?.truncated || (records.error && !data) || cfg.saving) ? (
+    fields && (data?.truncated || (records.error && !data)) ? (
       <>
         {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this range.</span>}
         {records.error && !data && <span role="alert">Could not load records: {records.error.message}</span>}
-        {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
       </>
     ) : undefined;
 

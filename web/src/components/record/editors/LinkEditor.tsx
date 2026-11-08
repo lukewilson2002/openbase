@@ -56,8 +56,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
   const single = options?.single ?? false;
   const env = useOptionalEditorEnv();
   const table = linkedTableOf(env?.schema, field);
-  const role = env?.schema?.role ?? "viewer";
-  const shownFields = useMemo(() => (table ? previewFields(table, role) : []), [table, role]);
+  const shownFields = useMemo(() => (table ? previewFields(table) : []), [table]);
   // The search matches what the results can show under their names.
   const searchFields = useMemo(() => shownFields.slice(0, PREVIEW_FIELDS * 2).map((f) => f.id), [shownFields]);
 
@@ -90,7 +89,6 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
             records={selectedRecords}
             fields={shownFields}
             format={env.format}
-            role={role}
             onChange={(next) => {
               // A removed card takes its focused ✕ with it: the search keeps the focus in the editor.
               searchRef.current?.focus({ preventScroll: true });
@@ -251,7 +249,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                 return (
                   <li key={r.id} id={`${listId}-${i}`} role="option" aria-selected={false}>
                     {table && env ? (
-                      <RecordPeek table={table} recordId={r.id} record={rec} format={env.format} role={role} side="right">
+                      <RecordPeek table={table} recordId={r.id} record={rec} format={env.format} side="right">
                         {row}
                       </RecordPeek>
                     ) : (

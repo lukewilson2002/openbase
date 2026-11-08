@@ -231,7 +231,7 @@ describe("the grid's floating record preview", () => {
     const second = vi.fn();
     const { rerender } = render(
       <Providers client={createQueryClient()}>
-        <FloatingRecordPeek at={at("row1", 10, first)} format={{ timeZone: "UTC", userName: () => undefined }} role="owner" />
+        <FloatingRecordPeek at={at("row1", 10, first)} format={{ timeZone: "UTC", userName: () => undefined }} />
       </Providers>,
     );
     await act(() => vi.advanceTimersByTimeAsync(450));
@@ -239,7 +239,7 @@ describe("the grid's floating record preview", () => {
     // The same record linked from the next row: the preview follows the pointer there.
     rerender(
       <Providers client={createQueryClient()}>
-        <FloatingRecordPeek at={at("row2", 200, second)} format={{ timeZone: "UTC", userName: () => undefined }} role="owner" />
+        <FloatingRecordPeek at={at("row2", 200, second)} format={{ timeZone: "UTC", userName: () => undefined }} />
       </Providers>,
     );
     await act(() => vi.advanceTimersByTimeAsync(350));
@@ -262,7 +262,7 @@ describe("a record's preview while a list scrolls", () => {
     mockApi({ "GET /api/tables/tbl2/records/recD": domain } as never);
     render(
       <Providers client={createQueryClient()}>
-        <RecordPeek table={setupTable} recordId="recD" record={domain} format={{ timeZone: "UTC", userName: () => undefined }} role="owner">
+        <RecordPeek table={setupTable} recordId="recD" record={domain} format={{ timeZone: "UTC", userName: () => undefined }}>
           <button type="button">Buy the domain</button>
         </RecordPeek>
       </Providers>,

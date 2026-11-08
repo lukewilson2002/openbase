@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MutationObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import type { GridAdapterProps, GridSelectionInfo } from "./adapter";
 
 const canvas = vi.hoisted(() => ({ props: null as unknown, clear: vi.fn() }));
@@ -414,13 +414,13 @@ describe("GridView: record panel with folded groups", () => {
 });
 
 describe("GridView: column menu", () => {
-  it("moves a column left or right, never before the primary field", async () => {
+  it("moves a column left or right, never before the primary field, as a draft", async () => {
     const user = userEvent.setup();
     const view = viewWithConfig("viw1", "grid", { hidden_fields: [F.start.id] });
     const { api } = renderView(GridView, {
       schema: projectSchema("editor", [view]),
       viewId: "viw1",
-      routes: { "POST /api/views/viw1/query": queryHandler({ records }), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never,
+      routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never,
     });
     await loaded();
     const ids = grid().columns.map((c) => c.id);
@@ -431,9 +431,11 @@ describe("GridView: column menu", () => {
     await user.keyboard("{Escape}");
     act(() => grid().onHeaderMenu(2, { x: 5, y: 5, width: 1, height: 1 }));
     await user.click(await screen.findByRole("menuitem", { name: "Move left" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
+    await waitFor(() => expect(draftChanges()?.field_order).toBeDefined());
     // The hidden Start field keeps its slot between Status and End.
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { field_order: string[] } }).config.field_order.slice(0, 4)).toEqual([F.name.id, F.end.id, F.start.id, F.status.id]);
+    expect(draftChanges()!.field_order!.slice(0, 4)).toEqual([F.name.id, F.end.id, F.start.id, F.status.id]);
+    // The new order is this person's until they update the view.
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 });
 
@@ -475,5 +477,43 @@ describe("GridView: edits made in the record panel", () => {
     await user.click(undo);
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect((api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body as { records: unknown[] }).records).toEqual([{ id: "r1", values: { [F.name.id]: "R1" } }]);
+  });
+});
+
+describe("GridView: every change to the view is a draft", () => {
+  it("keeps a column's width and its freeze as a draft with the changes bar, and saves nothing", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    await loaded();
+    expect(screen.queryByText(/These changes are only for now/)).not.toBeInTheDocument();
+    act(() => grid().onColumnResize(1, 333, true));
+    await waitFor(() => expect(draftChanges()?.field_widths).toEqual({ [grid().columns[1]!.id]: 333 }));
+    expect(await screen.findByText(/These changes are only for now/)).toBeInTheDocument();
+    // The grid draws the new width straight away.
+    await waitFor(() => expect(grid().columns[1]!.width).toBe(333));
+
+    act(() => grid().onHeaderMenu(2, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitem", { name: /Freeze/ }));
+    await waitFor(() => expect(draftChanges()?.frozen_columns).toBe(2));
+    await new Promise((r) => setTimeout(r, 450));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+
+    // Reset gives the saved layout back.
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(draftChanges()).toBeUndefined();
+    await waitFor(() => expect(grid().columns[1]!.width).not.toBe(333));
+  });
+
+  it("asks the server for a drafted summary, and for the drafted filter along with it", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({ routes: { "GET /api/views/viw1/aggregations": () => ({ values: { [F.effort.id]: 66 } }) } });
+    await loaded();
+    const effort = grid().columns.findIndex((c) => c.id === F.effort.id);
+    act(() => grid().onSummaryClick(effort, { x: 5, y: 5, width: 1, height: 1 }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Sum" }));
+    await waitFor(() => expect(api.callsTo("GET /api/views/viw1/aggregations").length).toBeGreaterThan(0));
+    const sent = JSON.parse(api.callsTo("GET /api/views/viw1/aggregations").at(-1)!.query.get("transient") ?? "null") as { summaries: Record<string, string> };
+    expect(sent.summaries).toEqual({ [F.effort.id]: "sum" });
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 });

@@ -77,8 +77,7 @@ function TimelineInner(props: ViewProps) {
   const depField = selfLinks.find((f) => f.id === tl.dependency_field_id);
 
   // Viewers cannot save the scale, so they keep their own choice for the session.
-  const [localScale, setLocalScale] = useState<TimelineScale | null>(null);
-  const scale: TimelineScale = cfg.canConfigure ? tl.scale : (localScale ?? tl.scale);
+  const scale: TimelineScale = tl.scale;
 
   const nowMs = useWallNow(timeZone);
   const today = dayNumber(wallNow(timeZone));
@@ -257,8 +256,7 @@ function TimelineInner(props: ViewProps) {
   const changeScale = useCallback(
     (next: TimelineScale) => {
       if (next === scale) return;
-      if (cfg.canConfigure) cfg.update((c) => setTimeline(c, { scale: next }));
-      else setLocalScale(next);
+      cfg.update((c) => setTimeline(c, { scale: next }));
       setAxis(makeAxis(next, centerDay.current));
     },
     [scale, cfg],
@@ -367,35 +365,32 @@ function TimelineInner(props: ViewProps) {
   const [overUnscheduled, setOverUnscheduled] = useState(false);
 
   // ---- toolbar -------------------------------------------------------------------------------------
-  const note = [cfg.canConfigure ? undefined : "You do not have permission to change this view.", dateNote].filter(Boolean).join(" ") || undefined;
   // Lanes come from the Swimlanes setting, or else the toolbar's grouping, never both.
   const groupingIgnored = !!groupField && (data?.groups.length ?? 0) > 0;
   const groupingName = table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name;
   const settings = (
-    <ViewSettings note={note}>
-      <FieldSelect label="Start date field" fields={dateFields} value={fields?.start.field.id ?? ""} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
+    <ViewSettings note={dateNote}>
+      <FieldSelect label="Start date field" fields={dateFields} value={fields?.start.field.id ?? ""} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
       <FieldSelect
         label="End date field"
         fields={dateFields.filter((f) => f.id !== fields?.start.field.id)}
         value={fields?.end?.field.id ?? ""}
         noneLabel="No end date (milestones)"
-        disabled={!cfg.canConfigure || !fields}
+        disabled={!fields}
         onChange={(id) => cfg.update((c) => setTimeline(c, { end_field_id: id }))}
       />
-      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint={groupingIgnored ? `The view is also grouped${groupingName ? ` by ${groupingName}` : ""}, but swimlanes take over here: that grouping is not used for the lanes. Choose no swimlanes to use it.` : "Without a field, the view's grouping (if any) makes the lanes."} />
+      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint={groupingIgnored ? `The view is also grouped${groupingName ? ` by ${groupingName}` : ""}, but swimlanes take over here: that grouping is not used for the lanes. Choose no swimlanes to use it.` : "Without a field, the view's grouping (if any) makes the lanes."} />
       <FieldSelect
         label="Dependencies"
         fields={selfLinks}
         value={depField?.id ?? ""}
         noneLabel="No dependencies"
-        disabled={!cfg.canConfigure}
         onChange={(id) => cfg.update((c) => setTimeline(c, { dependency_field_id: id }))}
         hint={selfLinks.length === 0 ? "Add a link field to this same table to draw dependency arrows (Gantt)." : "Arrows run from each linked predecessor's end to the record's start; red when they overlap."}
       />
       <DescriptionSelect
         candidates={descriptionFields}
         field={descriptionField}
-        disabled={!cfg.canConfigure}
         onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
         hint={descriptionFields.length === 0 ? "Add a text field to show a description with each bar." : "A text field read in full when you point at a bar."}
       />
@@ -494,11 +489,9 @@ function TimelineInner(props: ViewProps) {
               <span>
                 The lanes come from the Swimlanes setting ({groupField!.name}), so the view's grouping{groupingName ? ` by ${groupingName}` : ""} is not used here.
               </span>
-              {cfg.canConfigure && (
-                <button type="button" onClick={() => cfg.update((c) => setTimeline(c, { group_field_id: null }))} className="font-semibold text-fg underline hover:no-underline">
-                  Use the grouping instead
-                </button>
-              )}
+              <button type="button" onClick={() => cfg.update((c) => setTimeline(c, { group_field_id: null }))} className="font-semibold text-fg underline hover:no-underline">
+                Use the grouping instead
+              </button>
             </p>
           )}
         </div>
@@ -512,7 +505,7 @@ function TimelineInner(props: ViewProps) {
           showLabels={showLabels}
           labelHeading={grouped ? (groupField?.name ?? table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name) : primary?.name}
           labelWidth={tl.label_width}
-          onLabelWidth={cfg.canConfigure ? (w) => cfg.update((c) => setTimeline(c, { label_width: w })) : undefined}
+          onLabelWidth={(w) => cfg.update((c) => setTimeline(c, { label_width: w }))}
           canCreate={canEditDates}
           createSpansDays={canEditEnd}
           emptyMessage={emptyMessage}
@@ -551,7 +544,6 @@ function TimelineInner(props: ViewProps) {
               fields={sideFields}
               descriptionField={descriptionField}
               table={table}
-              role={setup.role}
               format={setup.format}
               emails={setup.emails}
               loading={undated.loading}
@@ -606,7 +598,6 @@ function TimelineInner(props: ViewProps) {
             )}
             {data?.truncated && <span role="status">Showing the first {data.records.length.toLocaleString()} of {data.total.toLocaleString()} records in this window.</span>}
             {records.error && !data && <span role="alert">Could not load records: {records.error.message}</span>}
-            {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
           </>
         ) : undefined
       }

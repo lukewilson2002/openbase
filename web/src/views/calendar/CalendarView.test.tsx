@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BaseSchema, Field, QueryRequest, TableRecord } from "@/api/types";
 import { ALL_FIELDS, field } from "@/test/fields";
 import { stubDesktop } from "@/test/utils";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import CalendarView from "./CalendarView";
 
 afterEach(() => {
@@ -99,17 +99,19 @@ describe("CalendarView", () => {
     expect(screen.getByText("Mar 1")).toBeInTheDocument();
   });
 
-  it("asks for a date field when none is set and saves the choice", async () => {
+  it("asks for a date field when none is set and keeps the choice as a draft", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const view = viewWithConfig("viw1", "calendar", {});
-    const { api, asked } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api, asked } = setup("editor", view);
     expect(await screen.findByText("Choose a date field")).toBeInTheDocument();
     expect(asked).toHaveLength(0);
     // The likely field (the first date people fill in) is chosen already.
     expect(screen.getByRole("combobox", { name: "Date field" })).toHaveValue("f_start");
     await user.click(screen.getByRole("button", { name: "Show calendar" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { calendar: { date_field_id: string } } }).config.calendar.date_field_id).toBe("f_start");
+    await waitFor(() => expect(draftChanges()?.calendar?.date_field_id).toBe("f_start"));
+    // Nothing is saved until someone says so.
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+    expect(await screen.findByText(/These changes are only for now/)).toBeInTheDocument();
   });
 
   it("lists records without a date in the unscheduled column, asking the server with a transient is_empty filter", async () => {

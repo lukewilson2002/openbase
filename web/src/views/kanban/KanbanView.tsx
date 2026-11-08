@@ -189,31 +189,27 @@ function KanbanInner(props: ViewProps) {
       : kind === "user"
         ? kanban.show_all_people
         ? "Every collaborator has a stack. Add people to the base to give them one."
-        : cfg.canConfigure
-          ? "Stacks follow the people with cards. Turn on Show everyone in View to add the rest."
-          : "Stacks follow the people with cards."
+        : "Stacks follow the people with cards. Turn on Show everyone in View to add the rest."
         : kind === "checkbox"
           ? "A checkbox always has two stacks: checked and unchecked."
           : undefined;
   const cardLimit = kanban.card_field_limit ?? CARD_FIELD_LIMIT;
   const limitOptions = [...new Set([...CARD_LIMITS, ALL_FIELDS_LIMIT, cardLimit])].sort((a, b) => a - b);
-  const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [], hidden_stacks: [] }));
   const settings = (
-    <ViewSettings note={note}>
-      <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} disabled={!cfg.canConfigure} onChange={chooseStack} hint="A single select, single user or checkbox field." />
+    <ViewSettings>
+      <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} onChange={chooseStack} hint="A single select, single user or checkbox field." />
       {kind === "user" && (
         <Checkbox
           label="Show everyone, even people with no cards"
           checked={kanban.show_all_people}
-          disabled={!cfg.canConfigure}
           onCheckedChange={(on) => cfg.update((c) => setKanban(c, { show_all_people: on }))}
         />
       )}
-      <FieldSelect label="Cover image" fields={attachmentFields} value={coverField?.id ?? ""} noneLabel="No cover" disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setKanban(c, { cover_field_id: id }))} />
+      <FieldSelect label="Cover image" fields={attachmentFields} value={coverField?.id ?? ""} noneLabel="No cover" onChange={(id) => cfg.update((c) => setKanban(c, { cover_field_id: id }))} />
       <FormField label="Cover image fit" hint={coverField ? "Crop fills the picture area; fit shows the whole image." : "Choose a cover image first."}>
         {(ctl) => (
-          <Select {...ctl} value={kanban.cover_fit ? "fit" : "crop"} disabled={!cfg.canConfigure || !coverField} onChange={(e) => cfg.update((c) => setKanban(c, { cover_fit: e.target.value === "fit" }))}>
+          <Select {...ctl} value={kanban.cover_fit ? "fit" : "crop"} disabled={!coverField} onChange={(e) => cfg.update((c) => setKanban(c, { cover_fit: e.target.value === "fit" }))}>
             <option value="crop">Crop to fill</option>
             <option value="fit">Fit inside</option>
           </Select>
@@ -221,7 +217,7 @@ function KanbanInner(props: ViewProps) {
       </FormField>
       <FormField label="Fields on a card" hint="Cards show only fields that have a value. Hide fields in the toolbar to choose which.">
         {(ctl) => (
-          <Select {...ctl} value={String(cardLimit)} disabled={!cfg.canConfigure} onChange={(e) => cfg.update((c) => setKanban(c, { card_field_limit: Number(e.target.value) }))}>
+          <Select {...ctl} value={String(cardLimit)} onChange={(e) => cfg.update((c) => setKanban(c, { card_field_limit: Number(e.target.value) }))}>
             {limitOptions.map((n) => (
               <option key={n} value={n}>
                 {n >= ALL_FIELDS_LIMIT ? "All" : n}
@@ -230,7 +226,7 @@ function KanbanInner(props: ViewProps) {
           </Select>
         )}
       </FormField>
-      <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
+      <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
     </ViewSettings>
   );
 
@@ -279,15 +275,14 @@ function KanbanInner(props: ViewProps) {
         emails={setup.emails}
         colors={data?.colors ?? {}}
         canEdit={setup.canEdit}
-        canConfigure={cfg.canConfigure}
         hasSorts={hasSorts}
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
         onMoveStack={(key, dir) => saveOrder(moveStackKey(shownKeys, key, dir))}
-        onReorderStacks={cfg.canConfigure ? saveOrder : undefined}
-        onHideStack={cfg.canConfigure ? hideStack : undefined}
+        onReorderStacks={saveOrder}
+        onHideStack={hideStack}
         hiddenStacks={hiddenStacks}
-        onShowStack={cfg.canConfigure ? showStack : undefined}
+        onShowStack={showStack}
         onRenameStack={renameStack}
         onColorStack={colorStack}
         onDeleteStack={deleteStack}
@@ -309,7 +304,7 @@ function KanbanInner(props: ViewProps) {
   const total = data?.total ?? 0;
   // Each stack counts its own cards, so the board has no total under it; only what needs saying.
   const footer =
-    stackField && data && (data.truncated || (hasSorts && setup.canEdit) || cfg.saving) ? (
+    stackField && data && (data.truncated || (hasSorts && setup.canEdit)) ? (
       <>
         {data.truncated && (
           <span role="status">
@@ -317,7 +312,6 @@ function KanbanInner(props: ViewProps) {
           </span>
         )}
         {hasSorts && setup.canEdit && <span className="hidden sm:inline">Sorted views keep their order: cards move between stacks but cannot be reordered by hand.</span>}
-        {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
       </>
     ) : undefined;
 
@@ -334,7 +328,6 @@ function KanbanInner(props: ViewProps) {
           label: "Hide empty stacks",
           icon: <EyeOff aria-hidden />,
           checked: kanban.hide_empty_stacks,
-          disabled: !cfg.canConfigure,
           onToggle: (on) => cfg.update((c) => setKanban(c, { hide_empty_stacks: on })),
         },
       ]}

@@ -25,10 +25,6 @@ function renderBar(over: Partial<ViewBarProps> = {}, { phone = false, onDialog }
     view,
     role: "viewer",
     config: view.config,
-    canConfigure: false,
-    hasLocalQuery: false,
-    onResetLocalQuery: vi.fn(),
-    saving: false,
     update: vi.fn(),
     collaborators: [],
     currentUserId: null,
@@ -50,11 +46,12 @@ const withConfig = (patch: Partial<ViewConfig>) => {
   return { view: v, config: v.config };
 };
 
-describe("ViewBar for people who cannot save the view", () => {
-  it("lets them filter, and says it applies only to them", async () => {
-    const props = renderBar();
+describe("ViewBar: every change is a draft, for everyone", () => {
+  it.each(["viewer", "commenter", "editor", "creator"])("as %s: filters, sorts, groups, colors and row height are all there to change", async (role) => {
+    const props = renderBar({ role, schema: makeSchema(role) });
     await userEvent.click(screen.getByRole("button", { name: "Filter" }));
-    expect(screen.getByText(/apply only to you and are not saved/)).toBeInTheDocument();
+    // No note about permission or about not being saved: the changes bar under the toolbar says it.
+    expect(screen.queryByText(/not saved|permission|apply only to you/i)).not.toBeInTheDocument();
     const add = screen.getByRole("button", { name: "Add condition" });
     expect(add).toBeEnabled();
     await userEvent.click(add);
@@ -64,44 +61,26 @@ describe("ViewBar for people who cannot save the view", () => {
   it("lets them sort and group too", async () => {
     renderBar();
     await userEvent.click(screen.getByRole("button", { name: "Sort" }));
-    expect(screen.getByText(/apply only to you and are not saved/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Add (a )?sort/i })).toBeEnabled();
   });
 
-  it("keeps colours read-only (the override does not cover them)", async () => {
-    renderBar();
+  it("lets them color records: row colors are a draft the server computes", async () => {
+    const props = renderBar();
     await userEvent.click(screen.getByRole("button", { name: "Color" }));
-    expect(screen.getByRole("group", { name: "Color records" })).toBeDisabled();
+    expect(screen.getByRole("group", { name: "Color records" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("radio", { name: "By conditions" }));
+    expect(props.update).toHaveBeenCalledTimes(1);
   });
 
-  it("shows no Not saved marker while nothing local is in effect", () => {
-    renderBar({ hasLocalQuery: false });
+  it("has no Not saved marker and no Locked badge: the view tab says locked, the bar says what is a draft", () => {
+    renderBar({ view: makeView({ id: "viw1", name: "All tasks", locked: true }) });
     expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
-  });
-
-  it("the Not saved marker resets the local query", async () => {
-    const props = renderBar({ hasLocalQuery: true });
-    expect(screen.getByRole("status")).toHaveTextContent("Not saved");
-    await userEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect(props.onResetLocalQuery).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ViewBar for people who can save the view", () => {
-  it("shows no marker and no read-only note", async () => {
-    renderBar({ canConfigure: true, hasLocalQuery: true, role: "editor", schema: makeSchema("editor") });
-    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Filter" }));
-    expect(screen.queryByText(/not saved/i)).not.toBeInTheDocument();
-  });
-
-  it("shows the locked badge on a locked view", () => {
-    renderBar({ view: makeView({ id: "viw1", locked: true }), canConfigure: false });
-    expect(screen.getByText("Locked")).toBeInTheDocument();
+    expect(screen.queryByText("Locked")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: "View: All tasks" })).getByRole("img", { name: "Locked view" })).toBeInTheDocument();
   });
 
   it("sets the row height from the toolbar", async () => {
-    const props = renderBar({ canConfigure: true, role: "creator", schema: makeSchema("creator") });
+    const props = renderBar({ role: "creator", schema: makeSchema("creator") });
     await userEvent.click(screen.getByRole("button", { name: "Row height" }));
     await userEvent.click(screen.getByRole("radio", { name: "Tall" }));
     expect(props.update).toHaveBeenCalledTimes(1);
@@ -514,7 +493,7 @@ describe("ViewBar grouping by a date", () => {
 
   function renderGrouped(groups: ViewConfig["groups"]) {
     const { view, config } = withConfig({ groups });
-    return renderBar({ table: dated, view, config, canConfigure: true, role: "creator", schema: makeSchema("creator") });
+    return renderBar({ table: dated, view, config, role: "creator", schema: makeSchema("creator") });
   }
   /** Apply the updater the toolbar last passed to `update`. */
   const applied = (props: { update: ViewBarProps["update"]; config: ViewConfig }) => {
@@ -547,7 +526,7 @@ describe("Hide fields: order", () => {
 
   async function open(over: Partial<ViewConfig> = {}) {
     const { view, config } = withConfig(over);
-    const props = renderBar({ table: four, view, config, canConfigure: true });
+    const props = renderBar({ table: four, view, config });
     await userEvent.click(screen.getByRole("button", { name: /Hide fields|hidden field/ }));
     return props;
   }

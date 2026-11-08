@@ -32,9 +32,8 @@ export interface UnscheduledListProps {
   fields: readonly Field[];
   /** The view's description field, if it has one (else a record's first text field describes it). */
   descriptionField?: Field;
-  /** The records' table and the person's role there: hovering a record shows all its fields. */
+  /** The records' table: hovering a record shows all its fields. */
   table?: Table;
-  role?: string;
   format: FormatCtx;
   emails: ReadonlyMap<string, string>;
   loading: boolean;
@@ -59,7 +58,7 @@ export interface UnscheduledListProps {
 const columnBg = "bg-[color-mix(in_srgb,var(--bg)_55%,var(--surface))]";
 const dropClass = "bg-primary-soft ring-2 ring-inset ring-ring";
 
-export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, table, role, format, emails, loading, truncated, draggable, nativeDrag, attachDrag, hint, dropActive = false, stacked = false, zoneRef, onOpen }: UnscheduledListProps) {
+export function UnscheduledList({ open, onToggle, records, primary, fields, descriptionField, table, format, emails, loading, truncated, draggable, nativeDrag, attachDrag, hint, dropActive = false, stacked = false, zoneRef, onOpen }: UnscheduledListProps) {
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     // The list is not mounted while loading or folded, so those re-run this once it is.
@@ -71,8 +70,8 @@ export function UnscheduledList({ open, onToggle, records, primary, fields, desc
   const count = loading ? null : records.length;
   // Every field on hover (a held finger is a drag here, so it does not open them).
   const peek = (r: TableRecord, card: React.ReactElement) =>
-    table && role ? (
-      <RecordPeek table={table} recordId={r.id} record={r} format={format} emails={emails} role={role} onOpen={() => onOpen(r.id)} side="left" touchHold={false} className="min-w-0 flex-1">
+    table ? (
+      <RecordPeek table={table} recordId={r.id} record={r} format={format} emails={emails} onOpen={() => onOpen(r.id)} side="left" touchHold={false} className="min-w-0 flex-1">
         {card}
       </RecordPeek>
     ) : (

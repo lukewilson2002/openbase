@@ -48,7 +48,7 @@ export interface ViewSetupStateProps {
 const selectClass = "h-[46px] rounded-[10px] pl-3.5 pr-10 text-base";
 
 export function ViewSetupState({ setup, picture, heading, body, emptyBody, pickers, button, onApply, footText, footLink, addType, accepts }: ViewSetupStateProps) {
-  const { schema, table, cfg, role } = setup;
+  const { schema, table, role } = setup;
   const canAddField = atLeast(role, "creator");
   const [adding, setAdding] = useState(false);
   const [chosen, setChosen] = useState<string[]>(() => pickers.map((p) => p.initial));
@@ -62,9 +62,7 @@ export function ViewSetupState({ setup, picture, heading, body, emptyBody, picke
   };
 
   let controls: ReactNode = null;
-  if (!cfg.canConfigure) {
-    controls = null;
-  } else if (!usable) {
+  if (!usable) {
     controls = canAddField ? (
       <Button variant="primary" size="lg" className="h-[46px] rounded-[10px] px-5 font-semibold" onClick={() => setAdding(true)}>
         {footLink}
@@ -115,7 +113,7 @@ export function ViewSetupState({ setup, picture, heading, body, emptyBody, picke
       );
   }
 
-  const sentence = !cfg.canConfigure ? `${usable ? "" : `${emptyBody} `}Ask someone who can edit this view to set it up.` : usable ? body : emptyBody;
+  const sentence = usable ? body : emptyBody;
 
   return (
     <div className="flex min-h-full justify-center px-4 py-10 sm:px-6 sm:py-14">
@@ -128,7 +126,7 @@ export function ViewSetupState({ setup, picture, heading, body, emptyBody, picke
           <p className="text-base leading-relaxed text-balance text-muted">{sentence}</p>
         </div>
         {controls}
-        {cfg.canConfigure && usable && (
+        {usable && (
           <p className="text-sm text-muted">
             {footText}
             {canAddField && (

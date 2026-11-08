@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
 import { field } from "@/test/fields";
 import { apiError } from "@/test/utils";
-import { F, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import { installBoardLayout, type BoardLayout } from "./boardLayout";
 import KanbanView from "./KanbanView";
 
@@ -76,18 +76,17 @@ describe("KanbanView", () => {
     expect(screen.getByRole("listitem", { name: "Stack: Uncategorized" })).not.toHaveClass("ob-fill");
   });
 
-  it("shows the setup prompt when no stack field is chosen and saves the choice", async () => {
+  it("shows the setup prompt when no stack field is chosen and keeps the choice as a draft", async () => {
     const user = userEvent.setup();
     const view = viewWithConfig("viw1", "kanban", {});
-    const { api } = setup("editor", view, { "PATCH /api/views/viw1": (call: { body: { config: unknown } }) => ({ ...view, config: call.body.config }) });
+    const { api } = setup("editor", view);
     expect(await screen.findByText("Choose how to stack cards")).toBeInTheDocument();
     expect(api.callsTo("POST /api/views/viw1/query")).toHaveLength(0); // nothing to query yet
     // The likely field (the first single select) is chosen already.
     expect(screen.getByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
     await user.click(screen.getByRole("button", { name: "Make stacks" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { stack_field_id: string } } };
-    expect(saved.config.kanban.stack_field_id).toBe("f_status");
+    await waitFor(() => expect(draftChanges()?.kanban?.stack_field_id).toBe("f_status"));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
   it("keeps the stack and cover choices behind the toolbar's View button", async () => {
@@ -118,11 +117,11 @@ describe("KanbanView", () => {
       return renderView(KanbanView, {
         schema,
         viewId: "viw1",
-        routes: { "POST /api/views/viw1/query": queryHandler(server), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never,
+        routes: { "POST /api/views/viw1/query": queryHandler(server) } as never,
       });
     }
 
-    it("offers text fields but not the title, starts empty and saves the choice", async () => {
+    it("offers text fields but not the title, starts empty and keeps the choice as a draft", async () => {
       const user = userEvent.setup();
       const { api } = setupNotes(board());
       await screen.findByRole("listitem", { name: "Stack: Todo" });
@@ -133,10 +132,8 @@ describe("KanbanView", () => {
       const options = within(select).getAllByRole("option").map((o) => o.textContent);
       expect(options).toEqual(["No description", "Notes", "Brief", "Label"]);
       await user.selectOptions(select, "f_notes");
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      const saved = api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { description_field_id: string; kanban: { stack_field_id: string } } };
-      expect(saved.config.description_field_id).toBe("f_notes");
-      expect(saved.config.kanban).toMatchObject({ stack_field_id: F.status.id });
+      await waitFor(() => expect(draftChanges()?.description_field_id).toBe("f_notes"));
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
     });
 
     it("draws the description under the title, clamped, and leaves its row out", async () => {
@@ -172,14 +169,14 @@ describe("KanbanView", () => {
   it("hides empty stacks from the More menu", async () => {
     const user = userEvent.setup();
     const view = board();
-    const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
+    const { api } = setup("editor", view);
     expect(await screen.findByRole("listitem", { name: "Stack: Done" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
     const item = await screen.findByRole("menuitemcheckbox", { name: "Hide empty stacks" });
     expect(item).toHaveAttribute("aria-checked", "false");
     await user.click(item);
-    await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-    expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { hide_empty_stacks: boolean } } }).config.kanban.hide_empty_stacks).toBe(true);
+    await waitFor(() => expect(draftChanges()?.kanban?.hide_empty_stacks).toBe(true));
+    expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
   it("adds a stack as a new choice of the select, for people who manage fields", async () => {
@@ -199,10 +196,12 @@ describe("KanbanView", () => {
     expect(screen.queryByRole("button", { name: "Add a stack" })).not.toBeInTheDocument();
   });
 
-  it("only offers fields that can stack, and tells viewers to ask an editor", async () => {
+  it("offers the stack field to a viewer too: their choice is a draft only they see", async () => {
     setup("viewer", viewWithConfig("viw1", "kanban", {}));
-    expect(await screen.findByText(/Ask someone who can edit this view/)).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Stack cards by" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
+    expect(screen.queryByText(/Ask someone who can edit this view/)).not.toBeInTheDocument();
+    // Only fields that can stack are offered.
+    expect(within(screen.getByRole("combobox", { name: "Stack cards by" })).getAllByRole("option").map((o) => o.textContent)).toEqual(["Status", "Owner"]);
   });
 
   it("dragging a card to another stack writes the stack field, then its place, optimistically", async () => {
@@ -371,74 +370,78 @@ describe("KanbanView", () => {
       expect(screen.getByText(/Stacks follow the people with cards/)).toBeInTheDocument();
     });
 
-    it("says so where Add a stack would be, and not to turn on a setting you cannot change", async () => {
+    it("says so where Add a stack would be, to a viewer too", async () => {
       setup("viewer", byOwner(), {}, { records: owned });
       await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
-      expect(screen.getByText("Stacks follow the people with cards.")).toBeInTheDocument();
+      expect(screen.getByText(/Stacks follow the people with cards/)).toBeInTheDocument();
     });
 
-    it("draws a stack for everyone when the setting asks for it, and saves the setting", async () => {
+    it("draws a stack for everyone when the setting asks for it, and keeps the setting as a draft", async () => {
       const user = userEvent.setup();
       const view = byOwner();
-      const { api } = setup("editor", view, { "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) }, { records: owned });
+      const { api } = setup("editor", view, {}, { records: owned });
       await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
       expect(screen.queryByRole("listitem", { name: "Stack: Grace Hopper" })).not.toBeInTheDocument();
       await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
       await user.click(await screen.findByRole("checkbox", { name: "Show everyone, even people with no cards" }));
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect((api.callsTo("PATCH /api/views/viw1")[0]!.body as { config: { kanban: { show_all_people: boolean } } }).config.kanban.show_all_people).toBe(true);
+      await waitFor(() => expect(draftChanges()?.kanban?.show_all_people).toBe(true));
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
     });
   });
 
   describe("stack menu", () => {
-    const saves = (view = board()) => ({ "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) });
-    const savedKanban = (api: ReturnType<typeof setup>["api"], n = 0) => (api.callsTo("PATCH /api/views/viw1")[n]!.body as { config: { kanban: Record<string, unknown> } }).config.kanban;
+    /** The board settings this person has changed (a draft: the view itself is not touched). */
+    const draftKanban = () => draftChanges()?.kanban as Record<string, unknown>;
 
     it("hides a stack for this view and brings it back from the end of the board", async () => {
       const user = userEvent.setup();
       const view = board();
-      const { api } = setup("editor", view, saves(view));
+      const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Doing" });
       await user.click(screen.getByRole("button", { name: "Options for Doing" }));
       await user.click(await screen.findByRole("menuitem", { name: "Hide stack" }));
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect(savedKanban(api).hidden_stacks).toEqual(["s2"]);
+      await waitFor(() => expect(draftKanban()).toBeDefined());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+      expect(draftKanban().hidden_stacks).toEqual(["s2"]);
     });
 
     it("leaves hidden stacks off the board and brings one back from the end of it", async () => {
       const user = userEvent.setup();
       const view = board({ hidden_stacks: ["s2", "s3"] });
-      const { api } = setup("editor", view, saves(view));
+      const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       expect(screen.queryByRole("listitem", { name: "Stack: Doing" })).not.toBeInTheDocument();
       expect(screen.queryByRole("listitem", { name: "Stack: Done" })).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "2 hidden stacks" }));
       await user.click(await screen.findByRole("menuitem", { name: /Show Doing/ }));
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect(savedKanban(api).hidden_stacks).toEqual(["s3"]);
+      await waitFor(() => expect(draftKanban()).toBeDefined());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+      expect(draftKanban().hidden_stacks).toEqual(["s3"]);
     });
 
     it("starts with every stack showing when the board is stacked by another field", async () => {
       const user = userEvent.setup();
       const view = board({ hidden_stacks: ["", "s2"] });
-      const { api } = setup("editor", view, saves(view));
+      const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
       await user.selectOptions(await screen.findByRole("combobox", { name: "Stack cards by" }), F.owner.id);
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect(savedKanban(api)).toMatchObject({ stack_field_id: F.owner.id, stack_order: [], hidden_stacks: [] });
+      await waitFor(() => expect(draftKanban()).toBeDefined());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+      expect(draftKanban()).toMatchObject({ stack_field_id: F.owner.id, stack_order: [], hidden_stacks: [] });
     });
 
     it("can hide a populated Uncategorized stack too", async () => {
       const user = userEvent.setup();
       const view = board();
-      const { api } = setup("editor", view, saves(view));
+      const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Uncategorized" });
       await user.click(screen.getByRole("button", { name: "Options for Uncategorized" }));
       expect(screen.queryByRole("menuitem", { name: "Rename stack" })).not.toBeInTheDocument();
       await user.click(await screen.findByRole("menuitem", { name: "Hide stack" }));
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect(savedKanban(api).hidden_stacks).toEqual([""]);
+      await waitFor(() => expect(draftKanban()).toBeDefined());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+      expect(draftKanban().hidden_stacks).toEqual([""]);
     });
 
     it("renames, recolours and deletes the choice for people who manage fields", async () => {
@@ -484,7 +487,7 @@ describe("KanbanView", () => {
 
     it("drags a header to reorder the stacks with one save, keeping the hidden ones in place", async () => {
       const view = board({ hidden_stacks: ["s2"] });
-      const { api } = setup("editor", view, saves(view));
+      const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       // Uncategorized, Todo, Done are shown (Doing is hidden): drag Uncategorized past Todo.
       const header = screen.getByRole("heading", { name: "Uncategorized" }).parentElement!;
@@ -494,18 +497,21 @@ describe("KanbanView", () => {
       fireEvent.mouseMove(document, { clientX: 410, clientY: 10 });
       await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
       fireEvent.mouseUp(document);
-      await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));
-      expect(savedKanban(api).stack_order).toEqual(["s1", "", "s2", "s3"]);
+      await waitFor(() => expect(draftKanban()).toBeDefined());
+      expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+      expect(draftKanban().stack_order).toEqual(["s1", "", "s2", "s3"]);
       await act(async () => void (await new Promise((r) => setTimeout(r, 60)))); // dnd-kit swallows the click after a drag for a moment
     });
 
-    it("lets people who cannot change the view collapse stacks only", async () => {
+    it("lets people who cannot change the view arrange stacks for themselves, but not rename them", async () => {
       const user = userEvent.setup();
       setup("viewer");
       await screen.findByRole("listitem", { name: "Stack: Todo" });
       await user.click(screen.getByRole("button", { name: "Options for Todo" }));
       await screen.findByRole("menuitem", { name: "Collapse stack" });
-      for (const name of ["Hide stack", "Move left", "Rename stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+      // Hiding and moving are drafts; renaming a choice changes the property, which a viewer may not.
+      for (const name of ["Hide stack", "Move right"]) expect(screen.getByRole("menuitem", { name })).toBeInTheDocument();
+      for (const name of ["Rename stack", "Change colour", "Delete stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
     });
   });
 
@@ -622,7 +628,7 @@ describe("KanbanView", () => {
       const schema = projectSchema("editor", [view]);
       schema.tables[0]!.fields = [...schema.tables[0]!.fields, ...extra];
       const row = rec("r1", { [F.status.id]: "s1", [F.effort.id]: 5, ...Object.fromEntries(extra.map((f, i) => [f.id, `value ${i + 1}`])) });
-      const api = renderView(KanbanView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records: [row] }), "PATCH /api/views/viw1": (c: { body: { config: unknown } }) => ({ ...view, config: c.body.config }) } as never });
+      const api = renderView(KanbanView, { schema, viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records: [row] }) } as never });
       return api;
     };
 
@@ -635,18 +641,15 @@ describe("KanbanView", () => {
       expect((await screen.findByRole("button", { name: "R1" })).querySelectorAll("dt")).toHaveLength(3);
     });
 
-    it("saves the number of fields and the cover fit from the View settings", async () => {
+    it("keeps the number of fields and the cover fit from the View settings as a draft", async () => {
       const user = userEvent.setup();
-      const api = crowded({ cover_field_id: F.cover.id }).api;
+      crowded({ cover_field_id: F.cover.id });
       await screen.findByRole("button", { name: "R1" });
       await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
       await user.selectOptions(await screen.findByRole("combobox", { name: "Fields on a card" }), "10");
       await user.selectOptions(screen.getByRole("combobox", { name: "Cover image fit" }), "fit");
-      // Quick changes are saved together.
-      await waitFor(() => {
-        const last = api.callsTo("PATCH /api/views/viw1").at(-1)!.body as { config: { kanban: { card_field_limit: number; cover_fit: boolean } } };
-        expect(last.config.kanban).toMatchObject({ card_field_limit: 10, cover_fit: true });
-      });
+      // Both changes are in the one draft.
+      await waitFor(() => expect(draftChanges()?.kanban).toMatchObject({ card_field_limit: 10, cover_fit: true }));
     });
 
     it("explains the cover fit setting is waiting for a cover", async () => {

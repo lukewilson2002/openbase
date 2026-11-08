@@ -6,15 +6,14 @@
  * a sliders button. Add floats at the screen's bottom right corner, on a phone and on a desktop alike.
  *
  * Every change is a pure mutation of the view config (see ./config.ts) applied through `update`,
- * which persists the full config with PATCH /api/views/{id}. People who cannot save the view
- * (viewers and commenters, editors on locked views) can still filter, sort and group for
- * themselves: `update` then keeps those as a local override that is sent with each query and
- * marked "Not saved" here. Colours stay read-only for them.
+ * which keeps it as a draft for this person on this device (COL-5): everyone can change everything
+ * here, and the TemporaryChangesBar under the toolbar says so and offers Reset, Update view and Save as
+ * view. Nothing here is saved to the view by itself.
  *
  * Sharing a view lives in the base's Share dialog ("Share a view") and in each view's menu.
  */
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, GripVertical, ListFilter, Lock, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, GripVertical, ListFilter, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type Modifier } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -81,12 +80,6 @@ export interface ViewBarProps {
   view: View;
   role: string;
   config: ViewConfig;
-  /** Whether changes can be saved to the view. When false, filter/sort/group apply to this viewer only. */
-  canConfigure: boolean;
-  /** A local (unsaved) filter, sort or group is in effect. */
-  hasLocalQuery: boolean;
-  onResetLocalQuery: () => void;
-  saving: boolean;
   update: (mutate: (c: ViewConfig) => ViewConfig) => void;
   collaborators: readonly Collaborator[];
   currentUserId: string | null;
@@ -140,7 +133,7 @@ export function toolButtonClass(active?: boolean): string {
 }
 
 /** A desktop tool: a plain word that opens its editor below it, tinted while the tool is in use. */
-function ToolButton({ label, active, children, note, wide }: { label: string; active?: boolean; children: ReactNode; note?: string; wide?: boolean }) {
+function ToolButton({ label, active, children, wide }: { label: string; active?: boolean; children: ReactNode; wide?: boolean }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -149,7 +142,6 @@ function ToolButton({ label, active, children, note, wide }: { label: string; ac
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className={cn("max-h-[min(34rem,var(--ob-avail))] overflow-y-auto p-3", wide ? "w-[min(46rem,calc(100vw-1.5rem))]" : "w-[min(30rem,calc(100vw-1.5rem))]")}>
-        {note && <p className="mb-2 rounded bg-warning-soft px-2 py-1 text-xs">{note}</p>}
         {children}
       </PopoverContent>
     </Popover>
@@ -157,7 +149,7 @@ function ToolButton({ label, active, children, note, wide }: { label: string; ac
 }
 
 type ToolEntry =
-  | { kind: "panel"; id: string; label: string; icon: ReactNode; value?: string; active?: boolean; note?: string; wide?: boolean; panel: ReactNode }
+  | { kind: "panel"; id: string; label: string; icon: ReactNode; value?: string; active?: boolean; wide?: boolean; panel: ReactNode }
   | { kind: "action"; id: string; label: string; icon: ReactNode; busy?: boolean; onSelect: () => void }
   | { kind: "toggle"; id: string; label: string; icon: ReactNode; checked: boolean; disabled?: boolean; onSelect: () => void }
   | { kind: "separator"; id: string };
@@ -208,7 +200,6 @@ function ToolMenu({ trigger, label, entries, footer, align = "start" }: { trigge
               </IconButton>
               <h3 className="text-[0.875rem] font-semibold">{panel.label}</h3>
             </div>
-            {panel.note && <p className="rounded bg-warning-soft px-2 py-1 text-xs">{panel.note}</p>}
             {panel.panel}
           </div>
         ) : (
@@ -362,7 +353,7 @@ function HideFieldRow({
   );
 }
 
-function ColorMenu({ table, config, update, props, readOnly }: { table: Table; config: ViewConfig; update: ViewBarProps["update"]; props: Pick<ViewBarProps, "collaborators" | "schema">; readOnly: boolean }) {
+function ColorMenu({ table, config, update, props }: { table: Table; config: ViewConfig; update: ViewBarProps["update"]; props: Pick<ViewBarProps, "collaborators" | "schema"> }) {
   const rc = config.row_color ?? null;
   const mode = rc?.mode ?? "none";
   const selects = table.fields.filter((f) => f.type === "single_select");
@@ -375,7 +366,7 @@ function ColorMenu({ table, config, update, props, readOnly }: { table: Table; c
   const setRules = (next: typeof rules) => update((c) => setRowColor(c, { mode: "by_conditions", rules: next } as RowColor));
   return (
     <div className="flex flex-col gap-3">
-      <fieldset className="flex flex-col gap-1.5" disabled={readOnly}>
+      <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1 text-[0.8125rem] font-medium">Color records</legend>
         {[
           ["none", "No colors"],
@@ -392,7 +383,7 @@ function ColorMenu({ table, config, update, props, readOnly }: { table: Table; c
           {selects.length === 0 ? (
             <p className="text-[0.8125rem] text-muted">This table has no single select field to color by.</p>
           ) : (
-            <Select aria-label="Color by field" disabled={readOnly} value={rc.field_id} onChange={(e) => update((c) => setRowColor(c, { mode: "by_select", field_id: e.target.value }))}>
+            <Select aria-label="Color by field" value={rc.field_id} onChange={(e) => update((c) => setRowColor(c, { mode: "by_select", field_id: e.target.value }))}>
               {selects.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
@@ -408,15 +399,15 @@ function ColorMenu({ table, config, update, props, readOnly }: { table: Table; c
           {rules.map((r, i) => (
             <div key={i} className="rounded-md border border-line p-2">
               <div className="mb-2 flex items-start justify-between gap-2">
-                <ColorSwatchPicker label={`Color for rule ${i + 1}`} value={r.color} onChange={(color) => !readOnly && setRules(rules.map((x, k) => (k === i ? { ...x, color } : x)))} className="flex-1" />
-                <IconButton label={`Remove rule ${i + 1}`} size="sm" noTooltip disabled={readOnly} onClick={() => setRules(rules.filter((_, k) => k !== i))}>
+                <ColorSwatchPicker label={`Color for rule ${i + 1}`} value={r.color} onChange={(color) => setRules(rules.map((x, k) => (k === i ? { ...x, color } : x)))} className="flex-1" />
+                <IconButton label={`Remove rule ${i + 1}`} size="sm" noTooltip onClick={() => setRules(rules.filter((_, k) => k !== i))}>
                   <X aria-hidden className="size-4" />
                 </IconButton>
               </div>
               <FilterBuilder
                 label={`Rule ${i + 1} condition`}
                 value={r.filter.items.length ? r.filter : null}
-                readOnly={readOnly}
+                readOnly={false}
                 fields={table.fields}
                 collaborators={props.collaborators}
                 tables={props.schema.tables}
@@ -425,11 +416,9 @@ function ColorMenu({ table, config, update, props, readOnly }: { table: Table; c
               />
             </div>
           ))}
-          {!readOnly && (
-            <Button size="sm" variant="secondary" onClick={() => setRules([...rules, { color: "green", filter: { conjunction: "and", items: [] } }])}>
-              <Plus aria-hidden className="size-4" /> Add color rule
-            </Button>
-          )}
+          <Button size="sm" variant="secondary" onClick={() => setRules([...rules, { color: "green", filter: { conjunction: "and", items: [] } }])}>
+            <Plus aria-hidden className="size-4" /> Add color rule
+          </Button>
         </div>
       )}
     </div>
@@ -453,14 +442,8 @@ function fieldsPhrase(table: Table, firstFieldId: string | null, count: number):
 }
 
 export function ViewBar(props: ViewBarProps) {
-  const { table, view, config, canConfigure, update, collaborators, schema, search, onSearchChange, searchOpen, onSearchOpenChange, searchInputRef } = props;
+  const { table, view, config, update, collaborators, schema, search, onSearchChange, searchOpen, onSearchOpenChange, searchInputRef } = props;
   const desktop = useMediaQuery(DESKTOP_QUERY);
-  const readOnly = !canConfigure;
-  const why = view.locked ? "This view is locked. Only a creator can change it." : "You do not have permission to change this view.";
-  // Colours are not part of the per-viewer override, so they stay read-only without save rights.
-  const colorNote = readOnly ? why : undefined;
-  // Filter, sort and group still work for this viewer alone; in the default grid they always do.
-  const queryNote = view.is_default ? "In the default grid, filters, sorts and groups are only yours, on this device." : readOnly ? `${why} Your filters, sorts and groups apply only to you and are not saved.` : undefined;
   const hiddenCount = config.hidden_fields.filter((id) => id !== table.primary_field_id).length;
   const filterCount = countConditions(config.filter);
   const sortable = table.fields.filter(isSortable);
@@ -523,14 +506,14 @@ export function ViewBar(props: ViewBarProps) {
   // The tools in their row order. Each shows on the toolbar while there is room and moves into
   // More, from the right end first, when there is not (see toolbarFit.ts).
   const toolDefs: ToolDef[] = [
-    { id: "filter", label: filterWhat ? `Filtered by ${filterWhat}` : "Filter", menuLabel: "Filter", icon: <FilterIcon aria-hidden />, value: filterWhat, active: filterCount > 0, note: queryNote, wide: true, panel: filterPanel },
-    { id: "sort", label: sortWhat ? `Sorted by ${sortWhat}` : "Sort", menuLabel: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, note: queryNote, wide: true, panel: sortPanel },
-    ...(features.group ? [{ id: "group", label: groupWhat ? `Grouped by ${groupWhat}` : "Group", menuLabel: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, note: queryNote, wide: true, panel: groupPanel }] : []),
+    { id: "filter", label: filterWhat ? `Filtered by ${filterWhat}` : "Filter", menuLabel: "Filter", icon: <FilterIcon aria-hidden />, value: filterWhat, active: filterCount > 0, wide: true, panel: filterPanel },
+    { id: "sort", label: sortWhat ? `Sorted by ${sortWhat}` : "Sort", menuLabel: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, wide: true, panel: sortPanel },
+    ...(features.group ? [{ id: "group", label: groupWhat ? `Grouped by ${groupWhat}` : "Group", menuLabel: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, wide: true, panel: groupPanel }] : []),
     { id: "hide", label: hiddenLabel, menuLabel: hideNoun, icon: <EyeOff aria-hidden />, value: hiddenCount > 0 ? `${hiddenCount} hidden` : undefined, active: hiddenCount > 0, panel: <HideFields table={table} config={config} update={update} /> },
-    ...(features.color ? [{ id: "color", label: colorWhat ? `Color by ${colorWhat}` : "Color", menuLabel: "Color", icon: <PaintBucket aria-hidden />, value: colorWhat, active: rowColorActive, note: colorNote, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} readOnly={readOnly} /> }] : []),
+    ...(features.color ? [{ id: "color", label: colorWhat ? `Color by ${colorWhat}` : "Color", menuLabel: "Color", icon: <PaintBucket aria-hidden />, value: colorWhat, active: rowColorActive, wide: true, panel: <ColorMenu table={table} config={config} update={update} props={{ collaborators, schema }} /> }] : []),
     ...(features.rowHeight ? [{ id: "row-height", label: heightWhat ?? "Row height", menuLabel: "Row height", icon: <Rows3 aria-hidden />, value: heightWhat ? ROW_HEIGHT_LABELS[config.row_height] : undefined, active: !!heightWhat, panel: rowHeightPanel }] : []),
   ];
-  const toolEntry = (t: ToolDef): ToolEntry => ({ kind: "panel", id: t.id, label: t.menuLabel, icon: t.icon, value: t.value, active: t.active, note: t.note, wide: t.wide, panel: t.panel });
+  const toolEntry = (t: ToolDef): ToolEntry => ({ kind: "panel", id: t.id, label: t.menuLabel, icon: t.icon, value: t.value, active: t.active, wide: t.wide, panel: t.panel });
   // Always in More, however wide the window: the view type's switches, Add field and Download CSV.
   const toggles: ToolEntry[] = (props.moreToggles ?? []).map((t) => ({ kind: "toggle", id: t.id, label: t.label, icon: t.icon, checked: t.checked, disabled: t.disabled, onSelect: () => t.onToggle(!t.checked) }) as const);
   const actions: ToolEntry[] = [
@@ -544,20 +527,6 @@ export function ViewBar(props: ViewBarProps) {
   };
   const activeTools = [filterCount > 0, config.sorts.length > 0, features.group && config.groups.length > 0, hiddenCount > 0, features.color && rowColorActive].filter(Boolean).length;
 
-  const locked = view.locked && (
-    <span className="inline-flex items-center gap-1 rounded bg-subtle px-1.5 py-0.5 text-xs text-muted" title="Locked view">
-      <Lock aria-hidden className="size-3" /> Locked
-    </span>
-  );
-  // In the default grid a filter of one's own is how it works, not a change left unsaved.
-  const notSaved = props.hasLocalQuery && !canConfigure && !view.is_default && (
-    <span role="status" className="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-xs" title="Your filters, sorts and groups are only applied for you">
-      Not saved
-      <button type="button" className="rounded px-1 font-medium underline hover:bg-hover" onClick={props.onResetLocalQuery}>
-        Reset
-      </button>
-    </span>
-  );
   const searchBox = showSearch ? (
     <div className="relative min-w-0 max-md:flex-1">
       <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -592,8 +561,6 @@ export function ViewBar(props: ViewBarProps) {
     return (
       <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-1.5 bg-surface px-2.5 py-2">
         {!showSearch && <ViewSwitcher schema={schema} table={table} view={view} className="flex-1" />}
-        {locked}
-        {notSaved}
         <ToolMenu
           label="View tools"
           align="end"
@@ -627,8 +594,6 @@ export function ViewBar(props: ViewBarProps) {
       toolDefs={toolDefs}
       moreEntries={moreEntries}
       switcher={<ViewSwitcher schema={schema} table={table} view={view} className="mr-1.5 max-w-[24rem] shrink" />}
-      locked={locked}
-      notSaved={notSaved}
       setting={props.setting}
       extra={props.extra}
       end={
@@ -651,7 +616,6 @@ interface ToolDef {
   icon: ReactNode;
   value?: string;
   active?: boolean;
-  note?: string;
   wide?: boolean;
   panel: ReactNode;
 }
@@ -667,8 +631,6 @@ function DesktopBar({
   toolDefs,
   moreEntries,
   switcher,
-  locked,
-  notSaved,
   setting,
   extra,
   end,
@@ -676,8 +638,6 @@ function DesktopBar({
   toolDefs: ToolDef[];
   moreEntries: (overflow: ToolDef[]) => ToolEntry[];
   switcher: ReactNode;
-  locked: ReactNode;
-  notSaved: ReactNode;
   setting?: ReactNode;
   extra?: ReactNode;
   end: ReactNode;
@@ -718,7 +678,6 @@ function DesktopBar({
   return (
     <div role="toolbar" aria-label="View toolbar" className="relative flex items-center gap-1.5 border-b border-line bg-surface px-4 py-2.5">
       {switcher}
-      {locked}
       <div ref={areaRef} className="flex min-w-0 flex-1 items-center gap-0.5" style={floor > 0 ? { minWidth: floor } : undefined}>
         {setting && (
           <span ref={settingRef} className="inline-flex shrink-0">
@@ -726,7 +685,7 @@ function DesktopBar({
           </span>
         )}
         {shown.map((t) => (
-          <ToolButton key={t.id} label={t.label} active={t.active} note={t.note} wide={t.wide}>
+          <ToolButton key={t.id} label={t.label} active={t.active} wide={t.wide}>
             {t.panel}
           </ToolButton>
         ))}
@@ -747,7 +706,6 @@ function DesktopBar({
           />
         )}
       </div>
-      {notSaved}
       <div className="flex shrink-0 items-center gap-1.5">{end}</div>
       {/* Out of sight and out of the accessibility tree: only here to be measured. */}
       <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex whitespace-nowrap">

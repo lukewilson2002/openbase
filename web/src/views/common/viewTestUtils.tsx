@@ -3,11 +3,12 @@ import type { ComponentType } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { render, type RenderResult } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
-import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, View, ViewType } from "@/api/types";
+import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, View, ViewConfig, ViewType } from "@/api/types";
 import { keys } from "@/api/keys";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
 import { USER, makeView, mockApi, stubDesktop, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
+import { readDraft } from "../drafts/store";
 import type { ViewProps } from "../types";
 
 export const F = {
@@ -37,6 +38,11 @@ export function viewWithConfig(id: string, type: ViewType, patch: Partial<View["
 }
 
 export const rec = (id: string, values: Record<string, unknown>): TableRecord => makeRecord({ [F.name.id]: id.toUpperCase(), ...values }, id);
+
+/** What the test's signed-in person has changed in a view and not saved: its draft's settings. */
+export function draftChanges(viewId = "viw1"): Partial<ViewConfig> | undefined {
+  return readDraft(USER.id, viewId)?.changes;
+}
 
 export interface QueryServer {
   /** Records the server holds (already in view order). */

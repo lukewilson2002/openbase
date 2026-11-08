@@ -65,13 +65,13 @@ export function linkedTableOf(schema: BaseSchema | undefined, field: Field): Tab
 }
 
 /** A table's fields in its grid's order, without the hidden ones (the layout of every record of it). */
-export function layoutFields(table: Table, role: string): Field[] {
-  return resolveFieldOrder(table, gridRecordLayout(table, role) ?? { field_order: [], hidden_fields: [] }).visible;
+export function layoutFields(table: Table): Field[] {
+  return resolveFieldOrder(table, gridRecordLayout(table) ?? { field_order: [], hidden_fields: [] }).visible;
 }
 
 /** The fields a linked record's card may show under its title: its grid's first ones, after the primary field. */
-export function previewFields(table: Table, role: string): Field[] {
-  return layoutFields(table, role).filter((f) => f.id !== table.primary_field_id);
+export function previewFields(table: Table): Field[] {
+  return layoutFields(table).filter((f) => f.id !== table.primary_field_id);
 }
 
 /** Records of `tableId` by id, fetched together (and refreshed with the table's other record queries). */
@@ -114,8 +114,8 @@ function FieldList({ fields, record, format, emails }: { fields: readonly Field[
 }
 
 /** A linked record's full details: every filled field of its grid's layout, read-only. */
-export function RecordPeekBody({ table, record, format, emails, role, onOpen }: { table: Table; record: TableRecord | undefined; format: FormatCtx; emails?: ReadonlyMap<string, string>; role: string; onOpen?: () => void }) {
-  const fields = layoutFields(table, role).filter((f) => f.id !== table.primary_field_id);
+export function RecordPeekBody({ table, record, format, emails, onOpen }: { table: Table; record: TableRecord | undefined; format: FormatCtx; emails?: ReadonlyMap<string, string>; onOpen?: () => void }) {
+  const fields = layoutFields(table).filter((f) => f.id !== table.primary_field_id);
   const filled = record ? fields.filter((f) => hasCardValue(f, record.values[f.id], format)) : [];
   const empty = fields.length - filled.length;
   return (
@@ -154,7 +154,6 @@ function PeekContent({
   record,
   format,
   emails,
-  role,
   onOpen,
   onClose,
   onPointerEnter,
@@ -166,7 +165,6 @@ function PeekContent({
   record: TableRecord | undefined;
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
-  role: string;
   onOpen?: () => void;
   onClose: () => void;
   onPointerEnter?: () => void;
@@ -193,7 +191,6 @@ function PeekContent({
           record={record}
           format={format}
           emails={emails}
-          role={role}
           onOpen={
             onOpen
               ? () => {
@@ -215,7 +212,6 @@ export interface RecordPeekProps {
   record?: TableRecord;
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
-  role: string;
   onOpen?: () => void;
   side?: "top" | "right" | "bottom" | "left";
   /** Whether holding a finger on it opens the details (off where a held finger starts a drag). */
@@ -229,7 +225,7 @@ export interface RecordPeekProps {
  * which leaves touch alone), or after holding a finger on it. A press that opened the details is not
  * also a tap. A tap outside, Escape or moving the mouse away closes them.
  */
-export function RecordPeek({ table, recordId, record, format, emails, role, onOpen, side = "right", touchHold = true, className, children }: RecordPeekProps) {
+export function RecordPeek({ table, recordId, record, format, emails, onOpen, side = "right", touchHold = true, className, children }: RecordPeekProps) {
   const [open, setOpen] = useState(false);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const opened = useRef(false);
@@ -317,7 +313,7 @@ export function RecordPeek({ table, recordId, record, format, emails, role, onOp
           {children}
         </div>
       </HoverCard.Trigger>
-      <PeekContent side={side} sideOffset={8} table={table} record={record ?? fetched.data} format={format} emails={emails} role={role} onOpen={onOpen} onClose={() => setOpen(false)} />
+      <PeekContent side={side} sideOffset={8} table={table} record={record ?? fetched.data} format={format} emails={emails} onOpen={onOpen} onClose={() => setOpen(false)} />
     </HoverCard.Root>
   );
 }
@@ -341,10 +337,9 @@ export function LinkedRecordCards({ field, value, format, emails, fallback, onCh
       table={table}
       refs={refs.map((r) => ({ ...r, name: titleOf(table, records.get(r.id), r.name, format) }))}
       records={records}
-      fields={previewFields(table, schema.role)}
+      fields={previewFields(table)}
       format={format}
       emails={emails}
-      role={schema.role}
       onOpen={host?.open ? (id) => host.open!(table.id, id) : undefined}
       onChange={onChange && ((next) => onChange(next.map((r) => refs.find((x) => x.id === r.id) ?? r)))}
     />
@@ -370,7 +365,7 @@ export interface FloatingPeekTarget {
 }
 
 /** `at` is what the pointer is over now; the preview keeps what it shows (its table too) until it moves on. */
-export function FloatingRecordPeek({ at, format, emails, role }: { at: FloatingPeekTarget | null; format: FormatCtx; emails?: ReadonlyMap<string, string>; role: string }) {
+export function FloatingRecordPeek({ at, format, emails }: { at: FloatingPeekTarget | null; format: FormatCtx; emails?: ReadonlyMap<string, string> }) {
   const [shown, setShown] = useState<typeof at>(null);
   const over = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -427,7 +422,6 @@ export function FloatingRecordPeek({ at, format, emails, role }: { at: FloatingP
         record={fetched.data}
         format={format}
         emails={emails}
-        role={role}
         onOpen={open}
         onClose={() => setShown(null)}
         onPointerEnter={() => {
@@ -475,7 +469,7 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
         {shown.map((c, i) => {
           const chip = <LinkChip key={c.id ?? `${c.text}-${i}`} name={c.text} />;
           return table && env?.schema && c.id ? (
-            <RecordPeek key={c.id} table={table} recordId={c.id} format={format} emails={emails} role={env.schema.role} onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined} side="bottom" className="min-w-0 max-w-full">
+            <RecordPeek key={c.id} table={table} recordId={c.id} format={format} emails={emails} onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined} side="bottom" className="min-w-0 max-w-full">
               {chip}
             </RecordPeek>
           ) : (

@@ -145,20 +145,18 @@ export interface SummaryMenuProps {
   at: ScreenRect | null;
   field: Field | undefined;
   current: Aggregation;
-  canConfigure: boolean;
   onClose: () => void;
   onPick: (agg: Aggregation) => void;
 }
 
-export function SummaryMenu({ at, field, current, canConfigure, onClose, onPick }: SummaryMenuProps) {
+export function SummaryMenu({ at, field, current, onClose, onPick }: SummaryMenuProps) {
   const options = field ? aggregationsFor(field) : [];
   return (
     <AnchoredMenu anchor={at} onClose={onClose} label="Summary options" align="start">
       <DropdownMenuLabel>{field ? `Summarize ${field.name}` : "Summarize"}</DropdownMenuLabel>
-      {!canConfigure && <p className="px-2 py-1 text-xs text-muted">You cannot change this view.</p>}
-      <DropdownMenuRadioGroup value={current} onValueChange={(v) => canConfigure && onPick(v as Aggregation)}>
+      <DropdownMenuRadioGroup value={current} onValueChange={(v) => onPick(v as Aggregation)}>
         {options.map((a) => (
-          <DropdownMenuRadioItem key={a} value={a} disabled={!canConfigure}>
+          <DropdownMenuRadioItem key={a} value={a}>
             {AGGREGATION_LABELS[a]}
           </DropdownMenuRadioItem>
         ))}

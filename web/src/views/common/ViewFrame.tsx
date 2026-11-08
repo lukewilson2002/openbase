@@ -6,6 +6,7 @@
 import { useMemo, useRef, type ComponentProps, type ReactNode } from "react";
 import { RecordPanel } from "./RecordPanel";
 import { EditorEnvProvider } from "@/components/record/editors/env";
+import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
 import { cn } from "@/lib/cn";
 import { gridRecordLayout } from "@/views/grid/useViewConfig";
@@ -67,7 +68,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
   // Ctrl/Cmd+Z reverts the last drop, edit, add or delete (not while a record is open: its fields have their own).
   useUndoShortcuts(setup.writes.history, setup.canEdit && !setup.openRecordId);
   // A record shows its fields as the table's grid lays them out, whichever view it is opened from.
-  const recordLayout = useMemo(() => gridRecordLayout(table, role) ?? config, [table, role, config]);
+  const recordLayout = useMemo(() => gridRecordLayout(table) ?? config, [table, config]);
 
   const neighbours = useMemo(() => {
     if (!setup.openRecordId || !recordIds) return { prev: null as string | null, next: null as string | null };
@@ -109,10 +110,6 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           view={view}
           role={role}
           config={config}
-          canConfigure={cfg.canConfigure}
-          hasLocalQuery={cfg.transient !== null}
-          onResetLocalQuery={cfg.resetTransient}
-          saving={cfg.saving}
           update={cfg.update}
           collaborators={setup.people}
           currentUserId={setup.currentUserId}
@@ -129,6 +126,7 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           moreToggles={moreToggles}
           onAdd={onAdd}
         />
+        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={setup.debouncedSearch} timeZone={setup.timeZone} />
         {body}
       </div>
       {setup.openRecordId && (

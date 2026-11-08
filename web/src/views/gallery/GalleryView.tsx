@@ -186,25 +186,23 @@ function GalleryInner(props: ViewProps) {
   const menuRecordIds = menu ? (sel.has(menu.id) ? sel.ids : [menu.id]) : [];
   const menuIndex = menu ? recordIds.indexOf(menu.id) : -1;
 
-  const note = cfg.canConfigure ? undefined : "You do not have permission to change this view.";
   const settings = (
-    <ViewSettings note={note}>
+    <ViewSettings>
       <FieldSelect
         label="Cover image"
         fields={attachmentFields}
         value={coverField?.id ?? ""}
         noneLabel="No cover"
-        disabled={!cfg.canConfigure}
         onChange={(id) => cfg.update((c) => setGallery(c, { cover_field_id: id }))}
         hint={attachmentFields.length === 0 ? "Add an attachment field to show pictures on the cards." : "Cards show the first image of this field, when they have one."}
       />
       <div className="flex flex-col gap-1">
-        <Checkbox label="Crop cover images" checked={crop} disabled={!cfg.canConfigure || !coverField} onCheckedChange={(on) => cfg.update((c) => setGallery(c, { cover_crop: on }))} />
+        <Checkbox label="Crop cover images" checked={crop} disabled={!coverField} onCheckedChange={(on) => cfg.update((c) => setGallery(c, { cover_crop: on }))} />
         <p className="text-xs text-muted">
           {coverField ? "On, a picture fills its space and loses its edges; off, the whole picture shows." : "Choose a cover image above to set how pictures fit."}
         </p>
       </div>
-      <DescriptionSelect candidates={descriptionFields} field={descriptionField} disabled={!cfg.canConfigure} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
+      <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
     </ViewSettings>
   );
 
@@ -223,7 +221,6 @@ function GalleryInner(props: ViewProps) {
               {data.total > data.records.length ? `${data.records.length.toLocaleString()} of ${itemsLabel(data.total)}` : itemsLabel(data.total)}
               {setup.debouncedSearch ? " found" : ""}
             </span>
-            {cfg.saving && <span className="ml-auto text-xs">Saving view…</span>}
           </>
         )
       }

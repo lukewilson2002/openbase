@@ -27,7 +27,6 @@ function board(over: Partial<KanbanBoardProps> = {}) {
     emails: new Map(),
     colors: { r1: "red" },
     canEdit: true,
-    canConfigure: true,
     hasSorts: false,
     collapsed: new Set(),
     onToggleCollapse: vi.fn(),
@@ -253,12 +252,13 @@ describe("KanbanBoard", () => {
       await waitFor(() => expect(onDeleteStack).toHaveBeenCalledWith("chs1"));
     });
 
-    it("offers none of that without the handlers, and keeps Hide for people who may change the view", async () => {
+    it("offers none of the stack's own changes without the handlers; collapsing and moving are the view's and always there", async () => {
       const user = userEvent.setup();
-      board({ canConfigure: false, onHideStack: vi.fn() });
+      board({});
       await user.click(screen.getByRole("button", { name: "Options for Todo" }));
       expect(await screen.findByRole("menuitem", { name: "Collapse stack" })).toBeInTheDocument();
-      for (const name of ["Rename stack", "Change colour", "Delete stack", "Hide stack", "Move left"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Move right" })).toBeInTheDocument();
+      for (const name of ["Rename stack", "Change colour", "Delete stack", "Hide stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
     });
 
     it("brings hidden stacks back from the end of the board", async () => {
@@ -295,15 +295,6 @@ describe("KanbanBoard", () => {
       await act(async () => void (await new Promise((r) => setTimeout(r, 60)))); // dnd-kit swallows the click after a drag for a moment
     });
 
-    it("does not drag headers without the permission to change the view", () => {
-      const onReorderStacks = vi.fn();
-      board({ onReorderStacks, canConfigure: false });
-      const header = screen.getByRole("heading", { name: "Todo" }).parentElement!;
-      fireEvent.mouseDown(header, { button: 0, clientX: 100, clientY: 10 });
-      fireEvent.mouseMove(document, { clientX: 410, clientY: 10 });
-      fireEvent.mouseUp(document);
-      expect(onReorderStacks).not.toHaveBeenCalled();
-    });
   });
 
   describe("selecting cards", () => {

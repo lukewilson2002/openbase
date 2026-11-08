@@ -25,7 +25,6 @@ export interface LinkedRecordListProps {
   fields: readonly Field[];
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
-  role: string;
   /** Opens a record (from its details on hover). */
   onOpen?: (recordId: string) => void;
   /** The records reordered or one removed; without it the cards only show. */
@@ -33,7 +32,7 @@ export interface LinkedRecordListProps {
   className?: string;
 }
 
-export function LinkedRecordList({ fieldName, table, refs, records, fields, format, emails, role, onOpen, onChange, className }: LinkedRecordListProps) {
+export function LinkedRecordList({ fieldName, table, refs, records, fields, format, emails, onOpen, onChange, className }: LinkedRecordListProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   // Said by screen readers as a card is moved: its name and place, not its id.
   const nameOf = (id: UniqueIdentifier) => refs.find((r) => r.id === id)?.name || "Untitled";
@@ -61,7 +60,6 @@ export function LinkedRecordList({ fieldName, table, refs, records, fields, form
           fields={fields}
           format={format}
           emails={emails}
-          role={role}
           onOpen={onOpen ? () => onOpen(r.id) : undefined}
           sortable={!!onChange && refs.length > 1}
           onRemove={onChange ? () => onChange(refs.filter((x) => x.id !== r.id)) : undefined}
@@ -87,7 +85,6 @@ function Card({
   fields,
   format,
   emails,
-  role,
   onOpen,
   sortable,
   onRemove,
@@ -98,7 +95,6 @@ function Card({
   fields: readonly Field[];
   format: FormatCtx;
   emails?: ReadonlyMap<string, string>;
-  role: string;
   onOpen?: () => void;
   sortable: boolean;
   onRemove?: () => void;
@@ -118,7 +114,7 @@ function Card({
   );
   return (
     <li ref={s.setNodeRef} style={{ transform: CSS.Translate.toString(s.transform), transition: s.transition }} className={cn("min-w-0", s.isDragging && "relative z-10")}>
-      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} role={role} onOpen={onOpen} side="left" touchHold={!sortable}>
+      <RecordPeek table={table} recordId={r.id} record={record} format={format} emails={emails} onOpen={onOpen} side="left" touchHold={!sortable}>
         <div data-linked-record={r.id} className={cn("flex min-w-0 items-start gap-1.5 rounded-md border border-line bg-surface py-1.5 pr-1.5 text-left", sortable ? "pl-1.5" : "pl-2.5", s.isDragging && "shadow-pop")}>
           {grip}
           <RecordSummary title={<span className="max-w-full truncate text-[0.8125rem] font-medium text-primary-text">{title}</span>} record={record} fields={fields} format={format} emails={emails} className="flex-1" />
