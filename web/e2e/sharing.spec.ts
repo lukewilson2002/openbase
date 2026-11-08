@@ -235,7 +235,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
     const dialog = page.getByRole("dialog", { name: /^Share / });
     await dialog.getByRole("tab", { name: "Share a view" }).click();
     await expect(dialog.getByRole("combobox", { name: "View" })).toHaveValue(viewId);
-    await expect(dialog.getByText(/The 1 hidden field never leaves the server/)).toBeVisible();
+    await expect(dialog.getByText(/The 1 hidden property never leaves the server/)).toBeVisible();
     await dialog.getByRole("checkbox", { name: "Require a password" }).click();
     await dialog.getByRole("textbox", { name: "Password" }).fill("open sesame");
     await dialog.getByRole("button", { name: "Create link" }).click();
