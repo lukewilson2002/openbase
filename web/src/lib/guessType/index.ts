@@ -24,13 +24,15 @@ const REFERENCE: DateContext = { now: Date.UTC(2000, 0, 1, 12), timeZone: "UTC",
 const NUMBER = String.raw`(?:0|[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d+)?`;
 const SYMBOLS = "$€£¥";
 const CHECKBOX_WORDS = /^(?:yes|no|true|false|✓|✗)$/i;
-const EMAIL = /^[^@\s/:]+@[^@\s/]+\.[^@\s/]+$/;
+const EMAIL = /^[^@\s/:]+@[^@\s/]+\.[^@\s/]*[^@\s/.]$/;
 const DOMAIN = String.raw`(?:[a-z0-9-]+\.)+[a-z]{2,}`;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
 const URL_WWW = new RegExp(String.raw`^www\.${DOMAIN}(?::\d+)?(?:[/?#]\S*)?$`, "i");
 const URL_PATH = new RegExp(String.raw`^${DOMAIN}(?::\d+)?[/?#]\S*$`, "i");
 const PHONE = /^\+?[\d(][\d ()-]*[\d)]$/;
-const ISO_DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+// Shapes made of digits and dashes or spaces that are not phone numbers: dated "12-25-2026" and "2024-1-15",
+// a year range "2020-2024", a number grouped in thousands "1 000 000", and an ISBN's many short groups.
+const NOT_PHONE = [/^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{1,2}-\d{1,2}-\d{4}$/, /^\d{4}-\d{4}$/, /^\d{1,3}(?: \d{3}){2,}$/, /^(?:\d+[- ]){4,}\d+$/];
 const CURRENCY_BEFORE = new RegExp(String.raw`^(-?)([${SYMBOLS}])\s?(-?)(${NUMBER})$`);
 const CURRENCY_AFTER = new RegExp(String.raw`^(-?)(${NUMBER})\s?([${SYMBOLS}])$`);
 const PERCENT = new RegExp(String.raw`^(-?${NUMBER})\s?%$`);
@@ -77,7 +79,7 @@ function duration(v: string): TypeGuess | null {
 }
 
 function phone(v: string): boolean {
-  if (!PHONE.test(v) || ISO_DATE_SHAPE.test(v)) return false;
+  if (!PHONE.test(v) || NOT_PHONE.some((shape) => shape.test(v))) return false;
   const n = digits(v);
   if (n < 7 || n > 15) return false;
   // A bare run of digits is a number or an identifier; a phone number is written with something between.

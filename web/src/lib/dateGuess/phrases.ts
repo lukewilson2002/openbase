@@ -19,7 +19,7 @@ export type DatePart =
   /** "Nov 14", "14 Nov 2027". `year` is null when the text gave none. */
   | { form: "month-day"; month: number; day: number; year: number | null }
   /** "11/14", "25/03/2026". `dayFirst` records which order the digits were read in. */
-  | { form: "numeric"; month: number; day: number; year: number | null; dayFirst: boolean; ambiguous: boolean }
+  | { form: "numeric"; month: number; day: number; year: number | null; dayFirst: boolean; ambiguous: boolean; shortYear: boolean }
   /** "2026-11-14", optionally with a time and a UTC offset. */
   | { form: "iso"; year: number; month: number; day: number; time: { h: number; mi: number; s: number } | null; offsetMs: number | null };
 
@@ -44,8 +44,10 @@ const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
  */
 const NEEDS_CAPITAL = new Set(["sat", "sun", "wed", "may"]);
 
-/** Quantities such as "1/2 cup" or "3/4 of the budget" are not dates. */
-const FRACTION_UNIT = /^\s+(?:of|cups?|tsp|tbsp|lbs?|oz|inch(?:es)?|miles?|mi|km|kg|ml|hours?|hrs?|days?|mins?|minutes?)(?![\p{L}\p{N}])/iu;
+/** Quantities and progress such as "1/2 cup", "3/4 of the budget" or "3/4 complete" are not dates. */
+const FRACTION_UNIT = /^\s+(?:of|cups?|tsp|tbsp|lbs?|oz|inch(?:es)?|miles?|mi|km|kg|ml|hours?|hrs?|days?|mins?|minutes?|done|complete|completed|finished|correct|passed)(?![\p{L}\p{N}])/iu;
+/** Words that put a ratio after them: "score 7/10", "step 2/5", "page 3/4". */
+const FRACTION_LEAD = /(?:score[ds]?|rated?|rating|grade[ds]?|step|page|part|chapter)\s*:?\s*$/iu;
 
 const LEFT_BAD = /[\p{L}\p{N}_/\\:#$€£¥.\-]/u;
 
@@ -112,6 +114,7 @@ function plausibleMonthDay(month: number, day: number): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(2024, month);
 }
 
+// Read as 20yy here; `resolve` moves one that lands far ahead back a century ("3/4/85" is 1985).
 const twoDigitYear = (s: string): number => 2000 + Number(s);
 
 function findDayWords(text: string): Found<DatePart>[] {
@@ -159,8 +162,8 @@ function findNumeric(text: string): Found<DatePart>[] {
     const month = dayFirst ? b : a;
     const day = dayFirst ? a : b;
     if (year === null ? !plausibleMonthDay(month, day) : !validDay(year, month, day)) return null;
-    if (year === null && FRACTION_UNIT.test(text.slice(m.index + m[0].length))) return null;
-    return { form: "numeric", month, day, year, dayFirst, ambiguous: a <= 12 && b <= 12 && a !== b };
+    if (year === null && (FRACTION_UNIT.test(text.slice(m.index + m[0].length)) || FRACTION_LEAD.test(text.slice(0, m.index)))) return null;
+    return { form: "numeric", month, day, year, dayFirst, ambiguous: a <= 12 && b <= 12 && a !== b, shortYear: m[3]?.length === 2 };
   });
 }
 

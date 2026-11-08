@@ -274,12 +274,23 @@ describe("numeric dates", () => {
     expect(guess("25/03/2026").ambiguity).not.toContain("day-month");
   });
 
-  it.each(["13/13", "13/13/2026", "2/30", "2/29/2027", "0/5", "5/0", "1/2/3/4", "a/b", "11/14/", "11//14", "1/2 cup", "3/4 of the budget", "1/2 hour", "example.com/11/14", "/11/14", "11/14/20267", "1/1/1850"])(
+  it.each(["13/13", "13/13/2026", "2/30", "2/29/2027", "0/5", "5/0", "1/2/3/4", "a/b", "11/14/", "11//14", "1/2 cup", "3/4 of the budget", "1/2 hour", "Project 3/4 complete", "Call Dana 2/3 done", "score 7/10", "Rated 4/5", "step 2/5", "page 3/4", "example.com/11/14", "/11/14", "11/14/20267", "1/1/1850"])(
     "%s is not a date",
     (text) => {
       expect(guessDate(text, ctx())).toBeNull();
     },
   );
+
+  it("a two-digit year far ahead is last century's, a near one this century's", () => {
+    expect(day("Born 3/4/85")).toBe("1985-03-04");
+    expect(day("1/2/99")).toBe("1999-01-02");
+    expect(day("11/14/26")).toBe("2026-11-14");
+    expect(day("1/2/46")).toBe("2046-01-02");
+    expect(day("1/2/47")).toBe("1947-01-02");
+    expect(day("1/2/47", { now: at(2040, 1, 1, 12) })).toBe("2047-01-02");
+    // A year written in full is never moved.
+    expect(day("3/4/2085")).toBe("2085-03-04");
+  });
 
   it("a trailing full stop or comma is not part of the date", () => {
     expect(guess("see 11/14.").rest).toBe("see.");

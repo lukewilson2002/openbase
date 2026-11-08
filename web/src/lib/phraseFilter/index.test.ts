@@ -605,6 +605,56 @@ describe("context", () => {
     expect(labelText(filters("follow-up on Nov 14", later)[0]!.label)).toBe("Next follow-up is Nov 14");
   });
 
+  it("reads an operator word in front of a day, or reads nothing: never a plain is (PF-1)", () => {
+    expect(top("follow-up till Nov 14")).toBe("Next follow-up is_on_or_before exact_date:2026-11-14");
+    expect(top("follow-up until Nov 20")).toBe("Next follow-up is_on_or_before exact_date:2026-11-20");
+    expect(top("follow-up not by Friday")).toBe("Next follow-up is_after exact_date:2026-11-13");
+    expect(top("follow-up not until Friday")).toBe("Next follow-up is_after exact_date:2026-11-13");
+    for (const text of ["follow-up: before Nov 14", "follow-up = before Nov 14", "follow-up is until Nov 20", "follow-up: by Friday", "follow-up due by Friday", "follow-up within before Friday"]) {
+      expect(sigs(text), text).toEqual([]);
+    }
+    // A lead word that only says "on" is the day itself.
+    expect(top("follow-up due Friday")).toBe("Next follow-up is exact_date:2026-11-13");
+    const one: PhraseContext = { ...CTX, fields: FIELDS.filter((f) => f.id !== "f_due") };
+    expect(top("till Friday", one)).toBe("Next follow-up is_on_or_before exact_date:2026-11-13");
+  });
+
+  it("reads a day with no year as the nearest one around New Year (PF-2)", () => {
+    const dec: PhraseContext = { ...CTX, now: Date.UTC(2026, 11, 28, 12, 0) };
+    expect(top("follow-up before Jan 5", dec)).toBe("Next follow-up is_before exact_date:2027-01-05");
+    expect(labelText(filters("follow-up before Jan 5", dec)[0]!.label)).toBe("Next follow-up is before Jan 5, 2027");
+    expect(top("follow-up on Jan 2", dec)).toBe("Next follow-up is exact_date:2027-01-02");
+    expect(top("follow-up 1/4", dec)).toBe("Next follow-up is exact_date:2027-01-04");
+    const jan: PhraseContext = { ...CTX, now: Date.UTC(2027, 0, 3, 12, 0) };
+    expect(top("follow-up since Dec 20", jan)).toBe("Next follow-up is_on_or_after exact_date:2026-12-20");
+    expect(top("follow-up after 12/15", jan)).toBe("Next follow-up is_after exact_date:2026-12-15");
+    // A year that was written stays.
+    expect(top("follow-up before Jan 5 2026", dec)).toBe("Next follow-up is_before exact_date:2026-01-05");
+  });
+
+  it("names a choice that is spelled like an emptiness word as the choice (PF-3)", () => {
+    const retitled = (id: string, name: string, ...names: string[]) => field(id === "f_tags" ? "multiple_select" : "single_select", { choices: choices(...names) }, named(id, name));
+    const fields = FIELDS.map((f) => (f.id === "f_priority" ? retitled(f.id, "Priority", "None", "Low", "High") : f.id === "f_status" ? retitled(f.id, "Status", "Not set", "Done") : f.id === "f_segment" ? retitled(f.id, "Segment", "Set", "SMB") : f.id === "f_tags" ? retitled(f.id, "Tags", "Missing", "Bug") : f));
+    const ctx: PhraseContext = { ...CTX, fields };
+    expect(top("priority none", ctx)).toBe("Priority is c_none");
+    expect(top("priority is none", ctx)).toBe("Priority is c_none");
+    expect(top("status not set", ctx)).toBe("Status is c_not_set");
+    expect(top("segment set", ctx)).toBe("Segment is c_set");
+    expect(top("tags missing", ctx)).toBe("Tags has_any_of [c_missing]");
+    // Without such a choice the words still mean empty.
+    expect(top("priority none")).toBe("Priority is_empty");
+    expect(top("notes is empty")).toBe("Notes is_empty");
+  });
+
+  it("reads a weekday after since as the one just gone (PF-4)", () => {
+    expect(top("follow-up since Friday")).toBe("Next follow-up is_on_or_after exact_date:2026-11-06");
+    expect(top("follow-up since Monday")).toBe("Next follow-up is_on_or_after exact_date:2026-11-02");
+    // Today's own weekday is a week back; operators that look ahead still do.
+    expect(top("follow-up since Saturday")).toBe("Next follow-up is_on_or_after exact_date:2026-10-31");
+    expect(top("follow-up from Friday")).toBe("Next follow-up is_on_or_after exact_date:2026-11-13");
+    expect(top("follow-up after Friday")).toBe("Next follow-up is_after exact_date:2026-11-13");
+  });
+
   it("reads a day with no year as this year's, behind us or ahead", () => {
     expect(top("follow-up on Jan 5", CTX)).toBe("Next follow-up is exact_date:2026-01-05");
     expect(top("follow-up after 3/4", CTX)).toBe("Next follow-up is_after exact_date:2026-03-04");

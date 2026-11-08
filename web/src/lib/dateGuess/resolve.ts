@@ -42,6 +42,8 @@ export interface Resolved {
 }
 
 const DAY_MS = 86_400_000;
+/** A two-digit year up to this many years ahead is this century's; further ahead it is the last one's. */
+const SHORT_YEAR_AHEAD = 20;
 
 export function addDays({ y, m, d }: YMD, n: number): YMD {
   const t = new Date(Date.UTC(y, m - 1, d + n));
@@ -116,7 +118,7 @@ export function resolve(date: DatePart | null, time: TimePart | null, ctx: DateC
         kind = "numeric";
         dateFormat = date.dayFirst ? "european" : "us";
         if (date.ambiguous) ambiguity.push("day-month");
-        day = date.year === null ? nextOccurrence(date.month, date.day, today) : { y: date.year, m: date.month, d: date.day };
+        day = date.year === null ? nextOccurrence(date.month, date.day, today) : { y: date.shortYear && date.year > today.y + SHORT_YEAR_AHEAD ? date.year - 100 : date.year, m: date.month, d: date.day };
         break;
       case "iso":
         kind = "iso";

@@ -132,6 +132,7 @@ describe("rule 3: email", () => {
       ["Dana <dana@harperco.example>", "text", 14],
       ["mailto:dana@harperco.example", "text", 14],
       ["dana at harperco.example", "text", 14],
+      ["dana@harperco.example.", "text", 14], // a full stop ends the sentence, not the domain (the importer rejects it too)
       ["https://dana@harperco.example", "url", 4],
     ]);
   });
@@ -209,6 +210,14 @@ describe("rule 5: phone", () => {
       ["++1 870 555 0100", "text", 14],
       ["2026-11-14", "date", 10], // eight digits and dashes, but a date
       ["2026-13-45", "text", 14],
+      ["12-25-2026", "text", 14], // dashed dates, years, ISBNs and thousands are not phone numbers (GT-1)
+      ["25-12-2026", "text", 14],
+      ["2024-1-15", "text", 14],
+      ["2020-2024", "text", 14],
+      ["1000-2000", "text", 14],
+      ["978-0-306-40615-7", "text", 14],
+      ["1 000 000", "text", 14],
+      ["123 456 789", "text", 14],
     ]);
   });
 });

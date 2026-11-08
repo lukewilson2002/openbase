@@ -234,7 +234,7 @@ function readDate(rest: readonly Token[], env: Env): Reading | null {
   for (const at of attempts(rest, DATE_OPS, true)) {
     const value = rest.slice(at?.len ?? 0);
     if (value.length === 0) continue;
-    const dv = dateValue(valueText(env.typed, value), env.dates);
+    const dv = dateValue(valueText(env.typed, value), env.dates, at?.tag === "since");
     if (!dv) continue;
     const explicit = at !== null;
     switch (at?.tag ?? "is") {
@@ -254,6 +254,7 @@ function readDate(rest: readonly Token[], env: Env): Reading | null {
         if (dv.range) continue;
         return reading("is_on_or_before", dv.operand, dv.label, explicit);
       case "on_or_after":
+      case "since":
         if (dv.range) continue;
         return reading("is_on_or_after", dv.operand, dv.label, explicit);
     }
@@ -300,6 +301,10 @@ function readLeft(field: Field, before: readonly Token[]): Reading | null {
 function readAround(field: Field, before: readonly Token[], after: readonly Token[], env: Env): Reading | null {
   if (before.length > 0) return after.length === 0 ? readLeft(field, before) : null;
   if (after.length === 0) return null;
+  // A choice named like an emptiness word ("None", "Not set") is the choice when the property has one;
+  // elsewhere "is empty" is emptiness, and not the text "empty".
+  const cls = kindClassOf(field);
+  if (cls === "select" || cls === "multi_select" || cls === "user" || cls === "user_multi") return readRight(field, after, env) ?? readEmptiness(field, after);
   return readEmptiness(field, after) ?? readRight(field, after, env);
 }
 

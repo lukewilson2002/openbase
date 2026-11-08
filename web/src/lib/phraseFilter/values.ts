@@ -6,7 +6,8 @@
 import type { DateOperand, Field } from "@/api/types";
 import { zonedParts, zonedToInstant, ymdToIso } from "@/lib/cells/dates";
 import { parseDuration, parseNumber } from "@/lib/cells/text";
-import { guessDate, type DateContext } from "@/lib/dateGuess";
+import { guessDate, type DateContext, type DateGuess } from "@/lib/dateGuess";
+import { addDays } from "@/lib/dateGuess/resolve";
 import { tokenWords, tokenWordsWithCommas, wordsOf, type Token } from "./tokens";
 
 /** One thing a value can name: a choice, or a person (who may be known by several spellings). */
@@ -194,9 +195,10 @@ const EXACT_KINDS = new Set(["weekday", "this-weekday", "next-weekday", "month-d
 /**
  * A date value, or null: today, tomorrow, yesterday, "3 days ago", "in 3 days", a week or month
  * ago or ahead, "this week", "next month", "past 7 days", "next 30 days", and a day written as
- * "Nov 14", "11/14", "Friday" or "2026-11-14". A time of day is not a filter value.
+ * "Nov 14", "11/14", "Friday" or "2026-11-14". A time of day is not a filter value. `lookBack` is for
+ * a word that only looks into the past ("since"): a bare weekday is then the one just gone.
  */
-export function dateValue(raw: string, ctx: DateContext): DateValue | null {
+export function dateValue(raw: string, ctx: DateContext, lookBack = false): DateValue | null {
   const s = raw
     .toLowerCase()
     .replace(/[.,;!?]+$/u, "")
@@ -240,15 +242,51 @@ export function dateValue(raw: string, ctx: DateContext): DateValue | null {
 
   const phrase = raw.trim().replace(/[.,;!?]+$/u, "");
   const nowMs = typeof ctx.now === "number" ? ctx.now : ctx.now.getTime();
-  const thisYear = zonedParts(nowMs, ctx.timeZone).y;
-  let g = guessDate(phrase, ctx);
+  const here = zonedParts(nowMs, ctx.timeZone);
+  const thisYear = here.y;
+  const at = (year: number): DateGuess | null => guessDate(phrase, { ...ctx, now: zonedToInstant({ y: year, m: 1, d: 1, h: 0, mi: 0, s: 0, ms: 0 }, ctx.timeZone) });
   // A filter looks back as often as ahead: "since Nov 1" in November is this year's Nov 1, so a
   // day written without a year is read from the start of the year, not from today.
+  let g = guessDate(phrase, ctx);
   if (g && (g.kind === "month-day" || g.kind === "numeric")) {
-    const startOfYear = zonedToInstant({ y: thisYear, m: 1, d: 1, h: 0, mi: 0, s: 0, ms: 0 }, ctx.timeZone);
-    g = guessDate(phrase, { ...ctx, now: startOfYear });
+    g = at(thisYear);
+    if (g && g.date.y === thisYear) g = nearYear(g, at, here);
   }
+  // A word that carries its own operator ("by", "before", "until", "till") was pulled into the date: the
+  // operator was not read, so reading the day alone would be a different filter than the one typed.
+  if (g && OPERATOR_LEAD.test(g.phrase)) return null;
   if (!g || g.rest.trim() !== "" || g.time !== null || !EXACT_KINDS.has(g.kind) || g.ambiguity.includes("more-phrases")) return null;
-  const iso = ymdToIso(g.date);
+  // "since Friday" is the Friday just gone, not the one ahead.
+  const day = lookBack && g.kind === "weekday" ? lastWeekday(g.date, here) : g.date;
+  const iso = ymdToIso(day);
   return { operand: { mode: "exact_date", date: iso }, range: false, label: dayLabel(iso, thisYear) };
+}
+
+const OPERATOR_LEAD = /^(?:(?:on|at|by|before|until|till|due)\s+){0,2}?(?:by|before|until|till)\s/i;
+/** A date written without a year this far from today (days) is read as the same day in the neighbouring year. */
+const YEAR_WRAP_DAYS = 330;
+
+const dayNumber = ({ y, m, d }: { y: number; m: number; d: number }): number => Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+
+/**
+ * "Jan 5" said on Dec 28 means next week, not eleven months ago: a day without a year is this year's
+ * unless that is far from today, then the nearest occurrence in the year before or after.
+ */
+function nearYear(thisYears: DateGuess, at: (year: number) => DateGuess | null, today: { y: number; m: number; d: number }): DateGuess {
+  const away = (g: DateGuess) => Math.abs(dayNumber(g.date) - dayNumber(today));
+  if (away(thisYears) <= YEAR_WRAP_DAYS) return thisYears;
+  let best = thisYears;
+  for (const year of [thisYears.date.y - 1, thisYears.date.y + 1]) {
+    const g = at(year);
+    // A year without that day (Feb 29) resolves to a later one: not a neighbour.
+    if (g && g.date.y === year && away(g) < away(best)) best = g;
+  }
+  return best;
+}
+
+/** The most recent `date`'s weekday before today (a week ago when today is that day). */
+function lastWeekday(date: { y: number; m: number; d: number }, today: { y: number; m: number; d: number }): { y: number; m: number; d: number } {
+  let back = addDays(date, -7);
+  if (dayNumber(back) >= dayNumber(today)) back = addDays(back, -7);
+  return back;
 }

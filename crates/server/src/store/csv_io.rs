@@ -311,9 +311,9 @@ static RE_CURRENCY: LazyLock<Regex> = LazyLock::new(|| {
         .expect("valid regex")
 });
 static RE_EMAIL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("valid regex"));
+    LazyLock::new(|| Regex::new(r"^[^@\s/:]+@[^@\s/]+\.[^@\s/]+$").expect("valid regex"));
 static RE_URL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^https?://[^\s]+$").expect("valid regex"));
+    LazyLock::new(|| Regex::new(r"(?i)^https?://[^\s]+$").expect("valid regex"));
 
 const BOOLEAN_WORDS: [&str; 6] = ["true", "false", "yes", "no", "checked", "unchecked"];
 
@@ -366,6 +366,9 @@ fn currency_options(values: &[&str]) -> Option<CurrencyOptions> {
     let mut max_decimals = 0;
     for v in values {
         let c = RE_CURRENCY.captures(v)?;
+        if !short_number(v) || decimals(v) > 8 {
+            return None;
+        }
         // A sign before and after the symbol would be ambiguous.
         if !c[1].is_empty() && !c[3].is_empty() {
             return None;
@@ -377,7 +380,7 @@ fn currency_options(values: &[&str]) -> Option<CurrencyOptions> {
         max_decimals = max_decimals.max(decimals(v));
     }
     Some(CurrencyOptions {
-        precision: max_decimals.clamp(2, 8) as u8,
+        precision: max_decimals.max(2) as u8,
         symbol: symbol?,
         allow_negative: true,
     })
@@ -456,8 +459,13 @@ pub fn infer_kind(cells: &[&str], primary: bool) -> FieldKind {
         if let Some(opts) = date_options(&values) {
             return Some(FieldKind::Date(opts));
         }
-        if values.iter().all(|v| RE_PERCENT.is_match(v)) {
-            let precision = values.iter().map(|v| decimals(v)).max().unwrap_or(0).min(8);
+        // Like a number, a percent keeps at most 15 digits and 8 decimals: longer is an identifier, and
+        // a precision of 8 would cut the rest off.
+        if values
+            .iter()
+            .all(|v| RE_PERCENT.is_match(v) && short_number(v) && decimals(v) <= 8)
+        {
+            let precision = values.iter().map(|v| decimals(v)).max().unwrap_or(0);
             return Some(FieldKind::Percent(NumberOptions {
                 precision: precision as u8,
                 ..NumberOptions::default()

@@ -96,15 +96,17 @@ export const NUMBER_OPS = lexicon<NumberTag>({
   lte: ["<=", "at most", "maximum", "max", "no more than", "not more than", "up to", "is at most", "is no more than", "is not more than", "less than or equal to", "is less than or equal to", "fewer than or equal to"],
 });
 
-export type DateTag = "is" | "is_not" | "before" | "after" | "on_or_before" | "on_or_after" | "within";
+export type DateTag = "is" | "is_not" | "before" | "after" | "on_or_before" | "on_or_after" | "since" | "within";
 
 export const DATE_OPS = lexicon<DateTag>({
   is: ["is", "on", "=", ":", "equals", "is on", "equal to", "is equal to"],
   is_not: ["is not", "isnt", "not", "not on", "is not on", "!=", "not equal to"],
   before: ["before", "<", "is before", "earlier than", "is earlier than", "prior to", "is prior to"],
-  after: ["after", ">", "is after", "later than", "is later than"],
-  on_or_before: ["on or before", "<=", "by", "no later than", "is on or before", "at or before", "is by", "until", "through", "is no later than", "not after", "is not after"],
-  on_or_after: ["on or after", ">=", "from", "since", "no earlier than", "is on or after", "at or after", "starting", "not before", "is not before", "is no earlier than"],
+  after: ["after", ">", "is after", "later than", "is later than", "not by", "not until", "not till"],
+  on_or_before: ["on or before", "<=", "by", "no later than", "is on or before", "at or before", "is by", "until", "till", "through", "is no later than", "not after", "is not after"],
+  on_or_after: ["on or after", ">=", "from", "no earlier than", "is on or after", "at or after", "starting", "not before", "is not before", "is no earlier than"],
+  // Looks back only: a bare weekday after it is the one just gone.
+  since: ["since"],
   within: ["within", "within the", "in", "in the", "during", "during the", "is within", "is within the", "is in", "is in the"],
 });
 
