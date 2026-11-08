@@ -11,6 +11,7 @@
  *   422 `import_failed` with the first problem rows, surfaced as {@link ImportFailedError}.
  */
 import { ApiError, http, request, requestFile, type RequestOptions } from "./client";
+import { countsChanged } from "./records";
 import type {
   AttachmentRef,
   CreateShare,
@@ -127,7 +128,7 @@ export const csvApi = {
   importIntoTable: (tableId: string, file: File, opts: ImportOptions = {}) => {
     const form = csvForm(file, opts.hasHeader);
     if (opts.mapping) form.append("mapping", JSON.stringify(opts.mapping));
-    return importRequest(`/api/tables/${enc(tableId)}/import`, form);
+    return countsChanged(importRequest(`/api/tables/${enc(tableId)}/import`, form));
   },
   /** A new table with inferred field types (Creator). */
   importNewTable: (baseId: string, file: File, opts: { name?: string; hasHeader?: boolean } = {}) => {

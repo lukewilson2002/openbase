@@ -35,6 +35,25 @@ import type {
 
 const enc = encodeURIComponent;
 
+const countListeners = new Set<() => void>();
+
+/**
+ * Runs `listener` once this tab has added, copied, restored, discarded or deleted records (or imported a CSV
+ * into a collection). The sidebar's record counts are only on the workspaces list, and the live stream skips
+ * this tab's own changes, so whoever keeps that list calls this to learn the counts moved.
+ */
+export function onRecordCountChange(listener: () => void): () => void {
+  countListeners.add(listener);
+  return () => void countListeners.delete(listener);
+}
+
+/** Tells the listeners after a write that changed how many records a collection has. */
+export async function countsChanged<T>(write: Promise<T>): Promise<T> {
+  const result = await write;
+  for (const listener of countListeners) listener();
+  return result;
+}
+
 /** Query-key helpers. Everything is under `["records", tableId, ...]` so live events invalidate it. */
 export const recordKeys = {
   table: (tableId: string) => ["records", tableId] as const,
@@ -64,23 +83,23 @@ export const recordsApi = {
       signal: opts.signal,
     }),
   get: (tableId: string, recordId: string) => http.get<TableRecord>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}`),
-  create: (tableId: string, body: CreateRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
+  create: (tableId: string, body: CreateRecords) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body)),
   update: (tableId: string, body: UpdateRecords) => http.patch<RecordsResponse>(`/api/tables/${enc(tableId)}/records`, body),
   /** DELETE with a JSON body of ids (soft delete: restorable from the trash); answers 204. */
-  remove: (tableId: string, ids: string[]) => request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } }),
+  remove: (tableId: string, ids: string[]) => countsChanged(request<void>(`/api/tables/${enc(tableId)}/records`, { method: "DELETE", body: { ids } })),
   /**
    * Take back a record the caller has just added and never changed, leaving no trace (no trash, no
    * history). Answers `{discarded: false}` when it is no longer untouched, so it stays.
    */
-  discard: (tableId: string, recordId: string) => http.post<{ discarded: boolean }>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {}),
+  discard: (tableId: string, recordId: string) => countsChanged(http.post<{ discarded: boolean }>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {})),
   /**
    * Save a record's page (markdown; null clears it) through the table's page property. A table
    * without one gets "Page" as part of this save, which `created` reports.
    */
   setPage: (tableId: string, recordId: string, text: string | null) => http.put<PageSaved>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/page`, { text }),
-  restore: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids }),
+  restore: (tableId: string, ids: string[]) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids })),
   /** Copy records, each right after its original (computed fields are left to recalculate); answers the copies in order. At most 100 ids. */
-  duplicate: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/duplicate`, { ids }),
+  duplicate: (tableId: string, ids: string[]) => countsChanged(http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/duplicate`, { ids })),
   move: (tableId: string, body: MoveRecords) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/move`, body),
   /** Link picker candidates: `q` matches the primary field's text, and that of `fields` too. */
   lookup: (tableId: string, q: string, opts: { limit?: number; viewId?: string | null; fields?: readonly string[]; signal?: AbortSignal } = {}) =>

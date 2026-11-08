@@ -2,7 +2,8 @@ import { act, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { EventSourceLike } from "@/api/events";
-import { COUNT_REFRESH_MS, useBaseEvents } from "./useBaseEvents";
+import { COUNT_REFRESH_MS } from "./useCountRefresh";
+import { useBaseEvents } from "./useBaseEvents";
 import { usePresence } from "./usePresence";
 
 class Fake implements EventSourceLike {

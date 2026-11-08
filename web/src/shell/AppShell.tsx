@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import { useUnreadCount } from "@/components/notifications/Notifications";
+import { useOwnRecordCounts } from "@/hooks/useCountRefresh";
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { workspaceToOpen } from "@/pages/workspace/lastWorkspace";
@@ -49,6 +50,7 @@ export function AppShell({ children, className, fill, mainLabel, searchHere, wor
   const menuId = useId();
   const { pathname } = useLocation();
   const unread = useUnreadCount();
+  useOwnRecordCounts();
   // `retryOnMount` off: a failed list that the screen above shows an error for must not start again (and flip that screen back to loading) just because the shell mounted under it.
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, retryOnMount: false });
   // Screens that hide the bottom navigation (full-screen editors) register here; a record page hides it by its address.
