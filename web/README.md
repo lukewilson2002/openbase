@@ -128,8 +128,8 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | Project | Spec | Depends on | Covers |
 |---|---|---|---|
 | `smoke` | `smoke.spec.ts` | | the embedded build loads `/` without console errors or CSP violations |
-| `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and project, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
-| `grid` | `grid.spec.ts` | journey | cell editing, undo, the filter bar (a typed phrase, a chip's editor, Backspace, the Advanced filter, Ctrl+F and `/`), hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
+| `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and project, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, the record's page and a comment, log out and in |
+| `grid` | `grid.spec.ts` | journey | cell editing, undo, the filter bar (a typed phrase, a chip's editor, Backspace, the Advanced filter, Ctrl+F and `/`), hiding fields, the field dialog, the record's page, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
 | `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> AI assistants -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `assistants` | `assistants.spec.ts` | grid | Account -> AI assistants: the MCP address is the server's public URL and answers `401` with the sign-in metadata, Claude is open by default and the sections are an accordion (mouse and keyboard), the copy buttons write the real clipboard, the token variants are collapsed until opened, the plain-http server shows the public-address warning, and the tab fits 375 px in the light and dark themes |
@@ -400,7 +400,8 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 |---|---|
 | `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
-| `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
+| `src/components/record/` | Cell editors shared by the grid overlay and the record page, comments, history, linked-record cards and previews |
+| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
 | `src/components/viewbar/` | The filter bar (`ViewFilterBar`), View options (`ViewOptions` and its screens), the filter builder, pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
@@ -417,10 +418,10 @@ All five get `{schema, table, view, role}`, are lazy chunks registered in `views
 
 | Where | What |
 |---|---|
-| `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the view config with this person's draft (`grid/useViewConfig`), search, record writes and the `?record=` parameter |
+| `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the view config with this person's draft (`grid/useViewConfig`), search, record writes and opening a record as its page (`openRecord`, `addRecord`) |
 | `common/useViewRecords.ts` | Whole-view query: pages of 1,000 up to a 5,000 cap (`truncated` drives the "showing first N" notice), cached under `["records", tableId, viewId, "query", ...]` so SSE invalidation refetches it |
 | `common/useRecordWrites.ts`, `cache.ts` | Optimistic edits, manual-order moves and creates over every cached whole-view query of the table, rolled back when the server rejects them |
-| `common/ViewFrame.tsx` | The filter bar with View options (`components/viewbar`, with `features`, `layoutSettings`, `propertySettings` and `layoutToggles` props), the changes bar (`DraftBar`) plus `ExpandedRecord` for `?record=` |
+| `common/ViewFrame.tsx` | The filter bar with View options (`components/viewbar`, with `features`, `layoutSettings`, `propertySettings` and `layoutToggles` props), the changes bar (`DraftBar`) plus the `recordIds` a layout with an order of its own hands to the record page |
 | `common/wallTime.ts` | Calendar/timeline time model: date cells are read as *wall time* (the wall-clock reading as UTC ms) in the field's zone, else the viewer's, so a day is always 86,400,000 ms and drags map back to stored values through `zonedToInstant` |
 
 - **List rows and Board cards share one look** (`common/CardProperties.tsx`, COL-7): the title in 600, then up to three properties that have a value on one line (`CARD_PROPERTY_LIMIT`; a choice is a StatusChip, a date is quiet text, a number sits at the right end with the `num` utility and a property's name is its tooltip). A Board's "Properties on a card" setting (`kanban.card_field_limit`) raises the count and the line wraps; unset it is three. The gallery keeps its own stacked card.

@@ -13,6 +13,20 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **A record is a page.** Opening a record, from any layout, a search result, a notification or a
+  linked record, goes to its own address (`/base/<folder>/<collection>/<view>/r/<record>`) instead of
+  a window over the collection. A bar on top holds the breadcrumb (folder, collection, record),
+  Previous and Next record (Alt+Up and Alt+Down; they follow the view the page was opened from,
+  with your unsaved changes to it, and a Board, Calendar, Timeline or List steps the way it shows
+  its records), who is viewing, Comments and History in a panel on the right, Share (the phone's
+  share sheet where there is one, else it copies the link) and More (Duplicate, Copy link, Delete).
+  Saving, Saved and Couldn't save are at its left. On a phone the 56 px header has the way back, named
+  for the collection, Comments, Share and More, and the bottom navigation steps aside. Escape returns
+  to the collection the page was opened from, whatever number of linked records were opened since;
+  the browser's back goes one page at a time. Old `?record=` and `?linked=` links (emails,
+  notifications, history) land on the page, and a link followed while signed out comes back to it
+  after sign-in. A linked record's chip opens its page. The expanded-record window and the stack of
+  linked-record panels are gone.
 - **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
   page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
   records as chips with the colour of their collection, and each group ends in "+ New client" (the

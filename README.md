@@ -73,7 +73,7 @@ functions. Formulas, lookups, rollups and counts are stored with the record and
 recomputed when their inputs change.
 
 **Records.** Create, edit, delete and restore records, in batches. Manual
-ordering, an expanded record view, duplicating, comments with @mentions and
+ordering, a page for each record, duplicating, comments with @mentions and
 in-app notifications, per-record revision history, attachments, copy and paste of
 ranges, a fill handle, undo / redo and search.
 
