@@ -1,14 +1,15 @@
-/** The expanded record's save status, multiline text that saves while typed, the Share button, and the full-screen editors. */
+/** The record page's save status, multiline text that saves while typed, the Share button, and the full-screen editors. */
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
+import { MemoryRouter } from "react-router";
 import { recordKeys } from "@/api/records";
 import { Providers, createQueryClient } from "@/providers";
 import { PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
-import { apiError, makeSchema, mockApi } from "@/test/utils";
-import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
+import { apiError, makeSchema, mockApi, stubDesktop, stubPhone } from "@/test/utils";
+import { RecordPage, type RecordPageProps } from "./RecordPage";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain notes" });
@@ -19,7 +20,9 @@ const record = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "#
 
 const PATCH = "PATCH /api/tables/tbl1/records";
 
-function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecordProps> = {}) {
+function setup(routes: Record<string, unknown> = {}, over: Partial<RecordPageProps> = {}, phone = false) {
+  if (phone) stubPhone();
+  else stubDesktop();
   let current = record;
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": () => current,
@@ -31,7 +34,7 @@ function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecor
     },
     ...routes,
   } as never);
-  const props: ExpandedRecordProps = {
+  const props: RecordPageProps = {
     schema,
     table,
     role: "owner",
@@ -40,6 +43,8 @@ function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecor
     nextId: null,
     onNavigate: vi.fn(),
     onClose: vi.fn(),
+    collectionHref: "/base/app1/tbl1/viw1",
+    onOpenLinked: vi.fn(),
     emails: new Map(PEOPLE.map((p) => [p.id, p.email])),
     timeZone: "UTC",
     currentUserId: "usr1",
@@ -49,7 +54,9 @@ function setup(routes: Record<string, unknown> = {}, over: Partial<ExpandedRecor
   const client = createQueryClient();
   const { unmount } = render(
     <Providers client={client}>
-      <ExpandedRecord {...props} />
+      <MemoryRouter>
+        <RecordPage {...props} />
+      </MemoryRouter>
     </Providers>,
   );
   return { api, props, unmount, client };
@@ -75,7 +82,7 @@ afterEach(() => {
   Reflect.deleteProperty(navigator, "clipboard");
 });
 
-describe("ExpandedRecord: save status", () => {
+describe("RecordPage: save status", () => {
   it("says Saving… while a save is in flight and Saved once it lands", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
@@ -130,7 +137,7 @@ describe("ExpandedRecord: save status", () => {
   });
 });
 
-describe("ExpandedRecord: multiline text saves while typing", () => {
+describe("RecordPage: multiline text saves while typing", () => {
   it("saves the plain text field once typing pauses, without rebuilding the text area under the caret", async () => {
     const { api } = setup();
     const area = await edit("Plain notes");
@@ -202,7 +209,7 @@ describe("ExpandedRecord: multiline text saves while typing", () => {
     expect(sent).toBe("# Plan\n\n![](/api/attachments/att5/plan.png)\n\n- one");
   });
 
-  it("opens the rich text editor full screen from the corner button and closes it on Escape without closing the record", async () => {
+  it("opens the rich text editor full screen from the corner button and closes it on Escape without leaving the page", async () => {
     const { props } = setup();
     await editRich();
     await userEvent.click(within(fieldRow("Notes")).getByRole("button", { name: "Open full screen" }));
@@ -216,7 +223,6 @@ describe("ExpandedRecord: multiline text saves while typing", () => {
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Notes" })).not.toBeInTheDocument());
     expect(props.onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(fieldRow("Notes").querySelector(".ProseMirror")).toHaveTextContent("extra"));
   });
 
@@ -235,7 +241,7 @@ describe("ExpandedRecord: multiline text saves while typing", () => {
   });
 });
 
-describe("ExpandedRecord: multiline text while saves and refetches are in flight", () => {
+describe("RecordPage: multiline text while saves and refetches are in flight", () => {
   const GET = "GET /api/tables/tbl1/records/rec1";
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -332,7 +338,7 @@ describe("ExpandedRecord: multiline text while saves and refetches are in flight
   });
 });
 
-describe("ExpandedRecord: Alt+Arrow while typing", () => {
+describe("RecordPage: Alt+Arrow while typing", () => {
   const rec2 = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec2");
 
   it("saves what was typed into the record it was typed in, and shows the next record as it is", async () => {
@@ -351,7 +357,7 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
     function Host() {
       const [id, setId] = useState("rec1");
       return (
-        <ExpandedRecord
+        <RecordPage
           schema={schema}
           table={table}
           role="owner"
@@ -360,6 +366,8 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
           nextId={id === "rec1" ? "rec2" : null}
           onNavigate={setId}
           onClose={vi.fn()}
+          collectionHref="/base/app1/tbl1/viw1"
+          onOpenLinked={vi.fn()}
           emails={new Map(PEOPLE.map((p) => [p.id, p.email]))}
           timeZone="UTC"
           currentUserId="usr1"
@@ -367,9 +375,12 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
         />
       );
     }
+    stubDesktop();
     render(
       <Providers client={client}>
-        <Host />
+        <MemoryRouter>
+          <Host />
+        </MemoryRouter>
       </Providers>,
     );
     const input = await edit("Name");
@@ -388,11 +399,11 @@ describe("ExpandedRecord: Alt+Arrow while typing", () => {
   });
 });
 
-describe("ExpandedRecord: Share", () => {
+describe("RecordPage: Share", () => {
   it("has a Share button, not a link button", async () => {
     setup();
     await screen.findByRole("button", { name: "Edit Name" });
-    expect(screen.getByRole("button", { name: "Share record" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copy link/i })).not.toBeInTheDocument();
   });
 
@@ -401,12 +412,12 @@ describe("ExpandedRecord: Share", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "share", { value: share, configurable: true });
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    window.history.replaceState(null, "", "/base/app1/tbl1/viw1?record=rec1");
+    window.history.replaceState(null, "", "/base/app1/tbl1/viw1/r/rec1");
     setup();
     await screen.findByRole("button", { name: "Edit Name" });
-    await userEvent.click(screen.getByRole("button", { name: "Share record" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
     expect(share).toHaveBeenCalledWith({ url: window.location.href, title: "Launch" });
-    expect(share.mock.calls[0]![0].url).toContain("?record=rec1");
+    expect(share.mock.calls[0]![0].url).toContain("/r/rec1");
     expect(writeText).not.toHaveBeenCalled();
   });
 
@@ -416,7 +427,7 @@ describe("ExpandedRecord: Share", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     setup();
     await screen.findByRole("button", { name: "Edit Name" });
-    await userEvent.click(screen.getByRole("button", { name: "Share record" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
     await Promise.resolve();
     expect(writeText).not.toHaveBeenCalled();
     expect(screen.queryByText("Link copied")).not.toBeInTheDocument();
@@ -428,22 +439,33 @@ describe("ExpandedRecord: Share", () => {
     expect(navigator.share).toBeUndefined();
     setup();
     await screen.findByRole("button", { name: "Edit Name" });
-    await userEvent.click(screen.getByRole("button", { name: "Share record" }));
+    await userEvent.click(screen.getByRole("button", { name: "Share" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
   });
 });
 
-describe("ExpandedRecord: phone layout", () => {
-  it("is full screen below sm: no inset, no radius, the dynamic viewport height, safe-area padding", async () => {
-    setup();
+describe("RecordPage: phone layout", () => {
+  it("has the 56 px header: the back link naming the collection, Comments, Share and More, and no search", async () => {
+    setup({}, {}, true);
     await screen.findByRole("button", { name: "Edit Name" });
-    const cls = screen.getByRole("dialog").className.split(/\s+/);
-    for (const c of ["fixed", "inset-0", "h-dvh", "pt-[env(safe-area-inset-top)]", "pb-[env(safe-area-inset-bottom)]", "pl-[env(safe-area-inset-left)]", "pr-[env(safe-area-inset-right)]"]) expect(cls).toContain(c);
-    // The inset and rounded card are for sm and up only.
-    expect(cls).not.toContain("inset-2");
-    expect(cls).not.toContain("rounded-lg");
-    expect(cls).toContain("sm:rounded-lg");
-    expect(cls).toContain("sm:inset-6");
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("link", { name: "Back to Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1");
+    expect(within(header).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Comments", "Share", "More"]);
+    expect(header.className).toContain("min-h-[calc(3.5rem");
+    // The save status has a place of its own, since there is no bar to hold it.
+    expect(screen.getByRole("status", { name: "Save status" })).toBeInTheDocument();
+  });
+
+  it("opens Comments and History as full-screen sheets", async () => {
+    setup({ "GET /api/records/rec1/comments": [] }, {}, true);
+    await screen.findByRole("button", { name: "Edit Name" });
+    await userEvent.click(screen.getByRole("button", { name: "Comments" }));
+    expect(await screen.findByRole("dialog", { name: "Comments" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Comments" })).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+    await userEvent.click(await screen.findByRole("button", { name: "History" }));
+    expect(await screen.findByRole("dialog", { name: "History" })).toBeInTheDocument();
   });
 });

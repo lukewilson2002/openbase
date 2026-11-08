@@ -29,7 +29,7 @@ export interface ScreenHeaderProps {
 }
 
 /** Folds the docked sidebar; flags unread notifications while it is hidden. */
-function MenuToggle() {
+export function MenuToggle() {
   const menu = useMenuControl();
   return (
     <IconButton

@@ -7,6 +7,7 @@ import { RequireAdmin, RequireAuth } from "@/auth/guards";
 import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { RecordRoute } from "@/record/RecordRoute";
 import { RootRoute } from "@/pages/RootRoute";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { CollectionsPage } from "@/pages/workspace/CollectionsPage";
@@ -85,6 +86,9 @@ export function AppRoutes() {
               }
             />
             <Route path="/base/:baseId/automations/:automationId?/:tab?" element={<BaseShell section="automations" />} />
+            {/* A record is a page of its own (decision 5); the view in the address is the one previous and next follow. */}
+            <Route path="/base/:baseId/:tableId/r/:recordId" element={<RecordRoute />} />
+            <Route path="/base/:baseId/:tableId/:viewId/r/:recordId" element={<RecordRoute />} />
             <Route path="/base/:baseId/:tableId?/:viewId?" element={<BaseShell />} />
           </Route>
           {/*

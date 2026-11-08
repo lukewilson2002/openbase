@@ -12,7 +12,11 @@ export interface LinkChipProps {
   markName?: string;
   /** Opens the linked record in place (a button). */
   onOpen?: () => void;
-  /** Opens the linked record as a link (the record's own URL); wins over `onOpen`. */
+  /**
+   * Opens the linked record as a link (the record's own URL), so it can be opened in a new tab or copied. With
+   * `onOpen` too, a plain click runs `onOpen` (the router navigates) and the other ways of using a link
+   * (middle click, copy address) take the address.
+   */
   href?: string;
   /** Unlinks it; adds a remove button. */
   onRemove?: () => void;
@@ -32,7 +36,21 @@ export function LinkChip({ name, hue, markName, onOpen, href, onRemove, classNam
   return (
     <span className={cn("inline-flex max-w-full items-center rounded-sm border border-line bg-bg text-meta font-medium text-fg", className)}>
       {href ? (
-        <a href={href} className={cn(part, "rounded-sm px-1.5 py-px hover:bg-hover")}>
+        <a
+          href={href}
+          onClick={
+            onOpen
+              ? (e) => {
+                  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  // A chip on a card or in a field is not also a click on that card or field.
+                  e.stopPropagation();
+                  onOpen();
+                }
+              : undefined
+          }
+          className={cn(part, "rounded-sm px-1.5 py-px hover:bg-hover")}
+        >
           {body}
         </a>
       ) : onOpen ? (

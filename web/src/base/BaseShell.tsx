@@ -1,15 +1,13 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import { FileQuestionMark, Table2 } from "lucide-react";
 import { isApiError } from "@/api/client";
-import { api } from "@/api/endpoints";
-import { keys } from "@/api/keys";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useBaseEvents } from "@/hooks/useBaseEvents";
 import { lastTableOf, lastViewOf, rememberPlace } from "@/lib/lastPlace";
+import { legacyRecordTarget } from "@/lib/recordPath";
 import { defaultViewOf, namedViews } from "@/lib/views";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
@@ -22,6 +20,7 @@ import { CollectionHeader } from "./CollectionHeader";
 import { CollectionTabs, VIEW_PANEL_ID, viewTabId } from "./CollectionTabs";
 import { EmptyBase } from "./EmptyBase";
 import { basePermissions } from "./permissions";
+import { useBaseSchema } from "./useBaseSchema";
 
 // Rarely opened, and it pulls in the filter builder and the record editors: its own chunk.
 const AutomationsPage = lazy(() => import("@/automations/AutomationsPage").then((m) => ({ default: m.AutomationsPage })));
@@ -36,13 +35,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
   const { baseId = "", tableId, viewId } = useParams();
   const location = useLocation();
   const [dialog, setDialog] = useState<BaseDialog | null>(null);
-  const base = useQuery({
-    queryKey: keys.base(baseId),
-    queryFn: () => api.bases.get(baseId),
-    retry: (count, err) => !(isApiError(err) && (err.status === 404 || err.status === 403)) && count < 2,
-  });
-  // The menu tree is built from the workspaces list: fetched beside the project, not after it.
-  useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
+  const base = useBaseSchema(baseId);
   useBaseEvents(baseId);
 
   const loaded = base.data;
@@ -61,6 +54,10 @@ export function BaseShell({ section }: { section?: "automations" }) {
     rememberWorkspace(workspaceId);
     if (tableOpen && viewOpen) rememberPlace({ baseId, tableId: tableOpen, viewId: viewOpen });
   }, [workspaceId, baseId, tableOpen, viewOpen]);
+
+  // Old links (emails, notifications, history) open a record with `?record=`; its page is where they lead now (decision 5).
+  const legacy = automations || !tableId ? null : legacyRecordTarget(baseId, tableId, viewId, location.search);
+  if (legacy) return <Navigate to={legacy} replace />;
 
   if (base.isPending) return <PageSpinner label="Loading folder" />;
   if (base.isError) {
@@ -87,7 +84,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
 
   // Canonicalise the URL so deep links always carry table and view ids.
   if (table && view && (table.id !== tableId || view.id !== viewId)) {
-    // Keep the query string: notification links arrive as /base/:id/:table?record=rec.
+    // Keep the query string.
     return <Navigate to={{ pathname: `/base/${schema.id}/${table.id}/${view.id}`, search: location.search }} replace />;
   }
 

@@ -3,10 +3,11 @@ import type { Editor } from "@tiptap/core";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Comment, HistoryEntry } from "@/api/types";
+import { MemoryRouter } from "react-router";
 import { Providers, createQueryClient } from "@/providers";
 import { ALL_FIELDS, CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
-import { makeSchema, mockApi } from "@/test/utils";
-import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
+import { makeSchema, mockApi, stubDesktop, stubPhone } from "@/test/utils";
+import { RecordPage, type RecordPageProps } from "./RecordPage";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
@@ -29,7 +30,9 @@ const history: HistoryEntry[] = [
   { id: 1, user_id: "usr1", user_name: "Ada Lovelace", kind: "create", created_at: 1_700_000_000_000, changes: { fld_name: { old: null, new: "Launch" } } },
 ];
 
-function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, unknown> = {}) {
+function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unknown> = {}, phone = false) {
+  if (phone) stubPhone();
+  else stubDesktop();
   let current = record;
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": () => current,
@@ -44,7 +47,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
     "DELETE /api/comments/cmt2": { ok: true },
     ...routes,
   } as never);
-  const props: ExpandedRecordProps = {
+  const props: RecordPageProps = {
     schema,
     table,
     role: "owner",
@@ -54,6 +57,8 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
     nextId: "rec2",
     onNavigate: vi.fn(),
     onClose: vi.fn(),
+    collectionHref: "/base/app1/tbl1/viw1",
+    onOpenLinked: vi.fn(),
     emails: new Map(PEOPLE.map((p) => [p.id, p.email])),
     timeZone: "UTC",
     currentUserId: "usr1",
@@ -62,7 +67,9 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
   };
   render(
     <Providers client={createQueryClient()}>
-      <ExpandedRecord {...props} />
+      <MemoryRouter>
+        <RecordPage {...props} />
+      </MemoryRouter>
     </Providers>,
   );
   return { api, props };
@@ -74,14 +81,27 @@ async function edit(field: string): Promise<HTMLInputElement> {
   return (await screen.findByRole("textbox", { name: field })) as HTMLInputElement;
 }
 
-describe("ExpandedRecord", () => {
-  it("opens with the dialog itself focused (not a button whose tooltip would swallow the first Escape) and closes on Escape", async () => {
+/** Opens the Comments or History panel from the bar. */
+async function openPanel(name: "Comments" | "History") {
+  await userEvent.click(await screen.findByRole("button", { name: new RegExp(`^${name}`) }));
+}
+
+describe("RecordPage", () => {
+  it("returns to the collection on Escape, and not while something else has use for it", async () => {
     const { props } = setup();
     await screen.findByRole("button", { name: "Edit Name" });
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a page: a main bar with the breadcrumb back to the collection, and the record's name as its heading", async () => {
+    setup();
+    await screen.findByRole("button", { name: "Edit Name" });
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(crumbs).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1");
+    expect(within(crumbs).getByText("Launch")).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("shows every field with its value, computed ones read-only, hidden ones collapsed", async () => {
@@ -132,7 +152,7 @@ describe("ExpandedRecord", () => {
     expect(await screen.findByRole("textbox", { name: "Budget" })).toBeInTheDocument();
   });
 
-  it("navigates between records and closes", async () => {
+  it("steps to the previous and next record, by button and by Alt+Arrow, and closes", async () => {
     const { props } = setup();
     await screen.findByRole("button", { name: "Edit Name" });
     await userEvent.click(screen.getByRole("button", { name: /Previous record/ }));
@@ -141,7 +161,7 @@ describe("ExpandedRecord", () => {
     expect(props.onNavigate).toHaveBeenNthCalledWith(2, "rec2");
     await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
     expect(props.onNavigate).toHaveBeenCalledTimes(3);
-    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await userEvent.keyboard("{Escape}");
     expect(props.onClose).toHaveBeenCalled();
   });
 
@@ -154,7 +174,7 @@ describe("ExpandedRecord", () => {
 
   it("viewers see values but no editors and cannot comment", async () => {
     setup({ role: "viewer" });
-    await screen.findByRole("heading", { name: "Launch" });
+    await screen.findByRole("heading", { name: "Launch", level: 1 });
     expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
     // A viewer's values are plain text: nothing to click, no hover tint, no button.
@@ -163,7 +183,8 @@ describe("ExpandedRecord", () => {
     expect(within(nameRow).queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
     expect(nameRow.innerHTML).not.toContain("hover:bg-hover");
-    expect(screen.getByText(/You can read comments but not write them/)).toBeInTheDocument();
+    await openPanel("Comments");
+    expect(await screen.findByText(/You can read comments but not write them/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Write a comment" })).not.toBeInTheDocument();
   });
 
@@ -176,11 +197,10 @@ describe("ExpandedRecord", () => {
 /** The Tiptap editor behind a rich text box. */
 const editorIn = (box: HTMLElement) => (box as HTMLElement & { editor: Editor }).editor;
 
-describe("ExpandedRecord: comments", () => {
+describe("RecordPage: comments", () => {
   it("lists comments with mentions rendered and marks your own", async () => {
     setup();
-    const list = await screen.findByRole("list", { name: "", hidden: false }).catch(() => null);
-    void list;
+    await openPanel("Comments");
     expect(await screen.findByText("Looks good")).toBeInTheDocument();
     expect(screen.getByText("@Ada Lovelace")).toHaveClass("ob-mention");
     // Comments are Markdown.
@@ -193,6 +213,7 @@ describe("ExpandedRecord: comments", () => {
 
   it("posts a rich text comment with an @mention picked after typing @", async () => {
     const { api } = setup();
+    await openPanel("Comments");
     const box = await screen.findByRole("textbox", { name: "Write a comment" });
     const editor = editorIn(box);
     act(() => box.focus());
@@ -214,8 +235,9 @@ describe("ExpandedRecord: comments", () => {
     await waitFor(() => expect(box).toHaveTextContent(""));
   });
 
-  it("closes the people list on Escape and keeps the record open", async () => {
+  it("closes the people list on Escape and keeps the page", async () => {
     const { props } = setup();
+    await openPanel("Comments");
     const box = await screen.findByRole("textbox", { name: "Write a comment" });
     act(() => box.focus());
     act(() => {
@@ -226,13 +248,13 @@ describe("ExpandedRecord: comments", () => {
     expect(screen.queryByRole("listbox", { name: "People to mention" })).not.toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
     expect(box).toHaveTextContent("@gr");
-    // With the list closed, Escape is the record's again.
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(props.onClose).toHaveBeenCalled());
+    // In the comment box Escape is the box's own: leaving the page is for when focus is on the page.
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 
   it("sends with Ctrl+Enter", async () => {
     const { api } = setup();
+    await openPanel("Comments");
     const box = await screen.findByRole("textbox", { name: "Write a comment" });
     act(() => box.focus());
     act(() => {
@@ -246,6 +268,7 @@ describe("ExpandedRecord: comments", () => {
 
   it("edits and deletes your own comment", async () => {
     const { api } = setup();
+    await openPanel("Comments");
     const mine = await screen.findByLabelText("Comment by Ada Lovelace");
     await userEvent.click(within(mine).getByRole("button", { name: "Edit comment" }));
     const box = await within(mine).findByRole("textbox", { name: "Edit comment" });
@@ -264,15 +287,16 @@ describe("ExpandedRecord: comments", () => {
 
   it("does not post an empty comment", async () => {
     setup();
+    await openPanel("Comments");
     await screen.findByRole("textbox", { name: "Write a comment" });
     expect(screen.getByRole("button", { name: "Comment" })).toBeDisabled();
   });
 });
 
-describe("ExpandedRecord: history", () => {
+describe("RecordPage: history", () => {
   it("renders old -> new per field using display formatting, newest first", async () => {
     setup();
-    await userEvent.click(await screen.findByRole("tab", { name: "History" }));
+    await openPanel("History");
     const list = await screen.findByRole("list", { name: "Revision history" });
     const entries = within(list).getAllByRole("listitem", {}).filter((li) => li.parentElement === list);
     expect(entries).toHaveLength(2);
@@ -290,24 +314,9 @@ describe("ExpandedRecord: history", () => {
     expect(within(entries[1]!).getByText("Launch")).toBeInTheDocument();
   });
 
-  it("scrolls as one column on a phone: the comments and history panels only scroll from md up", async () => {
-    setup();
-    const dialog = await screen.findByRole("dialog");
-    await screen.findByText("Thanks!");
-    // jsdom has no media queries: read the classes. An unprefixed overflow-y-auto outside the one
-    // column (and the lists in the fields' pop-overs) is a second scroll area under the finger.
-    const scrollers = [...dialog.querySelectorAll<HTMLElement>("[class*='overflow-y-auto']")].filter((el) => /(^|\s)overflow-y-auto(\s|$)/.test(el.className));
-    expect(scrollers).toHaveLength(1);
-    expect(scrollers[0]).toHaveClass("overscroll-contain");
-    const panel = dialog.querySelector("aside")!;
-    expect(panel.querySelector("[aria-live='polite']")).toHaveClass("md:overflow-y-auto");
-    await userEvent.click(screen.getByRole("tab", { name: "History" }));
-    expect(await screen.findByRole("list", { name: "Revision history" })).toHaveClass("md:overflow-y-auto");
-  });
-
   it("explains an empty history", async () => {
     setup({}, { "GET /api/records/rec1/history": [] });
-    await userEvent.click(await screen.findByRole("tab", { name: "History" }));
+    await openPanel("History");
     expect(await screen.findByText("No changes recorded yet.")).toBeInTheDocument();
   });
 });

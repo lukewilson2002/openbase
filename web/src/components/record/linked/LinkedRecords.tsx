@@ -38,12 +38,14 @@ const GET_CHUNK = 100;
 const LONG_PRESS_MS = 450;
 
 /**
- * What the host lets a linked record do. Provided by the record panel around its fields: link fields
- * there are cards, and `open` shows a linked record in the panel (from the Open of its details on
- * hover). Absent elsewhere (link fields are chips).
+ * What the host lets a linked record do. Provided by the record page around its properties: link fields
+ * there are cards, and `open` goes to a linked record's page (from the Open of its details on hover, and
+ * from its chips). Absent elsewhere (link fields are chips).
  */
 export interface LinkedRecordsHost {
   open?: (tableId: string, recordId: string) => void;
+  /** The address of a linked record's page, which its chips link to. */
+  href?: (tableId: string, recordId: string) => string;
 }
 const LinkedRecordsContext = createContext<LinkedRecordsHost | null>(null);
 export const LinkedRecordsProvider = LinkedRecordsContext.Provider;
@@ -468,7 +470,17 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
     <div className={cn("min-w-0 text-[0.8125rem]", className)}>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {shown.map((c, i) => {
-          const chip = <LinkChip key={c.id ?? `${c.text}-${i}`} name={c.text} hue={linked?.color} markName={linked?.name} />;
+          // Where the host can open a record (a record's page), its chips are links to the linked record's page.
+          const chip = (
+            <LinkChip
+              key={c.id ?? `${c.text}-${i}`}
+              name={c.text}
+              hue={linked?.color}
+              markName={linked?.name}
+              href={linked && c.id && host?.href ? host.href(linked.id, c.id) : undefined}
+              onOpen={linked && c.id && host?.open ? () => host.open!(linked.id, c.id!) : undefined}
+            />
+          );
           return table && env?.schema && c.id ? (
             <RecordPeek key={c.id} table={table} recordId={c.id} format={format} emails={emails} onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined} side="bottom" className="min-w-0 max-w-full">
               {chip}

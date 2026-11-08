@@ -9,6 +9,8 @@ export interface SidePanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** The panel's id, for the buttons that open it to name (`aria-controls`). */
+  id?: string;
   /** Buttons in the header, before the close button. */
   actions?: ReactNode;
   children?: ReactNode;
@@ -21,7 +23,7 @@ export interface SidePanelProps {
  * Escape, or its close button, closes it and returns focus to the control that opened it (A11Y-1). On a phone
  * the same content goes in a `Sheet` or a full-screen `Dialog`.
  */
-export function SidePanel({ open, onOpenChange, title, actions, children, className }: SidePanelProps) {
+export function SidePanel({ open, onOpenChange, title, id, actions, children, className }: SidePanelProps) {
   const titleId = useId();
   const presence = usePresence<HTMLElement>(open);
   const opener = useRef<HTMLElement | null>(null);
@@ -44,6 +46,7 @@ export function SidePanel({ open, onOpenChange, title, actions, children, classN
   if (!presence.mounted) return null;
   return (
     <aside
+      id={id}
       ref={presence.ref}
       data-state={presence.state}
       aria-labelledby={titleId}

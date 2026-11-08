@@ -1,11 +1,13 @@
-/** The expanded record's view mode: fields are shown rendered and become their editors when clicked. */
+/** The record page's view mode: fields are shown rendered and become their editors when clicked. */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 import { Providers, createQueryClient } from "@/providers";
 import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
-import { apiError, makeSchema, mockApi } from "@/test/utils";
-import { ExpandedRecord, type ExpandedRecordProps } from "./ExpandedRecord";
+import { apiError, makeSchema, mockApi, stubDesktop } from "@/test/utils";
+import { rememberNewRecord } from "./newRecords";
+import { RecordPage, type RecordPageProps } from "./RecordPage";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const empty = field("text", { multiline: false }, { id: "fld_empty", name: "Nickname" });
@@ -22,7 +24,8 @@ const record = makeRecord({ fld_name: "Launch", fld_status: "chs2", fld_notes: "
 
 const PATCH = "PATCH /api/tables/tbl1/records";
 
-function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, unknown> = {}) {
+function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unknown> = {}) {
+  stubDesktop();
   let current = record;
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": () => current,
@@ -34,7 +37,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
     },
     ...routes,
   } as never);
-  const props: ExpandedRecordProps = {
+  const props: RecordPageProps = {
     schema,
     table,
     role: "owner",
@@ -43,6 +46,8 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
     nextId: null,
     onNavigate: vi.fn(),
     onClose: vi.fn(),
+    collectionHref: "/base/app1/tbl1/viw1",
+    onOpenLinked: vi.fn(),
     emails: new Map(PEOPLE.map((p) => [p.id, p.email])),
     timeZone: "UTC",
     currentUserId: "usr1",
@@ -51,7 +56,9 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
   };
   render(
     <Providers client={createQueryClient()}>
-      <ExpandedRecord {...props} />
+      <MemoryRouter>
+        <RecordPage {...props} />
+      </MemoryRouter>
     </Providers>,
   );
   return { api, props };
@@ -60,7 +67,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}, routes: Record<string, u
 const area = (field: string) => screen.findByRole("button", { name: `Edit ${field}` });
 const row = (field: string) => screen.getByRole("group", { name: field });
 
-describe("ExpandedRecord: view mode", () => {
+describe("RecordPage: view mode", () => {
   it("shows each value rendered, not as an input, and an Empty placeholder where there is none", async () => {
     setup();
     await area("Name");
@@ -295,7 +302,9 @@ describe("ExpandedRecord: view mode", () => {
   });
 
   it("starts the primary field of a record just added in edit mode, focused", async () => {
-    setup({ justCreated: true });
+    // Records added from a collection screen are noted as new until their page has been left.
+    rememberNewRecord("rec1", {});
+    setup();
     const input = await screen.findByRole("textbox", { name: "Name" });
     await waitFor(() => expect(input).toHaveFocus());
     // The other fields are read as usual.

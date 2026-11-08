@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
 import { Providers, createQueryClient } from "@/providers";
+import { RecordPage, type RecordPageProps } from "@/record/RecordPage";
 import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
-import { makeSchema, makeView, mockApi } from "@/test/utils";
-import { formatTrail, parseTrail } from "@/views/common/RecordPanel";
-import { ExpandedRecord, type ExpandedRecordProps } from "../ExpandedRecord";
+import { makeSchema, makeView, mockApi, stubDesktop } from "@/test/utils";
 import { FloatingRecordPeek, RecordPeek, type FloatingPeekTarget } from "./LinkedRecords";
 import { EditorEnvProvider } from "../editors/env";
 import { LinkEditor } from "../editors/LinkEditor";
@@ -32,7 +32,8 @@ const domain = { ...makeRecord({ fld_title: "Buy the domain", fld_status: "chs3"
 
 afterEach(() => vi.useRealTimers());
 
-function setup(over: Partial<ExpandedRecordProps> = {}) {
+function setup(over: Partial<RecordPageProps> = {}) {
+  stubDesktop();
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": task,
     "GET /api/records/rec1/comments": [],
@@ -41,7 +42,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}) {
     "GET /api/tables/tbl2/records/recD": domain,
     "PATCH /api/tables/tbl1/records": (call: { body: { records: { values: Record<string, unknown> }[] } }) => ({ records: [{ ...task, values: { ...task.values, ...call.body.records[0]!.values } }] }),
   } as never);
-  const props: ExpandedRecordProps = {
+  const props: RecordPageProps = {
     schema,
     table: tasks,
     role: "owner",
@@ -51,6 +52,7 @@ function setup(over: Partial<ExpandedRecordProps> = {}) {
     nextId: null,
     onNavigate: vi.fn(),
     onClose: vi.fn(),
+    collectionHref: "/base/app1/tbl1/viw1",
     emails: new Map(PEOPLE.map((p) => [p.id, p.email])),
     timeZone: "UTC",
     currentUserId: "usr1",
@@ -60,13 +62,15 @@ function setup(over: Partial<ExpandedRecordProps> = {}) {
   };
   render(
     <Providers client={createQueryClient()}>
-      <ExpandedRecord {...props} />
+      <MemoryRouter>
+        <RecordPage {...props} />
+      </MemoryRouter>
     </Providers>,
   );
   return { api, props };
 }
 
-describe("linked records in the record panel", () => {
+describe("linked records on the record page", () => {
   /** A linked record's card (not a button: see the first test). */
   const findCard = () => waitFor(() => {
     const el = document.querySelector<HTMLElement>('[data-linked-record="recD"]');
@@ -90,7 +94,7 @@ describe("linked records in the record panel", () => {
     expect(props.onOpenLinked).not.toHaveBeenCalled();
   });
 
-  it("shows the whole linked record when a finger rests on its card, which opens it from there", async () => {
+  it("shows the whole linked record when a finger rests on its card, which opens its page from there", async () => {
     const { props } = setup();
     const card = await findCard();
     vi.useFakeTimers();
@@ -110,27 +114,6 @@ describe("linked records in the record panel", () => {
     expect(props.onOpenLinked).not.toHaveBeenCalled();
     await userEvent.click(within(peek).getByRole("button", { name: /Open/ }));
     expect(props.onOpenLinked).toHaveBeenCalledWith("tbl2", "recD");
-  });
-
-  it("goes back to the record it came from", async () => {
-    const onBack = vi.fn();
-    setup({ onBack, backLabel: "Build the website" });
-    await userEvent.click(await screen.findByRole("button", { name: "Back to Build the website" }));
-    expect(onBack).toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /Previous record/ })).toBeNull();
-  });
-});
-
-describe("the linked trail", () => {
-  it("round-trips, and drops steps whose table is gone", () => {
-    const raw = formatTrail([
-      { tableId: "tbl2", recordId: "recD" },
-      { tableId: "tblGone", recordId: "recX" },
-      { tableId: "tbl1", recordId: "rec9" },
-    ]);
-    expect(raw).toBe("tbl2.recD,tblGone.recX,tbl1.rec9");
-    expect(parseTrail(raw, schema).map((s) => `${s.table.id}.${s.recordId}`)).toEqual(["tbl2.recD", "tbl1.rec9"]);
-    expect(parseTrail(null, schema)).toEqual([]);
   });
 });
 
@@ -209,7 +192,7 @@ describe("the link picker under a field's cards", () => {
   });
 });
 
-describe("linked records in the record panel, edited in place", () => {
+describe("linked records on the record page, edited in place", () => {
   it("removes a record with its card's ✕ and saves it at once, without opening the picker", async () => {
     const { api } = setup();
     await waitFor(() => expect(document.querySelector('[data-linked-record="recD"]')).not.toBeNull());

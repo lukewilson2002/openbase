@@ -9,18 +9,7 @@ import { USER, apiError, makeSchema, makeWorkspace, mockApi, renderApp, stubDesk
 // and has its own tests under src/views/grid, so the shell tests render the placeholder for it.
 vi.mock("@/views/grid/GridView", async () => {
   const { PlaceholderView } = await import("@/views/PlaceholderView");
-  const { useSearchParams } = await import("react-router");
-  // Shows the ?record= parameter so tests can see whether the shell's redirects keep it.
-  function Stub(props: Parameters<typeof PlaceholderView>[0]) {
-    const [params] = useSearchParams();
-    return (
-      <>
-        <PlaceholderView {...props} />
-        <output data-testid="record-param">{params.get("record")}</output>
-      </>
-    );
-  }
-  return { default: Stub };
+  return { default: PlaceholderView };
 });
 
 // Same for the kanban view (its own tests live in src/views/kanban).
@@ -563,13 +552,6 @@ describe("base shell on a desktop", () => {
       expect(within(options).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
       expect(within(options).getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
     });
-  });
-
-  it("keeps ?record= when it canonicalises a link such as a notification's", async () => {
-    openBase("owner", {}, "/base/app1/tbl1?record=rec1");
-    expect(await screen.findByTestId("record-param")).toHaveTextContent("rec1");
-    expect(screen.getByRole("main", { name: "All tasks" })).toBeInTheDocument();
-    expect(tasksLink()).toHaveAttribute("aria-current", "page");
   });
 });
 
