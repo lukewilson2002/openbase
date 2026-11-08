@@ -40,6 +40,11 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   (share links, automations, inbox drafts, invites, members) say "This can't be undone", and
   [docs/mcp.md](docs/mcp.md#destructive-tools-and-what-can-be-undone) lists every destructive
   tool and whether the trash brings it back.
+- **One request for Home.** `GET /api/workspaces/{id}/home` (MCP `get_home`) returns what is due
+  soon (records of collections with a Home date, from 30 days ago to 7 days ahead in your time
+  zone, not marked done), the 10 records most recently created or edited that you can open, and
+  your inbox drafts. It reads only projects you can open, never more than 100,000 records, and
+  answers in under 300 ms for 20 collections and 100,000 records.
 - **Calendar weeks and months in date filters.** `is_within` takes `this_calendar_week`,
   `next_calendar_week`, `last_calendar_week`, `next_calendar_month` and `last_calendar_month`.
   Weeks start on the request's `week_start` (0 Sunday, 1 Monday; a view query, summaries, CSV

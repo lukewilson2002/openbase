@@ -273,6 +273,47 @@ was cut, between words when one ends close by) with `snippet_matches` and the `f
 including, `end` (`Array.from(text)` in JavaScript). The server finds them because it knows which
 field matched and folds case the way it searched.
 
+### Home (internal API)
+
+`GET /api/workspaces/{id}/home` is everything the web app's Home page shows for a workspace, in one
+read. Any member of the workspace can ask; an API token needs to reach at least one of its projects
+(otherwise `404`, like a workspace that does not exist). Only projects the caller can open are read,
+so a member limited to some folders sees only those; a read-only token sees what its user does, with
+`can_edit` false everywhere.
+
+The answer is `{today, timezone, due, truncated, recent, drafts}`:
+
+- `today` and `timezone`: today's date (`YYYY-MM-DD`) in the caller's time zone (the profile's,
+  else UTC), which `overdue` and the window count from.
+- `due`: records of the collections that have a **Home date** setting (`PATCH /api/tables/{id}` with
+  `home_date_field_id`), dated from 30 days ago to 7 days ahead (both days included) and not marked
+  done, oldest first (a date with a time sorts after the all-day dates of its day), at most 50. The
+  Home date can be any date-like property, a formula or rollup that returns a date included, and a
+  record with no date is not listed. A collection's **Done** setting (`done_field_id`, a checkbox)
+  leaves out the records where it is ticked; without one, every dated record is listed. Each item
+  has `record_id`, `table_id`, `base_id`, `base_name`, `title` (the primary field's text),
+  `table_name`, `table_color`, `date` (`YYYY-MM-DD`), `has_time`, `time` (`HH:MM` on `date`, null
+  without a time), `has_done`, `done_field_id`, `overdue` (`date` is before `today`) and `can_edit`
+  (the caller may edit records there, which enables the Done checkbox). Dates and times are in the
+  caller's time zone, or in the property's own zone when it has a fixed one; a date without a time
+  stays on its day in every zone.
+- `truncated`: true when the scan budget ran out, so `due` may miss records. The budget is that of
+  search: at most 100,000 records in at most 100 collections per request. A collection is read whole
+  or not at all (collections that do not fit are skipped and later, smaller ones may still be
+  read), so which records appear never depends on where in a collection the budget ended. More
+  than 50 due records is not truncation: the 50 oldest are returned.
+- `recent`: the 10 records most recently created, edited or restored that the caller can open, newest
+  first and once each, with `kind` (the latest change: `create`, `update` or `restore`), `author`
+  (`{id, name}`, null when the account is gone or an automation made the change) and `at` (Unix
+  milliseconds). Records in the trash are left out. The history is indexed by time, not by
+  collection, so the search stops after the latest 5,000 changes.
+- `drafts`: the caller's inbox drafts, most recently changed first, as `GET /api/inbox` lists them.
+  Drafts belong to the person, so every workspace's Home shows the same ones. A token limited to
+  some projects gets an empty list (the inbox is in no project).
+
+The MCP tool `get_home` wraps it. A benchmark (`cargo test --release -p openbase --test home_perf --
+--ignored`) keeps it under 300 ms for 20 collections and 100,000 records.
+
 ### Inbox (internal API)
 
 The inbox holds a person's private quick-capture drafts: Markdown text plus uploaded files, not yet in
