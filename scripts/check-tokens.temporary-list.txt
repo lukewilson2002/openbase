@@ -10,7 +10,6 @@ components/layouts.tsx
 onboarding/IntroOverlay.tsx
 onboarding/illustrations.tsx
 views/calendar/calendar.css
-views/common/SegmentedSwitch.tsx
 views/common/UnscheduledList.tsx
 views/common/ViewSetupState.tsx
 views/form/FormBuilder.tsx

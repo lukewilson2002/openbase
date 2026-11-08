@@ -53,8 +53,8 @@ export function SortListEditor({ noun, items, fields, max, readOnly, onAdd, onUp
 
   return (
     <div>
-      {items.length === 0 && <p className="mb-2 text-[0.8125rem] text-muted">{noun === "sort" ? "No sorts. Records appear in manual order." : "No grouping applied."}</p>}
-      <ul className="flex flex-col gap-1.5">
+      {items.length === 0 && <p className="mb-2 text-label text-muted">{noun === "sort" ? "No sorts. Records appear in manual order." : "No grouping applied."}</p>}
+      <ul className="flex flex-col gap-2">
         {items.map((s, i) => {
           const field = byId.get(s.field_id);
           const [asc, desc] = directionLabels(field);
@@ -76,41 +76,50 @@ export function SortListEditor({ noun, items, fields, max, readOnly, onAdd, onUp
                 setDragging(null);
               }}
               onDragEnd={() => setDragging(null)}
-              className="flex items-center gap-1.5"
+              className="flex flex-col gap-1 rounded-md border border-line p-2"
               aria-label={`${noun} ${i + 1}`}
             >
-              <GripVertical aria-hidden className="size-4 shrink-0 cursor-grab text-faint" />
-              <span className="w-14 shrink-0 text-[0.8125rem] text-muted">{i === 0 ? (noun === "sort" ? "Sort by" : "Group by") : "then by"}</span>
-              <InlineSelect aria-label={`Field for ${noun} ${i + 1}`} width="w-40" disabled={readOnly} value={s.field_id} onChange={(e) => onUpdate(i, { field_id: e.target.value })}>
-                {field ? null : <option value={s.field_id}>(deleted field)</option>}
-                {[...(field ? [field] : []), ...free].map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </InlineSelect>
-              {noun === "group" && field && kindClassOf(field) === "date" && (
-                <InlineSelect aria-label={`Granularity for group ${i + 1}`} width="w-32" disabled={readOnly} value={s.granularity ?? "day"} onChange={(e) => onUpdate(i, { granularity: e.target.value as DateGranularity })}>
-                  {(Object.keys(GRANULARITY_LABELS) as DateGranularity[]).map((g) => (
-                    <option key={g} value={g}>
-                      {GRANULARITY_LABELS[g]}
-                    </option>
-                  ))}
-                </InlineSelect>
-              )}
-              <InlineSelect aria-label={`Direction for ${noun} ${i + 1}`} width="w-44" disabled={readOnly} value={s.direction} onChange={(e) => onUpdate(i, { direction: e.target.value as Direction })}>
-                <option value="asc">{asc}</option>
-                <option value="desc">{desc}</option>
-              </InlineSelect>
-              <IconButton label={`Move ${noun} ${i + 1} up`} size="sm" noTooltip disabled={readOnly || i === 0} onClick={() => onMove(i, i - 1)}>
-                <ArrowUp aria-hidden className="size-4" />
-              </IconButton>
-              <IconButton label={`Move ${noun} ${i + 1} down`} size="sm" noTooltip disabled={readOnly || i === items.length - 1} onClick={() => onMove(i, i + 1)}>
-                <ArrowDown aria-hidden className="size-4" />
-              </IconButton>
-              <IconButton label={`Remove ${noun} ${i + 1}`} size="sm" noTooltip disabled={readOnly} onClick={() => onRemove(i)}>
-                <X aria-hidden className="size-4" />
-              </IconButton>
+              {/* Two lines: the property, then how it is ordered. View options is 360 px wide. */}
+              <div className="flex items-center gap-1.5">
+                <GripVertical aria-hidden className="size-4 shrink-0 cursor-grab text-faint" />
+                <span className="w-14 shrink-0 text-label text-muted">{i === 0 ? (noun === "sort" ? "Sort by" : "Group by") : "then by"}</span>
+                <div className="min-w-0 flex-1">
+                  <InlineSelect aria-label={`Property for ${noun} ${i + 1}`} width="w-full" disabled={readOnly} value={s.field_id} onChange={(e) => onUpdate(i, { field_id: e.target.value })}>
+                    {field ? null : <option value={s.field_id}>(deleted property)</option>}
+                    {[...(field ? [field] : []), ...free].map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </InlineSelect>
+                </div>
+                <IconButton label={`Remove ${noun} ${i + 1}`} size="sm" noTooltip disabled={readOnly} onClick={() => onRemove(i)}>
+                  <X aria-hidden className="size-4" />
+                </IconButton>
+              </div>
+              <div className="flex items-center gap-1.5 pl-[1.375rem]">
+                {noun === "group" && field && kindClassOf(field) === "date" && (
+                  <InlineSelect aria-label={`Granularity for group ${i + 1}`} width="w-28" disabled={readOnly} value={s.granularity ?? "day"} onChange={(e) => onUpdate(i, { granularity: e.target.value as DateGranularity })}>
+                    {(Object.keys(GRANULARITY_LABELS) as DateGranularity[]).map((g) => (
+                      <option key={g} value={g}>
+                        {GRANULARITY_LABELS[g]}
+                      </option>
+                    ))}
+                  </InlineSelect>
+                )}
+                <div className="min-w-0 flex-1">
+                  <InlineSelect aria-label={`Direction for ${noun} ${i + 1}`} width="w-full" disabled={readOnly} value={s.direction} onChange={(e) => onUpdate(i, { direction: e.target.value as Direction })}>
+                    <option value="asc">{asc}</option>
+                    <option value="desc">{desc}</option>
+                  </InlineSelect>
+                </div>
+                <IconButton label={`Move ${noun} ${i + 1} up`} size="sm" noTooltip disabled={readOnly || i === 0} onClick={() => onMove(i, i - 1)}>
+                  <ArrowUp aria-hidden className="size-4" />
+                </IconButton>
+                <IconButton label={`Move ${noun} ${i + 1} down`} size="sm" noTooltip disabled={readOnly || i === items.length - 1} onClick={() => onMove(i, i + 1)}>
+                  <ArrowDown aria-hidden className="size-4" />
+                </IconButton>
+              </div>
             </li>
           );
         })}

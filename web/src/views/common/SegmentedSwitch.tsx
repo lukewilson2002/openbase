@@ -7,14 +7,14 @@ export interface SegmentedSwitchProps<T extends string> {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
-  /** `md` is the toolbar's size (Build | Fill in form), `sm` a card header's. */
-  size?: "sm" | "md";
+  /** `md` is the toolbar's size (Build | Fill in form), `sm` a card header's, `lg` a full-width choice in a panel (View options' row height). */
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 export function SegmentedSwitch<T extends string>({ label, value, options, onChange, size = "sm", className }: SegmentedSwitchProps<T>) {
   return (
-    <div role="group" aria-label={label} className={cn("flex shrink-0 rounded-[10px] bg-subtle p-[3px]", className)}>
+    <div role="group" aria-label={label} className={cn("flex shrink-0 rounded-lg bg-subtle p-0.5", size === "lg" && "w-full", className)}>
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -24,9 +24,12 @@ export function SegmentedSwitch<T extends string>({ label, value, options, onCha
             aria-pressed={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              "rounded-[7px] transition-colors pointer-coarse:h-9",
-              size === "sm" ? "h-7 px-3 text-[0.8125rem]" : "h-[30px] px-3.5 text-[0.875rem]",
-              on ? "bg-surface font-semibold text-fg shadow-[0_1px_2px_rgb(15_20_30/0.12)]" : "font-medium text-muted hover:text-fg",
+              "rounded-md border transition-colors pointer-coarse:h-9",
+              size === "sm" && "h-7 px-3 text-[0.8125rem]",
+              size === "md" && "h-[30px] px-3.5 text-[0.875rem]",
+              // Four choices share the panel's width, and each is a 44 px target on a phone.
+              size === "lg" && "h-control-sm min-w-0 flex-1 px-1 text-label max-md:h-control-touch pointer-coarse:h-control-touch",
+              on ? "border-line bg-surface font-semibold text-fg" : "border-transparent font-medium text-muted hover:text-fg",
             )}
           >
             {o.label}

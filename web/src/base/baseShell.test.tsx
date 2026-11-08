@@ -195,7 +195,7 @@ describe("base shell on a desktop", () => {
     openBase("owner");
     await screen.findByText("Grid view coming soon");
     await user.click(tab("Board"));
-    expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
+    expect(await screen.findByText("Board view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
     expect(tab("Board")).toHaveAttribute("aria-selected", "true");
     expect(tab("All tasks")).toHaveAttribute("aria-selected", "false");
@@ -221,7 +221,7 @@ describe("base shell on a desktop", () => {
     await screen.findByText("Grid view coming soon");
     expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl2" } });
     await user.click(tasksLink());
-    expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
+    expect(await screen.findByText("Board view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
     expect(tab("Board")).toHaveAttribute("aria-selected", "true");
     expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl1" } });
@@ -494,7 +494,7 @@ describe("base shell on a desktop", () => {
     it("shares from the top bar: invites, and the view on screen picked under Share a view", async () => {
       const user = userEvent.setup();
       openBase("creator", { "GET /api/views/viw2/shares": [] }, "/base/app1/tbl1/viw2");
-      await screen.findByText("Kanban view coming soon");
+      await screen.findByText("Board view coming soon");
       await user.click(screen.getByRole("button", { name: "Share" }));
       const dialog = await screen.findByRole("dialog", { name: "Share Project tracker" });
       expect(within(dialog).getByRole("tab", { name: "Invite people" })).toHaveAttribute("aria-selected", "true");

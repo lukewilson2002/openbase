@@ -62,7 +62,7 @@ describe("suggestViewName", () => {
   it("falls back to the grouping, then the sort, then the layout, then the view's own name", () => {
     expect(suggestViewName({ ...base, config: { ...empty, groups: [{ field_id: "fStatus", direction: "asc" }], sorts: [{ field_id: "fFollow", direction: "asc" }] } })).toBe("By Status");
     expect(suggestViewName({ ...base, config: { ...empty, sorts: [{ field_id: "fFollow", direction: "asc" }, { field_id: "fStatus", direction: "desc" }] } })).toBe("Sorted by Next follow-up and Status");
-    expect(suggestViewName({ ...base, layout: "kanban", config: empty })).toBe("Kanban");
+    expect(suggestViewName({ ...base, layout: "kanban", config: empty })).toBe("Board");
     expect(suggestViewName({ ...base, config: empty })).toBe("Clients copy");
   });
 
