@@ -309,7 +309,7 @@ test("shares a grid with a password: a stranger gets the rows, not the hidden fi
 
 test("downloads a view as CSV: visible fields, the view's sort, BOM and quoting", async ({ page }) => {
   const created = await call<{ id: string; config: Record<string, unknown> }>(page.request, "post", `/api/tables/${fx.tableId}/views`, { name: "Export me", type: "grid", config: null });
-  await call(page.request, "patch", `/api/views/${created.id}`, { config: { ...created.config, hidden_fields: [fx.fields.salary], sorts: [{ field_id: fx.fields.qty, direction: "desc" }] } });
+  await call(page.request, "patch", `/api/views/${created.id}`, { config: { ...created.config, hidden_fields: [...((created.config.hidden_fields as string[] | undefined) ?? []), fx.fields.salary], sorts: [{ field_id: fx.fields.qty, direction: "desc" }] } });
   await openView(page, created.id);
   await page.getByRole("button", { name: "More" }).click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download CSV" }).click()]);
@@ -332,7 +332,7 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
 
   await test.step("New table from CSV: name from the file, preview, types inferred", async () => {
     await openView(page);
-    await page.getByRole("button", { name: /^Project options for / }).first().click();
+    await page.getByRole("button", { name: "Project options for Sharing E2E" }).click();
     await page.getByRole("menuitem", { name: "Add table" }).click();
     await page.getByRole("menuitem", { name: /New table from CSV/ }).click();
     const dialog = page.getByRole("dialog", { name: "New table from CSV" });

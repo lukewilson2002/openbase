@@ -269,14 +269,15 @@ test("the row numbers' column is resized from its edge, kept on this device, and
 
 test("hides a field and shows it again", async ({ page }) => {
   await gotoGrid(page);
-  await page.getByRole("button", { name: /Hide fields/ }).click();
+  // A table's Page property starts hidden in its views, so the button already counts one.
+  await page.getByRole("button", { name: /1 hidden field/ }).click();
+  await page.getByRole("switch", { name: "Qty" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /2 hidden fields/ })).toBeVisible();
+  await page.getByRole("button", { name: /2 hidden fields/ }).click();
   await page.getByRole("switch", { name: "Qty" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /1 hidden field/ })).toBeVisible();
-  await page.getByRole("button", { name: /1 hidden field/ }).click();
-  await page.getByRole("button", { name: "Show all" }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Hide fields" })).toBeVisible();
 });
 
 test("adds a field from the dialog", async ({ page }) => {

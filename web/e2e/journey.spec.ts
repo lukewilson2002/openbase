@@ -21,7 +21,7 @@ const CSRF = { "X-OpenBase-CSRF": "1" };
 const MARKER_W = 56;
 const HEADER_H = 44;
 const ROW_H = 42;
-// A table made on the empty base's page has only its primary field, so the added fields follow "Name".
+// A table made on the empty base's page has its primary field and the hidden Page property, so the columns the grid shows follow "Name".
 const COLUMNS = [
   { key: "name", width: 220 },
   { key: "qty", width: 140 },
@@ -112,17 +112,18 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect.poll(async () => api<{ intro_seen: boolean }>(page, "/api/auth/me")).toMatchObject({ email: EMAIL, is_admin: true, intro_seen: true });
   });
 
-  await test.step("creates a workspace and a project", async () => {
+  await test.step("creates a workspace, which starts with its top-level project", async () => {
     await page.getByRole("textbox", { name: "Workspace name" }).fill("Journey workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
-    // A workspace has no page of its own: with no project yet, the empty page offers to make one.
-    await expect(page.getByRole("heading", { name: "No projects in Journey workspace yet" })).toBeVisible();
-    await page.getByRole("button", { name: "New project" }).first().click();
-    await page.getByRole("textbox", { name: "Project name" }).fill("Journey base");
-    await page.getByRole("button", { name: "Create project" }).click();
-    // A new base starts without tables, and the page asks for the first one by name.
+    // A new workspace starts with an empty top-level project named after it, and opens it: the page asks for the first table.
     await expect(page).toHaveURL(/\/base\/app[^/]+$/);
-    baseId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
+    // The later steps and specs name the project, so give it the name they use (the sidebar and the top bar show it).
+    const topLevelId = /\/base\/(app[^/]+)/.exec(page.url())![1]!;
+    const renamed = await page.request.patch(`/api/bases/${topLevelId}`, { data: { name: "Journey base" }, headers: CSRF });
+    expect(renamed.ok(), `rename the top-level project: ${renamed.status()}`).toBeTruthy();
+    await page.reload();
+    // A new base starts without tables, and the page asks for the first one by name.
+    baseId = topLevelId;
     await expect(page.getByRole("heading", { name: "Create your first table" })).toBeVisible();
     await expect(page.getByRole("list", { name: /^Tables in / }).getByText("No tables yet.")).toBeVisible();
     await page.getByRole("textbox", { name: "Table name" }).fill("Table 1");
@@ -186,7 +187,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     });
 
     table = await loadTable();
-    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
+    expect(table.fields.map((f) => [f.name, f.type])).toEqual([["Name", "text"], ["Page", "rich_text"], ["Qty", "number"], ["Status", "single_select"], ["Due", "date"], ["Double", "formula"]]);
     const double = table.fields.find((f) => f.name === "Double")!;
     expect(double.options).toMatchObject({ expression: "{Qty} * 2", result_type: "number" });
     const status = table.fields.find((f) => f.name === "Status")!;
