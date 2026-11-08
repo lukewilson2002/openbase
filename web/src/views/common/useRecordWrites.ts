@@ -11,6 +11,7 @@
  */
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { isApiError } from "@/api/client";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, TableRecord, ViewConfig } from "@/api/types";
 import { useToast } from "@/components/ui/toast";
@@ -225,11 +226,17 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
           const removing = (op.kind === "create") === (dir === "undo");
           try {
             if (removing) {
+              // No longer "just added and untouched": looking it up again would answer 404.
+              for (const id of op.ids) created.current.delete(id);
               mutateCaches((d) => removeRecords(d, new Set(op.ids)));
               for (const part of chunk(op.ids, BATCH)) await recordsApi.remove(tableId, part);
             } else {
               for (const part of chunk(op.ids, BATCH)) await recordsApi.restore(tableId, part);
             }
+          } catch (e) {
+            // Undoing an add can meet a record the grid just took back because it was left untouched
+            // (undo moves the selection off it): it is gone, which is what undo asked for.
+            if (!(op.kind === "create" && dir === "undo" && op.ids.length === 1 && isApiError(e) && e.status === 404)) throw e;
           } finally {
             settle(true);
           }
@@ -401,6 +408,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
       await qc.cancelQueries({ queryKey: recordKeys.table(tableId) });
       const snap = snapshot();
       const gone = new Set(ids);
+      for (const id of ids) created.current.delete(id);
       mutateCaches((d) => removeRecords(d, gone));
       try {
         for (const part of chunk(ids, BATCH)) await recordsApi.remove(tableId, part);

@@ -209,6 +209,19 @@ describe("useRecordWrites", () => {
       expect(result.current.history.canUndo).toBe(true);
     });
 
+    // Asking the server for a removed record answers 404, which the browser logs as an error.
+    it.each([
+      ["undo", (r: { history: { undo(): Promise<void> } }) => r.history.undo()],
+      ["a delete", (r: { remove(ids: string[]): Promise<boolean> }) => r.remove(["new1"])],
+    ] as const)("does not look for a record that %s already removed", async (_name, removeIt) => {
+      const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({})] }, "DELETE /api/tables/tbl1/records": null, "GET /api/tables/tbl1/records/new1": record({}) });
+      const { result } = harness();
+      await act(async () => void (await result.current.create({})));
+      await act(async () => void (await removeIt(result.current)));
+      await act(async () => expect(await result.current.discardIfUntouched("new1")).toBe(false));
+      expect(api.callsTo("GET /api/tables/tbl1/records/new1")).toHaveLength(0);
+    });
+
     it("keeps a record that was changed, and one it did not create", async () => {
       const api = mockApi({ "POST /api/tables/tbl1/records": { records: [record({ f_status: "s1" })] }, "GET /api/tables/tbl1/records/new1": record({ f_status: "s1", f_name: "Typed" }) });
       const { result } = harness();
@@ -218,6 +231,15 @@ describe("useRecordWrites", () => {
       expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(0);
       expect(result.current.history.canUndo).toBe(true);
     });
+  });
+
+  it("undoes the add of a record that was already taken back without an error", async () => {
+    // The grid takes back a new record left untouched, and undo moves the selection off it, so the two can race.
+    mockApi({ "POST /api/tables/tbl1/records": { records: [makeRecord({}, "new1")] }, "DELETE /api/tables/tbl1/records": apiError(404, "not_found", "no such record") });
+    const { result } = harness();
+    await act(async () => void (await result.current.create({})));
+    await act(async () => void (await result.current.history.undo()));
+    expect(screen.queryByText(/Could not undo/)).toBeNull();
   });
 
   it("does nothing without permission to edit", async () => {
