@@ -1,0 +1,19 @@
+# Frozen (UX overhaul DL-1): the files the temporary list may ever hold. Never add a line.
+# scripts/check-tokens.mjs fails when check-tokens.temporary-list.txt holds a file that is not here,
+# so the list can only shrink. A line may be deleted once its file has moved to tokens.
+base/EmptyBase.tsx
+components/ShareDialog.tsx
+components/accountMenu.tsx
+components/layouts.tsx
+onboarding/IntroOverlay.tsx
+onboarding/illustrations.tsx
+views/calendar/calendar.css
+views/common/SegmentedSwitch.tsx
+views/common/UnscheduledList.tsx
+views/common/ViewSetupState.tsx
+views/form/FormBuilder.tsx
+views/form/FormFill.tsx
+views/form/FormSurface.tsx
+views/gallery/GalleryView.tsx
+views/kanban/KanbanBoard.tsx
+views/timeline/TimelineChart.tsx

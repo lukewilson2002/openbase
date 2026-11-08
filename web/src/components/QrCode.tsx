@@ -27,7 +27,7 @@ export function QrCode({ value, label, size = 192 }: { value: string; label: str
 
   if (failed) return <p className="text-[0.8125rem] text-muted">Could not render a QR code. Use the secret key below instead.</p>;
   return (
-    <div className="inline-block rounded-md bg-white p-3" style={{ width: size + 24, height: size + 24 }}>
+    <div className="inline-block rounded-md bg-paper p-3" style={{ width: size + 24, height: size + 24 }}>
       {src && <img src={src} alt={label} width={size} height={size} />}
     </div>
   );

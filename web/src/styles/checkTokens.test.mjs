@@ -109,6 +109,21 @@ describe("px font sizes", () => {
     "font: 13px/1.4 sans-serif;",
     'ctx.font = "600 13px Inter, sans-serif";',
     "ctx.font = '12px ' + family;",
+    "const s = { fontSize: big ? 16 : 13 };",
+    "const s = { fontSize: compact ? 12 : 14, color: x };",
+    "const s = { fontSize: x || 13 };",
+    "const s = { fontSize: x ?? 13 };",
+    "<text fontSize={wide ? 15 : size} />",
+    '<text fontSize={wide ? "15px" : size} />',
+    "const s = { fontSize: (big ? size : 13) };",
+    "const s = {\n  fontSize: big\n    ? 16\n    : 13,\n};",
+    'const s = { "font-size": "13px" };',
+    "const s = { 'font-size': 13 };",
+    'el.style["font-size"] = "13px";',
+    'el.style.setProperty("font-size", "13px");',
+    "el.style.setProperty('font-size', '12.5px');",
+    "const css = `font-size:${13}px`;",
+    "const s = { fontSize: `${13}px` };",
   ])("flags %s", (src) => {
     expect(kinds(src, "x.tsx")).toContain("px font size");
   });
@@ -140,8 +155,49 @@ describe("px font sizes", () => {
     "/* font-size: 13px */",
     "const thirteenPx = 13;",
     'const m = window.matchMedia("(min-width: 1024px)");',
+    "const s = { fontSize: big ? size : size * 1.2 };",
+    'const s = { fontSize: big ? "1.2em" : "0.8125rem" };',
+    "const s = { fontSize: x || size, lineHeight: 13 };",
+    "const s = { fontSize: size, width: big ? 16 : 13 };",
+    "const s = { fontSize: big ? size : Math.max(8, size) };",
+    'const s = { "font-size": "inherit", "line-height": "13px" };',
+    'el.style.setProperty("line-height", "13px");',
+    'el.style.setProperty("font-size", `${size}px`);',
+    "const css = `font-size:${size}px`;",
   ])("ignores %s", (src) => {
     expect(kinds(src, "x.tsx")).not.toContain("px font size");
+  });
+});
+
+describe("Tailwind palette colours", () => {
+  it.each([
+    'className="bg-white"',
+    'className="bg-black/60 text-white"',
+    'className="border border-black/10"',
+    'className="hover:bg-black/5 dark:text-white/70"',
+    'className="border-slate-200 text-gray-500 ring-blue-500"',
+    'className="fill-white stroke-black"',
+    'className="from-white to-black"',
+    'className="bg-white/[0.8] border-t-black"',
+    'className="!bg-white"',
+    "cn(on && 'text-white')",
+  ])("flags %s", (src) => {
+    expect(kinds(src)).toContain("palette colour");
+  });
+
+  it.each([
+    'className="bg-surface text-fg border-line bg-fg/10 hover:bg-hover"',
+    'className="bg-paper text-paper bg-scrim"',
+    'className="text-primary-fg bg-overlay"',
+    'className="whitespace-nowrap white-space"',
+    'className="bg-white-ish"',
+    'const note = "next-to-black"',
+    'className="text-black-ish"',
+    "// bg-white in a comment",
+    'className="border-blue"',
+    'className="bg-red-5"',
+  ])("ignores %s", (src) => {
+    expect(kinds(src)).not.toContain("palette colour");
   });
 });
 
@@ -236,7 +292,7 @@ describe("the temporary list", () => {
     for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
   });
 
-  function tree(files, list) {
+  function tree(files, list, baseline = list) {
     const dir = mkdtempSync(path.join(tmpdir(), "check-tokens-"));
     dirs.push(dir);
     const srcDir = path.join(dir, "src");
@@ -246,7 +302,9 @@ describe("the temporary list", () => {
     }
     const listFile = path.join(dir, "list.txt");
     writeFileSync(listFile, list);
-    return { srcDir, listFile };
+    const baselineFile = path.join(dir, "baseline.txt");
+    if (baseline !== null) writeFileSync(baselineFile, baseline);
+    return { srcDir, listFile, baselineFile };
   }
 
   const bad = 'export const c = "#fff";\n';
@@ -289,6 +347,23 @@ describe("the temporary list", () => {
     );
     expect(r.violations.size).toBe(0);
     expect(r.scanned).toBe(0);
+  });
+
+  it("fails on a file added to the list that the baseline never held, so the list cannot grow", () => {
+    const r = runCheck(tree({ "a/Old.tsx": bad, "a/New.tsx": bad }, "a/Old.tsx\na/New.tsx\n", "# frozen\na/Old.tsx\n"));
+    expect(r.violations.size).toBe(0);
+    expect(r.problems).toHaveLength(1);
+    expect(r.problems[0]).toMatch(/a\/New\.tsx: was not on the list when it was frozen/);
+  });
+
+  it("lets the list shrink below the baseline", () => {
+    const r = runCheck(tree({ "a/Old.tsx": bad }, "a/Old.tsx\n", "a/Old.tsx\na/Fixed.tsx\n"));
+    expect(r.problems).toEqual([]);
+  });
+
+  it("fails when the baseline file is missing", () => {
+    const r = runCheck(tree({ "a/Bad.tsx": bad }, "a/Bad.tsx\n", null));
+    expect(r.problems.some((p) => /baseline.txt is missing/.test(p))).toBe(true);
   });
 
   it("parses one path per line and skips comments and blanks", () => {

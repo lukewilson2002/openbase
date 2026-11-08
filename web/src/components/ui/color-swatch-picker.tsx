@@ -26,7 +26,7 @@ export function ColorSwatchPicker({ value, onChange, label = "Colour", className
             title={colorLabel(c)}
             onClick={() => onChange(c)}
             className={cn(
-              `choice choice-${c} flex aspect-square min-w-5 items-center justify-center rounded-full border border-black/10`,
+              `choice choice-${c} flex aspect-square min-w-5 items-center justify-center rounded-full border border-fg/10`,
               selected && "ring-2 ring-ring ring-offset-2 ring-offset-surface",
             )}
           >

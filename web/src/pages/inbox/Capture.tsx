@@ -148,7 +148,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
               <Link to={`/base/${filed.baseId}/${filed.tableId}?record=${filed.recordId}`} className="font-semibold underline underline-offset-2">
                 Open record
               </Link>
-              <button type="button" aria-label="Dismiss" onClick={() => setFiled(null)} className="-my-1 inline-flex size-7 items-center justify-center rounded hover:bg-black/5 pointer-coarse:size-9">
+              <button type="button" aria-label="Dismiss" onClick={() => setFiled(null)} className="-my-1 inline-flex size-7 items-center justify-center rounded hover:bg-hover pointer-coarse:size-9">
                 <X aria-hidden className="size-4" />
               </button>
             </span>
@@ -196,7 +196,7 @@ export function Capture({ workspaces }: { workspaces: readonly WorkspaceSummary[
                 <li key={m}>{m}</li>
               ))}
             </ul>
-            <button type="button" aria-label="Dismiss" onClick={uploads.dismissErrors} className="-my-1 inline-flex size-7 shrink-0 items-center justify-center rounded hover:bg-black/5 pointer-coarse:size-9">
+            <button type="button" aria-label="Dismiss" onClick={uploads.dismissErrors} className="-my-1 inline-flex size-7 shrink-0 items-center justify-center rounded hover:bg-hover pointer-coarse:size-9">
               <X aria-hidden className="size-4" />
             </button>
           </div>

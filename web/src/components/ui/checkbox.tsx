@@ -53,7 +53,7 @@ export function Switch({ checked, onCheckedChange, label, disabled, className }:
         onCheckedChange={onCheckedChange}
         className="relative h-5 w-9 shrink-0 rounded-full bg-line-strong transition-colors data-[state=checked]:bg-primary disabled:opacity-50"
       >
-        <S.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[18px]" />
+        <S.Thumb className="block size-4 translate-x-0.5 rounded-full bg-paper shadow transition-transform data-[state=checked]:translate-x-[18px]" />
       </S.Root>
       <label htmlFor={id} className={cn("text-[0.8125rem]", disabled && "opacity-60")}>
         {label}

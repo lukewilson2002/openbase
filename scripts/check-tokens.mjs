@@ -5,8 +5,12 @@
 // Flagged, outside the two lists below:
 //   - a raw hex colour (#fff, #1f5ae0, #1f5ae080)
 //   - an rgb(), rgba(), hsl() or hsla() colour
-//   - a px font size: Tailwind text-[13px], fontSize: 13 / "13px" / {13}, font-size: 13px,
-//     font-size="13", and the font shorthand (font: 13px ..., ctx.font = "600 13px ...")
+//   - a Tailwind palette colour utility (bg-white, text-black/70, border-slate-200, ring-blue-500):
+//     the colour must come from a token (bg-surface, text-fg, border-line)
+//   - a px font size: Tailwind text-[13px], fontSize: 13 / "13px" / {13}, a literal branch of a
+//     conditional or fallback (fontSize: big ? 16 : 13, fontSize: x || 13), "font-size": "13px",
+//     setProperty("font-size", "13px"), font-size:${13}px, font-size: 13px, font-size="13", and the
+//     font shorthand (font: 13px ..., ctx.font = "600 13px ...")
 // Comments are ignored; so are "#" in URLs, anchors, ids and entities, and "px" on anything that is
 // not a font size (widths, borders, offsets).
 //
@@ -17,6 +21,8 @@
 //              moved to tokens yet. It only shrinks: a file there with no violation left, or that no
 //              longer exists, fails the check, so whoever fixes the last literal in a file removes
 //              its line. It must be empty by Phase 7 of the UX overhaul.
+//              scripts/check-tokens.baseline.txt is the frozen set of files the list may ever hold: a
+//              file on the list but not in the baseline fails, so the list cannot grow.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +31,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const SRC = path.join(root, "web", "src");
 const TEMPORARY_LIST = path.join(here, "check-tokens.temporary-list.txt");
+const BASELINE = path.join(here, "check-tokens.baseline.txt");
 
 const SCANNED = /\.(?:[cm]?[jt]sx?|css)$/;
 
@@ -120,6 +127,10 @@ export function stripComments(src, { css = false } = {}) {
 // and nothing word-like or a hyphen follows (#add-row is an anchor, #fff is a colour).
 const HEX = /(?<![A-Za-z0-9&#/])(?<!url\(\s*["']?)#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])/g;
 const FUNC_COLOR = /(?<![A-Za-z0-9])(?:rgba?|hsla?)\(/gi;
+// A Tailwind palette utility: white, black or a named colour with a shade, optionally with an opacity
+// (bg-white, bg-black/60, border-slate-200, text-white/70). Tokens (bg-surface, text-fg) never match.
+const PALETTE_COLOR =
+  /(?<![\w-])(?:bg|text|border(?:-[xytblrse])?|ring|ring-offset|fill|stroke|outline|shadow|divide|from|via|to|decoration|accent|caret|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})(?:\/\d{1,3}|\/\[[^\]]+\])?(?![\w-])/g;
 const PX_FONT_SIZE = [
   // Tailwind arbitrary value: text-[13px], md:text-[length:13px]
   /(?<![\w-])text-\[(?:length:)?\d*\.?\d+px\]/g,
@@ -134,7 +145,48 @@ const PX_FONT_SIZE = [
   // font: 13px/1.4 sans-serif, ctx.font = "600 13px Inter". A size computed at run time
   // (`${size * rem}px`) is not a literal and is left alone.
   /\bfont\s*[:=]\s*[`'"]?[^\n;,]*?\d\s*px\b/g,
+  // A quoted key, as CSS-in-JS and style["font-size"] write it: "font-size": "13px", "font-size": 13
+  /["'`]font-size["'`]\]?\s*[:=](?!=)\s*(?:\{?\s*\d+(?:\.\d+)?(?![\w%.])|["'`][^"'`\n]*\d\s*px\b)/g,
+  // el.style.setProperty("font-size", "13px")
+  /\bsetProperty\(\s*["'`]font-size["'`]\s*,\s*(?:\d+(?:\.\d+)?(?![\w%.])|["'`][^"'`\n]*\d\s*px\b)/g,
+  // A literal written as an interpolation: font-size:${13}px, fontSize: `${13}px`
+  /\b(?:font-size|fontSize)\s*[:=](?!=)\s*\{?\s*["'`]?\s*\$\{\s*\d+(?:\.\d+)?\s*\}\s*px/g,
 ];
+
+/**
+ * The literal branches of a fontSize value that is more than one literal: fontSize: big ? 16 : 13,
+ * fontSize: x || 13, fontSize={wide ? "15px" : 13}. A number inside a call (Math.max(8, size / 4.5)) is
+ * a computed size and is left alone, like the plain literal, which PX_FONT_SIZE already reports.
+ */
+function conditionalFontSizes(text) {
+  const found = [];
+  for (const key of text.matchAll(/\bfontSize\s*[:=](?!=)\s*/g)) {
+    let i = key.index + key[0].length;
+    if (/["'`]/.test(text[i] ?? "")) continue;
+    const braced = text[i] === "{";
+    if (braced) i++;
+    const start = i;
+    let depth = 0;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (c === '"' || c === "'" || c === "`") {
+        let j = i + 1;
+        while (j < text.length && text[j] !== c && text[j] !== "\n") j += text[j] === "\\" ? 2 : 1;
+        i = j;
+      } else if (c === "(" || c === "[" || c === "{") depth++;
+      else if (c === ")" || c === "]" || c === "}") {
+        if (depth === 0) break;
+        depth--;
+      } else if (depth === 0 && (c === "," || c === ";")) break;
+      else if (depth === 0 && c === "\n" && !braced && !/^\s*(?:[?:]|\|\||&&)/.test(text.slice(i + 1, i + 40))) break;
+    }
+    const expr = text.slice(start, i);
+    for (const m of expr.matchAll(/(?:\?\?|\|\||&&|\?|:)\s*(["'`]?)(\d+(?:\.\d+)?)(?:px)?\1\s*(?=$|\?\?|\|\||&&|:|\?|\)|\n)/g)) {
+      found.push({ index: start + m.index + m[0].indexOf(m[2]), text: m[0].replace(/^[?:|&]+\s*/, "").trim() });
+    }
+  }
+  return found;
+}
 
 function lineCol(text, index) {
   const before = text.slice(0, index);
@@ -154,7 +206,9 @@ export function findViolations(src, file = "x.tsx") {
   };
   add(HEX, "hex colour");
   add(FUNC_COLOR, "rgb/hsl colour");
+  add(PALETTE_COLOR, "palette colour");
   for (const re of PX_FONT_SIZE) add(re, "px font size");
+  for (const f of conditionalFontSizes(text)) found.push({ ...lineCol(text, f.index), kind: "px font size", text: f.text });
   // The same text can match two font-size patterns; report each spot once.
   const seen = new Set();
   return found
@@ -182,11 +236,22 @@ export function parseTemporaryList(text) {
  * The whole check, without any printing: { violations: Map<file, violation[]> for files on neither
  * list, problems: string[] about the temporary list, scanned, temporary }.
  */
-export function runCheck({ srcDir = SRC, listFile = TEMPORARY_LIST } = {}) {
+export function runCheck({ srcDir = SRC, listFile = TEMPORARY_LIST, baselineFile = BASELINE } = {}) {
   const temporary = parseTemporaryList(existsSync(listFile) ? readFileSync(listFile, "utf8") : "");
   const onList = new Set(temporary);
   const problems = [];
   if (onList.size !== temporary.length) problems.push("the temporary list has a duplicate entry");
+  // The list only shrinks: nothing may be on it that was not there when the baseline was frozen.
+  if (!existsSync(baselineFile)) {
+    problems.push(`the baseline ${path.basename(baselineFile)} is missing`);
+  } else {
+    const baseline = new Set(parseTemporaryList(readFileSync(baselineFile, "utf8")));
+    for (const rel of temporary) {
+      if (!baseline.has(rel)) {
+        problems.push(`${rel}: was not on the list when it was frozen (check-tokens.baseline.txt); the list never grows, use tokens in this file`);
+      }
+    }
+  }
 
   const violations = new Map();
   const withViolations = new Set();
@@ -223,8 +288,8 @@ function main() {
     console.error(
       `\n${violations.size} file(s) use a literal where a design token belongs. Use a token from ` +
         "web/src/styles/index.css (a colour like text-fg or bg-primary-soft, a size like text-ui or " +
-        "text-label). Files that have not moved yet are listed in scripts/check-tokens.temporary-list.txt; " +
-        "never add to it.",
+        "text-label, a surface like bg-surface or border-line). Files that have not moved yet are listed in " +
+        "scripts/check-tokens.temporary-list.txt; never add to it.",
     );
   }
   if (violations.size > 0 || problems.length > 0) process.exit(1);

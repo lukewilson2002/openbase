@@ -49,6 +49,10 @@
   --warning-soft: #fff1cc;
   --ring: #1f5ae0;
   --overlay: rgb(15 20 30 / 0.45);
+  /* White in both themes, for what must stay light on a dark page: a QR code's quiet zone, a switch's thumb. */
+  --paper: #ffffff;
+  /* A dark wash over a picture, so a white mark on it reads whatever the picture is (a video's play badge). */
+  --scrim: rgb(0 0 0 / 0.6);
   --shadow: 0 1px 2px rgb(15 20 30 / 0.06), 0 4px 14px rgb(15 20 30 / 0.08);
   /* The edge of a scrolling list where there is more to scroll (the menu). */
   --scroll-shade: rgb(15 20 30 / 0.05);
@@ -83,6 +87,8 @@
   --warning-soft: #3a3010;
   --ring: #7aa1ff;
   --overlay: rgb(0 0 0 / 0.6);
+  --paper: #ffffff;
+  --scrim: rgb(0 0 0 / 0.6);
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.45);
   --scroll-shade: rgb(0 0 0 / 0.28);
 }
@@ -133,6 +139,8 @@
   --color-warning-soft: var(--warning-soft);
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);
+  --color-paper: var(--paper);
+  --color-scrim: var(--scrim);
   --shadow-pop: var(--shadow);
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
