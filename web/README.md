@@ -172,7 +172,7 @@ The suite must not depend on how fast the machine is (it passes on a laptop and 
 ```
 src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE), keys.ts, types/ (generated)
 src/auth/       current-user hooks and route guards
-src/base/       project screen in the app shell: top bar, menu (tables, views, actions), dialogs, empty project, permission rules
+src/base/       project screen in the app shell: the collection header, menu (tables, views, actions), dialogs, empty folder, permission rules
 src/components/ design-system primitives (ui/) and shared dialogs
 src/lib/webauthn.ts  the WebAuthn browser API <-> the server's JSON (base64url conversion, support checks, errors); `src/auth/usePasskeyLogin.ts` is the login page's passkey button and background autofill request
 src/pages/      setup, login, signup, invite, password reset, home, account/ (SecuritySection: password, PasskeysSection, two-factor), admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
@@ -180,6 +180,21 @@ src/theme/      light/dark theme provider (the pre-paint script is public/theme-
 src/views/      ViewHost + registry.ts: the extension point where grid/kanban/... plug in
 src/automations/ the automations page (list, editor, test panel, run history); its own lazy chunk
 ```
+
+### App frame and routes (NAV-5)
+
+There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked menu (a drawer on phone) beside `main`. Each screen draws its own
+header as the first thing inside `main`: `shell/ScreenHeader.tsx` (the menu toggle, an optional `h1`, actions, the search button; the workspace
+screens get it from `HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (path, the collection's `h1` with its color mark, presence faces, Share).
+`shell/menuContext.tsx` is how a header reaches the menu's state. A screen that scrolls inside itself passes `fill` to `AppShell` and lays out
+its own column (header, then a `min-h-0 flex-1` body).
+
+Routes (`App.tsx`; `routes.test.tsx` holds the table): `/` goes to the last workspace's Home (`workspaceToOpen` in `pages/workspace/lastWorkspace.ts`)
+or shows first run; `/workspace/:id` is Home (for now the Inbox's capture box until HOME-1 to HOME-11 rebuild it); `/workspace/:id/collections` is
+the phone's Collections tab and redirects to Home on a desktop; `/notifications` and `/inbox` (until Home absorbs it) are screens of their own;
+`/workspace/:id/automations` lists automations by folder and links to the unchanged editor route. `lib/topLevel.ts` splits a workspace's
+projects into the top level and the folders the person can open (NAV-10: `GET /api/workspaces` lists only openable projects and drops
+`root_base_id` when the top level is not one of them).
 
 ### Plugging in a view
 
@@ -261,12 +276,12 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 
 ### Trash and notifications
 
-`components/trash`: `TrashButton` in the project top bar (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). A deleted *workspace* has no trash of its own to open (`GET /api/workspaces/{id}/trash` answers 404 once it is deleted), so the home page lists the caller's own deleted workspaces in "Recently deleted workspaces" (`DeletedWorkspaces`, from `GET /api/trash/workspaces`, owners only) with a Restore button; the section is absent when there are none. `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
+`components/trash`: `TrashButton` in the project header (creators and owners) opens `TrashDialog` (tables, fields, views, records with relative deletion time and Restore; retention note: 30 days by default). A deleted *workspace* has no trash of its own to open (`GET /api/workspaces/{id}/trash` answers 404 once it is deleted), so the home page lists the caller's own deleted workspaces in "Recently deleted workspaces" (`DeletedWorkspaces`, from `GET /api/trash/workspaces`, owners only) with a Restore button; the section is absent when there are none. `components/notifications`: `NotificationBell` replaces the disabled bell; unread count polled every 60 s and refetched on window focus, `describeNotification` turns payloads (mention: `author_name`, `snippet`, `record_name` and the location keys; assigned: `field_name`, `assigned_by` (a user id, so no name is shown); automation: `message`, `automation_name`; all optional) into text and a link (a record is linked only when the payload names its table), which `BaseShell` keeps intact when it canonicalises the URL.
 
 ### Automations (`src/automations`)
 
 `/base/:baseId/automations/:automationId?/:tab?` renders inside the project shell (`BaseShell section="automations"`, lazy chunk), reached
-from the "Automations" button in the top bar. Creators and owners only (`basePermissions.manageAutomations`): the server lets editors
+from a folder's menu in the sidebar, and listed by folder for the whole workspace at `/workspace/:workspaceId/automations` (the sidebar's Automations row, creators only; each row links here). Creators and owners only (`basePermissions.manageAutomations`): the server lets editors
 read run history, but listing automations needs a creator, so editors have no way to learn an automation's id.
 
 | Where | What |
@@ -393,7 +408,7 @@ glyph drawn directly, a stroke width set by hand, an `IconButton` without `label
   handwritten. There are no inline scripts or styles in `index.html`: the server's CSP forbids them.
 - `src/components/brandMarks.ts` (generated): the path data that `components/Logo.tsx` draws inline. `Logo` is the lockup (mark plus
   outlined wordmark, in the text colour, so it follows the theme) or, with `showName={false}`, the small mark; `BrandMark` is the bare
-  mark. They sit in the app top bars, the sign-in, setup, invite and reset pages and, as "Powered by OpenBase", the footer of public
+  mark. They sit on the sign-in, setup, invite and reset pages and, as "Powered by OpenBase", the footer of public
   form and share pages. The server serves these files with `Cache-Control: public, max-age=86400` and an ETag (the manifest and
   `index.html` are `no-cache`), see `crates/server/src/web.rs`.
 
