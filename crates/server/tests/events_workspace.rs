@@ -87,6 +87,59 @@ async fn relays_every_project_with_its_id_and_nothing_from_other_workspaces() {
 }
 
 #[tokio::test]
+async fn another_workspaces_project_changes_cost_no_reads_once_its_workspace_is_known() {
+    let f = Fixture::new().await;
+    let (other, _, _) = second_project(&f, "Second").await;
+    let elsewhere = workspace(&f.app, &f.owner, "Elsewhere").await;
+    let mut foreign = Vec::new();
+    for n in 0..4 {
+        let b = base(&f.app, &f.owner, &elsewhere, &format!("Foreign {n}")).await;
+        foreign.push(b["id"].as_str().unwrap().to_string());
+    }
+    let member = f.member("member@example.com", Role::Viewer);
+    let mut streams = vec![
+        open_workspace(&f.app, &f.owner, &f.ws).await.stream(),
+        open_workspace(&f.app, &member, &f.ws).await.stream(),
+    ];
+    let reorder = |ws: String, ids: Vec<String>| {
+        let (app, owner) = (&f.app, &f.owner);
+        async move {
+            app.post(
+                owner,
+                &format!("/api/workspaces/{ws}/bases/reorder"),
+                json!({ "ids": ids }),
+            )
+            .await
+            .assert_status(200);
+        }
+    };
+    // Each reorder publishes one base_changed per project. The first asks the database once
+    // per project, for every stream together; repeating it asks nothing.
+    let backwards: Vec<String> = foreign.iter().rev().cloned().collect();
+    reorder(elsewhere.clone(), backwards.clone()).await;
+    for s in &mut streams {
+        s.expect_quiet(QUIET).await;
+    }
+    assert_eq!(f.app.state.events.workspace_loads(), 4);
+    // Back and forth: an unchanged order publishes nothing, so each call really swaps.
+    for ids in [&foreign, &backwards, &foreign] {
+        reorder(elsewhere.clone(), ids.clone()).await;
+    }
+    for s in &mut streams {
+        s.expect_quiet(QUIET).await;
+    }
+    assert_eq!(f.app.state.events.workspace_loads(), 4);
+
+    // The workspace's own projects still come through, and are asked about once too.
+    reorder(f.ws.clone(), vec![other.clone(), f.base_id.clone()]).await;
+    for s in &mut streams {
+        expect(s, "base_changed", &other).await;
+        expect(s, "base_changed", &f.base_id).await;
+    }
+    assert_eq!(f.app.state.events.workspace_loads(), 6);
+}
+
+#[tokio::test]
 async fn a_limited_member_sees_only_the_projects_they_can_open() {
     let f = Fixture::new().await;
     let (_, other_table, other_primary) = second_project(&f, "Second").await;

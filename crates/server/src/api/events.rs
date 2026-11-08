@@ -384,21 +384,31 @@ impl WorkspaceFeed {
             self.workspace_id.clone(),
             base_id.to_string(),
         );
+        // Every project of the server passes here, most of them another workspace's. The
+        // bus settles which workspace a project is in once for all streams, so those cost
+        // no read here.
+        let db = self.state.db.clone();
+        let looked_up = base.clone();
+        let home = self
+            .state
+            .events
+            .workspace_of(base_id, || async move {
+                db.read(move |conn| {
+                    Ok(conn.query_row(
+                        "SELECT workspace_id FROM bases WHERE id = ?1",
+                        [&looked_up],
+                        |r| r.get::<_, String>(0),
+                    )?)
+                })
+                .await
+            })
+            .await;
+        if !home.is_ok_and(|home| home == ws) {
+            return Some(false);
+        }
         self.state
             .db
             .read(move |conn| {
-                // Every project of the server passes here: most are another
-                // workspace's and cost one query.
-                let ours: bool = conn
-                    .query_row(
-                        "SELECT count(*) > 0 FROM bases WHERE id = ?1 AND workspace_id = ?2",
-                        [&base, &ws],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(false);
-                if !ours {
-                    return Ok(Some(false));
-                }
                 if !still_member(conn, &actor, &ws) {
                     return Ok(None);
                 }

@@ -3,10 +3,12 @@
 //! cross-process fan-out: OpenBase runs as a single process by design.
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use ob_core::api::events::{BaseEvent, EventEnvelope};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{OnceCell, broadcast, watch};
 
 use crate::store::versions::DataVersions;
 
@@ -19,6 +21,8 @@ const TAP_CAPACITY: usize = 1024;
 /// allows about six connections per site, so this is generous; it stops a
 /// runaway client from holding the server's connections.
 pub const MAX_WORKSPACE_STREAMS_PER_USER: usize = 20;
+/// Projects whose workspace [`EventBus::workspace_of`] remembers before it starts over.
+const HOME_CACHE_MAX: usize = 100_000;
 
 /// Flipped to `true` when the server begins to shut down.
 #[derive(Clone)]
@@ -42,6 +46,15 @@ impl Default for Tap {
     }
 }
 
+/// Which workspace each project belongs to, for the workspace streams. A project never moves
+/// between workspaces, so an answer stays right for as long as the project exists.
+#[derive(Default)]
+struct Homes {
+    cells: Mutex<HashMap<String, Arc<OnceCell<String>>>>,
+    /// How many times the answer had to be loaded (tests and metrics).
+    loads: AtomicU64,
+}
+
 /// A user with open event streams on one base.
 struct Viewer {
     user_id: String,
@@ -62,6 +75,7 @@ pub struct EventBus {
     tap: Tap,
     /// Open workspace streams per user id.
     workspace_streams: Arc<Mutex<HashMap<String, usize>>>,
+    homes: Arc<Homes>,
 }
 
 /// One open workspace event stream of a user. Dropping it frees the user's
@@ -251,6 +265,36 @@ impl EventBus {
         self.tap.0.subscribe()
     }
 
+    /// The workspace `base_id` belongs to, loaded with `load` the first time anyone asks and
+    /// remembered after. Every workspace stream sees every project's `base_changed`, and most
+    /// belong to other workspaces: asking the database about each one, in each stream, lets one
+    /// person's project churn load every other tenant's reads. Concurrent first askers share
+    /// one load, and a failed load is not remembered.
+    pub async fn workspace_of<F, Fut, E>(&self, base_id: &str, load: F) -> Result<String, E>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<String, E>>,
+    {
+        let cell = {
+            let mut cells = self.homes.cells.lock().unwrap_or_else(|p| p.into_inner());
+            if cells.len() >= HOME_CACHE_MAX {
+                cells.clear();
+            }
+            cells.entry(base_id.to_string()).or_default().clone()
+        };
+        cell.get_or_try_init(|| {
+            self.homes.loads.fetch_add(1, Ordering::Relaxed);
+            load()
+        })
+        .await
+        .cloned()
+    }
+
+    /// How many times [`EventBus::workspace_of`] had to load an answer.
+    pub fn workspace_loads(&self) -> u64 {
+        self.homes.loads.load(Ordering::Relaxed)
+    }
+
     pub fn subscribe(&self, base_id: &str) -> broadcast::Receiver<Arc<EventEnvelope>> {
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(base_id.to_string())
@@ -310,6 +354,34 @@ impl EventBus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn the_workspace_of_a_project_is_loaded_once_even_when_asked_together() {
+        let bus = EventBus::default();
+        let ask = |bus: EventBus| async move {
+            bus.workspace_of("app1", || async {
+                tokio::task::yield_now().await;
+                Ok::<_, ()>("wsp1".to_string())
+            })
+            .await
+        };
+        let (a, b, c) = tokio::join!(ask(bus.clone()), ask(bus.clone()), ask(bus.clone()));
+        assert_eq!(
+            (a, b, c),
+            (Ok("wsp1".into()), Ok("wsp1".into()), Ok("wsp1".into()))
+        );
+        assert_eq!(ask(bus.clone()).await, Ok("wsp1".to_string()));
+        assert_eq!(bus.workspace_loads(), 1);
+        // A failed load is not remembered: the next ask tries again.
+        let failed = bus
+            .workspace_of("app2", || async { Err::<String, _>("gone") })
+            .await;
+        assert_eq!(failed, Err("gone"));
+        let retried = bus
+            .workspace_of("app2", || async { Ok::<_, &str>("wsp2".to_string()) })
+            .await;
+        assert_eq!(retried, Ok("wsp2".to_string()));
+    }
 
     #[tokio::test]
     async fn subscribers_receive_only_their_base() {
