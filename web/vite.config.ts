@@ -34,7 +34,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    // .mjs: styles/checkTokens.test.mjs tests scripts/check-tokens.mjs, which is plain Node.
+    include: ["src/**/*.test.{ts,tsx,mjs}"],
     css: false,
     restoreMocks: true,
   },

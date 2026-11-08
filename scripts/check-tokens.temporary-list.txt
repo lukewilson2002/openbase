@@ -1,0 +1,23 @@
+# Files that still hold a raw colour or px font size because they have not moved to design tokens
+# yet (UX overhaul DL-1). One path per line, relative to web/src.
+#
+# This list only shrinks. Never add a file: use a token from web/src/styles/index.css instead.
+# scripts/check-tokens.mjs fails when a file listed here no longer has a violation (delete its
+# line) or no longer exists. It must be empty by Phase 7 of the UX overhaul.
+base/EmptyBase.tsx
+components/ShareDialog.tsx
+components/accountMenu.tsx
+components/layouts.tsx
+components/ui/dialog.tsx
+onboarding/IntroOverlay.tsx
+onboarding/illustrations.tsx
+views/calendar/calendar.css
+views/common/SegmentedSwitch.tsx
+views/common/UnscheduledList.tsx
+views/common/ViewSetupState.tsx
+views/form/FormBuilder.tsx
+views/form/FormFill.tsx
+views/form/FormSurface.tsx
+views/gallery/GalleryView.tsx
+views/kanban/KanbanBoard.tsx
+views/timeline/TimelineChart.tsx
