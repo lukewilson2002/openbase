@@ -269,7 +269,43 @@ phone-width media query.
 ### Plugging in a view
 
 Implement a component taking `ViewProps` (`schema`, `table`, `view`, `role`) and point the matching line of
-`src/views/registry.ts` at it (use `React.lazy` to keep the shell bundle small).
+`src/views/registry.ts` at it (use `React.lazy` to keep the shell bundle small). `ViewHost` picks the component by the
+view's layout: its own type, or the one this person's draft switched to. The component always gets the saved `view`.
+
+### Drafts (COL-5, `src/views/drafts` and `views/grid/useViewConfig.ts`)
+
+Every change to a view is a draft until someone saves it (decision 4). Nothing saves by itself: there is no timer, no
+"Not saved" badge and no "Locked" badge on the toolbar. `useViewConfig(schema, table, view, role)` is the one hook the
+views use; its `config` is the saved config with this person's draft laid over it, `update(mutate)` writes the draft.
+
+| File | What |
+|---|---|
+| `classify.ts` | Every `ViewConfig` key, classified (`Record<keyof ViewConfig, ...>`, so a new key cannot be added without deciding). `QUERY_KEYS` (filter, sorts, groups, row_color, summaries) go to the server as `TransientConfig`; `LAYOUT_KEYS` are the ones Update view saves on the default view; `form` is the only `IMMEDIATE_KEYS` entry |
+| `draft.ts` | Pure: `diffChanges`, `applyDraft`, `toTransient` / `applyTransient`, `nextDraft` (null once the changes are undone by hand), `fingerprint` and `changedOnServer`, `parseDraft` (storage can hold anything) |
+| `permissions.ts` | `canConfigureView` and `draftActions(role, view, draft)`: which of Update view, Save as view and Everyone a person has |
+| `store.ts` | localStorage `ob-view-draft:<user>:<view>`, every access guarded (a refused write lasts as long as the page); `useViewDraft`; moves the old `ob-view-local` and `ob-view-transient` entries into drafts, and deletes them, the first time a person's drafts are read |
+| `name.ts` | The name Save as view suggests, from the filter chips ("Proposal sent, Next follow-up this calendar week") |
+| `useDraftCounts.ts` | The two numbers in "Showing 3 of 12 clients": two one-record queries, only while the draft changes the filter |
+
+- **Permissions.** Everyone drafts everything, viewers and commenters included. Reset is for everyone. **Update view** is for people
+  who may configure the view (editors on shared views, creators on locked ones, editors on their own personal views) when the layout
+  is the view's own; on the default view, which sets the layout of every record, editors and up, for the layout settings only (its
+  filter, sorts, groups and colors can only become a new view, as the server enforces) and what Update view does not take stays a
+  draft. **Save as view** is for editors and up: Only me makes a personal view, Everyone needs the creator role. Saving a different
+  layout always makes a new view. The changes bar (`components/viewbar/DraftBar.tsx`, over the `TemporaryChangesBar` core
+  component) shows exactly the buttons the person has.
+- **What travels.** `useViewConfig` returns `transient` (the query settings that differ from the saved view) and `queryConfig` (the
+  saved config with it applied). Build query keys from `queryConfig`, and send `transient` with every view query and aggregation:
+  the server computes the filter, sorts, groups, row colors and summaries. Layout settings (widths, order, hidden, frozen, row height) and
+  the layout's own settings are applied by the client only. A hidden property does not leave a text search on the server (the
+  search skips a saved view's hidden properties, and a draft has no way to say so).
+- **Forms** save as they are made, for people who may configure the view (`cfg.saveNow`): a public form follows the live form. Saves go
+  out at once, one at a time, the latest state last, and the cached schema is updated first. A form shown as the layout of another view
+  cannot be built (`cfg.canEditForm`).
+- **The view changed meanwhile.** A draft keeps the fingerprint of the saved config it started from; when the view's config differs,
+  the bar adds "This view changed since you started." and keeps the draft. A save of this person's own (a form edit) moves the
+  fingerprint along, so it never reports itself.
+- **Tests.** `viewTestUtils.draftChanges()` reads the test person's draft for a view; `test/setup.ts` clears drafts between tests.
 
 ### The grid view (`src/views/grid`)
 
@@ -281,7 +317,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | Where | What |
 |---|---|
 | `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
-| `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config (`useViewConfig`) |
+| `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
 | `src/components/viewbar/` | Toolbar, filter builder, pure `ViewConfig` mutations (`config.ts`) |
@@ -297,10 +333,10 @@ All five get `{schema, table, view, role}`, are lazy chunks registered in `views
 
 | Where | What |
 |---|---|
-| `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the saved view config (`grid/useViewConfig`), search, record writes and the `?record=` parameter |
+| `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the view config with this person's draft (`grid/useViewConfig`), search, record writes and the `?record=` parameter |
 | `common/useViewRecords.ts` | Whole-view query: pages of 1,000 up to a 5,000 cap (`truncated` drives the "showing first N" notice), cached under `["records", tableId, viewId, "query", ...]` so SSE invalidation refetches it |
 | `common/useRecordWrites.ts`, `cache.ts` | Optimistic edits, manual-order moves and creates over every cached whole-view query of the table, rolled back when the server rejects them |
-| `common/ViewFrame.tsx` | The shared toolbar (`components/viewbar`, with `features`/`extra` props to drop grid-only controls and add view settings) plus `ExpandedRecord` for `?record=` |
+| `common/ViewFrame.tsx` | The shared toolbar (`components/viewbar`, with `features`/`extra` props to drop grid-only controls and add view settings), the changes bar (`DraftBar`) plus `ExpandedRecord` for `?record=` |
 | `common/wallTime.ts` | Calendar/timeline time model: date cells are read as *wall time* (the wall-clock reading as UTC ms) in the field's zone, else the viewer's, so a day is always 86,400,000 ms and drags map back to stored values through `zonedToInstant` |
 
 - **Kanban** stacks by single select, single user or checkbox (`stacks.ts` is pure: bucketing, `stack_order`, drop planning). dnd-kit with pointer and keyboard sensors (Space picks up, arrows move, Space drops, Enter opens). A drop writes the stack field with `typecast` and, only when the view has no sorts, a manual-order move; both are optimistic with rollback.

@@ -138,6 +138,24 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Changed
 
+- **Every change to a view is a draft until someone saves it.** Filtering, sorting, grouping,
+  coloring, hiding or reordering properties, resizing or freezing columns, row height, summaries
+  and a layout's own settings (what a board stacks by, a calendar's dates, a timeline's scale)
+  now stay on your device, for you, and survive a reload; nobody else sees them, whatever your
+  role. A bar under the toolbar says "Showing 3 of 12 clients. These changes are only for now."
+  (the count only when the filter changed; it uses the collection's record name) with **Reset**,
+  **Update view** and **Save as view**. Update view writes the changes to the view for people who
+  may change it (on the default grid, editors and up, for the layout settings only; its filter,
+  sort, groups and colors can only become a new view). Save as view, for editors and up, names
+  the changes after the filter and offers Only me or Everyone (creators). If the view was saved by
+  someone else meanwhile the bar adds "This view changed since you started." and keeps your
+  changes. The toolbar no longer saves after a pause, and the "Not saved" and "Locked" badges are
+  gone (the view list still marks locked views). Viewers and commenters can now choose a board's
+  stack property, a calendar's date and the like, and color records, for themselves. A form's own
+  settings and fields still save as they are made. Old per-device filters and layouts move into
+  drafts the first time you open a view. Row colors and summaries drafted in the app are computed
+  by the server like saved ones (`transient.row_color` and `transient.summaries`, see
+  [docs/api.md](docs/api.md)).
 - **The sidebar is rebuilt around one workspace.** It starts with the workspace switcher (the
   workspace's color, its name and "Switch workspace"; its menu begins with the OpenBase mark,
   lists every workspace and ends with the workspace's own actions), "Search everything", Home,
