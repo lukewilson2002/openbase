@@ -148,6 +148,14 @@ The grid is a canvas, so cells are operated by position with real mouse and keyb
 are asserted against the API. The server's public URL is `http://localhost:<port>` (not `127.0.0.1`): WebAuthn needs a domain name as the relying party, and `localhost` is the one browsers treat as a secure context over plain http. `OPENBASE_E2E_URL=...` uses a running server, `OPENBASE_E2E_SKIP_BUILD=1`
 reuses the existing builds, and `scripts/check.sh` runs all of this when `OPENBASE_E2E=1` is set.
 
+Two specs belong to the UX overhaul. `shellRoutes.spec.ts` opens every route of the spec's Routes table that exists
+in a real browser at 1440 and 390 px and checks the shell (the sidebar, or the phone's bottom bar), one `main` with its
+own header and one `h1`, and no horizontal scroll; the phase that adds a route adds a line to its `ROUTES`.
+`ledger.spec.ts` takes the screen ledger's screenshots into `docs/plans/ux-overhaul-screenshots/NN-slug-{light,dark}-{1440,390}.png`
+(NN is the ledger row, device scale factor 1). It rewrites tracked files, so it runs only with `LEDGER_SHOTS=1`
+(`LEDGER_ONLY=2,4` limits it to those rows); the data it looks at is seeded through the API by `ledgerSeed.ts`, and a
+phase adds a screen by adding one entry to `SHOTS`.
+
 The suite must not depend on how fast the machine is (it passes on a laptop and has to pass on a busy CI runner):
 
 - **Client addresses.** The server limits sign-ins (10 a minute) and sign-ups (10 an hour) per client address, and
