@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { keys } from "@/api/keys";
 import type { View, ViewConfig } from "@/api/types";
 import { apiError } from "@/test/utils";
-import { F, projectSchema, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, openViewOptions, projectSchema, renderView, viewWithConfig } from "../common/viewTestUtils";
 import type { ViewProps } from "../types";
 import FormView from "./FormView";
 
@@ -605,5 +605,45 @@ describe("who is notified of responses", () => {
     await waitFor(() => expect(me).toBeEnabled());
     await user.click(me);
     await waitFor(async () => expect((await saved(api)).notify_user_ids).toEqual(["usr1"]), { timeout: 3000 });
+  });
+});
+
+describe("View options on a form", () => {
+  it("is in the toolbar with the layout tiles (Form selected) and Download CSV, and nothing a form has no use for", async () => {
+    const user = userEvent.setup();
+    setup("creator");
+    await screen.findByRole("heading", { name: "Form" });
+    const panel = await openViewOptions(user);
+    expect(within(panel).getByRole("button", { name: "Form", pressed: true })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Download CSV" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: /^(Sort|Group|Color|Properties)/ })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Add property" })).not.toBeInTheDocument();
+  });
+
+  it("opens the builder from Fill in form, for people who may build it, and closes", async () => {
+    const user = userEvent.setup();
+    setup("creator");
+    await screen.findByRole("heading", { name: "Form" });
+    await user.click(screen.getByRole("button", { name: "Fill in form" }));
+    expect(screen.queryByRole("region", { name: "Form preview" })).not.toBeInTheDocument();
+    const panel = await openViewOptions(user);
+    await user.click(within(panel).getByRole("button", { name: "Open the form builder" }));
+    expect(await screen.findByRole("region", { name: "Form preview" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("says a viewer can fill in or look but not change the form", async () => {
+    const user = userEvent.setup();
+    setup("viewer");
+    await screen.findByRole("heading", { name: "Form" });
+    const panel = await openViewOptions(user);
+    expect(within(panel).getByText("You can fill in this form but not change it.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Open the form builder" })).not.toBeInTheDocument();
+  });
+
+  it("has no Download CSV in More: it lives in View options", async () => {
+    setup("creator");
+    await screen.findByRole("heading", { name: "Form" });
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
   });
 });

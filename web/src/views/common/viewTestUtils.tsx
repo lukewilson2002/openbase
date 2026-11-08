@@ -1,7 +1,7 @@
 /** Test helpers for the view components: a small schema, a query-aware mock API and a renderer. */
 import type { ComponentType } from "react";
 import { MemoryRouter, useLocation } from "react-router";
-import { render, type RenderResult } from "@testing-library/react";
+import { render, screen, within, type RenderResult } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { BaseSchema, Field, GroupHeader, QueryRequest, Table, TableRecord, View, ViewConfig, ViewType } from "@/api/types";
 import { keys } from "@/api/keys";
@@ -10,6 +10,7 @@ import { ALL_FIELDS, field, makeRecord } from "@/test/fields";
 import { USER, makeView, mockApi, stubDesktop, type Handler, type MockApi, type RecordedCall } from "@/test/utils";
 import { readDraft } from "../drafts/store";
 import type { ViewProps } from "../types";
+import { AddRecordProvider, useAddRecord } from "./addRecord";
 
 export const F = {
   name: field("text", { multiline: false }, { id: "f_name", name: "Name" }),
@@ -67,6 +68,17 @@ export interface RenderedView extends RenderResult {
   client: QueryClient;
 }
 
+/** The collection header's New button, as far as a layout is concerned: it runs whatever way of adding the layout offers. */
+function HeaderAdd() {
+  const add = useAddRecord();
+  // The real button is disabled when the layout cannot add; here it is absent, which reads the same in a test.
+  return add.available ? (
+    <button type="button" aria-label="Add record" onClick={add.run}>
+      New record
+    </button>
+  ) : null;
+}
+
 function Where() {
   const l = useLocation();
   return <output data-testid="where">{l.pathname + l.search}</output>;
@@ -83,8 +95,8 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
   });
   const table = opts.schema.tables[0]!;
   const view = table.views.find((v) => v.id === opts.viewId)!;
-  // jsdom matches no media query, so the toolbar would fold its tools into one menu as on a phone;
-  // these tests reach for Sort, Filter and the view settings directly.
+  // jsdom matches no media query, so View options would open as a phone's sheet; these tests reach for it
+  // as the popover a desktop shows.
   stubDesktop();
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false, staleTime: 0, gcTime: 0 } });
@@ -93,10 +105,26 @@ export function renderView(Component: ComponentType<ViewProps>, opts: { schema: 
   const result = render(
     <Providers client={client}>
       <MemoryRouter initialEntries={[opts.route ?? "/base/app1/tbl1/" + opts.viewId]}>
-        <Component schema={opts.schema} table={table} view={view} role={opts.schema.role} />
+        <AddRecordProvider>
+          <HeaderAdd />
+          <Component schema={opts.schema} table={table} view={view} role={opts.schema.role} />
+        </AddRecordProvider>
         <Where />
       </MemoryRouter>
     </Providers>,
   );
   return Object.assign(result, { api, client });
+}
+
+/** Opens View options (the popover a desktop shows) and returns it. */
+export async function openViewOptions(user: ReturnType<typeof import("@testing-library/user-event").default.setup>): Promise<HTMLElement> {
+  await user.click(screen.getByRole("button", { name: "View options" }));
+  return screen.findByRole("dialog");
+}
+
+/** Opens View options and goes into one of its screens (Sort, Group, Color, Properties); returns the panel. */
+export async function openOptionsScreen(user: ReturnType<typeof import("@testing-library/user-event").default.setup>, name: "Sort" | "Group" | "Color" | "Properties"): Promise<HTMLElement> {
+  const panel = await openViewOptions(user);
+  await user.click(within(panel).getByRole("button", { name: new RegExp(`^${name}`) }));
+  return panel;
 }

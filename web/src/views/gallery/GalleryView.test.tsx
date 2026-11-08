@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
 import { ALL_FIELDS } from "@/test/fields";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import GalleryView from "./GalleryView";
 import { GALLERY_PAGE } from "./useGalleryData";
 
@@ -40,13 +40,14 @@ describe("GalleryView", () => {
     expect(screen.getByRole("button", { name: "R2" }).querySelector("img")).toBeNull();
   });
 
-  it("keeps the cover and its fit together behind the toolbar's View button", async () => {
+  it("keeps the cover and its fit together under the layout tiles in View options", async () => {
     const user = userEvent.setup();
     const view = gallery();
     const { api } = setup("editor", view, records);
     await screen.findByRole("button", { name: "R1" });
-    await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-    expect(await screen.findByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
+    const panel = await openViewOptions(user);
+    expect(within(panel).getByRole("button", { name: "Gallery", pressed: true })).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Cover" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Crop cover images" }));
     await waitFor(() => expect(draftChanges()?.gallery?.cover_crop).toBe(true));
     expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
@@ -56,9 +57,9 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     setup("editor", gallery({ cover_field_id: null }));
     await screen.findByRole("button", { name: "R1" });
-    await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+    await openViewOptions(user);
     expect(await screen.findByRole("checkbox", { name: "Crop cover images" })).toBeDisabled();
-    expect(screen.getByText("Choose a cover image above to set how pictures fit.")).toBeInTheDocument();
+    expect(screen.getByText("Choose a cover above to set how pictures fit.")).toBeInTheDocument();
   });
 
   it("crops covers when the view says so", async () => {

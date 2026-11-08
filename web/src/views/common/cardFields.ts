@@ -1,7 +1,7 @@
 /**
  * Which fields a card (kanban, gallery, list row) shows and how to find its cover (an image, or the
  * preview of a PDF or a video).
- * Hiding a field in the toolbar removes it from every card; the primary field is the card title.
+ * Hiding a property in View options removes it from every card; the primary field is the card title.
  */
 import { attachmentsApi } from "@/api/records";
 import type { AttachmentRef, Field, TableRecord, ViewConfig } from "@/api/types";

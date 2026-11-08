@@ -93,25 +93,7 @@
   --scroll-shade: rgb(0 0 0 / 0.28);
 }
 
-/*
- * A tool that is on (the view toolbar's "Sorted by Name", "2 hidden fields"): a plain grey made of the
- * text colour over the surface, so it holds no tint of the accent and stands off the bar in either theme.
- */
-:root,
-[data-theme-scope] {
-  --tool-on: color-mix(in srgb, var(--fg) 9%, var(--surface));
-  --tool-on-hover: color-mix(in srgb, var(--fg) 13%, var(--surface));
-}
-/* Dark surfaces need more of the text colour for the same step. */
-:root[data-theme="dark"],
-[data-theme-scope][data-theme="dark"] {
-  --tool-on: color-mix(in srgb, var(--fg) 16%, var(--surface));
-  --tool-on-hover: color-mix(in srgb, var(--fg) 22%, var(--surface));
-}
-
 @theme inline {
-  --color-tool-on: var(--tool-on);
-  --color-tool-on-hover: var(--tool-on-hover);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-chrome: var(--chrome);

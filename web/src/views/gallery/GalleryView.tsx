@@ -29,7 +29,7 @@ import { SelectionBar } from "../common/SelectionBar";
 import { useRecordSelection, type RecordSelection } from "../common/useRecordSelection";
 import { useRovingFocus, type RovingItemProps } from "../common/useRovingFocus";
 import { useViewSetup } from "../common/useViewSetup";
-import { FieldSelect, ViewSettings } from "../common/ViewSettings";
+import { FieldSelect } from "../common/FieldSelect";
 import { ViewFrame } from "../common/ViewFrame";
 import type { ViewProps } from "../types";
 import { neighbourCard, onLastRow, survivorAfterDelete } from "./galleryNav";
@@ -187,24 +187,24 @@ function GalleryInner(props: ViewProps) {
   const menuIndex = menu ? recordIds.indexOf(menu.id) : -1;
 
   const settings = (
-    <ViewSettings>
+    <>
       <FieldSelect
-        label="Cover image"
+        label="Cover"
         fields={attachmentFields}
         value={coverField?.id ?? ""}
         noneLabel="No cover"
         onChange={(id) => cfg.update((c) => setGallery(c, { cover_field_id: id }))}
-        hint={attachmentFields.length === 0 ? "Add an attachment field to show pictures on the cards." : "Cards show the first image of this field, when they have one."}
+        hint={attachmentFields.length === 0 ? "Add an attachment property to show pictures on the cards." : "Cards show the first image of this property, when they have one."}
       />
       <div className="flex flex-col gap-1">
         <Checkbox label="Crop cover images" checked={crop} disabled={!coverField} onCheckedChange={(on) => cfg.update((c) => setGallery(c, { cover_crop: on }))} />
         <p className="text-xs text-muted">
-          {coverField ? "On, a picture fills its space and loses its edges; off, the whole picture shows." : "Choose a cover image above to set how pictures fit."}
+          {coverField ? "On, a picture fills its space and loses its edges; off, the whole picture shows." : "Choose a cover above to set how pictures fit."}
         </p>
       </div>
-      <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
-    </ViewSettings>
+    </>
   );
+  const propertySettings = <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />;
 
   return (
     <ViewFrame
@@ -212,7 +212,8 @@ function GalleryInner(props: ViewProps) {
       recordIds={panelIds}
       layout="bare"
       features={{ group: false, rowHeight: false }}
-      toolbarSetting={settings}
+      layoutSettings={settings}
+      propertySettings={propertySettings}
       onAdd={setup.canEdit ? () => void setup.addRecord() : undefined}
       footer={
         data.loading ? undefined : (

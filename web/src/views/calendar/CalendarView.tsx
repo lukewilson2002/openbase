@@ -40,7 +40,7 @@ import { SegmentedSwitch } from "../common/SegmentedSwitch";
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
-import { FieldSelect, ViewSettings } from "../common/ViewSettings";
+import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
 import { floorDay, isDateLike, isWritableDate, wallNow, wallYmd } from "../common/wallTime";
@@ -160,8 +160,8 @@ function DayNumber({ arg }: { arg: DayCellContentArg }) {
 /** Why events cannot be moved, when the date fields are computed (null when they can be). */
 function readOnlyReason(fields: { start: Field; end: Field | null }): string | null {
   const kind = (f: Field) => (f.type === "created_time" || f.type === "last_modified_time" ? `a ${FIELD_TYPE_LABELS[f.type]} field, which fills itself in` : `a ${FIELD_TYPE_LABELS[f.type]} field, which is worked out from other fields`);
-  if (!isWritableDate(fields.start)) return `Events cannot be moved, resized or added by clicking a day: ${fields.start.name} is ${kind(fields.start)}. Pick a date field you can edit as the Date field under View.`;
-  if (fields.end && !isWritableDate(fields.end)) return `Events cannot be moved or resized: ${fields.end.name} is ${kind(fields.end)}. Pick a date field you can edit as the End date field, or none, under View.`;
+  if (!isWritableDate(fields.start)) return `Events cannot be moved, resized or added by clicking a day: ${fields.start.name} is ${kind(fields.start)}. Pick a date property you can edit as the Date under View options.`;
+  if (fields.end && !isWritableDate(fields.end)) return `Events cannot be moved or resized: ${fields.end.name} is ${kind(fields.end)}. Pick a date property you can edit as the End date, or none, under View options.`;
   return null;
 }
 
@@ -377,28 +377,22 @@ function CalendarInner(props: ViewProps) {
   const api = () => calendar.current?.getApi();
   const chooseDate = (id: string | null) => cfg.update((c) => setCalendar(c, { date_field_id: id }));
   const settings = (
-    <ViewSettings>
+    <>
       <FieldSelect
-        label="Date field"
+        label="Date"
         fields={dateFields}
         value={fields?.start.field.id ?? ""}
         onChange={chooseDate}
         hint={fields && !isWritableDate(fields.start.field) ? `${FIELD_TYPE_LABELS[fields.start.field.type]} fields are filled in for you, so events cannot be moved or added on a day. Pick a date field you can edit to do that.` : undefined}
       />
       <FieldSelect
-        label="End date field"
+        label="End date"
         fields={dateFields.filter((f) => f.id !== fields?.start.field.id)}
         value={fields?.end?.field.id ?? ""}
         noneLabel="No end date"
         disabled={!fields}
         onChange={(id) => cfg.update((c) => setCalendar(c, { end_field_id: id }))}
         hint={fields?.end && !isWritableDate(fields.end.field) ? `${FIELD_TYPE_LABELS[fields.end.field.type]} fields are worked out for you, so events cannot be moved or resized. Pick a date field you can edit to do that.` : "Shows records as ranges and lets you resize them."}
-      />
-      <DescriptionSelect
-        candidates={descriptionFields}
-        field={descriptionField}
-        onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
-        hint={descriptionFields.length === 0 ? "Add a text field to show a description with each event." : "A text field read in full when you point at an event."}
       />
       {/* This browser's own taste, not part of the saved view: anyone can set it. */}
       <FormField label="Week starts on" hint="Only changes how you see the calendar.">
@@ -412,7 +406,15 @@ function CalendarInner(props: ViewProps) {
           </Select>
         )}
       </FormField>
-    </ViewSettings>
+    </>
+  );
+  const propertySettings = (
+    <DescriptionSelect
+      candidates={descriptionFields}
+      field={descriptionField}
+      onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
+      hint={descriptionFields.length === 0 ? "Add a text property to show a description with each event." : "A text property read in full when you point at an event."}
+    />
   );
 
   let body: React.ReactNode;
@@ -553,7 +555,8 @@ function CalendarInner(props: ViewProps) {
       recordIds={fields ? recordIds : undefined}
       layout={fields ? "fill" : "bare"}
       features={{ group: false, rowHeight: false }}
-      toolbarSetting={settings}
+      layoutSettings={settings}
+      propertySettings={propertySettings}
       onAdd={setup.canEdit ? addHere : undefined}
       footer={footer}
     >

@@ -7,7 +7,7 @@
  *   cellModels     O(1) cell lookup for the canvas
  *   GlideGrid      the canvas (behind the GridAdapter interface)
  *   ViewFilterBar  the filter bar: chips, suggestions and the view search (COL-3)
- *   ViewBar        toolbar (hide/group/sort/colour/row height)
+ *   ViewOptions    layout, sort, group, colour, properties and row height (in the filter bar)
  *   ExpandedRecord modal reached by the row's expand icon, Shift+Space or `?record=recXXX`
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +30,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { DraftBar } from "@/components/viewbar/DraftBar";
-import { ViewBar } from "@/components/viewbar/ViewBar";
+import { ViewOptions } from "@/components/viewbar/ViewOptions";
 import { ViewFilterBar } from "@/components/viewbar/ViewFilterBar";
 import { itemsLabel } from "@/views/common/cardFields";
 import { SelectionBar } from "@/views/common/SelectionBar";
@@ -58,7 +58,7 @@ import { ColumnMenu, RowMenu, SummaryMenu } from "./GridMenus";
 import { frozenColumnCount, usePrimaryPinned } from "./usePrimaryPinned";
 import { ADD, BLANK, LOADING, createCellModelFactory, cellValueOf, toColumnSpecs } from "./cellModels";
 import { countClearCells, linkKey, planClear, planFill, planPaste, selectionRectangles, summariseProblems, type Ambiguity, type GridReader } from "./gridOps";
-import { GRID_HEADER_HEIGHT, GlideGrid } from "./glide/GlideGrid";
+import { GlideGrid, gridHeaderHeight } from "./glide/GlideGrid";
 import { floatingAddGroup, newRecordValues } from "./addRows";
 import { discardIfUntouched, type Fresh } from "./freshRows";
 import { PAGE_SIZE, buildRowMap, groupPathKeys } from "./rowMap";
@@ -753,7 +753,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [table.fields, queryConfig.filter, me.data?.id, createFresh, selectQuietly, grouped],
   );
 
-  /** The group the floating Add adds into: that of the selected row, else the one at the top of what is on screen. */
+  /** The group the header's New button adds into: that of the selected row, else the one at the top of what is on screen. */
   const floatingGroup = useCallback((): number => {
     const sel = selectionRef.current;
     const gi = floatingAddGroup(rowMapRef.current, dataRef.current.groups, sel.cell?.row ?? sel.rows[0] ?? null, visibleRows.current?.[0] ?? null);
@@ -996,6 +996,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     fitColumns: !data.loading,
     rowCount: rowCountForGrid,
     rowHeight,
+    wrapHeaders: config.wrap_headers,
     freezeColumns,
     primaryPin: desktop || !columns[0]?.isPrimary ? null : { pinned, onToggle: togglePrimaryPinned },
     showSummary: !empty,
@@ -1057,11 +1058,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // height it scrolls inside. With no records it keeps only the header, so fields can still be added,
   // and the empty message sits under it: the canvas would otherwise draw blank rows and an empty
   // summary bar that look broken.
-  const gridHeight = empty ? undefined : Math.max(GRID_HEADER_HEIGHT + (rowCountForGrid + 1) * rowHeight + 2 + hScrollbar, total === 0 ? 180 : 0);
+  const gridHeight = empty ? undefined : Math.max(gridHeaderHeight(config.wrap_headers) + (rowCountForGrid + 1) * rowHeight + 2 + hScrollbar, total === 0 ? 180 : 0);
 
-  // The floating Add and the collection header's New button add the same way.
-  const addFromToolbar = canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined;
-  useRegisterAddRecord(addFromToolbar);
+  // The collection header's New button adds a record the way the end of the grid does.
+  const addFromHeader = canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined;
+  useRegisterAddRecord(addFromHeader);
 
   return (
     <EditorEnvProvider value={editorEnv}>
@@ -1076,21 +1077,24 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           search={search}
           onSearchChange={setSearch}
           timeZone={timeZone}
+          trailing={
+            <ViewOptions
+              schema={schema}
+              table={table}
+              view={view}
+              role={role}
+              config={config}
+              update={cfg.update}
+              collaborators={people}
+              layout={cfg.layout}
+              onLayoutChange={cfg.setLayout}
+              features={{ rowHeight: true }}
+              toggles={grouped ? [{ id: "fold-all", label: "Fold all groups", checked: pathKeys.every((k) => collapsed.has(k)), onToggle: (on) => replaceCollapsed(on ? pathKeys : []) }] : undefined}
+              timeZone={timeZone}
+            />
+          }
         />
         <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={debouncedSearch} timeZone={timeZone} />
-        <ViewBar
-          schema={schema}
-          table={table}
-          view={view}
-          role={role}
-          config={config}
-          update={cfg.update}
-          collaborators={people}
-          currentUserId={me.data?.id ?? null}
-          onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
-          timeZone={timeZone}
-          onAdd={addFromToolbar}
-        />
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (
@@ -1108,7 +1112,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
               </div>
             </div>
           ) : (
-            <div className={empty ? "shrink-0" : "min-h-0 flex-1"} style={empty ? { height: GRID_HEADER_HEIGHT + 1 } : undefined}>
+            <div className={empty ? "shrink-0" : "min-h-0 flex-1"} style={empty ? { height: gridHeaderHeight(config.wrap_headers) + 1 } : undefined}>
               <GlideGrid ref={gridRef} {...gridProps} />
             </div>
           )}
@@ -1132,16 +1136,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
             {debouncedSearch ? " found" : ""}
           </span>
           {grouped && <span className="hidden sm:inline">· grouped</span>}
-          {grouped && (
-            <span className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => replaceCollapsed(pathKeys)} disabled={pathKeys.every((k) => collapsed.has(k))}>
-                Collapse all
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => replaceCollapsed([])} disabled={!pathKeys.some((k) => collapsed.has(k))}>
-                Expand all
-              </Button>
-            </span>
-          )}
           <span className="ml-auto flex items-center gap-1">
             {canEdit && (
               <>

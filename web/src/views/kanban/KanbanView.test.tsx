@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryRequest } from "@/api/types";
 import { field } from "@/test/fields";
 import { apiError } from "@/test/utils";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, openOptionsScreen, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import { installBoardLayout, type BoardLayout } from "./boardLayout";
 import KanbanView from "./KanbanView";
 
@@ -89,16 +89,14 @@ describe("KanbanView", () => {
     expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
   });
 
-  it("keeps the stack and cover choices behind the toolbar's View button", async () => {
+  it("keeps the stack and cover choices under the layout tiles in View options, with Board selected", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    const tool = screen.getAllByRole("button", { name: "View" })[0]!;
-    // A plain tool: the view's own settings are always there, so it is never "on".
-    expect(tool).not.toHaveClass("bg-tool-on");
-    await user.click(tool);
-    expect(await screen.findByRole("combobox", { name: "Stack cards by" })).toHaveValue("f_status");
-    expect(screen.getByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
+    const panel = await openViewOptions(user);
+    expect(within(panel).getByRole("button", { name: "Board", pressed: true })).toBeInTheDocument();
+    expect(within(panel).getByRole("combobox", { name: "Stack by" })).toHaveValue("f_status");
+    expect(within(panel).getByRole("combobox", { name: "Cover image" })).toBeInTheDocument();
   });
 
   describe("description", () => {
@@ -125,8 +123,8 @@ describe("KanbanView", () => {
       const user = userEvent.setup();
       const { api } = setupNotes(board());
       await screen.findByRole("listitem", { name: "Stack: Todo" });
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-      const select = await screen.findByRole("combobox", { name: "Description" });
+      await openOptionsScreen(user, "Properties");
+      const select = await screen.findByRole("combobox", { name: "Description property" });
       // Nothing is picked for the view, even though the table has exactly one multiline text.
       expect(select).toHaveValue("");
       const options = within(select).getAllByRole("option").map((o) => o.textContent);
@@ -166,13 +164,13 @@ describe("KanbanView", () => {
     });
   });
 
-  it("hides empty stacks from the More menu", async () => {
+  it("hides empty stacks from a switch in View options", async () => {
     const user = userEvent.setup();
     const view = board();
     const { api } = setup("editor", view);
     expect(await screen.findByRole("listitem", { name: "Stack: Done" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
-    const item = await screen.findByRole("menuitemcheckbox", { name: "Hide empty stacks" });
+    await openViewOptions(user);
+    const item = await screen.findByRole("switch", { name: "Hide empty stacks" });
     expect(item).toHaveAttribute("aria-checked", "false");
     await user.click(item);
     await waitFor(() => expect(draftChanges()?.kanban?.hide_empty_stacks).toBe(true));
@@ -273,7 +271,7 @@ describe("KanbanView", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
   });
 
-  it("adds from the toolbar to the stack of the card last focused", async () => {
+  it("adds from the header to the stack of the card last focused", async () => {
     const user = userEvent.setup();
     const created = rec("r9", { [F.status.id]: "s2" });
     const { api } = setup("editor", board(), { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
@@ -381,7 +379,7 @@ describe("KanbanView", () => {
       const { api } = setup("editor", view, {}, { records: owned });
       await screen.findByRole("listitem", { name: "Stack: Ada Lovelace" });
       expect(screen.queryByRole("listitem", { name: "Stack: Grace Hopper" })).not.toBeInTheDocument();
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await openViewOptions(user);
       await user.click(await screen.findByRole("checkbox", { name: "Show everyone, even people with no cards" }));
       await waitFor(() => expect(draftChanges()?.kanban?.show_all_people).toBe(true));
       expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
@@ -423,8 +421,8 @@ describe("KanbanView", () => {
       const view = board({ hidden_stacks: ["", "s2"] });
       const { api } = setup("editor", view);
       await screen.findByRole("listitem", { name: "Stack: Todo" });
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-      await user.selectOptions(await screen.findByRole("combobox", { name: "Stack cards by" }), F.owner.id);
+      await openViewOptions(user);
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Stack by" }), F.owner.id);
       await waitFor(() => expect(draftKanban()).toBeDefined());
       expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
       expect(draftKanban()).toMatchObject({ stack_field_id: F.owner.id, stack_order: [], hidden_stacks: [] });
@@ -640,13 +638,14 @@ describe("KanbanView", () => {
       expect((await screen.findByRole("button", { name: "R1" })).querySelectorAll("dt")).toHaveLength(3);
     });
 
-    it("keeps the number of fields and the cover fit from the View settings as a draft", async () => {
+    it("keeps the number of properties and the cover fit from View options as a draft", async () => {
       const user = userEvent.setup();
       crowded({ cover_field_id: F.cover.id });
       await screen.findByRole("button", { name: "R1" });
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-      await user.selectOptions(await screen.findByRole("combobox", { name: "Fields on a card" }), "10");
-      await user.selectOptions(screen.getByRole("combobox", { name: "Cover image fit" }), "fit");
+      const panel = await openViewOptions(user);
+      await user.selectOptions(within(panel).getByRole("combobox", { name: "Cover image fit" }), "fit");
+      await user.click(within(panel).getByRole("button", { name: /^Properties/ }));
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Properties on a card" }), "10");
       // Both changes are in the one draft.
       await waitFor(() => expect(draftChanges()?.kanban).toMatchObject({ card_field_limit: 10, cover_fit: true }));
     });
@@ -655,7 +654,7 @@ describe("KanbanView", () => {
       const user = userEvent.setup();
       crowded();
       await screen.findByRole("button", { name: "R1" });
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+      await openViewOptions(user);
       expect(await screen.findByRole("combobox", { name: "Cover image fit" })).toBeDisabled();
       expect(screen.getByText("Choose a cover image first.")).toBeInTheDocument();
     });

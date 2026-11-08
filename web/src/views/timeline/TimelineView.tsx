@@ -22,7 +22,7 @@ import { usePersistedSet } from "../common/usePersistedSet";
 import { SegmentedSwitch } from "../common/SegmentedSwitch";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
-import { FieldSelect, ViewSettings } from "../common/ViewSettings";
+import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
 import { DAY_MS, isDateLike, isWritableDate, padRange, wallNow, wallYmd } from "../common/wallTime";
@@ -364,41 +364,43 @@ function TimelineInner(props: ViewProps) {
   const unscheduleZone = useRef<HTMLDivElement>(null);
   const [overUnscheduled, setOverUnscheduled] = useState(false);
 
-  // ---- toolbar -------------------------------------------------------------------------------------
-  // Lanes come from the Swimlanes setting, or else the toolbar's grouping, never both.
+  // ---- View options and adding -----------------------------------------------------------------
+  // Lanes come from the Swimlanes setting, or else the view's grouping, never both.
   const groupingIgnored = !!groupField && (data?.groups.length ?? 0) > 0;
   const groupingName = table.fields.find((f) => f.id === data?.groups[0]?.field_id)?.name;
   const settings = (
-    <ViewSettings note={dateNote}>
-      <FieldSelect label="Start date field" fields={dateFields} value={fields?.start.field.id ?? ""} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
+    <>
+      <FieldSelect label="Start" fields={dateFields} value={fields?.start.field.id ?? ""} onChange={(id) => cfg.update((c) => setTimeline(c, { start_field_id: id }))} />
       <FieldSelect
-        label="End date field"
+        label="End"
         fields={dateFields.filter((f) => f.id !== fields?.start.field.id)}
         value={fields?.end?.field.id ?? ""}
         noneLabel="No end date (milestones)"
         disabled={!fields}
         onChange={(id) => cfg.update((c) => setTimeline(c, { end_field_id: id }))}
       />
-      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint={groupingIgnored ? `The view is also grouped${groupingName ? ` by ${groupingName}` : ""}, but swimlanes take over here: that grouping is not used for the lanes. Choose no swimlanes to use it.` : "Without a field, the view's grouping (if any) makes the lanes."} />
+      <FieldSelect label="Swimlanes" fields={groupFields} value={groupField?.id ?? ""} noneLabel="No swimlanes" onChange={(id) => cfg.update((c) => setTimeline(c, { group_field_id: id }))} hint={groupingIgnored ? `The view is also grouped${groupingName ? ` by ${groupingName}` : ""}, but swimlanes take over here: that grouping is not used for the lanes. Choose no swimlanes to use it.` : "Without a property, the view's grouping (if any) makes the lanes."} />
       <FieldSelect
         label="Dependencies"
         fields={selfLinks}
         value={depField?.id ?? ""}
         noneLabel="No dependencies"
         onChange={(id) => cfg.update((c) => setTimeline(c, { dependency_field_id: id }))}
-        hint={selfLinks.length === 0 ? "Add a link field to this same table to draw dependency arrows (Gantt)." : "Arrows run from each linked predecessor's end to the record's start; red when they overlap."}
+        hint={selfLinks.length === 0 ? "Add a link property to this same collection to draw dependency arrows (Gantt)." : "Arrows run from each linked predecessor's end to the record's start; red when they overlap."}
       />
-      <DescriptionSelect
-        candidates={descriptionFields}
-        field={descriptionField}
-        onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
-        hint={descriptionFields.length === 0 ? "Add a text field to show a description with each bar." : "A text field read in full when you point at a bar."}
-      />
-    </ViewSettings>
+    </>
+  );
+  const propertySettings = (
+    <DescriptionSelect
+      candidates={descriptionFields}
+      field={descriptionField}
+      onChange={(id) => cfg.update((c) => setDescriptionField(c, id))}
+      hint={descriptionFields.length === 0 ? "Add a text property to show a description with each bar." : "A text property read in full when you point at a bar."}
+    />
   );
 
   const addToday = fields && canEditDates ? () => void setup.addRecord(createWrites(dayNumber(wallNow(timeZone)), dayNumber(wallNow(timeZone)), fields, timeZone)) : undefined;
-  // The bar focus was last on (pressing the toolbar's Add moves it away); focus on the chart elsewhere forgets it.
+  // The bar focus was last on (pressing the header's New button moves it away); focus on the chart elsewhere forgets it.
   const lastBar = useRef<string | null>(null);
   useEffect(() => {
     const onFocusIn = (e: FocusEvent) => {
@@ -410,7 +412,7 @@ function TimelineInner(props: ViewProps) {
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
-  // The toolbar's Add goes to the lane of the focused bar, else to no lane in particular; both start today.
+  // The header's New button goes to the lane of the focused bar, else to no lane in particular; both start today.
   const addInView = addToday
     ? () => {
         const id = lastBar.current;
@@ -567,7 +569,8 @@ function TimelineInner(props: ViewProps) {
       recordIds={chartLanes.flatMap((l) => l.bars.map((b) => b.id))}
       layout={fields ? "hug" : "bare"}
       features={{ group: true, rowHeight: false }}
-      toolbarSetting={settings}
+      layoutSettings={settings}
+      propertySettings={propertySettings}
       // With dates that cannot be written, Add still makes a record, left blank for the person to fill in.
       onAdd={addInView ?? (setup.canEdit ? () => void setup.addRecord({}) : undefined)}
       footer={

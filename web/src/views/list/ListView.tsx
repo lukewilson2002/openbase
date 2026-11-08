@@ -6,7 +6,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronsDownUp } from "lucide-react";
 import { recordKeys } from "@/api/records";
 import type { Field, ViewConfig } from "@/api/types";
 import type { MenuAnchor } from "@/components/ui/anchored-menu";
@@ -23,7 +22,7 @@ import { useRecordSelection } from "../common/useRecordSelection";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
 import { ViewFrame } from "../common/ViewFrame";
-import { FieldSelect, ViewSettings } from "../common/ViewSettings";
+import { FieldSelect } from "../common/FieldSelect";
 import type { ViewProps } from "../types";
 import { ListOutline, type RowTreeActions } from "./ListOutline";
 import { allPaths, buildOutline, drawnIds, leafNodes, moveBetweenGroups, placeIndexes, planDrop, withTails, type DropPlan } from "./outline";
@@ -203,15 +202,15 @@ function ListInner(props: ViewProps) {
       recordIds={panelIds}
       layout="hug"
       features={{ rowHeight: false }}
-      toolbarSetting={
-        <ViewSettings>
+      layoutSettings={
+        <>
           <FieldSelect
-            label="Prefix field"
+            label="Prefix"
             fields={prefixFields}
             value={prefix?.id ?? ""}
             noneLabel="No prefix"
             onChange={(id) => cfg.update((c) => setList(c, { prefix_field_id: id }))}
-            hint={prefixFields.length === 0 ? "Add a checkbox, single select or person field to show it at the start of each row." : "Shown at the start of each row and changed there: tick off a checkbox without opening the record."}
+            hint={prefixFields.length === 0 ? "Add a checkbox, single select or person property to show it at the start of each row." : "Shown at the start of each row and changed there: tick off a checkbox without opening the record."}
           />
           <FieldSelect
             label="Sub-items"
@@ -219,16 +218,12 @@ function ListInner(props: ViewProps) {
             value={parentField?.id ?? ""}
             noneLabel="No sub-items"
             onChange={(id) => cfg.update((c) => setList(c, { parent_field_id: id }))}
-            hint={parentFields.length === 0 ? "Add a link field to this table's own records to nest rows under their parent." : "Rows linked in this field sit under their parent. Tab indents a row and Shift+Tab outdents it."}
+            hint={parentFields.length === 0 ? "Add a link property to this collection's own records to nest rows under their parent." : "Rows linked in this property sit under their parent. Tab indents a row and Shift+Tab outdents it."}
           />
-          <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
-        </ViewSettings>
+        </>
       }
-      moreToggles={
-        grouped
-          ? [{ id: "fold-all", label: "Fold all groups", icon: <ChevronsDownUp aria-hidden />, checked: allFolded, onToggle: (on) => replace(on ? paths : []) }]
-          : undefined
-      }
+      propertySettings={<DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />}
+      layoutToggles={grouped ? [{ id: "fold-all", label: "Fold all groups", checked: allFolded, onToggle: (on) => replace(on ? paths : []) }] : undefined}
       onAdd={setup.canEdit ? () => void add(addTarget.current?.() ?? {}) : undefined}
       footer={
         <>

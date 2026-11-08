@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
 import { field } from "@/test/fields";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, openOptionsScreen, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import ListView from "./ListView";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -43,13 +43,12 @@ describe("ListView", () => {
     const user = userEvent.setup();
     setup();
     await screen.findByRole("tree");
-    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
-    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Fold all groups" }));
+    await openViewOptions(user);
+    await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
     expect(screen.queryByRole("treeitem", { name: /^R1(,|$)/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("treeitem")).toHaveLength(2); // only the top level is left visible
-    await user.click(screen.getByRole("button", { name: /^(More|Tools)/ }));
-    expect(await screen.findByRole("menuitemcheckbox", { name: "Fold all groups" })).toHaveAttribute("aria-checked", "true");
-    await user.click(screen.getByRole("menuitemcheckbox", { name: "Fold all groups" }));
+    expect(screen.getByRole("switch", { name: "Fold all groups" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
     expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("ob-list-collapsed:viw1") ?? "[]")).toEqual([]);
   });
@@ -73,7 +72,7 @@ describe("ListView", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
   });
 
-  it("adds from the toolbar to the group of the row last focused", async () => {
+  it("adds from the header to the group of the row last focused", async () => {
     const user = userEvent.setup();
     const created = rec("r9", {});
     const { api } = setup("editor", outline, { records, groups }, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
@@ -130,14 +129,14 @@ describe("ListView", () => {
       });
     }
 
-    it("is chosen in the toolbar and kept as a draft", async () => {
+    it("is chosen among the properties in View options and kept as a draft", async () => {
       const user = userEvent.setup();
       const { api } = setupNotes({});
       await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
       // Nothing is a description until the view picks one: Notes is an ordinary field.
       expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ }).querySelector("[data-row-description]")).toBeNull();
-      await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-      const select = await screen.findByRole("combobox", { name: "Description" });
+      await openOptionsScreen(user, "Properties");
+      const select = await screen.findByRole("combobox", { name: "Description property" });
       expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No description", "Notes"]);
       await user.selectOptions(select, "f_notes");
       await waitFor(() => expect(draftChanges()?.description_field_id).toBe("f_notes"));
@@ -337,8 +336,8 @@ describe("ListView prefix", () => {
     const { api } = setupPrefix({});
     await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
     expect(screen.queryByRole("checkbox", { name: /^Done:/ })).not.toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
-    const select = await screen.findByRole("combobox", { name: "Prefix field" });
+    await openViewOptions(user);
+    const select = await screen.findByRole("combobox", { name: "Prefix" });
     // Status (a single select), Owner (one person) and Done; not the multi-link, date or attachment fields.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No prefix", "Status", "Owner", "Done"]);
     await user.selectOptions(select, "f_done");
@@ -425,7 +424,7 @@ describe("ListView sub-items", () => {
     const { api } = setup("editor", flat, { records: tree, groups: [] });
     await screen.findByRole("treeitem", { name: /^R1(,|$)/ });
     expect(screen.getByRole("treeitem", { name: /^R2(,|$)/ })).toHaveAttribute("aria-level", "1");
-    await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+    await openViewOptions(user);
     const select = await screen.findByRole("combobox", { name: "Sub-items" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["No sub-items", "Depends on"]);
     await user.selectOptions(select, F.deps.id);

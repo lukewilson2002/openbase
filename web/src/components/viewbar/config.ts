@@ -1,7 +1,6 @@
 /**
  * Pure mutations of a view's `ViewConfig`. Every function returns a new config and never
- * mutates its input; the toolbar persists the result with `PATCH /api/views/{id}`
- * (a full replacement of the config).
+ * mutates its input; View options and the filter bar apply the result as the person's draft (COL-5).
  */
 import type { Aggregation, Direction, Field, Filter, Group, RowColor, RowHeight, Table, ViewConfig } from "@/api/types";
 import { kindClassOf } from "@/lib/cells/kinds";

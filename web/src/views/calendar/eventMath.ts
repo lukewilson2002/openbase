@@ -220,7 +220,7 @@ export function unscheduleValues(fields: CalendarFields): Record<string, null> {
 }
 
 /**
- * The day the toolbar's Add creates a record on: today while it is on screen, else the first day of the
+ * The day the header's New button creates a record on: today while it is on screen, else the first day of the
  * period shown (the 1st of a month, the first day of a week), so Add never lands out of sight.
  */
 export function addDay(todayMs: number, periodStartMs: number, periodEndMs: number): number {

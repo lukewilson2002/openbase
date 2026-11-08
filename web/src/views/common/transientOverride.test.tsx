@@ -16,7 +16,7 @@ import KanbanView from "../kanban/KanbanView";
 import ListView from "../list/ListView";
 import TimelineView from "../timeline/TimelineView";
 import type { ViewProps } from "../types";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "./viewTestUtils";
+import { F, draftChanges, openOptionsScreen, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "./viewTestUtils";
 
 let layout: BoardLayout;
 beforeEach(() => {
@@ -62,7 +62,7 @@ describe.each(CASES)("%s view", (_name, Component, view) => {
     expect(viewQueries(asked).every((a) => !a.transient)).toBe(true);
     expect(screen.queryByText(/These changes are only for now/)).not.toBeInTheDocument();
 
-    await u.click(screen.getByRole("button", { name: /Sort/ }));
+    await openOptionsScreen(u, "Sort");
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
     await waitFor(() => expect(viewQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
     expect(viewQueries(asked).find((a) => a.transient)!.transient).toEqual({ sorts: [{ field_id: expect.any(String) as string, direction: "asc" }] });
@@ -83,7 +83,7 @@ describe.each(CASES)("%s view", (_name, Component, view) => {
     const u = user();
     const { asked, api } = setup(Component, view, "editor");
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
-    await u.click(screen.getByRole("button", { name: /Sort/ }));
+    await openOptionsScreen(u, "Sort");
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
     await waitFor(() => expect(viewQueries(asked).some((a) => a.transient?.sorts?.length === 1)).toBe(true));
     // No timer saves it.
@@ -99,7 +99,7 @@ describe.each(CASES)("%s view", (_name, Component, view) => {
     const { asked, api } = setup(Component, view, "editor");
     api.set("PATCH /api/views/viw1", (c: { body: unknown }) => ({ ...view, config: (c.body as { config: ViewConfig }).config }));
     await waitFor(() => expect(asked.length).toBeGreaterThan(0));
-    await u.click(screen.getByRole("button", { name: /Sort/ }));
+    await openOptionsScreen(u, "Sort");
     await u.click(await screen.findByRole("button", { name: "Add sort" }));
     await u.click(await screen.findByRole("button", { name: "Update view" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(1));

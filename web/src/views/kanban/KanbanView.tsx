@@ -1,10 +1,9 @@
 /**
  * Kanban view: cards stacked by a single select, single user or checkbox field. Records come
- * from the view query (filter, sorts, colours, search), so the toolbar behaves as in the grid;
+ * from the view query (filter, sorts, colours, search), so View options behave as in the grid;
  * drops write the stack field (and the manual order when the view has no sorts) optimistically.
  */
 import { useCallback, useMemo, useRef } from "react";
-import { EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/api/keys";
 import { schemaApi } from "@/api/records";
@@ -19,14 +18,14 @@ import { DescriptionSelect, setDescriptionField, useDescriptionField } from "../
 import { usePersistedSet } from "../common/usePersistedSet";
 import { useViewRecords } from "../common/useViewRecords";
 import { useViewSetup } from "../common/useViewSetup";
-import { FieldSelect, ViewSettings } from "../common/ViewSettings";
+import { FieldSelect } from "../common/FieldSelect";
 import { ViewSetupState } from "../common/ViewSetupState";
 import { ViewFrame } from "../common/ViewFrame";
 import type { ViewProps } from "../types";
 import { KanbanBoard } from "./KanbanBoard";
 import { applyShownOrder, buildAllStacks, clearStack as clearStackFor, isStackField, moveStackKey, stackKind, stackValue, type DropPlan } from "./stacks";
 
-/** Choices for "Fields on a card"; "All" is a number no table reaches. */
+/** Choices for "Properties on a card"; "All" is a number no table reaches. */
 const CARD_LIMITS = [3, 4, 5, 6, 8, 10, 12, 20] as const;
 const ALL_FIELDS_LIMIT = 100;
 
@@ -197,8 +196,8 @@ function KanbanInner(props: ViewProps) {
   const limitOptions = [...new Set([...CARD_LIMITS, ALL_FIELDS_LIMIT, cardLimit])].sort((a, b) => a - b);
   const chooseStack = (id: string | null) => cfg.update((c) => setKanban(c, { stack_field_id: id, stack_order: [], hidden_stacks: [] }));
   const settings = (
-    <ViewSettings>
-      <FieldSelect label="Stack cards by" fields={stackFields} value={stackField?.id ?? ""} onChange={chooseStack} hint="A single select, single user or checkbox field." />
+    <>
+      <FieldSelect label="Stack by" fields={stackFields} value={stackField?.id ?? ""} onChange={chooseStack} hint="A single select, single user or checkbox property." />
       {kind === "user" && (
         <Checkbox
           label="Show everyone, even people with no cards"
@@ -215,7 +214,11 @@ function KanbanInner(props: ViewProps) {
           </Select>
         )}
       </FormField>
-      <FormField label="Fields on a card" hint="Cards show only fields that have a value. Hide fields in the toolbar to choose which.">
+    </>
+  );
+  const propertySettings = (
+    <>
+      <FormField label="Properties on a card" hint="Cards show only properties that have a value. Hide properties above to choose which.">
         {(ctl) => (
           <Select {...ctl} value={String(cardLimit)} onChange={(e) => cfg.update((c) => setKanban(c, { card_field_limit: Number(e.target.value) }))}>
             {limitOptions.map((n) => (
@@ -227,7 +230,7 @@ function KanbanInner(props: ViewProps) {
         )}
       </FormField>
       <DescriptionSelect candidates={descriptionFields} field={descriptionField} onChange={(id) => cfg.update((c) => setDescriptionField(c, id))} />
-    </ViewSettings>
+    </>
   );
 
   let body: React.ReactNode;
@@ -321,12 +324,12 @@ function KanbanInner(props: ViewProps) {
       recordIds={recordIds}
       layout="bare"
       features={{ group: false, rowHeight: false }}
-      toolbarSetting={settings}
-      moreToggles={[
+      layoutSettings={settings}
+      propertySettings={propertySettings}
+      layoutToggles={[
         {
           id: "hide-empty",
           label: "Hide empty stacks",
-          icon: <EyeOff aria-hidden />,
           checked: kanban.hide_empty_stacks,
           onToggle: (on) => cfg.update((c) => setKanban(c, { hide_empty_stacks: on })),
         },

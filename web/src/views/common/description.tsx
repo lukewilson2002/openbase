@@ -12,7 +12,7 @@ import { Markdown } from "@/components/record/Markdown";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { displayText, isFormulaError, type FormatCtx } from "@/lib/cells/format";
 import { descriptionText, isDescriptionField } from "./cardFields";
-import { FieldSelect } from "./ViewSettings";
+import { FieldSelect } from "./FieldSelect";
 
 /** The fields that can be a view's description, and the one the view chose (if it still can be). */
 export function useDescriptionField(table: Pick<Table, "fields" | "primary_field_id">, config: Pick<ViewConfig, "description_field_id">): { candidates: Field[]; field: Field | undefined } {
@@ -27,17 +27,17 @@ export function setDescriptionField(config: ViewConfig, id: string | null): View
   return { ...config, description_field_id: id };
 }
 
-/** The "Description" choice in a view's settings. */
+/** The description property choice, on View options' Properties screen. */
 export function DescriptionSelect({ candidates, field, disabled, onChange, hint }: { candidates: readonly Field[]; field: Field | undefined; disabled?: boolean; onChange: (id: string | null) => void; hint?: ReactNode }) {
   return (
     <FieldSelect
-      label="Description"
+      label="Description property"
       fields={candidates}
       value={field?.id ?? ""}
       noneLabel="No description"
       disabled={disabled}
       onChange={onChange}
-      hint={hint ?? (candidates.length === 0 ? "Add a text field to show a description under each title." : "A text field read under each record's title.")}
+      hint={hint ?? (candidates.length === 0 ? "Add a text property to show a description under each title." : "A text property read under each record's title.")}
     />
   );
 }

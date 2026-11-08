@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BaseSchema, Field, QueryRequest, TableRecord } from "@/api/types";
 import { ALL_FIELDS, field } from "@/test/fields";
 import { stubDesktop } from "@/test/utils";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import CalendarView from "./CalendarView";
 
 afterEach(() => {
@@ -261,7 +261,7 @@ describe("CalendarView", () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { asked } = setup();
       await screen.findByText("March 2026");
-      await user.click(screen.getByRole("button", { name: "View" }));
+      await openViewOptions(user);
       await user.selectOptions(await screen.findByRole("combobox", { name: "Week starts on" }), "Monday");
       expect(localStorage.getItem("ob-calendar-week-start")).toBe("1");
       // March 2026 starts on a Sunday: with Monday first the first row is Feb 23 (the query pads a day).
@@ -316,7 +316,7 @@ describe("CalendarView", () => {
     it("explains why events cannot be moved and how to fix it, only to people who could edit", async () => {
       setup("editor", cal({ date_field_id: created.id, end_field_id: null }), {}, [rec("r1", { [created.id]: "2026-03-10T09:00:00.000Z" })], [created]);
       const note = await screen.findByText(/Created is a Created time field/);
-      expect(note).toHaveTextContent("Pick a date field you can edit as the Date field under View");
+      expect(note).toHaveTextContent("Pick a date property you can edit as the Date under View options");
       expect(document.querySelector(".fc-event-draggable")).toBeNull();
     });
 
@@ -329,7 +329,7 @@ describe("CalendarView", () => {
     it("names a computed end field the same way", async () => {
       setup("editor", cal({ end_field_id: created.id }), {}, records, [created]);
       const note = await screen.findByText(/Created is a Created time field/);
-      expect(note).toHaveTextContent("End date field");
+      expect(note).toHaveTextContent("as the End date");
     });
 
     it("does not say it for a date field that can be edited", async () => {

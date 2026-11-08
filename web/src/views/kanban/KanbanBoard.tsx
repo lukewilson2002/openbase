@@ -98,7 +98,7 @@ export interface KanbanBoardProps {
   onReorderStacks?: (keys: string[]) => void;
   onDrop(plan: DropPlan): void;
   onAddCard(key: string): void;
-  /** Filled with a function giving the stack the toolbar's Add adds to: the focused card's, the selection's, else the first one in view (null: none to say). */
+  /** Filled with a function giving the stack the header's New button adds to: the focused card's, the selection's, else the first one in view (null: none to say). */
   addTargetRef?: MutableRefObject<(() => string | null) | null>;
   /** Adds a stack (a new choice of the stack field); omitted where that is not possible or allowed. */
   onAddStack?: (name: string) => Promise<void>;
@@ -377,7 +377,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
       const list = listRef.current;
       if (!list) return null;
       const keyOf = (el: Element | null | undefined) => el?.closest<HTMLElement>("[data-stack-key]")?.dataset.stackKey ?? null;
-      // The stack focus last was in (pressing the toolbar's Add moves it away), if it is still drawn.
+      // The stack focus last was in (pressing the header's New button moves it away), if it is still drawn.
       const focused = lastStack.current !== null ? [...list.querySelectorAll<HTMLElement>("[data-stack-key]")].find((el) => el.dataset.stackKey === lastStack.current) : undefined;
       if (focused) return lastStack.current;
       for (const id of sel.ids) {

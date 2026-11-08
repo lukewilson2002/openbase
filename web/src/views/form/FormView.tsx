@@ -4,24 +4,23 @@
  * `ViewConfig.form`. A public form follows the live form, so its changes are the one thing that is not a
  * draft: they save as they are made (`cfg.saveNow`). The public side is `src/public/PublicFormPage.tsx`.
  *
- * The toolbar is the form's own: the table and view picker, Build | Fill in form, More (open or copy
- * the public link, download CSV) and Share form. Filter, sort and "Add" have nothing to do here.
+ * The toolbar is the form's own: Build | Fill in form, More (open or copy the public link), View options
+ * (the layout tiles and Download CSV; the form builder is the form's own settings) and Share form. Filter,
+ * sort and "Add" have nothing to do here.
  */
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Copy, Download, ExternalLink, Share2 } from "lucide-react";
+import { ChevronDown, Copy, ExternalLink, Share2 } from "lucide-react";
 import { keys } from "@/api/keys";
 import { sharesApi } from "@/api/sharing";
 import type { FormConfig } from "@/api/types";
-import { useExportCsv } from "@/components/csv/ExportCsvButton";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { ShareViewDialog } from "@/components/share/LazyShareViewDialog";
 import { canShareView } from "@/components/share/shareView";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
-import { toolButtonClass } from "@/components/viewbar/ViewBar";
-import { cn } from "@/lib/cn";
+import { ViewOptions } from "@/components/viewbar/ViewOptions";
 import { atLeast } from "@/lib/roles";
 import { cleanForm, pruneForm } from "@/lib/forms/formConfig";
 import { publicLink } from "@/lib/shareLinks";
@@ -41,7 +40,6 @@ export default function FormView(props: ViewProps) {
   const isCreator = atLeast(role, "creator");
   const [mode, setMode] = useState<Mode>(cfg.canEditForm || !canFill ? "build" : "fill");
   const [sharing, setSharing] = useState(false);
-  const csv = useExportCsv(view, setup.timeZone);
   // Only creators manage links; for everyone else the list would be refused.
   const links = useQuery({ queryKey: keys.shares(view.id), queryFn: () => sharesApi.list(view.id), enabled: isCreator && !view.personal });
   const link = links.data?.find((l) => l.enabled && l.kind === "form");
@@ -77,6 +75,27 @@ export default function FormView(props: ViewProps) {
     }
   };
 
+  /** The Layout section's own line for a form: the builder, which saves as it is made rather than as a draft. */
+  const formSettings = (close: () => void) =>
+    canBuild ? (
+      mode === "build" ? (
+        <p className="text-label text-muted">The form builder is open. What you change in it saves as you make it.</p>
+      ) : (
+        <Button
+          onClick={() => {
+            setMode("build");
+            close();
+          }}
+        >
+          Open the form builder
+        </Button>
+      )
+    ) : (
+      <p className="text-label text-muted">
+        {linkLocked ? "This form has a public link, so only a creator can change it." : view.type !== "form" ? "Save these changes as a view to build a form from them." : "You can fill in this form but not change it."}
+      </p>
+    );
+
   const modes = [
     { value: "build" as const, label: canBuild ? "Build" : "Form" },
     ...(canFill ? [{ value: "fill" as const, label: "Fill in form" }] : []),
@@ -87,31 +106,41 @@ export default function FormView(props: ViewProps) {
       <div className="flex h-full min-h-[24rem] flex-col">
         <div role="toolbar" aria-label="Form toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-2.5 py-2 md:px-4 md:py-2.5">
           {modes.length > 1 ? <SegmentedSwitch label="Form mode" size="md" value={mode} options={modes} onChange={setMode} className="md:mr-1.5" /> : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={cn(toolButtonClass(), "gap-1 pr-2")}>
-                More <ChevronDown aria-hidden className="size-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {address && (
-                <>
-                  <DropdownMenuItem onSelect={() => window.open(address, "_blank", "noopener,noreferrer")}>
-                    <ExternalLink aria-hidden className="size-4 text-muted" /> Open the form
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void copy()}>
-                    <Copy aria-hidden className="size-4 text-muted" /> Copy form link
-                  </DropdownMenuItem>
-                </>
-              )}
-              <DropdownMenuItem disabled={csv.busy} onSelect={() => void csv.run()}>
-                <Download aria-hidden className="size-4 text-muted" /> {csv.busy ? "Preparing…" : "Download CSV"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {address && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-1 pr-2">
+                  More <ChevronDown aria-hidden className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onSelect={() => window.open(address, "_blank", "noopener,noreferrer")}>
+                  <ExternalLink aria-hidden className="size-4 text-muted" /> Open the form
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void copy()}>
+                  <Copy aria-hidden className="size-4 text-muted" /> Copy form link
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <div className="ml-auto flex items-center gap-2">
             {cfg.saving && <span className="text-xs text-muted">Saving…</span>}
-            {isCreator && (
+            <ViewOptions
+              schema={setup.schema}
+              table={table}
+              view={view}
+              role={role}
+              config={setup.config}
+              update={cfg.update}
+              collaborators={setup.people}
+              layout={cfg.layout}
+              onLayoutChange={cfg.setLayout}
+              features={{ sort: false, group: false, color: false, properties: false, addProperty: false }}
+              layoutSettings={(close) => formSettings(close)}
+              timeZone={setup.timeZone}
+            />
+            {/* A form shown as a layout of another view is not a form someone can publish: save it as a view first. */}
+            {isCreator && view.type === "form" && (
               <>
                 <Button
                   variant="secondary"

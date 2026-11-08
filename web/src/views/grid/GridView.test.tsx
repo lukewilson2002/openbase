@@ -8,14 +8,14 @@ import userEvent from "@testing-library/user-event";
 import { MutationObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
-import { F, draftChanges, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
+import { F, draftChanges, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import type { GridAdapterProps, GridSelectionInfo } from "./adapter";
 
 const canvas = vi.hoisted(() => ({ props: null as unknown, clear: vi.fn() }));
 vi.mock("./glide/GlideGrid", async () => {
   const React = await import("react");
   return {
-    GRID_HEADER_HEIGHT: 44,
+    gridHeaderHeight: (wrap?: boolean) => (wrap ? 64 : 44),
     GlideGrid: React.forwardRef(function FakeGrid(props: unknown, ref: React.ForwardedRef<unknown>) {
       canvas.props = props;
       React.useImperativeHandle(ref, () => ({
@@ -233,14 +233,24 @@ describe("GridView: groups", () => {
     await waitFor(() => expect(grid().rowCount).toBe(5));
   });
 
-  it("collapses and expands every group from the footer", async () => {
+  it("folds and unfolds every group with the Fold all groups switch in View options", async () => {
     const user = userEvent.setup();
     setup({ recs: four, groups });
     await waitFor(() => expect(grid().rowCount).toBe(8));
-    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    await openViewOptions(user);
+    await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
     await waitFor(() => expect(grid().rowCount).toBe(2));
-    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByRole("switch", { name: "Fold all groups" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("switch", { name: "Fold all groups" }));
     await waitFor(() => expect(grid().rowCount).toBe(8));
+  });
+
+  it("has no Fold all groups switch while nothing is grouped", async () => {
+    const user = userEvent.setup();
+    setup();
+    await loaded();
+    await openViewOptions(user);
+    expect(screen.queryByRole("switch", { name: "Fold all groups" })).not.toBeInTheDocument();
   });
 
   it("opens a summary cell's menu from the keyboard", async () => {
@@ -268,7 +278,7 @@ describe("GridView: add rows and new rows", () => {
   /** The focus goes to somewhere else on the page. */
   const clickOff = () => act(() => void screen.getByTestId("canvas").dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: document.body })));
 
-  it("adds from the floating Add into the group of the selected cell, else the group in view, else the end", async () => {
+  it("adds from the header's New button into the group of the selected cell, else the group in view, else the end", async () => {
     const user = userEvent.setup();
     const { api } = setup({ recs: four, groups, routes });
     await waitFor(() => expect(grid().rowCount).toBe(8));

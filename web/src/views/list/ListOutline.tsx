@@ -526,7 +526,7 @@ export function ListOutline(p: ListOutlineProps) {
     for (const e of entries) if (e.kind === "leaf" && e.leaf.loaded < e.leaf.needed) onNeedRows?.(e.leaf.path, e.leaf.needed);
   }, [entries, onNeedRows]);
 
-  // "Add" of the toolbar adds to the group being worked in: the focused row's, else the selection's, else the first one in view.
+  // The header's New button adds to the group being worked in: the focused row's, else the selection's, else the first one in view.
   const { addTargetRef } = p;
   const lastAt = useRef<string | null>(null);
   useEffect(() => {
@@ -546,7 +546,7 @@ export function ListOutline(p: ListOutlineProps) {
         const d = el.closest<HTMLElement>("[data-leaf],[data-group]")?.dataset;
         return d ? defaults(d.leaf ?? d.group) : null;
       };
-      // Where focus last was in the list (pressing the toolbar's Add moves it away).
+      // Where focus last was in the list (pressing the header's New button moves it away).
       const focused = defaults(lastAt.current ?? undefined);
       if (focused) return focused;
       for (const id of p.selection?.ids ?? []) {
