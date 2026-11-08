@@ -65,7 +65,6 @@ describe("every signed-in route opens in the shell without a global top bar", ()
 
   it.each([
     ["/workspace/wsp1", "Home"],
-    ["/inbox", "Inbox"],
     ["/notifications", "Notifications"],
     ["/workspace/wsp1/automations", "Automations"],
     ["/workspace/wsp1/members", "Members"],
@@ -167,15 +166,25 @@ describe("/notifications", () => {
     expect(await screen.findByText("Weekly digest sent")).toBeInTheDocument();
     expectFrame();
   });
+
+  it("marks the sidebar's Notifications row as the current page on a desktop", async () => {
+    stubDesktop();
+    routes({ "GET /api/notifications": list });
+    renderApp({ route: "/notifications" });
+    await screen.findByText("Weekly digest sent");
+    expect(within(menu()).getByRole("button", { name: /^Notifications/ })).toHaveAttribute("aria-current", "page");
+    expect(within(menu()).getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
+  });
 });
 
 describe("/inbox", () => {
-  // The sidebar has no Inbox row (NAV-1); the page stays by address until Home holds the drafts (Phase 6).
-  it("is still reachable by its address", async () => {
+  // The routes table: the Inbox has no route of its own, and old links land on Home, which holds the drafts.
+  it("redirects to Home", async () => {
     stubDesktop();
     routes();
     renderApp({ route: "/inbox" });
-    expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Inbox" })).not.toBeInTheDocument();
     expect(within(menu()).queryByRole("link", { name: "Inbox" })).not.toBeInTheDocument();
   });
 });
@@ -194,9 +203,9 @@ describe("/workspace/:id/automations", () => {
     renderApp({ route: "/workspace/wsp1/automations" });
     await screen.findByRole("link", { name: /Welcome email/ });
     const groups = within(screen.getByRole("main")).getAllByRole("region");
-    expect(groups.map((g) => within(g).getByRole("heading", { level: 2 }).textContent)).toEqual(["Top level", "CRM"]);
-    // A folder without any says nothing.
-    expect(screen.queryByRole("heading", { name: "Hiring" })).not.toBeInTheDocument();
+    expect(groups.map((g) => within(g).getByRole("heading", { level: 2 }).textContent)).toEqual(["Top level", "CRM", "Hiring"]);
+    // A folder without any is still there, so its first one can be made.
+    expect(within(groups[2]!).getByText("No automations yet.")).toBeInTheDocument();
     const welcome = within(groups[0]!).getByRole("link", { name: /Welcome email/ });
     expect(welcome).toHaveAttribute("href", "/base/app1/automations/autA");
     expect(welcome).toHaveTextContent("On · A record is created");
@@ -220,10 +229,14 @@ describe("/workspace/:id/automations", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Automations" })).toBeInTheDocument();
   });
 
-  it("says when no folder has one yet", async () => {
+  it("offers New automation for the top level and every folder, even when none has one yet", async () => {
     routes({ "GET /api/bases/app1/automations": automations([]), "GET /api/bases/app2/automations": automations([]), "GET /api/bases/app3/automations": automations([]) });
     renderApp({ route: "/workspace/wsp1/automations" });
-    expect(await screen.findByText("No automations yet")).toBeInTheDocument();
+    expect(await screen.findAllByText("No automations yet.")).toHaveLength(3);
+    // The top level has no row or menu in the sidebar, so this is the only way in to its automations.
+    expect(screen.getByRole("link", { name: "New automation in Top level" })).toHaveAttribute("href", "/base/app1/automations");
+    expect(screen.getByRole("link", { name: "New automation in CRM" })).toHaveAttribute("href", "/base/app2/automations");
+    expect(screen.getByRole("link", { name: "New automation in Hiring" })).toHaveAttribute("href", "/base/app3/automations");
   });
 
   it("is for creators", async () => {

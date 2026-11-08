@@ -71,9 +71,10 @@ export function unreadBadge(unread: number): string {
 
 /**
  * The sidebar row. Spreads the rest of its props on the button so it can be a popover trigger;
- * `open` marks it while the panel is showing (not as the current page: the panel is not a page).
+ * `open` marks it while the panel is showing (not as the current page: the panel is not a page); `selected` is for
+ * the Notifications screen itself, which the row also stands for.
  */
-export function NotificationsRow({ open, className, ...props }: { open: boolean } & Omit<ComponentProps<typeof NavRow>, "children" | "asChild" | "count" | "selected">) {
+export function NotificationsRow({ open, className, ...props }: { open: boolean } & Omit<ComponentProps<typeof NavRow>, "children" | "asChild" | "count">) {
   const unread = useUnreadCount();
   return (
     <NavRow

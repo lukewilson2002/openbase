@@ -1,24 +1,14 @@
 /**
- * The Inbox, which is also what a workspace's Home shows until Home is rebuilt (HOME-1 to HOME-11 absorb it, and
- * `/inbox` goes). A calm column like an AI chat's home: a heading and one big box to put something in
+ * The Inbox, which is also what a workspace's Home shows until Home is rebuilt (HOME-1 to HOME-11 absorb it; `/inbox`
+ * already redirects to Home). A calm column like an AI chat's home: a heading and one big box to put something in
  * (a thought, a file), which stays a draft until it is saved into a table. The person's drafts are
  * listed under the box.
  */
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { HomeShell } from "@/shell/HomeShell";
 import { HelpTip } from "@/components/ui/help-tip";
 import { Capture } from "./Capture";
-
-/** `/inbox`: the page on its own, in the shell. */
-export function InboxRoute() {
-  return (
-    <HomeShell>
-      <InboxPage title="Inbox" />
-    </HomeShell>
-  );
-}
 
 export function InboxPage({ title }: { title: string }) {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });

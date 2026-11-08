@@ -2,9 +2,10 @@
  * `/workspace/:workspaceId/automations`: every automation of the workspace, grouped by folder (APP-5).
  * A row opens the automation in its editor, which stays at `/base/:baseId/automations/:automationId`.
  * Creators and owners manage automations, so the screen is theirs; the folders listed are the ones the
- * person can open (NAV-10), the top level first.
+ * person can open (NAV-10), the top level first. Every group links to its folder's automations, where
+ * the first one is made, so the top level (which has no row or menu in the sidebar) is as reachable as a folder.
  */
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
@@ -43,11 +44,9 @@ function ByFolder({ ws }: { ws: WorkspaceSummary }) {
     return <EmptyState title="Automations are for creators" description="Only creators and owners can see and change a folder's automations. Ask one of them for access." className="py-20" />;
   }
   const loading = lists.some((l) => l.isPending);
-  const empty = !loading && lists.every((l) => l.isSuccess && l.data.length === 0);
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6" aria-busy={loading}>
       <p className="text-label text-muted">Do things automatically when records change, forms arrive, on a schedule or from a webhook.</p>
-      {empty && <EmptyState title="No automations yet" description="Make one in a folder: open the folder's menu and choose Automations." className="py-10" />}
       {groups.map((g, i) => (
         <FolderGroup key={g.base.id} base={g.base} label={g.label} list={lists[i]!} />
       ))}
@@ -57,14 +56,20 @@ function ByFolder({ ws }: { ws: WorkspaceSummary }) {
 
 function FolderGroup({ base, label, list }: { base: BaseSummary; label: string; list: UseQueryResult<Automation[]> }) {
   const navigate = useNavigate();
-  // A folder with none says nothing; the empty state above covers the case where all are empty.
-  if (list.isSuccess && list.data.length === 0) return null;
   return (
     <section aria-labelledby={`automations-${base.id}`} className="flex flex-col gap-2">
-      <h2 id={`automations-${base.id}`} className="flex items-center gap-2 text-h3">
-        <ColorMark hue={base.color} name={base.name} size={14} />
-        {label}
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={`automations-${base.id}`} className="flex min-w-0 items-center gap-2 text-h3">
+          <ColorMark hue={base.color} name={base.name} size={14} />
+          <span className="truncate">{label}</span>
+        </h2>
+        {/* The folder's own page holds the New automation button; a group with none yet is where the first one starts. */}
+        <Button asChild size="sm">
+          <Link to={`/base/${base.id}/automations`} aria-label={`New automation in ${label}`}>
+            New automation
+          </Link>
+        </Button>
+      </div>
       {list.isPending ? (
         <Card padded={false} aria-hidden>
           <Skeleton className="m-2 h-8" />
@@ -76,6 +81,8 @@ function FolderGroup({ base, label, list }: { base: BaseSummary; label: string; 
             Try again
           </Button>
         </div>
+      ) : list.data.length === 0 ? (
+        <p className="text-label text-muted">No automations yet.</p>
       ) : (
         <Card padded={false}>
           <ul className="divide-y divide-line">

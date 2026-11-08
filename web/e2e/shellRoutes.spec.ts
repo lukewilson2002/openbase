@@ -11,7 +11,7 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  * leads. A route is added to {@link ROUTES} in the phase that creates it (the record page in Phase 5).
  *
  * Not in the list, on purpose: the design reference (`/__dev/design`), sign-in, sign-up, invite, public form and
- * share pages and the OAuth consent page are outside the shell; `/inbox` is going away with Home (HOME-8).
+ * share pages and the OAuth consent page are outside the shell; `/inbox` redirects to Home.
  *
  * Signs up its own user, and signs in as the journey's administrator for /admin. Runs only with OPENBASE_E2E=1.
  */

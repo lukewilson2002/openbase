@@ -59,7 +59,7 @@ async function write(text: string) {
 const SAVE_WAIT = { timeout: 3000 };
 
 describe("the Inbox page", () => {
-  it("is what a workspace's Home shows for now, and is still reachable at /inbox", async () => {
+  it("is what a workspace's Home shows for now, and /inbox leads there", async () => {
     stubDesktop();
     routes();
     const first = renderApp();
@@ -67,7 +67,7 @@ describe("the Inbox page", () => {
     expect(await screen.findByRole("textbox", { name: "Note" })).toBeInTheDocument();
     first.unmount();
     renderApp({ route: "/inbox" });
-    expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
     expect(await screen.findByRole("textbox", { name: "Note" })).toBeInTheDocument();
   });
 

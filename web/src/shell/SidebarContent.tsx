@@ -133,7 +133,7 @@ function Notifications() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <NotificationsRow open={open} />
+        <NotificationsRow open={open} selected={pathname === "/notifications"} />
       </PopoverTrigger>
       {/* Beside the sidebar rather than over it. */}
       <PopoverContent

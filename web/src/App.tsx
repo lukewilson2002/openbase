@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Link, Outlet, Route, Routes, useNavigate } from "react-router";
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { setUnauthorizedHandler } from "@/api/client";
 import { keys } from "@/api/keys";
@@ -8,7 +8,6 @@ import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { RootRoute } from "@/pages/RootRoute";
-import { InboxRoute } from "@/pages/inbox/InboxPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { CollectionsPage } from "@/pages/workspace/CollectionsPage";
 import { WorkspaceAutomationsPage } from "@/pages/workspace/WorkspaceAutomationsPage";
@@ -71,8 +70,8 @@ export function AppRoutes() {
             <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
             <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
-            {/* The Inbox stays reachable until Home absorbs its drafts (HOME-8) and the page goes. */}
-            <Route path="/inbox" element={<InboxRoute />} />
+            {/* Home holds the drafts; old Inbox links land there (routes table). */}
+            <Route path="/inbox" element={<Navigate to="/" replace />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/trash" element={<TrashPage />} />
             {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}
