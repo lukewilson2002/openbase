@@ -176,6 +176,37 @@ credential (session or API token); several streams (tabs) of one user count once
 | `GET /api/bases/{id}/presence` | `{viewers: [user_id, ...]}`: everyone with an open stream on the project, in the order they arrived. Same access as reading the project (Viewer role; a read-only token may call it). |
 | `GET /api/bases/{id}/events` | Also sends `presence_changed` with `data` `{base_id, user_id, event: {kind: "presence_changed", viewers: [...]}}` to the streams already open when a user's **first** stream opens or their **last** one closes (closing the tab, losing access, the server stopping). `user_id` is the person who arrived or left. Every new stream also starts with the current list as its first event, right after the `: connected` comment: a `presence_changed` frame whose `user_id` is `null` and whose `viewers` already include the new viewer, so a client needs no separate `GET /presence` and cannot miss an arrival between the two. The stream is not told about its own arrival a second time. Presence never counts as a data change (no view cache is invalidated). |
 
+### Workspace live updates (internal API)
+
+`GET /api/workspaces/{id}/events` is one Server-Sent Events stream for all the projects of a
+workspace that the caller can open. The web app's Home uses it: a browser allows about six
+connections per site, so it cannot hold one `GET /api/bases/{id}/events` per project.
+
+- **Messages.** The same as the per-project stream: `event: records_changed`, `schema_changed`,
+  `comments_changed` or `base_changed`, with `data` the same envelope `{base_id, client_id, user_id,
+  event}`. `base_id` is the project the event belongs to, which is how a client routes it. Echo
+  suppression with `X-Client-Id` works as on the per-project stream. After the `: connected`
+  comment there is no snapshot frame.
+- **No presence.** The stream never counts its user as viewing any project, and `presence_changed`
+  is not relayed. A screen that shows who is viewing a project opens that project's own stream.
+- **Which projects.** Those the caller can open (Viewer or better) at that moment. Access follows
+  the same rules as reading a project: a member limited to some projects of the workspace gets only
+  those, and an API token only the projects its scope reaches. A project created, duplicated or
+  restored after the stream opened, or granted to the caller later, starts being relayed; its first
+  event is a `base_changed` for it, which tells the client to refetch the project list.
+- **Losing access.** When the caller loses a project (taken off their list, or the project is
+  deleted), the stream sends one last `base_changed` for it and stops relaying it. When the caller
+  loses the workspace, is deactivated, or their session, token or OAuth grant ends, the stream
+  closes. The check runs when a `base_changed` passes, after a lag, and at least every 60 seconds.
+  The same re-read announces any project that appeared or vanished without an event.
+- **Lag.** A client too slow to keep up gets a `base_changed` for each of its projects: refetch
+  everything.
+- **Limits.** `404 not_found` for a workspace the caller is not in (also for a token that reaches
+  none of its projects), `429` once the user holds 20 workspace streams at the same time. Each
+  open stream is one connection: a browser tab should hold one.
+- **Agents.** The stream never ends, so it has no MCP tool (`api_reference` lists it as not
+  callable); an agent polls the read endpoints, or `GET /api/history` for what changed.
+
 ### Activity feed (internal API)
 
 `GET /api/history` lists what changed lately across every record the caller can open, in all their
