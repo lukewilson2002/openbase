@@ -362,6 +362,13 @@ describe("View options: footer", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("says the file is the saved view's while there is a draft, without changing the button's name", async () => {
+    renderOptions({ hasDraft: true });
+    const { panel } = await open();
+    const download = within(panel).getByRole("button", { name: "Download CSV" });
+    expect(download).toHaveAccessibleDescription("Saved view only");
+  });
+
   it("offers no Add property to an editor", async () => {
     renderOptions({ role: "editor", schema: makeSchema("editor") });
     const { panel } = await open();

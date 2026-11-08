@@ -66,6 +66,8 @@ export interface ViewOptionsProps {
   layout: ViewType;
   onLayoutChange: (type: ViewType) => void;
   features?: ViewOptionsFeatures;
+  /** The view has a draft: its filter, sorts and properties are not saved yet, and Download CSV is the saved view's. */
+  hasDraft?: boolean;
   /** The shown layout's own settings, under the tiles (what a board stacks by, a calendar's dates). A function gets `close`, for a button that opens something else. */
   layoutSettings?: ReactNode | ((close: () => void) => ReactNode);
   /** Settings that sit with the properties: the description property, how many properties a card shows. */
@@ -93,7 +95,7 @@ export function forgetViewOptionsHandOver(): void {
 }
 
 export function ViewOptions(props: ViewOptionsProps) {
-  const { schema, table, view, role, config, update, collaborators, layout, features, layoutSettings, propertySettings, toggles = [], timeZone } = props;
+  const { schema, table, view, role, config, update, collaborators, layout, features, hasDraft = false, layoutSettings, propertySettings, toggles = [], timeZone } = props;
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const [open, setOpen] = useState(carry.open);
   const [screen, setScreen] = useState<Screen>("root");
@@ -267,12 +269,19 @@ export function ViewOptions(props: ViewOptionsProps) {
               variant="ghost"
               className="justify-start px-2"
               disabled={csv.busy}
+              // The file holds the saved view; a draft is on this device only, so say it is not in it.
+              aria-describedby={hasDraft ? "csv-saved-note" : undefined}
               onClick={() => {
                 void csv.run();
                 close();
               }}
             >
               <Icon icon={Download} /> {csv.busy ? "Preparing…" : "Download CSV"}
+              {hasDraft && (
+                <span id="csv-saved-note" aria-hidden className="ml-auto pl-2 text-meta font-normal text-muted">
+                  Saved view only
+                </span>
+              )}
             </Button>
           )}
         </div>

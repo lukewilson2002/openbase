@@ -11,7 +11,7 @@ import type { ViewConfigApi } from "../grid/useViewConfig";
 export function useResetFilters(cfg: ViewConfigApi, view: View, search: string, setSearch: (s: string) => void): () => void {
   const { update } = cfg;
   const draftFilters = cfg.draft !== null && "filter" in cfg.draft.changes;
-  const savedFilter = view.config.filter;
+  const savedFilter = view.config.filter ?? null;
   const typed = search.trim() !== "";
   return useCallback(() => {
     if (draftFilters || typed) update((c) => setFilter(c, savedFilter));

@@ -128,6 +128,7 @@ export function ViewFrame({ setup, recordIds, features, layoutSettings, property
               layout={cfg.layout}
               onLayoutChange={cfg.setLayout}
               features={features}
+              hasDraft={cfg.draft !== null}
               layoutSettings={layoutSettings}
               propertySettings={propertySettings}
               toggles={layoutToggles}

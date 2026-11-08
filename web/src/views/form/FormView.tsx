@@ -137,6 +137,7 @@ export default function FormView(props: ViewProps) {
               layout={cfg.layout}
               onLayoutChange={cfg.setLayout}
               features={{ sort: false, group: false, color: false, properties: false, addProperty: false }}
+              hasDraft={cfg.draft !== null}
               layoutSettings={(close) => formSettings(close)}
               timeZone={setup.timeZone}
             />

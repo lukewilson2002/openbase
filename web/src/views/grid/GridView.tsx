@@ -1094,6 +1094,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
               layout={cfg.layout}
               onLayoutChange={cfg.setLayout}
               features={{ rowHeight: true }}
+              hasDraft={cfg.draft !== null}
               toggles={grouped ? [{ id: "fold-all", label: "Fold all groups", checked: pathKeys.every((k) => collapsed.has(k)), onToggle: (on) => replaceCollapsed(on ? pathKeys : []) }] : undefined}
               timeZone={timeZone}
             />
