@@ -271,9 +271,8 @@ impl Passkeys {
         passkey: &mut Passkey,
     ) -> Result<(), LoginRefused> {
         let webauthn = self.webauthn().map_err(|_| LoginRefused::Invalid)?;
-        let key = [webauthn_rs::prelude::DiscoverableKey::from(&*passkey)];
         let result = webauthn
-            .finish_discoverable_authentication(cred, state, &key)
+            .finish_discoverable_authentication_v2(cred, state, &*passkey)
             .map_err(|e| {
                 tracing::debug!(error = %e, "passkey sign-in refused");
                 match e {

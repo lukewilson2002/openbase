@@ -8,7 +8,15 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lukewilson2002/openbase"
 homepage = "https://github.com/lukewilson2002/openbase"
-rust-version = "1.85"
+rust-version = "1.89"
+
+# The webauthn-rs and time security fixes need Rust 1.89 (SEC-1), and clippy gates its newer style
+# lints on rust-version. These stay allowed until they get a cleanup commit of their own, so the
+# dependency bump does not rewrite code it has nothing to do with.
+[workspace.lints.clippy]
+collapsible_if = "allow"
+manual_is_multiple_of = "allow"
+chunks_exact_to_as_chunks = "allow"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

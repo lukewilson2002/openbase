@@ -124,7 +124,7 @@ impl Authenticator {
         let mut secret = [0u8; 32];
         rand::RngExt::fill(&mut rand::rng(), secret.as_mut_slice());
         let key = SigningKey::from_slice(&secret).map_err(|e| e.to_string())?;
-        let point = VerifyingKey::from(&key).to_encoded_point(false);
+        let point = VerifyingKey::from(&key).to_sec1_point(false);
 
         let cose = Cbor::Map(
             [
