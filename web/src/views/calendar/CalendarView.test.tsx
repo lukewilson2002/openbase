@@ -103,10 +103,10 @@ describe("CalendarView", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const view = viewWithConfig("viw1", "calendar", {});
     const { api, asked } = setup("editor", view);
-    expect(await screen.findByText("Choose a date field")).toBeInTheDocument();
+    expect(await screen.findByText("Choose a date property")).toBeInTheDocument();
     expect(asked).toHaveLength(0);
     // The likely field (the first date people fill in) is chosen already.
-    expect(screen.getByRole("combobox", { name: "Date field" })).toHaveValue("f_start");
+    expect(screen.getByRole("combobox", { name: "Date property" })).toHaveValue("f_start");
     await user.click(screen.getByRole("button", { name: "Show calendar" }));
     await waitFor(() => expect(draftChanges()?.calendar?.date_field_id).toBe("f_start"));
     // Nothing is saved until someone says so.
@@ -315,7 +315,7 @@ describe("CalendarView", () => {
 
     it("explains why events cannot be moved and how to fix it, only to people who could edit", async () => {
       setup("editor", cal({ date_field_id: created.id, end_field_id: null }), {}, [rec("r1", { [created.id]: "2026-03-10T09:00:00.000Z" })], [created]);
-      const note = await screen.findByText(/Created is a Created time field/);
+      const note = await screen.findByText(/Created is a Created time property/);
       expect(note).toHaveTextContent("Pick a date property you can edit as the Date under View options");
       expect(document.querySelector(".fc-event-draggable")).toBeNull();
     });
@@ -328,7 +328,7 @@ describe("CalendarView", () => {
 
     it("names a computed end field the same way", async () => {
       setup("editor", cal({ end_field_id: created.id }), {}, records, [created]);
-      const note = await screen.findByText(/Created is a Created time field/);
+      const note = await screen.findByText(/Created is a Created time property/);
       expect(note).toHaveTextContent("as the End date");
     });
 
@@ -368,7 +368,7 @@ describe("CalendarView", () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const created: Field = { ...ALL_FIELDS.created_time!, id: "f_created", name: "Created" };
       const { api } = setup("editor", cal({ date_field_id: created.id, end_field_id: null }), routes, [], [created]);
-      await screen.findByText(/Created is a Created time field/);
+      await screen.findByText(/Created is a Created time property/);
       await user.click(screen.getByRole("button", { name: "Add record" }));
       await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
       expect(startOf(api)).not.toHaveProperty("f_created");

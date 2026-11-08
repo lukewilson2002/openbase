@@ -163,7 +163,7 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
         }}
       />
       {suggestions.length > 0 && (
-        <ul id={listId} role="listbox" aria-label="Fields" className="absolute left-0 z-20 mt-1 max-h-48 w-64 overflow-y-auto rounded-md border border-line bg-surface p-1 shadow-pop">
+        <ul id={listId} role="listbox" aria-label="Properties" className="absolute left-0 z-20 mt-1 max-h-48 w-64 overflow-y-auto rounded-md border border-line bg-surface p-1 shadow-pop">
           {suggestions.map((f, i) => (
             <li key={f.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => accept(f)} className={cn("block w-full truncate rounded px-2 py-1 text-left text-[0.8125rem]", i === active && "bg-hover")}>
@@ -185,8 +185,8 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
           </p>
         )}
         {check.status === "checking" && <p className="text-muted">Checking…</p>}
-        {check.status === "unavailable" && <p className="text-muted">Type {"{"} to insert a field name. Formulas are checked when you save.</p>}
-        {check.status === "idle" && value.trim() === "" && <p className="text-muted">Type {"{"} to insert a field name.</p>}
+        {check.status === "unavailable" && <p className="text-muted">Type {"{"} to insert a property name. Formulas are checked when you save.</p>}
+        {check.status === "idle" && value.trim() === "" && <p className="text-muted">Type {"{"} to insert a property name.</p>}
       </div>
     </div>
   );

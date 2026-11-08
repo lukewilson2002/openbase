@@ -202,7 +202,7 @@ export function ConditionRow({
           onChange(keep ? { ...cond, field_id: next.id } : newCondition(next), false);
         }}
       >
-        {!field && <option value="">(deleted field)</option>}
+        {!field && <option value="">(deleted property)</option>}
         {filterable.map((f) => (
           <option key={f.id} value={f.id}>
             {f.name}

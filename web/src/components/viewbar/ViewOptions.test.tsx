@@ -380,7 +380,7 @@ describe("View options: footer", () => {
     renderOptions({ role: "creator", schema: makeSchema("creator") });
     const { user, panel } = await open();
     await user.click(within(panel).getByRole("button", { name: "Add property" }));
-    expect(await screen.findByRole("dialog", { name: "Add a field" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Add property" })).toBeInTheDocument();
     // The options panel made way for it.
     expect(screen.queryByRole("group", { name: "Layout" })).not.toBeInTheDocument();
   });

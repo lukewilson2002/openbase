@@ -142,7 +142,7 @@ function Created({ who, changes, fields, format }: { who: React.ReactNode; chang
               ))}
             </ul>
           )}
-          <Toggle expanded={open} onClick={() => setOpen(!open)} more={`Show ${changes.length} ${changes.length === 1 ? "field" : "fields"}`} less="Hide fields" />
+          <Toggle expanded={open} onClick={() => setOpen(!open)} more={`Show ${changes.length} ${changes.length === 1 ? "property" : "properties"}`} less="Hide properties" />
         </>
       )}
     </>
@@ -152,7 +152,7 @@ function Created({ who, changes, fields, format }: { who: React.ReactNode; chang
 /** "changed Status from Todo to Done", "set Due to Oct 20", "cleared Notes (was …)". */
 function ChangeText({ fieldId, change, fields, format }: { fieldId: string; change: { old?: unknown; new?: unknown }; fields: Readonly<Record<string, Field>>; format: FormatCtx }) {
   const field = fields[fieldId];
-  const name = <span className="font-medium">{field?.name ?? "(deleted field)"}</span>;
+  const name = <span className="font-medium">{field?.name ?? "(deleted property)"}</span>;
   const before = historyValueText(field, change.old, format);
   const after = historyValueText(field, change.new, format);
   if (!before && after) {

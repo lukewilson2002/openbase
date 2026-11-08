@@ -11,7 +11,7 @@ export const ACCESS_LABEL: Record<OAuthAccess, string> = {
 
 export const ACCESS_HINT: Record<OAuthAccess, string> = {
   read: "See your projects, tables and records. Cannot change anything.",
-  write: "Also create, edit and delete records, tables, fields, views and automations in your projects.",
+  write: "Also create, edit and delete records, collections, properties, views and automations in your projects.",
   manage:
     "Also manage workspaces, members, invites and settings, and use the admin pages if you are an administrator. Passwords, two-factor settings, sessions and tokens are never reachable.",
 };

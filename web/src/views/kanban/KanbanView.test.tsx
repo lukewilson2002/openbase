@@ -514,7 +514,7 @@ describe("KanbanView", () => {
       await user.click(screen.getByRole("button", { name: "Options for Todo" }));
       await screen.findByRole("menuitem", { name: "Collapse stack" });
       for (const name of ["Rename stack", "Change colour", "Delete stack"]) expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
-      expect(screen.getByText(/Adding a stack adds an option to the field/)).toBeInTheDocument();
+      expect(screen.getByText(/Adding a stack adds an option to the property/)).toBeInTheDocument();
     });
 
     it("drags a header to reorder the stacks with one save, keeping the hidden ones in place", async () => {

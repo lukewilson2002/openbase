@@ -304,7 +304,7 @@ describe("RecordPage: history", () => {
     expect(within(item("Status")).getByText("In progress")).toBeInTheDocument();
     expect(within(item("Owner")).getByText("Alpha")).toBeInTheDocument();
     expect(within(item("Owner")).getByText("(empty)")).toBeInTheDocument();
-    expect(within(item("(deleted field)")).getByText("y")).toBeInTheDocument();
+    expect(within(item("(deleted property)")).getByText("y")).toBeInTheDocument();
     expect(within(entries[1]!).getByText("Created this record")).toBeInTheDocument();
     expect(within(entries[1]!).getByText("Launch")).toBeInTheDocument();
   });

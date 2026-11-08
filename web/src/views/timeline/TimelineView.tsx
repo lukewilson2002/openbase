@@ -445,7 +445,7 @@ function TimelineInner(props: ViewProps) {
         setup={setup}
         heading="Choose the dates"
         body="Pick when each record starts. Add an end date to draw bars; without one, each record is a diamond."
-        emptyBody="This table has no date field yet."
+        emptyBody="This collection has no date property yet."
         pickers={[
           { label: "Start date", fields: dateFields, initial: likely.start?.id ?? "" },
           { label: <>End date <span className="font-normal text-muted">· optional</span></>, fields: dateFields, initial: likely.end?.id ?? "", noneLabel: "No end date" },
@@ -453,7 +453,7 @@ function TimelineInner(props: ViewProps) {
         button="Show timeline"
         onApply={([start, end]) => cfg.update((c) => setTimeline(c, { start_field_id: start ?? null, end_field_id: end && end !== start ? end : null }))}
         footText="Need a different date?"
-        footLink="Add a date field"
+        footLink="Add a date property"
         addType="date"
         accepts={isDateLike}
       />

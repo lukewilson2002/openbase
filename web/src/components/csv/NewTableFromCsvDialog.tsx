@@ -26,7 +26,7 @@ export interface NewTableFromCsvDialogProps {
 
 export function NewTableFromCsvDialog({ open, onOpenChange, baseId }: NewTableFromCsvDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title="New table from CSV" description="OpenBase reads the file, picks a field type for each column and adds every row.">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl" title="New collection from CSV" description="OpenBase reads the file, picks a property type for each column and adds every row.">
       {open && <Body baseId={baseId} onClose={() => onOpenChange(false)} />}
     </Dialog>
   );
@@ -67,7 +67,7 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
       // Left as suggested, the server picks the name itself (and makes it unique among the base's tables).
       const res = await csvApi.importNewTable(baseId, picked.file, { hasHeader, ...(trimmed && trimmed !== suggested ? { name: trimmed } : {}) });
       await qc.invalidateQueries({ queryKey: keys.base(baseId) });
-      toast.toast({ title: `Imported ${res.created.toLocaleString()} record${res.created === 1 ? "" : "s"}`, description: `New table with ${res.fields.length} field${res.fields.length === 1 ? "" : "s"}: ${res.fields.map((f) => f.name).slice(0, 6).join(", ")}${res.fields.length > 6 ? "…" : ""}`, variant: "success" });
+      toast.toast({ title: `Imported ${res.created.toLocaleString()} record${res.created === 1 ? "" : "s"}`, description: `New collection with ${res.fields.length} property${res.fields.length === 1 ? "" : "s"}: ${res.fields.map((f) => f.name).slice(0, 6).join(", ")}${res.fields.length > 6 ? "…" : ""}`, variant: "success" });
       onClose();
       navigate(`/base/${baseId}/${res.table_id}`);
     } catch (e) {
@@ -87,7 +87,7 @@ function Body({ baseId, onClose }: { baseId: string; onClose: () => void }) {
           >
             {(ctl) => <Input {...ctl} value={name} maxLength={255} disabled={busy} onChange={(e) => setName(e.target.value)} />}
           </Field>
-          <Checkbox checked={hasHeader} disabled={busy} onCheckedChange={setHasHeader} label="The first row holds the field names" />
+          <Checkbox checked={hasHeader} disabled={busy} onCheckedChange={setHasHeader} label="The first row holds the property names" />
           <section aria-label="Preview">
             <h3 className="mb-1.5 text-[0.9375rem]">Preview</h3>
             <div className="overflow-x-auto rounded-md border border-line">

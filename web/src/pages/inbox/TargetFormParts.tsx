@@ -160,7 +160,7 @@ export function OtherFields({ form }: { form: TargetForm }) {
         {fields.length > FIELDS_SHOWN && (
           <button type="button" aria-expanded={all} onClick={() => setAll((a) => !a)} className="flex h-9 items-center gap-1 self-start rounded-[10px] px-1.5 text-[0.8125rem] font-medium text-muted hover:bg-hover hover:text-fg pointer-coarse:h-11">
             <ChevronDown aria-hidden className={cn("size-4 transition-transform", all && "rotate-180")} />
-            {all ? "Show fewer fields" : `Show ${fields.length - FIELDS_SHOWN} more ${fields.length - FIELDS_SHOWN === 1 ? "field" : "fields"}`}
+            {all ? "Show fewer properties" : `Show ${fields.length - FIELDS_SHOWN} more ${fields.length - FIELDS_SHOWN === 1 ? "property" : "properties"}`}
           </button>
         )}
       </div>

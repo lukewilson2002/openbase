@@ -13,33 +13,33 @@ function setup(role: string, withoutDates = false) {
   return renderView(CalendarView, { schema, viewId: "viw1" });
 }
 
-describe("ViewSetupState (a calendar without a date field)", () => {
-  it("offers the date field dialog from the footnote, with the date type chosen", async () => {
+describe("ViewSetupState (a calendar without a date property)", () => {
+  it("offers the date property dialog from the footnote, with the date type chosen", async () => {
     const user = userEvent.setup();
     setup("creator");
-    expect(await screen.findByRole("heading", { name: "Choose a date field" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Choose a date property" })).toBeInTheDocument();
     expect(screen.getByText("Need a different date?")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Add a date field" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add a field" });
+    await user.click(screen.getByRole("button", { name: "Add a date property" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add property" });
     expect(dialog).toHaveTextContent("Date");
   });
 
-  it("says when the table has no date field yet and makes adding one the main button", async () => {
+  it("says when the collection has no date property yet and makes adding one the main button", async () => {
     setup("creator", true);
-    expect(await screen.findByText("This table has no date field yet.")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Date field" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add a date field" })).toBeInTheDocument();
+    expect(await screen.findByText("This collection has no date property yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Date property" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a date property" })).toBeInTheDocument();
   });
 
   it("lets editors pick the field but not add one", async () => {
     setup("editor");
-    expect(await screen.findByRole("combobox", { name: "Date field" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add a date field" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Date property" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a date property" })).not.toBeInTheDocument();
   });
 
   it("lets people who cannot change the view pick the field too: the choice is a draft only they see", async () => {
     setup("viewer");
-    expect(await screen.findByRole("combobox", { name: "Date field" })).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Date property" })).toBeInTheDocument();
     expect(screen.queryByText(/Ask someone who can edit this view/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show calendar" })).toBeInTheDocument();
   });

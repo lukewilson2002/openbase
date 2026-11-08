@@ -48,8 +48,8 @@ export function mappingKeys(names: readonly string[], hasHeader: boolean): strin
 /** Why a field cannot receive imported data, or `null` when it can (mirrors `csv_io::importable`). */
 export function importProblem(field: Field): string | null {
   if (isComputed(field)) return "computed";
-  if (field.type === "link") return "link fields cannot be imported";
-  if (field.type === "user") return "user fields cannot be imported";
+  if (field.type === "link") return "link properties cannot be imported";
+  if (field.type === "user") return "user properties cannot be imported";
   if (field.type === "attachment") return "attachments cannot be imported";
   return null;
 }

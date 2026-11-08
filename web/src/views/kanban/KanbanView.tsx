@@ -187,7 +187,7 @@ function KanbanInner(props: ViewProps) {
   const addStackNote = onAddStack
     ? undefined
     : kind === "select"
-      ? "Adding a stack adds an option to the field, which takes the Creator role."
+      ? "Adding a stack adds an option to the property, which takes the Creator role."
       : kind === "user"
         ? kanban.show_all_people
         ? "Every collaborator has a stack. Add people to the base to give them one."
@@ -243,13 +243,13 @@ function KanbanInner(props: ViewProps) {
       <ViewSetupState
         setup={setup}
         heading="Choose how to stack cards"
-        body="Pick a field. Each of its values becomes a stack you can drag cards between."
-        emptyBody="This table has no single select, person or checkbox field to stack cards by yet."
+        body="Pick a property. Each of its values becomes a stack you can drag cards between."
+        emptyBody="This collection has no single select, person or checkbox property to stack cards by yet."
         pickers={[{ label: "Stack cards by", fields: stackFields, initial: likely?.id ?? "" }]}
         button="Make stacks"
         onApply={([id]) => chooseStack(id ?? null)}
-        footText="Stacks come from a single select or a person field."
-        footLink="Add a field"
+        footText="Stacks come from a single select or a person property."
+        footLink="Add a property"
         addType="single_select"
         accepts={isStackField}
       />

@@ -378,7 +378,7 @@ describe("base shell on a desktop", () => {
       await openFolderMenu(user);
       expect(await screen.findByRole("menuitem", { name: "New collection" })).toBeInTheDocument();
       await user.click(screen.getByRole("menuitem", { name: "New collection from CSV" }));
-      expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
+      expect(await screen.findByRole("dialog", { name: "New collection from CSV" })).toBeInTheDocument();
     });
   });
 
@@ -592,7 +592,7 @@ describe("an empty base", () => {
     const user = userEvent.setup();
     openBase("creator", { "GET /api/bases/app1": empty("creator") });
     await user.click(await screen.findByRole("button", { name: "Import CSV" }));
-    expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "New collection from CSV" })).toBeInTheDocument();
   });
 
   it.each(["viewer", "editor"])("tells a %s whom to ask", async (role) => {

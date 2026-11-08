@@ -80,7 +80,7 @@ export function DateOptionsEditor({ value, onChange, allowTime = true, label = "
           </Select>
         )}
       </FormField>
-      {allowTime && <Checkbox label="Include a time field" checked={value.include_time} onCheckedChange={(on) => onChange({ ...value, include_time: on })} />}
+      {allowTime && <Checkbox label="Include a time of day" checked={value.include_time} onCheckedChange={(on) => onChange({ ...value, include_time: on })} />}
       {value.include_time && (
         <FormField label="Time format">
           {(c) => (
@@ -172,8 +172,8 @@ function WatchedFields({ ctx, existing, value, onChange }: { ctx: KindContext; e
   const candidates = ctx.table.fields.filter((f) => f.id !== existing?.id && !["created_time", "last_modified_time", "created_by", "last_modified_by", "autonumber", "formula", "lookup", "rollup", "count", "button"].includes(f.type));
   return (
     <fieldset>
-      <legend className="mb-1 text-[0.8125rem] font-medium">Watch these fields</legend>
-      <p className="mb-2 text-xs text-muted">Only changes to the checked fields update this value. Leave all unchecked to track every editable field.</p>
+      <legend className="mb-1 text-[0.8125rem] font-medium">Watch these properties</legend>
+      <p className="mb-2 text-xs text-muted">Only changes to the checked properties update this value. Leave all unchecked to track every editable property.</p>
       <ul className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
         {candidates.map((f) => (
           <li key={f.id}>
@@ -312,30 +312,30 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
     case "created_by":
     case "autonumber":
     case "barcode":
-      return <p className="text-[0.8125rem] text-muted">This field type has no options.</p>;
+      return <p className="text-[0.8125rem] text-muted">This type has no options.</p>;
     case "link": {
       const target = otherTables.find((t) => t.id === kind.options.linked_table_id);
       return (
         <div className="flex flex-col gap-3">
-          <FormField label="Table to link to" hint={existing ? "The linked table cannot be changed after the field is created." : undefined}>
+          <FormField label="Collection to link to" hint={existing ? "The linked collection can't be changed once the property is added." : undefined}>
             {(c) => (
               <EntitySelect
                 {...c}
                 disabled={!!existing}
                 value={kind.options.linked_table_id}
                 onValueChange={(id) => onChange({ ...kind, options: { ...kind.options, linked_table_id: id, picker_view_id: null } })}
-                options={otherTables.map((t) => ({ value: t.id, label: `${t.name}${t.id === ctx.table.id ? " (this table)" : ""}`, icon: t.icon }))}
+                options={otherTables.map((t) => ({ value: t.id, label: `${t.name}${t.id === ctx.table.id ? " (this collection)" : ""}`, icon: t.icon }))}
               />
             )}
           </FormField>
           <Checkbox label="Allow linking to only one record" checked={kind.options.single} onCheckedChange={(single) => onChange({ ...kind, options: { ...kind.options, single } })} />
           {creating && (
-            <FormField label="Name of the field created in the linked table" hint="Leave blank to use the default.">
+            <FormField label="Name of the property created in the linked collection" hint="Leave blank to use the default.">
               {(c) => <Input {...c} value={inverseName} onChange={(e) => onInverseName(e.target.value)} />}
             </FormField>
           )}
           {target && target.views.length > 0 && (
-            <FormField label="Limit record choices to a view" hint="Only records in this view of the linked table can be picked.">
+            <FormField label="Limit record choices to a view" hint="Only records in this view of the linked collection can be picked.">
               {(c) => (
                 <Select {...c} value={kind.options.picker_view_id ?? ""} onChange={(e) => onChange({ ...kind, options: { ...kind.options, picker_view_id: e.target.value || null } })}>
                   <option value="">All records</option>
@@ -376,16 +376,16 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
       return (
         <div className="flex flex-col gap-3">
           {links.length === 0 ? (
-            <p className="rounded bg-warning-soft px-2 py-1.5 text-[0.8125rem]">This table has no link fields yet. Add a link to another record first.</p>
+            <p className="rounded bg-warning-soft px-2 py-1.5 text-[0.8125rem]">This collection has no link properties yet. Add a link property first.</p>
           ) : (
-            <FormField label="Link field">
+            <FormField label="Link property">
               {(c) => (
                 <Select
                   {...c}
                   value={kind.options.link_field_id}
                   onChange={(e) => onChange({ ...kind, options: { ...kind.options, link_field_id: e.target.value, ...(kind.type !== "count" ? { target_field_id: "" } : {}) } } as FieldKind)}
                 >
-                  {!link && <option value="">Choose a link field…</option>}
+                  {!link && <option value="">Choose a link property…</option>}
                   {links.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -396,10 +396,10 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
             </FormField>
           )}
           {kind.type !== "count" && (
-            <FormField label="Field to use from the linked table">
+            <FormField label="Property to use from the linked collection">
               {(c) => (
                 <Select {...c} disabled={!link} value={kind.options.target_field_id} onChange={(e) => onChange({ ...kind, options: { ...kind.options, target_field_id: e.target.value } } as FieldKind)}>
-                  <option value="">Choose a field…</option>
+                  <option value="">Choose a property…</option>
                   {targetFields.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.name}

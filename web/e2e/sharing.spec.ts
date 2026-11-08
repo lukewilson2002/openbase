@@ -328,11 +328,11 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
   diagnostics.allow(/status of 422.*import\)$/);
   let newTableId = "";
 
-  await test.step("New table from CSV: name from the file, preview, types inferred", async () => {
+  await test.step("New collection from CSV: name from the file, preview, types inferred", async () => {
     await openView(page);
     await page.getByRole("button", { name: "Folder options for Sharing E2E" }).click();
     await page.getByRole("menuitem", { name: "New collection from CSV" }).click();
-    const dialog = page.getByRole("dialog", { name: "New table from CSV" });
+    const dialog = page.getByRole("dialog", { name: "New collection from CSV" });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "Customers 2026.csv", mimeType: "text/csv", buffer: Buffer.from("Name,Age,Joined,Active\nAnn,30,2024-01-05,yes\nBob,41,2023-12-31,no\nCyd,29,2022-06-30,yes\n") });
     await expect(dialog.getByLabel("Table name")).toHaveValue("Customers 2026");
     await expect(dialog.getByRole("region", { name: "Preview" }).getByText("Bob")).toBeVisible();
@@ -352,10 +352,10 @@ test("imports a CSV into a new table, then into an existing one, and reports bad
     const dialog = page.getByRole("dialog", { name: `Import CSV into ${fx.tableName}` });
     await dialog.getByLabel("CSV file").setInputFiles({ name: "more.csv", mimeType: "text/csv", buffer: Buffer.from("Name;Qty;Comment\nDelta;12;hi\nEcho;4;there\n") });
     const mapping = dialog.getByRole("region", { name: "Column mapping" });
-    await expect(mapping.getByLabel("Field for Name")).toHaveValue(fx.fields.name);
-    await expect(mapping.getByLabel("Field for Qty")).toHaveValue(fx.fields.qty);
-    await expect(mapping.getByLabel("Field for Comment")).toHaveValue("");
-    await mapping.getByLabel("Field for Comment").selectOption({ label: "Notes" });
+    await expect(mapping.getByLabel("Property for Name")).toHaveValue(fx.fields.name);
+    await expect(mapping.getByLabel("Property for Qty")).toHaveValue(fx.fields.qty);
+    await expect(mapping.getByLabel("Property for Comment")).toHaveValue("");
+    await mapping.getByLabel("Property for Comment").selectOption({ label: "Notes" });
     await dialog.getByRole("button", { name: "Import 3 columns" }).click();
     await expect(dialog.getByText("Imported 2 records")).toBeVisible();
     await dialog.getByRole("button", { name: "Done" }).click();

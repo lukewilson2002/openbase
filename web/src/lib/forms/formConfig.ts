@@ -36,9 +36,9 @@ export type PublicStatus =
   | { public: false; reason: "link" | "user" | "hidden"; message: string };
 
 const REASONS = {
-  link: "Link fields are not collected by public forms, so this field only appears when signed-in editors fill in the form.",
-  user: "User fields are not collected by public forms, so this field only appears when signed-in editors fill in the form.",
-  hidden: "This field is hidden in the form view, so the public form leaves it out.",
+  link: "Link properties are not collected by public forms, so this property only appears when signed-in editors fill in the form.",
+  user: "User properties are not collected by public forms, so this property only appears when signed-in editors fill in the form.",
+  hidden: "This property is hidden in the form view, so the public form leaves it out.",
 } as const;
 
 /** Whether the public form (share link) shows this field, and why not when it does not. */
@@ -51,8 +51,8 @@ export function publicStatus(field: Pick<Field, "id" | "type">, hiddenFields: re
 
 /** Why a field cannot be marked required, or null when it can (the server refuses it for link and user fields). */
 export function requiredBlockedReason(field: Pick<Field, "type">): string | null {
-  if (field.type === "link") return "Link fields cannot be required: the public form does not ask for them.";
-  if (field.type === "user") return "User fields cannot be required: the public form does not ask for them.";
+  if (field.type === "link") return "Link properties cannot be required: the public form does not ask for them.";
+  if (field.type === "user") return "User properties cannot be required: the public form does not ask for them.";
   return null;
 }
 

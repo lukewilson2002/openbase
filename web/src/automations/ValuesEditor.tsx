@@ -87,7 +87,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
 
   return (
     <div className="flex flex-col gap-3">
-      {rows.length === 0 && <p className="text-[0.8125rem] text-muted">No field values yet. Fields you leave out are left empty (create) or unchanged (update).</p>}
+      {rows.length === 0 && <p className="text-[0.8125rem] text-muted">No property values yet. Properties you leave out are left empty (create) or unchanged (update).</p>}
       <EditorEnvProvider value={editorEnv}>
         <ul className="flex flex-col gap-3">
           {rows.map((fieldId) => {
@@ -95,7 +95,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
             return (
               <li key={fieldId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:gap-3">
                 {field ? <ValueRow field={field} value={values[fieldId] ?? null} onChange={(v) => set(fieldId, v)} ctx={ctx} timeZone={env.timeZone} collaborators={env.collaborators} /> : <MissingField fieldId={fieldId} />}
-                <IconButton label={`Remove ${field?.name ?? "deleted field"}`} size="sm" onClick={() => remove(fieldId)} className="self-start">
+                <IconButton label={`Remove ${field?.name ?? "deleted property"}`} size="sm" onClick={() => remove(fieldId)} className="self-start">
                   <Trash2 aria-hidden className="size-4" />
                 </IconButton>
               </li>
@@ -105,7 +105,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
       </EditorEnvProvider>
       <div className="max-w-xs">
         <Select
-          aria-label="Add a field"
+          aria-label="Add a property"
           value=""
           disabled={unused.length === 0}
           onChange={(e) => {
@@ -113,7 +113,7 @@ export function ValuesEditor({ table, values, onChange, ctx, error }: ValuesEdit
             if (f) set(f.id, emptyValue(f));
           }}
         >
-          <option value="">{unused.length === 0 ? "All fields added" : "Add a field…"}</option>
+          <option value="">{unused.length === 0 ? "All properties added" : "Add a property…"}</option>
           {unused.map((f) => (
             <option key={f.id} value={f.id}>
               {f.name}

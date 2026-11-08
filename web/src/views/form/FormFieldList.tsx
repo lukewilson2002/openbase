@@ -151,7 +151,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
           <button
             type="button"
             aria-label={`Show ${field.name} on the public form`}
-            title="Show this field on the public form"
+            title="Show this property on the public form"
             onClick={() => onShowPublic(field.id)}
             className="shrink-0 rounded-md px-2 py-0.5 text-meta font-medium text-primary-text hover:bg-hover pointer-coarse:py-2"
           >
@@ -197,7 +197,7 @@ function Row({ entry, field, index, count, hiddenFields, readOnly, onChange, onR
                 onChange={(e) => patch({ help: e.target.value })}
                 className="min-h-8 text-label text-fg"
               />
-              {field.description?.trim() && !entry.help?.trim() && <span>The field's description is shown while this is empty.</span>}
+              {field.description?.trim() && !entry.help?.trim() && <span>The property's description is shown while this is empty.</span>}
             </label>
           </div>
           <MoveButtons name={field.name} index={index} count={count} readOnly={readOnly} form={form} onChange={onChange} />
@@ -329,10 +329,10 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
           Fields
         </h3>
         <span className="text-label text-muted">
-          {questions} in the form{computedCount > 0 ? `, ${computedCount} computed field${computedCount === 1 ? "" : "s"} cannot be asked` : ""}
+          {questions} in the form{computedCount > 0 ? `, ${computedCount} computed property${computedCount === 1 ? "" : "s"} cannot be asked` : ""}
         </span>
       </div>
-      {items.length === 0 && <p className="rounded-md border border-dashed border-line-strong px-3 py-4 text-center text-label text-muted">No fields yet. Add the fields this form should ask for.</p>}
+      {items.length === 0 && <p className="rounded-md border border-dashed border-line-strong px-3 py-4 text-center text-label text-muted">No properties yet. Add the properties this form should ask for.</p>}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           <ul aria-label="Form fields" className="flex flex-col gap-2">
@@ -368,7 +368,7 @@ export function FormFieldList({ form, table, hiddenFields, readOnly, onChange, o
                 disabled={addable.length === 0}
                 className="-ml-1 flex h-9 items-center gap-1.5 self-start rounded-lg px-2.5 text-ui text-muted hover:bg-hover hover:text-fg disabled:opacity-50 data-[state=open]:bg-hover"
               >
-                <Plus aria-hidden className="size-[15px]" /> {addable.length === 0 ? "All fields are in the form" : "Add a field"}
+                <Plus aria-hidden className="size-[15px]" /> {addable.length === 0 ? "All properties are in the form" : "Add a property"}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-[min(20rem,var(--ob-avail))] w-60 overflow-y-auto">

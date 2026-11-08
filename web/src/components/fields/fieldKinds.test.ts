@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { FieldType } from "@/api/types";
 import { ALL_FIELDS, field, makeTable } from "@/test/fields";
-import { FIELD_TYPES, FIELD_TYPE_GROUPS, conversionRisk, conversionWarning, defaultKind, draftFromField, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
+import { FIELD_TYPES, FIELD_TYPE_GROUPS, clearedSentence, conversionRisk, conversionWarning, defaultKind, draftFromField, kindChange, needsConfirmation, toCreateField, toUpdateField, validateDraft, type FieldDraft, type KindContext } from "./fieldKinds";
 
 const link = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_link", name: "Owner" });
 const table = makeTable([field("text", { multiline: false }, { id: "fld_name", name: "Name" }), link]);
 const other = makeTable([field("text", { multiline: false }, { id: "fld_p", name: "Person" })], { id: "tbl2", name: "People" });
 const ctx: KindContext = { table, tables: [table, other] };
 
-const draft = (type: FieldType, name = "New field"): FieldDraft => ({ name, description: "", kind: defaultKind(type, ctx), inverseName: "" });
+const draft = (type: FieldType, name = "New property"): FieldDraft => ({ name, description: "", kind: defaultKind(type, ctx), inverseName: "" });
 
 describe("field types", () => {
   it("covers exactly the 28 types, each in one picker group", () => {
@@ -25,7 +25,7 @@ describe("defaultKind and the CreateField payload", () => {
     expect(body.type).toBe(type);
     expect(body.options).toBeTypeOf("object");
     expect(body.options).not.toBeNull();
-    expect(body.name).toBe("New field");
+    expect(body.name).toBe("New property");
   });
 
   it("matches the server defaults for simple types", () => {
@@ -85,7 +85,7 @@ describe("validateDraft", () => {
     expect(validateDraft({ ...draft("formula") }, ctx)[0]?.message).toMatch(/formula/i);
     expect(validateDraft({ ...draft("button") }, ctx).map((i) => i.message)).toEqual(["Enter a formula that produces the URL."]);
     expect(validateDraft({ ...draft("lookup") }, ctx)[0]?.message).toMatch(/look up/);
-    expect(validateDraft({ ...draft("count"), kind: { type: "count", options: { link_field_id: "" } } }, ctx)[0]?.message).toMatch(/link field/);
+    expect(validateDraft({ ...draft("count"), kind: { type: "count", options: { link_field_id: "" } } }, ctx)[0]?.message).toMatch(/link property/);
     expect(validateDraft(draft("text"), ctx)).toEqual([]);
   });
 });
@@ -123,5 +123,73 @@ describe("type change warnings", () => {
     expect(conversionWarning("text", "number")).toMatch(/cleared/);
     expect(conversionWarning("number", "formula")).toMatch(/discarded/);
     expect(conversionWarning("number", "text")).toMatch(/converted/);
+  });
+});
+
+describe("what a type change clears (the server's rules)", () => {
+  const qty = field("number", { precision: 0, allow_negative: true }, { id: "fld_q", name: "Qty" });
+  const note = field("text", { multiline: false }, { id: "fld_t", name: "Note" });
+  const linkOptions = { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false };
+  const owner = field("link", linkOptions, { id: "fld_l", name: "Owner" });
+
+  it("clears every value when a property becomes computed", () => {
+    expect(kindChange(qty, defaultKind("formula", ctx))).toMatchObject({ risk: "lossy", clears: "all", linkPair: false });
+    expect(kindChange(qty, defaultKind("autonumber", ctx)).clears).toBe("all");
+  });
+
+  it("clears every value when a property becomes a link, and says a matching property is added", () => {
+    const change = kindChange(note, defaultKind("link", ctx));
+    expect(change).toMatchObject({ risk: "lossy", clears: "all", linkPair: true });
+    expect(change.warning).toMatch(/added to the linked collection/);
+  });
+
+  it("clears every link when a link property is pointed at another collection, and the old pair goes to the trash", () => {
+    const elsewhere = { type: "link" as const, options: { ...linkOptions, linked_table_id: "tbl9" } };
+    const change = kindChange(owner, elsewhere);
+    expect(change).toMatchObject({ risk: "lossy", clears: "all", linkPair: true });
+    expect(change.warning).toMatch(/moves to the trash/);
+    // Editing the other options of a link keeps its pair and its values.
+    expect(kindChange(owner, { type: "link", options: { ...linkOptions, single: true } })).toMatchObject({ risk: "none", clears: null, linkPair: false });
+  });
+
+  it("converts a link into text one value at a time, and the pair goes to the trash", () => {
+    expect(kindChange(owner, defaultKind("text", ctx))).toMatchObject({ clears: "misfits", linkPair: true });
+  });
+
+  it("clears the values that do not fit when a type is converted", () => {
+    expect(kindChange(note, defaultKind("number", ctx))).toMatchObject({ risk: "lossy", clears: "misfits" });
+    expect(kindChange(qty, defaultKind("text", ctx))).toMatchObject({ risk: "safe", clears: null });
+  });
+
+  it("clears nothing for a change of look: lines joined, formatting removed", () => {
+    expect(kindChange(field("text", { multiline: true }, { id: "fld_m", name: "M" }), { type: "text", options: { multiline: false } })).toMatchObject({ risk: "lossy", clears: null });
+    expect(kindChange(field("rich_text", {}, { id: "fld_r", name: "R" }), defaultKind("text", ctx))).toMatchObject({ risk: "lossy", clears: null });
+  });
+
+  it("clears nothing stored when the property was computed", () => {
+    expect(kindChange(ALL_FIELDS.formula, defaultKind("link", ctx)).clears).toBeNull();
+    expect(kindChange(ALL_FIELDS.created_time, defaultKind("number", ctx)).clears).toBeNull();
+  });
+
+  it("says how many values go", () => {
+    expect(clearedSentence("all", 12)).toBe("12 values will be cleared.");
+    expect(clearedSentence("all", 1)).toBe("1 value will be cleared.");
+    expect(clearedSentence("misfits", 12)).toBe("Up to 12 values may be cleared: the ones that don't fit.");
+    expect(clearedSentence("all", 0)).toMatch(/nothing is cleared/);
+    expect(clearedSentence("all", null)).toBe("Every value will be cleared.");
+    expect(clearedSentence("misfits", null)).toBe("Values that don't fit will be cleared.");
+    expect(clearedSentence(null, 5)).toBeNull();
+  });
+
+  it("asks to be confirmed unless there is nothing to take away", () => {
+    const lossy = kindChange(note, defaultKind("number", ctx));
+    expect(needsConfirmation(lossy, 3)).toBe(true);
+    expect(needsConfirmation(lossy, null)).toBe(true);
+    expect(needsConfirmation(lossy, 0)).toBe(false);
+    // A link change still adds or removes a property elsewhere.
+    expect(needsConfirmation(kindChange(note, defaultKind("link", ctx)), 0)).toBe(true);
+    expect(needsConfirmation(kindChange(qty, defaultKind("text", ctx)), 5)).toBe(false);
+    // Joining lines changes values whether or not they can be counted.
+    expect(needsConfirmation(kindChange(field("text", { multiline: true }, { id: "fld_m", name: "M" }), { type: "text", options: { multiline: false } }), 0)).toBe(true);
   });
 });

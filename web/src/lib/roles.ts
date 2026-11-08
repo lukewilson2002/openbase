@@ -14,7 +14,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   viewer: "Can view records",
   commenter: "Can view and comment",
   editor: "Can edit records",
-  creator: "Can edit records and configure tables, fields and views",
+  creator: "Can edit records and configure collections, properties and views",
   owner: "Full control, including sharing and deletion",
 };
 

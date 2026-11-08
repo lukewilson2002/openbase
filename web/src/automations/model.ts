@@ -29,7 +29,7 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
 
 export const TRIGGER_HINTS: Record<TriggerType, string> = {
   record_created: "Fires for records created in the grid, the API, an import or a form (never by an automation).",
-  record_updated: "Fires when an editable field changes. Pick fields to watch, or leave it empty for any.",
+  record_updated: "Fires when an editable property changes. Pick properties to watch, or leave it empty for any.",
   record_matches: "Fires when a record starts matching the conditions: created matching, or edited into matching.",
   form_submitted: "Fires when someone submits a form view. The new record also fires \"a record is created\".",
   schedule: "Fires on a cron schedule in a time zone, at most every 5 minutes.",
@@ -46,7 +46,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 
 export const ACTION_HINTS: Record<ActionType, string> = {
   create_record: "Add a record to a table, with values that can use data from the trigger.",
-  update_record: "Change fields of an existing record, such as the one that fired the trigger.",
+  update_record: "Change properties of an existing record, such as the one that fired the trigger.",
   send_email: "Send a plain-text email. Needs SMTP to be configured on the server.",
   http_request: "Call an external URL (GET, POST, PUT, PATCH or DELETE).",
   notify: "Send an in-app notification to people with access to this project.",
@@ -176,7 +176,7 @@ export function triggerSummary(trigger: Trigger, schema: BaseSchema): string {
       return `A record is created in ${tableName(trigger.table_id)}`;
     case "record_updated": {
       const table = schema.tables.find((t) => t.id === trigger.table_id);
-      const names = trigger.field_ids.map((id) => table?.fields.find((f) => f.id === id)?.name ?? "deleted field");
+      const names = trigger.field_ids.map((id) => table?.fields.find((f) => f.id === id)?.name ?? "deleted property");
       return `A record in ${tableName(trigger.table_id)} is updated${names.length ? ` (${names.join(", ")})` : ""}`;
     }
     case "record_matches":

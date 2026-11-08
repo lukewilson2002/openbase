@@ -62,7 +62,7 @@ describe("a read-only view link", () => {
     expect(within(dialog).getByText(/switched off/)).toBeInTheDocument();
     // The explanation names the visible fields and the hidden one.
     expect(within(dialog).getByText(/the 3 visible fields/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/The 1 hidden field never leaves the server/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/The 1 hidden property never leaves the server/)).toBeInTheDocument();
     expect(within(dialog).getByText(/e-mail addresses and user ids/)).toBeInTheDocument();
   });
 
@@ -178,6 +178,6 @@ describe("a form link", () => {
     const onlyUsers = makeView({ id: "viw1", name: "Odd", type: "form" });
     onlyUsers.config.form.fields = [{ field_id: "f_owner", required: false, label: null, help: null }];
     open(onlyUsers, []);
-    expect(await screen.findByText(/no fields visitors can fill in/)).toBeInTheDocument();
+    expect(await screen.findByText(/no properties visitors can fill in/)).toBeInTheDocument();
   });
 });

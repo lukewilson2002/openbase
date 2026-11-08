@@ -203,7 +203,7 @@ export function ChoiceEditor({ field, value, variant, target, initialText, onCha
             </button>
           </li>
         )}
-        {rows === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{choices.length === 0 ? "This field has no options yet." : "No matching options."}</li>}
+        {rows === 0 && <li className="px-2 py-3 text-center text-[0.8125rem] text-muted">{choices.length === 0 ? "This property has no options yet." : "No matching options."}</li>}
       </ul>
       <div className="flex items-center justify-between gap-2 border-t border-line p-2">
         <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>

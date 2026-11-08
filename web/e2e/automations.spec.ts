@@ -136,7 +136,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     const card = page.getByRole("listitem", { name: /^Action 1:/ });
     await card.getByRole("combobox", { name: "Table", exact: true }).click();
     await page.getByRole("option", { name: "Table 2", exact: true }).click();
-    await card.getByLabel("Add a field").selectOption(fx.table2.nameId);
+    await card.getByLabel("Add a property").selectOption(fx.table2.nameId);
     // The value comes from the "Insert data" menu, so the token is the real thing.
     await card.getByRole("button", { name: "Insert data into Name" }).click();
     await page.getByRole("menuitem", { name: /^Name\s/ }).click();

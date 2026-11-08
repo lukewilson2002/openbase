@@ -30,7 +30,7 @@ export function useExportCsv(view: Pick<View, "id" | "name">, timeZone?: string)
 export function ExportCsvButton({ view, timeZone }: { view: Pick<View, "id" | "name">; timeZone?: string }) {
   const { busy, run } = useExportCsv(view, timeZone);
   return (
-    <Button size="sm" variant="ghost" loading={busy} onClick={() => void run()} title="Download this view as a CSV file (its visible fields, filter and sort)">
+    <Button size="sm" variant="ghost" loading={busy} onClick={() => void run()} title="Download this view as a CSV file (its visible properties, filter and sort)">
       {!busy && <Download aria-hidden className="size-4" />} <span className="max-sm:sr-only">{busy ? "Preparing…" : "Download CSV"}</span>
     </Button>
   );

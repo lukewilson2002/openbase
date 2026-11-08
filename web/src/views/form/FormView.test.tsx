@@ -64,7 +64,7 @@ describe("the builder", () => {
     setup("creator");
     await screen.findByRole("heading", { name: "Form" });
     expect(screen.getAllByText("Not public")).toHaveLength(2); // Owner (user) and Depends on (link)
-    expect(screen.getByText(/2 of 4 fields/)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 4 properties/)).toBeInTheDocument();
     const preview = screen.getByRole("region", { name: "Form preview" });
     expect(within(preview).getAllByText("Signed-in editors only")).toHaveLength(2);
 
@@ -122,11 +122,11 @@ describe("the builder", () => {
     await waitFor(async () => expect((await saved(api)).fields.map((f) => f.field_id)).toEqual([F.name.id, F.deps.id, F.status.id]), { timeout: 3000 });
 
     // Owner can be added back from the picker, to the place it had; computed-free tables offer every other field.
-    await user.click(screen.getByRole("button", { name: "Add a field" }));
+    await user.click(screen.getByRole("button", { name: "Add a property" }));
     expect((await screen.findAllByRole("menuitem")).map((o) => o.textContent?.trim())).toEqual(["Start", "End", "Owner", "Cover", "number", "Add all fields"]);
     await user.click(screen.getByRole("menuitem", { name: "Owner" }));
     await waitFor(async () => expect((await saved(api)).fields.map((f) => f.field_id)).toEqual([F.name.id, F.deps.id, F.owner.id, F.status.id]), { timeout: 3000 });
-    await user.click(screen.getByRole("button", { name: "Add a field" }));
+    await user.click(screen.getByRole("button", { name: "Add a property" }));
     await user.click(await screen.findByRole("menuitem", { name: "Add all fields" }));
     await waitFor(async () => expect((await saved(api)).fields).toHaveLength(8), { timeout: 3000 });
   });
@@ -137,10 +137,10 @@ describe("the builder", () => {
     schema.tables[0]!.fields = [...schema.tables[0]!.fields, { id: "f_total", table_id: "tbl1", name: "Total", type: "formula", options: { expression: "1", result_type: "number" } } as never];
     renderView(FormView, { schema, viewId: "viw1" });
     await screen.findByRole("heading", { name: "Form" });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Add a field" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add a property" }));
     await screen.findAllByRole("menuitem");
     expect(screen.queryByRole("menuitem", { name: "Total" })).not.toBeInTheDocument();
-    expect(screen.getByText(/1 computed field cannot be asked/)).toBeInTheDocument();
+    expect(screen.getByText(/1 computed property cannot be asked/)).toBeInTheDocument();
   });
 
   it("accepts only http and https for the redirect and does not save anything else", async () => {
@@ -168,7 +168,7 @@ describe("the builder", () => {
     expect(await screen.findByText(/This view is locked/)).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toBeDisabled();
     expect(screen.getByLabelText("Label for Name")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Add a field" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a property" })).not.toBeInTheDocument();
     // Editors can still fill the form in.
     expect(screen.getByRole("button", { name: "Fill in form" })).toBeInTheDocument();
   });
@@ -263,7 +263,7 @@ describe("removing and re-adding a field", () => {
     await screen.findByRole("heading", { name: "Form" });
     await user.click(screen.getByRole("button", { name: "Remove Status from the form" }));
     await waitFor(async () => expect((await saved(api)).fields).toHaveLength(2), { timeout: 3000 });
-    await user.click(screen.getByRole("button", { name: "Add a field" }));
+    await user.click(screen.getByRole("button", { name: "Add a property" }));
     await user.click(await screen.findByRole("menuitem", { name: "Status" }));
     await waitFor(async () => expect((await saved(api, 2)).fields.map((f) => f.field_id)).toEqual([F.name.id, F.status.id, F.start.id]), { timeout: 3000 });
     expect((await saved(api, 2)).fields[1]).toMatchObject({ label: "How far along?", help: "Pick one", required: true });
@@ -313,7 +313,7 @@ describe("editors and a public link", () => {
     expect(await screen.findByText(/public link/)).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toBeDisabled();
     expect(screen.getByLabelText("Label for Name")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Add a field" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a property" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fill in form" })).toBeInTheDocument();
   });
 

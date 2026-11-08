@@ -160,7 +160,7 @@ function DayNumber({ arg }: { arg: DayCellContentArg }) {
 
 /** Why events cannot be moved, when the date fields are computed (null when they can be). */
 function readOnlyReason(fields: { start: Field; end: Field | null }): string | null {
-  const kind = (f: Field) => (f.type === "created_time" || f.type === "last_modified_time" ? `a ${FIELD_TYPE_LABELS[f.type]} field, which fills itself in` : `a ${FIELD_TYPE_LABELS[f.type]} field, which is worked out from other fields`);
+  const kind = (f: Field) => (f.type === "created_time" || f.type === "last_modified_time" ? `a ${FIELD_TYPE_LABELS[f.type]} property, which fills itself in` : `a ${FIELD_TYPE_LABELS[f.type]} property, which is worked out from other properties`);
   if (!isWritableDate(fields.start)) return `Events cannot be moved, resized or added by clicking a day: ${fields.start.name} is ${kind(fields.start)}. Pick a date property you can edit as the Date under View options.`;
   if (fields.end && !isWritableDate(fields.end)) return `Events cannot be moved or resized: ${fields.end.name} is ${kind(fields.end)}. Pick a date property you can edit as the End date, or none, under View options.`;
   return null;
@@ -384,7 +384,7 @@ function CalendarInner(props: ViewProps) {
         fields={dateFields}
         value={fields?.start.field.id ?? ""}
         onChange={chooseDate}
-        hint={fields && !isWritableDate(fields.start.field) ? `${FIELD_TYPE_LABELS[fields.start.field.type]} fields are filled in for you, so events cannot be moved or added on a day. Pick a date field you can edit to do that.` : undefined}
+        hint={fields && !isWritableDate(fields.start.field) ? `${FIELD_TYPE_LABELS[fields.start.field.type]} properties are filled in for you, so events cannot be moved or added on a day. Pick a date property you can edit to do that.` : undefined}
       />
       <FieldSelect
         label="End date"
@@ -393,7 +393,7 @@ function CalendarInner(props: ViewProps) {
         noneLabel="No end date"
         disabled={!fields}
         onChange={(id) => cfg.update((c) => setCalendar(c, { end_field_id: id }))}
-        hint={fields?.end && !isWritableDate(fields.end.field) ? `${FIELD_TYPE_LABELS[fields.end.field.type]} fields are worked out for you, so events cannot be moved or resized. Pick a date field you can edit to do that.` : "Shows records as ranges and lets you resize them."}
+        hint={fields?.end && !isWritableDate(fields.end.field) ? `${FIELD_TYPE_LABELS[fields.end.field.type]} properties are worked out for you, so events cannot be moved or resized. Pick a date property you can edit to do that.` : "Shows records as ranges and lets you resize them."}
       />
       {/* This browser's own taste, not part of the saved view: anyone can set it. */}
       <FormField label="Week starts on" hint="Only changes how you see the calendar.">
@@ -423,14 +423,14 @@ function CalendarInner(props: ViewProps) {
     body = (
       <ViewSetupState
         setup={setup}
-        heading="Choose a date field"
-        body="Pick the field that decides which day each record shows up on."
-        emptyBody="This table has no date field yet."
-        pickers={[{ label: "Date field", fields: dateFields, initial: likelyDateField(dateFields)?.id ?? "" }]}
+        heading="Choose a date property"
+        body="Pick the property that decides which day each record shows up on."
+        emptyBody="This collection has no date property yet."
+        pickers={[{ label: "Date property", fields: dateFields, initial: likelyDateField(dateFields)?.id ?? "" }]}
         button="Show calendar"
         onApply={([id]) => chooseDate(id ?? null)}
         footText="Need a different date?"
-        footLink="Add a date field"
+        footLink="Add a date property"
         addType="date"
         accepts={isDateLike}
       />

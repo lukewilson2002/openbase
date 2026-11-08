@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the field dialog: default options per type (the `options: {}` defaults of
+ * Pure helpers for the property dialog: default options per type (the `options: {}` defaults of
  * ob_core::field::FieldKind::default_for plus sensible references for the types that need them),
  * validation, the CreateField / UpdateField payloads, and a warning model for type changes.
  */
@@ -49,9 +49,9 @@ export const FIELD_TYPE_GROUPS: readonly { label: string; types: readonly FieldT
 
 /** What the type picker needs to know about the surroundings to build valid default options. */
 export interface KindContext {
-  /** The table being edited. */
+  /** The collection being edited. */
   table: Table;
-  /** Every table of the base (link targets). */
+  /** Every collection of the folder (link targets). */
   tables: readonly Table[];
 }
 
@@ -59,7 +59,7 @@ export function linkFields(table: Table): Extract<Field, { type: "link" }>[] {
   return table.fields.filter((f): f is Extract<Field, { type: "link" }> => f.type === "link");
 }
 
-/** The first table a new link field points at: another table when there is one, else this one. */
+/** The first collection a new link property points at: another one when there is one, else this one. */
 function defaultLinkTarget(ctx: KindContext): string {
   return ctx.tables.find((t) => t.id !== ctx.table.id)?.id ?? ctx.table.id;
 }
@@ -127,7 +127,7 @@ export interface FieldDraft {
   name: string;
   description: string;
   kind: FieldKind;
-  /** Link fields only: name of the inverse field created in the linked table. */
+  /** Link properties only: name of the property created in the linked collection. */
   inverseName: string;
 }
 
@@ -145,9 +145,9 @@ export interface DraftIssue {
 export function validateDraft(draft: FieldDraft, ctx: KindContext, existing?: Field): DraftIssue[] {
   const issues: DraftIssue[] = [];
   const name = draft.name.trim();
-  if (!name) issues.push({ field: "name", message: "Give the field a name." });
-  else if (name.length > 255) issues.push({ field: "name", message: "Field names can have at most 255 characters." });
-  else if (ctx.table.fields.some((f) => f.id !== existing?.id && f.name.trim().toLowerCase() === name.toLowerCase())) issues.push({ field: "name", message: "Another field in this table already has that name." });
+  if (!name) issues.push({ field: "name", message: "Give the property a name." });
+  else if (name.length > 255) issues.push({ field: "name", message: "Property names can have at most 255 characters." });
+  else if (ctx.table.fields.some((f) => f.id !== existing?.id && f.name.trim().toLowerCase() === name.toLowerCase())) issues.push({ field: "name", message: "Another property in this collection already has that name." });
   const k = draft.kind;
   switch (k.type) {
     case "single_select":
@@ -158,22 +158,22 @@ export function validateDraft(draft: FieldDraft, ctx: KindContext, existing?: Fi
       break;
     }
     case "link":
-      if (!k.options.linked_table_id) issues.push({ field: "options", message: "Choose the table to link to." });
+      if (!k.options.linked_table_id) issues.push({ field: "options", message: "Choose the collection to link to." });
       break;
     case "formula":
       if (!k.options.expression.trim()) issues.push({ field: "options", message: "Enter a formula." });
       break;
     case "lookup":
-      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link field." });
-      else if (!k.options.target_field_id) issues.push({ field: "options", message: "Choose the field to look up." });
+      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link property." });
+      else if (!k.options.target_field_id) issues.push({ field: "options", message: "Choose the property to look up." });
       break;
     case "rollup":
-      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link field." });
-      else if (!k.options.target_field_id) issues.push({ field: "options", message: "Choose the field to roll up." });
+      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link property." });
+      else if (!k.options.target_field_id) issues.push({ field: "options", message: "Choose the property to roll up." });
       else if (!k.options.expression.trim()) issues.push({ field: "options", message: "Enter a rollup formula." });
       break;
     case "count":
-      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link field." });
+      if (!k.options.link_field_id) issues.push({ field: "options", message: "Choose a link property." });
       break;
     case "button":
       if (!k.options.label.trim()) issues.push({ field: "options", message: "Give the button a label." });
@@ -262,31 +262,91 @@ export function conversionWarning(from: FieldType, to: FieldType): string | null
       return "Existing values are converted to the new type.";
     case "lossy":
       return isComputedType(to)
-        ? "Computed fields are calculated, not typed in: the values stored in this field will be discarded."
-        : "Values that do not fit the new type are cleared, and some may change meaning. This cannot be undone automatically.";
+        ? "Computed properties are calculated, not typed in: the values stored in this property are discarded."
+        : "Values that do not fit the new type are cleared, and some may change meaning. This can't be undone automatically.";
   }
 }
 
-/** Whether changing `existing` to `kind` turns a multiline text field into a one-line one. */
+/** Whether changing `existing` to `kind` turns a multiline text property into a one-line one. */
 function joinsLines(existing: Field, kind: FieldKind): boolean {
   return existing.type === "text" && existing.options.multiline && kind.type === "text" && !kind.options.multiline;
 }
 
 /**
- * The risk and explanation of changing `existing` to `kind`: the type's (see `conversionRisk`),
- * said more exactly for text, and for turning Multiline off, which changes values without a new type.
+ * Which stored values a type change removes, by the server's own rules (`rewrite_for_new_kind`): `all` when it
+ * clears every value (a property that becomes computed, or becomes a link or links another collection, since
+ * links are made by choosing records), `misfits` when each value is converted and the ones that do not fit the
+ * new type are cleared, and null when nothing is cleared (every value converts, or only its look changes).
  */
-export function kindChange(existing: Field, kind: FieldKind): { risk: ConversionRisk; warning: string | null } {
+export type Clears = "all" | "misfits" | null;
+
+export interface KindChange {
+  risk: ConversionRisk;
+  warning: string | null;
+  clears: Clears;
+  /** The pair of link properties changes: one is added to, or goes to the trash from, another collection. */
+  linkPair: boolean;
+}
+
+/**
+ * The risk and explanation of changing `existing` to `kind`: the type's (see `conversionRisk`),
+ * said more exactly for text and links, and for turning Multiline off, which changes values without a new type.
+ */
+export function kindChange(existing: Field, kind: FieldKind): KindChange {
   const lines = "Line breaks in existing values become spaces.";
-  if (joinsLines(existing, kind)) return { risk: "lossy", warning: lines };
+  if (joinsLines(existing, kind)) return { risk: "lossy", warning: lines, clears: null, linkPair: false };
   if (existing.type === "rich_text" && kind.type === "text") {
     const words = "Formatting is removed: each value keeps the text it shows (a mention as @Name, a link as its text).";
-    return { risk: "lossy", warning: kind.options.multiline ? words : `${words} ${lines}` };
+    return { risk: "lossy", warning: kind.options.multiline ? words : `${words} ${lines}`, clears: null, linkPair: false };
   }
   if (kind.type === "rich_text" && (existing.type === "text" || existing.type === "barcode")) {
-    return { risk: "safe", warning: "Values keep the text they show: characters that would be formatting are kept as typed." };
+    return { risk: "safe", warning: "Values keep the text they show: characters that would be formatting are kept as typed.", clears: null, linkPair: false };
   }
-  return { risk: conversionRisk(existing.type, kind.type), warning: conversionWarning(existing.type, kind.type) };
+  const stored = !isComputedType(existing.type);
+  if (kind.type === "link" && existing.type !== "link") {
+    return {
+      risk: "lossy",
+      warning: "Links are made by choosing records, so the existing values can't carry over. A matching property is added to the linked collection.",
+      clears: stored ? "all" : null,
+      linkPair: true,
+    };
+  }
+  if (kind.type === "link" && existing.type === "link" && existing.options.linked_table_id !== kind.options.linked_table_id) {
+    return {
+      risk: "lossy",
+      warning: "Linking another collection clears every link here, and the matching property in the old collection moves to the trash.",
+      clears: "all",
+      linkPair: true,
+    };
+  }
+  const risk = conversionRisk(existing.type, kind.type);
+  const warning = conversionWarning(existing.type, kind.type);
+  const leavesLink = existing.type === "link" && kind.type !== "link";
+  const clears: Clears = risk !== "lossy" || !stored ? null : isComputedType(kind.type) ? "all" : "misfits";
+  return {
+    risk,
+    warning: leavesLink && warning ? `${warning} The matching property in the linked collection moves to the trash.` : warning,
+    clears,
+    linkPair: leavesLink,
+  };
+}
+
+/**
+ * How many values the change clears, in a sentence. `filled` is how many records have a value in the property
+ * (null while that is being counted, or when it could not be): for `misfits` it is the most that can go.
+ */
+export function clearedSentence(clears: Clears, filled: number | null): string | null {
+  if (!clears) return null;
+  if (filled === 0) return "No record has a value in this property, so nothing is cleared.";
+  const n = filled === null ? null : `${filled} ${filled === 1 ? "value" : "values"}`;
+  if (clears === "all") return n ? `${n} will be cleared.` : "Every value will be cleared.";
+  return n ? `Up to ${n} may be cleared: the ones that don't fit.` : "Values that don't fit will be cleared.";
+}
+
+/** Whether saving a change asks to be confirmed: not when it has nothing to take away. */
+export function needsConfirmation(change: KindChange, filled: number | null): boolean {
+  if (change.risk !== "lossy") return false;
+  return !(change.clears !== null && filled === 0 && !change.linkPair);
 }
 
 export { canBePrimary };

@@ -149,7 +149,7 @@ export function FormBuilder({ setup, onChange, linkLocked = false, onShowPublic 
         {summary.excluded.length > 0 && (
           <div className="mx-auto w-full max-w-[560px]">
             <Notice tone="warning">
-              <strong>{summary.publicCount === 0 ? "No field" : `${summary.publicCount} of ${summary.total} fields`}</strong> will appear on the public form.{" "}
+              <strong>{summary.publicCount === 0 ? "No property" : `${summary.publicCount} of ${summary.total} properties`}</strong> will appear on the public form.{" "}
               {summary.excluded.map((e) => `${e.field.name} (${e.status.reason === "hidden" ? "hidden in this view" : `${e.status.reason} field`})`).join(", ")} stay{summary.excluded.length === 1 ? "s" : ""} off it: public forms never collect link or user fields.
             </Notice>
           </div>

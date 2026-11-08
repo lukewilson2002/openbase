@@ -64,7 +64,7 @@ function Entry({ entry, fields, format }: { entry: HistoryEntry; fields: readonl
       {changes.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-2" aria-label="Changes">
           {changes.map(([fid, ch]) => (
-            <Change key={fid} field={byId.get(fid)} name={byId.get(fid)?.name ?? "(deleted field)"} oldValue={ch.old} newValue={ch.new} format={format} />
+            <Change key={fid} field={byId.get(fid)} name={byId.get(fid)?.name ?? "(deleted property)"} oldValue={ch.old} newValue={ch.new} format={format} />
           ))}
         </ul>
       )}

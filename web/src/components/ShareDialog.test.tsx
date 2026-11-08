@@ -155,7 +155,7 @@ describe("Share dialog: share a view", () => {
     // Personal views cannot be shared, so they are not offered.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["All tasks", "Board"]);
     expect(
-      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the project."),
+      within(dialog).getByText("Anyone with the link sees only what this view shows: its records and properties, now and as they change later. They can't edit anything or open the rest of the project."),
     ).toBeInTheDocument();
 
     await user.click(await within(dialog).findByRole("button", { name: /Create link/ }));

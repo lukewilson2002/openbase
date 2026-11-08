@@ -110,7 +110,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
             label="The first row holds the column names"
           />
           <section aria-label="Column mapping" className="flex flex-col gap-2">
-            <h3 className="text-[0.9375rem]">Match columns to fields</h3>
+            <h3 className="text-[0.9375rem]">Match columns to properties</h3>
             <p className="text-xs text-muted">
               Columns whose name matches a field are matched for you. Pick “Skip this column” to leave one out. Values are read the way pasted text is (“$1,200”, “25%”, “yes”); a select value that does not exist yet becomes a new choice.
             </p>
@@ -127,7 +127,7 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
                             {hasHeader ? name : `Column ${i + 1}`}
                           </div>
                           <Select
-                            aria-label={`Field for ${hasHeader ? name : `column ${i + 1}`}`}
+                            aria-label={`Property for ${hasHeader ? name : `column ${i + 1}`}`}
                             aria-invalid={duplicate || undefined}
                             disabled={busy}
                             value={target}
@@ -169,10 +169,10 @@ function ImportBody({ baseId, table, onClose }: { baseId: string; table: ImportC
             <p className="text-xs text-muted">
               Showing the first {sample.length} row{sample.length === 1 ? "" : "s"}
               {picked.head.preview.more ? " of the file" : ""}.
-              {skipped.length > 0 && ` ${skipped.map((f) => f.name).join(", ")} cannot be imported (computed, link, user and attachment fields are filled in other ways).`}
+              {skipped.length > 0 && ` ${skipped.map((f) => f.name).join(", ")} cannot be imported (computed, link, user and attachment properties are filled in other ways).`}
             </p>
-            {check.duplicates.length > 0 && <Notice tone="error">A field can receive only one column. Change one of the columns that share a field.</Notice>}
-            {check.mapped === 0 && check.duplicates.length === 0 && <Notice tone="warning">No column is matched to a field yet. Choose a field for at least one column.</Notice>}
+            {check.duplicates.length > 0 && <Notice tone="error">A property can receive only one column. Change one of the columns that share a property.</Notice>}
+            {check.mapped === 0 && check.duplicates.length === 0 && <Notice tone="warning">No column is matched to a property yet. Choose a property for at least one column.</Notice>}
           </section>
         </>
       )}

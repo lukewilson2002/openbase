@@ -693,7 +693,7 @@ function StackColumn({ stack, index, count, ids, recordsById, limit, onShowMore,
 }
 
 /** What deleting a stack does, in plain words: the option goes from the field, its cards lose the value. */
-export function deleteStackText(stack: Pick<Stack, "label" | "records">, fieldName = "the field"): string {
+export function deleteStackText(stack: Pick<Stack, "label" | "records">, fieldName = "the property"): string {
   const n = stack.records.length;
   const cards = n === 0 ? "No cards here use it." : `The ${n === 1 ? "card" : `${n.toLocaleString()} cards`} in this stack will keep ${n === 1 ? "its" : "their"} other values but have no ${fieldName} value, so ${n === 1 ? "it moves" : "they move"} to Uncategorized.`;
   return `This removes "${stack.label}" as an option of ${fieldName} in every view of the table. ${cards} Cards elsewhere that use it lose it as well.`;
@@ -720,7 +720,7 @@ function RenameStack({ stack, onClose, onSave }: { stack: Stack; onClose: () => 
     }
   };
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()} title="Rename stack" description="This renames the option in the field, so it changes everywhere the field is used." size="sm">
+    <Dialog open onOpenChange={(open) => !open && onClose()} title="Rename stack" description="This renames the option in the property, so it changes everywhere the property is used." size="sm">
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
         <Input autoFocus aria-label="Stack name" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.currentTarget.select()} />
         {error && (
@@ -754,7 +754,7 @@ function ColourStack({ stack, onClose, onPick }: { stack: Stack; onClose: () => 
     }
   };
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()} title={`Colour of ${stack.label}`} description="This colours the option in the field, so it changes everywhere the field is used." size="sm">
+    <Dialog open onOpenChange={(open) => !open && onClose()} title={`Colour of ${stack.label}`} description="This colours the option in the property, so it changes everywhere the property is used." size="sm">
       <ColorSwatchPicker value={stack.color} onChange={(c) => void pick(c)} label={`Colour of ${stack.label}`} />
       {error && (
         <p role="alert" className="mt-3 text-[0.8125rem] text-danger">

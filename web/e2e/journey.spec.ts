@@ -4,7 +4,7 @@ import { clickGrid, expect, gridFocused, newRecordButton, openOptionsScreen, ope
 /**
  * The journey of a new instance, driven through the real UI in a real browser against the real
  * server: set up the first administrator, create a workspace and a base, rename the table, add
- * fields (number, single select, date, formula) through the field dialog, add records and edit cells
+ * fields (number, single select, date, formula) through the property dialog, add records and edit cells
  * in the grid, filter and sort from the toolbar, open the expanded record and comment, then log out
  * and back in. Everything that matters is verified against the API, never against canvas pixels
  * (the grid is drawn on a canvas, so cells are operated by position, like grid.spec.ts does).
@@ -165,18 +165,18 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   const addField = async (name: string, type: RegExp, fill?: () => Promise<void>) => {
     await (await openViewOptions(page)).getByRole("button", { name: "Add property" }).click();
-    const dialog = page.getByRole("dialog", { name: "Add a field" });
-    await dialog.getByLabel("Field name").fill(name);
+    const dialog = page.getByRole("dialog", { name: "Add property" });
+    await dialog.getByLabel("Name", { exact: true }).fill(name);
     await dialog.getByRole("option", { name: type }).click();
     await fill?.();
-    await dialog.getByRole("button", { name: "Create field" }).click();
+    await dialog.getByRole("button", { name: "Add property" }).click();
     await expect(dialog).toBeHidden();
   };
 
-  await test.step("adds a number, a single select, a date and a formula field through the field dialog", async () => {
+  await test.step("adds a number, a single select, a date and a formula field through the property dialog", async () => {
     await addField("Qty", /^Number\b/);
     await addField("Status", /^Single select\b/, async () => {
-      const dialog = page.getByRole("dialog", { name: "Add a field" });
+      const dialog = page.getByRole("dialog", { name: "Add property" });
       await dialog.getByRole("button", { name: "Add option" }).click();
       await dialog.getByLabel("Name of option 1").fill("Todo");
       await dialog.getByRole("button", { name: "Add option" }).click();
@@ -184,7 +184,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     });
     await addField("Due", /^Date\b/);
     await addField("Double", /^Formula\b/, async () => {
-      const dialog = page.getByRole("dialog", { name: "Add a field" });
+      const dialog = page.getByRole("dialog", { name: "Add property" });
       await dialog.getByRole("combobox", { name: "Formula" }).fill("{Qty} * 2");
       // The live check against the server parses the formula and previews it.
       await expect(dialog.getByText(/Looks good/)).toBeVisible();
@@ -357,18 +357,18 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(row.locator("svg")).toHaveCount(0);
 
     await (await openViewOptions(page)).getByRole("button", { name: "Add property" }).click();
-    const dialog = page.getByRole("dialog", { name: "Add a field" });
-    await dialog.getByLabel("Field name").fill("Client");
+    const dialog = page.getByRole("dialog", { name: "Add property" });
+    await dialog.getByLabel("Name", { exact: true }).fill("Client");
     await dialog.getByRole("option", { name: /^Link to another record/ }).click();
-    const target = dialog.getByRole("combobox", { name: "Table to link to" });
+    const target = dialog.getByRole("combobox", { name: "Collection to link to" });
     await target.click();
-    const here = page.getByRole("option", { name: "Projects (this table)" });
+    const here = page.getByRole("option", { name: "Projects (this collection)" });
     const other = page.getByRole("option", { name: "Clients" });
     await expect(here.locator("svg[data-icon='tractor']")).toBeVisible();
     await expect(other.locator("svg[data-icon='users']")).toBeVisible();
     await other.click();
     await expect(target.locator("svg[data-icon='users']")).toBeVisible();
-    await dialog.getByRole("button", { name: "Create field" }).click();
+    await dialog.getByRole("button", { name: "Add property" }).click();
     await expect(dialog).toBeHidden();
     const link = (await loadTable()).fields.find((f) => f.name === "Client")!;
     expect(link.type).toBe("link");

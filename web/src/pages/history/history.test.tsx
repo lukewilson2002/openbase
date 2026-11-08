@@ -159,7 +159,7 @@ describe("History page", () => {
     expect(card("Sprint 1", 0)).toHaveTextContent("Grace Hopper created the record");
     // A new record's values are behind a button: this is a skim.
     expect(card("Sprint 1", 0)).not.toHaveTextContent("set Status to Todo");
-    await user.click(within(card("Sprint 1", 0)).getByRole("button", { name: "Show 1 field" }));
+    await user.click(within(card("Sprint 1", 0)).getByRole("button", { name: "Show 1 property" }));
     expect(card("Sprint 1", 0)).toHaveTextContent("set Status to Todo");
     expect(card("Old plan")).toHaveTextContent("Someone deleted the record");
   });

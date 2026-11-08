@@ -367,7 +367,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         const plan = planPaste(rd, target, rows, { parse: parseCtx(linkIds), linkNames: names, selection: sel, ambiguous });
         // What fits is pasted; what does not is left as it was, and said so.
         const problems = summariseProblems(plan.errors);
-        if (plan.readOnlyFields.length > 0) problems.push(`${plan.readOnlyFields.slice(0, 3).join(", ")}${plan.readOnlyFields.length > 3 ? " and more" : ""}: computed fields are left as they are`);
+        if (plan.readOnlyFields.length > 0) problems.push(`${plan.readOnlyFields.slice(0, 3).join(", ")}${plan.readOnlyFields.length > 3 ? " and more" : ""}: computed properties are left as they are`);
         const skipped = plan.errors.length;
         const steps: UndoOp[] = [];
         // Unknown select options need creating first (creators only); the server enforces who may.

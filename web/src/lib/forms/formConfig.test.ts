@@ -202,8 +202,8 @@ describe("removing a field and adding it back", () => {
 describe("what can be required", () => {
   it("is everything but the fields the public form cannot ask for", () => {
     expect(requiredBlockedReason(name)).toBeNull();
-    expect(requiredBlockedReason(owner)).toMatch(/User fields cannot be required/);
-    expect(requiredBlockedReason(parent)).toMatch(/Link fields cannot be required/);
+    expect(requiredBlockedReason(owner)).toMatch(/User properties cannot be required/);
+    expect(requiredBlockedReason(parent)).toMatch(/Link properties cannot be required/);
   });
 });
 

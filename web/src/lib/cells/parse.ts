@@ -76,7 +76,7 @@ function parseUsers(field: Extract<Field, { type: "user" }>, text: string, ctx: 
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length === 0) return CLEAR;
-  if (!field.options.multiple && ids.length > 1) return fail("This field allows a single user");
+  if (!field.options.multiple && ids.length > 1) return fail("This property allows a single user");
   return ok(ids);
 }
 
@@ -88,13 +88,13 @@ function parseLinks(field: Extract<Field, { type: "link" }>, text: string, ctx: 
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length === 0) return CLEAR;
-  if (field.options.single && ids.length > 1) return fail("This field allows a single linked record");
+  if (field.options.single && ids.length > 1) return fail("This property allows a single linked record");
   return ok(ids);
 }
 
 /** Turn text into the stored JSON for `field`. Blank text clears the cell. */
 export function parseText(field: Field, text: string, ctx: ParseCtx): ParseResult {
-  if (isComputed(field)) return fail("This field is computed and cannot be edited");
+  if (isComputed(field)) return fail("This property is computed and cannot be edited");
   const blank = text.trim() === "";
   switch (field.type) {
     case "text":
@@ -191,7 +191,7 @@ export function parseText(field: Field, text: string, ctx: ParseCtx): ParseResul
     case "user":
       return blank ? CLEAR : parseUsers(field, text, ctx);
     default:
-      return fail("This field is computed and cannot be edited");
+      return fail("This property is computed and cannot be edited");
   }
 }
 

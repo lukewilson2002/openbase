@@ -525,7 +525,7 @@ describe("folder menu (NAV-3)", () => {
 
     await open(user);
     await user.click(screen.getByRole("menuitem", { name: "New collection from CSV" }));
-    expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "New collection from CSV" })).toBeInTheDocument();
   });
 
   it("shares the folder, and duplicates it", async () => {

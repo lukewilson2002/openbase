@@ -47,7 +47,7 @@ export function CreateRecordEditor({ action, onChange, ctx, error }: ActionEdito
     <div className="flex flex-col gap-4">
       <TableSelect label="Table" value={action.table_id} onChange={(id) => onChange({ ...action, table_id: id, values: {} })} />
       <div>
-        <h4 className="mb-2 text-[0.8125rem] font-medium">Field values</h4>
+        <h4 className="mb-2 text-[0.8125rem] font-medium">Property values</h4>
         <ValuesEditor table={table} values={action.values} onChange={(values) => onChange({ ...action, values })} ctx={ctx} error={error} />
       </div>
     </div>
@@ -70,7 +70,7 @@ export function UpdateRecordEditor({ action, onChange, ctx, error }: ActionEdito
         hint="The id of the record to change, usually a placeholder such as {{trigger.record.id}} or {{steps.1.record_id}}."
       />
       <div>
-        <h4 className="mb-2 text-[0.8125rem] font-medium">Field values</h4>
+        <h4 className="mb-2 text-[0.8125rem] font-medium">Property values</h4>
         <ValuesEditor table={table} values={action.values} onChange={(values) => onChange({ ...action, values })} ctx={ctx} error={error} />
       </div>
     </div>

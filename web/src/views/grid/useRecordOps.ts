@@ -366,12 +366,12 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
       try {
         await schemaApi.deleteField(field.id);
       } catch (e) {
-        toast.error(e, "Could not delete the field");
+        toast.error(e, "Could not delete the property");
         return false;
       }
       void qc.invalidateQueries({ queryKey: keys.base(baseId) });
       void qc.invalidateQueries({ queryKey: ["records"] });
-      record({ kind: "field", label: `Delete field ${field.name}`, fieldId: field.id }, undefined, `Field "${field.name}" deleted`);
+      record({ kind: "field", label: `Delete property ${field.name}`, fieldId: field.id }, undefined, `Property "${field.name}" deleted`);
       return true;
     },
     [qc, baseId, toast, record],

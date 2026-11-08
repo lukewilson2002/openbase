@@ -124,7 +124,7 @@ describe("triggers round-trip into the update payload", () => {
   it("record_updated: watched fields (editable only), and the table change resets them", async () => {
     const { api } = await setup(makeAutomation({ trigger: { type: "record_updated", table_id: "tbl1", field_ids: [] } }));
     expect(screen.queryByRole("checkbox", { name: "Double" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Any field/)).toBeInTheDocument();
+    expect(screen.getByText(/Any property/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: "Qty" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Status" }));
     expect((await save(api)).trigger).toEqual({ type: "record_updated", table_id: "tbl1", field_ids: ["fld2", "fld3"] });
@@ -223,13 +223,13 @@ describe("actions round-trip into the update payload", () => {
     await addAction("Create record");
     const c = card(1);
     await chooseOption(within(c).getByLabelText("Table"), "People");
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld5");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "{{trigger.record.fields.Name}}");
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld6");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld6");
     const score = within(c).getByRole("textbox", { name: "Score" });
     await userEvent.type(score, "42");
     await userEvent.tab(); // the typed editor commits on blur
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld7");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld7");
     await userEvent.click(within(c).getByRole("checkbox", { name: /Active/ }));
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl2", values: { fld5: "{{trigger.record.fields.Name}}", fld6: 42, fld7: true } }]);
   });
@@ -239,7 +239,7 @@ describe("actions round-trip into the update payload", () => {
     await addAction("Create record");
     const c = card(1);
     await chooseOption(within(c).getByLabelText("Table"), "People");
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld6");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld6");
     await userEvent.click(within(c).getByRole("button", { name: "Template" }));
     await paste(within(c).getByRole("textbox", { name: "Score" }), "{{trigger.body.score}}");
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl2", values: { fld6: "{{trigger.body.score}}" } }]);
@@ -248,7 +248,7 @@ describe("actions round-trip into the update payload", () => {
   it("create_record: a select takes a choice id from its editor, and a choice name that is not an id opens as a template", async () => {
     const { api } = await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl1", values: { fld1: "x" } }] }));
     const c = card(1);
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld3");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld3");
     await userEvent.click(within(c).getByRole("button", { name: "Status" }));
     await userEvent.click(within(await screen.findByRole("listbox", { name: "Status" })).getByRole("option", { name: "Done" }).querySelector("button")!);
     expect((await save(api)).actions).toEqual([{ type: "create_record", table_id: "tbl1", values: { fld1: "x", fld3: "chs3" } }]);
@@ -274,7 +274,7 @@ describe("actions round-trip into the update payload", () => {
     await addAction("Update record");
     const c = card(1);
     expect(within(c).getByLabelText("Record id")).toHaveValue("{{trigger.record.id}}");
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld1");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld1");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "Seen");
     expect((await save(api)).actions).toEqual([{ type: "update_record", table_id: "tbl1", record_id: "{{trigger.record.id}}", values: { fld1: "Seen" } }]);
   });
@@ -288,7 +288,7 @@ describe("actions round-trip into the update payload", () => {
     await userEvent.click(within(c).getByRole("button", { name: "Insert data into Record id" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /record_id.*steps\.1\.record_id/ }));
     await chooseOption(within(c).getByLabelText("Table"), "People");
-    await userEvent.selectOptions(within(c).getByLabelText("Add a field"), "fld5");
+    await userEvent.selectOptions(within(c).getByLabelText("Add a property"), "fld5");
     await paste(within(c).getByRole("textbox", { name: "Name" }), "again");
     const actions = (await save(api)).actions;
     expect(actions[1]).toEqual({ type: "update_record", table_id: "tbl2", record_id: "{{steps.1.record_id}}", values: { fld5: "again" } });

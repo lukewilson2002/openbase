@@ -94,7 +94,7 @@ function ListInner(props: ViewProps) {
 
   const reorder = async (id: string, plan: DropPlan | "blocked") => {
     if (plan === "blocked") {
-      toast.toast({ title: "Records cannot be moved into these groups", description: "Their group comes from a field that cannot be edited, such as a formula or a link." });
+      toast.toast({ title: "Records cannot be moved into these groups", description: "Their group comes from a property that cannot be edited, such as a formula or a link." });
       return;
     }
     const order = placeIndexes(recordIds, id, plan);

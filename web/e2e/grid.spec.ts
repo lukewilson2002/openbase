@@ -356,9 +356,9 @@ test("adds a property from View options", async ({ page }) => {
   await gotoGrid(page);
   const panel = await openViewOptions(page);
   await panel.getByRole("button", { name: "Add property" }).click();
-  await page.getByLabel("Field name").fill("Remarks");
+  await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Remarks");
   await page.getByRole("option", { name: /^Rich text/ }).click();
-  await page.getByRole("button", { name: "Create field" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add property" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   const base = await (await page.request.get(`/api/bases/${fx.baseId}`)).json();
   const fields = base.tables.find((t: { id: string }) => t.id === fx.tableId).fields as { name: string; type: string }[];

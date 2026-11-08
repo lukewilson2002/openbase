@@ -34,14 +34,14 @@ describe("importing a CSV into a table", () => {
     importer();
     await choose(user, csv(CSV));
     const mapping = await screen.findByRole("region", { name: "Column mapping" });
-    expect(within(mapping).getByLabelText("Field for Name")).toHaveValue("f_name");
-    expect(within(mapping).getByLabelText("Field for Qty")).toHaveValue("f_qty");
-    expect(within(mapping).getByLabelText("Field for Notes")).toHaveValue(""); // no such field: skipped
+    expect(within(mapping).getByLabelText("Property for Name")).toHaveValue("f_name");
+    expect(within(mapping).getByLabelText("Property for Qty")).toHaveValue("f_qty");
+    expect(within(mapping).getByLabelText("Property for Notes")).toHaveValue(""); // no such field: skipped
     expect(within(mapping).getByText("Ann")).toBeInTheDocument();
     expect(within(mapping).getByText("world")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import 2 columns" })).toBeEnabled();
     // Fields the server cannot import into are not offered, and the dialog says why.
-    const options = within(within(mapping).getByLabelText("Field for Name")).getAllByRole("option").map((o) => o.textContent);
+    const options = within(within(mapping).getByLabelText("Property for Name")).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Skip this column", "Name", "Qty", "Status"]);
     expect(screen.getByText(/Owner, Total, attachment cannot be imported/)).toBeInTheDocument();
   });
@@ -51,7 +51,7 @@ describe("importing a CSV into a table", () => {
     const api = importer({ "POST /api/tables/tbl1/import": { created: 2, table_id: "tbl1", fields: [] } });
     await choose(user, csv(CSV));
     await screen.findByRole("region", { name: "Column mapping" });
-    await user.selectOptions(screen.getByLabelText("Field for Notes"), "f_status");
+    await user.selectOptions(screen.getByLabelText("Property for Notes"), "f_status");
     await user.click(screen.getByRole("button", { name: "Import 3 columns" }));
     expect(await screen.findByText("Imported 2 records")).toBeInTheDocument();
     const call = api.callsTo("POST /api/tables/tbl1/import")[0]!;
@@ -71,7 +71,7 @@ describe("importing a CSV into a table", () => {
     // The header row is data now: it is shown as a row, and nothing matches by name any more.
     expect(within(mapping).getByRole("cell", { name: "Qty" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
-    await user.selectOptions(within(mapping).getByLabelText("Field for column 1"), "f_name");
+    await user.selectOptions(within(mapping).getByLabelText("Property for column 1"), "f_name");
     await user.click(screen.getByRole("button", { name: "Import 1 column" }));
     await screen.findByText("Imported 3 records");
     const form = api.callsTo("POST /api/tables/tbl1/import")[0]!.body as FormData;
@@ -95,7 +95,7 @@ describe("importing a CSV into a table", () => {
     importer();
     await choose(user, csv(CSV));
     await screen.findByRole("region", { name: "Column mapping" });
-    const notes = screen.getByLabelText("Field for Notes");
+    const notes = screen.getByLabelText("Property for Notes");
     // Taken fields are disabled in the other columns' lists.
     expect(within(notes).getByRole("option", { name: "Name" })).toBeDisabled();
     expect(within(notes).getByRole("option", { name: "Status" })).toBeEnabled();
@@ -148,7 +148,7 @@ describe("importing a CSV into a table", () => {
     await screen.findByRole("region", { name: "Column mapping" });
     await user.click(screen.getByRole("button", { name: /^Import/ }));
     expect(await screen.findByText(/Importing…/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Field for Name")).toBeDisabled();
+    expect(screen.getByLabelText("Property for Name")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     release({ created: 2, table_id: "tbl1", fields: [] });
     expect(await screen.findByText("Imported 2 records")).toBeInTheDocument();

@@ -56,7 +56,7 @@ export function ShareViewTab({
         <p>
           {kind === "form"
             ? "Anyone with the link can fill in this form and add a record. They never see the records already in the table, and can't open the rest of the project."
-            : `Anyone with the link sees only what this view shows: its records and fields, now and as they change later. They can't edit anything or open the rest of the project.${hiddenNote(view)}`}
+            : `Anyone with the link sees only what this view shows: its records and properties, now and as they change later. They can't edit anything or open the rest of the project.${hiddenNote(view)}`}
         </p>
       </div>
       {/* Keyed by view: a half-typed password must not carry over to another view's link. */}
@@ -183,6 +183,6 @@ function ViewLink({ view }: { view: View }) {
  */
 function hiddenNote(view: View): string {
   const n = view.config.hidden_fields.length;
-  return n > 0 ? ` The ${n} hidden field${n === 1 ? "" : "s"} never leave${n === 1 ? "s" : ""} the server.` : "";
+  return n > 0 ? ` The ${n} hidden property${n === 1 ? "" : "s"} never leave${n === 1 ? "s" : ""} the server.` : "";
 }
 

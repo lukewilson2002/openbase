@@ -142,7 +142,7 @@ export function RecordPeekBody({ table, record, format, emails, onOpen }: { tabl
       ) : (
         <p className="text-xs text-muted">Nothing else is filled in.</p>
       )}
-      {record && empty > 0 && filled.length > 0 && <p className="text-xs text-faint">{empty === 1 ? "1 empty field" : `${empty} empty fields`}</p>}
+      {record && empty > 0 && filled.length > 0 && <p className="text-xs text-faint">{empty === 1 ? "1 empty property" : `${empty} empty properties`}</p>}
     </LinkedRecordsProvider>
     </InsidePeekProvider>
   );
