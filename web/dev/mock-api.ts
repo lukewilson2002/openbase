@@ -147,6 +147,7 @@ function emptyConfig(): Obj {
   };
 }
 
+let madeViews = 0;
 const views: Obj[] = [
   { id: "viw1", table_id: T_TASKS, name: "All tasks", type: "grid", config: emptyConfig(), personal: false, locked: false },
   { id: "viw2", table_id: T_TASKS, name: "By status", type: "grid", config: { ...emptyConfig(), groups: [{ field_id: "fld_status", direction: "asc" }], row_color: { mode: "by_select", field_id: "fld_status" } }, personal: false, locked: false },
@@ -606,11 +607,12 @@ function runQuery(view: Obj, body: Obj): Obj {
   const fields = fieldsOf(view.table_id);
   const cfg = view.config;
   let rows = [...records.values()].filter((r) => !r.deleted && r.table_id === view.table_id).sort((a, b) => a.order - b.order).map(shape);
-  // A transient override replaces the saved filter / sorts / groups for this request only.
+  // A transient override replaces the saved filter / sorts / groups / row colors / summaries for this request only (a draft, BE-12).
   const transient = (body.transient ?? {}) as Obj;
   const filter = transient.filter ?? cfg.filter;
   const sorts: Obj[] = transient.sorts ?? cfg.sorts;
   const groupBy: Obj[] = transient.groups ?? cfg.groups;
+  const rowColor: Obj | null = transient.row_color ?? cfg.row_color;
   rows = rows.filter((r) => matchFilter(filter, r, fields));
   if (body.range) {
     // Records whose [start, end] (end defaults to start) overlaps [from, to]; records without a start are left out.
@@ -660,11 +662,17 @@ function runQuery(view: Obj, body: Obj): Obj {
     });
   }
   const colors: Obj = {};
-  if (cfg.row_color?.mode === "by_select") {
-    const f = fields.find((x) => x.id === cfg.row_color.field_id);
+  if (rowColor?.mode === "by_select") {
+    const f = fields.find((x) => x.id === rowColor.field_id);
     for (const r of rows) {
       const c = f?.options.choices?.find((x: Obj) => x.id === r.values[f.id]);
       if (c) colors[r.id] = c.color;
+    }
+  } else if (rowColor?.mode === "by_conditions") {
+    // The first matching rule decides; no rules is how a draft says "no colors".
+    for (const r of rows) {
+      const rule = (rowColor.rules as Obj[]).find((x) => x.filter?.items?.length && matchFilter(x.filter, r, fields));
+      if (rule) colors[r.id] = rule.color;
     }
   }
   const offset = Number(body.offset ?? 0);
@@ -672,12 +680,11 @@ function runQuery(view: Obj, body: Obj): Obj {
   return { total: rows.length, offset, records: rows.slice(offset, offset + limit), groups, colors };
 }
 
-function aggregate(view: Obj): Obj {
-  const all = runQuery(view, { offset: 0, limit: 1000 });
-  const rows = [...records.values()].filter((r) => !r.deleted && r.table_id === view.table_id).map(shape);
-  void all;
+function aggregate(view: Obj, transient: Obj, search: string): Obj {
+  // Over the records that pass the filter (and search); the summaries asked for are the draft's, else the view's.
+  const rows = runQuery(view, { offset: 0, limit: 1000, search, transient }).records as Obj[];
   const values: Obj = {};
-  for (const [fid, agg] of Object.entries<string>(view.config.summaries)) {
+  for (const [fid, agg] of Object.entries<string>(transient.summaries ?? view.config.summaries)) {
     const col = rows.map((r) => r.values[fid]);
     const nums = col.filter((x) => typeof x === "number") as number[];
     const filled = col.filter((x) => x !== undefined && x !== null && x !== "" && x !== false && !(Array.isArray(x) && !x.length));
@@ -1185,6 +1192,19 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     tableOrder.splice(tableOrder.findIndex((t) => t.id === g![1]), 1);
     return send(res, 200, { ok: true }), true;
   }
+  if ((g = /^\/api\/tables\/([^/]+)\/views$/.exec(p)) && m === "POST") {
+    // Save as view (COL-5): a new view of a draft. Editors make personal views; shared ones need a creator.
+    const role = baseDto(req).role as string;
+    const name = String(body.name ?? "").trim();
+    if (!name) return err(res, 422, "validation_failed", "a view needs a name"), true;
+    if (!["editor", "creator", "owner"].includes(role)) return err(res, 403, "forbidden", "creating a personal view needs the editor role"), true;
+    if (!body.personal && !["creator", "owner"].includes(role)) return err(res, 403, "forbidden", "creating a shared view needs the creator role"), true;
+    const view = { id: `viw_made_${++madeViews}`, table_id: g[1]!, name, type: String(body.type ?? "grid"), config: body.config ?? emptyConfig(), personal: !!body.personal, locked: false };
+    // New views go before the table's default grid, which stays last in the list.
+    views.splice(views.findIndex((v) => v.table_id === g![1] && v.is_default), 0, view);
+    emit({ client_id: clientId, event: { kind: "schema_changed", table_id: g[1]! } });
+    return send(res, 201, view), true;
+  }
   if ((g = /^\/api\/tables\/([^/]+)\/views\/reorder$/.exec(p)) && m === "POST") {
     // Shared views or personal ones, never the default grid: the listed ids keep to the places they held.
     reorderInPlace(views as { id: string }[], (Array.isArray(body.ids) ? body.ids : []).filter((id: unknown) => views.some((v) => v.id === id && v.table_id === g![1] && !v.is_default)));
@@ -1252,7 +1272,14 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   }
   if ((g = /^\/api\/views\/([^/]+)\/aggregations$/.exec(p))) {
     const v = views.find((x) => x.id === g![1]);
-    return v ? (send(res, 200, aggregate(v)), true) : (err(res, 404, "not_found", "view not found"), true);
+    if (!v) return err(res, 404, "not_found", "view not found"), true;
+    let transient: Obj = {};
+    try {
+      transient = JSON.parse(url.searchParams.get("transient") ?? "{}") as Obj;
+    } catch {
+      return err(res, 400, "bad_request", "invalid transient parameter"), true;
+    }
+    return send(res, 200, aggregate(v, transient, url.searchParams.get("search") ?? "")), true;
   }
   if ((g = /^\/api\/views\/([^/]+)$/.exec(p)) && m === "PATCH") {
     const v = views.find((x) => x.id === g![1]);
