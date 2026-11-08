@@ -1,0 +1,63 @@
+# cargo-deny policy (SEC-3). `cargo deny check` runs in scripts/check.sh and in CI.
+# Every exception below says why it exists and when to look at it again; an ignore without a
+# reason does not belong in this file.
+
+[graph]
+# What ships is the server for the platforms the release builds. The wasm32 target in
+# rust-toolchain.toml is for the shared-core experiments and pulls no extra crates into the server.
+all-features = false
+
+[advisories]
+# Yanked crates fail the check as well as RUSTSEC entries.
+yanked = "deny"
+ignore = [
+  # No fixed rsa release exists (the advisory has `patched = []`, and rsa 0.10.0-rc.19 is affected).
+  # webauthn-rs reaches rsa through crypto-glue only to verify RSA signatures from passkeys, which
+  # uses the public key; the Marvin timing leak is in private-key operations, and OpenBase never
+  # signs or decrypts with RSA. Re-check on 2027-02-07: drop this entry as soon as rsa or
+  # webauthn-rs ships a fix. (RUSTSEC-2026-0387, crypto-bigint, was cleared by webauthn-rs 0.6.2 and
+  # needs no entry.)
+  { id = "RUSTSEC-2023-0071", reason = "rsa has no fix; passkeys only verify RSA signatures with public keys, no private-key operation is reachable. Re-check 2027-02-07." },
+]
+
+[licenses]
+# OpenBase is distributed as MIT OR Apache-2.0, so every dependency must be usable under terms
+# that fit that: permissive licences, plus MPL-2.0 (file-level copyleft, used unmodified). Strong
+# copyleft (GPL, AGPL, LGPL-only) is not on the list on purpose. A crate with an "OR" expression
+# passes when any one alternative is listed, so r-efi (MIT OR Apache-2.0 OR LGPL-2.1-or-later)
+# needs no LGPL entry.
+confidence-threshold = 0.93
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "MIT-0",
+  "BSD-1-Clause", # fiat-crypto
+  "BSD-2-Clause", # zerocopy
+  "BSD-3-Clause", # brotli, aws-lc-sys, encoding_rs, ...
+  "ISC", # rustls, aws-lc-rs, untrusted
+  "Zlib", # bytemuck, miniz_oxide, tinyvec, zune-*
+  "0BSD", # adler2, quoted_printable
+  "BSL-1.0", # ryu
+  "CC0-1.0", # constant_time_eq, dunce
+  "Unlicense", # aho-corasick, memchr, csv, walkdir (all dual-licensed with MIT)
+  "Unicode-3.0", # icu_* and unicode-ident data tables
+  "CDLA-Permissive-2.0", # webpki-root-certs (Mozilla's CA list)
+  "MPL-2.0", # webauthn-rs and friends; used as a library, unmodified
+]
+
+[bans]
+# The RustCrypto crates (argon2, digest, base64 users, ...) are mid-migration to new major
+# versions at different speeds, so several crates appear twice with no way for us to fix it.
+# Reporting them would bury real findings; `cargo tree -d` lists them when someone wants to look.
+multiple-versions = "allow"
+wildcards = "deny"
+# Path dependencies between our own workspace crates carry no registry version.
+allow-wildcard-paths = true
+
+[sources]
+# Only crates.io: no git dependencies and no alternative registries.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

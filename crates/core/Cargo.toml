@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
+# Released as a binary and an image, never to crates.io. Marking it private also lets cargo-deny
+# accept the path dependency between our own crates.
+publish = false
 
 [lints]
 workspace = true
