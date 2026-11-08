@@ -22,6 +22,25 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   numbers at the right). Board stacks are 280 px wide with the stack's value as a chip and its card
   count, and a "+ New client" at the foot. The column menu says "property": Rename, Edit property,
   Insert left and right, Hide and Delete.
+- **The Calendar, Gallery, Timeline and Form in the new look.** Every surface, line and event
+  of the calendar and the timeline now follows the theme, light and dark: days are white, the
+  header and the days of the neighbouring months are the page's grey, events are flat chips in
+  their colour, and nothing is raised with a shadow. The timeline draws today as a dashed line in
+  the accent. Gallery cards are bordered cards with 12 px corners that take their cover's top
+  corners, and the Unscheduled column beside the calendar and the timeline is the page's grey with
+  flat cards. The form builder and its preview are cards on the page with the same type sizes as
+  the rest of the app. A calendar, board or timeline that has no property to use yet asks for one
+  in words and a button, without the little picture it used to draw.
+- **Empty collections and filtered-to-nothing views.** A view with no records says "No clients yet"
+  with "New client" (after the collection's record name); a view whose filter or search matches
+  nothing says "No clients match these filters" with Reset, which clears the filter and search in
+  your draft (the saved view keeps its filter). Board, List, Gallery and the grid all do this.
+- **Selection and holds on a phone.** On a phone the bar for selected records shrinks to the count,
+  an Actions button and a way to let go; Duplicate, Delete and a Board's "Move to" are rows of a
+  bottom sheet. A hold on a card or row that lets go without moving opens its action sheet (Open
+  record, Select, Duplicate, Delete, Move to a stack); a hold that moves drags the card where it
+  can be dragged, and a swipe still scrolls. A right-click on a desktop opens the same actions as a
+  menu at the pointer.
 - **Upgrade to database schema 17 (a page for every table).** The server snapshots the database
   first, as for every upgrade, and no value you entered changes. A table with exactly one rich
   text property besides its title uses it as its page; every other table gets a new rich text
