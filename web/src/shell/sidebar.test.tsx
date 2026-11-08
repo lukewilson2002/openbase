@@ -629,6 +629,15 @@ describe("workspace switcher (NAV-3, NAV-4, NAV-6)", () => {
     expect(radios.at(-1)!.compareDocumentPosition(items[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("owns only items, groups and separators: the drag live region sits in a group, not beside the items", async () => {
+    const user = userEvent.setup();
+    render();
+    const menuEl = await open(user);
+    // axe: aria-required-children fails on a status that is a direct child of a menu.
+    expect(menuEl.querySelector(':scope > [role="status"]')).toBeNull();
+    expect(menuEl.querySelector('[role="group"] > [role="status"]')).not.toBeNull();
+  });
+
   it("goes to another workspace's Home and remembers it", async () => {
     const user = userEvent.setup();
     render();

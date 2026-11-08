@@ -14,7 +14,6 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, WorkspaceSummary } from "@/api/types";
 import { basePermissions } from "@/base/permissions";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { NavRow } from "@/components/ui/nav-row";
@@ -23,7 +22,8 @@ import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { foldersOf, topLevelOf } from "@/lib/topLevel";
 import { useNavDialog } from "./NavDialogs";
-import { LinkItem, MenuGroups, RowMenu } from "./NavRowMenu";
+import { ActionMenu, LinkItem, MenuItem } from "./menuItems";
+import { MenuGroups, RowMenu } from "./NavRowMenu";
 import { CollectionList } from "./NavTables";
 import { MoveItems, ReorderRoot, SortableGroup, SortableRow, useRowMenu } from "./sortable";
 import { useOpenState } from "./useOpenState";
@@ -48,38 +48,38 @@ export function NavTree({ ws, tableId }: { ws: WorkspaceSummary; tableId?: strin
           Collections
         </h2>
         {(canCreateCollection || canCreateFolder) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <ActionMenu
+            title="Add"
+            trigger={
               <IconButton label="Add a collection or folder" size="sm" noTooltip>
                 <Icon icon={Plus} />
               </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <MenuGroups
-                groups={[
-                  [
-                    canCreateCollection && top && (
-                      <DropdownMenuItem key="new" onSelect={() => openDialog({ kind: "create-collection", baseId: top.id })}>
-                        <Icon icon={Table2} /> New collection
-                      </DropdownMenuItem>
-                    ),
-                    canCreateCollection && top && (
-                      <DropdownMenuItem key="csv" onSelect={() => openDialog({ kind: "create-collection-csv", baseId: top.id })}>
-                        <Icon icon={FileUp} /> New collection from CSV
-                      </DropdownMenuItem>
-                    ),
-                  ],
-                  [
-                    canCreateFolder && (
-                      <DropdownMenuItem key="folder" onSelect={() => openDialog({ kind: "create-folder", workspaceId: ws.id })}>
-                        <Icon icon={FolderPlus} /> New folder
-                      </DropdownMenuItem>
-                    ),
-                  ],
-                ]}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
+            }
+          >
+            <MenuGroups
+              groups={[
+                [
+                  canCreateCollection && top && (
+                    <MenuItem key="new" onSelect={() => openDialog({ kind: "create-collection", baseId: top.id })} icon={Table2}>
+                      New collection
+                    </MenuItem>
+                  ),
+                  canCreateCollection && top && (
+                    <MenuItem key="csv" onSelect={() => openDialog({ kind: "create-collection-csv", baseId: top.id })} icon={FileUp}>
+                      New collection from CSV
+                    </MenuItem>
+                  ),
+                ],
+                [
+                  canCreateFolder && (
+                    <MenuItem key="folder" onSelect={() => openDialog({ kind: "create-folder", workspaceId: ws.id })} icon={FolderPlus}>
+                      New folder
+                    </MenuItem>
+                  ),
+                ],
+              ]}
+            />
+          </ActionMenu>
         )}
       </div>
       <ReorderRoot>
@@ -173,68 +173,68 @@ function FolderMenu({ base, workspaceName, workspaceRole, menu }: { base: BaseSu
   });
   const canCreate = basePermissions.manageTables(base.role);
   return (
-    <RowMenu label={`Folder options for ${base.name}`} menu={menu}>
+    <RowMenu label={`Folder options for ${base.name}`} title={base.name} menu={menu}>
       <MenuGroups
         groups={[
           [
             canEdit && (
-              <DropdownMenuItem key="rename" onSelect={() => openDialog({ kind: "rename-folder", base })}>
-                <Icon icon={Pencil} /> Rename
-              </DropdownMenuItem>
+              <MenuItem key="rename" onSelect={() => openDialog({ kind: "rename-folder", base })} icon={Pencil}>
+                Rename
+              </MenuItem>
             ),
             canEdit && (
-              <DropdownMenuItem key="color" onSelect={() => openDialog({ kind: "folder-color", base })}>
-                <Icon icon={Palette} /> Color
-              </DropdownMenuItem>
+              <MenuItem key="color" onSelect={() => openDialog({ kind: "folder-color", base })} icon={Palette}>
+                Color
+              </MenuItem>
             ),
           ],
           [
             canCreate && (
-              <DropdownMenuItem key="new" onSelect={() => openDialog({ kind: "create-collection", baseId: base.id })}>
-                <Icon icon={FilePlus} /> New collection
-              </DropdownMenuItem>
+              <MenuItem key="new" onSelect={() => openDialog({ kind: "create-collection", baseId: base.id })} icon={FilePlus}>
+                New collection
+              </MenuItem>
             ),
             canCreate && (
-              <DropdownMenuItem key="csv" onSelect={() => openDialog({ kind: "create-collection-csv", baseId: base.id })}>
-                <Icon icon={FileUp} /> New collection from CSV
-              </DropdownMenuItem>
+              <MenuItem key="csv" onSelect={() => openDialog({ kind: "create-collection-csv", baseId: base.id })} icon={FileUp}>
+                New collection from CSV
+              </MenuItem>
             ),
           ],
           [
             basePermissions.manageSharing(base.role) && (
-              <DropdownMenuItem key="share" onSelect={() => openDialog({ kind: "share-folder", base, workspaceName })}>
-                <Icon icon={Share2} /> Share
-              </DropdownMenuItem>
+              <MenuItem key="share" onSelect={() => openDialog({ kind: "share-folder", base, workspaceName })} icon={Share2}>
+                Share
+              </MenuItem>
             ),
-            <LinkItem key="access" to={`/workspace/${base.workspace_id}/members`} icon={<Icon icon={Users} />}>
+            <LinkItem key="access" to={`/workspace/${base.workspace_id}/members`} icon={Users}>
               Access
             </LinkItem>,
             basePermissions.manageAutomations(base.role) && (
-              <LinkItem key="automations" to={`/base/${base.id}/automations`} icon={<Icon icon={Zap} />}>
+              <LinkItem key="automations" to={`/base/${base.id}/automations`} icon={Zap}>
                 Automations
               </LinkItem>
             ),
           ],
           [
             canEdit && (
-              <DropdownMenuItem key="duplicate" onSelect={() => duplicate.mutate()}>
-                <Icon icon={Copy} /> Duplicate
-              </DropdownMenuItem>
+              <MenuItem key="duplicate" onSelect={() => duplicate.mutate()} icon={Copy}>
+                Duplicate
+              </MenuItem>
             ),
             canEdit && <MoveItems key="move" />,
           ],
           [
             isOwner && (
-              <DropdownMenuItem key="top" onSelect={() => useAsTopLevel.mutate()}>
-                <Icon icon={ArrowUpToLine} /> Use as top level
-              </DropdownMenuItem>
+              <MenuItem key="top" onSelect={() => useAsTopLevel.mutate()} icon={ArrowUpToLine}>
+                Use as top level
+              </MenuItem>
             ),
           ],
           [
             isOwner && (
-              <DropdownMenuItem key="delete" danger onSelect={() => openDialog({ kind: "delete-folder", base })}>
-                <Icon icon={Trash2} /> Delete
-              </DropdownMenuItem>
+              <MenuItem key="delete" danger onSelect={() => openDialog({ kind: "delete-folder", base })} icon={Trash2}>
+                Delete
+              </MenuItem>
             ),
           ],
         ]}

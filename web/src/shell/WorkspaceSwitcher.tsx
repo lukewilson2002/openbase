@@ -24,7 +24,8 @@ import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { useNavDialog } from "./NavDialogs";
-import { LinkItem, MenuGroups } from "./NavRowMenu";
+import { LinkItem } from "./menuItems";
+import { MenuGroups } from "./NavRowMenu";
 import { ReorderRoot, SortableGroup, SortableRow, useRowMove } from "./sortable";
 import { useReorder } from "./useReorder";
 
@@ -127,7 +128,7 @@ function MenuSwitcher({ workspaces, current, compact }: WorkspaceSwitcherProps) 
           <Logo className="h-8" />
         </div>
         <DropdownMenuSeparator />
-        <ReorderRoot>
+        <ReorderRoot inMenu>
           <SortableGroup group="workspaces" items={workspaces} idOf={(w) => w.id} enabled onReorder={(ids) => reorder({ kind: "workspaces", ids })}>
             {(list) => (
               <DropdownMenuRadioGroup value={current?.id ?? ""} onValueChange={go} aria-label="Workspaces">
@@ -149,7 +150,7 @@ function MenuSwitcher({ workspaces, current, compact }: WorkspaceSwitcherProps) 
               groups={actions.map((group) =>
                 group.map((a) =>
                   a.to ? (
-                    <LinkItem key={a.key} to={a.to} icon={<Icon icon={a.icon} />}>
+                    <LinkItem key={a.key} to={a.to} icon={a.icon}>
                       {a.label}
                     </LinkItem>
                   ) : (

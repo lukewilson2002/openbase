@@ -21,10 +21,9 @@ import { DndContext, MouseSensor, TouchSensor, closestCenter, useSensor, useSens
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
+import { MenuItem, MenuSeparator } from "./menuItems";
 import { applyOrder, moveId } from "./useReorder";
 
 /** Marks what must not start a drag: the "…" buttons (they open menus). */
@@ -82,9 +81,14 @@ export function holdClicks() {
   return () => window.setTimeout(() => window.removeEventListener("click", preventDefault, { capture: true }), 50);
 }
 
-/** The one drag context of the tree: wrap everything that has `SortableGroup`s in it. */
-export function ReorderRoot({ children }: { children: ReactNode }) {
+/**
+ * The one drag context of the tree: wrap everything that has `SortableGroup`s in it. `inMenu` is for a root
+ * inside a `role="menu"`: dnd-kit's live region (a `role="status"`) would otherwise be a direct child of the
+ * menu, which may own only items, groups and separators, so it is placed in a group of its own.
+ */
+export function ReorderRoot({ children, inMenu = false }: { children: ReactNode; inMenu?: boolean }) {
   const id = useId();
+  const [liveRegion, setLiveRegion] = useState<HTMLElement | null>(null);
   const sensors = useSensors(
     useSensor(RowMouseSensor, { activationConstraint: { distance: 5 } }),
     // A finger must rest on the row first: moving straight away is a swipe that scrolls the menu.
@@ -118,8 +122,9 @@ export function ReorderRoot({ children }: { children: ReactNode }) {
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragCancel={onDragCancel}
-        accessibility={{ announcements, screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the row's options menu." } }}
+        accessibility={{ announcements, container: inMenu && liveRegion ? liveRegion : undefined, screenReaderInstructions: { draggable: "Drag with the pointer, or use Move up and Move down in the row's options menu." } }}
       >
+        {inMenu && <div role="group" ref={setLiveRegion} />}
         {children}
       </DndContext>
     </InRoot.Provider>
@@ -218,14 +223,14 @@ export function MoveItems({ separator, row: given }: { separator?: "before" | "a
   if (!row) return null;
   return (
     <>
-      {separator === "before" && <DropdownMenuSeparator />}
-      <DropdownMenuItem disabled={!row.canUp} onSelect={() => row.move(-1)}>
-        <Icon icon={ArrowUp} /> Move up
-      </DropdownMenuItem>
-      <DropdownMenuItem disabled={!row.canDown} onSelect={() => row.move(1)}>
-        <Icon icon={ArrowDown} /> Move down
-      </DropdownMenuItem>
-      {separator === "after" && <DropdownMenuSeparator />}
+      {separator === "before" && <MenuSeparator />}
+      <MenuItem icon={ArrowUp} disabled={!row.canUp} onSelect={() => row.move(-1)}>
+        Move up
+      </MenuItem>
+      <MenuItem icon={ArrowDown} disabled={!row.canDown} onSelect={() => row.move(1)}>
+        Move down
+      </MenuItem>
+      {separator === "after" && <MenuSeparator />}
     </>
   );
 }

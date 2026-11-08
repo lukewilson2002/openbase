@@ -131,6 +131,16 @@ describe("bottom navigation (PH-1)", () => {
     expect(screen.queryByRole("navigation", { name: "Main menu" })).not.toBeInTheDocument();
   });
 
+  it("leaves someone with no workspace the avatar, so Sign out and the rest stay reachable", async () => {
+    const user = userEvent.setup();
+    const api = routes({ "GET /api/workspaces": [] });
+    renderApp({ route: "/" });
+    await screen.findByRole("heading", { name: "Create your first workspace" });
+    await user.click(await screen.findByRole("button", { name: "Account menu" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Account" })).getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(api.callsTo("POST /api/auth/logout")).toHaveLength(1));
+  });
+
   it("knows a record page by its address, with or without the view", () => {
     expect(isRecordPath("/base/app1/tbl1/viw1/r/rec1")).toBe(true);
     expect(isRecordPath("/base/app1/tbl1/r/rec1")).toBe(true);
@@ -468,12 +478,54 @@ describe("the Collections tab (NAV-7)", () => {
     expect(within(await tabs()).getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("keeps a collection's row menu, whose dialogs open over the screen", async () => {
+  it("opens a collection's row menu as a bottom sheet named for it, whose rows act and close it", async () => {
     const user = userEvent.setup();
     const { main } = await open();
-    await user.click(await within(main).findByRole("button", { name: "Collection options for Tasks" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const more = await within(main).findByRole("button", { name: "Collection options for Tasks" });
+    expect(more).toHaveAttribute("aria-haspopup", "dialog");
+    await user.click(more);
+    // A sheet, not a popover.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: "Tasks" });
+    expect(within(sheet).getAllByRole("button").map((b) => b.textContent)).toEqual(expect.arrayContaining(["Rename", "Color", "Duplicate", "Import CSV", "Move up", "Move down", "Delete"]));
+    await user.click(within(sheet).getByRole("button", { name: "Rename" }));
     expect(await screen.findByRole("dialog", { name: "Rename collection" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).not.toBeInTheDocument();
+  });
+
+  it("opens a folder's menu as a sheet too, with its links as links", async () => {
+    const user = userEvent.setup();
+    const { main } = await open();
+    await user.click(await within(main).findByRole("button", { name: "Folder options for Consulting" }));
+    const sheet = await screen.findByRole("dialog", { name: "Consulting" });
+    expect(within(sheet).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
+    expect(within(sheet).getByRole("link", { name: "Access" })).toHaveAttribute("href", "/workspace/wsp1/members");
+  });
+
+  it("opens the + beside Collections as a sheet, and Escape closes it", async () => {
+    const user = userEvent.setup();
+    const { main } = await open();
+    await user.click(within(main).getByRole("button", { name: "Add a collection or folder" }));
+    const sheet = await screen.findByRole("dialog", { name: "Add" });
+    expect(within(sheet).getAllByRole("button").map((b) => b.textContent)).toEqual(expect.arrayContaining(["New collection", "New collection from CSV", "New folder"]));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add" })).not.toBeInTheDocument());
+  });
+
+  it("follows the workspace's live stream (BE-9)", async () => {
+    const urls: string[] = [];
+    class Stream {
+      onopen = null;
+      onerror = null;
+      constructor(url: string) {
+        urls.push(url);
+      }
+      addEventListener() {}
+      close() {}
+    }
+    vi.stubGlobal("EventSource", Stream);
+    await open();
+    expect(urls).toContain("/api/workspaces/wsp1/events");
   });
 
   it("shows Automations only to creators", async () => {

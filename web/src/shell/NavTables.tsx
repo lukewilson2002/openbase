@@ -15,12 +15,11 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { BaseSummary, TableSummary } from "@/api/types";
 import { basePermissions } from "@/base/permissions";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { Icon } from "@/components/ui/icon";
 import { NavRow } from "@/components/ui/nav-row";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { useNavDialog } from "./NavDialogs";
+import { MenuItem } from "./menuItems";
 import { MenuGroups, RowMenu, countSlotClass, rowEndClass } from "./NavRowMenu";
 import { MoveItems, SortableGroup, SortableRow, useRowMenu } from "./sortable";
 import { useReorder } from "./useReorder";
@@ -94,38 +93,38 @@ function CollectionRow({ base, table: t, active }: { base: BaseSummary; table: T
             </Link>
           </NavRow>
           {(canManage || canImport) && (
-            <RowMenu label={`Collection options for ${t.name}`} menu={menu}>
+            <RowMenu label={`Collection options for ${t.name}`} title={t.name} menu={menu}>
               <MenuGroups
                 groups={[
                   [
                     canManage && (
-                      <DropdownMenuItem key="rename" onSelect={() => openDialog({ kind: "rename-collection", baseId: base.id, table: t })}>
-                        <Icon icon={Pencil} /> Rename
-                      </DropdownMenuItem>
+                      <MenuItem key="rename" onSelect={() => openDialog({ kind: "rename-collection", baseId: base.id, table: t })} icon={Pencil}>
+                        Rename
+                      </MenuItem>
                     ),
                     canManage && (
-                      <DropdownMenuItem key="color" onSelect={() => openDialog({ kind: "collection-color", baseId: base.id, table: t })}>
-                        <Icon icon={Palette} /> Color
-                      </DropdownMenuItem>
+                      <MenuItem key="color" onSelect={() => openDialog({ kind: "collection-color", baseId: base.id, table: t })} icon={Palette}>
+                        Color
+                      </MenuItem>
                     ),
                     canManage && (
-                      <DropdownMenuItem key="duplicate" onSelect={() => duplicate.mutate()}>
-                        <Icon icon={Copy} /> Duplicate
-                      </DropdownMenuItem>
+                      <MenuItem key="duplicate" onSelect={() => duplicate.mutate()} icon={Copy}>
+                        Duplicate
+                      </MenuItem>
                     ),
                     canImport && (
-                      <DropdownMenuItem key="import" onSelect={() => openDialog({ kind: "import-csv", baseId: base.id, table: t })}>
-                        <Icon icon={FileUp} /> Import CSV
-                      </DropdownMenuItem>
+                      <MenuItem key="import" onSelect={() => openDialog({ kind: "import-csv", baseId: base.id, table: t })} icon={FileUp}>
+                        Import CSV
+                      </MenuItem>
                     ),
                     canManage && <MoveItems key="move" separator="before" />,
                   ],
                   [
                     canManage && (
                       // The server keeps at least one collection in a folder.
-                      <DropdownMenuItem key="delete" danger disabled={base.tables.length <= 1} onSelect={() => openDialog({ kind: "delete-collection", baseId: base.id, table: t })}>
-                        <Icon icon={Trash2} /> Delete
-                      </DropdownMenuItem>
+                      <MenuItem key="delete" danger disabled={base.tables.length <= 1} onSelect={() => openDialog({ kind: "delete-collection", baseId: base.id, table: t })} icon={Trash2}>
+                        Delete
+                      </MenuItem>
                     ),
                   ],
                 ]}

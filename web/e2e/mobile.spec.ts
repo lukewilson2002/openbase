@@ -9,8 +9,7 @@ import { expect, skipIntro, test } from "./fixtures";
  * buttons, and the workspace switcher and profile menu as sheets; the Collections tab holds what the sidebar
  * holds. Every screen must fit without horizontal scrolling (a page wider than the screen makes the phone zoom it
  * out), and every focusable text field must be at least 16px, or iOS Safari zooms the page in when it is tapped.
- * The icon picker opens as a bottom sheet inside the screen and closes on a tap outside. Signs up its own
- * users. Runs only with OPENBASE_E2E=1.
+ * The sidebar's row menus are sheets here too. Signs up its own users. Runs only with OPENBASE_E2E=1.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 
@@ -186,40 +185,6 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
   await expectFits(page, "record panel");
 });
 
-test("the icon picker opens as a sheet that fits the screen, without the keyboard, and a tap outside closes only it", async ({ page }) => {
-  const email = `e2e-mobile-icon-${randomBytes(4).toString("hex")}@example.com`;
-  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
-  expect(signup.ok(), await signup.text()).toBeTruthy();
-  await skipIntro(page.request);
-  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Kitchen" }, headers: CSRF })).json();
-
-  // The sidebar offers no icons (decision 3); the workspace's settings page still does until its own rebuild.
-  await page.goto(`/workspace/${ws.id}/settings`);
-  await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
-  await expectFits(page, "workspace settings");
-  const change = page.getByRole("button", { name: "Change icon…" });
-  await change.tap();
-
-  const sheet = page.getByRole("dialog", { name: "Workspace icon" });
-  await expect(sheet.getByTestId("icon-list")).toBeVisible();
-  const box = (await sheet.boundingBox())!;
-  const screen = page.viewportSize()!;
-  expect(box.y, "sheet top").toBeGreaterThanOrEqual(0);
-  expect(box.y + box.height, "sheet bottom").toBeLessThanOrEqual(screen.height + 0.5);
-  expect(box.width, "sheet width").toBeLessThanOrEqual(screen.width);
-  await expect(sheet.getByRole("searchbox", { name: "Search icons" })).not.toBeFocused();
-  await expectFits(page, "icon picker");
-
-  // Above the sheet is the backdrop.
-  await page.touchscreen.tap(screen.width / 2, box.y / 2);
-  await expect(sheet).toBeHidden();
-
-  await change.tap();
-  await sheet.getByRole("button", { name: "Truck" }).tap();
-  await expect(sheet).toBeHidden();
-  await expect.poll(async () => ((await (await page.request.get("/api/workspaces")).json()) as { id: string; icon: string | null }[]).find((w) => w.id === ws.id)?.icon).toBe("truck");
-});
-
 /** A one-finger swipe from (x, y) by dy, sent as real touch events (Playwright only has taps). */
 async function swipe(page: Page, x: number, y: number, dy: number): Promise<void> {
   const cdp = await page.context().newCDPSession(page);
@@ -232,7 +197,7 @@ async function swipe(page: Page, x: number, y: number, dy: number): Promise<void
   await cdp.detach();
 }
 
-test("a swipe that starts on a row's button scrolls the Collections tab and opens nothing; a tap opens its menu", async ({ page }) => {
+test("a swipe that starts on a row's button scrolls the Collections tab and opens nothing; a tap opens its sheet", async ({ page }) => {
   const email = `e2e-mobile-swipe-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -257,10 +222,11 @@ test("a swipe that starts on a row's button scrolls the Collections tab and open
   const before = await scrollY();
   await swipe(page, box.x + box.width / 2, box.y + box.height / 2, -240);
   await expect.poll(scrollY, "the swipe scrolled the screen").toBeGreaterThan(before);
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Project 05" })).toHaveCount(0);
 
-  // A tap on the same button opens its menu.
+  // A tap on the same button opens its menu, as a sheet named for the folder (PH-3).
   await more.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await more.tap();
-  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Rename" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Project 05" }).getByRole("button", { name: "Rename" })).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveCount(0);
 });

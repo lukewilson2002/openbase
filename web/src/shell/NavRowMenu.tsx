@@ -1,13 +1,14 @@
 /**
- * The pieces every sidebar row shares for its "…" menu: the button, the menu laid out in groups, and a menu
- * item that is a link. A right-click on the row opens the same menu (`useRowMenu`).
+ * The pieces every sidebar row shares for its "…" menu: the button and the menu laid out in groups (the items
+ * themselves are in `menuItems.tsx`). A right-click on the row opens the same menu (`useRowMenu`).
  */
-import { Fragment, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Fragment, useContext, type ReactNode } from "react";
 import { Ellipsis } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
+import { SheetMenuGroup } from "@/components/ui/sheet-menu";
+import { ActionMenu, SheetModeContext } from "./menuItems";
 import { NO_DRAG, useRowMenu } from "./sortable";
 
 export type RowMenuState = ReturnType<typeof useRowMenu>["menu"];
@@ -27,42 +28,39 @@ export const rowEndClass = "max-md:pr-11 pointer-coarse:pr-11";
 export const countSlotClass =
   "inline-block min-w-7 text-right md:pointer-fine:group-hover/item:invisible md:pointer-fine:group-focus-within/item:invisible md:pointer-fine:group-has-[[data-state=open]]/item:invisible";
 
-/** A "…" button with its menu, in the place every row keeps it; `menu` also opens it on a right-click. */
-export function RowMenu({ label, menu, children }: { label: string; menu: RowMenuState; children: ReactNode }) {
+/** A "…" button with its menu, in the place every row keeps it; `menu` also opens it on a right-click. `title` names the sheet on a phone: the row's name. */
+export function RowMenu({ label, title, menu, children }: { label: string; title: string; menu: RowMenuState; children: ReactNode }) {
   return (
-    <DropdownMenu {...menu}>
-      <DropdownMenuTrigger asChild>
+    <ActionMenu
+      title={title}
+      state={menu}
+      trigger={
         <IconButton label={label} size="sm" noTooltip className={rowActionClass} {...NO_DRAG}>
           <Icon icon={Ellipsis} />
         </IconButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">{children}</DropdownMenuContent>
-    </DropdownMenu>
+      }
+    >
+      {children}
+    </ActionMenu>
   );
 }
 
-/** Groups of menu items with a separator between the groups that have something in them. */
+/** Groups of items with a rule (a dropdown) or a sheet section (a phone) between the groups that have something in them. */
 export function MenuGroups({ groups }: { groups: ReactNode[][] }) {
+  const sheet = useContext(SheetModeContext);
   const shown = groups.map((g) => g.filter(Boolean)).filter((g) => g.length > 0);
   return (
     <>
-      {shown.map((items, i) => (
-        <Fragment key={i}>
-          {i > 0 && <DropdownMenuSeparator />}
-          {items}
-        </Fragment>
-      ))}
+      {shown.map((items, i) =>
+        sheet ? (
+          <SheetMenuGroup key={i}>{items}</SheetMenuGroup>
+        ) : (
+          <Fragment key={i}>
+            {i > 0 && <DropdownMenuSeparator />}
+            {items}
+          </Fragment>
+        ),
+      )}
     </>
-  );
-}
-
-/** A menu item that goes to a page. */
-export function LinkItem({ to, icon, children }: { to: string; icon: ReactNode; children: ReactNode }) {
-  return (
-    <DropdownMenuItem asChild>
-      <Link to={to}>
-        {icon} {children}
-      </Link>
-    </DropdownMenuItem>
   );
 }
