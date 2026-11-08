@@ -39,4 +39,12 @@ describe("HelpTip", () => {
     await new Promise((r) => setTimeout(r, 250));
     expect(screen.getByText(words)).toBeInTheDocument();
   });
+
+  it("keeps 12 px of room around its words (the menu surface under a popover pads 6)", async () => {
+    render(<HelpTip label="About the Inbox">{words}</HelpTip>);
+    await userEvent.click(screen.getByRole("button", { name: "About the Inbox" }));
+    const panel = (await screen.findByText(words)).closest("[data-state]") as HTMLElement;
+    expect(panel).toHaveClass("p-3");
+    expect(panel).not.toHaveClass("p-1.5");
+  });
 });

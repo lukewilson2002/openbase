@@ -59,7 +59,7 @@ export function HelpTip({ label, children, className }: { label: string; childre
         onPointerLeave={hover(false)}
         // A hover is not a reason to move the focus; a click or a tap is.
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-auto max-w-[min(20rem,calc(100vw-1rem))] text-[0.8125rem] leading-relaxed text-muted"
+        className="w-auto max-w-[min(20rem,calc(100vw-1rem))] p-3 text-[0.8125rem] leading-relaxed text-muted"
       >
         {children}
       </PopoverContent>
