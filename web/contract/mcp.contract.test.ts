@@ -5,43 +5,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { api } from "../src/api/endpoints";
+import { recordsApi } from "../src/api/records";
+import { call, fails as rpcError, rpc } from "./mcpClient";
 import { adminProfile, rand, seeded, type Profile } from "./support";
 import { parse, parseList } from "./typecheck";
-
-interface Rpc {
-  status: number;
-  headers: Headers;
-  body: any;
-}
-
-let nextId = 1;
-
-async function rpc(token: string | null, method: string, params: Record<string, unknown> = {}, extraHeaders: Record<string, string> = {}): Promise<Rpc> {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    accept: "application/json, text/event-stream",
-    "mcp-protocol-version": "2025-06-18",
-    ...extraHeaders,
-  };
-  if (token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(`${seeded.baseUrl}/mcp`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }),
-  });
-  const text = await res.text();
-  return { status: res.status, headers: res.headers, body: text ? JSON.parse(text) : null };
-}
-
-/** A tool call that must succeed; returns its structured result. */
-async function call(token: string, name: string, args: Record<string, unknown> = {}): Promise<any> {
-  const res = await rpc(token, "tools/call", { name, arguments: args });
-  expect(res.status).toBe(200);
-  expect(res.body.error).toBeUndefined();
-  const result = res.body.result;
-  expect(result.isError, `${name}: ${result.content?.[0]?.text}`).toBe(false);
-  return result.structuredContent;
-}
 
 describe("MCP endpoint", () => {
   let admin: Profile;
@@ -175,6 +142,80 @@ describe("MCP endpoint", () => {
     const found = await call(token, "list_icons", { query: "shopping cart", limit: 3 });
     expect(found.icons[0]).toBe("shopping-cart");
     expect(await seen()).toEqual({ workspace: "users", base: "store", table: null });
+  });
+
+  it("sets the collection settings, the page and Home through tools that the web client then sees", async () => {
+    const made = await call(token, "create_workspace", { name: `Collections ${rand()}` });
+    const wsId = made.workspace_id as string;
+    const top = made.top_level_project as string;
+    const created = await call(token, "create_table", { project_id: top, name: "Jobs", color: "teal" });
+    expect(created.table).toMatchObject({ color: "teal", page_field: "Page", record_count: 0 });
+    await call(token, "create_field", { project_id: top, table: "Jobs", name: "Due", type: "date", options: {} });
+    await call(token, "create_field", { project_id: top, table: "Jobs", name: "Shipped", type: "checkbox", options: {} });
+    await call(token, "create_field", { project_id: top, table: "Jobs", name: "Notes", type: "rich_text", options: {} });
+
+    // Settings by field name; the REST schema carries the ids.
+    const settings = await call(token, "update_table_settings", { project_id: top, table: "Jobs", color: "orange", description: "Work to do", record_noun: "job", home_date_field: "Due", done_field: "Shipped" });
+    expect(settings.table).toMatchObject({ color: "orange", record_noun: "job", home_date_field: "Due", done_field: "Shipped" });
+    const tableOf = async () => parse("BaseSchema", await admin.run(() => api.bases.get(top))).tables.find((t) => t.name === "Jobs")!;
+    const jobs = await tableOf();
+    const fieldId = (n: string) => jobs.fields.find((f) => f.name === n)!.id;
+    expect(jobs).toMatchObject({ color: "orange", description: "Work to do", record_noun: "job", home_date_field_id: fieldId("Due"), done_field_id: fieldId("Shipped") });
+    expect(await rpcError(token, "update_table_settings", { project_id: top, table: "Jobs", home_date_field: "Notes" })).toContain("Home date");
+    expect(await rpcError(token, "update_table_settings", { project_id: top, table: "Jobs", done_field: "Due" })).toContain("checkbox");
+
+    // Home: a record dated today (in the caller's zone) shows up, through the tool and through REST.
+    const today = parse("HomeResponse", await admin.run(() => api.workspaces.home(wsId))).today;
+    await call(token, "create_records", { project_id: top, table: "Jobs", records: [{ fields: { Name: "Ship it", Due: today } }, { fields: { Name: "Done already", Due: today, Shipped: true } }] });
+    const home = await call(token, "get_home", { workspace: wsId });
+    expect(home).toMatchObject({ workspace_id: wsId, truncated: false });
+    expect(home.due.map((d: { title: string }) => d.title)).toEqual(["Ship it"]);
+    expect(home.due[0]).toMatchObject({ table: "Jobs", project_id: top, overdue: false, can_edit: true });
+    const viaRest = parse("HomeResponse", await admin.run(() => api.workspaces.home(wsId)));
+    expect(viaRest.due.map((d) => d.record_id)).toEqual(home.due.map((d: { record_id: string }) => d.record_id));
+
+    // The page: pick another rich text field, clear it, create "Page" again, and write a page into it.
+    expect((await call(token, "set_page_field", { project_id: top, table: "Jobs", field: "Notes" })).page_field).toBe("Notes");
+    expect((await tableOf()).body_field_id).toBe(fieldId("Notes"));
+    expect((await call(token, "set_page_field", { project_id: top, table: "Jobs", clear: true })).page_field).toBeNull();
+    expect((await tableOf()).body_field_id ?? null).toBeNull();
+    const recreated = await call(token, "set_page_field", { project_id: top, table: "Jobs", create: true });
+    expect(recreated.page_field).toMatch(/^Page/);
+    expect(await rpcError(token, "set_page_field", { project_id: top, table: "Jobs" })).toContain("exactly one");
+    await call(token, "update_records", { project_id: top, table: "Jobs", records: [{ id: home.due[0].record_id, fields: { [recreated.page_field]: "# Notes for the job" } }] });
+    const rec = parse("TableRecord", await admin.run(() => recordsApi.get(jobs.id, home.due[0].record_id)));
+    expect(rec.values[(await tableOf()).body_field_id!]).toBe("# Notes for the job");
+
+    // The REST endpoints behind them are reachable through api_request, except the event stream.
+    const put = await call(token, "api_request", { method: "PUT", path: `/api/tables/${jobs.id}/records/${home.due[0].record_id}/page`, body: { text: "From api_request" } });
+    expect(put.status).toBe(200);
+    expect(put.body).toMatchObject({ created: false });
+    const restHome = await call(token, "api_request", { method: "GET", path: `/api/workspaces/${wsId}/home` });
+    expect(restHome.status).toBe(200);
+    const stream = await rpc(token, "tools/call", { name: "api_request", arguments: { method: "GET", path: `/api/workspaces/${wsId}/events` } });
+    expect(stream.body.result.isError).toBe(true);
+    expect(stream.body.result.content[0].text).toContain("not available through MCP");
+    const reference = await call(token, "api_reference", { area: "system" });
+    expect(JSON.stringify(reference)).toContain(`/api/workspaces/{id}/events`);
+
+    // The top level moves to another folder and the listing follows.
+    const side = (await call(token, "create_project", { workspace_id: wsId, name: "Side" })).base.id as string;
+    expect((await call(token, "set_top_level_project", { workspace_id: wsId, project_id: side })).top_level_project).toBe(side);
+    const entry = (await call(token, "list_projects", {})).workspaces.find((w: { id: string }) => w.id === wsId);
+    expect(entry.top_level_project).toBe(side);
+    expect(entry.bases.filter((b: { is_top_level: boolean }) => b.is_top_level).map((b: { id: string }) => b.id)).toEqual([side]);
+    const listed = parseList("WorkspaceSummary", await admin.run(api.workspaces.list)).find((w) => w.id === wsId)!;
+    expect(listed.root_base_id).toBe(side);
+  });
+
+  it("says in its descriptions what the app does with the new settings", async () => {
+    const tools: { name: string; description: string }[] = (await rpc(token, "tools/list")).body.result.tools;
+    const text = (n: string) => tools.find((t) => t.name === n)!.description;
+    // Personal views need the editor role, as the store enforces; a viewer cannot make them.
+    expect(text("create_view")).toContain("personal views (personal=true) need the editor role");
+    for (const n of ["get_home", "set_page_field", "update_table_settings", "set_top_level_project"]) expect(tools.map((t) => t.name)).toContain(n);
+    expect(text("list_icons")).toContain("no longer displays");
+    for (const n of ["delete_share_link", "delete_automation", "delete_inbox_item", "remove_member", "revoke_invite"]) expect(text(n), n).toContain("can't be undone");
   });
 
   it("reads the email settings and refuses to change the password through a token", async () => {
