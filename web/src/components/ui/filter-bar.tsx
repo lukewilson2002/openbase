@@ -279,6 +279,8 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
         <PopoverContent
           align="start"
           sideOffset={6}
+          // The combobox's popup is the listbox inside; a nameless dialog around it would be announced as one too.
+          role="presentation"
           // Focus stays in the field: the popover neither takes it on opening nor gives it back on closing.
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}

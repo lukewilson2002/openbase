@@ -485,6 +485,8 @@ function CalendarInner(props: ViewProps) {
               fixedWeekCount={false}
               views={VIEW_OPTIONS}
               dayMaxEvents
+              // FullCalendar gives the "+N more" link aria-expanded and no role, which a link does not allow.
+              moreLinkDidMount={(arg) => arg.el.setAttribute("role", "button")}
               scrollTime="08:00:00"
               events={events}
               eventOrder={sorted ? SORTED_EVENT_ORDER : EVENT_ORDER}

@@ -19,7 +19,7 @@ import { AddRecordProvider } from "@/views/common/addRecord";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
 import { CollectionHeader } from "./CollectionHeader";
-import { CollectionTabs } from "./CollectionTabs";
+import { CollectionTabs, VIEW_PANEL_ID, viewTabId } from "./CollectionTabs";
 import { EmptyBase } from "./EmptyBase";
 import { basePermissions } from "./permissions";
 
@@ -137,7 +137,9 @@ export function BaseShell({ section }: { section?: "automations" }) {
               onSettings={(t) => setDialog({ kind: "collection-settings", table: t })}
             />
             {table && view && <CollectionTabs schema={schema} table={table} view={view} />}
-            <div className="relative min-h-0 flex-1">{page}</div>
+            <div className="relative min-h-0 flex-1" {...(table && view ? { id: VIEW_PANEL_ID, role: "tabpanel", "aria-labelledby": viewTabId(view.id) } : {})}>
+              {page}
+            </div>
             <BaseDialogs schema={schema} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
           </AppShell>
         </AddRecordProvider>

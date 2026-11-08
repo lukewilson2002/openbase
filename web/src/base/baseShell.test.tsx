@@ -87,6 +87,16 @@ describe("base shell on a desktop", () => {
     expect(tab("Board")).toHaveAttribute("aria-selected", "false");
   });
 
+  it("makes the page under the tabs their one panel, so the open tab points at an element that exists", async () => {
+    openBase("owner");
+    await screen.findByText("Grid view coming soon");
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toHaveAttribute("aria-labelledby", tab("All tasks").id);
+    expect(tab("All tasks")).toHaveAttribute("aria-controls", panel.id);
+    expect(tab("Board")).not.toHaveAttribute("aria-controls");
+    expect(within(panel).getByText("Grid view coming soon")).toBeInTheDocument();
+  });
+
   it("puts the collection in the app shell: no top bar, its own header inside main, then Home and Notifications above the collections in the sidebar", async () => {
     openBase("viewer");
     await screen.findByText("Grid view coming soon");

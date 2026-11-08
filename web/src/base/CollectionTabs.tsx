@@ -42,6 +42,13 @@ const TAB_GAP = 4;
 /** After a press held on a touch screen opened a menu, the touch's own click or press is not a choice of that tab. */
 const HOLD_GUARD_MS = 700;
 
+/**
+ * The view's body is the one panel of the tab strip: every view is its own address and the page under the tabs
+ * shows the open one, so there is a single panel and the selected tab points at it (`aria-controls`).
+ */
+export const VIEW_PANEL_ID = "collection-view-panel";
+export const viewTabId = (viewId: string): string => `view-tab-${viewId}`;
+
 const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 });
 
 const tabAnnouncements: Announcements = {
@@ -86,12 +93,14 @@ function tabIcon(tab: ViewTab) {
 
 interface TabProps {
   tab: ViewTab;
+  /** The open view's tab: the one that controls the panel. */
+  active: boolean;
   /** Whether the person may drag it (and there is somewhere to drag it to). */
   draggable: boolean;
   onMenu: ((anchor: MenuAnchor) => void) | null;
 }
 
-function Tab({ tab, draggable, onMenu }: TabProps) {
+function Tab({ tab, active, draggable, onMenu }: TabProps) {
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: tab.view.id, disabled: !draggable });
   const style: CSSProperties = { transform: CSS.Translate.toString(transform), transition };
   const onContextMenu = (e: MouseEvent<HTMLElement>) => {
@@ -105,6 +114,9 @@ function Tab({ tab, draggable, onMenu }: TabProps) {
     <TabsTrigger
       ref={setNodeRef}
       value={tab.view.id}
+      id={viewTabId(tab.view.id)}
+      // Radix points every tab at a panel of its own, which this strip does not have.
+      aria-controls={active ? VIEW_PANEL_ID : undefined}
       icon={tabIcon(tab)}
       style={style}
       data-sortable={draggable ? "" : undefined}
@@ -249,6 +261,7 @@ export function CollectionTabs({ schema, table, view }: CollectionTabsProps) {
                 <Tab
                   key={tab.view.id}
                   tab={tab}
+                  active={tab.view.id === view.id}
                   draggable={canDrag(tab.view)}
                   onMenu={hasMenu(tab.view) ? (anchor) => setMenu({ view: tab.view, anchor }) : null}
                 />
