@@ -172,7 +172,8 @@ The suite must not depend on how fast the machine is (it passes on a laptop and 
 ```
 src/api/        client.ts (fetch wrapper), endpoints.ts (typed), events.ts (SSE), keys.ts, types/ (generated)
 src/auth/       current-user hooks and route guards
-src/base/       project screen in the app shell: the collection header, menu (tables, views, actions), dialogs, empty folder, permission rules
+src/base/       folder screen in the app shell: the collection header, view dialogs, empty folder, permission rules
+src/shell/      the app frame and its sidebar (see "The sidebar"), screen headers, search, the sidebar's dialogs
 src/components/ design-system primitives (ui/) and shared dialogs
 src/lib/webauthn.ts  the WebAuthn browser API <-> the server's JSON (base64url conversion, support checks, errors); `src/auth/usePasskeyLogin.ts` is the login page's passkey button and background autofill request
 src/pages/      setup, login, signup, invite, password reset, home, account/ (SecuritySection: password, PasskeysSection, two-factor), admin/, oauth/ (the consent page an app's "connect" request lands on, `/oauth/consent?request=<id>`; account/AssistantsSection (the AI assistants tab: one section per assistant, with account/ConnectedAppsSection below it) and admin/ConnectedAppsTab list and revoke connected apps)
@@ -183,7 +184,7 @@ src/automations/ the automations page (list, editor, test panel, run history); i
 
 ### App frame and routes (NAV-5)
 
-There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked menu (a drawer on phone) beside `main`. Each screen draws its own
+There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked sidebar (a drawer on phone) beside `main`. Each screen draws its own
 header as the first thing inside `main`: `shell/ScreenHeader.tsx` (the menu toggle, an optional `h1`, actions, the search button; the workspace
 screens get it from `HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (path, the collection's `h1` with its color mark, presence faces, Share).
 `shell/menuContext.tsx` is how a header reaches the menu's state. A screen that scrolls inside itself passes `fill` to `AppShell` and lays out
@@ -195,6 +196,30 @@ the phone's Collections tab and redirects to Home on a desktop; `/notifications`
 `/workspace/:id/automations` lists automations by folder and links to the unchanged editor route. `lib/topLevel.ts` splits a workspace's
 projects into the top level and the folders the person can open (NAV-10: `GET /api/workspaces` lists only openable projects and drops
 `root_base_id` when the top level is not one of them).
+
+### The sidebar (NAV-1 to NAV-4, NAV-6, NAV-10)
+
+`shell/SidebarContent.tsx` holds what the sidebar holds, top to bottom: `WorkspaceSwitcher` (the open workspace's 26 px mark, its name and "Switch
+workspace"; its menu starts with the OpenBase mark, lists the workspaces with a check on the open one, then New workspace and the open workspace's
+Rename, Color, Members, Invite people, Settings, History, Trash and Delete), the "Search everything" row (opens the header's search box; the command
+palette replaces it in NAV-9), Home, Notifications (a popover beside the docked sidebar, a swap inside the phone drawer, a link on the Collections
+tab) and Automations (creators), then `NavTree` (the top level's collections, then the folders, each folded open to its collections: `NavTables`
+draws a folder's rows), then History, Trash (both filtered to the workspace), Workspace settings (owners) and `ProfileMenu`. `Sidebar.tsx` has only
+the frames (`DockedSidebar`, `SidebarDrawer`) and `SidebarLayout`. One component serves the docked sidebar, the drawer and the phone's Collections
+tab (`mode`).
+
+The tree is drawn from `GET /api/workspaces` alone: a folder carries its collections' summaries and `record_count`, so nothing is fetched when a
+folder unfolds. `SidebarContent` asks for the list again on window focus and every 60 s (BE-9); `useBaseEvents` also refreshes it, at most every
+3 s, when other people add or delete records in the open folder, and on a schema change. `lib/topLevel.ts` decides what is the top level and what
+a folder (NAV-10). Rows are `NavRow`s with a `ColorMark`; a row's "…" menu (and a right-click) comes from `NavRowMenu.tsx` (`RowMenu`, `MenuGroups`).
+Menus hold only what the person's role allows, so a viewer's collection row has no "…" at all. Colors go through `ColorDialog` (the swatch picker);
+no menu offers an icon (decision 3), though the icon columns stay in the API.
+
+Folders fold on a click or Enter (`useOpenState("ob-folders-open")`: open unless folded by hand, and a folded folder unfolds when the open
+collection turns out to be inside it). Drag a collection or folder to reorder it (`sortable.tsx`, `useReorder.ts`), or use Move up and Move down;
+workspaces are dragged inside the switcher's menu, or moved with Alt+Up and Alt+Down on the focused one. Width (200 to 400 px, 256 by default) and
+the collapsed state are per device (`sidebarPrefs.ts`); Ctrl+\ (Cmd+\) folds it. The dialogs the rows open are `NavDialogs.tsx`, which sits
+around the page so they survive the drawer closing; a collection's CSV import loads the folder's schema first, because the summaries carry no properties.
 
 ### Plugging in a view
 

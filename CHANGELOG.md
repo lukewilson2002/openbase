@@ -138,6 +138,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Changed
 
+- **The sidebar is rebuilt around one workspace.** It starts with the workspace switcher (the
+  workspace's color, its name and "Switch workspace"; its menu begins with the OpenBase mark,
+  lists every workspace and ends with the workspace's own actions), "Search everything", Home,
+  Notifications and Automations, then the collections (the top level's, with their record counts)
+  and the folders, and ends with History, Trash, Workspace settings and your account. Clicking a
+  folder folds it, kept on each device; a collection opens in the view you used last. Collections,
+  folders and workspaces show a color mark, never an icon or a letter, and their menus offer a
+  color instead of an icon. A "+" beside Collections adds a collection, one from CSV or a folder.
+  Folder menus gain "Use as top level"; collection menus no longer hold Edit schema or Add view
+  (views are made from the view list). Ctrl+\ folds the sidebar, and the Inbox is no longer in it.
 - **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
   the same person fold into one history entry while it is under ten minutes old: it keeps the
   first old value, the latest new value and the time of the latest edit. Other fields, other
