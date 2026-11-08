@@ -231,6 +231,22 @@ describe("LinkChip", () => {
     expect(screen.getByRole("link", { name: "Buy milk" })).toHaveAttribute("href", "/base/b/t/r/rec1");
     expect(screen.queryByRole("button")).toBeNull();
   });
+  it("runs onOpen on a plain click of its link, so the router navigates, and leaves the other ways of using a link to the browser", async () => {
+    const onOpen = vi.fn();
+    const onCard = vi.fn();
+    render(
+      <div onClick={onCard}>
+        <LinkChip name="Buy milk" href="/base/b/t/r/rec1" onOpen={onOpen} />
+      </div>,
+    );
+    const link = screen.getByRole("link", { name: "Buy milk" });
+    await userEvent.click(link);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    // A chip on a card is not also a click on the card.
+    expect(onCard).not.toHaveBeenCalled();
+    fireEvent.click(link, { ctrlKey: true });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
   it("shows the collection's 8 px mark beside the name, not in it", () => {
     const { container } = render(<LinkChip name="Buy milk" hue="orange" onOpen={() => {}} />);
     expect(container.querySelector(".ob-mark-8.ob-hue-orange")).toHaveAttribute("aria-hidden", "true");

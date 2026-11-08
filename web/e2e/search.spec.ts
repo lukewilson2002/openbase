@@ -92,8 +92,11 @@ test("runs actions from the keyboard: a new record, a new collection, Home and s
   await box.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/r/rec`));
   await expect(dialog).toHaveCount(0);
-  // Its page opens; leaving it empty takes the record back, and Escape returns to the collection before the next step.
+  // Its page opens with the title being typed in; leaving it empty takes the record back. The first Escape ends the
+  // title's edit and the second returns to the collection, before the next step.
   await expect(page.getByRole("main", { name: "Record" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Name" })).toBeFocused();
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("main", { name: "Record" })).toHaveCount(0);
 

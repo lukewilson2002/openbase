@@ -305,7 +305,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Charlie" })).toBeVisible();
     const comments = await openRecordPanel(page, "Comments");
     await comments.getByRole("textbox", { name: "Write a comment" }).fill("Ship it");
-    await comments.getByRole("button", { name: "Comment" }).click();
+    await comments.getByRole("button", { name: "Comment", exact: true }).click();
     await expect(comments.getByText("Ship it")).toBeVisible();
     const rec = (await records())[0]!;
     const saved = await api<{ body: string; user_name: string }[]>(page, `/api/records/${rec.id}/comments`);

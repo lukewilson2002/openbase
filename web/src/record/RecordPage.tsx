@@ -277,7 +277,7 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
               <SaveStatus state={save.state} />
             </div>
           )}
-          <div className="mx-auto w-full max-w-record px-4 py-5 md:px-8 md:py-8">{body}</div>
+          <div className="mx-auto w-full max-w-record px-4 py-5 max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] md:px-8 md:py-8">{body}</div>
         </div>
         {desktop && (
           <SidePanel open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} id={panelId}>

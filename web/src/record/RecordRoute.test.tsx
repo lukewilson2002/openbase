@@ -124,6 +124,27 @@ describe("leaving a record's page", () => {
   });
 });
 
+describe("a link to a record followed while signed out", () => {
+  it("goes through sign-in and comes back to the page", async () => {
+    const user = userEvent.setup();
+    let signedIn = false;
+    open("/base/app1/tbl1/viw1/r/rec1", {
+      "GET /api/auth/me": () => (signedIn ? USER : { status: 401, json: { error: { code: "unauthorized", message: "no session" } } }),
+      "POST /api/auth/login": () => {
+        signedIn = true;
+        return { user: USER, two_factor_required: false };
+      },
+    });
+    expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+    expect(where()).toHaveTextContent(`/login?next=${encodeURIComponent("/base/app1/tbl1/viw1/r/rec1")}`);
+    await user.type(screen.getByLabelText("Email"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "correct horse");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Launch" })).toBeInTheDocument();
+    expect(where()).toHaveTextContent("/base/app1/tbl1/viw1/r/rec1");
+  });
+});
+
 describe("old record links", () => {
   it("send ?record= to the page, keeping the view", async () => {
     open("/base/app1/tbl1/viw1?record=rec1");

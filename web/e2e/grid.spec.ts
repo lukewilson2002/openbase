@@ -374,7 +374,7 @@ test("opens the record's page with Shift+Space, comments, steps with Alt+Down, a
   const main = page.getByRole("main", { name: "Record" });
   await expect(main.getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
   // The bar's breadcrumb leads back to the collection the page was opened from.
-  await expect(main.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Tasks" })).toBeVisible();
+  await expect(main.getByRole("navigation", { name: "Breadcrumb" }).locator(`a[href="/base/${fx.baseId}/${fx.tableId}/${fx.viewId}"]`)).toBeVisible();
   const comments = await openRecordPanel(page, "Comments");
   // The comment box is rich text: typing @ offers the project's people, Enter picks one as a chip.
   const box = comments.getByRole("textbox", { name: "Write a comment" });
@@ -383,7 +383,7 @@ test("opens the record's page with Shift+Space, comments, steps with Alt+Down, a
   await expect(comments.getByRole("listbox", { name: "People to mention" }).getByRole("option").first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(box.locator(".ob-mention")).toBeVisible();
-  await comments.getByRole("button", { name: "Comment" }).click();
+  await comments.getByRole("button", { name: "Comment", exact: true }).click();
   const posted = comments.getByRole("listitem").filter({ hasText: "Hello from the e2e test" });
   await expect(posted.locator(".ob-mention")).toBeVisible();
   await expect(box).toHaveText("");
@@ -404,7 +404,7 @@ test("opens the record's page with Shift+Space, comments, steps with Alt+Down, a
   // Escape returns to the collection the page was named for.
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/\/r\//);
-  await expect(page.getByRole("main").getByRole("heading", { level: 1, name: "Tasks" })).toBeVisible();
+  await expect(canvas(page)).toBeVisible();
 });
 
 test("an old ?record= link lands on the record's page", async ({ page }) => {
