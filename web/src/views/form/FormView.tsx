@@ -6,7 +6,7 @@
  *
  * The toolbar is the form's own: Build | Fill in form, More (open or copy the public link), View options
  * (the layout tiles and Download CSV; the form builder is the form's own settings) and Share form. Filter,
- * sort and "Add" have nothing to do here.
+ * sort and "Add" have nothing to do here. The draft's changes bar sits under it, for a layout switched to Form.
  */
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import { canShareView } from "@/components/share/shareView";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
+import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewOptions } from "@/components/viewbar/ViewOptions";
 import { atLeast } from "@/lib/roles";
 import { cleanForm, pruneForm } from "@/lib/forms/formConfig";
@@ -155,6 +156,8 @@ export default function FormView(props: ViewProps) {
             )}
           </div>
         </div>
+        {/* Switching another view to the Form layout is a draft: Reset takes it back and Save as view makes the form a view. */}
+        <DraftBar schema={setup.schema} table={table} view={view} cfg={cfg} search={setup.debouncedSearch} timeZone={setup.timeZone} />
         {mode === "build" ? (
           <FormBuilder setup={setup} onChange={setForm} linkLocked={linkLocked} onShowPublic={showPublic} />
         ) : (

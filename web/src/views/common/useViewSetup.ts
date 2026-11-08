@@ -12,11 +12,12 @@ import type { Collaborator, TableRecord, TransientConfig, ViewConfig } from "@/a
 import { useMe } from "@/auth/useAuth";
 import type { EditorEnv } from "@/components/record/editors/env";
 import { useDebounced } from "@/components/record/editors/useDebounced";
-import { queryRelevantKey, setFilter } from "@/components/viewbar/config";
+import { queryRelevantKey } from "@/components/viewbar/config";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
 import { LINKED_PARAM } from "./RecordPanel";
 import { isFiltered } from "./filtered";
+import { useResetFilters } from "./useResetFilters";
 import { personColors } from "@/lib/colors";
 import { linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
@@ -50,7 +51,7 @@ export interface ViewSetup extends ViewProps {
   debouncedSearch: string;
   /** The filter or the search narrows the view: with no records it is "filtered to nothing", not an empty collection (COL-9). */
   filtered: boolean;
-  /** Clears the draft's filter and the search ("Reset" in the empty state); the saved view is untouched. */
+  /** "Reset" in the filtered-empty state: drops the draft's filter and the search, back to the view as saved. */
   resetFilters(): void;
   writes: RecordWrites;
   /** Delete and duplicate for cards and rows (the confirmation for several is drawn by `ViewFrame`). */
@@ -98,11 +99,7 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const debouncedSearch = useDebounced(search.trim(), 250);
 
   const filtered = isFiltered(cfg.config, debouncedSearch);
-  const { update: updateConfig } = cfg;
-  const resetFilters = useCallback(() => {
-    updateConfig((c) => setFilter(c, null));
-    setSearch("");
-  }, [updateConfig]);
+  const resetFilters = useResetFilters(cfg, view, search, setSearch);
 
   const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
   const actions = useRecordActions({ writes, role, canEdit });

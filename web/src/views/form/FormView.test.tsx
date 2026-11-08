@@ -641,6 +641,19 @@ describe("View options on a form", () => {
     expect(within(panel).queryByRole("button", { name: "Open the form builder" })).not.toBeInTheDocument();
   });
 
+  it("shows the changes bar when another view is switched to the Form layout, so it can be reset or saved as a view (COL-5)", async () => {
+    const user = userEvent.setup();
+    setup("creator", viewWithConfig("viw1", "grid", {}));
+    await screen.findByRole("toolbar", { name: "Form toolbar" });
+    const panel = await openViewOptions(user);
+    await user.click(within(panel).getByRole("button", { name: "Form" }));
+    await user.keyboard("{Escape}");
+    expect(await screen.findByText(/These changes are only for now/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save as view" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save as view" })).not.toBeInTheDocument());
+  });
+
   it("has no Download CSV in More: it lives in View options", async () => {
     setup("creator");
     await screen.findByRole("heading", { name: "Form" });
