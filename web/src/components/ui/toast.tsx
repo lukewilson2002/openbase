@@ -114,7 +114,7 @@ export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
       className={cn(
-        "ob-rise-in pointer-events-auto flex w-full items-center gap-2 rounded-lg border bg-surface p-3 shadow-pop",
+        "ob-rise-in pointer-events-auto flex w-full data-[state=closed]:pointer-events-none items-center gap-2 rounded-lg border bg-surface p-3 shadow-pop",
         item.variant === "error" ? "border-danger" : "border-line",
       )}
     >
@@ -128,6 +128,9 @@ export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id
           key={a.label}
           type="button"
           onClick={() => {
+            // The toast stays mounted while it leaves; a second press in that time must not run the action again
+            // (an Undo that puts a form block back twice).
+            if (leaving) return;
             close();
             a.onClick();
           }}

@@ -249,6 +249,19 @@ describe("Sheet", () => {
       expect(onOpenChange).toHaveBeenLastCalledWith(false);
     });
 
+    it("comes back when the owner refuses the close", async () => {
+      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
+      const onOpenChange = vi.fn();
+      render(<Sheet open onOpenChange={onOpenChange} title="Delete Clients?" />);
+      const sheet = await screen.findByRole("dialog");
+      const zone = screen.getByTestId("sheet-drag-zone");
+      pointer(zone, "pointerDown", 100, 0);
+      pointer(zone, "pointerMove", 200, 40);
+      pointer(zone, "pointerUp", 220, 60);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      expect(sheet.style.transform).toBe("");
+    });
+
     it("leaves the Done button its own tap", async () => {
       const { sheet, zone } = await openTall();
       pointer(within(sheet).getByRole("button", { name: "Done" }), "pointerDown", 100, 0);
@@ -732,6 +745,34 @@ describe("Toast", () => {
     expect(open).toHaveBeenCalledTimes(1);
     expect(undo).not.toHaveBeenCalled();
     expect(screen.queryByText("Added to Tasks")).not.toBeInTheDocument();
+  });
+
+  it("runs an action once even when it is pressed again while the toast is leaving", async () => {
+    // jsdom has no animations, so a toast would leave at once; say there is one so it stays mounted.
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+      const style = real(el, pseudo);
+      return new Proxy(style, {
+        get: (t, k) => {
+          if (k === "animationName") return "ob-rise-out";
+          const v = Reflect.get(t, k, t);
+          return typeof v === "function" ? v.bind(t) : v;
+        },
+      });
+    });
+    try {
+      const onUndo = vi.fn();
+      setup({ title: "Removed heading", action: { label: "Undo", onClick: onUndo } });
+      await userEvent.click(screen.getByText("go"));
+      const undo = screen.getByRole("button", { name: "Undo" });
+      fireEvent.click(undo);
+      expect(screen.getByText("Removed heading")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveAttribute("data-state", "closed");
+      fireEvent.click(undo);
+      expect(onUndo).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("waits while the pointer or keyboard is on it, then goes", async () => {

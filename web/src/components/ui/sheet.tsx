@@ -61,6 +61,16 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
   const tapStart = useRef<{ x: number; y: number } | null>(null);
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
+  // A drag past the closed point asked the owner to close; see below.
+  const [closeAsked, setCloseAsked] = useState(false);
+
+  // The sheet is left where the finger let go so the exit animation carries on from there. If the owner
+  // refuses the close (a confirmation that is busy), `open` is still true once its update has landed in
+  // the same batch as this one, and the sheet returns instead of staying off the screen.
+  if (closeAsked) {
+    setCloseAsked(false);
+    if (open) setOffset(0);
+  }
 
   // Each opening starts at the open position, not wherever the last one was let go.
   const [wasOpen, setWasOpen] = useState(open);
@@ -106,6 +116,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
     if (closed > 0 && target >= closed) {
       // The exit animation carries on from the dragged position (the inline offset stays), so it does not jump.
       setOffset(from);
+      setCloseAsked(true);
       onOpenChange(false);
     } else {
       setOffset(target);
