@@ -78,8 +78,8 @@ export default defineConfig({
     // Passkeys with Chrome's virtual authenticator: add, sign in without a password, skip 2FA, remove,
     // and an administrator removing another user's passkeys; signs up its own users.
     { name: "passkeys", testMatch: /passkeys\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
-    // Search everything from inside a project, with match highlights and "This project"; a crowded
-    // bar and a phone fold it into a button. Signs up its own users.
+    // The command palette (Ctrl K) from inside a folder: match highlights, "This folder" and actions; the header's
+    // button and the phone's full-screen palette. Signs up its own users.
     { name: "search", testMatch: /search\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The sidebar: structure and counts, folding, the collection and folder menus, the switcher with the brand and
     // Ctrl+\. Signs up its own user.
