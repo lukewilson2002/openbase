@@ -154,7 +154,11 @@ own header and one `h1`, and no horizontal scroll; the phase that adds a route a
 `ledger.spec.ts` takes the screen ledger's screenshots into `docs/plans/ux-overhaul-screenshots/NN-slug-{light,dark}-{1440,390}.png`
 (NN is the ledger row, device scale factor 1). It rewrites tracked files, so it runs only with `LEDGER_SHOTS=1`
 (`LEDGER_ONLY=2,4` limits it to those rows); the data it looks at is seeded through the API by `ledgerSeed.ts`, and a
-phase adds a screen by adding one entry to `SHOTS`.
+phase adds a screen by adding one entry to `SHOTS`. The seed gives Clients a record name ("client") and a saved view of
+each of Board, Calendar, List and Form, Projects a Gallery and a Timeline, and "Ideas" (in a workspace the sidebar shots
+do not show) no records at all; a shot opens a saved view with `openView(page, seed, "Clients", "Pipeline")`.
+`collection.spec.ts` also walks the draft story end to end: a typed phrase, its chip and the changes bar, a reload that
+keeps the draft, Reset, Save as view, and a layout switched from View options.
 
 The suite must not depend on how fast the machine is (it passes on a laptop and has to pass on a busy CI runner):
 

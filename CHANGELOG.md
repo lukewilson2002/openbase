@@ -295,6 +295,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Fixed
 
+- On a phone the select box of a Board card or a Gallery card no longer covers the first letters of
+  its title (it sits in the top right corner, and the title leaves room for it), and the select
+  boxes of cards and List rows are 44 px targets. The List's number no longer runs into its box.
+  The grid's last header reads "Add property", the timeline's Today label no longer sits on top of
+  a date label, and the month of the calendar scrolls on a phone when the Unscheduled sheet leaves
+  its days too little room, instead of letting "+1 more" spill into the next week.
 - Pickers in forms and the record panel show a pick at once; Tab and Enter commit and move on in
   person, link, choice and attachment cells; the rating keys step instead of clearing.
 - Pasting a block that includes an attachment column or one bad cell pastes the cells that fit
