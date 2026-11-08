@@ -98,6 +98,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Changed
 
+- **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
+  the same person fold into one history entry while it is under ten minutes old: it keeps the
+  first old value, the latest new value and the time of the latest edit. Other fields, other
+  people and older entries still get their own entry.
+- **Notifications:** the unused "invite" kind is gone from the app and the docs (the server never
+  wrote one). The MCP `create_view` description now says personal views need the editor role.
 - **The Docker image runs on Debian 13** (a current ffmpeg) with its packages upgraded at build
   time, and the base images are pinned by digest. The release and CI builds use Node 26 (the
   active LTS line) and one exact Rust version, 1.99.1, named in `rust-toolchain.toml`. Building

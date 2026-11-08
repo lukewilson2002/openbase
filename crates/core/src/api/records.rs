@@ -335,7 +335,7 @@ pub struct RestoreResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Notification {
     pub id: String,
-    /// mention | assigned | invite | automation
+    /// mention | assigned | automation | form_response
     pub kind: String,
     pub payload: Json,
     #[serde(default)]

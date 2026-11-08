@@ -25,7 +25,7 @@ function listing(): NotificationsResponse {
       note("n1", "mention", { base_id: "app1", table_id: "tbl1", record_id: "rec1", record_name: "Launch plan", snippet: "please review", author_name: "Grace" }),
       note("n2", "assigned", { base_id: "app1", table_id: "tbl1", record_id: "rec2", record_name: "Fix login", assigned_by: "usr3" }, false, 3 * 3600_000),
       note("n3", "automation", { message: "Weekly digest sent" }),
-      note("n4", "invite", { actor_name: "Alan", base_name: "Roadmap", token: "tok1" }, true, 2 * 86400_000),
+      note("n4", "form_response", { form_name: "Signup", table_name: "Leads", base_id: "app1" }, true, 2 * 86400_000),
     ],
   };
 }
@@ -80,7 +80,7 @@ describe("Notifications in the docked menu", () => {
     expect(within(panel).getByText("You were assigned to Fix login")).toBeInTheDocument();
     expect(within(panel).getByText("Automation notification")).toBeInTheDocument(); // payload without a name
     expect(within(panel).getByText("Weekly digest sent")).toBeInTheDocument();
-    expect(within(panel).getByText("Alan invited you to Roadmap")).toBeInTheDocument();
+    expect(within(panel).getByText("New response to Signup")).toBeInTheDocument();
     expect(within(panel).getByText("3 hours ago")).toBeInTheDocument();
     // The Inbox is the link above it; the notifications are only this row.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
@@ -106,7 +106,7 @@ describe("Notifications in the docked menu", () => {
     routes({ notifications: [], unread: 0 });
     renderShell();
     const panel = await openNotifications(user, "Notifications");
-    expect(await within(panel).findByText("Nothing yet. Mentions, invites and automation alerts will show up here.")).toBeInTheDocument();
+    expect(await within(panel).findByText("Nothing yet. Mentions, assignments and automation alerts will show up here.")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Mark all as read" })).toBeDisabled();
   });
 

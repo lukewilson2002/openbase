@@ -6,7 +6,7 @@
 import { useMemo, type ComponentProps } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, ClipboardList, Mail, UserCheck, Zap } from "lucide-react";
+import { AtSign, Bell, ClipboardList, UserCheck, Zap } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -95,7 +95,7 @@ export function NotificationsRow({ open, className, ...props }: { open: boolean 
   );
 }
 
-const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, invite: Mail, automation: Zap, form_response: ClipboardList, other: Bell };
+const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, automation: Zap, form_response: ClipboardList, other: Bell };
 
 /**
  * The panel's content: a heading with "Mark all as read", then the notifications, newest first.
@@ -141,7 +141,7 @@ export function NotificationsPanel({ onOpened, headingId, className }: { onOpene
             Notifications are unavailable: {errorMessage(list.error)}
           </p>
         ) : list.data.notifications.length === 0 ? (
-          <p className="px-6 py-8 text-center text-[0.8125rem] text-muted">Nothing yet. Mentions, invites and automation alerts will show up here.</p>
+          <p className="px-6 py-8 text-center text-[0.8125rem] text-muted">Nothing yet. Mentions, assignments and automation alerts will show up here.</p>
         ) : (
           <ul aria-label="Notifications">
             {list.data.notifications.map((n) => (
@@ -179,7 +179,7 @@ function NotificationItem({ n, emails, onOpen, onMarkRead }: { n: Notification; 
   return (
     <li className="relative border-b border-line last:border-b-0">
       <button type="button" onClick={() => onOpen(n, v.href)} className="flex w-full items-start gap-3 px-4 py-3 pr-10 text-left hover:bg-hover focus-visible:bg-hover">
-        {actor && (v.kind === "mention" || v.kind === "invite") ? (
+        {actor && v.kind === "mention" ? (
           <span aria-hidden className="flex">
             <Avatar name={actor} email={actorId ? emails.get(actorId) : undefined} size="md" />
           </span>

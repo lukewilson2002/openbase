@@ -43,9 +43,7 @@ describe("describeNotification", () => {
     expect(notificationHref({})).toBeNull();
   });
 
-  it("describes invites (token link wins) and automations", () => {
-    expect(describeNotification(n("invite", { actor_name: "Ada", base_name: "Roadmap", token: "tok" }))).toMatchObject({ title: "Ada invited you to Roadmap", href: "/invite/tok" });
-    expect(describeNotification(n("invite", { base_id: "app1" }))).toMatchObject({ title: "Someone invited you to a project", href: "/base/app1" });
+  it("describes automations", () => {
     expect(describeNotification(n("automation", { automation_name: "Weekly digest", message: "Sent 4 emails", base_id: "app1" }))).toMatchObject({
       kind: "automation",
       title: 'Automation "Weekly digest"',
@@ -68,5 +66,7 @@ describe("describeNotification", () => {
   it("falls back for kinds it does not know", () => {
     expect(describeNotification(n("something_new", { message: "Hello" }))).toMatchObject({ kind: "other", title: "Hello" });
     expect(describeNotification(n("something_new", {})).title).toBe("New notification");
+    // The server never wrote "invite" notifications; a row of that kind would read as any unknown kind.
+    expect(describeNotification(n("invite", { message: "Join us", base_id: "app1" }))).toMatchObject({ kind: "other", title: "Join us", href: "/base/app1" });
   });
 });

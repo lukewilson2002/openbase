@@ -11,7 +11,7 @@
  */
 import type { Notification } from "@/api/types";
 
-export type NotificationKind = "mention" | "assigned" | "invite" | "automation" | "form_response" | "other";
+export type NotificationKind = "mention" | "assigned" | "automation" | "form_response" | "other";
 
 export interface NotificationView {
   kind: NotificationKind;
@@ -45,21 +45,21 @@ export function notificationHref(p: Record<string, unknown>): string | null {
   return table && record ? `${path}?record=${encodeURIComponent(record)}` : path;
 }
 
-/** Who did it: the author of a mention (`actor_name` is accepted for invites and future kinds). */
+/** Who did it: the author of a mention. */
 function actorName(p: Record<string, unknown>): string {
-  return text(p, "author_name") ?? text(p, "actor_name") ?? "Someone";
+  return text(p, "author_name") ?? "Someone";
 }
 
-/** The person behind a notification, when the payload names one (mentions and invites). */
+/** The person behind a notification, when the payload names one (mentions). */
 export function notificationActor(n: Notification): string | null {
   const p = payloadOf(n);
-  return text(p, "author_name") ?? text(p, "actor_name");
+  return text(p, "author_name");
 }
 
 /** The user id of that person, when the payload has it (a mention's `author_id`). */
 export function notificationActorId(n: Notification): string | null {
   const p = payloadOf(n);
-  return text(p, "author_id") ?? text(p, "actor_id");
+  return text(p, "author_id");
 }
 
 /** A base or table a notification is about, with the icon it had when the notification was written. */
@@ -81,7 +81,7 @@ export function notificationPlace(n: Notification): { base: PlaceName | null; ta
 }
 
 function kindOf(kind: string): NotificationKind {
-  return kind === "mention" || kind === "assigned" || kind === "invite" || kind === "automation" || kind === "form_response" ? kind : "other";
+  return kind === "mention" || kind === "assigned" || kind === "automation" || kind === "form_response" ? kind : "other";
 }
 
 export function describeNotification(n: Notification): NotificationView {
@@ -99,10 +99,6 @@ export function describeNotification(n: Notification): NotificationView {
       // The server records who assigned (a user id) but not their name, so the title leaves them out.
       const field = text(p, "field_name");
       return { kind, title: `You were assigned to ${record ?? "a record"}`, detail: snippet ?? message ?? (field ? `In ${field}` : null), href };
-    }
-    case "invite": {
-      const token = text(p, "token");
-      return { kind, title: `${actor} invited you to ${text(p, "base_name") ?? text(p, "workspace_name") ?? "a project"}`, detail: message, href: token ? `/invite/${encodeURIComponent(token)}` : href };
     }
     case "form_response": {
       const form = text(p, "form_name");
