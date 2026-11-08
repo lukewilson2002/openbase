@@ -1,9 +1,24 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { keys } from "./keys";
-import type { BaseSchema, TableSummary, WorkspaceSummary } from "./types";
+import type { BaseSchema, Table, TableSummary, WorkspaceSummary } from "./types";
+
+/** What the workspace list says about a table, taken from the table as the base schema has it. */
+export function summaryOfTable(t: Table): TableSummary {
+  return {
+    id: t.id,
+    name: t.name,
+    icon: t.icon ?? null,
+    color: t.color,
+    record_count: t.record_count,
+    body_field_id: t.body_field_id ?? null,
+    home_date_field_id: t.home_date_field_id ?? null,
+    done_field_id: t.done_field_id ?? null,
+    record_noun: t.record_noun,
+  };
+}
 
 function sameTables(a: readonly TableSummary[], b: readonly TableSummary[]): boolean {
-  return a.length === b.length && a.every((t, i) => t.id === b[i]!.id && t.name === b[i]!.name && (t.icon ?? null) === (b[i]!.icon ?? null));
+  return a.length === b.length && a.every((t, i) => JSON.stringify(t) === JSON.stringify(b[i]));
 }
 
 /**
@@ -20,7 +35,7 @@ export function syncBaseTablesIntoWorkspaces(client: QueryClient): () => void {
     if (key.length !== 2 || key[0] !== keys.allBases[0]) return;
     const schema = event.query.state.data as BaseSchema | undefined;
     if (!schema?.tables) return;
-    const tables: TableSummary[] = schema.tables.map((t) => ({ id: t.id, name: t.name, icon: t.icon ?? null }));
+    const tables = schema.tables.map(summaryOfTable);
     const list = client.getQueryData<WorkspaceSummary[]>(keys.workspaces);
     const base = list?.find((w) => w.id === schema.workspace_id)?.bases.find((b) => b.id === schema.id);
     if (!list || !base || sameTables(base.tables ?? [], tables)) return;

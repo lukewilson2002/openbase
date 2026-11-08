@@ -23,6 +23,7 @@ import type {
   HistoryEntry,
   LinkCandidates,
   MoveRecords,
+  PageSaved,
   QueryRequest,
   QueryResponse,
   RecordsResponse,
@@ -71,6 +72,11 @@ export const recordsApi = {
    * history). Answers `{discarded: false}` when it is no longer untouched, so it stays.
    */
   discard: (tableId: string, recordId: string) => http.post<{ discarded: boolean }>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {}),
+  /**
+   * Save a record's page (markdown; null clears it) through the table's page property. A table
+   * without one gets "Page" as part of this save, which `created` reports.
+   */
+  setPage: (tableId: string, recordId: string, text: string | null) => http.put<PageSaved>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/page`, { text }),
   restore: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/restore`, { ids }),
   /** Copy records, each right after its original (computed fields are left to recalculate); answers the copies in order. At most 100 ids. */
   duplicate: (tableId: string, ids: string[]) => http.post<RecordsResponse>(`/api/tables/${enc(tableId)}/records/duplicate`, { ids }),

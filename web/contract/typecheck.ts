@@ -48,6 +48,7 @@ import type {
   Member,
   NotificationsResponse,
   OkResponse,
+  PageSaved,
   PasskeyChallenge,
   PasskeyInfo,
   PasskeysRemoved,
@@ -111,6 +112,7 @@ export interface TypeMap {
   Member: Member;
   NotificationsResponse: NotificationsResponse;
   OkResponse: OkResponse;
+  PageSaved: PageSaved;
   PasskeyChallenge: PasskeyChallenge;
   PasskeyInfo: PasskeyInfo;
   PasskeysRemoved: PasskeysRemoved;

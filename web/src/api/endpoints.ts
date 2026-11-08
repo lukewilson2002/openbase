@@ -55,6 +55,7 @@ import type {
   ResetLink,
   SearchResponse,
   SessionInfo,
+  SetBodyField,
   UpdateEmailSettings,
   UpdateInboxItem,
   SetupStatus,
@@ -231,6 +232,8 @@ export const api = {
     reorder: (ids: string[]) => http.post<OkResponse>("/api/workspaces/reorder", { ids }),
     /** A workspace's projects, for everyone in it (creators and up may); `ids` work as in `reorder`. */
     reorderBases: (id: string, ids: string[]) => http.post<OkResponse>(`/api/workspaces/${enc(id)}/bases/reorder`, { ids }),
+    /** Owners only: which project's collections show directly under the workspace. Only the pointer moves. */
+    setTopLevel: (id: string, baseId: string) => http.post<WorkspaceSummary>(`/api/workspaces/${enc(id)}/top-level`, { base_id: baseId }),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
@@ -256,13 +259,16 @@ export const api = {
   },
 
   tables: {
-    create: (baseId: string, name: string, icon?: string | null) => http.post<Table>(`/api/bases/${enc(baseId)}/tables`, icon ? { name, icon } : { name }),
+    create: (baseId: string, name: string, icon?: string | null, color?: string | null) =>
+      http.post<Table>(`/api/bases/${enc(baseId)}/tables`, { name, ...(icon ? { icon } : {}), ...(color ? { color } : {}) }),
     update: (id: string, body: UpdateTable) => http.patch<Table>(`/api/tables/${enc(id)}`, body),
     remove: (id: string) => http.delete<OkResponse>(`/api/tables/${enc(id)}`),
     /** `include_records` defaults to true server-side. */
     duplicate: (id: string, body: { name?: string | null; include_records?: boolean } = {}) =>
       http.post<Table>(`/api/tables/${enc(id)}/duplicate`, body),
     setPrimaryField: (id: string, fieldId: string) => http.post<Table>(`/api/tables/${enc(id)}/primary-field`, { field_id: fieldId }),
+    /** Pick the rich text property that holds each record's page (null: none), or `{ create: true }` to add "Page" when there is none. */
+    setBodyField: (id: string, body: SetBodyField) => http.post<Table>(`/api/tables/${enc(id)}/body-field`, body),
     /** The table's shared views, or its personal ones, in the order of `ids`; never the default grid. */
     reorderViews: (id: string, ids: string[]) => http.post<OkResponse>(`/api/tables/${enc(id)}/views/reorder`, { ids }),
   },

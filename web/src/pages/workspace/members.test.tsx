@@ -8,9 +8,9 @@ import { USER, apiError, mockApi, renderApp, type Handler } from "@/test/utils";
 afterEach(() => vi.unstubAllGlobals());
 
 const bases = [
-  { id: "app1", workspace_id: "wsp1", name: "Chores", color: "teal", role: "owner", people: [], tables: [] },
-  { id: "app2", workspace_id: "wsp1", name: "Budget", color: "blue", role: "owner", people: [], tables: [] },
-  { id: "app3", workspace_id: "wsp1", name: "Recipes", color: "red", role: "owner", people: [], tables: [] },
+  { id: "app1", workspace_id: "wsp1", name: "Chores", color: "teal", role: "owner", is_top_level: false, people: [], tables: [] },
+  { id: "app2", workspace_id: "wsp1", name: "Budget", color: "blue", role: "owner", is_top_level: false, people: [], tables: [] },
+  { id: "app3", workspace_id: "wsp1", name: "Recipes", color: "red", role: "owner", is_top_level: false, people: [], tables: [] },
 ];
 const ws: WorkspaceSummary = { id: "wsp1", name: "Household", color: "green", role: "owner", member_count: 4, pending_invite_count: 1, bases };
 const members: Member[] = [

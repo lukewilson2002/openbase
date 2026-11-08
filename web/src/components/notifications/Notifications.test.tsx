@@ -170,7 +170,7 @@ describe("Notifications in the docked menu", () => {
     const grace = { user_id: "usr2", name: "Grace", email: "grace@example.com", pending: false, role: "editor" };
     routes(
       { unread: 1, notifications: [note("n1", "mention", { base_id: "app1", record_id: "rec1", record_name: "Launch plan", author_id: "usr2", author_name: "Grace" })] },
-      { "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", people: [grace], tables: [] }])] },
+      { "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", is_top_level: false, people: [grace], tables: [] }])] },
     );
     renderShell();
     const panel = await openNotifications(user);

@@ -31,13 +31,14 @@ const workspaces: WorkspaceSummary[] = [
         name: "Project tracker",
         color: "green_dark",
         role: "owner",
+        is_top_level: false,
         people: [me, grace, jordan],
         tables: [
-          { id: "tbl1", name: "Tasks", icon: null },
-          { id: "tbl2", name: "People", icon: "users" },
+          { id: "tbl1", name: "Tasks", icon: null, color: "blue", record_count: 0, record_noun: "" },
+          { id: "tbl2", name: "People", icon: "users", color: "blue", record_count: 0, record_noun: "" },
         ],
       },
-      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", people: [me], tables: [] },
+      { id: "app2", workspace_id: "wsp1", name: "CRM", color: "blue", icon: "users", role: "owner", is_top_level: false, people: [me], tables: [] },
     ],
   },
   {
@@ -47,7 +48,7 @@ const workspaces: WorkspaceSummary[] = [
     role: "viewer",
     member_count: 3,
     pending_invite_count: 0,
-    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", people: [me, grace], tables: [] }],
+    bases: [{ id: "app3", workspace_id: "wsp2", name: "Roadmap", color: "red", role: "viewer", is_top_level: false, people: [me, grace], tables: [] }],
   },
 ];
 

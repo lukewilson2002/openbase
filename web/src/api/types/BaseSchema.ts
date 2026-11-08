@@ -17,4 +17,9 @@ people: Array<BasePerson>, workspace_name: string,
 /**
  * The workspace's colour (one of `ob_core::field::COLORS`).
  */
-workspace_color: string, };
+workspace_color: string, 
+/**
+ * Whether this is the workspace's top-level project, whose collections the app shows
+ * directly under the workspace (every other project is a folder).
+ */
+is_top_level: boolean, };

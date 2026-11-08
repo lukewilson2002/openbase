@@ -3,6 +3,11 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 export type CreateTable = { name: string, icon?: string | null, 
 /**
+ * One of `ob_core::field::COLORS`. Absent: the next colour of the cycle the project's
+ * tables take.
+ */
+color?: string | null, 
+/**
  * Fields to create after the primary field "Name", each in the shape of
  * `POST /api/tables/{id}/fields` (`name`, `type`, `options`, `description`,
  * `inverse_name`; `options` may be left out for the type's defaults), in order. All or nothing: if any field is invalid the

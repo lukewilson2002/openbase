@@ -7,4 +7,28 @@ export type TableSummary = { id: string, name: string,
 /**
  * Lucide icon name (kebab-case); the client falls back to the name's initial.
  */
-icon?: string | null, };
+icon?: string | null, 
+/**
+ * One of `ob_core::field::COLORS`.
+ */
+color: string, 
+/**
+ * Live records in the table.
+ */
+record_count: number, 
+/**
+ * The rich text property that holds the page of each record, if any.
+ */
+body_field_id?: string | null, 
+/**
+ * The date property Home orders the table's records by, if any.
+ */
+home_date_field_id?: string | null, 
+/**
+ * The checkbox property that marks a record done, if any.
+ */
+done_field_id?: string | null, 
+/**
+ * What one record is called ("client"); empty means "record".
+ */
+record_noun: string, };

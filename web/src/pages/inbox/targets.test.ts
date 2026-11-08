@@ -73,7 +73,7 @@ describe("captureTargets", () => {
     role: "owner",
     member_count: 1,
     pending_invite_count: 0,
-    bases: [{ id: "b", workspace_id: "w", name: "B", color: "blue", role, people: [], tables: Array.from({ length: tables }, (_, i) => ({ id: `t${i}`, name: `T${i}`, icon: null })) }],
+    bases: [{ id: "b", workspace_id: "w", name: "B", color: "blue", role, is_top_level: false, people: [], tables: Array.from({ length: tables }, (_, i) => ({ id: `t${i}`, name: `T${i}`, icon: null, color: "blue", record_count: 0, record_noun: "" })) }],
   });
 
   it("offers projects where records can be created and that have a table", () => {
@@ -88,7 +88,7 @@ describe("captureTargets", () => {
 describe("everyoneInProjects", () => {
   it("lists the people of every project once, by name, without pending invites", () => {
     const person = (user_id: string | null, name: string, pending = false) => ({ user_id, name, email: `${name.toLowerCase()}@example.com`, pending, role: "editor" });
-    const base = (id: string, people: ReturnType<typeof person>[]) => ({ id, workspace_id: "w", name: id, color: "blue", role: "editor", people, tables: [] });
+    const base = (id: string, people: ReturnType<typeof person>[]) => ({ id, workspace_id: "w", name: id, color: "blue", role: "editor", is_top_level: false, people, tables: [] });
     const ws: WorkspaceSummary = {
       id: "w",
       name: "W",

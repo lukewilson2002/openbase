@@ -41,7 +41,7 @@ describe("moveId", () => {
   });
 });
 
-const base = (id: string, workspace_id: string, tables: string[] = []) => ({ id, workspace_id, name: id, color: "blue", icon: null, role: "owner", people: [], tables: tables.map((t) => ({ id: t, name: t })) });
+const base = (id: string, workspace_id: string, tables: string[] = []) => ({ id, workspace_id, name: id, color: "blue", icon: null, role: "owner", is_top_level: false, people: [], tables: tables.map((t) => ({ id: t, name: t, icon: null, color: "blue", record_count: 0, record_noun: "" })) });
 const workspace = (id: string, bases: ReturnType<typeof base>[]): WorkspaceSummary => ({ id, name: id, color: "green", role: "owner", bases, member_count: 1, pending_invite_count: 0 });
 
 describe("cache transforms", () => {

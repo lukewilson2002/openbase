@@ -17,7 +17,7 @@ function open(role: string, route: string) {
   return mockApi({
     "GET /api/auth/me": USER,
     "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false },
-    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [], tables: [] }])],
+    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, is_top_level: false, people: [], tables: [] }])],
     "GET /api/bases/app1": automationSchema(role),
     "GET /api/bases/app1/collaborators": PEOPLE,
     "GET /api/bases/app1/automations": [makeAutomation({ name: "Copy tasks" })],
