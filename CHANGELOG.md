@@ -295,6 +295,21 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Fixed
 
+- Switching a view to the Form layout shows the changes bar like any other draft, so Reset and Save as
+  view are there and a form can be made from it. Reset in "No clients match these filters" goes back
+  to the view as it is saved instead of dropping the view's own filter. Download CSV says "Saved view
+  only" while there are unsaved changes, because the file is the saved view's.
+- A phrase in the filter bar keeps what it says: "till Nov 14", "not by Friday" and "since Friday"
+  read as dates before, after and back, a lead word such as "before" or "by" that no operator took
+  is left unread, "Jan 5" near New Year is the nearest one, and a choice named "None" or "Not set"
+  is the choice. "3/4 complete", "score 7/10" and "step 2/5" are not dates in the capture box,
+  "3/4/85" is 1985, and a dashed date, a year range or an ISBN is not guessed as a phone number.
+  The CSV importer keeps a currency or a percent with more than 15 digits or 8 decimals as text,
+  reads HTTP:// in capitals as a link, and no longer takes "mailto:a@b.com" for an email address.
+- The view tabs point at the page under them, the Ctrl+F of the filter bar stays out of a dialog,
+  Escape from Save as view, Reset and Clear selection leave focus on the page, a Board's "+ New
+  record" keeps its height and contrast, and filter chips, switches, property handles and List
+  checkboxes are 44 px targets on a phone.
 - On a phone the select box of a Board card or a Gallery card no longer covers the first letters of
   its title (it sits in the top right corner, and the title leaves room for it), and the select
   boxes of cards and List rows are 44 px targets. The List's number no longer runs into its box.
