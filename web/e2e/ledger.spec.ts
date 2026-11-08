@@ -455,6 +455,47 @@ const SHOTS: Shot[] = [
     },
   },
 
+  // 18 · Record page (REC-1 to REC-6): an account with its properties and a page that has a heading, a list and both
+  // embeds. The phone's shot has the keyboard's formatting bar up (the page has the focus).
+  {
+    row: 18,
+    slug: "record-page",
+    name: "record page",
+    open: async ({ page, seed, phone }) => {
+      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
+      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      const box = page.getByRole("textbox", { name: "Page" });
+      await expect(box.getByRole("heading", { name: "This quarter" })).toBeVisible();
+      // The embeds have their rows before the picture is taken.
+      await expect(page.getByRole("region", { name: /^Bills · linked to this account/ }).getByRole("link", { name: "Domain renewal" })).toBeVisible();
+      if (phone) {
+        await box.getByRole("heading", { name: "This quarter" }).scrollIntoViewIfNeeded();
+        await box.tap({ position: { x: 40, y: 12 } });
+        await expect(page.getByRole("toolbar", { name: "Formatting" })).toBeVisible();
+      } else {
+        await rest(page);
+      }
+    },
+  },
+
+  // 20 · Page embeds (REC-6): Linked records and View as tables in the page.
+  {
+    row: 20,
+    slug: "page-embeds",
+    name: "page embeds",
+    open: async ({ page, seed, phone }) => {
+      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
+      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      const linked = page.getByRole("region", { name: /^Bills · linked to this account/ });
+      const unpaid = page.getByRole("region", { name: /^Unpaid bills/ });
+      await expect(linked.getByRole("link", { name: "Domain renewal" })).toBeVisible();
+      await expect(unpaid.getByRole("link", { name: "Accounting fees" })).toBeVisible();
+      // The page's top (a desktop shows both tables), or the first table's, at the top of the screen.
+      await (phone ? linked : page.getByRole("region", { name: "Page" })).evaluate((el) => el.scrollIntoView({ block: "start" }));
+      await rest(page);
+    },
+  },
+
   // 43 · Empty folder (Navigation routes)
   {
     row: 43,

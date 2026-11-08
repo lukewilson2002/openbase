@@ -11,6 +11,8 @@ import { expect, newClientContext, skipIntro } from "./fixtures";
  *    their own and an empty folder (Archive 2025). Records carry dates around today, a checkbox and a choice.
  *  - Two more workspaces, so the switcher lists three.
  *  - A second person, limited to the Operations folder (NAV-10).
+ *  - A record page in the Side projects workspace, which the other shots do not show: Accounts and Bills, with an
+ *    account whose page has a heading, a list and both embeds (REC-5, REC-6).
  */
 
 const PASSWORD = "correct horse battery staple 42";
@@ -37,6 +39,8 @@ export interface LedgerSeed {
   views: Record<string, string>;
   /** A word that matches records, collections, a folder, a view and a workspace, for the command palette. */
   palette: string;
+  /** A record with a page (REC-5, REC-6): a heading, a list, its linked bills and a view of the unpaid ones. */
+  pageRecord: { baseId: string; tableId: string; viewId: string; recordId: string; title: string };
 }
 
 async function call<T>(request: APIRequestContext, method: "post" | "patch", path: string, data: unknown): Promise<T> {
@@ -377,6 +381,51 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
   const sideTop = ((await (await r.get("/api/workspaces")).json()) as { id: string; root_base_id: string }[]).find((w) => w.id === others[1]!.id)!.root_base_id;
   await make(sideTop, { name: "Ideas", color: "yellow", fields: [{ name: "Notes", type: "text" }], recordNoun: "idea", rows: [] });
 
+  // A record with a page, in the same workspace (the other shots do not show it): an account with its bills linked
+  // and a saved view of the unpaid ones embedded below a heading and a list.
+  await make(sideTop, {
+    name: "Bills",
+    color: "teal",
+    recordNoun: "bill",
+    fields: [
+      { name: "Amount", type: "number" },
+      { name: "Due", type: "date" },
+      { name: "Paid", type: "checkbox" },
+    ],
+    views: [{ name: "Unpaid bills", type: "grid", config: (f) => ({ filter: { conjunction: "and", items: [{ field_id: f["Paid"], op: "is", value: false }] } }) }],
+    rows: [
+      ["Hosting, October", 240, day(-6), true],
+      ["Domain renewal", 18, day(9), false],
+      ["Design software", 79, day(4), false],
+      ["Accounting fees", 450, day(15), false],
+      ["Photography", 320, day(-12), true],
+    ],
+  });
+  await make(sideTop, {
+    name: "Accounts",
+    color: "blue",
+    recordNoun: "account",
+    fields: [{ name: "Status", type: "single_select", choices: ["Active", "Paused"] }],
+    rows: [["Fernwood Dental", "Active"], ["Oakline Cycles", "Active"], ["Studio Vesper", "Paused"]],
+  });
+  const rows = async (viewId: string) => ((await (await r.post(`/api/views/${viewId}/query`, { data: { limit: 50 }, headers: CSRF })).json()) as { records: { id: string; values: Record<string, unknown> }[] }).records;
+  const billRows = await rows(defaultViews["Bills"]!);
+  const accountRows = await rows(defaultViews["Accounts"]!);
+  const billsLink = await call<{ id: string }>(r, "post", `/api/tables/${t["Accounts"]}/fields`, { name: "Bills", type: "link", options: { linked_table_id: t["Bills"], single: false } });
+  const accountsSchema = await (await r.get(`/api/bases/${sideTop}`)).json();
+  const pageField = (accountsSchema.tables as { id: string; body_field_id: string }[]).find((x) => x.id === t["Accounts"])!.body_field_id;
+  const fernwood = accountRows[0]!.id;
+  const pageText = [
+    "## This quarter",
+    "- Send the revised quote before the 12th",
+    "- Move the hosting plan to the annual price",
+    "Bills for this account:",
+    "```openbase\n" + JSON.stringify({ embed: "linked", field: billsLink.id }) + "\n```",
+    "Every bill still to be paid:",
+    "```openbase\n" + JSON.stringify({ embed: "view", view: savedViews["Bills / Unpaid bills"], limit: 10 }) + "\n```",
+  ].join("\n\n");
+  await call(r, "patch", `/api/tables/${t["Accounts"]}/records`, { records: [{ id: fernwood, values: { [billsLink.id]: billRows.slice(0, 2).map((b) => b.id), [pageField]: pageText } }] });
+
   // A person limited to the Operations folder.
   const invite = await call<{ url: string }>(r, "post", `/api/bases/${operations.id}/invites`, { role: "editor", email: null });
   const limitedContext = await newClientContext(browser, testInfo, { baseURL, storageState: { cookies: [], origins: [] } }, "ledger-limited");
@@ -396,6 +445,7 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     defaultViews,
     views: savedViews,
     palette: "mark",
+    pageRecord: { baseId: sideTop, tableId: t["Accounts"]!, viewId: defaultViews["Accounts"]!, recordId: fernwood, title: "Fernwood Dental" },
   };
   await ownerContext.close();
   await limitedContext.close();
