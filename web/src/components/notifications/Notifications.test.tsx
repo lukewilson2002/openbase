@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Notification, NotificationsResponse } from "@/api/types";
 import { IntroProvider } from "@/onboarding/IntroContext";
 import { AppShell } from "@/shell/AppShell";
+import { ScreenHeader } from "@/shell/ScreenHeader";
 import { avatarColor } from "@/components/ui/avatar";
 import { accentHue } from "@/lib/colors";
 import { USER, makeWorkspace, mockApi, renderWithProviders, stubDesktop, type Handler } from "@/test/utils";
@@ -47,6 +48,7 @@ function renderShell() {
           path="*"
           element={
             <AppShell sidebar={<p>Menu content</p>}>
+              <ScreenHeader />
               <Where />
             </AppShell>
           }
@@ -63,7 +65,7 @@ async function openNotifications(user: ReturnType<typeof userEvent.setup>, name:
 }
 
 describe("Notifications in the docked menu", () => {
-  it("is the menu's second row (below the Inbox link), with the unread count, and lists each kind beside the menu", async () => {
+  it("is the menu's row below the Home and Inbox links, with the unread count, and lists each kind beside the menu", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes(listing());
@@ -82,9 +84,10 @@ describe("Notifications in the docked menu", () => {
     expect(within(panel).getByText("Weekly digest sent")).toBeInTheDocument();
     expect(within(panel).getByText("New response to Signup")).toBeInTheDocument();
     expect(within(panel).getByText("3 hours ago")).toBeInTheDocument();
-    // The Inbox is the link above it; the notifications are only this row.
+    // Home and the Inbox are the links above it; the notifications are only this row.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
-    expect(within(menu).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(menu).getAllByRole("link")[0]).toHaveAccessibleName("Home");
+    expect(within(menu).getAllByRole("link")[1]).toHaveAccessibleName("Inbox");
     expect(within(menu).getAllByRole("button", { name: /^Notifications/ })).toHaveLength(1);
   });
 

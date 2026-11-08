@@ -25,7 +25,7 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
 }
 
 /**
- * The menu's column: the Inbox and Notifications rows, the page's own content and the footer links (Trash)
+ * The menu's column: the Home, Inbox and Notifications rows, the page's own content and the footer links (Trash)
  * scroll together, so a long menu pushes the footer down instead of squeezing
  * the content between fixed rows; the footer still sits at the bottom of a short one. Only the
  * profile stays put. A shadow at either end shows there is more to scroll that way.
@@ -98,7 +98,7 @@ export function DockedSidebar({
   };
 
   return (
-    <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-14 flex h-[calc(100dvh-3.5rem)] shrink-0 flex-col border-r border-line bg-chrome">
+    <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-0 flex h-dvh shrink-0 flex-col border-r border-line bg-chrome">
       <SidebarBody topRows={topRows} footer={footer}>
         {children}
       </SidebarBody>

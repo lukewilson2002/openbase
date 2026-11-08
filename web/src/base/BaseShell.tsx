@@ -9,16 +9,15 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageSpinner } from "@/components/ui/spinner";
 import { useBaseEvents } from "@/hooks/useBaseEvents";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { lastTableOf, lastViewOf, rememberPlace } from "@/lib/lastPlace";
 import { defaultViewOf, namedViews } from "@/lib/views";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
-import { AppShell, DESKTOP_QUERY } from "@/shell/AppShell";
+import { AppShell } from "@/shell/AppShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
 import { NavGlobalLinks, NavTree } from "@/shell/NavTree";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
-import { BaseBrand, BaseTopBar } from "./BaseTopBar";
+import { CollectionHeader } from "./CollectionHeader";
 import { EmptyBase } from "./EmptyBase";
 import { basePermissions } from "./permissions";
 
@@ -26,8 +25,8 @@ import { basePermissions } from "./permissions";
 const AutomationsPage = lazy(() => import("@/automations/AutomationsPage").then((m) => ({ default: m.AutomationsPage })));
 
 /**
- * `/base/:baseId/:tableId?/:viewId?`: the app shell with the project's top bar and the menu tree,
- * and the active view as the page. Without a table (or a view) in the address it opens the one
+ * `/base/:baseId/:tableId?/:viewId?`: the app shell with the menu tree, the collection's header and
+ * the active view as the page. Without a table (or a view) in the address it opens the one
  * last used on this device, else the first. With `section="automations"`
  * (`/base/:baseId/automations/...`) the page is the automations page instead.
  */
@@ -35,7 +34,6 @@ export function BaseShell({ section }: { section?: "automations" }) {
   const { baseId = "", tableId, viewId } = useParams();
   const location = useLocation();
   const [dialog, setDialog] = useState<BaseDialog | null>(null);
-  const desktop = useMediaQuery(DESKTOP_QUERY);
   const base = useQuery({
     queryKey: keys.base(baseId),
     queryFn: () => api.bases.get(baseId),
@@ -98,7 +96,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
       </div>
     );
   } else if (!table) {
-    page = <EmptyBase schema={schema} onImport={() => setDialog({ kind: "create-table-csv" })} />;
+    page = <EmptyBase schema={schema} onNew={() => setDialog({ kind: "create-table" })} onImport={() => setDialog({ kind: "create-table-csv" })} />;
   } else if (!view) {
     page = (
       <EmptyState
@@ -120,15 +118,14 @@ export function BaseShell({ section }: { section?: "automations" }) {
       <NavDialogsProvider>
         <AppShell
           fill
-          hidePhoneLogo
+          workspaceId={schema.workspace_id}
           mainLabel={automations ? "Automations" : (view?.name ?? "Project content")}
-          brand={<BaseBrand schema={schema} table={table} />}
           searchHere={{ workspaceId: schema.workspace_id, baseId: schema.id }}
-          topBar={<BaseTopBar schema={schema} table={table} desktop={desktop} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />}
           sidebar={<NavTree workspaceId={schema.workspace_id} baseId={schema.id} tableId={table?.id} viewId={view?.id} />}
           sidebarFooter={<NavGlobalLinks page={null} />}
         >
-          {page}
+          <CollectionHeader schema={schema} table={table} section={section} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />
+          <div className="relative min-h-0 flex-1">{page}</div>
           <BaseDialogs schema={schema} activeTableId={table?.id} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
         </AppShell>
       </NavDialogsProvider>

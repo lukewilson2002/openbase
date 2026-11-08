@@ -1,8 +1,10 @@
 /**
- * `/`: the Inbox, inside the app's usual shell (the menu takes people to their projects). Someone
- * without any workspace, which only happens before the first one is made, gets the page that makes it.
+ * `/`: opens the last workspace's Home (the one used last on this device while the person still belongs
+ * to it, else their first). Someone without any workspace, which only happens before the first one is
+ * made, gets the first-run page that makes it.
  */
 import { useState, type FormEvent } from "react";
+import { Navigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { SquarePlus } from "lucide-react";
 import { errorMessage } from "@/api/client";
@@ -14,23 +16,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { HomeShell, useCreateWorkspace } from "@/shell/HomeShell";
-import { InboxPage } from "./inbox/InboxPage";
+import { workspaceToOpen } from "./workspace/lastWorkspace";
 
-export function HomePage() {
+export function RootRoute() {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
-  return (
-    <HomeShell>
-      {workspaces.isPending ? (
-        <PageSpinner label="Loading workspaces" />
-      ) : workspaces.isError ? (
+  if (workspaces.isPending) return <PageSpinner label="Loading workspaces" />;
+  if (workspaces.isError)
+    return (
+      <HomeShell>
         <div className="p-6">
           <Notice tone="error">{errorMessage(workspaces.error)}</Notice>
         </div>
-      ) : workspaces.data.length > 0 ? (
-        <InboxPage />
-      ) : (
-        <FirstWorkspace />
-      )}
+      </HomeShell>
+    );
+  const target = workspaceToOpen(workspaces.data);
+  if (target) return <Navigate to={`/workspace/${target.id}`} replace />;
+  return (
+    <HomeShell>
+      <FirstWorkspace />
     </HomeShell>
   );
 }

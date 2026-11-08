@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Plus, Table2 } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
@@ -313,6 +313,18 @@ describe("FeedRow", () => {
   it("is a link when it has an address", () => {
     render(<FeedRow title="Buy milk" href="/base/b/t/r/rec1" />);
     expect(screen.getByRole("link", { name: "Buy milk" })).toHaveAttribute("href", "/base/b/t/r/rec1");
+  });
+  it("runs onOpen on a plain click of its link, so a router can navigate, and leaves the other clicks to the browser", () => {
+    const onOpen = vi.fn();
+    render(<FeedRow title="Buy milk" href="/base/b/t/r/rec1" onOpen={onOpen} />);
+    const link = screen.getByRole("link", { name: "Buy milk" });
+    // A click that opens a new tab or window is the browser's.
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { button: 1 });
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(fireEvent.click(link)).toBe(false);
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
   it("is 44 px tall, 56 on phone", () => {
     const { container } = render(<FeedRow title="Buy milk" />);

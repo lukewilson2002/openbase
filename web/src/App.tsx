@@ -7,8 +7,12 @@ import { RequireAdmin, RequireAuth } from "@/auth/guards";
 import { BaseShell } from "@/base/BaseShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { HomePage } from "@/pages/HomePage";
-import { WorkspaceRedirect } from "@/pages/workspace/WorkspaceRedirect";
+import { RootRoute } from "@/pages/RootRoute";
+import { InboxRoute } from "@/pages/inbox/InboxPage";
+import { NotificationsPage } from "@/pages/NotificationsPage";
+import { CollectionsPage } from "@/pages/workspace/CollectionsPage";
+import { WorkspaceAutomationsPage } from "@/pages/workspace/WorkspaceAutomationsPage";
+import { WorkspaceHomePage } from "@/pages/workspace/WorkspaceHomePage";
 import { IntroGate, IntroProvider } from "@/onboarding/IntroContext";
 import { LoginPage } from "@/pages/LoginPage";
 import { TwoFactorLoginPage } from "@/pages/TwoFactorLoginPage";
@@ -60,10 +64,15 @@ export function AppRoutes() {
           {DesignPage && <Route path="/__dev/design" element={<DesignPage />} />}
           {/* The signed-in app: one RequireAuth and one IntroGate for every page in it. */}
           <Route element={<SignedInArea />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/workspace/:workspaceId" element={<WorkspaceRedirect />} />
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/workspace/:workspaceId" element={<WorkspaceHomePage />} />
+            <Route path="/workspace/:workspaceId/collections" element={<CollectionsPage />} />
+            <Route path="/workspace/:workspaceId/automations" element={<WorkspaceAutomationsPage />} />
             <Route path="/workspace/:workspaceId/members" element={<MembersPage />} />
             <Route path="/workspace/:workspaceId/settings" element={<WorkspaceSettingsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            {/* The Inbox stays reachable until Home absorbs its drafts (HOME-8) and the page goes. */}
+            <Route path="/inbox" element={<InboxRoute />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/trash" element={<TrashPage />} />
             {DevSharePage && import.meta.env.VITE_MOCK && <Route path="/__dev/share" element={<DevSharePage />} />}

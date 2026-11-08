@@ -117,27 +117,44 @@ describe("base shell on a desktop", () => {
     expect(within(await openType(user, list, "Grid")).getByRole("menuitem", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("puts the project in the app shell: `Acme / Project tracker` as plain text in the top bar, the Inbox and Notifications, then the tree in the menu", async () => {
+  it("puts the collection in the app shell: no top bar, its own header inside main, then Home, the Inbox and Notifications above the tree in the menu", async () => {
     openBase("viewer");
     await screen.findByText("Grid view coming soon");
-    const header = document.querySelector("header")!;
-    expect(within(header).getByText("Acme")).toBeInTheDocument();
-    expect(within(header).getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
-    // The open table is the breadcrumb's last part; a viewer cannot change its icon.
-    expect(within(header).getByRole("heading", { name: "Tasks", level: 2 })).toBeInTheDocument();
-    expect(within(header).queryByRole("button", { name: "Change the icon of Tasks" })).not.toBeInTheDocument();
-    // The names are text now, not pickers.
+    // NAV-5: nothing spans the app; the header belongs to the screen and sits in its `main`.
+    expect([...document.querySelectorAll("header")].every((h) => h.closest("main"))).toBe(true);
+    const main = screen.getByRole("main", { name: "All tasks" });
+    const header = main.querySelector("header")!;
+    expect(header).not.toBeNull();
+    // The workspace as the path (this project is a folder), and the collection's name as the screen's one h1.
+    expect(within(header).getByText("Acme / Project tracker")).toBeInTheDocument();
+    expect(within(header).getByRole("heading", { name: "Tasks", level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(within(header).queryByRole("button", { name: /Acme|Project tracker/ })).not.toBeInTheDocument();
     // A viewer can neither invite nor share a view, so there is no Share to open.
     expect(within(header).queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
-    expect(within(menu()).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
+    expect(within(menu()).getAllByRole("link")[0]).toHaveAccessibleName("Home");
+    expect(within(menu()).getAllByRole("link")[1]).toHaveAccessibleName("Inbox");
     expect(within(menu()).getAllByRole("button")[0]).toHaveAccessibleName("Notifications");
+    // The menu's Automations row is for creators.
+    expect(within(menu()).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
     expect(await within(menu()).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
     // One tree: the workspace, its project, the project's tables.
     expect(within(menu()).getByRole("button", { name: "Collapse Acme" })).toHaveAttribute("aria-expanded", "true");
     expect(within(within(menu()).getByRole("list", { name: "Projects in Acme" })).getByRole("button", { name: "Collapse Project tracker" })).toBeInTheDocument();
     expect(within(tables()).getByRole("link", { name: "Tasks" })).toBeInTheDocument();
     expect(within(menu()).queryByRole("link", { name: "Members" })).not.toBeInTheDocument();
+  });
+
+  it("names the top level's collection under the workspace alone, and a creator sees Share in the header", async () => {
+    const user = userEvent.setup();
+    openBase("owner", { "GET /api/bases/app1": makeSchema("owner", { is_top_level: true }) });
+    await screen.findByText("Grid view coming soon");
+    const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
+    expect(within(header).getByText("Acme")).toBeInTheDocument();
+    expect(within(header).queryByText("Acme / Project tracker")).not.toBeInTheDocument();
+    await user.click(within(header).getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("dialog", { name: /Share/ })).toBeInTheDocument();
   });
 
   it("shows the other workspaces' projects from inside a project, and expanding one lists its tables without leaving", async () => {
@@ -375,7 +392,7 @@ describe("base shell on a desktop", () => {
       expect(itemNames(await screen.findByRole("menu"))).toEqual(["Edit schema"]);
       await user.keyboard("{Escape}");
       expect(screen.queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Tasks", level: 1 })).toBeInTheDocument();
     });
 
     it("has no Share (nothing to invite or share) but still finds the members", async () => {
@@ -559,7 +576,7 @@ describe("base shell on a desktop", () => {
       await openAddTable(user);
       await pick(user, "New empty table");
       await user.type(await screen.findByLabelText("Name"), "Projects");
-      await user.click(screen.getByRole("button", { name: "Create table" }));
+      await user.click(screen.getByRole("button", { name: "Create collection" }));
       await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
       expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Projects" });
     });
@@ -657,11 +674,11 @@ describe("base shell on a desktop", () => {
       expect(api.callsTo("GET /api/trash")[0]!.query.get("base_id")).toBe("app1");
     });
 
-    it("links creators to the automations from the project's menu, not a row of their own", async () => {
+    it("links creators to the project's automations from its menu, and to the workspace's list from the Automations row", async () => {
       const user = userEvent.setup();
       openBase("creator");
       await screen.findByText("Grid view coming soon");
-      expect(within(menu()).queryByRole("link", { name: "Automations" })).toBeNull();
+      expect(within(menu()).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/workspace/wsp1/automations");
       expect(within(await openProjectMenu(user)).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
     });
 
@@ -689,7 +706,7 @@ describe("an empty base", () => {
   beforeEach(() => stubDesktop());
   const empty = (role: string) => makeSchema(role, { tables: [] });
 
-  it("invites a creator to make the first table by name and opens it", async () => {
+  it("invites a creator to make the first collection and opens it", async () => {
     const user = userEvent.setup();
     let made = false;
     const withTable = (): BaseSchema => {
@@ -703,15 +720,15 @@ describe("an empty base", () => {
         return withTable().tables[0];
       },
     });
-    expect(await screen.findByRole("heading", { name: "Create your first table" })).toBeInTheDocument();
-    expect(screen.getByText("A table is one list of things, like your chores or a shopping list. You add the fields you need as you go.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No collections in Project tracker yet" })).toBeInTheDocument();
+    expect(screen.getByText("A collection is one list of things, like your chores or a shopping list. You add the properties you need as you go.")).toBeInTheDocument();
     expect(within(tables()).getByText("No tables yet.")).toBeInTheDocument();
-    const create = screen.getByRole("button", { name: "Create table" });
-    expect(create).toBeDisabled();
-    const name = screen.getByRole("textbox", { name: "Table name" });
-    expect(name).toHaveAttribute("placeholder", "For example, Tasks");
-    await user.type(name, "Chores");
-    await user.click(create);
+    // The header names the folder while it holds nothing.
+    expect(screen.getByRole("heading", { name: "Project tracker", level: 1 })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New collection" }));
+    const dialog = await screen.findByRole("dialog", { name: "New collection" });
+    await user.type(within(dialog).getByLabelText("Name"), "Chores");
+    await user.click(within(dialog).getByRole("button", { name: "Create collection" }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
     expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Chores" });
     expect(await screen.findByText("Grid view coming soon")).toBeInTheDocument();
@@ -721,16 +738,15 @@ describe("an empty base", () => {
   it("offers a creator a CSV import instead", async () => {
     const user = userEvent.setup();
     openBase("creator", { "GET /api/bases/app1": empty("creator") });
-    await user.click(await screen.findByRole("button", { name: "Import a CSV" }));
+    await user.click(await screen.findByRole("button", { name: "Import CSV" }));
     expect(await screen.findByRole("dialog", { name: "New table from CSV" })).toBeInTheDocument();
   });
 
   it.each(["viewer", "editor"])("tells a %s whom to ask", async (role) => {
     openBase(role, { "GET /api/bases/app1": empty(role) });
-    expect(await screen.findByText("This project has no tables yet. Ask someone who can create tables to add one.")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Create your first table" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Table name" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Import a CSV" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Ask someone who can create collections to add one.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New collection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import CSV" })).not.toBeInTheDocument();
     expect(within(tables()).getByText("No tables yet.")).toBeInTheDocument();
   });
 });
@@ -758,18 +774,20 @@ describe("base shell on a phone", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
-  it("names the table in the top bar, where a tap opens the drawer: the Inbox and Notifications, then the tree", async () => {
+  it("names the table in its own header, whose toggle opens the drawer: Home, the Inbox and Notifications, then the tree", async () => {
     const user = userEvent.setup();
     openBase("owner");
     await screen.findByText("Grid view coming soon");
     // The workspace and project small over the open table's name; not a picker.
-    const title = screen.getByRole("heading", { level: 1 });
-    expect(title).toHaveTextContent("Acme / Project trackerTasks");
-    await user.click(within(title).getByRole("button", { name: "Tasks in Project tracker in Acme. Open the menu" }));
+    const header = screen.getByRole("main", { name: "All tasks" }).querySelector("header")!;
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tasks");
+    expect(within(header).getByText("Acme / Project tracker")).toBeInTheDocument();
+    await user.click(within(header).getByRole("button", { name: "Show menu" }));
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(drawer).getByRole("button", { name: "Close menu" })).toBeInTheDocument();
     const nav = within(drawer).getByRole("navigation", { name: "Main menu" });
-    expect(within(nav).getAllByRole("link")[0]).toHaveAccessibleName("Inbox");
+    expect(within(nav).getAllByRole("link")[0]).toHaveAccessibleName("Home");
+    expect(within(nav).getAllByRole("link")[1]).toHaveAccessibleName("Inbox");
     expect(within(nav).getAllByRole("button")[0]).toHaveAccessibleName("Notifications");
     expect(within(nav).getByRole("list", { name: "Tables in Project tracker" })).toBeInTheDocument();
     // Folding rows is not navigating: the drawer stays.
@@ -890,13 +908,13 @@ describe("icons", () => {
     await screen.findByText("Grid view coming soon");
     await openAddTable(user);
     await pick(user, "New empty table");
-    const dialog = await screen.findByRole("dialog", { name: "New table" });
+    const dialog = await screen.findByRole("dialog", { name: "New collection" });
     await user.type(within(dialog).getByLabelText("Name"), "Orders");
     await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
     await user.click(await screen.findByRole("button", { name: "Package" }));
     // the picker closes and the dialog now shows the chosen icon
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Change icon" })).toBeInTheDocument());
-    await user.click(within(dialog).getByRole("button", { name: "Create table" }));
+    await user.click(within(dialog).getByRole("button", { name: "Create collection" }));
     await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables")).toHaveLength(1));
     expect(api.callsTo("POST /api/bases/app1/tables")[0]?.body).toEqual({ name: "Orders", icon: "package" });
   });

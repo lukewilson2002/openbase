@@ -18,7 +18,10 @@ export interface FeedRowProps extends Omit<ComponentProps<"div">, "title"> {
   trailing?: ReactNode;
   /** Opens the thing the row is about. The whole row is the target, so the title is the one tab stop. */
   onOpen?: () => void;
-  /** Opens it as a link instead; wins over `onOpen`. */
+  /**
+   * Opens it as a link, so it can be copied or opened in a new tab. With `onOpen` as well, a plain click runs
+   * `onOpen` (a router navigation) instead of loading the page.
+   */
   href?: string;
 }
 
@@ -37,7 +40,7 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing,
     </>
   );
   // The open target stretches over the whole row (a pseudo-element), so the leading control stays clickable on its own.
-  const body = "min-w-0 flex-1 text-left after:absolute after:inset-0 focus-visible:after:rounded-md";
+  const body = "min-w-0 flex-1 text-left text-fg no-underline after:absolute after:inset-0 focus-visible:after:rounded-md";
   return (
     <div
       className={cn("relative flex min-h-row-feed items-center gap-3 px-2 max-md:min-h-row-feed-phone", openable && "hover:bg-hover", className)}
@@ -45,7 +48,15 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing,
     >
       {leading != null && <div className="relative z-10 flex shrink-0 items-center">{leading}</div>}
       {href ? (
-        <a href={href} className={body}>
+        <a
+          href={href}
+          onClick={(e) => {
+            if (!onOpen || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            onOpen();
+          }}
+          className={body}
+        >
           {text}
         </a>
       ) : onOpen ? (

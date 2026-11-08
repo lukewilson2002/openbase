@@ -8,6 +8,7 @@ import { ADMIN, USER, makeSchema, mockApi, renderWithProviders, stubDesktop } fr
 import { AppShell } from "./AppShell";
 import { BaseAvatars } from "./BaseAvatars";
 import { HomeShell } from "./HomeShell";
+import { ScreenHeader } from "./ScreenHeader";
 import { SidebarLink, SidebarSection } from "./Sidebar";
 import { SIDEBAR_KEY } from "./sidebarPrefs";
 
@@ -30,13 +31,13 @@ function Shell() {
           path="*"
           element={
             <AppShell
-              topBar={<span>Page title</span>}
               sidebar={
                 <SidebarSection title="Workspaces">
                   <SidebarLink to="/workspace/wsp1">Acme</SidebarLink>
                 </SidebarSection>
               }
             >
+              <ScreenHeader title="Page title" />
               <p>Page body</p>
             </AppShell>
           }
@@ -91,25 +92,28 @@ describe("AppShell on a desktop", () => {
     expect(JSON.parse(localStorage.getItem(SIDEBAR_KEY)!)).toEqual({ width: 200, collapsed: false });
   });
 
-  it("starts the menu with the Inbox, a link to /, above Notifications and its unread count", async () => {
+  it("starts the menu with Home and the Inbox, above Notifications and its unread count", async () => {
     stubDesktop();
     mockApi({ "GET /api/auth/me": USER, "GET /api/notifications": { notifications: [], unread: 3 } });
     renderWithProviders(<Shell />, "/workspace/wsp1");
     const menu = screen.getByRole("navigation", { name: "Main menu" });
+    // Without a workspace of its own the shell's Home is wherever `/` leads (the last workspace's Home).
+    const home = within(menu).getByRole("link", { name: "Home" });
+    expect(home).toHaveAttribute("href", "/");
     const inbox = within(menu).getByRole("link", { name: "Inbox" });
-    expect(inbox).toHaveAttribute("href", "/");
+    expect(inbox).toHaveAttribute("href", "/inbox");
     expect(inbox).not.toHaveAttribute("aria-current", "page");
     const notifications = await within(menu).findByRole("button", { name: "Notifications, 3 unread" });
     expect(notifications).toHaveTextContent("3");
-    // Inbox first, Notifications under it, then the page's own menu.
-    const order = [inbox, notifications, within(menu).getByRole("link", { name: "Acme" })];
+    // Home, then the Inbox, Notifications under them, then the page's own menu.
+    const order = [home, inbox, notifications, within(menu).getByRole("link", { name: "Acme" })];
     for (let i = 1; i < order.length; i++) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("marks the Inbox as the page being shown on /", () => {
+  it("marks the Inbox as the page being shown on /inbox", () => {
     stubDesktop();
     routes();
-    renderWithProviders(<Shell />, "/");
+    renderWithProviders(<Shell />, "/inbox");
     expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
   });
 
@@ -732,18 +736,24 @@ describe("HomeShell", () => {
     });
   });
 
-  it("puts Search everything in the middle of the top bar", async () => {
+  it("draws the screen's header inside main, with the search as a button in it and no bar across the app", async () => {
     stubDesktop();
     home();
-    expect(within(screen.getByRole("banner")).getByRole("combobox", { name: "Search everything" })).toBeInTheDocument();
+    const main = screen.getByRole("main");
+    expect([...document.querySelectorAll("header")].every((h) => h.closest("main"))).toBe(true);
+    const header = main.querySelector("header")!;
+    expect(within(header).getByRole("button", { name: "Hide menu" })).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Search everything" })).not.toBeInTheDocument();
   });
 
-  it("on a phone names the open workspace in the top bar, and a tap on it opens the menu", async () => {
+  it("on a phone names the open workspace in the header, whose toggle opens the menu", async () => {
     const user = userEvent.setup();
     home();
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
-    await user.click(await within(banner).findByRole("button", { name: "Workspace: Acme. Show menu" }));
+    const header = screen.getByRole("main").querySelector("header")!;
+    expect(within(header).getByRole("button", { name: "Search everything" })).toBeInTheDocument();
+    expect(await within(header).findByText("Acme")).toBeInTheDocument();
+    await user.click(within(header).getByRole("button", { name: "Show menu" }));
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(drawer).getByRole("button", { name: "Collapse Acme" })).toBeInTheDocument();
     // Folding a row in the drawer does not close it: only a navigation does.

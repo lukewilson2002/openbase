@@ -1,30 +1,32 @@
 /**
- * The shell of the home pages (a workspace's members and settings, account, admin, history, trash):
- * the logo and "Search everything" (in the middle) in the top bar, and the menu with the Inbox, the navigation tree
- * and the History and Trash of everything.
+ * The shell of the workspace-level screens (Home, a workspace's members, settings and automations,
+ * account, admin, history, trash): the main menu with the tree and the History and Trash of
+ * everything, and, inside `main`, the screen's own header (NAV-5).
  */
 import type { ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
-import { WorkspaceTile } from "@/components/icons/EntityIcon";
-import { AppShell, useOpenMenu } from "./AppShell";
+import { ColorMark } from "@/components/ui/color-mark";
+import { AppShell } from "./AppShell";
 import { NavDialogsProvider } from "./NavDialogs";
 import { NavGlobalLinks, NavTree } from "./NavTree";
-import { SearchSlot } from "./SearchEverything";
+import { ScreenHeader } from "./ScreenHeader";
 
 export { useCreateWorkspace } from "./useCreateWorkspace";
 
 export interface HomeShellProps {
-  /** The workspace the page belongs to: it is open in the menu, and named in a phone's top bar. */
+  /** The workspace the page belongs to: it is open in the menu, and named in a phone's header. */
   workspaceId?: string;
-  /** Extra top bar content, before the search. */
-  topBar?: ReactNode;
+  /** The screen's name, as the header's `h1`. Leave it out when the page's content starts with its own heading. */
+  title?: ReactNode;
+  /** The header's actions, before the search. */
+  actions?: ReactNode;
   children: ReactNode;
 }
 
-export function HomeShell({ workspaceId: pageWorkspace, topBar, children }: HomeShellProps) {
+export function HomeShell({ workspaceId: pageWorkspace, title, actions, children }: HomeShellProps) {
   const { pathname, search } = useLocation();
   const params = new URLSearchParams(search);
   // One Trash and one History for everything; a workspace's is that page filtered to it.
@@ -34,37 +36,23 @@ export function HomeShell({ workspaceId: pageWorkspace, topBar, children }: Home
   const globalPage = unfiltered && pathname === "/trash" ? "trash" : unfiltered && pathname === "/history" ? "history" : null;
   return (
     <NavDialogsProvider>
-      <AppShell
-        topBar={
-          <>
-            {workspaceId && <PhoneWorkspaceTitle workspaceId={workspaceId} />}
-            {topBar}
-            <SearchSlot />
-          </>
-        }
-        hidePhoneLogo={!!workspaceId}
-        searchHere={workspaceId ? { workspaceId } : undefined}
-        sidebar={<NavTree workspaceId={workspaceId} />}
-        sidebarFooter={<NavGlobalLinks page={globalPage} />}
-      >
+      <AppShell workspaceId={workspaceId} searchHere={workspaceId ? { workspaceId } : undefined} sidebar={<NavTree workspaceId={workspaceId} />} sidebarFooter={<NavGlobalLinks page={globalPage} />}>
+        <ScreenHeader title={title} actions={actions} leading={workspaceId ? <PhoneWorkspaceName workspaceId={workspaceId} /> : undefined} />
         {children}
       </AppShell>
     </NavDialogsProvider>
   );
 }
 
-/** On a phone the open workspace names the page from the top bar; tapping it opens the menu. */
-function PhoneWorkspaceTitle({ workspaceId }: { workspaceId: string }) {
+/** On a phone the open workspace names the screen from its header (a desktop's menu shows it). */
+function PhoneWorkspaceName({ workspaceId }: { workspaceId: string }) {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
-  const openMenu = useOpenMenu();
   const ws = workspaces.data?.find((w) => w.id === workspaceId);
   if (!ws) return null;
   return (
-    <div className="min-w-0 md:hidden">
-      <button type="button" onClick={openMenu} aria-label={`Workspace: ${ws.name}. Show menu`} className="flex h-11 max-w-full items-center gap-2 rounded-[10px] px-1.5 text-[1.0625rem] font-bold text-fg hover:bg-hover">
-        <WorkspaceTile ws={ws} size="sm" className="size-[26px] rounded-[7px] text-[0.8125rem]" />
-        <span className="min-w-0 truncate">{ws.name}</span>
-      </button>
-    </div>
+    <span className="flex min-w-0 items-center gap-2 text-ui font-semibold md:hidden">
+      <ColorMark hue={ws.color} name={ws.name} size={24} />
+      <span className="min-w-0 truncate">{ws.name}</span>
+    </span>
   );
 }

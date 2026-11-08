@@ -34,8 +34,8 @@ describe("automations in the base shell", () => {
     open("creator", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
     const menu = screen.getByRole("navigation", { name: "Main menu" });
-    // In the project's menu, not a row of its own.
-    expect(within(menu).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
+    // The menu's own Automations row is the workspace's list; the project's automations are in its menu.
+    expect(within(menu).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/workspace/wsp1/automations");
     await user.click(within(menu).getByRole("button", { name: "Project options for Project tracker" }));
     await user.click(await screen.findByRole("menuitem", { name: "Automations" }));
     expect(await screen.findByRole("list", { name: "Automations" })).toBeInTheDocument();

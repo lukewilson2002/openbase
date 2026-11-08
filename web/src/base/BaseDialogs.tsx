@@ -109,7 +109,7 @@ export function BaseDialogs({ schema, activeTableId, activeViewId, dialog, onClo
 
   return (
     <>
-      <NameDialog open={dialog?.kind === "create-table"} onOpenChange={onOpenChange} title="New table" submitLabel="Create table" withIcon onSubmit={(name, icon) => createTable.mutateAsync({ name, icon })} />
+      <NameDialog open={dialog?.kind === "create-table"} onOpenChange={onOpenChange} title="New collection" submitLabel="Create collection" withIcon onSubmit={(name, icon) => createTable.mutateAsync({ name, icon })} />
       {dialog?.kind === "create-table-csv" && <NewTableFromCsvDialog open onOpenChange={onOpenChange} baseId={schema.id} />}
       {dialog?.kind === "import" && <ImportCsvDialog open onOpenChange={onOpenChange} baseId={schema.id} table={dialog.table} />}
       <NameDialog
