@@ -204,7 +204,7 @@ describe("structure", () => {
     render();
     await user.click(within(menu()).getByRole("button", { name: /^Search everything/ }));
     expect(await screen.findByRole("dialog", { name: "Search everything" })).toBeInTheDocument();
-    expect(await screen.findByRole("combobox", { name: "Search everything" })).toHaveFocus();
+    expect(await screen.findByRole("combobox", { name: "Search" })).toHaveFocus();
   });
 
   it("sets Notifications apart from the pages: it opens beside the sidebar and shows the unread count", async () => {
