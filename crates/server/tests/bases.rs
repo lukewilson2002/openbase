@@ -328,6 +328,7 @@ async fn base_position_orders_the_workspace_listing() {
 async fn role_matrix_for_base_update_and_delete() {
     for role in ALL_ROLES {
         let f = Fixture::new().await;
+        f.free_the_base().await;
         let u = f.base_guest("g@example.com", role);
         let path = format!("/api/bases/{}", f.base_id);
         let r = f.app.patch(&u, &path, json!({ "name": "X" })).await;
@@ -356,6 +357,7 @@ async fn role_matrix_for_base_update_and_delete() {
 #[tokio::test]
 async fn deleting_a_base_hides_it_and_notifies_subscribers() {
     let f = Fixture::new().await;
+    f.free_the_base().await;
     let mut rx = f.app.state.events.subscribe(&f.base_id);
     let r = f
         .app

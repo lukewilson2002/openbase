@@ -3,6 +3,8 @@
 //! docs/plans/2026-10-12-openbase.md "Scale limits".
 
 pub const MAX_NAME_LEN: usize = 255;
+/// Longest name for what one record of a table is called ("client").
+pub const MAX_RECORD_NOUN_LEN: usize = 40;
 pub const MAX_DESCRIPTION_LEN: usize = 20_000;
 pub const MAX_TEXT_CELL_LEN: usize = 100_000;
 pub const MAX_FORMULA_LEN: usize = 10_000;

@@ -174,6 +174,7 @@ fn summary_of(
     role: Role,
     people: Vec<BasePerson>,
     tables: Vec<TableSummary>,
+    is_top_level: bool,
 ) -> BaseSummary {
     BaseSummary {
         id: base.id.clone(),
@@ -184,6 +185,7 @@ fn summary_of(
         role: role.as_str().to_string(),
         people,
         tables,
+        is_top_level,
     }
 }
 
@@ -193,8 +195,11 @@ fn tables_by_base(
     conn: &Connection,
     workspace_id: &str,
 ) -> AppResult<HashMap<String, Vec<TableSummary>>> {
+    let mut counts = schema::record_counts_in_workspace(conn, workspace_id)?;
     let mut stmt = conn.prepare(
-        "SELECT t.base_id, t.id, t.name, t.icon FROM tables t JOIN bases b ON b.id = t.base_id
+        "SELECT t.base_id, t.id, t.name, t.icon, t.color, t.body_field_id, t.home_date_field_id,
+                t.done_field_id, t.record_noun
+         FROM tables t JOIN bases b ON b.id = t.base_id
          WHERE b.workspace_id = ?1 AND b.deleted_at IS NULL AND t.deleted_at IS NULL
          ORDER BY t.position, t.created_at, t.id",
     )?;
@@ -205,12 +210,19 @@ fn tables_by_base(
                 id: r.get(1)?,
                 name: r.get(2)?,
                 icon: r.get(3)?,
+                color: r.get(4)?,
+                record_count: 0,
+                body_field_id: r.get(5)?,
+                home_date_field_id: r.get(6)?,
+                done_field_id: r.get(7)?,
+                record_noun: r.get(8)?,
             },
         ))
     })?;
     let mut out: HashMap<String, Vec<TableSummary>> = HashMap::new();
     for row in rows {
-        let (base_id, table) = row?;
+        let (base_id, mut table) = row?;
+        table.record_count = counts.remove(&table.id).unwrap_or(0);
         out.entry(base_id).or_default().push(table);
     }
     Ok(out)
@@ -285,10 +297,19 @@ pub fn people_for_base(conn: &Connection, base: &bases::BaseRow) -> AppResult<Ve
 /// role, the live bases they can open, and who else can open each.
 pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<WorkspaceSummary>> {
     let mut out = Vec::new();
-    type MemberOf = (String, String, Option<String>, String, String, bool);
+    type MemberOf = (
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        bool,
+        Option<String>,
+    );
     let member_of: Vec<MemberOf> = {
         let mut stmt = conn.prepare(
-            "SELECT w.id, w.name, w.icon, w.color, m.role, m.all_bases FROM workspace_members m
+            "SELECT w.id, w.name, w.icon, w.color, m.role, m.all_bases, w.root_base_id
+             FROM workspace_members m
              JOIN workspaces w ON w.id = m.workspace_id
              WHERE m.user_id = ?1 AND w.deleted_at IS NULL
              ORDER BY m.position IS NULL, m.position, w.created_at, w.id",
@@ -301,11 +322,12 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
                 r.get(3)?,
                 r.get(4)?,
                 r.get(5)?,
+                r.get(6)?,
             ))
         })?;
         rows.collect::<Result<_, _>>()?
     };
-    for (id, name, icon, color, role, all_bases) in member_of {
+    for (id, name, icon, color, role, all_bases, root_base_id) in member_of {
         let role = Role::parse(&role)?;
         let people = People::load(conn, &id)?;
         let listed: HashSet<String> = if all_bases {
@@ -319,9 +341,13 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
             .filter(|b| all_bases || listed.contains(&b.id))
             .map(|b| {
                 let tables = tables.remove(&b.id).unwrap_or_default();
-                summary_of(b, role, people.for_base(&b.id), tables)
+                let top = root_base_id.as_deref() == Some(b.id.as_str());
+                summary_of(b, role, people.for_base(&b.id), tables, top)
             })
-            .collect();
+            .collect::<Vec<_>>();
+        // Only a top level the caller can open is named; its id would otherwise point at a
+        // project the rest of the listing hides.
+        let root_base_id = root_base_id.filter(|r| bases.iter().any(|b| &b.id == r));
         out.push(WorkspaceSummary {
             id,
             name,
@@ -331,6 +357,7 @@ pub fn list_for_user(conn: &Connection, user_id: &str) -> AppResult<Vec<Workspac
             bases,
             member_count: people.member_count(),
             pending_invite_count: people.pending_invite_count(),
+            root_base_id,
         });
     }
     Ok(out)
@@ -440,13 +467,20 @@ pub fn create(
         params![id, top.id],
     )?;
     let people = People::load(tx, &id)?;
-    let top = summary_of(&top, Role::Owner, people.for_base(&top.id), Vec::new());
+    let top = summary_of(
+        &top,
+        Role::Owner,
+        people.for_base(&top.id),
+        Vec::new(),
+        true,
+    );
     Ok(WorkspaceSummary {
         id,
         name,
         icon,
         color,
         role: Role::Owner.as_str().to_string(),
+        root_base_id: Some(top.id.clone()),
         bases: vec![top],
         member_count: 1,
         pending_invite_count: 0,
@@ -484,6 +518,30 @@ pub fn set_color(tx: &Transaction, workspace_id: &str, color: &str) -> AppResult
         return Err(AppError::not_found("workspace"));
     }
     Ok(())
+}
+
+/// Make `base_id` the workspace's top-level project (UX decision 1). Only the pointer moves:
+/// no collection, link or permission changes. The project must be a live project of the
+/// workspace.
+pub fn set_top_level(tx: &Transaction, workspace_id: &str, base_id: &str) -> AppResult<()> {
+    validate_base_ids(tx, workspace_id, &[base_id.to_string()])?;
+    tx.execute(
+        "UPDATE workspaces SET root_base_id = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![workspace_id, base_id],
+    )?;
+    Ok(())
+}
+
+/// The workspace's top-level project, if it has one.
+pub fn top_level_base(conn: &Connection, workspace_id: &str) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT root_base_id FROM workspaces WHERE id = ?1",
+            [workspace_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten())
 }
 
 /// Rename a live workspace.

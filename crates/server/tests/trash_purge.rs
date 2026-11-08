@@ -380,6 +380,7 @@ async fn purging_a_base_and_a_workspace_cascades_everything() {
     let ows = workspace(&f.app, &other, "Theirs").await;
     let obase = base(&f.app, &other, &ows, "Theirs base").await;
 
+    f.free_the_base().await;
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))
         .await

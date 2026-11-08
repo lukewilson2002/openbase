@@ -44,6 +44,20 @@ pub fn definitions() -> Vec<ToolDef> {
         .manage()
         .idempotent(),
         ToolDef::new(
+            "set_top_level_project",
+            "Choose a workspace's top-level project",
+            "Choose which project of a workspace is its top level: the project whose tables the app shows directly under the workspace, while every other project appears as a folder. Only the choice moves; no table, record or permission changes. The top-level project cannot be deleted, so call this first to free another one (or delete the workspace). list_projects marks it with is_top_level. Needs the manage permission and the owner role on the workspace.",
+            object(
+                json!({
+                    "workspace_id": string("Workspace id (from list_workspaces)."),
+                    "project_id": string(BASE_ID),
+                }),
+                &["workspace_id", "project_id"],
+            ),
+        )
+        .manage()
+        .idempotent(),
+        ToolDef::new(
             "delete_workspace",
             "Delete a workspace",
             "Delete a workspace and all its projects. They move to the trash and can be restored for the trash retention period (restore_from_trash with kind 'workspace'). Needs the manage permission and the owner role.",
@@ -119,6 +133,14 @@ struct RenameWorkspace {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct SetTopLevel {
+    workspace_id: String,
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ScopeArgs {
     scope: Scope,
     id: String,
@@ -160,6 +182,7 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
             Err(e) => e,
         }),
         "rename_workspace" => with_args!(RenameWorkspace, rename_workspace),
+        "set_top_level_project" => with_args!(SetTopLevel, set_top_level_project),
         "delete_workspace" => with_args!(WorkspaceArg, delete_workspace),
         "remove_member" => with_args!(RemoveMember, remove_member),
         "list_invites" => with_args!(ScopeArgs, list_invites),
@@ -185,6 +208,21 @@ async fn rename_workspace(ctx: &McpCtx, a: RenameWorkspace) -> ToolResult {
     let path = format!("/api/workspaces/{}", encode_segment(&a.workspace_id));
     match fetch(ctx, "PATCH", &path, None, Some(Value::Object(body))).await {
         Ok(v) => ToolResult::ok(with_note(json!({ "workspace": v }), note)),
+        Err(e) => e,
+    }
+}
+
+async fn set_top_level_project(ctx: &McpCtx, a: SetTopLevel) -> ToolResult {
+    let path = format!(
+        "/api/workspaces/{}/top-level",
+        encode_segment(&a.workspace_id)
+    );
+    let body = json!({ "base_id": a.base_id });
+    match fetch(ctx, "POST", &path, None, Some(body)).await {
+        Ok(v) => ToolResult::ok(json!({
+            "workspace_id": a.workspace_id,
+            "top_level_project": v["root_base_id"],
+        })),
         Err(e) => e,
     }
 }

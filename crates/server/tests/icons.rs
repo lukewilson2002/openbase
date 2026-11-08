@@ -426,6 +426,7 @@ async fn trash_listing_carries_icons() {
     assert_eq!(item["icon"], "truck");
 
     // base in the workspace trash, then the workspace itself
+    f.free_the_base().await;
     f.app
         .patch(&f.owner, &base_path(&f), json!({ "icon": "store" }))
         .await

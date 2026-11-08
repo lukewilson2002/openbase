@@ -800,6 +800,8 @@ async fn tools_listed_depend_on_the_token() {
         "update_field",
         "delete_field",
         "set_primary_field",
+        "set_page_field",
+        "update_table_settings",
         "check_formula",
         "create_view",
         "update_view",
@@ -832,6 +834,7 @@ async fn tools_listed_depend_on_the_token() {
         "revoke_invite",
         "duplicate_project",
         "delete_project",
+        "set_top_level_project",
     ];
     let sorted = |v: &[String]| {
         let mut v = v.to_vec();

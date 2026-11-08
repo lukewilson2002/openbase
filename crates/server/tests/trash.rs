@@ -370,6 +370,7 @@ async fn items_inside_a_trashed_table_cannot_be_restored_on_their_own() {
 #[tokio::test]
 async fn bases_and_workspaces_restore_in_order() {
     let f = Fixture::new().await;
+    f.free_the_base().await;
     let base_path = format!("/api/bases/{}", f.base_id);
     f.app.delete(&f.owner, &base_path).await.assert_status(200);
 
@@ -434,6 +435,7 @@ async fn restore_publishes_events() {
             table_id: Some(sid(&t2["id"]).to_string())
         }
     );
+    f.free_the_base().await;
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))
         .await
@@ -542,6 +544,7 @@ async fn base_and_workspace_restore_need_owner_and_a_session() {
     for role in ALL_ROLES {
         let f = Fixture::new().await;
         let u = f.member("m@example.com", role);
+        f.free_the_base().await;
         f.app
             .delete(&f.owner, &format!("/api/bases/{}", f.base_id))
             .await
@@ -563,6 +566,7 @@ async fn base_and_workspace_restore_need_owner_and_a_session() {
         );
     }
     let f = Fixture::new().await;
+    f.free_the_base().await;
     // a base-level owner may restore the base but not touch the workspace
     let guest = f.base_guest("guest@example.com", Role::Owner);
     f.app

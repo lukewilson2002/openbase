@@ -213,6 +213,22 @@ impl Fixture {
         u
     }
 
+    /// Let the test delete the fixture's base: it is the workspace's top level, which cannot be
+    /// deleted, so another project, "Spare", takes that place first. Returns its id.
+    pub async fn free_the_base(&self) -> String {
+        let spare = base(&self.app, &self.owner, &self.ws, "Spare").await;
+        let id = spare["id"].as_str().unwrap().to_string();
+        self.app
+            .post(
+                &self.owner,
+                &format!("/api/workspaces/{}/top-level", self.ws),
+                json!({ "base_id": id }),
+            )
+            .await
+            .assert_status(200);
+        id
+    }
+
     pub async fn schema(&self) -> Value {
         let r = self
             .app

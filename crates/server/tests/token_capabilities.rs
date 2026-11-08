@@ -196,6 +196,16 @@ const CASES: &[Case] = &[
         scoped: Scoped::Refused,
     },
     Case {
+        name: "choose the top-level project",
+        method: "POST",
+        template: "/api/workspaces/{id}/top-level",
+        path: |i| format!("/api/workspaces/{}/top-level", i.ws),
+        body: |i| Some(json!({"base_id": i.side})),
+        min: Min::Role(Role::Owner),
+        ok: 200,
+        scoped: Scoped::Refused,
+    },
+    Case {
         name: "delete workspace",
         method: "DELETE",
         template: "/api/workspaces/{id}",

@@ -111,7 +111,7 @@ pub fn create(
     if input.empty == Some(true) {
         return live_base(tx, &id);
     }
-    tables::create(tx, &id, FIRST_TABLE_NAME, None, user_id)?;
+    tables::create(tx, &id, FIRST_TABLE_NAME, None, None, user_id)?;
     live_base(tx, &id)
 }
 
@@ -132,6 +132,7 @@ pub fn schema(
             .push(f);
     }
     let mut views_by_table = schema::base_visible_views(conn, &base.id, user_id)?;
+    let mut counts = schema::record_counts_in_base(conn, &base.id)?;
     let mut out = Vec::with_capacity(table_rows.len());
     for t in table_rows {
         let stored = fields_by_table.remove(&t.id).unwrap_or_default();
@@ -142,6 +143,12 @@ pub fn schema(
             icon: t.icon.clone(),
             description: t.description.clone(),
             primary_field_id: t.primary_field_id.clone(),
+            color: t.color.clone(),
+            body_field_id: t.body_field_id.clone(),
+            home_date_field_id: t.home_date_field_id.clone(),
+            done_field_id: t.done_field_id.clone(),
+            record_noun: t.record_noun.clone(),
+            record_count: counts.remove(&t.id).unwrap_or(0),
             fields: schema::fields_for_client(&stored),
             views: views_by_table
                 .remove(&t.id)
@@ -151,11 +158,12 @@ pub fn schema(
                 .collect(),
         });
     }
-    let (workspace_name, workspace_color) = conn.query_row(
-        "SELECT name, color FROM workspaces WHERE id = ?1",
-        [&base.workspace_id],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )?;
+    let (workspace_name, workspace_color, root_base_id): (String, String, Option<String>) = conn
+        .query_row(
+            "SELECT name, color, root_base_id FROM workspaces WHERE id = ?1",
+            [&base.workspace_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
     Ok(BaseSchema {
         id: base.id.clone(),
         workspace_id: base.workspace_id.clone(),
@@ -167,6 +175,7 @@ pub fn schema(
         people: workspaces::people_for_base(conn, base)?,
         workspace_name,
         workspace_color,
+        is_top_level: root_base_id.as_deref() == Some(base.id.as_str()),
     })
 }
 
@@ -207,7 +216,24 @@ pub fn update(tx: &Transaction, base_id: &str, patch: &UpdateBase) -> AppResult<
 /// Move a base to the trash, as deleted by `user_id`. Only the base row is
 /// stamped: its tables and records are unreachable while it is in the trash
 /// and come back unchanged with it.
+///
+/// The top-level project of a workspace cannot be deleted (UX decision 1): its collections are
+/// the ones shown directly under the workspace. Another project has to become the top level
+/// first, or the whole workspace goes to the trash.
 pub fn soft_delete(tx: &Transaction, base_id: &str, user_id: &str) -> AppResult<()> {
+    let base = live_base(tx, base_id)?;
+    let is_top_level: bool = tx.query_row(
+        "SELECT root_base_id IS ?2 FROM workspaces WHERE id = ?1",
+        params![base.workspace_id, base.id],
+        |r| r.get(0),
+    )?;
+    if is_top_level {
+        return Err(AppError::conflict(format!(
+            "'{}' is the top-level folder of its workspace, so it cannot be deleted. Make another \
+             folder the top level first, or delete the workspace.",
+            base.name
+        )));
+    }
     let n = tx.execute(
         "UPDATE bases SET deleted_at = ?2, deleted_by = ?3 WHERE id = ?1 AND deleted_at IS NULL",
         params![base_id, now_ms(), user_id],

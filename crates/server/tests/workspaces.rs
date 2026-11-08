@@ -294,12 +294,19 @@ async fn deleted_workspace_and_bases_disappear_from_lists() {
 
     // a deleted base alone disappears from the workspace listing
     let g = Fixture::new().await;
+    let spare = g.free_the_base().await;
     g.app
         .delete(&g.owner, &format!("/api/bases/{}", g.base_id))
         .await
         .assert_status(200);
     let list = g.app.get(&g.owner, "/api/workspaces").await;
-    assert_eq!(list.body[0]["bases"], json!([]));
+    let bases = list.body[0]["bases"].as_array().unwrap();
+    assert_eq!(
+        bases.len(),
+        1,
+        "only the project that took its place is left"
+    );
+    assert_eq!(bases[0]["id"], spare.as_str());
 }
 
 #[tokio::test]

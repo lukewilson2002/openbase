@@ -34,6 +34,8 @@ fn type_names() -> &'static [&'static str] {
     })
 }
 
+const TABLE_COLOR: &str = "Optional colour name, e.g. blue, orange, green, purple, yellow, pink, teal, red, cyan, gray. The app marks a table by its colour (it no longer shows icons); by default a new table takes the next colour of the project's cycle.";
+
 pub fn definitions() -> Vec<ToolDef> {
     let ftype = json!({
         "type": "string",
@@ -100,11 +102,12 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_table",
             "Create a table",
-            "Add a table to a project, optionally with an icon and its fields, so a typical table is set up in ONE call. Every new table starts with the primary text field 'Name', a hidden rich text field 'Page' (the body of its records, added after the listed fields; 'Page 2' if the name is taken) and a grid view, like the first table of a new project (create_project): nothing else is added. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the project, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
+            "Add a table to a project, optionally with a colour, an icon and its fields, so a typical table is set up in ONE call. Every new table starts with the primary text field 'Name', a hidden rich text field 'Page' (the body of its records, added after the listed fields; 'Page 2' if the name is taken) and a grid view, like the first table of a new project (create_project): nothing else is added. Pass `fields` (same shape as create_field: name, type, options, description, inverse_name; listed in order after 'Name') to create the rest at once. It is all or nothing: every field is validated first and if one is invalid nothing is created, and the error names it (e.g. fields[2] 'Status'). A link may point to any table of the project, including ones created earlier; a lookup, rollup or count may use a link field listed earlier in `fields` (options.link_field) and formulas may use any field listed before them. To link a table to itself, create the table and then call create_field. Rename the primary field afterwards with update_field if 'Name' does not fit. Then set up the views the table's purpose calls for (create_view; the result's views_note says how). Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
                     "name": string("Table name."),
+                    "color": string(TABLE_COLOR),
                     "icon": icon_schema("table"),
                     "fields": {
                         "type": "array",
@@ -127,14 +130,15 @@ pub fn definitions() -> Vec<ToolDef> {
         .write(),
         ToolDef::new(
             "rename_table",
-            "Rename a table or change its icon",
-            "Change a table's name, description and/or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
+            "Rename a table or change its colour or icon",
+            "Change a table's name, description, colour and/or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it; the app no longer shows icons, it marks a table by its colour. Needs the creator role. update_table_settings changes the other collection settings.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
                     "table": string(TABLE),
                     "name": string("New name."),
                     "description": string("New description."),
+                    "color": string(TABLE_COLOR),
                     "icon": icon_schema("table"),
                 }),
                 &["project_id", "table"],
@@ -250,6 +254,42 @@ pub fn definitions() -> Vec<ToolDef> {
         .write()
         .idempotent(),
         ToolDef::new(
+            "set_page_field",
+            "Set the page field",
+            "Choose which rich text field holds the page of each record of a table: the long-form body the app shows below the record's properties. Give `field` (name or id of a rich text field other than the primary field), or `create: true` to add a rich text field called 'Page' (hidden in every view) when the table has none, or `clear: true` for no page field. Every table made by this app already has one; deleting or retyping the page field clears it. Write a page with update_records on this field. Needs the creator role.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "field": string("Name or id of a rich text field to use as the page."),
+                    "create": boolean("true: add the 'Page' field if the table has no page field yet (nothing changes if it has one)."),
+                    "clear": boolean("true: the table has no page field."),
+                }),
+                &["project_id", "table"],
+            ),
+        )
+        .write()
+        .idempotent(),
+        ToolDef::new(
+            "update_table_settings",
+            "Update table settings",
+            "Change a table's collection settings; what you leave out stays. color; description; record_noun (what one record is called, e.g. 'client'; '' resets it to 'record'); home_date_field (the date field the app's Home screen orders the table's records by: a date, created time or last modified time field, or a formula or rollup that gives a date; null = none); done_field (the checkbox field that marks a record done on Home; null = none). Fields are given by name or id and must belong to the table. Deleting or retyping such a field clears the setting. Name and icon: rename_table; title field: set_primary_field; page field: set_page_field. Needs the creator role.",
+            object(
+                json!({
+                    "project_id": string(BASE_ID),
+                    "table": string(TABLE),
+                    "color": string(TABLE_COLOR),
+                    "description": string("New description."),
+                    "record_noun": string("What one record is called, e.g. 'client'; '' resets it to 'record'."),
+                    "home_date_field": json!({"type": ["string", "null"], "description": "Name or id of the date field Home orders the table by; null for none."}),
+                    "done_field": json!({"type": ["string", "null"], "description": "Name or id of the checkbox field that marks a record done; null for none."}),
+                }),
+                &["project_id", "table"],
+            ),
+        )
+        .write()
+        .idempotent(),
+        ToolDef::new(
             "check_formula",
             "Check a formula",
             "Parse and type-check a formula without creating a field and preview its value on a record. Write field references as {Field Name}. Returns ok, the result type, or the error with its position. Needs the editor role.",
@@ -314,6 +354,8 @@ pub async fn run(ctx: &McpCtx, name: &str, args: &Value) -> Option<ToolResult> {
         "update_field" => with_args!(UpdateField, update_field),
         "delete_field" => with_args!(FieldArg, delete_field),
         "set_primary_field" => with_args!(FieldArg, set_primary_field),
+        "set_page_field" => with_args!(SetPageField, set_page_field),
+        "update_table_settings" => with_args!(TableSettings, update_table_settings),
         "check_formula" => with_args!(CheckFormula, check_formula),
         "list_icons" => Some(match parse::<ListIconsArg>(args.clone()) {
             Ok(a) => list_icons(a),
@@ -437,13 +479,47 @@ fn table_out(v: &Value) -> Value {
     if let Some(i) = v["icon"].as_str() {
         out["icon"] = json!(i);
     }
+    // Collection settings: the fields they point at by name, like `primary_field`.
+    let name_of = |key: &str| {
+        v["fields"]
+            .as_array()
+            .unwrap_or(&empty)
+            .iter()
+            .find(|f| !v[key].is_null() && f["id"] == v[key])
+            .map(|f| f["name"].clone())
+    };
+    for (key, out_key) in [
+        ("body_field_id", "page_field"),
+        ("home_date_field_id", "home_date_field"),
+        ("done_field_id", "done_field"),
+    ] {
+        if let Some(name) = name_of(key) {
+            out[out_key] = name;
+        }
+    }
+    for key in ["color", "record_count"] {
+        if !v[key].is_null() {
+            out[key] = v[key].clone();
+        }
+    }
+    if let Some(n) = v["record_noun"].as_str().filter(|n| !n.is_empty()) {
+        out["record_noun"] = json!(n);
+    }
     out
 }
 
 /// A base (a summary, or with its tables).
 fn base_out(v: &Value) -> Value {
     let mut out = Map::new();
-    for key in ["id", "name", "workspace_id", "color", "icon", "role"] {
+    for key in [
+        "id",
+        "name",
+        "workspace_id",
+        "color",
+        "icon",
+        "role",
+        "is_top_level",
+    ] {
         if !v[key].is_null() {
             out.insert(key.into(), v[key].clone());
         }
@@ -590,6 +666,8 @@ struct CreateTable {
     #[serde(rename = "project_id", alias = "base_id")]
     base_id: String,
     name: String,
+    #[serde(default)]
+    color: Option<String>,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
     #[serde(default)]
@@ -641,6 +719,7 @@ fn placeholder_field(body: &Value) -> Field {
 async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
     let mut body = Map::new();
     body.insert("name".into(), json!(a.name));
+    insert_some(&mut body, "color", a.color);
     let note = match put_icon(&mut body, a.icon) {
         Ok(n) => n,
         Err(e) => return e,
@@ -657,6 +736,12 @@ async fn create_table(ctx: &McpCtx, a: CreateTable) -> ToolResult {
             icon: None,
             description: None,
             primary_field_id: "Name".into(),
+            color: "blue".into(),
+            body_field_id: None,
+            home_date_field_id: None,
+            done_field_id: None,
+            record_noun: String::new(),
+            record_count: 0,
             fields: Vec::new(),
             views: Vec::new(),
         };
@@ -708,6 +793,8 @@ struct RenameTable {
     name: Option<String>,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
     #[serde(default, deserialize_with = "ob_core::api::double_option")]
     icon: Option<Option<String>>,
 }
@@ -716,12 +803,13 @@ async fn rename_table(ctx: &McpCtx, a: RenameTable) -> ToolResult {
     let mut body = Map::new();
     insert_some(&mut body, "name", a.name);
     insert_some(&mut body, "description", a.description);
+    insert_some(&mut body, "color", a.color);
     let note = match put_icon(&mut body, a.icon) {
         Ok(n) => n,
         Err(e) => return e,
     };
     if body.is_empty() {
-        return ToolResult::error("Give a new name, description and/or icon.");
+        return ToolResult::error("Give a new name, description, colour and/or icon.");
     }
     let schema = match load_schema(ctx, &a.base_id).await {
         Ok(s) => s,
@@ -1127,6 +1215,131 @@ async fn set_primary_field(ctx: &McpCtx, a: FieldArg) -> ToolResult {
     .await
     {
         Ok(_) => ToolResult::ok(json!({ "table": table.name, "primary_field": field.name })),
+        Err(e) => e,
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetPageField {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    table: String,
+    #[serde(default)]
+    field: Option<String>,
+    #[serde(default)]
+    create: Option<bool>,
+    #[serde(default)]
+    clear: Option<bool>,
+}
+
+async fn set_page_field(ctx: &McpCtx, a: SetPageField) -> ToolResult {
+    let create = a.create == Some(true);
+    let clear = a.clear == Some(true);
+    if usize::from(a.field.is_some()) + usize::from(create) + usize::from(clear) != 1 {
+        return ToolResult::error(
+            "Give exactly one of: field (a rich text field to use as the page), create: true (add a 'Page' field if the table has none) or clear: true (no page field).",
+        );
+    }
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let table = match find_table(&schema, &a.table) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    let body = match &a.field {
+        Some(key) => match find_field(table, key) {
+            Ok(f) => json!({ "field_id": f.id }),
+            Err(e) => return e,
+        },
+        None if create => json!({ "create": true }),
+        None => json!({ "field_id": null }),
+    };
+    match fetch(
+        ctx,
+        "POST",
+        &table_path(&table.id, "/body-field"),
+        None,
+        Some(body),
+    )
+    .await
+    {
+        Ok(v) => {
+            let out = table_out(&v);
+            ToolResult::ok(json!({
+                "table": table.name,
+                "page_field": out.get("page_field").cloned().unwrap_or(Value::Null),
+            }))
+        }
+        Err(e) => e,
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TableSettings {
+    #[serde(rename = "project_id", alias = "base_id")]
+    base_id: String,
+    table: String,
+    #[serde(default)]
+    color: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    record_noun: Option<String>,
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
+    home_date_field: Option<Option<String>>,
+    #[serde(default, deserialize_with = "ob_core::api::double_option")]
+    done_field: Option<Option<String>>,
+}
+
+async fn update_table_settings(ctx: &McpCtx, a: TableSettings) -> ToolResult {
+    let schema = match load_schema(ctx, &a.base_id).await {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let table = match find_table(&schema, &a.table) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    let mut body = Map::new();
+    insert_some(&mut body, "color", a.color);
+    insert_some(&mut body, "description", a.description);
+    insert_some(&mut body, "record_noun", a.record_noun);
+    for (key, setting) in [
+        ("home_date_field_id", a.home_date_field),
+        ("done_field_id", a.done_field),
+    ] {
+        match setting {
+            None => {}
+            Some(None) => {
+                body.insert(key.into(), Value::Null);
+            }
+            Some(Some(name)) => match find_field(table, &name) {
+                Ok(f) => {
+                    body.insert(key.into(), json!(f.id));
+                }
+                Err(e) => return e,
+            },
+        }
+    }
+    if body.is_empty() {
+        return ToolResult::error(
+            "Give at least one setting: color, description, record_noun, home_date_field or done_field.",
+        );
+    }
+    match fetch(
+        ctx,
+        "PATCH",
+        &table_path(&table.id, ""),
+        None,
+        Some(Value::Object(body)),
+    )
+    .await
+    {
+        Ok(v) => ToolResult::ok(json!({ "table": table_out(&v) })),
         Err(e) => e,
     }
 }

@@ -42,6 +42,24 @@ pub struct Table {
     #[serde(default)]
     pub description: Option<String>,
     pub primary_field_id: String,
+    /// One of `ob_core::field::COLORS`: the mark that identifies the collection (UX decision 3;
+    /// `icon` stays for compatibility but nothing in the app shows it).
+    pub color: String,
+    /// The rich text property that holds the page of each record, if the collection has one.
+    #[serde(default)]
+    pub body_field_id: Option<String>,
+    /// The date property Home orders the collection's records by, if any.
+    #[serde(default)]
+    pub home_date_field_id: Option<String>,
+    /// The checkbox property that marks a record done, if any.
+    #[serde(default)]
+    pub done_field_id: Option<String>,
+    /// What one record is called ("client"); empty means "record".
+    #[serde(default)]
+    pub record_noun: String,
+    /// Live records in the collection.
+    #[serde(default)]
+    pub record_count: i64,
     /// Fields in display order.
     pub fields: Vec<Field>,
     /// Views in display order (only those visible to the caller).
@@ -66,6 +84,10 @@ pub struct BaseSchema {
     pub workspace_name: String,
     /// The workspace's colour (one of `ob_core::field::COLORS`).
     pub workspace_color: String,
+    /// Whether this is the workspace's top-level project, whose collections the app shows
+    /// directly under the workspace (every other project is a folder).
+    #[serde(default)]
+    pub is_top_level: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +96,10 @@ pub struct CreateTable {
     pub name: String,
     #[serde(default)]
     pub icon: Option<String>,
+    /// One of `ob_core::field::COLORS`. Absent: the next colour of the cycle the project's
+    /// tables take.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Fields to create after the primary field "Name", each in the shape of
     /// `POST /api/tables/{id}/fields` (`name`, `type`, `options`, `description`,
     /// `inverse_name`; `options` may be left out for the type's defaults), in order. All or nothing: if any field is invalid the
@@ -103,6 +129,29 @@ pub struct UpdateTable {
     pub description: Option<String>,
     #[serde(default)]
     pub position: Option<f64>,
+    /// One of `ob_core::field::COLORS`; absent leaves it unchanged.
+    #[serde(default)]
+    pub color: Option<String>,
+    /// What one record is called ("client"); empty resets it to "record". Absent = unchanged.
+    #[serde(default)]
+    pub record_noun: Option<String>,
+    /// The date property Home orders the collection by: a date, created or last modified time,
+    /// or a formula or rollup that gives a date. Absent = unchanged, `null` = none.
+    #[serde(
+        default,
+        deserialize_with = "super::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub home_date_field_id: Option<Option<String>>,
+    /// The checkbox property that marks a record done. Absent = unchanged, `null` = none.
+    #[serde(
+        default,
+        deserialize_with = "super::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub done_field_id: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +193,41 @@ pub struct UpdateField {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SetPrimaryField {
     pub field_id: String,
+}
+
+/// `POST /api/tables/{id}/body-field`: make a rich text property the table's page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct SetBodyField {
+    /// A rich text property of the table. `null` or absent: the table has no page property.
+    #[serde(default)]
+    pub field_id: Option<String>,
+    /// `true` instead of a `field_id`: make sure the table has a page, adding a rich text
+    /// property called "Page" (hidden in every view) when it has none. Nothing changes if it
+    /// already has one.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub create: bool,
+}
+
+/// `PUT /api/tables/{id}/records/{rid}/page`: write a record's page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct SetPage {
+    /// The page as markdown; `null` or absent clears it.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// What `PUT /api/tables/{id}/records/{rid}/page` returns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct PageSaved {
+    /// The table's page property, which this save created when `created` is true.
+    pub field_id: String,
+    /// Whether the table had no page property and this save created "Page".
+    pub created: bool,
+    pub record: crate::api::records::Record,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

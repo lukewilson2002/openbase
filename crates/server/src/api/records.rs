@@ -3,7 +3,8 @@
 //! Write endpoints (Editor role): `POST|PATCH|DELETE /api/tables/{id}/records`
 //! (batch), `POST /api/tables/{id}/records/restore`,
 //! `POST /api/tables/{id}/records/move`, `POST /api/tables/{id}/records/duplicate` and
-//! `POST /api/tables/{id}/records/{rid}/discard`.
+//! `POST /api/tables/{id}/records/{rid}/discard`, and `PUT /api/tables/{id}/records/{rid}/page`
+//! (the record's page, which also creates the table's page property when it has none).
 //! All writes go through `engine::write` in one transaction and events are
 //! published after it commits.
 //!
@@ -22,16 +23,17 @@
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ob_core::api::records::{
     AggregateRequest, AggregateResponse, AggregationsResponse, CreateRecords, HistoryEntry,
-    LinkCandidates, MoveRecords, QueryRequest, QueryResponse, Record, RecordIds, RecordsResponse,
-    TransientConfig, UpdateRecords,
+    LinkCandidates, MoveRecords, QueryRequest, QueryResponse, Record, RecordIds, RecordPatch,
+    RecordsResponse, TransientConfig, UpdateRecords,
 };
+use ob_core::api::schema::{PageSaved, SetPage};
 use serde::Deserialize;
 
-use crate::api::schema_support::publish;
+use crate::api::schema_support::{publish, publish_schema};
 use crate::auth::Actor;
 use crate::engine::query;
 use crate::engine::write::{self, CreateOpts, WriteCtx, WriteOutcome, WriteSource};
@@ -39,7 +41,8 @@ use crate::error::{AppError, AppResult};
 use crate::extract::{ApiJson, ApiQuery};
 use crate::perm::{self, Role};
 use crate::state::AppState;
-use crate::store::{history, records as record_store};
+use crate::store::schema::Touched;
+use crate::store::{history, pages, records as record_store};
 
 /// Entries per history page unless the request says otherwise, and the cap.
 const HISTORY_DEFAULT: usize = 50;
@@ -55,6 +58,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/tables/{id}/records/move", post(move_records))
         .route("/api/tables/{id}/records/duplicate", post(duplicate))
         .route("/api/tables/{id}/records/{rid}/discard", post(discard))
+        .route("/api/tables/{id}/records/{rid}/page", put(set_page))
         .route("/api/tables/{id}/records/lookup", get(lookup))
         .route("/api/tables/{id}/records/get", post(get_many))
         .route("/api/tables/{id}/records/{rid}", get(get_one))
@@ -128,6 +132,58 @@ async fn update(
         .await?;
     publish_outcome(&state, &headers, &who, &outcome);
     Ok(Json(RecordsResponse { records }))
+}
+
+/// Write a record's page. A table without a page property gets "Page" as part of this save
+/// (decision 2 of the UX overhaul): the one schema change an editor can cause, kept to this
+/// call so that no other write creates properties. The value is saved like any other cell, so
+/// history, search and automations see it.
+async fn set_page(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path((table_id, record_id)): Path<(String, String)>,
+    ApiJson(body): ApiJson<SetPage>,
+) -> AppResult<Json<PageSaved>> {
+    let who = actor.clone();
+    let (outcome, saved) = state
+        .db
+        .write(move |tx| {
+            let ctx = editor_ctx(tx, &actor, &table_id)?;
+            let (field_id, created) = pages::ensure_body_field(tx, &table_id)?;
+            let patch = RecordPatch {
+                id: record_id.clone(),
+                values: [(
+                    field_id.clone(),
+                    body.text.map_or(serde_json::Value::Null, Into::into),
+                )]
+                .into(),
+            };
+            let outcome = write::update_records(tx, &ctx, &table_id, vec![patch])?;
+            let record = record_store::load_dtos(tx, &table_id, &[record_id], ctx.timezone)?
+                .pop()
+                .ok_or_else(|| AppError::not_found("record"))?;
+            Ok((
+                outcome,
+                PageSaved {
+                    field_id,
+                    created,
+                    record,
+                },
+            ))
+        })
+        .await?;
+    if saved.created {
+        publish_schema(
+            &state,
+            &headers,
+            &who,
+            &outcome.base_id,
+            &Touched::of(&outcome.table_id),
+        );
+    }
+    publish_outcome(&state, &headers, &who, &outcome);
+    Ok(Json(saved))
 }
 
 async fn remove(

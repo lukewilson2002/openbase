@@ -648,7 +648,8 @@ async fn list_projects(ctx: &McpCtx) -> ToolResult {
             "id": w.id,
             "name": w.name,
             "role": w.role,
-            "bases": w.bases.iter().map(|b| with_icon(json!({"id": b.id, "name": b.name, "role": b.role}), &b.icon)).collect::<Vec<_>>(),
+            "top_level_project": w.root_base_id,
+            "bases": w.bases.iter().map(|b| with_icon(json!({"id": b.id, "name": b.name, "role": b.role, "is_top_level": b.is_top_level}), &b.icon)).collect::<Vec<_>>(),
         }), &w.icon)).collect::<Vec<_>>(),
     }))
 }
@@ -696,6 +697,12 @@ async fn get_project_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
                     "name": t.name,
                     "description": t.description,
                     "primary_field": primary,
+                    "color": t.color,
+                    "record_count": t.record_count,
+                    "record_noun": t.record_noun,
+                    "page_field": field_name(t, &t.body_field_id),
+                    "home_date_field": field_name(t, &t.home_date_field_id),
+                    "done_field": field_name(t, &t.done_field_id),
                     "fields": t.fields.iter().map(field_json).collect::<Vec<_>>(),
                     "views": t.views.iter().map(|v| {
                         let mut view = json!({
@@ -720,10 +727,21 @@ async fn get_project_schema(ctx: &McpCtx, a: BaseArg) -> ToolResult {
             "name": schema.name,
             "workspace_id": schema.workspace_id,
             "your_role": schema.role,
+            "is_top_level": schema.is_top_level,
             "tables": tables,
         }),
         &schema.icon,
     ))
+}
+
+/// The name of the field of `table` that `id` points at (a collection setting), if any.
+fn field_name(table: &ob_core::api::schema::Table, id: &Option<String>) -> Option<String> {
+    let id = id.as_deref()?;
+    table
+        .fields
+        .iter()
+        .find(|f| f.id == id)
+        .map(|f| f.name.clone())
 }
 
 /// `value` (an object) with its `icon` when it has one (icons are left out when unset, like

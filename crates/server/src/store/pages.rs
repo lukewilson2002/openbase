@@ -4,13 +4,14 @@
 
 use ob_core::field::{Field, FieldKind};
 use ob_core::limits;
+use ob_core::value::ResultType;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
 use crate::db::now_ms;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
-use crate::store::schema::{self, PositionScope};
+use crate::store::schema::{self, PositionScope, TableRow};
 
 /// Name of the page property of a collection that has none yet. Another property of the table may
 /// already use it; the new one is then called "Page 2", "Page 3" and so on.
@@ -55,6 +56,201 @@ pub fn create_body_field(conn: &Connection, table_id: &str) -> AppResult<Option<
     )?;
     hide_in_every_view(conn, table_id, &field.id)?;
     Ok(Some(field.id))
+}
+
+/// The page property of `table_id`, created as "Page" when the table has none. The `bool` says
+/// whether this call created it. This is the one schema change an editor can cause (decision 2):
+/// the page of a record is written through it, see `PUT /api/tables/{id}/records/{rid}/page`.
+pub fn ensure_body_field(conn: &Connection, table_id: &str) -> AppResult<(String, bool)> {
+    if let Some(id) = body_field_id(conn, table_id)? {
+        return Ok((id, false));
+    }
+    match create_body_field(conn, table_id)? {
+        Some(id) => Ok((id, true)),
+        None => Err(AppError::conflict(format!(
+            "this collection already has {} properties, the most it can have, so there is no \
+             room for a page; delete a property first",
+            limits::MAX_FIELDS_PER_TABLE
+        ))),
+    }
+}
+
+/// Whether a property can be a collection's Home date (HOME-5): a date, a created or last
+/// modified time, or a formula or rollup that gives a date. A lookup gives a list of dates,
+/// which has no single date to order by.
+pub fn is_date_like(kind: &FieldKind) -> bool {
+    let gives_date = |t: &ResultType| matches!(t, ResultType::Date | ResultType::DateTime);
+    match kind {
+        FieldKind::Date(_) | FieldKind::CreatedTime(_) | FieldKind::LastModifiedTime(_) => true,
+        FieldKind::Formula(o) => gives_date(&o.result_type),
+        FieldKind::Rollup(o) => gives_date(&o.result_type),
+        _ => false,
+    }
+}
+
+fn is_checkbox(kind: &FieldKind) -> bool {
+    matches!(kind, FieldKind::Checkbox(_))
+}
+
+fn is_rich_text(kind: &FieldKind) -> bool {
+    matches!(kind, FieldKind::RichText(_))
+}
+
+/// A property of `table_id` that is not in the trash.
+fn table_field(conn: &Connection, table_id: &str, field_id: &str) -> AppResult<Option<Field>> {
+    Ok(schema::table_fields(conn, table_id)?
+        .into_iter()
+        .find(|f| f.id == field_id))
+}
+
+/// Make `field_id` the page of the table, or with `None` give the table no page property.
+/// The property must be a rich text property of the table other than its title.
+pub fn set_body_field(
+    conn: &Connection,
+    table_id: &str,
+    field_id: Option<&str>,
+) -> AppResult<TableRow> {
+    let table = schema::live_table(conn, table_id)?;
+    if let Some(id) = field_id {
+        let field = table_field(conn, table_id, id)?.ok_or_else(|| AppError::not_found("field"))?;
+        if !is_rich_text(&field.kind) {
+            return Err(AppError::bad_request(format!(
+                "a {} property cannot be the page; only rich text properties can",
+                field.field_type().label()
+            )));
+        }
+        if table.primary_field_id == field.id {
+            return Err(AppError::bad_request(
+                "the title property cannot also be the page; make another property the title first",
+            ));
+        }
+    }
+    conn.execute(
+        "UPDATE tables SET body_field_id = ?2 WHERE id = ?1",
+        params![table_id, field_id],
+    )?;
+    schema::live_table(conn, table_id)
+}
+
+/// Set the Home date of the table (`None` = no Home date): a date-like property of the table.
+pub fn set_home_date_field(
+    conn: &Connection,
+    table_id: &str,
+    field_id: Option<&str>,
+) -> AppResult<()> {
+    set_pointer(
+        conn,
+        table_id,
+        "home_date_field_id",
+        field_id,
+        is_date_like,
+        "Home date",
+        "a date, created time or last modified time property, or a formula or rollup that gives a date",
+    )
+}
+
+/// Set the Done property of the table (`None` = none): a checkbox property of the table.
+pub fn set_done_field(conn: &Connection, table_id: &str, field_id: Option<&str>) -> AppResult<()> {
+    set_pointer(
+        conn,
+        table_id,
+        "done_field_id",
+        field_id,
+        is_checkbox,
+        "Done property",
+        "a checkbox property",
+    )
+}
+
+fn set_pointer(
+    conn: &Connection,
+    table_id: &str,
+    column: &str,
+    field_id: Option<&str>,
+    valid: fn(&FieldKind) -> bool,
+    what: &str,
+    wants: &str,
+) -> AppResult<()> {
+    if let Some(id) = field_id {
+        let field = table_field(conn, table_id, id)?.ok_or_else(|| {
+            AppError::bad_request(format!("the {what} must be a property of this table"))
+        })?;
+        if !valid(&field.kind) {
+            return Err(AppError::bad_request(format!(
+                "a {} property cannot be the {what}; it must be {wants}",
+                field.field_type().label()
+            )));
+        }
+    }
+    // `column` is one of this file's constants, never client input.
+    conn.execute(
+        &format!("UPDATE tables SET {column} = ?2 WHERE id = ?1"),
+        params![table_id, field_id],
+    )?;
+    Ok(())
+}
+
+/// Clear what the tables' settings point at when it is no longer there or no longer fits:
+/// the page when its property is deleted, retyped away from rich text or made the title; the
+/// Home date or Done property when theirs is deleted or retyped. Nothing is refused, so the
+/// calls that delete or retype a property behave as they always did (FLD-4); run this after
+/// them for every table they touched. A property that comes back from the trash is not
+/// pointed at again.
+pub fn clear_stale_settings(conn: &Connection, table_ids: &[String]) -> AppResult<()> {
+    for table_id in table_ids {
+        let Some(table) = schema::table_any(conn, table_id)? else {
+            continue;
+        };
+        let fields = schema::table_fields(conn, table_id)?;
+        let fits = |pointer: &Option<String>, valid: &dyn Fn(&Field) -> bool| {
+            pointer
+                .as_deref()
+                .is_none_or(|id| fields.iter().any(|f| f.id == id && valid(f)))
+        };
+        let checks = [
+            (
+                "body_field_id",
+                fits(&table.body_field_id, &|f| {
+                    is_rich_text(&f.kind) && f.id != table.primary_field_id
+                }),
+            ),
+            (
+                "home_date_field_id",
+                fits(&table.home_date_field_id, &|f| is_date_like(&f.kind)),
+            ),
+            (
+                "done_field_id",
+                fits(&table.done_field_id, &|f| is_checkbox(&f.kind)),
+            ),
+        ];
+        for (column, ok) in checks {
+            if !ok {
+                conn.execute(
+                    &format!("UPDATE tables SET {column} = NULL WHERE id = ?1"),
+                    [table_id],
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validate and normalise what a record of the table is called: trimmed, at most
+/// [`limits::MAX_RECORD_NOUN_LEN`] characters, no control characters; empty means "record".
+pub fn validate_record_noun(raw: &str) -> AppResult<String> {
+    let noun = raw.trim();
+    if noun.chars().count() > limits::MAX_RECORD_NOUN_LEN {
+        return Err(AppError::bad_request(format!(
+            "the record name is too long (max {} characters)",
+            limits::MAX_RECORD_NOUN_LEN
+        )));
+    }
+    if noun.chars().any(char::is_control) {
+        return Err(AppError::bad_request(
+            "the record name cannot contain control characters",
+        ));
+    }
+    Ok(noun.to_string())
 }
 
 /// Add `field_id` to the hidden fields of every view of the table: the ones people see, personal

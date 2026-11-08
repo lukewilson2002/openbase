@@ -180,7 +180,10 @@ async fn an_agent_sets_changes_keeps_and_clears_icons_on_workspace_base_and_tabl
             json!({"base_id": base_id, "table": "Orders"}),
         )
         .await;
-    assert!(err.contains("name, description and/or icon"), "{err}");
+    assert!(
+        err.contains("name, description, colour and/or icon"),
+        "{err}"
+    );
 
     // ---- the REST API sees the same values (and keeps its own, format-only validation)
     let rest = r
