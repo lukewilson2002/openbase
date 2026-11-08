@@ -239,7 +239,7 @@ describe("the palette on a desktop", () => {
     // Wraps to the last row, which is an action.
     expect(screen.getByRole("option", { selected: true })).toHaveTextContent("New record in Chore log");
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl2");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl2"));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
@@ -251,7 +251,7 @@ describe("the palette on a desktop", () => {
     await openPalette(user);
     await user.keyboard("cho");
     await user.click(await screen.findByRole("option", { name: /Chores by person/ }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1/viw2");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1/viw2"));
   });
 
   it("does not let Enter open a result for text that has since been typed past", async () => {
@@ -297,7 +297,7 @@ describe("the palette on a desktop", () => {
     expect(groupNames(screen.getByRole("listbox"))[1]).toBe("Comments");
     expect(option).toHaveTextContent("Ada on Take out trash");
     await user.click(option);
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1?record=rec1");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1?record=rec1"));
   });
 
   it("says when nothing matches, and explains a failed search", async () => {
@@ -346,7 +346,7 @@ describe("actions", () => {
     expect(groupNames(list)).toEqual(["Actions"]);
     expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["New collection", "Go to Home", "Open settings"]);
     await user.keyboard("{ArrowDown}{Enter}");
-    expect(screen.getByTestId("where")).toHaveTextContent("/workspace/wsp1");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/workspace/wsp1"));
   });
 
   it("lists New record in each collection the person can add to that fits the text, and not the viewer-only ones", async () => {
@@ -420,7 +420,7 @@ describe("actions", () => {
     await openPalette(user);
     await user.keyboard("sett");
     await user.click(await screen.findByRole("option", { name: "Open settings" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/workspace/wsp1/settings");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/workspace/wsp1/settings"));
     owner.unmount();
 
     mockApi({ "GET /api/workspaces": workspaces("editor"), "GET /api/search": { results: [] } });
@@ -428,7 +428,7 @@ describe("actions", () => {
     await openPalette(user);
     await user.keyboard("settings");
     await user.click(await screen.findByRole("option", { name: "Open settings" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/account");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/account"));
   });
 });
 
@@ -525,7 +525,7 @@ describe("the palette on a phone", () => {
     await waitFor(() => expect(input).toHaveFocus());
     await user.type(input, "cho");
     await user.click(await within(dialog).findByRole("option", { name: "Chore log" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl2");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl2"));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search everything" })).not.toBeInTheDocument());
 
     await user.click(button);
