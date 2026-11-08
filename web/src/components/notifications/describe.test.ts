@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Notification } from "@/api/types";
-import { describeNotification, notificationHref, notificationPlace } from "./describe";
+import { describeNotification, notificationHref, notificationRecord } from "./describe";
 
 const n = (kind: string, payload: unknown): Notification => ({ id: "ntf1", kind, payload: payload as Notification["payload"], read_at: null, created_at: 1 });
 
@@ -20,12 +20,18 @@ describe("describeNotification", () => {
     expect(v.href).toBe("/base/app1/tbl1?record=rec1");
   });
 
-  it("names the base and table with the icons they had", () => {
-    const place = notificationPlace(n("mention", { base_name: "Roadmap", base_icon: "store", table_name: "Tasks", table_icon: null }));
-    expect(place).toEqual({ base: { name: "Roadmap", icon: "store" }, table: { name: "Tasks", icon: null } });
-    expect(notificationPlace(n("mention", { table_name: "Tasks", table_icon: "truck" }))).toEqual({ base: null, table: { name: "Tasks", icon: "truck" } });
-    expect(notificationPlace(n("mention", { record_name: "x" }))).toBeNull();
-    expect(notificationPlace(n("assigned", null))).toBeNull();
+  it("names the record to link to, with its collection, only when the payload says where it is", () => {
+    expect(notificationRecord(n("assigned", { base_id: "app1", table_id: "tbl1", table_name: "Tasks", record_id: "rec1", record_name: "Fix login" }))).toEqual({
+      name: "Fix login",
+      href: "/base/app1/tbl1?record=rec1",
+      tableId: "tbl1",
+      tableName: "Tasks",
+    });
+    // A record without a name still gets a chip; one without its collection cannot be opened, so it gets none.
+    expect(notificationRecord(n("form_response", { base_id: "app1", table_id: "tbl1", record_id: "rec1" }))).toMatchObject({ name: "Record", tableName: null });
+    expect(notificationRecord(n("mention", { base_id: "app1", record_id: "rec1", record_name: "x" }))).toBeNull();
+    expect(notificationRecord(n("automation", { message: "Weekly digest sent" }))).toBeNull();
+    expect(notificationRecord(n("assigned", null))).toBeNull();
   });
 
   it("tolerates missing keys and odd payloads", () => {

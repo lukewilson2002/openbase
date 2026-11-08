@@ -1,7 +1,8 @@
 /**
  * Notifications: a row of the sidebar (below Home), with the unread count (polled every minute
- * and on window focus), opening the person's notifications beside the menu (inside the drawer on a
- * phone). Clicking a notification marks it read and goes to its record.
+ * and on window focus), opening the person's notifications in a popover beside it, and on a phone the
+ * Notifications tab, a screen of its own (`/notifications`, PH-1). Both draw the same panel and rows.
+ * Clicking a notification marks it read and goes to its record.
  */
 import { useMemo, type ComponentProps } from "react";
 import { useNavigate } from "react-router";
@@ -13,11 +14,12 @@ import { keys } from "@/api/keys";
 import type { Notification, NotificationsResponse } from "@/api/types";
 import { Avatar } from "@/components/ui/avatar";
 import { NavRow } from "@/components/ui/nav-row";
+import { LinkChip } from "@/components/ui/link-chip";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/relativeTime";
 import { notificationsApi } from "./api";
-import { describeNotification, notificationActor, notificationActorId, notificationPlace, type NotificationKind } from "./describe";
+import { describeNotification, notificationActor, notificationActorId, notificationRecord, type NotificationKind } from "./describe";
 
 export const NOTIFICATION_POLL_MS = 60_000;
 
@@ -89,15 +91,17 @@ export function NotificationsRow({ open, className, ...props }: { open: boolean 
 const ICONS: Record<NotificationKind, typeof Bell> = { mention: AtSign, assigned: UserCheck, automation: Zap, form_response: ClipboardList, other: Bell };
 
 /**
- * The panel's content: a heading with "Mark all as read", then the notifications, newest first.
- * `onOpened` runs after a click took the person somewhere, so the container can close.
+ * The panel's content: "Mark all read" and the unread count, then the notifications, newest first. In a popover
+ * it starts with its own heading (`headingId` names the popover); as a screen the header already says
+ * "Notifications", so it starts with the toolbar. `onOpened` runs after a click took the person somewhere,
+ * so the container can close.
  */
-export function NotificationsPanel({ onOpened, headingId, className }: { onOpened?: () => void; headingId?: string; className?: string }) {
+export function NotificationsPanel({ onOpened, headingId, heading = true, className }: { onOpened?: () => void; headingId?: string; heading?: boolean; className?: string }) {
   const navigate = useNavigate();
   const list = useNotifications();
   const markRead = useMarkRead();
   const unread = list.data?.unread ?? 0;
-  const emails = useKnownEmails();
+  const lookups = useLookups();
 
   const open = (n: Notification, href: string | null) => {
     if (n.read_at == null) markRead.mutate([n.id]);
@@ -107,20 +111,30 @@ export function NotificationsPanel({ onOpened, headingId, className }: { onOpene
     }
   };
 
+  const markAll = (
+    <button
+      type="button"
+      disabled={unread === 0 || markRead.isPending}
+      onClick={() => markRead.mutate(null)}
+      className="-mr-2 flex min-h-control-md items-center rounded-md px-2 text-label font-semibold text-primary-text hover:bg-hover disabled:cursor-default disabled:text-muted disabled:opacity-60 disabled:hover:bg-transparent max-md:min-h-control-touch pointer-coarse:min-h-control-touch"
+    >
+      Mark all read
+    </button>
+  );
+
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="flex items-center justify-between gap-3 border-b border-line px-4 pb-2.5 pt-3.5">
-        <h2 id={headingId} className="text-[1rem] font-semibold">
-          Notifications
-        </h2>
-        <button
-          type="button"
-          disabled={unread === 0 || markRead.isPending}
-          onClick={() => markRead.mutate(null)}
-          className="rounded px-1 py-1 text-[0.8125rem] font-semibold text-muted hover:text-fg disabled:cursor-default disabled:opacity-50 pointer-coarse:py-2.5"
-        >
-          Mark all as read
-        </button>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-1">
+        {heading ? (
+          <h2 id={headingId} className="text-h3">
+            Notifications
+          </h2>
+        ) : (
+          <p role="status" className="text-label text-muted">
+            {list.data ? (unread > 0 ? `${unread} unread` : "All caught up") : ""}
+          </p>
+        )}
+        {markAll}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {list.isPending ? (
@@ -128,15 +142,15 @@ export function NotificationsPanel({ onOpened, headingId, className }: { onOpene
             <Spinner className="size-4" label="Loading notifications" />
           </div>
         ) : list.isError ? (
-          <p role="alert" className="px-4 py-6 text-center text-[0.8125rem] text-muted">
+          <p role="alert" className="px-4 py-6 text-center text-label text-muted">
             Notifications are unavailable: {errorMessage(list.error)}
           </p>
         ) : list.data.notifications.length === 0 ? (
-          <p className="px-6 py-8 text-center text-[0.8125rem] text-muted">Nothing yet. Mentions, assignments and automation alerts will show up here.</p>
+          <p className="px-6 py-8 text-center text-label text-muted">Nothing yet. Mentions, assignments and automation alerts will show up here.</p>
         ) : (
           <ul aria-label="Notifications">
             {list.data.notifications.map((n) => (
-              <NotificationItem key={n.id} n={n} emails={emails} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
+              <NotificationItem key={n.id} n={n} lookups={lookups} onOpen={open} onMarkRead={() => markRead.mutate([n.id])} />
             ))}
           </ul>
         )}
@@ -145,58 +159,79 @@ export function NotificationsPanel({ onOpened, headingId, className }: { onOpene
   );
 }
 
+interface Lookups {
+  /** Emails of the people in the caller's workspaces, by user id. */
+  emails: ReadonlyMap<string, string>;
+  /** Collection colors, by collection id. */
+  tableColors: ReadonlyMap<string, string>;
+}
+
 /**
- * Emails of the people in the caller's workspaces, by user id. A face's colour comes from the
- * person's email, and notifications only carry a name, so without this the same person would get
- * another colour in Notifications than everywhere else.
+ * What the workspaces list knows that a notification's payload does not. A face's colour comes from the
+ * person's email, and notifications only carry a name, so without the emails the same person would get
+ * another colour in Notifications than everywhere else. The payload names a collection but not its color.
  */
-function useKnownEmails(): ReadonlyMap<string, string> {
+function useLookups(): Lookups {
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list });
   return useMemo(() => {
-    const out = new Map<string, string>();
-    for (const w of workspaces.data ?? []) for (const b of w.bases) for (const p of b.people) if (p.user_id && p.email) out.set(p.user_id, p.email);
-    return out;
+    const emails = new Map<string, string>();
+    const tableColors = new Map<string, string>();
+    for (const w of workspaces.data ?? [])
+      for (const b of w.bases) {
+        for (const p of b.people) if (p.user_id && p.email) emails.set(p.user_id, p.email);
+        for (const t of b.tables) if (t.color) tableColors.set(t.id, t.color);
+      }
+    return { emails, tableColors };
   }, [workspaces.data]);
 }
 
-function NotificationItem({ n, emails, onOpen, onMarkRead }: { n: Notification; emails: ReadonlyMap<string, string>; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
+/**
+ * One notification: who or what, one sentence, a chip for the record, and when. The sentence is the row's main
+ * button (stretched over the whole row, so a tap anywhere opens it); the chip and the unread dot sit above it.
+ */
+function NotificationItem({ n, lookups, onOpen, onMarkRead }: { n: Notification; lookups: Lookups; onOpen: (n: Notification, href: string | null) => void; onMarkRead: () => void }) {
   const v = describeNotification(n);
-  const Icon = ICONS[v.kind];
+  const Glyph = ICONS[v.kind];
   const actor = notificationActor(n);
   const actorId = notificationActorId(n);
   const isUnread = n.read_at == null;
-  const place = notificationPlace(n);
-  const where = [place?.base?.name, place?.table?.name].filter(Boolean).join(" › ");
+  const record = notificationRecord(n);
   return (
-    <li className="relative border-b border-line last:border-b-0">
-      <button type="button" onClick={() => onOpen(n, v.href)} className="flex w-full items-start gap-3 px-4 py-3 pr-10 text-left hover:bg-hover focus-visible:bg-hover">
+    <li className="relative border-b border-line last:border-b-0 hover:bg-hover">
+      <div className="flex items-start gap-3 px-4 py-3 pr-12">
         {actor && v.kind === "mention" ? (
           <span aria-hidden className="flex">
-            <Avatar name={actor} email={actorId ? emails.get(actorId) : undefined} size="md" />
+            <Avatar name={actor} email={actorId ? lookups.emails.get(actorId) : undefined} size="md" />
           </span>
         ) : (
-          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-surface">
-            <Icon className="size-4" />
+          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-subtle text-muted">
+            <Glyph className="size-4" />
           </span>
         )}
-        <span className="min-w-0 flex-1 text-[0.875rem] leading-snug">
-          <span className={cn("block", isUnread && "font-semibold")}>{v.title}</span>
-          {v.detail && <span className="mt-0.5 line-clamp-2 block text-[0.8125rem] text-muted">{v.detail}</span>}
-          <span className="mt-0.5 block text-xs text-faint">
-            {where && `${where} · `}
-            {relativeTime(n.created_at)}
-          </span>
-        </span>
-        {isUnread && <span className="sr-only">Unread</span>}
-      </button>
+        <div className="min-w-0 flex-1 text-ui">
+          <button type="button" onClick={() => onOpen(n, v.href)} className={cn("text-left after:absolute after:inset-0 focus-visible:after:outline-2 focus-visible:after:outline-ring", isUnread ? "font-semibold" : "font-medium")}>
+            {v.title}
+            {isUnread && <span className="sr-only">, unread</span>}
+          </button>
+          {v.detail && <p className="mt-0.5 line-clamp-2 text-label text-muted">{v.detail}</p>}
+          <div className="mt-1 flex min-w-0 items-center gap-2 text-meta text-muted">
+            {record && (
+              <LinkChip name={record.name} hue={lookups.tableColors.get(record.tableId) ?? null} markName={record.tableName ?? undefined} onOpen={() => onOpen(n, record.href)} className="relative min-w-0" />
+            )}
+            <time dateTime={new Date(n.created_at).toISOString()} className="shrink-0">
+              {relativeTime(n.created_at)}
+            </time>
+          </div>
+        </div>
+      </div>
       {isUnread && (
         <button
           type="button"
           aria-label={`Mark "${v.title}" as read`}
           onClick={onMarkRead}
-          className="absolute right-2 top-3 inline-flex size-6 items-center justify-center rounded hover:bg-hover pointer-coarse:right-0.5 pointer-coarse:top-1.5 pointer-coarse:size-10"
+          className="absolute right-1 top-2 inline-flex size-control-md items-center justify-center rounded-md hover:bg-subtle max-md:size-control-touch pointer-coarse:size-control-touch"
         >
-          <span aria-hidden className="size-2 rounded-full bg-primary" />
+          <span aria-hidden className="size-2 rounded-pill bg-primary" />
         </button>
       )}
     </li>

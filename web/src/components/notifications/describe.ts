@@ -2,8 +2,8 @@
  * Turns a notification into text and a link. The payload keys are the ones the server writes:
  * `mention` (store/mentions.rs) has `base_id`, `base_name`, `table_id`, `table_name`, `record_id`,
  * `record_name`, `snippet`, `author_id`, `author_name`, then `comment_id` for a mention in a comment or
- * `field_id`/`field_name` for one in a rich text cell (and `base_icon`/`table_icon`,
- * the Lucide names the base and table had then, which `notificationPlace` returns); `assigned` (engine/write.rs)
+ * `field_id`/`field_name` for one in a rich text cell (and `base_icon`/`table_icon`, which nothing displays any
+ * more, decision 3); `assigned` (engine/write.rs)
  * has the same location keys plus `field_id`, `field_name` and `assigned_by` (a user id, no name);
  * `automation` has `message`, `automation_name`, `base_id`, `record_id`; `form_response` (api/sharing.rs, a response
  * sent through a form's public link) has `form_name`, `message`, `view_id`, `record_id` and the location keys. Every key is optional
@@ -62,22 +62,14 @@ export function notificationActorId(n: Notification): string | null {
   return text(p, "author_id");
 }
 
-/** A base or table a notification is about, with the icon it had when the notification was written. */
-export interface PlaceName {
-  name: string;
-  icon: string | null;
-}
-
-/** The base and table a notification names (`base_name`/`base_icon`, `table_name`/`table_icon`), if any. */
-export function notificationPlace(n: Notification): { base: PlaceName | null; table: PlaceName | null } | null {
+/** The record a notification is about, for the link chip under its sentence: only when the payload names the collection too, which a record link needs. */
+export function notificationRecord(n: Notification): { name: string; href: string; tableId: string; tableName: string | null } | null {
   const p = payloadOf(n);
-  const one = (kind: "base" | "table"): PlaceName | null => {
-    const name = text(p, `${kind}_name`);
-    return name ? { name, icon: text(p, `${kind}_icon`) } : null;
-  };
-  const base = one("base");
-  const table = one("table");
-  return base || table ? { base, table } : null;
+  const tableId = text(p, "table_id");
+  const record = text(p, "record_id");
+  const href = notificationHref(p);
+  if (!tableId || !record || !href) return null;
+  return { name: text(p, "record_name") ?? "Record", href, tableId, tableName: text(p, "table_name") };
 }
 
 function kindOf(kind: string): NotificationKind {

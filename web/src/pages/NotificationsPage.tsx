@@ -7,8 +7,8 @@ import { HomeShell } from "@/shell/HomeShell";
 
 export function NotificationsPage() {
   return (
-    <HomeShell title="Notifications">
-      <NotificationsPanel className="mx-auto w-full max-w-2xl" />
+    <HomeShell title="Notifications" variant="tab">
+      <NotificationsPanel heading={false} className="mx-auto w-full max-w-2xl" />
     </HomeShell>
   );
 }

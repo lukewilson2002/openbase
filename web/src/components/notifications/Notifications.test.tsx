@@ -109,7 +109,7 @@ describe("Notifications in the docked menu", () => {
     renderShell();
     const panel = await openNotifications(user, "Notifications");
     expect(await within(panel).findByText("Nothing yet. Mentions, assignments and automation alerts will show up here.")).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Mark all as read" })).toBeDisabled();
+    expect(within(panel).getByRole("button", { name: "Mark all read" })).toBeDisabled();
   });
 
   it("marks a notification read and opens its record when clicked, closing the panel", async () => {
@@ -145,25 +145,41 @@ describe("Notifications in the docked menu", () => {
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n2"] });
     // The optimistic update drops the count straight away.
     expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
-    await user.click(within(panel).getByRole("button", { name: "Mark all as read" }));
+    await user.click(within(panel).getByRole("button", { name: "Mark all read" }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(2));
     expect(api.callsTo("POST /api/notifications/read")[1]!.body).toEqual({});
     expect(await screen.findByRole("button", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("/");
   });
 
-  it("names the base and table a notification is about", async () => {
+  it("shows the record as a chip with its collection's color, which opens it and marks the notification read", async () => {
     stubDesktop();
     const user = userEvent.setup();
-    routes({
-      unread: 1,
-      notifications: [note("n1", "assigned", { base_id: "app1", base_name: "Roadmap", table_id: "tbl1", table_name: "Tasks", record_id: "rec2", record_name: "Fix login", field_name: "Owner" })],
-    });
+    const api = routes(
+      {
+        unread: 2,
+        notifications: [
+          note("n1", "assigned", { base_id: "app1", base_name: "Roadmap", table_id: "tbl1", table_name: "Tasks", record_id: "rec2", record_name: "Fix login", field_name: "Owner" }),
+          note("n2", "automation", { message: "Weekly digest sent", base_id: "app1" }),
+        ],
+      },
+      {
+        "POST /api/notifications/read": { ok: true },
+        "GET /api/workspaces": [makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Roadmap", color: "red", role: "owner", is_top_level: false, people: [], tables: [{ id: "tbl1", name: "Tasks", color: "purple", record_count: 0, record_noun: "" }] }])],
+      },
+    );
     renderShell();
     const panel = await openNotifications(user);
     const item = (await within(panel).findByText("You were assigned to Fix login")).closest("li")!;
     expect(item).toHaveTextContent("In Owner");
-    expect(item).toHaveTextContent("Roadmap › Tasks · 1 minute ago");
+    expect(item).toHaveTextContent("1 minute ago");
+    const chip = within(item).getByRole("button", { name: "Fix login" });
+    await waitFor(() => expect(chip.querySelector(".ob-mark")).toHaveClass(`ob-hue-${accentHue("purple")}`));
+    // A notification that names no record has no chip.
+    expect(within(panel).getByText("Automation notification").closest("li")!.querySelector(".ob-mark")).toBeNull();
+    await user.click(chip);
+    await waitFor(() => expect(api.callsTo("POST /api/notifications/read")[0]?.body).toEqual({ ids: ["n1"] }));
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1?record=rec2");
   });
 
   it("gives the person who mentioned you the face they have everywhere else", async () => {
@@ -206,31 +222,6 @@ describe("Notifications in the docked menu", () => {
     renderShell();
     const panel = await openNotifications(user, "Notifications");
     expect(await within(panel).findByRole("alert")).toHaveTextContent("Notifications are unavailable");
-  });
-});
-
-describe("Notifications on a phone", () => {
-  it("marks the menu button while anything is unread and opens inside the drawer", async () => {
-    const user = userEvent.setup();
-    routes(listing());
-    renderShell();
-    const toggle = await screen.findByRole("button", { name: "Show menu (3 unread in Notifications)" });
-    expect(screen.getByTestId("menu-unread-dot")).toBeInTheDocument();
-    await user.click(toggle);
-    const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    await user.click(within(drawer).getByRole("button", { name: "Notifications, 3 unread" }));
-    expect(within(drawer).getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
-    expect(within(drawer).getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
-    expect(within(drawer).queryByText("Search everything")).not.toBeInTheDocument();
-    await user.click(within(drawer).getByRole("button", { name: "Back to the menu" }));
-    expect(within(drawer).getByText("Search everything")).toBeInTheDocument();
-  });
-
-  it("has no dot when nothing is unread", async () => {
-    routes({ notifications: [], unread: 0 });
-    renderShell();
-    expect(await screen.findByRole("button", { name: "Show menu" })).toBeInTheDocument();
-    expect(screen.queryByTestId("menu-unread-dot")).not.toBeInTheDocument();
   });
 });
 
