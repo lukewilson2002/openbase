@@ -2,6 +2,7 @@ import type { ComponentProps, CSSProperties } from "react";
 import { Popover as P } from "radix-ui";
 import { cn } from "@/lib/cn";
 import { menuSurfaceClass } from "./dropdown-menu";
+import { usePortalHost } from "./portal-host";
 
 export const Popover = P.Root;
 export const PopoverTrigger = P.Trigger;
@@ -14,8 +15,9 @@ const popoverAvailStyle = {
 } as CSSProperties;
 
 export function PopoverContent({ className, style, sideOffset = 6, align = "start", collisionPadding = 8, ...props }: ComponentProps<typeof P.Content>) {
+  const host = usePortalHost();
   return (
-    <P.Portal>
+    <P.Portal container={host.container}>
       <P.Content
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}

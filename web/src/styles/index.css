@@ -17,6 +17,7 @@
  * border-line, ...) are generated from them in the @theme block below.
  */
 
+[data-theme-scope][data-theme="light"],
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
@@ -53,6 +54,7 @@
   --scroll-shade: rgb(15 20 30 / 0.05);
 }
 
+[data-theme-scope][data-theme="dark"],
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #12151b;
@@ -89,12 +91,14 @@
  * A tool that is on (the view toolbar's "Sorted by Name", "2 hidden fields"): a plain grey made of the
  * text colour over the surface, so it holds no tint of the accent and stands off the bar in either theme.
  */
-:root {
+:root,
+[data-theme-scope] {
   --tool-on: color-mix(in srgb, var(--fg) 9%, var(--surface));
   --tool-on-hover: color-mix(in srgb, var(--fg) 13%, var(--surface));
 }
 /* Dark surfaces need more of the text colour for the same step. */
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+[data-theme-scope][data-theme="dark"] {
   --tool-on: color-mix(in srgb, var(--fg) 16%, var(--surface));
   --tool-on-hover: color-mix(in srgb, var(--fg) 22%, var(--surface));
 }
@@ -294,6 +298,10 @@
   --duration-fast-leave: calc(var(--duration-fast) * 0.7);
   --duration-base-leave: calc(var(--duration-base) * 0.7);
   --duration-slow-leave: calc(var(--duration-slow) * 0.7);
+}
+/* Derived from --fg at :root, so a subtree that forces a theme (the design reference page) derives it again from its own. */
+[data-theme-scope] {
+  --mark-edge: color-mix(in srgb, var(--fg) 12%, transparent);
 }
 /* The desktop layout starts at md (see the breakpoint above). */
 @media (min-width: 64rem) {
@@ -708,8 +716,8 @@
   --accent-line: color-mix(in srgb, var(--accent) 32%, var(--surface));
   --accent-ink: color-mix(in srgb, var(--accent) 85%, #000);
 }
-:root[data-theme="dark"] .ob-tint,
-:root[data-theme="dark"] .ob-tint-button {
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint,
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint-button {
   --accent-soft: color-mix(in srgb, var(--accent) 24%, var(--surface));
   --accent-line: color-mix(in srgb, var(--accent) 45%, var(--surface));
   --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff);
@@ -718,8 +726,22 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-:root[data-theme="dark"] .ob-tint {
+:is(:root, [data-theme-scope])[data-theme="dark"] .ob-tint {
   color: var(--accent-ink);
+}
+/*
+ * A subtree that forces a theme (`data-theme-scope` with its own `data-theme`, used by the design reference page)
+ * can sit in a page of the other theme. The rules above reach it through the page's own <html data-theme="dark">,
+ * so a forced-light subtree in a dark page takes its light values back here.
+ */
+[data-theme-scope][data-theme="light"] .ob-tint,
+[data-theme-scope][data-theme="light"] .ob-tint-button {
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--accent) 32%, var(--surface));
+  --accent-ink: color-mix(in srgb, var(--accent) 85%, #000);
+}
+[data-theme-scope][data-theme="light"] .ob-tint {
+  color: var(--accent);
 }
 .ob-dot {
   background: var(--accent);

@@ -357,6 +357,28 @@ Dialogs opened from state have no Radix trigger to return focus to, so `use-retu
 (A11Y-1). Leaving animations (`[data-state="closed"]` on `.ob-*-in` in `styles/index.css`) run 30% faster than entering; under reduced
 motion everything fades for 120 ms. `use-presence.ts` does the same for the pieces that are not Radix primitives.
 
+### Design reference page and icons (DL-2, DL-4)
+
+`/__dev/design` (`src/dev/DesignPage.tsx`, sections in `src/dev/design/`) draws every token and every core component in every state, with the
+light and dark themes side by side. It is built by `npm run dev` and when `VITE_DESIGN_PAGE=1` (`playwright.config.ts` sets it for the e2e
+build), and never into a release build: the route in `App.tsx` is behind `import.meta.env.DEV || import.meta.env.VITE_DESIGN_PAGE === "1"`, so the
+page and its chunk are tree-shaken out (check with `npm run build`, then grep `dist` for `DesignPage`). It needs no sign-in. Add a component to its
+section in `src/dev/designSections.ts` and to the matching `*Sections.tsx`; `DesignPage.test.tsx` and `e2e/design.spec.ts` check every section in both themes.
+
+- **Forcing a theme.** A column carries `data-theme-scope`, its own `data-theme` and the person's `data-accent`; `styles/index.css` and the generated
+  `styles/accents.css` apply the theme variables to such an element as well as to `<html>`. States that need a pointer (hover, focus) are drawn with
+  the classes the real state sets.
+- **Floating pieces.** `PortalHost` (`ui/portal-host.tsx`) moves the portals of everything inside it (popovers, menus, tooltips, dialogs, sheets) into
+  an element, so they take their column's theme. With `inline` it also draws a `Dialog`, `Sheet` or `CommandPalette` open in place, without the focus
+  trap or scroll lock, so any number can be open at once inside a `Frame`. The app never uses either.
+- **Screenshots** for the ledger are in `docs/plans/ux-overhaul-screenshots/01-design-reference-{light,dark}-{1440,390}.png`. A page taller than
+  16384 px cannot be captured in one piece by Chrome: take it in strips (`clip` with `fullPage`) and append them.
+
+`ui/icon.tsx` is the one way the core components draw an icon: stroke width 2, `currentColor`, `aria-hidden`, 16 px (20 on phone and touch screens)
+by default, `size="sm"` (12 px) inside a chip or checkbox, `size="fit"` where the caller sizes it. It accepts no stroke width, colour or width/height.
+`IconButton` requires `label` by type. `ui/icons.test.tsx` holds the `@ts-expect-error` cases and a scan of `components/ui` that fails on a lucide
+glyph drawn directly, a stroke width set by hand, an `IconButton` without `label` or an icon-only `<button>` without `aria-label`.
+
 ### Logo, favicon and web app manifest
 
 `brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and

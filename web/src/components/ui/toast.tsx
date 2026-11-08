@@ -3,6 +3,7 @@ import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { IconButton } from "./icon-button";
 import { usePresence } from "./use-presence";
+import { Icon } from "./icon";
 
 export type ToastVariant = "default" | "success" | "error";
 
@@ -23,7 +24,7 @@ export interface ToastAction {
   onClick: () => void;
 }
 
-interface ToastItem extends ToastOptions {
+export interface ToastItem extends ToastOptions {
   id: number;
 }
 
@@ -80,7 +81,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 const DEFAULT_MS = 5000;
 const DEFAULT_ACTION_MS = 8000;
 
-function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
+/** One toast. The provider lays them out; the design reference page (`/__dev/design`) draws them where they can be looked at. */
+export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
   const { id } = item;
   const actions = [...(item.action ? [item.action] : []), ...(item.actions ?? [])];
   const durationMs = item.durationMs ?? (actions.length ? DEFAULT_ACTION_MS : DEFAULT_MS);
@@ -101,7 +103,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
     if (leaving && !presence.mounted) onDismiss(id);
   }, [leaving, presence.mounted, id, onDismiss]);
 
-  const Icon = item.variant === "error" ? CircleAlert : item.variant === "success" ? CircleCheck : null;
+  const Glyph = item.variant === "error" ? CircleAlert : item.variant === "success" ? CircleCheck : null;
   return (
     <div
       ref={presence.ref}
@@ -116,7 +118,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
         item.variant === "error" ? "border-danger" : "border-line",
       )}
     >
-      {Icon && <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", item.variant === "error" ? "text-danger" : "text-success")} />}
+      {Glyph && <Icon icon={Glyph} className={cn("mt-0.5", item.variant === "error" ? "text-danger" : "text-success")} />}
       <div className="min-w-0 flex-1">
         <p className="text-label font-medium">{item.title}</p>
         {item.description && <p className="mt-0.5 break-words text-meta text-muted">{item.description}</p>}
@@ -135,7 +137,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
         </button>
       ))}
       <IconButton label="Dismiss" size="sm" noTooltip onClick={close} className="-my-1 -mr-1 size-6 max-md:size-control-touch max-md:-my-2.5 pointer-coarse:size-control-touch pointer-coarse:-my-2.5">
-        <X aria-hidden className="size-3.5" />
+        <Icon icon={X} />
       </IconButton>
     </div>
   );

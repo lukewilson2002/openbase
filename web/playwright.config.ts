@@ -24,6 +24,10 @@ import { defineConfig, devices } from "@playwright/test";
  * the first one to run sees a fresh instance (smoke: the first-run screen), the second sets it up
  * through the UI (journey), the others work on that instance (grid, then sharing and automations).
  */
+// The design reference page (/__dev/design, DL-2) is compiled into the e2e build and never into a release build:
+// globalSetup's `npm run build` inherits this. A release build runs `npm run build` without it.
+process.env["VITE_DESIGN_PAGE"] ??= "1";
+
 const browser = process.env["OPENBASE_E2E_BROWSER"] ?? "chrome";
 if (browser !== "chrome" && browser !== "chromium") {
   throw new Error(`OPENBASE_E2E_BROWSER must be "chrome" or "chromium", not "${browser}".`);
@@ -51,6 +55,8 @@ export default defineConfig({
   },
   projects: [
     { name: "smoke", testMatch: /smoke\.spec\.ts$/, use: chrome },
+    // The design reference page: every token and core component in both themes. Needs no account.
+    { name: "design", testMatch: /design\.spec\.ts$/, use: chrome, dependencies: ["smoke"] },
     { name: "journey", testMatch: /journey\.spec\.ts$/, use: chrome, dependencies: ["smoke"] },
     { name: "grid", testMatch: /grid\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Forms, share links and CSV; signs up its own user, so it only needs the instance to be set up.

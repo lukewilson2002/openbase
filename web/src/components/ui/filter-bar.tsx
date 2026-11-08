@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { FilterChip } from "./filter-chip";
 import { ListboxOption, useListNav } from "./listbox";
 import { Popover, PopoverAnchor, PopoverContent } from "./popover";
+import { Icon } from "./icon";
 
 export interface FilterBarChip {
   id: string;
@@ -122,7 +123,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
             className,
           )}
         >
-          <Search aria-hidden className="size-4 shrink-0 text-muted" />
+          <Icon icon={Search} className="text-muted" />
           {chips.map((c) => (
             <FilterChip
               key={c.id}

@@ -6,7 +6,9 @@ import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { cn } from "@/lib/cn";
 import { Button } from "./button";
 import { ListboxOption, useListNav } from "./listbox";
+import { usePortalHost } from "./portal-host";
 import { useReturnFocus } from "./use-return-focus";
+import { Icon } from "./icon";
 
 export interface CommandItem {
   id: string;
@@ -55,6 +57,7 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
   const visible = useVisualViewport(open && !desktop);
   const input = useRef<HTMLInputElement>(null);
   const returnFocus = useReturnFocus();
+  const host = usePortalHost();
   const uid = useId();
   const shown = groups.filter((g) => g.items.length > 0);
   const flat = shown.flatMap((g) => g.items.map((item) => ({ item, domId: `${uid}-${g.id}-${item.id}` })));
@@ -68,8 +71,8 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
   const status = busy ? "Searching" : flat.length === 0 ? emptyText : `${flat.length} ${flat.length === 1 ? "result" : "results"}`;
 
   return (
-    <D.Root open={open} onOpenChange={onOpenChange}>
-      <D.Portal>
+    <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>
+      <D.Portal container={host.container}>
         <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
         <D.Content
           aria-describedby={undefined}
@@ -77,7 +80,7 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
           onOpenAutoFocus={(e) => {
             returnFocus.noteOpener();
             e.preventDefault();
-            input.current?.focus();
+            if (!host.inline) input.current?.focus();
           }}
           style={desktop ? undefined : { top: visible.top, height: visible.height }}
           className={cn(
@@ -90,7 +93,7 @@ export function CommandPalette({ open, onOpenChange, query, onQueryChange, group
         >
           <D.Title className="sr-only">Search everything</D.Title>
           <div className="flex shrink-0 items-center gap-2 border-b border-line pl-4 pr-2">
-            <Search aria-hidden className="size-4 shrink-0 text-muted" />
+            <Icon icon={Search} className="text-muted" />
             <input
               ref={input}
               role="combobox"

@@ -3,6 +3,8 @@ import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { cn } from "@/lib/cn";
 import { useTapGuard } from "@/lib/tapGuard";
+import { usePortalHost } from "./portal-host";
+import { Icon } from "./icon";
 
 /**
  * The height a menu has below or above its trigger, inside the screen's collision padding and clear
@@ -89,8 +91,9 @@ export function DropdownMenuTrigger({ onPointerDown, onPointerMove, onPointerUp,
 export const DropdownMenuRadioGroup = M.RadioGroup;
 
 export function DropdownMenuContent({ className, style, sideOffset = 4, align = "end", collisionPadding = 8, ...props }: ComponentProps<typeof M.Content>) {
+  const host = usePortalHost();
   return (
-    <M.Portal>
+    <M.Portal container={host.container}>
       <M.Content
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
@@ -113,7 +116,7 @@ export function DropdownMenuRadioItem({ className, children, ...props }: Compone
   return (
     <M.RadioItem className={cn(itemClass, "pl-8", className)} {...props}>
       <M.ItemIndicator className="absolute left-2.5 inline-flex">
-        <Check aria-hidden className="size-3.5" />
+        <Icon icon={Check} />
       </M.ItemIndicator>
       {children}
     </M.RadioItem>
@@ -130,14 +133,15 @@ export function DropdownMenuSubTrigger({ className, children, ...props }: Compon
   return (
     <M.SubTrigger className={cn(itemClass, "data-[state=open]:bg-primary-soft", className)} {...props}>
       {children}
-      <ChevronRight aria-hidden className="ml-auto size-3.5 text-muted" />
+      <Icon icon={ChevronRight} className="ml-auto text-muted" />
     </M.SubTrigger>
   );
 }
 
 export function DropdownMenuSubContent({ className, style, sideOffset = 4, collisionPadding = 8, ...props }: ComponentProps<typeof M.SubContent>) {
+  const host = usePortalHost();
   return (
-    <M.Portal>
+    <M.Portal container={host.container}>
       <M.SubContent
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}

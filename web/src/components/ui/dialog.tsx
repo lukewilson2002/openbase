@@ -5,8 +5,10 @@ import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { cn } from "@/lib/cn";
 import { IconButton } from "./icon-button";
+import { usePortalHost } from "./portal-host";
 import { Sheet } from "./sheet";
 import { useReturnFocus } from "./use-return-focus";
+import { Icon } from "./icon";
 
 export interface DialogProps {
   open: boolean;
@@ -85,7 +87,7 @@ function DialogParts({ title, description, children, footer, roomy, hideClose, f
         {!hideClose && (
           <D.Close asChild>
             <IconButton label="Close" size="sm" noTooltip className={cn(!fullScreen && "-mr-1.5", roomy && "-mr-2 size-10")}>
-              <X aria-hidden className={roomy ? "size-[18px]" : "size-4"} />
+              <Icon icon={X} />
             </IconButton>
           </D.Close>
         )}
@@ -100,9 +102,10 @@ function DialogParts({ title, description, children, footer, roomy, hideClose, f
 
 function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, dismissOnOutsidePress = true, onOpenAutoFocus, className, ...parts }: DialogProps) {
   const returnFocus = useReturnFocus();
+  const host = usePortalHost();
   return (
-    <D.Root open={open} onOpenChange={onOpenChange}>
-      <D.Portal>
+    <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>
+      <D.Portal container={host.container}>
         <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
         <D.Content
           // Only when asked for: an explicit undefined would replace the role Radix gives the content.
@@ -113,6 +116,7 @@ function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, d
           onCloseAutoFocus={returnFocus.onCloseAutoFocus}
           onOpenAutoFocus={(e) => {
             returnFocus.noteOpener();
+            if (host.inline) return e.preventDefault();
             onOpenAutoFocus?.(e);
           }}
           className={cn(
@@ -133,9 +137,10 @@ function DesktopDialog({ open, onOpenChange, size = "md", roomy = false, role, d
 function FullScreenDialog({ open, onOpenChange, roomy = false, role, dismissOnOutsidePress = true, onOpenAutoFocus, className, ...parts }: DialogProps) {
   const visible = useVisualViewport(open);
   const returnFocus = useReturnFocus();
+  const host = usePortalHost();
   return (
-    <D.Root open={open} onOpenChange={onOpenChange}>
-      <D.Portal>
+    <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>
+      <D.Portal container={host.container}>
         <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" />
         <D.Content
           // Only when asked for: an explicit undefined would replace the role Radix gives the content.
@@ -146,6 +151,7 @@ function FullScreenDialog({ open, onOpenChange, roomy = false, role, dismissOnOu
           onCloseAutoFocus={returnFocus.onCloseAutoFocus}
           onOpenAutoFocus={(e) => {
             returnFocus.noteOpener();
+            if (host.inline) return e.preventDefault();
             onOpenAutoFocus?.(e);
           }}
           // Placed from the visual viewport: iOS Safari leaves the layout viewport at full height under the keyboard.

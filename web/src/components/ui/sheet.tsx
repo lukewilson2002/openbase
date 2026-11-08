@@ -5,6 +5,7 @@ import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { cn } from "@/lib/cn";
 import { Button } from "./button";
 import { rubberBand, settleSheet, sheetSnapPoints } from "./sheet-snap";
+import { usePortalHost } from "./portal-host";
 import { useReturnFocus } from "./use-return-focus";
 
 export interface SheetProps {
@@ -55,6 +56,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
   const content = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const returnFocus = useReturnFocus();
+  const host = usePortalHost();
   const drag = useRef<DragState | null>(null);
   const tapStart = useRef<{ x: number; y: number } | null>(null);
   const [offset, setOffset] = useState(0);
@@ -127,8 +129,8 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
   };
 
   return (
-    <D.Root open={open} onOpenChange={onOpenChange}>
-      <D.Portal>
+    <D.Root open={open} onOpenChange={onOpenChange} modal={!host.inline}>
+      <D.Portal container={host.container}>
         <D.Overlay className="ob-fade-in fixed inset-0 z-50 bg-overlay" onTouchStart={onOverlayTouchStart} onTouchEnd={onOverlayTouchEnd} />
         <D.Content
           ref={content}
@@ -140,6 +142,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
           onCloseAutoFocus={returnFocus.onCloseAutoFocus}
           onOpenAutoFocus={(e) => {
             returnFocus.noteOpener();
+            if (host.inline) return e.preventDefault();
             if (onOpenAutoFocus) return onOpenAutoFocus(e);
             e.preventDefault();
             // A finger on a text field would raise the keyboard over the sheet it just opened.

@@ -310,7 +310,8 @@ export function accentCss(): string {
   ];
   for (const accent of ACCENTS) {
     for (const mode of ["light", "dark"] as const) {
-      const selector = mode === "light" ? `:root:not([data-theme="dark"])[data-accent="${accent}"]` : `:root[data-theme="dark"][data-accent="${accent}"]`;
+      // `[data-theme-scope]` is a subtree that forces a theme (the design reference page); it carries its own data-accent.
+      const selector = mode === "light" ? `:is(:root, [data-theme-scope]):not([data-theme="dark"])[data-accent="${accent}"]` : `:is(:root, [data-theme-scope])[data-theme="dark"][data-accent="${accent}"]`;
       lines.push(`${selector} {`);
       for (const token of ACCENT_TOKENS) lines.push(`  --${token}: ${ACCENT_THEMES[accent][mode][token]};`);
       lines.push("}");
