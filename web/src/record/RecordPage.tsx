@@ -36,9 +36,11 @@ import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeade
 import { discardNewRecord, isNewRecord } from "./newRecords";
 import { commentsLabel, RecordBar, RecordMoreItems, SaveStatus, type RecordActions, type RecordPanelKind } from "./RecordBar";
 import { RecordHead } from "./RecordHead";
+import { PageSection } from "./PageSection";
 import { RecordProperties } from "./RecordProperties";
 import { titleModeOf } from "./properties";
 import { useRecordLayout } from "./useRecordLayout";
+import { usePageSave } from "./usePageSave";
 import { combineSaveStates, useRecordSave } from "./useRecordSave";
 
 export interface RecordPageProps {
@@ -97,8 +99,12 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
   const record = useQuery({ queryKey: recordKeys.record(table.id, recordId), queryFn: () => recordsApi.get(table.id, recordId) });
   const save = useRecordSave({ table, recordId, record: record.data, timeZone, collaborators });
   const layout = useRecordLayout({ schema, table, view: layoutView });
-  // One status for everything this page saves: values, and which properties pages show.
-  const saveState = combineSaveStates(save.state, layout.state);
+  const pageSave = usePageSave({ baseId: schema.id, table, recordId, save });
+  // One status for everything this page saves: values, the page text, and which properties pages show.
+  const saveState = combineSaveStates(save.state, layout.state, pageSave.state);
+  // The page's Property block asks the property list to open its Add property box.
+  const [addPropertyRequest, setAddPropertyRequest] = useState(0);
+  const addProperty = useMemo(() => (atLeast(role, "creator") ? () => setAddPropertyRequest((n) => n + 1) : undefined), [role]);
   const comments = useQuery({ queryKey: keys.comments(recordId), queryFn: () => commentsApi.list(recordId) });
   const commentCount = comments.data?.length ?? 0;
 
@@ -224,7 +230,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
     );
   const panelTitle = panel === "history" ? "History" : "Comments";
 
-  // Enter in the title moves on to the page (REC-5 marks it `data-record-page`); until it has one, to the first value.
+  // Enter in the title moves on to the page (the editor marks itself `data-record-page`); until it has one, to the first value.
   const bodyRef = useRef<HTMLDivElement>(null);
   const focusPage = useCallback(() => {
     const target = bodyRef.current?.querySelector<HTMLElement>("[data-record-page]") ?? bodyRef.current?.querySelector<HTMLElement>("[data-edit-field][tabindex='0']");
@@ -251,7 +257,8 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
     <>
       <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} autoFocus={justCreated && canEdit} onEnter={focusPage} />
       <LinkedRecordsProvider value={linkedHost}>
-        <RecordProperties schema={schema} table={table} record={record.data} view={layoutView} role={role} env={env} emails={emails} save={save} layout={layout} titleMode={titleMode} justCreated={justCreated && canEdit} />
+        <RecordProperties schema={schema} table={table} record={record.data} view={layoutView} role={role} env={env} emails={emails} save={save} layout={layout} titleMode={titleMode} justCreated={justCreated && canEdit} addPropertyRequest={addPropertyRequest} />
+        <PageSection schema={schema} table={table} record={record.data} role={role} save={save} pageSave={pageSave} collaborators={collaborators} upload={uploadToProject} onAddProperty={addProperty} />
       </LinkedRecordsProvider>
     </>
   );

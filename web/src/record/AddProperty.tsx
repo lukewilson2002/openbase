@@ -34,9 +34,11 @@ export interface AddPropertyProps {
   save: RecordSave;
   /** Continues in the property dialog, for a type the box cannot set up. */
   onSetup(name: string, type: FieldType): void;
+  /** Opens the box when it changes to something above 0 (the page's block menu: Property). */
+  openRequest?: number;
 }
 
-export function AddProperty({ schema, table, env, save, onSetup }: AddPropertyProps) {
+export function AddProperty({ schema, table, env, save, onSetup, openRequest = 0 }: AddPropertyProps) {
   const qc = useQueryClient();
   const toast = useToast();
   const me = useMe();
@@ -54,6 +56,9 @@ export function AddProperty({ schema, table, env, save, onSetup }: AddPropertyPr
   const changeType = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const hintId = useId();
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
   // At the foot of a long page the box opens below the fold: bring all of it into view, not just the Name.
   useEffect(() => {
     if (open) form.current?.scrollIntoView({ block: "nearest" });

@@ -459,7 +459,10 @@ function addTable(name: string, color?: string | null): string {
   const id = newId("tbl");
   madeTables.set(id, { name, color: color ?? TABLE_COLORS[tableOrder.length % TABLE_COLORS.length]! });
   PRIMARY[id] = `fld_${id}_name`;
-  views.push({ id: `viw_default_${id}`, table_id: id, name: "Default grid", type: "grid", config: emptyConfig(), personal: false, locked: false, is_default: true });
+  // A new collection gets its "Page" at once, hidden in its views (decision 2).
+  const page = field(`fld_${id}_page`, "Page", "rich_text", {}, id);
+  madePages.set(id, page);
+  views.push({ id: `viw_default_${id}`, table_id: id, name: "Default grid", type: "grid", config: { ...emptyConfig(), hidden_fields: [page.id] }, personal: false, locked: false, is_default: true });
   tableOrder.push({ id });
   return id;
 }
@@ -1438,6 +1441,25 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
       emit({ client_id: clientId, event: { kind: "records_changed", table_id: table, created: [], updated: [], deleted: body.ids } });
       return send(res, 204), true;
     }
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/records\/([^/]+)\/page$/.exec(p)) && m === "PUT") {
+    const table = g[1]!;
+    const rec = records.get(g[2]!);
+    if (!rec || rec.deleted || rec.table_id !== table) return err(res, 404, "not_found", "record not found"), true;
+    let fieldId = tableDto(table).body_field_id as string | null;
+    const created = !fieldId;
+    if (!fieldId) {
+      // Only a made collection can grow a Page here: the fixed tables' properties are fixed.
+      if (!madeTables.has(table)) return err(res, 422, "validation_failed", "this collection has no page property"), true;
+      const page = field(`fld_${table}_page`, "Page", "rich_text", {}, table);
+      madePages.set(table, page);
+      (tableEdits[table] ??= {}).body_field_id = page.id;
+      fieldId = page.id;
+      emit({ client_id: clientId, event: { kind: "schema_changed", table_id: table } });
+    }
+    applyValues(rec, { [fieldId as string]: body.text ?? null }, clientId);
+    emit({ client_id: clientId, event: { kind: "records_changed", table_id: table, created: [], updated: [rec.id], deleted: [] } });
+    return send(res, 200, { field_id: fieldId, created, record: shape(rec) }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/([^/]+)\/discard$/.exec(p)) && m === "POST") {
     const r = records.get(g[2]!);

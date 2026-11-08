@@ -27,13 +27,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { PropertyList, PropertyRow } from "@/components/ui/property-list";
 import { useToast } from "@/components/ui/toast";
-import { jsonEqual } from "@/lib/cells/parse";
 import { isComputed, isMultilineText } from "@/lib/cells/kinds";
 import { cn } from "@/lib/cn";
 import { atLeast } from "@/lib/roles";
 import { ActionMenu, MenuItem, MenuSeparator } from "@/shell/menuItems";
 import { AddProperty } from "./AddProperty";
 import { foldLabel, hasValue, splitProperties, type TitleMode } from "./properties";
+import { useRebuilds } from "./useRebuilds";
 import { useRecordFolds, type FoldKind } from "./useRecordFolds";
 import type { RecordLayout } from "./useRecordLayout";
 import type { RecordSave, Unsent } from "./useRecordSave";
@@ -123,22 +123,11 @@ function PropertyEntry({ field, table, roles, record, readOnly, hidden, role, er
   const value = record.values[field.id] ?? null;
   const computed = isComputed(field);
   const labelId = `property-${field.id}`;
-  // An editor is rebuilt when its value changes under it (someone else edited it, a save was refused). Long
-  // text saves while it is typed in, so a value that is only our own save coming back must not rebuild the
-  // editor, or the caret would jump out from under the typing. Nor is it rebuilt while text of ours is typed
-  // but not sent, or sent but not answered: a refetch in that time answers with what the server held before
-  // (the text being typed would be replaced by it, and the next keystroke would save the stale text).
+  // An editor is rebuilt when its value changes under it (someone else edited it, a save was refused); see useRebuilds.
   const textKey = `${record.id}:${field.id}`;
-  const rebuilds = useRef({ json: JSON.stringify(value), n: 0 });
   const typedIn = isMultilineText(field);
-  if (typedIn) {
-    const json = JSON.stringify(value);
-    if (json !== rebuilds.current.json) {
-      rebuilds.current.json = json;
-      if (!jsonEqual(value, lastSaved.current.get(textKey) ?? null) && !unsent.current.isWaiting(textKey)) rebuilds.current.n++;
-    }
-  }
-  const editorKey = typedIn ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
+  const rebuilds = useRebuilds(textKey, value, lastSaved, unsent, typedIn);
+  const editorKey = typedIn ? `${record.id}:${field.id}:${rebuilds}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
   return (
     <PropertyRow label={<PropertyName field={field} table={table} id={labelId} role={role} hidden={hidden} layout={layout} roles={roles} onRename={() => onRename(field)} onEdit={() => onEdit(field)} onDelete={() => onDelete(field)} />} className="items-start">
       {readOnly || computed ? (
@@ -193,9 +182,11 @@ export interface RecordPropertiesProps {
   titleMode: TitleMode;
   /** The record was just added: a title that is a row starts being edited. */
   justCreated: boolean;
+  /** Opens "Add property" when it changes to something above 0 (the page's Property block). */
+  addPropertyRequest?: number;
 }
 
-export function RecordProperties({ schema, table, record, view, role, env, emails, save, layout, titleMode, justCreated }: RecordPropertiesProps) {
+export function RecordProperties({ schema, table, record, view, role, env, emails, save, layout, titleMode, justCreated, addPropertyRequest }: RecordPropertiesProps) {
   const qc = useQueryClient();
   const toast = useToast();
   const readOnly = !atLeast(role, "editor");
@@ -270,7 +261,7 @@ export function RecordProperties({ schema, table, record, view, role, env, email
           {folds.hidden && <PropertyList id={hiddenId}>{groups.hidden.map((f) => row(f, true))}</PropertyList>}
         </>
       )}
-      {atLeast(role, "creator") && <AddProperty schema={schema} table={table} env={env} save={save} onSetup={(name, type) => setDialog({ mode: "create", name, type })} />}
+      {atLeast(role, "creator") && <AddProperty schema={schema} table={table} env={env} save={save} openRequest={addPropertyRequest} onSetup={(name, type) => setDialog({ mode: "create", name, type })} />}
       {dialog && <FieldDialog state={dialog} schema={schema} table={table} onOpenChange={(open) => !open && setDialog(null)} />}
       <ConfirmDialog
         open={!!deleting}

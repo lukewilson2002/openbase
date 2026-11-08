@@ -15,6 +15,8 @@ export interface PropertyRoles {
   setTitle(field: Field): void;
   /** Makes the rich text property the collection's page. */
   setPage(field: Field): void;
+  /** Adds a rich text property called "Page" and makes it the collection's page (a collection with none). */
+  addPage(): Promise<unknown>;
 }
 
 export function usePropertyRoles(baseId: string, table: Pick<Table, "id">): PropertyRoles {
@@ -39,5 +41,11 @@ export function usePropertyRoles(baseId: string, table: Pick<Table, "id">): Prop
     onError: (e) => toast.error(e, "Could not change the page property"),
   });
 
-  return { setTitle: title.mutate, setPage: page.mutate };
+  const add = useMutation({
+    mutationFn: () => api.tables.setBodyField(table.id, { create: true }),
+    onSuccess: refresh,
+    onError: (e) => toast.error(e, "Could not add the page property"),
+  });
+
+  return { setTitle: title.mutate, setPage: page.mutate, addPage: add.mutateAsync };
 }
