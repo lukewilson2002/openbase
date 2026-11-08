@@ -122,7 +122,9 @@ async fn a_read_only_grant_reads_and_cannot_write() {
     );
     let message = res.body["error"]["message"].as_str().unwrap();
     assert!(
-        message.contains("create_table") && message.contains("Reconnect"),
+        message.contains("create_table")
+            && message.contains("Change access")
+            && message.contains("reconnect the app"),
         "{message}"
     );
     assert_eq!(w.count("SELECT count(*) FROM tables WHERE name = 'T'"), 0);

@@ -744,7 +744,7 @@ async fn view_search_skips_embed_blocks_in_rich_text() {
     let notes = id_of(
         &p.f.add_field(
             &p.f.table_id,
-            json!({ "name": "Page", "type": "rich_text", "options": {} }),
+            json!({ "name": "Embedding page", "type": "rich_text", "options": {} }),
         )
         .await,
     );
