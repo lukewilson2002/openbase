@@ -436,14 +436,17 @@ const tableOrder: { id: string }[] = [{ id: T_TASKS }, { id: T_PEOPLE }, { id: T
 
 const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fld_p_name", [T_PROJECTS]: "fld_j_name" };
 
+/** What the sidebar's Rename and Color menu items changed (`PATCH /api/tables/:id`). */
+const tableEdits: Record<string, { name?: string; color?: string }> = {};
+
 function tableDto(id: string): Obj {
   return {
     id,
     base_id: BASE_ID,
-    name: id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People",
+    name: tableEdits[id]?.name ?? (id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People"),
     description: null,
     primary_field_id: PRIMARY[id]!,
-    color: id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange",
+    color: tableEdits[id]?.color ?? (id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange"),
     record_noun: "",
     record_count: [...records.values()].filter((r) => r.table_id === id && !r.deleted).length,
     body_field_id: null,
@@ -787,8 +790,8 @@ function basePeople(b: Obj): Obj[] {
 }
 
 function baseSummary(b: Obj, role: string): Obj {
-  // Every mock base serves the same three tables (see baseDto).
-  const tables = tableOrder.map(({ id }) => {
+  // Only the tracker has tables (see baseDto); the other mock bases are empty folders, like their pages.
+  const tables = (b.id === BASE_ID ? tableOrder : []).map(({ id }) => {
     const t = tableDto(id);
     return { id, name: t.name, icon: null, color: t.color, record_count: t.record_count, body_field_id: null, home_date_field_id: null, done_field_id: null, record_noun: "" };
   });
@@ -844,6 +847,12 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
   if (p === "/api/workspaces/reorder" && m === "POST") {
     reorderInPlace(ws.workspaces as { id: string }[], body.ids);
     return send(res, 200, { ok: true }), true;
+  }
+  // Owners only: which project's collections show directly under the workspace. Only the pointer moves.
+  if ((g = /^\/api\/workspaces\/([^/]+)\/top-level$/.exec(p)) && m === "POST") {
+    if (!ws.bases.some((b) => b.id === body.base_id && b.workspace_id === g![1])) return err(res, 400, "bad_request", "that folder is not in this workspace"), true;
+    ws.roots[g[1]!] = body.base_id;
+    return send(res, 200, workspaceList().find((x) => x.id === g![1])), true;
   }
   if ((g = /^\/api\/workspaces\/([^/]+)\/bases\/reorder$/.exec(p)) && m === "POST") {
     reorderInPlace(ws.bases as { id: string }[], body.ids);
@@ -919,9 +928,17 @@ function workspaceRoutes(m: string, p: string, body: Obj, res: ServerResponse, u
     ws.bases.push(b);
     return send(res, 201, { ...baseSummary(b, "owner"), tables: [], workspace_name: ws.workspaces.find((w) => w.id === g![1])?.name ?? "" }), true;
   }
+  if ((g = /^\/api\/bases\/([^/]+)\/duplicate$/.exec(p)) && m === "POST") {
+    const b = ws.bases.find((x) => x.id === g![1]);
+    if (!b) return err(res, 404, "not_found", "base not found"), true;
+    const copy: Obj = { ...b, id: newId("app"), name: body.name ?? `${b.name} copy` };
+    ws.bases.push(copy);
+    return send(res, 201, { ...baseSummary(copy, "owner"), workspace_name: ws.workspaces.find((w) => w.id === copy.workspace_id)?.name ?? "" }), true;
+  }
   if ((g = /^\/api\/bases\/([^/]+)$/.exec(p)) && (g[1] !== BASE_ID || m === "PATCH") && (m === "PATCH" || m === "DELETE")) {
     const b = ws.bases.find((x) => x.id === g![1]);
     if (!b) return err(res, 404, "not_found", "base not found"), true;
+    if (m === "DELETE" && ws.roots[b.workspace_id] === b.id) return err(res, 409, "conflict", `'${b.name}' is the top-level folder of its workspace, so it cannot be deleted. Make another folder the top level first, or delete the workspace.`), true;
     if (m === "DELETE") ws.bases.splice(ws.bases.indexOf(b), 1);
     else Object.assign(b, Object.fromEntries(Object.entries(body).filter(([k]) => ["name", "color", "icon"].includes(k))));
     return send(res, 200, { ok: true }), true;
@@ -1132,6 +1149,12 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if ((g = /^\/api\/bases\/([^/]+)\/tables\/reorder$/.exec(p)) && m === "POST") {
     reorderInPlace(tableOrder, body.ids);
     return send(res, 200, { ok: true }), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)$/.exec(p)) && m === "PATCH" && tableOrder.some((t) => t.id === g![1])) {
+    const edit = (tableEdits[g[1]!] ??= {});
+    if (typeof body.name === "string") edit.name = body.name;
+    if (typeof body.color === "string") edit.color = body.color;
+    return send(res, 200, tableDto(g[1]!)), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/views\/reorder$/.exec(p)) && m === "POST") {
     // Shared views or personal ones, never the default grid: the listed ids keep to the places they held.
