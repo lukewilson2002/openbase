@@ -3,7 +3,8 @@
  * account, admin, history, trash): the sidebar, and, inside `main`, the screen's own header (NAV-5).
  *
  * On a phone the header depends on where the screen sits (PH-2): Home carries the workspace switcher and the
- * avatar that opens the profile sheet (NAV-8), a tab's root screen (Collections, Notifications) has its title,
+ * avatar that opens the profile sheet (NAV-8), a tab's root screen (Collections, Notifications) has its title
+ * (and the avatar too while the person has no workspace and so no tabs),
  * and every other screen has a back link naming the screen it came from.
  */
 import { useState, type ReactNode } from "react";
@@ -61,6 +62,8 @@ function HomeHeader({ workspaceId, title, actions, variant }: Pick<HomeShellProp
   const list = workspaces.data ?? [];
   const ws = list.find((w) => w.id === workspaceId) ?? workspaceToOpen(list);
 
+  // With no workspace there is no bottom navigation, so no Collections tab with the profile row: the avatar is the way to Sign out and the rest.
+  const withAccount = variant === "home" || (variant === "tab" && !workspaces.isPending && !ws);
   const account: PhoneAction[] = user
     ? [{ id: "account", label: "Account menu", face: <Avatar name={user.name} email={user.email} size="sm" own />, onSelect: () => setProfileOpen(true) }]
     : [];
@@ -73,10 +76,10 @@ function HomeHeader({ workspaceId, title, actions, variant }: Pick<HomeShellProp
         actions={actions}
         phone={{
           leading: variant === "home" ? <WorkspaceSwitcher workspaces={list} current={ws} compact /> : variant === "page" ? <PhoneBackLink {...back} /> : undefined,
-          actions: variant === "home" ? account : [],
+          actions: withAccount ? account : [],
         }}
       />
-      {variant === "home" && <ProfileSheet open={profileOpen} onOpenChange={setProfileOpen} />}
+      {withAccount && <ProfileSheet open={profileOpen} onOpenChange={setProfileOpen} />}
     </>
   );
 }
