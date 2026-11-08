@@ -460,9 +460,12 @@ database plus attachments.
 ## Security
 
 OpenBase is designed to face the internet behind HTTPS: invite-only sign-up by
-default, Argon2id passwords, optional passkeys and TOTP 2FA, revocable sessions and tokens, CSRF
-protection, per-role access checks on every route, rate limits on every
-unauthenticated surface, and SSRF protection for automation HTTP requests. The
+default, Argon2id passwords, optional passkeys and TOTP 2FA, revocable sessions and tokens (the
+session cookie is `__Host-` prefixed over HTTPS and ends after 14 idle days), CSRF protection
+(header and `Origin` check), security headers including HSTS, per-role access checks on every
+route, rate limits on every unauthenticated surface (share-link passwords included, with a
+per-link guess cap), SSRF protection for automation HTTP requests, and dependency, secret and
+image scans in CI. The
 threat model, every limit, the administrator checklist and the accepted risks are
 in [docs/security.md](docs/security.md). Read the checklist before going live.
 

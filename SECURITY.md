@@ -32,6 +32,11 @@ The threat model, the limits that are enforced, the checklist for administrators
 that are accepted on purpose are in [docs/security.md](docs/security.md). Reports about something
 listed there as an accepted risk are still welcome if you think the judgement is wrong.
 
+Dependencies are scanned on every change: `cargo deny check` (advisories, licences, sources),
+`npm audit --audit-level=high`, gitleaks over the git history and Trivy over the Docker image
+(see [CONTRIBUTING.md](CONTRIBUTING.md)). The advisory that is ignored on purpose, with its
+reason and re-check date, is in `deny.toml` and in the accepted risks.
+
 Problems in a dependency should be reported to that project; tell us as well if OpenBase is
-affected and needs a release. Dependabot and `cargo audit` style findings that do not affect
-OpenBase need no report.
+affected and needs a release. Dependabot, `cargo audit` and `npm audit` style findings that do
+not affect OpenBase need no report.

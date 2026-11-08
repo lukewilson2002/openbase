@@ -19,7 +19,8 @@ pub fn new_id(prefix: &str) -> String {
 }
 
 /// New secret token (sessions, API tokens, invites, share links): 43 chars of
-/// base62 (~256 bits). Only `hash_token(token)` is stored.
+/// base62 (~256 bits). Only `hash_token(token)` is stored, except for share links: their token
+/// stays readable so the link can be shown again (an accepted risk, docs/security.md).
 pub fn new_token(prefix: &str) -> String {
     format!("{prefix}{}", random_base62(43))
 }

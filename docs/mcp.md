@@ -698,6 +698,9 @@ have no access" (the project is outside the user's or the token's reach).
   always send one) is served only if the origin is the configured public URL or in
   `OPENBASE_MCP_ALLOWED_ORIGINS`; otherwise `403`. Non-browser clients send no
   `Origin` and are unaffected.
+- **Your address is the caller's.** Requests that `api_request` and the curated tools run
+  inside the server carry the address of the connection to `/mcp` (behind a trusted proxy, the
+  address it saw), so rate limits and the audit log name the agent's real address.
 - **Outbound fetches are guarded.** `upload_attachment` with a `url`, and the
   automations' HTTP action, go through one SSRF guard: http(s) only, no credentials in
   the URL, the host is resolved by the server and every address checked (loopback,

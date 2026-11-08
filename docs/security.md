@@ -65,9 +65,11 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 
 - **Run it behind HTTPS** and set `OPENBASE_PUBLIC_URL` to the exact public URL.
   With an `https://` URL session cookies are marked `Secure` and named
-  `__Host-ob_session`, and the server sends HSTS; the URL's origin is
-  also what the CSRF `Origin` check compares against. The bundled Caddy setup
-  does this for you.
+  `__Host-ob_session`, and the server sends HSTS (the bundled Caddyfile sends
+  the same header too); the URL's origin is also what the CSRF `Origin` check
+  compares against, so a browser that reaches OpenBase at any other address
+  (an IP, a second domain) is refused on every write: use the address you set.
+  The bundled Caddy setup does this for you.
 - **`OPENBASE_TRUST_PROXY=true` only behind a proxy, and only when OpenBase is
   reachable solely through it.** OpenBase then takes the client address from the
   **last** `X-Forwarded-For` entry (the address the proxy saw); earlier entries
@@ -175,7 +177,12 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   holds every password hash, two-factor secret and the SMTP password (listing and creating
   backups stay available, they reveal names and sizes only). `upload_attachment` with a URL fetches through the same
   SSRF guard as the automations' HTTP action (see [automations](automations.md#http-requests-and-ssrf)),
-  with a size limit and no redirects. Full details: [MCP](mcp.md#security-model).
+  with a size limit and no redirects. These in-process requests carry the caller's real
+  address, so per-address limits and the audit log see the agent and not the server itself:
+  behind a trusted proxy (`OPENBASE_TRUST_PROXY`) it is the address the proxy saw, passed on as
+  `X-Forwarded-For`; without one it is the address of the connection to `/mcp`, handed over
+  inside the server and never as a header that a client could write. Full details:
+  [MCP](mcp.md#security-model).
 - **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenBase-CSRF`
   header, and when the request carries an `Origin` (or, without one, a `Referer`) it must
   be the public URL's origin, otherwise the answer is `403`. Requests with neither header
@@ -213,8 +220,17 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   redirects ([automations](automations.md#http-requests-and-ssrf)).
 - **Rate limiter memory is bounded**: keys over 64 bytes are hashed, expired
   windows are swept every 30 s, and at most 100,000 keys are tracked.
-- **Dependencies**: the server uses rustls (no OpenSSL); the web client is built
-  with a committed lockfile, `npm ci --ignore-scripts` and no runtime CDN.
+- **Dependencies and build**: the server uses rustls (no OpenSSL); the web client is built
+  with a committed lockfile, `npm ci --ignore-scripts` and no runtime CDN. Every change is
+  checked by `scripts/check.sh` and CI: `cargo deny check` (known advisories, yanked crates,
+  licences, only crates.io as a source, no git dependencies; policy and the one ignored advisory
+  in `deny.toml`), `npm audit --audit-level=high` over the whole web tree (dev dependencies
+  included), a gitleaks scan of the git history and a Trivy scan of the Docker image that fails
+  on critical or high findings that have a fix. Dependabot proposes updates weekly for Cargo,
+  npm, GitHub Actions, Compose and the Dockerfile. Reproducibility: Rust is pinned to an exact
+  version (`rust-toolchain.toml`, which the Docker build checks against its builder image), Node
+  to the LTS line, and the Dockerfile's base images by digest. The runtime image is Debian 13
+  with the packages upgraded at build time, so ffmpeg (which decodes uploaded videos) is current.
 
 ## OAuth (connected apps)
 
@@ -375,7 +391,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Surface | Limit |
 |---|---|
 | Public requests (all `/api/public/*`) | 300 per minute per client IP, 1,200 per minute per share token |
-| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id. New passwords need 8 to 256 characters (older, shorter ones keep working). Per link, over all client addresses: after 100 wrong guesses in an hour the link refuses every guess, right or wrong, for 15 minutes (`429`); a guess after the lockout still counts against the same hour. Checked in their own pool of 2 hashing slots, apart from sign-in's. |
+| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id. New passwords need 8 to 256 characters (older, shorter ones keep working). Per link, over all client addresses: after 100 wrong guesses in an hour the link refuses every guess, right or wrong, for 15 minutes (`429`). The count is per hour, not per lockout: the first guess after the lockout is let through, and if it is wrong the link locks again until the hour is over (see [accepted risks](#accepted-risks)). A right guess is not counted. Checked in their own pool of 2 hashing slots, apart from sign-in's. |
 | Attachment downloads with `?share=` | 600 per minute per client IP, 2,400 per minute per token (own buckets, so a gallery of thumbnails does not eat the public-request budget) |
 | Public form submissions / uploads | 20 each per 10 minutes per (client IP, link); a file is at most 25 MB and never above the configured upload limit |
 | Anonymous upload bytes | per hour: 200 MB per client IP, 500 MB per project, 1,000 MB for the whole server; charged when the request starts, for its declared length (the cap if none is declared) |
@@ -478,6 +494,28 @@ Authentication and email:
 
 Shares, uploads and imports:
 
+- **Share tokens are stored in plain text.** Everything else secret is stored as a hash
+  (sessions, API tokens, OAuth tokens, invites, share passwords), but the token of a share link
+  or public form sits readable in `share_links.token`, because the link has to be shown again
+  whenever someone with the right role opens the share dialog to copy it; a hash could not give
+  it back. The cost: whoever can read the database or a backup can open every enabled link
+  without its URL ever having been shared with them. That reader already has every record and
+  file, so it adds little, but it is one more reason to protect backups (see the checklist). The
+  token is 43 random base62 characters (about 256 bits) and a link is closed by disabling or
+  deleting it, which also makes the old URL useless.
+- **Anyone who knows a password-protected link can lock its password prompt.** The cap of 100
+  wrong guesses per hour is counted for the link across all addresses, because per-address limits
+  cannot stop a guesser who has many of them. The price is that a stranger who has the URL can
+  spend those 100 guesses on purpose, from one address in a few minutes (30 per minute per
+  address), and the link then refuses everyone, right password included, for 15 minutes. The
+  first guess after that is let through and, if wrong, locks the link again until the hour is
+  over, so someone who keeps at it can hold the prompt shut. People who are already viewing
+  the link are shut out as well, because the browser sends the password with every request.
+  Nothing is exposed and nothing is lost by it: it is an outage of one link, not a way in, and
+  it ends when the guesser stops (or the link owner removes the password, or disables the link
+  and makes a new one). The alternative, no shared cap, would leave an 8-character password open
+  to guessing from many addresses, which is the worse failure. The counters are in memory and
+  start over when the server restarts.
 - **Upload byte budgets live in memory** and start over on restart; they are also
   charged by declared length, so a client that declares a long request and sends
   less uses up budget it did not use.
@@ -502,6 +540,35 @@ Shares, uploads and imports:
   budget, and an attacker with many addresses (an IPv6 range) multiplies theirs.
   The per-project and server-wide upload budgets and the Argon2 concurrency cap are
   what hold in that case.
+
+Web and dependencies:
+
+- **`style-src 'unsafe-inline'` stays in the Content-Security-Policy.** The web client's
+  component library (Radix UI) and the canvas widgets set inline `style` attributes at run time
+  (positions, sizes, colours), and the CSP has no way to allow those without allowing inline
+  styles in general. What that costs: an attacker who already managed to inject markup into a
+  page could restyle it (hide or overlay parts of the screen). Scripts are a separate directive:
+  `script-src 'self'` allows no inline script, no `eval` and no WebAssembly, so injected markup
+  cannot run code, which is what the policy is there to stop. Cell values are shown as text, and
+  rich text is Markdown rendered by the web client and sanitized by DOMPurify, which also strips
+  `style` attributes and `<style>`, form and frame tags, so what people type cannot become an
+  inline style. Removing the exception means moving every dynamic style into classes or CSS
+  variables; it is not planned.
+- **One dependency advisory is ignored: RUSTSEC-2023-0071 (`rsa`, the Marvin timing attack).**
+  No fixed release exists. `rsa` comes in through `webauthn-rs`, which uses it only to verify
+  RSA signatures from passkeys, with the public key; the leak is in private-key operations,
+  and OpenBase never signs or decrypts with RSA. It is listed with this reason in `deny.toml`
+  and is re-checked on 2027-02-07; the entry goes as soon as `rsa` or `webauthn-rs` ships a
+  fix. (The other advisory that was open when this was first written, RUSTSEC-2026-0387 in
+  `crypto-bigint`, was cleared by updating `webauthn-rs` to 0.6.2 and is no longer ignored.)
+  `npm audit --audit-level=high` has no exception: nothing in the web tree is ignored.
+- **The Docker scan skips findings that have no fix yet.** Trivy runs with `--ignore-unfixed`,
+  because Debian always carries some high findings it has not patched, and a scan that can never
+  pass gets ignored. Such a finding starts failing CI the day a fix exists. Until then an image
+  can contain a known, unpatched flaw in a Debian package; pull new images when they come out.
+- **HSTS is sent for one year without `includeSubDomains` or `preload`.** Both are hard to undo
+  and would bind domains that OpenBase does not control. A first visit over plain http is
+  therefore not protected by the header; the bundled Caddy setup redirects http to https.
 
 Formulas and queries:
 

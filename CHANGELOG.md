@@ -70,12 +70,40 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 - **Share-link passwords:** new passwords need at least 8 characters (existing ones keep
   working). A link locks for 15 minutes after 100 wrong guesses in an hour from all addresses
   together, and checking those passwords no longer competes with sign-in for hashing slots.
+  Anyone who knows a link can use up those guesses on purpose and so lock its password prompt
+  (for people already viewing it too); that is accepted, see
+  [docs/security.md](docs/security.md#accepted-risks).
 - The server sends `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Resource-Policy: same-origin`, and `Strict-Transport-Security` (one year) when
-  the public URL is https.
+  the public URL is https (without `includeSubDomains` or `preload`). A popup that another
+  origin opened onto OpenBase no longer has a `window.opener` link back to it, so an OAuth client
+  that waited for the sign-in popup to talk back through it must use a redirect instead (the MCP
+  clients do).
+- **Agents and the API see the right caller address.** Requests an agent makes through the
+  `api_request` tool now carry the address of the connection to `/mcp` (or, behind a trusted
+  proxy, the address the proxy saw), so per-address limits and the audit log name the real caller
+  instead of the server itself.
+- **Dependency security updates.** The Rust and web dependencies were updated to versions
+  without known fixable advisories (rustls, rustls-webpki, tokio, time, pulldown-cmark,
+  webauthn-rs 0.6.2, undici, body-parser, qs and others), the unused `ammonia` crate was
+  removed, and the grid library's minimatch is forced to a fixed version. One advisory has no fix
+  and is ignored on purpose, with its reason and a re-check date (RUSTSEC-2023-0071, `rsa`,
+  reached only to verify passkey signatures); see
+  [docs/security.md](docs/security.md#accepted-risks).
+- [docs/security.md](docs/security.md) now says what the code does after these changes and lists
+  the accepted risks with their reasons: share tokens stored readable, `style-src 'unsafe-inline'`,
+  the ignored advisory, and that anyone who knows a password-protected link can lock its
+  password prompt for 15 minutes by guessing wrongly 100 times.
 
 ### Changed
 
+- **The Docker image runs on Debian 13** (a current ffmpeg) with its packages upgraded at build
+  time, and the base images are pinned by digest. The release and CI builds use Node 26 (the
+  active LTS line) and one exact Rust version, 1.99.1, named in `rust-toolchain.toml`. Building
+  from source needs that Rust version (at least 1.89), not "stable".
+- CI also runs `cargo deny check`, `npm audit --audit-level=high`, a gitleaks scan and a Trivy
+  scan of the image, and so does `scripts/check.sh` for the first two. Contributors need
+  [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) installed.
 - **Delete deletes.** Delete or Backspace on selected grid rows now deletes the records (with
   Undo) instead of emptying their cells; clearing a large range of cells asks first. On the
   timeline, Delete on a selected bar deletes its record; **U** (or dragging it onto
