@@ -52,6 +52,9 @@ pub mod actions {
     pub const OAUTH_GRANT_CREATE: &str = "oauth_grant_create";
     /// A grant was revoked: by the user, an administrator or the app itself (detail: `by`).
     pub const OAUTH_GRANT_REVOKE: &str = "oauth_grant_revoke";
+    /// A user changed the access of a connected app on the account page (target: the grant id;
+    /// detail: the app, `from`, `to`).
+    pub const OAUTH_GRANT_UPDATE: &str = "oauth_grant_update";
     /// An already used refresh token was presented: the grant was revoked.
     pub const OAUTH_REFRESH_REUSE: &str = "oauth_refresh_reuse";
     /// An already used authorization code was presented: the grant created from it was revoked.

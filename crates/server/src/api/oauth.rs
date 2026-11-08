@@ -10,7 +10,9 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use ob_core::api::oauth::{ConsentDecision, ConsentOutcome, ConsentRequest, GrantInfo, access};
+use ob_core::api::oauth::{
+    ConsentDecision, ConsentOutcome, ConsentRequest, GrantAccessUpdate, GrantInfo, access,
+};
 use serde_json::json;
 
 use crate::auth::{Actor, Capability, ClientInfo, admin_guard};
@@ -29,27 +31,33 @@ pub fn router() -> Router<AppState> {
         .route("/api/oauth/requests/{id}", get(get_request))
         .route("/api/oauth/requests/{id}/decision", post(decide))
         .route("/api/oauth/grants", get(list_grants))
-        .route("/api/oauth/grants/{id}", delete(revoke_grant))
+        .route(
+            "/api/oauth/grants/{id}",
+            delete(revoke_grant).patch(change_grant_access),
+        )
         .route("/api/admin/oauth/grants", get(admin_list_grants))
         .route("/api/admin/oauth/grants/{id}", delete(admin_revoke_grant))
 }
 
-/// The highest level the user may pick for a request, and the level preselected on the page.
+/// The highest level the user may choose for a request, the level preselected on the page, and
+/// the level the app asked for.
 ///
-/// - **Read only is always preselected**, whatever the app asked for: more access is a decision
-///   the person makes, never a default.
-/// - The ceiling is what the app asked for. An app that named no scope we know gets "Read & edit"
-///   at most; **Full control is offered only when the app asked for it** (`openbase:manage`) and
-///   the person could hand it out themselves, that is, may create `manage` tokens (every
+/// - Every level is offered, whatever the app asked for: many assistants never ask for Full
+///   control, and the person is the one who decides what an app gets. The ceiling is therefore
+///   what the person could hand out themselves, that is, may create `manage` tokens (every
 ///   signed-in person may; a token or an OAuth grant never reaches this code, the endpoints are
-///   session-only).
+///   session-only). It is a ceiling on the app's scope only: the app still acts as the person
+///   and keeps their role in every workspace, so Full control never lifts a Viewer above Viewer.
+/// - The preselected level is what the app asked for (Read only when it named no scope we know).
+///   Anything above that is the person's own choice, made in the decision they post, and is
+///   recorded as such in the audit log.
 fn levels(actor: &Actor, req: &store::PendingRequest) -> (Access, Access, Option<Access>) {
     let asked = scope::max_requested(&req.scope);
-    let mut max = asked.unwrap_or(Access::Write);
-    if max == Access::Manage && actor.require_capability(Capability::Manage).is_err() {
+    let mut max = Access::Manage;
+    if actor.require_capability(Capability::Manage).is_err() {
         max = Access::Write;
     }
-    (max, Access::Read, asked)
+    (max, asked.unwrap_or(Access::Read).min(max), asked)
 }
 
 async fn get_request(
@@ -127,7 +135,7 @@ async fn decide(
                     redirect_url(&req.redirect_uri, &pairs, &issuer)
                 }
                 "approve" => {
-                    let (max, _, _) = levels(&actor, &req);
+                    let (max, _, asked) = levels(&actor, &req);
                     let chosen =
                         body.access
                             .as_deref()
@@ -142,7 +150,7 @@ async fn decide(
                             })?;
                     if chosen > max {
                         return Err(AppError::bad_request(
-                            "that is more access than the app asked for",
+                            "your account cannot give an app that much access",
                         ));
                     }
                     let base_ids = match &body.base_ids {
@@ -162,6 +170,10 @@ async fn decide(
                     store::delete_request(tx, &req.id)?;
                     let mut detail = detail;
                     detail["access"] = json!(chosen.as_str());
+                    // What the app asked for, and whether the person chose more: the choice that
+                    // matters most when reading the log after an incident.
+                    detail["requested"] = json!(asked.map(Access::as_str));
+                    detail["beyond_request"] = json!(chosen > asked.unwrap_or(Access::Read));
                     detail["base_ids"] = json!(token_scope.base_ids);
                     audit::record_as(
                         tx,
@@ -229,6 +241,75 @@ async fn revoke_grant(
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Change what a connected app may do (Account, AI assistants, Change access): up or down,
+/// applied to the grant and its live tokens from their next request, no reconnect.
+///
+/// Session only, like every other way of changing or removing a connected app: if an app could
+/// raise its own access, the consent screen would mean nothing. The new level can never exceed
+/// what the person themselves may hand out (see [`levels`]), and the app keeps acting as the
+/// person, so their role in each workspace still bounds it. An app limited to some projects
+/// cannot be given Full control, which reaches beyond single projects.
+async fn change_grant_access(
+    State(state): State<AppState>,
+    actor: Actor,
+    client: ClientInfo,
+    Path(id): Path<String>,
+    ApiJson(body): ApiJson<GrantAccessUpdate>,
+) -> AppResult<Json<GrantInfo>> {
+    actor.require_capability(Capability::SessionOnly)?;
+    let to = Access::parse(&body.access).ok_or_else(|| {
+        AppError::bad_request(format!(
+            "choose an access level: {}, {} or {}",
+            access::READ,
+            access::WRITE,
+            access::MANAGE
+        ))
+    })?;
+    if to == Access::Manage {
+        actor.require_capability(Capability::Manage)?;
+    }
+    let info = state
+        .db
+        .write(move |tx| {
+            let Some(current) = store::list_grants(tx, Some(&actor.user_id))?
+                .into_iter()
+                .find(|g| g.id == id)
+            else {
+                return Err(AppError::not_found("connected app"));
+            };
+            if to == Access::Manage && current.bases.is_some() {
+                return Err(AppError::bad_request(
+                    "this app is limited to some projects, and Full control reaches beyond single \
+                     projects; connect it again without a project limit to give it Full control",
+                ));
+            }
+            let Some((before, after)) = store::set_grant_access(tx, &id, &actor.user_id, to)?
+            else {
+                return Err(AppError::not_found("connected app"));
+            };
+            audit::record_as(
+                tx,
+                &actor,
+                actions::OAUTH_GRANT_UPDATE,
+                Some(&id),
+                Some(json!({
+                    "client": current.client_name,
+                    "redirect_host": current.redirect_host,
+                    "from": scope::access_of(&before).as_str(),
+                    "to": scope::access_of(&after).as_str(),
+                    "base_ids": after.base_ids,
+                })),
+                Some(&client.ip),
+            )?;
+            store::list_grants(tx, Some(&actor.user_id))?
+                .into_iter()
+                .find(|g| g.id == id)
+                .ok_or_else(|| AppError::not_found("connected app"))
+        })
+        .await?;
+    Ok(Json(info))
 }
 
 async fn admin_list_grants(

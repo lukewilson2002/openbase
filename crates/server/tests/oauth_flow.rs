@@ -647,25 +647,23 @@ async fn the_consent_page_gets_everything_it_shows_from_the_server() {
     assert!(b["impersonates"].is_null());
     assert!(b["requested_access"].is_null());
     assert_eq!(
-        b["max_access"], "write",
-        "no scope asked: Full control is not offered"
+        b["max_access"], "manage",
+        "every level is offered, whatever the app asked for"
     );
     assert_eq!(
         b["default_access"], "read",
-        "never preselect more than reading"
+        "an app that asked for nothing we know is preselected Read only"
     );
     assert!(b["expires_at"].as_i64().unwrap() > openbase::db::now_ms());
 }
 
 #[tokio::test]
-async fn requested_scopes_set_the_ceiling_and_read_only_is_always_preselected() {
+async fn every_level_is_offered_and_the_app_s_request_is_preselected() {
     let fx = Fx::new().await;
-    for (scope, requested, max) in [
+    for (scope, requested, default) in [
         ("openbase:read", "read", "read"),
         ("openbase:write", "write", "write"),
         ("openbase:read openbase:write", "write", "write"),
-        // The ceiling is what the app asked for; the preselection is always Read only, even for
-        // an app that asks for everything.
         (
             "openbase:read openbase:write openbase:manage",
             "manage",
@@ -679,28 +677,29 @@ async fn requested_scopes_set_the_ceiling_and_read_only_is_always_preselected() 
             .get(&fx.user, &format!("/api/oauth/requests/{id}"))
             .await;
         assert_eq!(info.body["requested_access"], requested, "{scope}");
-        assert_eq!(info.body["max_access"], max, "{scope}");
-        assert_eq!(info.body["default_access"], "read", "{scope}");
+        assert_eq!(info.body["max_access"], "manage", "{scope}");
+        assert_eq!(info.body["default_access"], default, "{scope}");
     }
-    // Unknown scopes are ignored: the app asked for nothing we know, so it can be given reading
-    // and editing, but never Full control.
+    // Unknown scopes are ignored: the app asked for nothing we know, so Read only is preselected,
+    // and the person may still choose any level.
     let id = request_id(&fx.authorize(&[("scope", "openid profile")]).await);
     let info = fx
         .app
         .get(&fx.user, &format!("/api/oauth/requests/{id}"))
         .await;
     assert!(info.body["requested_access"].is_null());
-    assert_eq!(info.body["max_access"], "write");
+    assert_eq!(info.body["max_access"], "manage");
     assert_eq!(info.body["default_access"], "read");
     approve(&fx.app, &fx.user, &id, "write")
         .await
         .assert_status(200);
 }
 
-/// Full control is for apps that ask for it: an app that asked for less (or named nothing) is
-/// refused when the decision claims more, whatever the page offered.
+/// Granting more than the app asked for happens only by the person's explicit choice: the
+/// decision must name the level, an unknown level is refused, and the audit entry says the person
+/// went beyond the request. The token response reports the scope actually granted.
 #[tokio::test]
-async fn full_control_is_only_granted_to_an_app_that_asked_for_it() {
+async fn full_control_can_be_chosen_for_an_app_that_asked_for_less() {
     let fx = Fx::new().await;
     for scope in ["", "openbase:read openbase:write", "openid"] {
         let extra: Vec<(&str, &str)> = if scope.is_empty() {
@@ -708,23 +707,51 @@ async fn full_control_is_only_granted_to_an_app_that_asked_for_it() {
         } else {
             vec![("scope", scope)]
         };
-        let id = request_id(&fx.authorize(&extra).await);
-        let res = approve(&fx.app, &fx.user, &id, "manage").await;
-        res.assert_status(400);
-        assert!(
-            res.body["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("more access than the app asked for"),
-            "{scope:?}: {}",
-            res.body
+        let (verifier, challenge) = pkce();
+        let id = request_id(&authorize_with(&fx.app, &fx.client_id, CB, &challenge, &extra).await);
+        // No explicit level: nothing is granted, whatever the app asked for.
+        let codes = fx.count("SELECT count(*) FROM oauth_codes");
+        decide(&fx.app, &fx.user, &id, json!({"decision": "approve"}))
+            .await
+            .assert_status(400);
+        approve(&fx.app, &fx.user, &id, "root")
+            .await
+            .assert_status(400);
+        assert_eq!(fx.count("SELECT count(*) FROM oauth_codes"), codes);
+        let code = code_of(&approve(&fx.app, &fx.user, &id, "manage").await);
+        let tokens = fx.exchange(&code, &verifier).await;
+        tokens.assert_status(200);
+        assert_eq!(
+            tokens.body["scope"], "openbase:read openbase:write openbase:manage",
+            "{scope:?}"
         );
     }
-    assert_eq!(fx.count("SELECT count(*) FROM oauth_codes"), 0);
-    let id = request_id(&fx.authorize(&[("scope", "openbase:manage")]).await);
-    approve(&fx.app, &fx.user, &id, "manage")
+    let details = audit_details(&fx.app, "oauth_approve");
+    assert_eq!(details.len(), 3);
+    for d in &details {
+        assert_eq!(d["access"], "manage");
+        assert_eq!(d["beyond_request"], true, "{d}");
+    }
+    assert!(details[1]["requested"] == "write" && details[0]["requested"].is_null());
+    // Choosing what the app asked for is not "beyond".
+    let (_, code_challenge) = pkce();
+    let id = request_id(
+        &authorize_with(
+            &fx.app,
+            &fx.client_id,
+            CB,
+            &code_challenge,
+            &[("scope", "openbase:read openbase:write")],
+        )
+        .await,
+    );
+    approve(&fx.app, &fx.user, &id, "write")
         .await
         .assert_status(200);
+    assert_eq!(
+        audit_details(&fx.app, "oauth_approve")[3]["beyond_request"],
+        false
+    );
 }
 
 #[tokio::test]
@@ -1036,7 +1063,7 @@ async fn denying_sends_access_denied_and_issues_nothing() {
 }
 
 #[tokio::test]
-async fn the_user_picks_the_access_within_what_the_app_asked_for() {
+async fn the_user_picks_the_access_and_the_projects() {
     let fx = Fx::new().await;
     let (ws, base) = fx.app.workspace_with_base(&fx.user, "Acme");
     let _ = ws;
@@ -1059,20 +1086,7 @@ async fn the_user_picks_the_access_within_what_the_app_asked_for() {
             .await
             .assert_status(400);
     }
-    // More than the app asked for.
-    let id2 = stage("openbase:read").await;
-    let res = approve(&fx.app, &fx.user, &id2, "write").await;
-    res.assert_status(400);
-    assert!(
-        res.body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("more access")
-    );
-    let id3 = stage("openbase:write").await;
-    approve(&fx.app, &fx.user, &id3, "manage")
-        .await
-        .assert_status(400);
+    let id = stage("").await;
     // Bases: empty list, unknown base, somebody else's base, too many.
     for ids in [
         json!([]),
@@ -1115,6 +1129,15 @@ async fn the_user_picks_the_access_within_what_the_app_asked_for() {
         scopes,
         json!({"write": true, "manage": false, "base_ids": [base]})
     );
+    // More than the app asked for is the person's explicit choice, and works.
+    let id2 = stage("openbase:read").await;
+    approve(&fx.app, &fx.user, &id2, "write")
+        .await
+        .assert_status(200);
+    let id3 = stage("openbase:write").await;
+    approve(&fx.app, &fx.user, &id3, "manage")
+        .await
+        .assert_status(200);
 }
 
 // ----------------------------------------------------------------------------- token

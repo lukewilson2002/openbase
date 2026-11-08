@@ -45,11 +45,12 @@ impersonates?: string | null,
  */
 requested_access?: string | null, 
 /**
- * The highest level the user may choose (`read`, `write` or `manage`).
+ * The highest level the user may choose (`read`, `write` or `manage`). Every level is offered
+ * whatever the app asked for; choosing more than it asked for is the person's explicit call.
  */
 max_access: string, 
 /**
- * The level the page selects first (never `manage`).
+ * The level the page selects first: what the app asked for (`read` when it named nothing).
  */
 default_access: string, 
 /**

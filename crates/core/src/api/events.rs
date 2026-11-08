@@ -2,6 +2,8 @@
 //! (`GET /api/bases/{base_id}/events`). Each SSE message has `event: <kind>`
 //! and `data: <json of BaseEvent>`. Clients treat events as invalidation
 //! hints and refetch what they display; events carry ids, not full data.
+//! `GET /api/workspaces/{id}/events` relays the same messages for every project
+//! of a workspace the caller can open; `EventEnvelope::base_id` routes them.
 
 use serde::{Deserialize, Serialize};
 

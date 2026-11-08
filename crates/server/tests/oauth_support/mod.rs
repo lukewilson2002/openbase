@@ -394,6 +394,26 @@ pub fn audit_actions(app: &TestApp) -> Vec<String> {
         .unwrap()
 }
 
+/// The `detail` of every audit entry of `action`, oldest first.
+pub fn audit_details(app: &TestApp, action: &str) -> Vec<Value> {
+    let action = action.to_string();
+    app.state
+        .db
+        .write_sync(move |tx| {
+            let mut stmt =
+                tx.prepare("SELECT detail FROM audit_log WHERE action = ?1 ORDER BY id")?;
+            let rows = stmt.query_map([&action], |r| r.get::<_, Option<String>>(0))?;
+            Ok(rows
+                .map(|r| {
+                    r.unwrap()
+                        .map(|d| serde_json::from_str(&d).unwrap())
+                        .unwrap_or(Value::Null)
+                })
+                .collect::<Vec<_>>())
+        })
+        .unwrap()
+}
+
 // ------------------------------------------------------------ metadata document server
 
 #[derive(Clone)]

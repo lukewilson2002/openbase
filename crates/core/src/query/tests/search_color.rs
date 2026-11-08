@@ -212,3 +212,26 @@ fn color_rule_validation() {
             .contains("at most")
     );
 }
+
+#[test]
+fn search_ignores_embed_blocks_in_rich_text_only() {
+    let t = table();
+    let page = "Renewal notes\n\n```openbase\n{\"embed\":\"linked\",\"field\":\"fldInvoices\"}\n```\n\nSigned\n";
+    let embed = json!({"embed": "linked"}).to_string();
+    let r = row(
+        "r1",
+        json!({"fldLong": page, "fldText": format!("```openbase\n{embed}\n```")}),
+    );
+    let rich = vec![&t["fldLong"]];
+    let s = |fields: &[&Field], q: &str| {
+        matches_search(&r, fields, &search_needle(q).unwrap(), &names(), Tz::UTC)
+    };
+    assert!(s(&rich, "renewal notes"));
+    assert!(s(&rich, "signed"));
+    for hidden in ["embed", "linked", "fldInvoices", "openbase"] {
+        assert!(!s(&rich, hidden), "{hidden}");
+    }
+    // Plain text fields have no embeds: what they hold is what they are.
+    let plain = vec![&t["fldText"]];
+    assert!(s(&plain, "openbase"));
+}

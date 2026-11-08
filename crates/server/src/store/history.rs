@@ -44,6 +44,72 @@ pub fn record(
     Ok(())
 }
 
+/// How long a text edit keeps folding into the latest history row (BE-6).
+pub const COALESCE_WINDOW_MS: i64 = 10 * 60 * 1000;
+
+/// Log an update. With `coalesce`, an edit of one text cell by the person
+/// who made the record's latest history row is folded into that row when the
+/// row is an update of the same single field and under [`COALESCE_WINDOW_MS`]
+/// old: the row keeps its first `old`, takes the new `new` and moves to
+/// `at_ms`. Page text autosaves every few seconds and each row holds the whole
+/// text twice, so one row per save would drown the real history. Anything
+/// else (another field, another person, a stale row, a row whose `new` is
+/// not the value this edit started from) adds a row as usual.
+///
+/// The row keeps its id, so a reader paging by id (record history) sees no
+/// gap; feeds sort by time, where the row simply becomes the newest.
+pub fn record_update(
+    conn: &Connection,
+    record_id: &str,
+    table_id: &str,
+    user_id: Option<&str>,
+    changes: &Map<String, Json>,
+    at_ms: i64,
+    coalesce: bool,
+) -> AppResult<()> {
+    if coalesce
+        && let Some(user) = user_id
+        && changes.len() == 1
+        && let Some((field_id, incoming)) = changes.iter().next()
+        && let Some(row) = conn
+            .prepare_cached(
+                "SELECT id, user_id, kind, changes, created_at FROM record_history
+                 WHERE record_id = ?1 ORDER BY id DESC LIMIT 1",
+            )?
+            .query_row([record_id], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })
+            .optional()?
+    {
+        let (id, row_user, kind, raw, row_at) = row;
+        let age = at_ms - row_at;
+        if kind == UPDATE
+            && row_user.as_deref() == Some(user)
+            && (0..COALESCE_WINDOW_MS).contains(&age)
+            && let Ok(Json::Object(mut stored)) = serde_json::from_str::<Json>(&raw)
+            && stored.len() == 1
+            && let Some(prev) = stored.get_mut(field_id)
+            // The edit must continue from where the row left off; a cell that
+            // changed some other way in between starts a new row.
+            && prev.get("new") == incoming.get("old")
+        {
+            prev["new"] = incoming.get("new").cloned().unwrap_or(Json::Null);
+            conn.prepare_cached(
+                "UPDATE record_history SET changes = ?1, created_at = ?2 WHERE id = ?3",
+            )?
+            .execute(params![serde_json::to_string(&stored)?, at_ms, id])?;
+            return Ok(());
+        }
+    }
+    record(conn, record_id, table_id, user_id, UPDATE, changes, at_ms)
+}
+
 /// One change entry in the stored shape.
 pub fn change(old: Option<&Json>, new: Option<&Json>) -> Json {
     serde_json::json!({

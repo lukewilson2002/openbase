@@ -85,6 +85,9 @@ function Consent({ request }: { request: ConsentRequest }) {
 
   const allowed = ACCESS_ORDER.slice(0, ACCESS_ORDER.indexOf(max) + 1);
   const cannotApprove = limitBases && baseIds.length === 0;
+  // The server preselects what the app asked for and offers every level; going above it is the person's own call.
+  const asked = isAccess(request.requested_access) ? request.requested_access : null;
+  const beyondRequest = ACCESS_ORDER.indexOf(access) > (asked ? ACCESS_ORDER.indexOf(asked) : 0);
 
   if (left) {
     return (
@@ -137,7 +140,11 @@ function Consent({ request }: { request: ConsentRequest }) {
             </label>
           ))}
         </div>
-        {request.requested_access && max !== "manage" && <p className="mt-2 text-xs text-muted">The app asked for no more than {ACCESS_LABEL[max].toLowerCase()}.</p>}
+        {beyondRequest && (
+          <p className="mt-2 text-xs text-muted" role="status">
+            This app asked for {asked ? ACCESS_LABEL[asked].toLowerCase() : "nothing we know"}, not {ACCESS_LABEL[access].toLowerCase()}. It gets this much only because you chose it.
+          </p>
+        )}
       </fieldset>
 
       <fieldset className="mt-5">

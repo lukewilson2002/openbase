@@ -89,6 +89,7 @@ export type { FormulaCheckError } from "./FormulaCheckError";
 export type { FormulaCheckResult } from "./FormulaCheckResult";
 export type { FormulaOptions } from "./FormulaOptions";
 export type { GalleryConfig } from "./GalleryConfig";
+export type { GrantAccessUpdate } from "./GrantAccessUpdate";
 export type { GrantBase } from "./GrantBase";
 export type { GrantInfo } from "./GrantInfo";
 export type { Group } from "./Group";

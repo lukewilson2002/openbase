@@ -119,11 +119,12 @@ and approve. The app then holds a short-lived access token for `/mcp`.
 | Read & edit | also create, change and delete content in your projects | "Allow writes" |
 | Full control | also manage workspaces, members, invites and settings (and the admin pages for an administrator) | "Allow managing ..." |
 
-Plus **All projects** or **only the projects you tick**. The page **always preselects Read
-only**; you choose more. An app is offered what it asked for and nothing above it: Read &
-edit when it asked for write (an app that named no scope we know can get that much), and
-Full control only when it asked for `openbase:manage` (the `401` from `/mcp` names
-`openbase:read openbase:write`, so a client that follows it does not ask for more). It shows
+Plus **All projects** or **only the projects you tick**. All three levels are always offered,
+whatever the app asked for, because many assistants never ask for Full control. The page
+preselects what the app asked for (Read only when it named no scope we know), and anything
+above that is your explicit choice; the audit entry records that you went beyond the request.
+The token response reports the scope you actually granted. (The `401` from `/mcp` names
+`openbase:read openbase:write`, so a client that follows it asks for that much.) It shows
 the app's name (written by the app itself, so not proof of anything) and the address the
 answer goes to, and warns when the app runs on your own computer, when OpenBase cannot
 verify the address, and when an app calls itself "Claude" or "ChatGPT" (look-alikes with
@@ -139,7 +140,7 @@ stay out of reach, and what you can do in a project limits what the app can do.
 
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, projects, where it connects from, when it connected and when it was last used,
-with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
+with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing or resetting your password, turning on
 two-factor authentication, **Sign out other sessions** and having your account deactivated
 disconnect all your apps (they have to be approved again; reactivating an account does not
@@ -330,7 +331,7 @@ are names or ids.
 | `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`). A project appears as a folder in the app, except a workspace's top-level project: each workspace names it (`top_level_project`) and each project says `is_top_level` |
 | `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
-| `search_records` | any | Case-insensitive text search over all fields; takes `include_empty` like `list_records` |
+| `search_records` | any | Case-insensitive text search over all fields (embed blocks in rich text are skipped, see [Embedding records and views in rich text](#embedding-records-and-views-in-rich-text)); takes `include_empty` like `list_records` |
 | `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
 | `get_home` | any | A workspace's Home in one read (`workspace`: name or id, optional when you belong to one): `due` (records dated from 30 days ago to 7 days ahead by their table's Home date, not marked done, oldest first, at most 50, with `date`, `time`, `overdue`, `done_field_id` and `can_edit`), `recent` (the 10 records most recently created or edited, with who and when), `drafts` (your inbox drafts) and `truncated` when some tables were not checked. Only projects you can open are read. Same as `GET /api/workspaces/{id}/home` ([docs/api.md](api.md)) |
 | `aggregate_records` | any | Counts, sums, averages, minimums and maximums computed on the server, optionally per group (`group_by` up to 3 fields); narrow with `view` / `filterByFormula`; group values come back as names (selects, links, people), dates as `YYYY-MM-DD`, empty group as `null`; invalid combinations (sum of text, group by a button) are errors that list the valid fields. Same as `POST /api/tables/{id}/aggregate` ([docs/api.md](api.md) §5) |
@@ -501,7 +502,7 @@ needs only read access.
 |---|---|---|
 | `list_trash` | any | Deleted records, fields, tables and views of a project (creator role; an editor sees the records they deleted themselves and their own personal views); a workspace's deleted projects; your deleted workspaces |
 | `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace. Editors can restore the records they deleted themselves; other people's records, fields, tables and shared views need the creator role |
-| `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values |
+| `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values. Repeated edits of one text or rich text cell by the same person fold into one entry while it is under ten minutes old (first old value, latest new value, time of the latest edit) |
 | `list_activity` | any | What changed lately across all your projects (or one workspace, project, table or person; one kind): who created, changed, deleted or restored which record with field names and readable values, and the comments, newest first; `before` pages it |
 | `list_notifications` / `mark_notifications_read` | any / write | Your notifications; mark some or all read |
 
@@ -568,6 +569,28 @@ The file must belong to the same project as the record (upload with that `projec
 fails with `attachment att... is not a file of this project`; for an inbox draft, upload without `project_id`
 and filing moves the file into the project. Images from other websites (`![](https://...)`) are never shown,
 only a link. Details and the serving rules: [docs/api.md](api.md#files-in-rich-text-internal-api).
+
+#### Embedding records and views in rich text
+
+A rich text value can embed a small table of the record's linked records or of a view's first records. Write
+a fenced code block with the info string `openbase` whose body is a single JSON object, on lines of its own
+in the value you write with `create_records` or `update_records`:
+
+````
+```openbase
+{"embed":"linked","field":"fldXXXXXXXXXXXXXX"}
+```
+
+```openbase
+{"embed":"view","view":"viwXXXXXXXXXXXXXX","limit":10}
+```
+````
+
+`field` is one of the record's own link fields and `view` a saved (not personal) view of the same workspace,
+both by **id** (`get_project_schema` lists them); `limit` is optional (10). The web app draws the table in the
+record's page; a block it cannot read is shown as plain text. Search ignores the content of these blocks
+(`search_records`, `search_everything`, the grid search) and still finds the text around them. Details:
+[docs/api.md](api.md#embeds-in-rich-text-internal-api).
 
 #### Mentioning people
 
@@ -902,7 +925,7 @@ tool above its access. `scope` and `resource_metadata` are left out when OAuth i
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
 | `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens; a deactivation also deletes connected apps). For an OAuth app: its access token expired and it did not refresh, or you revoked the connection; connect it again |
-| `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; disconnect it under Connected apps and connect it again with more access |
+| `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; give it more under Account → AI assistants → Change access (it applies from its next request), or disconnect it and connect it again with more access |
 | the connector says it cannot reach or sign in to the server | Claude and ChatGPT connect from the internet: OpenBase needs a public `https://` address (`OPENBASE_PUBLIC_URL` set to it) with a valid certificate; `curl https://<your OpenBase>/.well-known/oauth-protected-resource/mcp` should answer JSON |
 | `could not fetch the app's metadata document` on the approval step | the app's `client_id` URL did not answer with its JSON document from a public address (the server log has the reason). Private and loopback addresses are refused on purpose |
 | `404` `oauth_disabled` | `OPENBASE_PUBLIC_URL` is plain `http://` on a public address; OAuth is only served over HTTPS (or on localhost) |

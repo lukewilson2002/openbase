@@ -41,7 +41,9 @@
 //!    cells ([`WriteCtx::max_recomputes`], default
 //!    [`DEFAULT_MAX_EVALS`](super::recompute::DEFAULT_MAX_EVALS)).
 //! 7. `record_history` gets one row per create/update/delete/restore with the
-//!    old/new JSON of the changed *editable* fields.
+//!    old/new JSON of the changed *editable* fields. Except that a person's
+//!    repeated edits of one text or rich text cell fold into one row
+//!    ([`history::record_update`]).
 //! 8. Users newly added to a user field with `notify` get an "assigned"
 //!    notification (not for assigning yourself), and people newly mentioned
 //!    (`@[Name](usrXXXX)`) in a rich text cell get a "mention" notification
@@ -785,14 +787,23 @@ impl<'a> Writer<'a> {
             .entry((row.table_id.clone(), row.id.clone()))
             .or_insert_with(|| row.data.clone());
         records::save_edit(self.conn(), &row.id, &data, at, self.ctx.actor_str())?;
-        history::record(
+        // Only a person's own typing folds into the last row; an automation
+        // or import writing the same cell is a separate event in the log.
+        let coalesce = matches!(self.ctx.source, WriteSource::Api)
+            && changes.keys().all(|id| {
+                matches!(
+                    self.sess.schema.fields.get(id).map(|f| &f.kind),
+                    Some(FieldKind::Text(_) | FieldKind::RichText(_))
+                )
+            });
+        history::record_update(
             self.conn(),
             &row.id,
             &row.table_id,
             self.ctx.actor_str(),
-            history::UPDATE,
             changes,
             at,
+            coalesce,
         )?;
         let mut next = row.clone();
         next.data = data;

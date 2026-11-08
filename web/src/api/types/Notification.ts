@@ -3,6 +3,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 export type Notification = { id: string, 
 /**
- * mention | assigned | invite | automation
+ * mention | assigned | automation | form_response
  */
 kind: string, payload: JsonValue, read_at?: number | null, created_at: number, };

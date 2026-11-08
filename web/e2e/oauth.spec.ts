@@ -114,9 +114,9 @@ test("an MCP client connects through the browser, works with its token, and is r
     await expect(page.getByRole("heading", { name: `Allow ${name} to use your OpenBase?` })).toBeVisible();
     await expect(page.getByTestId("redirect-host")).toHaveText(`127.0.0.1:${listener.port}`);
     await expect(page.getByText("This app runs on your own computer")).toHaveCount(2); // the label and the warning
-    await expect(page.getByLabel(/Read only/)).toBeChecked(); // Read only is always preselected
-    await expect(page.getByLabel(/Read & edit/)).not.toBeChecked(); // the app asked for write: offered, not chosen
-    await expect(page.getByLabel(/Full control/)).toHaveCount(0); // it asked for no more than that
+    await expect(page.getByLabel(/Read & edit/)).toBeChecked(); // what the app asked for is preselected
+    await expect(page.getByLabel(/Read only/)).not.toBeChecked();
+    await expect(page.getByLabel(/Full control/)).not.toBeChecked(); // always offered, never preselected unless asked for
 
     // The consent page cannot be framed.
     const consentUrl = page.url();

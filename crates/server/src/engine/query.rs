@@ -811,6 +811,8 @@ pub fn effective_config(
         filter: t.filter.clone(),
         sorts: t.sorts.clone().unwrap_or_default(),
         groups: t.groups.clone().unwrap_or_default(),
+        row_color: t.row_color.clone(),
+        summaries: t.summaries.clone().unwrap_or_default(),
         ..ViewConfig::default()
     };
     crate::store::views::validate_config(&fields, &only_the_override)
@@ -823,6 +825,12 @@ pub fn effective_config(
     }
     if let Some(g) = &t.groups {
         config.groups = g.clone();
+    }
+    if let Some(rc) = &t.row_color {
+        config.row_color = Some(rc.clone());
+    }
+    if let Some(s) = &t.summaries {
+        config.summaries = s.clone();
     }
     Ok(config)
 }
@@ -1107,7 +1115,8 @@ pub struct AggregationOpts<'a> {
     /// The same search as the grid's search box: only matching records are
     /// summarised.
     pub search: Option<&'a str>,
-    /// A one-off filter override (sorts and groups are accepted and ignored).
+    /// A one-off override of the filter and the summaries (sorts, groups and
+    /// row colors are accepted and ignored).
     pub transient: Option<&'a TransientConfig>,
 }
 
@@ -1247,12 +1256,13 @@ pub struct RecordHit {
 }
 
 /// The text the global search reads in a cell: its display text, and for rich
-/// text its words without the Markdown (a mention reads `@Name`), so neither
-/// matches nor snippets show markup.
+/// text its words without the Markdown (a mention reads `@Name`) and without
+/// its embed blocks, so neither matches nor snippets show markup or the JSON
+/// of an embed.
 fn search_text(field: &Field, stored: Option<&Json>, names: &NameCache, tz: Tz) -> String {
     let text = display_text(field, stored, names, tz);
     if matches!(field.kind, FieldKind::RichText(_)) {
-        crate::store::mentions::plain_text(&text)
+        crate::store::mentions::plain_text(&ob_core::cell::without_embeds(&text))
     } else {
         text
     }

@@ -140,8 +140,8 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
       trusted_host: false,
       redirect_host: "127.0.0.1:53199",
       requested_access: "write",
-      max_access: "write",
-      default_access: "read",
+      max_access: "manage",
+      default_access: "write",
     });
     expect(url.searchParams.get("scope")).toBe("openbase:read openbase:write");
     expect(iss).toBe(seeded.baseUrl);

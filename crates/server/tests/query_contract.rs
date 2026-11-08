@@ -1,7 +1,7 @@
 //! Response contracts the web client relies on (plan section 3.1): group
 //! headers on every page, system fields in `values`, the aggregations
 //! `search` parameter and the request-scoped `transient` override of a view's
-//! filter / sorts / groups.
+//! filter / sorts / groups / row colors / summaries.
 
 mod common;
 mod query_support;
@@ -564,4 +564,226 @@ async fn button_values_are_the_materialized_urls() {
         .set(&t, &id_str(&rec["id"]), json!({ &f.primary_id: "xyz" }))
         .await;
     assert_eq!(edited["values"][&button], "https://example.com/?q=xyz");
+}
+
+// ------------------------------------- transient row colors and summaries
+
+/// Drafted row colors and summaries are computed like saved ones: the same
+/// config sent as a transient override on an unconfigured view answers what
+/// the view answers with that config saved.
+#[tokio::test]
+async fn a_transient_row_color_gives_the_colors_the_saved_one_does() {
+    let p = people().await;
+    let by_select = json!({ "mode": "by_select", "field_id": p.status });
+    let by_conditions = json!({ "mode": "by_conditions", "rules": [
+        { "color": "red", "filter": and(vec![cond(&p.age, "gt", json!(35))]) },
+        { "color": "blue", "filter": and(vec![cond(&p.age, "gt", json!(26))]) },
+    ] });
+    for rc in [by_select, by_conditions] {
+        p.f.configure(json!({})).await;
+        let drafted = p.f.query(json!({ "transient": { "row_color": rc } })).await;
+        assert!(!drafted["colors"].as_object().unwrap().is_empty());
+        // Nothing was saved by asking.
+        assert_eq!(p.f.query(json!({})).await["colors"], json!({}));
+        p.f.configure(json!({ "row_color": rc })).await;
+        let saved = p.f.query(json!({})).await;
+        assert_eq!(drafted["colors"], saved["colors"], "{rc}");
+        // The records and their order are not touched by the colors.
+        assert_eq!(rec_ids(&drafted), rec_ids(&saved));
+    }
+}
+
+#[tokio::test]
+async fn a_transient_row_color_replaces_the_saved_one_or_drops_it() {
+    let p = people().await;
+    p.f.configure(json!({ "row_color": { "mode": "by_select", "field_id": p.status } }))
+        .await;
+    assert_eq!(
+        p.f.query(json!({})).await["colors"]
+            .as_object()
+            .unwrap()
+            .len(),
+        4
+    );
+
+    let by_age = json!({ "mode": "by_conditions", "rules": [
+        { "color": "red", "filter": and(vec![cond(&p.age, "gt", json!(35))]) } ] });
+    let r =
+        p.f.query(json!({ "transient": { "row_color": by_age } }))
+            .await;
+    let colors = r["colors"].as_object().unwrap();
+    assert_eq!(colors.len(), 1);
+    assert_eq!(colors[&p.ids[2]], "red");
+
+    // No rules: no colors at all, whatever the view saved.
+    let none = json!({ "mode": "by_conditions", "rules": [] });
+    let r =
+        p.f.query(json!({ "transient": { "row_color": none } }))
+            .await;
+    assert_eq!(r["colors"], json!({}));
+
+    // Left out: the saved one stays.
+    let r = p.f.query(json!({ "transient": { "sorts": [] } })).await;
+    assert_eq!(r["colors"].as_object().unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn transient_summaries_give_the_values_the_saved_ones_do() {
+    let p = people().await;
+    let summaries = json!({ &p.age: "sum", &p.name: "filled", &p.due: "earliest_date" });
+    let view = p.view().to_string();
+    p.f.configure(json!({})).await;
+    let q = enc(&json!({ "summaries": summaries }).to_string());
+    let drafted = aggregations_with(&p, &view, &format!("transient={q}")).await;
+    drafted.assert_status(200);
+    assert_eq!(drafted.body["values"][&p.age], 126);
+    // Nothing was saved by asking.
+    assert_eq!(
+        aggregations_with(&p, &view, "").await.body["values"],
+        json!({})
+    );
+    p.f.configure(json!({ "summaries": summaries })).await;
+    let saved = aggregations_with(&p, &view, "").await;
+    assert_eq!(drafted.body["values"], saved.body["values"]);
+
+    // The map replaces the saved one as a whole; `{}` drops every summary.
+    let q = enc(&json!({ "summaries": { &p.age: "average" } }).to_string());
+    let one = aggregations_with(&p, &view, &format!("transient={q}")).await;
+    assert_eq!(one.body["values"].as_object().unwrap().len(), 1);
+    assert_eq!(one.body["values"][&p.age], 31.5);
+    let q = enc(&json!({ "summaries": {} }).to_string());
+    let none = aggregations_with(&p, &view, &format!("transient={q}")).await;
+    assert_eq!(none.body["values"], json!({}));
+
+    // Combined with a drafted filter, as the grid sends them.
+    let q = enc(
+        &json!({ "filter": and(vec![cond(&p.age, "gte", json!(30))]),
+                 "summaries": { &p.age: "sum" } })
+        .to_string(),
+    );
+    let both = aggregations_with(&p, &view, &format!("transient={q}")).await;
+    assert_eq!(both.body["values"][&p.age], 101);
+}
+
+#[tokio::test]
+async fn transient_row_colors_and_summaries_are_validated_like_saved_ones() {
+    let p = people().await;
+    let msg = bad(
+        &p,
+        json!({ "row_color": { "mode": "by_select", "field_id": "fldNOPE" } }),
+    )
+    .await;
+    assert!(msg.starts_with("transient"), "{msg}");
+    bad(
+        &p,
+        json!({ "row_color": { "mode": "by_conditions", "rules": [
+            { "color": "chartreuse", "filter": and(vec![cond(&p.age, "gt", json!(1))]) } ] } }),
+    )
+    .await;
+    bad(
+        &p,
+        json!({ "row_color": { "mode": "by_conditions", "rules": [
+            { "color": "red", "filter": and(vec![cond("fldNOPE", "gt", json!(1))]) } ] } }),
+    )
+    .await;
+    bad(&p, json!({ "summaries": { "fldNOPE": "sum" } })).await;
+    bad(
+        &p,
+        json!({ "summaries": { &p.age: "no_such_aggregation" } }),
+    )
+    .await;
+    let r =
+        p.f.query_as(
+            &p.f.owner,
+            p.view(),
+            json!({ "transient": { "row_color": 5 } }),
+        )
+        .await;
+    assert_eq!(r.status.as_u16(), 400);
+    // The aggregations endpoint refuses a bad one the same way.
+    let view = p.view().to_string();
+    let q = enc(&json!({ "summaries": { "fldNOPE": "sum" } }).to_string());
+    aggregations_with(&p, &view, &format!("transient={q}"))
+        .await
+        .assert_status(400);
+}
+
+#[tokio::test]
+async fn users_who_cannot_save_the_view_can_draft_colors_and_summaries() {
+    let p = people().await;
+    let viewer = p.f.member("viewer@example.com", Role::Viewer);
+    let rc = json!({ "mode": "by_select", "field_id": p.status });
+    let r =
+        p.f.query_as(
+            &viewer,
+            p.view(),
+            json!({ "transient": { "row_color": rc } }),
+        )
+        .await;
+    r.assert_status(200);
+    assert_eq!(r.body["colors"].as_object().unwrap().len(), 4);
+    let q = enc(&json!({ "summaries": { &p.age: "sum" } }).to_string());
+    let r =
+        p.f.app
+            .get(
+                &viewer,
+                &format!("/api/views/{}/aggregations?transient={q}", p.view()),
+            )
+            .await;
+    r.assert_status(200);
+    assert_eq!(r.body["values"][&p.age], 126);
+}
+
+// ---------------------------------------------------------- embed blocks
+
+/// The view search, `search_records` and the aggregations' search read rich
+/// text without its embed blocks.
+#[tokio::test]
+async fn view_search_skips_embed_blocks_in_rich_text() {
+    let p = people().await;
+    let notes = id_of(
+        &p.f.add_field(
+            &p.f.table_id,
+            json!({ "name": "Page", "type": "rich_text", "options": {} }),
+        )
+        .await,
+    );
+    p.f.set(
+        &p.f.table_id,
+        &p.ids[0],
+        json!({ &notes: "Renewal due soon\n\n```openbase\n{\"embed\":\"linked\",\"field\":\"fldInvoices\"}\n```\n\nSigned by Ann\n" }),
+    )
+    .await;
+    p.f.set(
+        &p.f.table_id,
+        &p.ids[1],
+        json!({ &notes: "```js\nconst embed = 1;\n```\n" }),
+    )
+    .await;
+
+    let total = |search: &str| {
+        let search = search.to_string();
+        let f = &p.f;
+        async move {
+            f.query(json!({ "search": search })).await["total"]
+                .as_u64()
+                .unwrap()
+        }
+    };
+    assert_eq!(total("renewal").await, 1);
+    assert_eq!(total("signed by ann").await, 1);
+    for hidden in ["embed", "linked", "fldInvoices", "openbase"] {
+        // Only the ordinary code block of bob matches "embed".
+        let expected = u64::from(hidden == "embed");
+        assert_eq!(total(hidden).await, expected, "{hidden}");
+    }
+
+    // The summary bar's search agrees with the query's.
+    let view = p.view().to_string();
+    p.f.configure(json!({ "summaries": { &p.name: "filled" } }))
+        .await;
+    let r = aggregations_with(&p, &view, "search=fldInvoices").await;
+    assert_eq!(r.body["values"][&p.name], 0);
+    let r = aggregations_with(&p, &view, "search=renewal").await;
+    assert_eq!(r.body["values"][&p.name], 1);
 }

@@ -7,7 +7,7 @@ use crate::db::now_ms;
 use crate::error::AppResult;
 use crate::ids::new_id;
 
-/// Create a notification for `user_id`. `kind`: mention | assigned | invite | automation.
+/// Create a notification for `user_id`. `kind`: mention | assigned | automation | form_response.
 pub fn create(conn: &Connection, user_id: &str, kind: &str, payload: &Json) -> AppResult<String> {
     let id = new_id(ob_core::ids::NOTIFICATION);
     conn.execute(

@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
-use crate::view::{Direction, Filter, Group, Sort};
+use crate::ids::FieldId;
+use crate::view::{Aggregation, Direction, Filter, Group, RowColor, Sort};
 
 /// A record as returned by the API.
 ///
@@ -90,10 +91,15 @@ pub struct QueryRequest {
 /// only; parts left out keep the saved value. It is validated with the same
 /// rules as saving a view config (unknown fields, operators that do not suit
 /// the field type, level limits) and is never stored. To drop the saved
-/// filter, send a filter without items.
+/// filter, send a filter without items; to drop the saved row colors, send
+/// `{"mode": "by_conditions", "rules": []}`; `summaries` replaces the whole map,
+/// so `{}` drops every summary.
 ///
 /// The view query takes it as the `transient` body field; the aggregations
-/// endpoint takes it JSON-encoded in the `transient` query parameter.
+/// endpoint takes it JSON-encoded in the `transient` query parameter. A view
+/// query returns the colors the effective `row_color` gives, and the
+/// aggregations endpoint the values the effective `summaries` ask for, exactly
+/// as for the same config saved on the view.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct TransientConfig {
@@ -103,6 +109,10 @@ pub struct TransientConfig {
     pub sorts: Option<Vec<Sort>>,
     #[serde(default)]
     pub groups: Option<Vec<Group>>,
+    #[serde(default)]
+    pub row_color: Option<RowColor>,
+    #[serde(default)]
+    pub summaries: Option<BTreeMap<FieldId, Aggregation>>,
 }
 
 /// One group header in a grouped view. Groups are listed in display order,
@@ -339,7 +349,7 @@ pub struct RestoreResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct Notification {
     pub id: String,
-    /// mention | assigned | invite | automation
+    /// mention | assigned | automation | form_response
     pub kind: String,
     pub payload: Json,
     #[serde(default)]

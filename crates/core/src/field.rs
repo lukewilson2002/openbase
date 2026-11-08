@@ -20,7 +20,8 @@
 //! | attachment         | array of [`AttachmentRef`]                          |
 //! | link               | array of record id strings (both sides stored)       |
 //! | user               | array of user id strings                            |
-//! | computed types     | never stored; computed on read                      |
+//! | formula, lookup, rollup, count, button | computed by the server and saved with the record, so reads and filters see them |
+//! | created/last-modified time/by, autonumber | not stored in the record; filled in on read |
 //!
 //! `options` is always required on the wire; `{}` gives every option its default.
 //!
@@ -121,7 +122,9 @@ impl FieldType {
         FieldType::Button,
     ];
 
-    /// Computed fields are never written by clients and never stored.
+    /// Computed fields are never written by clients: the server derives them (formulas,
+    /// lookups, rollups, counts and buttons are saved with the record; the system fields
+    /// are filled in on read).
     pub fn is_computed(self) -> bool {
         matches!(
             self,

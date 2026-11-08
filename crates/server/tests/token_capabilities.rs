@@ -500,6 +500,12 @@ const SESSION_ONLY: &[(&str, &str, &str, Option<&str>)] = &[
         None,
     ),
     (
+        "PATCH",
+        "/api/oauth/grants/{id}",
+        "/api/oauth/grants/grtNope",
+        Some(r#"{"access":"manage"}"#),
+    ),
+    (
         "GET",
         "/api/oauth/requests/{id}",
         "/api/oauth/requests/oarNope",
