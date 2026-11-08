@@ -427,6 +427,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Regex cache | 64 compiled patterns per thread, least recently used evicted; **failed compiles are cached too** | `functions/regex.rs` |
 | Grid search text | 500 characters (400 beyond); lower-cased once per query, not per row | `limits.rs`, `query/search.rs` |
 | Search everything (`GET /api/search`) | 200 characters of text (400 beyond); at most 50 results (default 20); record text of at most 100,000 records in at most 100 tables per search, after which only names are searched | `store/search.rs` |
+| Home (`GET /api/workspaces/{id}/home`) | at most 100,000 records in at most 100 collections that have a Home date per request, each collection read whole or skipped (`truncated`); 50 due records; the latest 5,000 history entries are walked for the 10 recent ones | `store/home.rs` |
 | `filterByFormula` (v1 API) | 5 seconds of evaluation per request, then 422 | `v1/records.rs` |
 | v1 pagination snapshots | 16 per user, 256 and 1,000,000 ids overall; when the store is full the user holding the most loses their oldest snapshot first | `v1/cursor.rs` |
 

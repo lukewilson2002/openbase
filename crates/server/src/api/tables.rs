@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{patch, post};
 use axum::{Json, Router};
-use ob_core::api::schema::{CreateTable, DuplicateTable, Table, UpdateTable};
+use ob_core::api::schema::{CreateTable, DuplicateTable, SetBodyField, Table, UpdateTable};
 use ob_core::api::workspaces::Reorder;
 use ob_core::limits;
 
@@ -17,9 +17,9 @@ use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::field_kind::parse_create_field;
-use crate::store::fields;
 use crate::store::schema::{self, PositionScope, Touched};
 use crate::store::tables;
+use crate::store::{fields, pages};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/bases/{id}/tables/reorder", post(reorder))
         .route("/api/tables/{id}", patch(update).delete(remove))
         .route("/api/tables/{id}/duplicate", post(duplicate))
+        .route("/api/tables/{id}/body-field", post(set_body_field))
 }
 
 /// Point a lookup/rollup/count's `link_field_id` (and the `fields` watched by a
@@ -76,11 +77,12 @@ async fn create(
         .db
         .write(move |tx| {
             perm::require_base(tx, &actor, &base_id, Role::Creator)?;
-            let row = tables::create(
+            let row = tables::create_without_page(
                 tx,
                 &base_id,
                 &body.name,
                 body.icon.as_deref(),
+                body.color.as_deref(),
                 &actor.user_id,
             )?;
             // The transaction rolls back on the first error: all or nothing.
@@ -99,6 +101,10 @@ async fn create(
                     touched.add(t);
                 }
             }
+            // After the caller's fields, so that one of them may be called "Page".
+            pages::create_body_field(tx, &row.id)?;
+            // Read again: the page property is a setting of the table row.
+            let row = schema::live_table(tx, &row.id)?;
             Ok((tables::to_dto(tx, &row, &actor.user_id)?, touched))
         })
         .await?;
@@ -147,6 +153,39 @@ async fn update(
             let base = perm::base_of_table(tx, &id)?;
             perm::require_base(tx, &actor, &base, Role::Creator)?;
             let row = tables::update(tx, &id, &body)?;
+            Ok((base, tables::to_dto(tx, &row, &actor.user_id)?))
+        })
+        .await?;
+    publish_schema(&state, &headers, &who, &base, &Touched::of(&table.id));
+    Ok(Json(table))
+}
+
+/// Choose the rich text property that holds each record's page, or none (`field_id` null), or
+/// add the "Page" property when the table has none (`create`).
+async fn set_body_field(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(table_id): Path<String>,
+    ApiJson(body): ApiJson<SetBodyField>,
+) -> AppResult<Json<Table>> {
+    let who = actor.clone();
+    let (base, table) = state
+        .db
+        .write(move |tx| {
+            let base = perm::base_of_table(tx, &table_id)?;
+            perm::require_base(tx, &actor, &base, Role::Creator)?;
+            let row = if body.create {
+                if body.field_id.is_some() {
+                    return Err(AppError::bad_request(
+                        "give either field_id or create, not both",
+                    ));
+                }
+                pages::ensure_body_field(tx, &table_id)?;
+                schema::live_table(tx, &table_id)?
+            } else {
+                pages::set_body_field(tx, &table_id, body.field_id.as_deref())?
+            };
             Ok((base, tables::to_dto(tx, &row, &actor.user_id)?))
         })
         .await?;

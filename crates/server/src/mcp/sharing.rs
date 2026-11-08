@@ -58,7 +58,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_share_link",
             "Delete a share link",
-            "Delete a share link for good; its URL stops working. Needs the creator role.",
+            "Delete a share link for good; its URL stops working. This can't be undone: it has no trash, so create a new link (a new URL) if you need one again. Needs the creator role.",
             object(
                 json!({ "share_id": string("Share link id (from list_share_links).") }),
                 &["share_id"],

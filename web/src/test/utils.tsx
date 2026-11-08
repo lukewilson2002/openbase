@@ -111,7 +111,7 @@ export function renderWithProviders(ui: ReactElement, route = "/"): RenderResult
 // ---- fixtures -------------------------------------------------------------------------------
 
 
-export const USER: User = { id: "usr1", email: "ada@example.com", name: "Ada Lovelace", is_admin: false, timezone: null, totp_enabled: false, intro_seen: true };
+export const USER: User = { id: "usr1", email: "ada@example.com", name: "Ada Lovelace", is_admin: false, timezone: null, totp_enabled: false, intro_seen: true, week_start: 0 };
 export const ADMIN: User = { ...USER, id: "usr0", email: "root@example.com", name: "Root Admin", is_admin: true };
 
 export function makeView(over: Partial<View> & { id: string; type?: View["type"] }): View {
@@ -163,14 +163,18 @@ export function makeSchema(role: string, over: Partial<BaseSchema> = {}): BaseSc
         name: "Tasks",
         description: null,
         primary_field_id: "fld1",
+        color: "blue",
+        record_noun: "",
+        record_count: 0,
         fields: [{ id: "fld1", table_id: "tbl1", name: "Name", type: "text", options: { multiline: false } }],
         views: [makeView({ id: "viw1", name: "All tasks" }), makeView({ id: "viw2", name: "Board", type: "kanban" }), makeView({ id: "viw3", name: "My tasks", personal: true })],
       },
-      { id: "tbl2", base_id: "app1", name: "People", description: null, primary_field_id: "fld2", fields: [], views: [makeView({ id: "viw4", name: "Everyone" })] },
+      { id: "tbl2", base_id: "app1", name: "People", description: null, primary_field_id: "fld2", color: "orange", record_noun: "", record_count: 0, fields: [], views: [makeView({ id: "viw4", name: "Everyone" })] },
     ],
     people: [],
     workspace_name: "Acme",
     workspace_color: "green",
+    is_top_level: false,
     ...over,
   };
 }

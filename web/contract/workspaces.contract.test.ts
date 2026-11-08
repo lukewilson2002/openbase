@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../src/api/endpoints";
 import { recordsApi, schemaApi } from "../src/api/records";
-import { adminProfile, createWorld, expectError, failure, joinBase, newUser, rand, refreshBase, type Profile, type World } from "./support";
+import { adminProfile, createWorld, expectError, failure, fieldNamed, joinBase, newUser, rand, refreshBase, tableOf, type Profile, type World } from "./support";
 import { parse, parseList } from "./typecheck";
 
 describe("workspaces", () => {
@@ -15,12 +15,13 @@ describe("workspaces", () => {
   let workspaceId = "";
   const name = `Workspace ${rand()}`;
 
-  it("creates a workspace (201) the creator owns, with no bases yet", async () => {
+  it("creates a workspace (201) the creator owns, with its top-level project", async () => {
     owner = await adminProfile();
     other = await newUser(owner, "outsider");
     const ws = parse("WorkspaceSummary", await owner.run(() => api.workspaces.create(name)));
     expect(owner.status).toBe(201);
-    expect(ws).toMatchObject({ name, role: "owner", bases: [] });
+    expect(ws).toMatchObject({ name, role: "owner" });
+    expect(ws.bases.map((b) => b.name)).toEqual([name]);
     workspaceId = ws.id;
   });
 
@@ -329,5 +330,178 @@ describe("icons", () => {
     expect(parse("TrashListing", await w.owner.run(() => api.trash.forWorkspace(ws.id))).items).toContainEqual(expect.objectContaining({ kind: "base", id: base.id, icon: "star" }));
     await w.owner.run(() => api.workspaces.remove(ws.id));
     expect(parse("TrashListing", await w.owner.run(api.trash.deletedWorkspaces)).items).toContainEqual(expect.objectContaining({ kind: "workspace", id: ws.id, icon: "folder" }));
+  });
+});
+
+describe("collection settings", () => {
+  let w: World;
+  let editor: Profile;
+  let table: Awaited<ReturnType<typeof tableOf>>;
+
+  it("creates a table with a colour and lists the settings, the page and the record count", async () => {
+    w = await createWorld("Collections");
+    editor = await newUser(w.owner, "collections-editor");
+    await joinBase(w.owner, w.baseId, editor, "editor");
+    table = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Clients", null, "teal")));
+    expect(table).toMatchObject({ color: "teal", record_noun: "", record_count: 0 });
+    const page = fieldNamed(table, "Page");
+    expect(table.body_field_id).toBe(page.id);
+    expect(table.home_date_field_id ?? null).toBeNull();
+    expect(table.done_field_id ?? null).toBeNull();
+
+    await w.owner.run(() => recordsApi.create(table.id, { records: [{ values: {} }, { values: {} }] }));
+    const listed = (await refreshBase(w.owner, w.baseId)).tables.find((t) => t.id === table.id);
+    expect(listed).toMatchObject({ color: "teal", record_count: 2, body_field_id: page.id });
+    const summary = parseList("WorkspaceSummary", await w.owner.run(api.workspaces.list))
+      .find((x) => x.id === w.workspaceId)!
+      .bases.find((b) => b.id === w.baseId)!
+      .tables.find((t) => t.id === table.id);
+    expect(summary).toMatchObject({ color: "teal", record_count: 2, body_field_id: page.id, record_noun: "" });
+    expectError(await failure(w.owner.run(() => api.tables.create(w.baseId, "Bad colour", null, "mauve"))), 400, "bad_request");
+  });
+
+  it("changes the colour, record name, Home date and Done, each checked", async () => {
+    const due = await w.owner.run(() => schemaApi.createField(table.id, { name: "Due", type: "date", options: { date_format: "iso", include_time: false, time_zone: "utc" } } as never));
+    const done = await w.owner.run(() => schemaApi.createField(table.id, { name: "Done", type: "checkbox", options: {} } as never));
+    const t = parse("Table", await w.owner.run(() => api.tables.update(table.id, { color: "pink", record_noun: " client ", home_date_field_id: due.id, done_field_id: done.id })));
+    expect(w.owner.status).toBe(200);
+    expect(t).toMatchObject({ color: "pink", record_noun: "client", home_date_field_id: due.id, done_field_id: done.id });
+
+    expectError(await failure(w.owner.run(() => api.tables.update(table.id, { color: "mauve" }))), 400, "bad_request");
+    expectError(await failure(w.owner.run(() => api.tables.update(table.id, { home_date_field_id: done.id }))), 400, "bad_request");
+    expectError(await failure(w.owner.run(() => api.tables.update(table.id, { done_field_id: due.id }))), 400, "bad_request");
+    expectError(await failure(w.owner.run(() => api.tables.update(table.id, { record_noun: "x".repeat(41) }))), 400, "bad_request");
+    expectError(await failure(editor.run(() => api.tables.update(table.id, { record_noun: "no" }))), 403, "forbidden");
+
+    // null removes a setting; leaving it out keeps it.
+    const cleared = parse("Table", await w.owner.run(() => api.tables.update(table.id, { done_field_id: null })));
+    expect(cleared.done_field_id ?? null).toBeNull();
+    expect(cleared.home_date_field_id).toBe(due.id);
+  });
+
+  it("deleting or retyping a field clears the setting that pointed at it", async () => {
+    let t = await tableOf(w.owner, w.baseId, table.id);
+    const due = t.fields.find((f) => f.name === "Due")!;
+    await w.owner.run(() => schemaApi.updateField(due.id, { type: "text", options: { multiline: false } } as never));
+    t = await tableOf(w.owner, w.baseId, table.id);
+    expect(t.home_date_field_id ?? null).toBeNull();
+    const page = fieldNamed(t, "Page");
+    await w.owner.run(() => schemaApi.deleteField(page.id));
+    t = await tableOf(w.owner, w.baseId, table.id);
+    expect(t.body_field_id ?? null).toBeNull();
+  });
+
+  it("chooses the page field and adds Page when the table has none", async () => {
+    const notes = await w.owner.run(() => schemaApi.createField(table.id, { name: "Notes", type: "rich_text", options: {} } as never));
+    const chosen = parse("Table", await w.owner.run(() => api.tables.setBodyField(table.id, { field_id: notes.id })));
+    expect(chosen.body_field_id).toBe(notes.id);
+    expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, { field_id: chosen.primary_field_id }))), 400, "bad_request");
+    expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, { field_id: "fldDoesNotExist" }))), 404, "not_found");
+    expectError(await failure(editor.run(() => api.tables.setBodyField(table.id, { field_id: null }))), 403, "forbidden");
+    const none = parse("Table", await w.owner.run(() => api.tables.setBodyField(table.id, { field_id: null })));
+    expect(none.body_field_id ?? null).toBeNull();
+
+    // An editor writing a page in a table without one adds "Page" as part of the save.
+    const rec = (await w.owner.run(() => recordsApi.create(table.id, { records: [{ values: {} }] }))).records[0]!;
+    const saved = parse("PageSaved", await editor.run(() => recordsApi.setPage(table.id, rec.id, "# First words")));
+    expect(editor.status).toBe(200);
+    expect(saved.created).toBe(true);
+    expect(saved.record.values[saved.field_id]).toBe("# First words");
+    expect((await tableOf(w.owner, w.baseId, table.id)).body_field_id).toBe(saved.field_id);
+    const again = parse("PageSaved", await editor.run(() => recordsApi.setPage(table.id, rec.id, null)));
+    expect(again).toMatchObject({ created: false, field_id: saved.field_id });
+    expect(again.record.values[saved.field_id] ?? null).toBeNull();
+    const viewer = await newUser(w.owner, "collections-viewer");
+    await joinBase(w.owner, w.baseId, viewer, "viewer");
+    expectError(await failure(viewer.run(() => recordsApi.setPage(table.id, rec.id, "no"))), 403, "forbidden");
+  });
+
+  it("chooses the top-level project and refuses to delete it", async () => {
+    const before = parseList("WorkspaceSummary", await w.owner.run(api.workspaces.list)).find((x) => x.id === w.workspaceId)!;
+    expect(before.root_base_id).toBeTruthy();
+    expect(before.bases.find((b) => b.id === before.root_base_id)?.is_top_level).toBe(true);
+    expect(before.bases.find((b) => b.id === w.baseId)?.is_top_level).toBe(false);
+
+    const moved = parse("WorkspaceSummary", await w.owner.run(() => api.workspaces.setTopLevel(w.workspaceId, w.baseId)));
+    expect(w.owner.status).toBe(200);
+    expect(moved.root_base_id).toBe(w.baseId);
+    expect(moved.bases.filter((b) => b.is_top_level).map((b) => b.id)).toEqual([w.baseId]);
+    expect((await refreshBase(w.owner, w.baseId)).is_top_level).toBe(true);
+
+    const e = await failure(w.owner.run(() => api.bases.remove(w.baseId)));
+    expectError(e, 409, "conflict");
+    expect(e.message).toContain("Make another folder the top level first");
+
+    expectError(await failure(w.owner.run(() => api.workspaces.setTopLevel(w.workspaceId, "appDoesNotExist"))), 400, "bad_request");
+    expectError(await failure(editor.run(() => api.workspaces.setTopLevel(w.workspaceId, before.root_base_id!))), 403, "forbidden");
+
+    // Handing the place back frees this project again.
+    await w.owner.run(() => api.workspaces.setTopLevel(w.workspaceId, before.root_base_id!));
+    expect(parse("OkResponse", await w.owner.run(() => api.bases.remove(w.baseId)))).toEqual({ ok: true });
+  });
+});
+
+describe("home", () => {
+  let w: World;
+  let table: Awaited<ReturnType<typeof tableOf>>;
+  let doneId = "";
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+  it("lists what is due soon, oldest first, without what is done", async () => {
+    w = await createWorld("Home");
+    table = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Tasks")));
+    const due = await w.owner.run(() => schemaApi.createField(table.id, { name: "Due", type: "date", options: { include_time: false } } as never));
+    const done = await w.owner.run(() => schemaApi.createField(table.id, { name: "Done", type: "checkbox", options: {} } as never));
+    doneId = done.id;
+    await w.owner.run(() => api.tables.update(table.id, { home_date_field_id: due.id, done_field_id: done.id }));
+    const add = (title: string, offset: number | null, finished = false) =>
+      w.owner.run(() =>
+        recordsApi.create(table.id, {
+          records: [{ values: { [table.primary_field_id]: title, ...(offset === null ? {} : { [due.id]: day(offset) }), ...(finished ? { [done.id]: true } : {}) } }],
+        }),
+      );
+    await add("Later", 3);
+    await add("Overdue", -2);
+    await add("Finished", 0, true);
+    await add("Far away", 20);
+    await add("Undated", null);
+
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(w.owner.status).toBe(200);
+    expect(home.due.map((d) => d.title)).toEqual(["Overdue", "Later"]);
+    expect(home.due[0]).toMatchObject({ table_id: table.id, base_id: w.baseId, date: day(-2), has_time: false, has_done: true, done_field_id: doneId, overdue: true, can_edit: true });
+    expect(home.due[0]!.time ?? null).toBeNull();
+    expect(home.due[1]!.overdue).toBe(false);
+    expect(home.truncated).toBe(false);
+    expect(home.timezone).toBe("UTC");
+    expect(home.today).toBe(day(0));
+  });
+
+  it("lists the latest changes once each, with who made them", async () => {
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.recent.length).toBe(5);
+    expect(home.recent[0]).toMatchObject({ title: "Undated", kind: "create", table_name: "Tasks" });
+    expect(home.recent[0]!.author?.id).toBe(w.owner.id);
+    expect(new Set(home.recent.map((r) => r.record_id)).size).toBe(5);
+  });
+
+  it("carries the caller's inbox drafts, whatever the workspace", async () => {
+    // The seeded administrator is shared by every contract file, so look for the draft rather than count.
+    const draft = await w.owner.run(() => api.inbox.create({ title: `Stamps ${rand()}`, body: "" }));
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.drafts.map((d) => d.id)).toContain(draft.id);
+    await w.owner.run(() => api.inbox.remove(draft.id));
+  });
+
+  it("answers 404 to people outside the workspace and a viewer cannot tick Done", async () => {
+    const outsider = await newUser(w.owner, "home-outsider");
+    expectError(await failure(outsider.run(() => api.workspaces.home(w.workspaceId))), 404, "not_found");
+    expectError(await failure(w.owner.run(() => api.workspaces.home("wspDoesNotExist"))), 404, "not_found");
+    const viewer = await newUser(w.owner, "home-viewer");
+    await joinBase(w.owner, w.baseId, viewer, "viewer");
+    const home = parse("HomeResponse", await viewer.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.due.map((d) => d.title)).toEqual(["Overdue", "Later"]);
+    expect(home.due.every((d) => !d.can_edit)).toBe(true);
+    expect(home.drafts).toEqual([]);
   });
 });

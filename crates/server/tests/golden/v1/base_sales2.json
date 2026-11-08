@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "body": {
+      "tables": [
+        {
+          "fields": [
+            {
+              "id": "fldcopyitemsname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldcopyitemsqty",
+              "name": "Qty",
+              "options": {
+                "precision": 1
+              },
+              "type": "number"
+            }
+          ],
+          "id": "tblcopyitems",
+          "name": "Items",
+          "primaryFieldId": "fldcopyitemsname",
+          "views": [
+            {
+              "id": "viwdefcopyitems",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "tables": {
+    "tblcopyitems": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Name": "bolt",
+                  "Qty": 10
+                },
+                "id": "reccopyitems1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldcopyitemsname": "bolt",
+                  "fldcopyitemsqty": 10
+                },
+                "id": "reccopyitems1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Name": "bolt",
+            "Qty": 10
+          },
+          "id": "reccopyitems1"
+        },
+        "status": 200
+      }
+    }
+  }
+}

@@ -485,6 +485,7 @@ async fn update_me(
         .as_deref()
         .map(users::validate_accent)
         .transpose()?;
+    let week_start = req.week_start.map(users::validate_week_start).transpose()?;
     let user = state
         .db
         .write(move |tx| {
@@ -499,6 +500,9 @@ async fn update_me(
             }
             if let Some(accent) = &accent {
                 users::set_accent(tx, &actor.user_id, accent.as_deref())?;
+            }
+            if let Some(week_start) = week_start {
+                users::set_week_start(tx, &actor.user_id, week_start)?;
             }
             users::require(tx, &actor.user_id)
         })

@@ -165,7 +165,7 @@ async fn lookup_references_are_validated() {
     // the failures left no fields behind
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes", "Orders"]
+        ["Name", "Page", "Notes", "Orders"]
     );
 }
 
@@ -433,7 +433,7 @@ async fn deleting_a_link_field_trashes_what_is_built_on_it_and_restore_brings_it
     }
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
 
     // a dependent cannot come back before what it is built on
@@ -459,7 +459,7 @@ async fn deleting_a_link_field_trashes_what_is_built_on_it_and_restore_brings_it
     assert_eq!(r.body["restored_field_ids"].as_array().unwrap().len(), 4);
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes", "Orders", "Prices", "N"]
+        ["Name", "Page", "Notes", "Orders", "Prices", "N"]
     );
     let _ = url;
 }
@@ -490,7 +490,7 @@ async fn dependents_deleted_earlier_stay_deleted_when_the_link_is_restored() {
     r.assert_status(200);
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes", "Orders"]
+        ["Name", "Page", "Notes", "Orders"]
     );
     // and the lookup can be restored on its own now
     l.f.app
@@ -503,7 +503,7 @@ async fn dependents_deleted_earlier_stay_deleted_when_the_link_is_restored() {
         .assert_status(200);
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes", "Orders", "Prices"]
+        ["Name", "Page", "Notes", "Orders", "Prices"]
     );
 }
 
@@ -532,7 +532,7 @@ async fn deleting_a_lookup_target_trashes_the_lookup() {
     );
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes", "Orders"]
+        ["Name", "Page", "Notes", "Orders"]
     );
 }
 
@@ -621,10 +621,10 @@ async fn deleting_a_field_runs_the_recompute_hook_only_for_the_survivors() {
         .assert_status(200);
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
     assert_eq!(
         Fixture::field_names(&l.f.table(&l.orders).await),
-        ["Name", "Price"]
+        ["Name", "Page", "Price"]
     );
 }

@@ -8,6 +8,31 @@ export type Table = { id: string, base_id: string, name: string,
  */
 icon?: string | null, description?: string | null, primary_field_id: string, 
 /**
+ * One of `ob_core::field::COLORS`: the mark that identifies the collection (UX decision 3;
+ * `icon` stays for compatibility but nothing in the app shows it).
+ */
+color: string, 
+/**
+ * The rich text property that holds the page of each record, if the collection has one.
+ */
+body_field_id?: string | null, 
+/**
+ * The date property Home orders the collection's records by, if any.
+ */
+home_date_field_id?: string | null, 
+/**
+ * The checkbox property that marks a record done, if any.
+ */
+done_field_id?: string | null, 
+/**
+ * What one record is called ("client"); empty means "record".
+ */
+record_noun: string, 
+/**
+ * Live records in the collection.
+ */
+record_count: number, 
+/**
  * Fields in display order.
  */
 fields: Array<Field>, 

@@ -1,6 +1,7 @@
 //! Query tests and their shared table fixture.
 
 mod aggregate;
+mod calendar_ranges;
 mod dates;
 mod filter;
 mod search_color;

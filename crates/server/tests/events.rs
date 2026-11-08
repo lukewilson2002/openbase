@@ -365,6 +365,7 @@ async fn a_member_who_keeps_access_keeps_the_stream_after_base_changed() {
 #[tokio::test]
 async fn deleting_the_base_closes_every_stream() {
     let f = Fixture::new().await;
+    f.free_the_base().await;
     let mut s = open(&f.app, &f.owner, &f.base_id).await.stream();
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))

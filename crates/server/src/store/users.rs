@@ -83,6 +83,17 @@ pub fn validate_accent(accent: &str) -> AppResult<Option<String>> {
     Ok(Some(accent.to_string()))
 }
 
+/// A first day of the week from `PATCH /api/auth/me` or a request: 0 (Sunday) or 1 (Monday).
+pub fn validate_week_start(week_start: i32) -> AppResult<u8> {
+    match week_start {
+        0 => Ok(0),
+        1 => Ok(1),
+        other => Err(AppError::bad_request(format!(
+            "week_start must be 0 (Sunday) or 1 (Monday), not {other}"
+        ))),
+    }
+}
+
 /// A full `users` row.
 #[derive(Debug, Clone)]
 pub struct UserRow {
@@ -99,10 +110,12 @@ pub struct UserRow {
     pub last_login_at: Option<i64>,
     pub intro_seen: bool,
     pub accent: Option<String>,
+    pub week_start: u8,
 }
 
 const COLUMNS: &str = "id, email, name, password_hash, is_admin, is_active, timezone, \
-                       totp_secret, totp_enabled, created_at, last_login_at, intro_seen, accent";
+                       totp_secret, totp_enabled, created_at, last_login_at, intro_seen, accent, \
+                       week_start";
 
 impl UserRow {
     fn from_row(r: &Row) -> rusqlite::Result<UserRow> {
@@ -120,6 +133,7 @@ impl UserRow {
             last_login_at: r.get(10)?,
             intro_seen: r.get(11)?,
             accent: r.get(12)?,
+            week_start: r.get(13)?,
         })
     }
 
@@ -133,6 +147,7 @@ impl UserRow {
             totp_enabled: self.totp_enabled,
             intro_seen: self.intro_seen,
             accent: self.accent.clone(),
+            week_start: self.week_start,
         }
     }
 
@@ -247,6 +262,26 @@ pub fn set_accent(conn: &Connection, id: &str, accent: Option<&str>) -> AppResul
         params![accent, now_ms(), id],
     )?;
     Ok(())
+}
+
+/// Set the first day of the week (0 = Sunday, 1 = Monday; see [`validate_week_start`]).
+pub fn set_week_start(conn: &Connection, id: &str, week_start: u8) -> AppResult<()> {
+    conn.execute(
+        "UPDATE users SET week_start = ?1, updated_at = ?2 WHERE id = ?3",
+        params![week_start, now_ms(), id],
+    )?;
+    Ok(())
+}
+
+/// The first day of the week of a user: Sunday for someone unknown (an anonymous share
+/// viewer) or whose stored value is not 0 or 1.
+pub fn user_week_start(conn: &Connection, id: &str) -> chrono::Weekday {
+    conn.query_row("SELECT week_start FROM users WHERE id = ?1", [id], |r| {
+        r.get::<_, i64>(0)
+    })
+    .ok()
+    .and_then(ob_core::query::week_start_from)
+    .unwrap_or(chrono::Weekday::Sun)
 }
 
 /// Record whether the user has seen the introduction (false shows it again).

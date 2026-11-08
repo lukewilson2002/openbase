@@ -54,7 +54,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_automation",
             "Update an automation",
-            "Enable or disable an automation, rename it, or replace its trigger and/or all its actions. Webhook automations can rotate their token (returned once). Needs the creator role.",
+            "Enable or disable an automation, rename it, or replace its trigger and/or all its actions (replacing them can't be undone). Webhook automations can rotate their token (returned once). Needs the creator role.",
             object(
                 json!({
                     "automation_id": string("Automation id."),
@@ -76,7 +76,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_automation",
             "Delete an automation",
-            "Delete an automation and its run history for good. Needs the creator role.",
+            "Delete an automation and its run history for good. This can't be undone: it has no trash, so recreate it with create_automation if you need it again. Needs the creator role.",
             object(
                 json!({ "automation_id": string("Automation id.") }),
                 &["automation_id"],
@@ -547,6 +547,7 @@ mod tests {
             people: Vec::new(),
             workspace_name: "Acme".into(),
             workspace_color: "green".into(),
+            is_top_level: false,
             tables: vec![Table {
                 id: "tbl1".into(),
                 base_id: "app1".into(),
@@ -554,6 +555,12 @@ mod tests {
                 icon: None,
                 description: None,
                 primary_field_id: "fld1".into(),
+                color: "blue".into(),
+                body_field_id: None,
+                home_date_field_id: None,
+                done_field_id: None,
+                record_noun: String::new(),
+                record_count: 0,
                 fields: vec![Field {
                     id: "fld1".into(),
                     table_id: "tbl1".into(),

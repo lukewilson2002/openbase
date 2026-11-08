@@ -74,6 +74,10 @@ pub struct QueryRequest {
     /// user's profile zone, then UTC.
     #[serde(default)]
     pub timezone: Option<String>,
+    /// First day of the week for the calendar-week date filters: 0 = Sunday, 1 = Monday.
+    /// Defaults to the user's profile `week_start`, then Sunday.
+    #[serde(default)]
+    pub week_start: Option<i32>,
     /// A one-off filter / sort / group override for this request only; see
     /// [`TransientConfig`].
     #[serde(default)]
@@ -434,6 +438,10 @@ pub struct AggregateRequest {
     /// IANA zone for date groups and relative dates (default: the caller's).
     #[serde(default)]
     pub timezone: Option<String>,
+    /// First day of the week for the calendar-week dates of the view's filter: 0 = Sunday,
+    /// 1 = Monday (default: the caller's profile, then Sunday).
+    #[serde(default)]
+    pub week_start: Option<i32>,
 }
 
 /// One group of an [`AggregateResponse`].

@@ -58,7 +58,8 @@ async fn a_table_is_set_up_in_one_call() {
             "Owner email",
             "Owners",
             "Double",
-            "Touched"
+            "Touched",
+            "Page"
         ]
     );
     let status = &t["fields"][1];
@@ -92,7 +93,7 @@ async fn a_table_is_set_up_in_one_call() {
         .iter()
         .find(|t| t["name"] == "Customers")
         .unwrap();
-    assert_eq!(names(customers), ["Name", "Email", "Roadmap"]);
+    assert_eq!(names(customers), ["Name", "Email", "Page", "Roadmap"]);
 }
 
 #[tokio::test]
@@ -172,7 +173,7 @@ async fn every_new_table_starts_the_same_way() {
             json!({"base_id": created["base"]["id"], "name": "Later"}),
         )
         .await;
-    assert_eq!(first, "Name");
+    assert_eq!(first, "Name,Page");
     assert_eq!(names(&later["table"]).join(","), first);
     // An empty list adds nothing; a list adds exactly what it names, never Notes.
     let none = a
@@ -181,7 +182,7 @@ async fn every_new_table_starts_the_same_way() {
             json!({"base_id": r.base, "name": "None", "fields": []}),
         )
         .await;
-    assert_eq!(names(&none["table"]), ["Name"]);
+    assert_eq!(names(&none["table"]), ["Name", "Page"]);
     let some = a
         .call(
             "create_table",
@@ -189,7 +190,7 @@ async fn every_new_table_starts_the_same_way() {
                    "fields": [{"name": "Qty", "type": "number"}]}),
         )
         .await;
-    assert_eq!(names(&some["table"]), ["Name", "Qty"]);
+    assert_eq!(names(&some["table"]), ["Name", "Qty", "Page"]);
     // The tool says so.
     let (_, listing) = a.rpc("tools/list", json!({})).await;
     let ct = listing["result"]["tools"]
@@ -199,6 +200,9 @@ async fn every_new_table_starts_the_same_way() {
         .find(|t| t["name"] == "create_table")
         .expect("create_table is listed");
     let text = ct["description"].as_str().unwrap();
-    assert!(text.contains("just the primary text field"), "{text}");
+    assert!(
+        text.contains("starts with the primary text field 'Name', a hidden rich text field 'Page'"),
+        "{text}"
+    );
     assert!(ct["inputSchema"]["properties"]["fields"].is_object());
 }

@@ -20,4 +20,9 @@ people: Array<BasePerson>,
  * Live tables in sidebar order, so a list of bases can name their tables
  * without loading every base's schema.
  */
-tables: Array<TableSummary>, };
+tables: Array<TableSummary>, 
+/**
+ * Whether this is the workspace's top-level project: its collections show directly under
+ * the workspace, every other project is a folder.
+ */
+is_top_level: boolean, };

@@ -58,6 +58,10 @@ a picked list (`base_ids`); their role applies to each project they can open, an
 any other project answers 404. Owners always have every project. A member limited to
 some projects who creates or duplicates a project gets it added to their list.
 
+- `POST /api/workspaces` creates the workspace together with its top-level project (named after
+  it, without tables) and answers the summary with `root_base_id` and that project in `bases`.
+  `DELETE /api/workspaces/{id}` and `DELETE /api/bases/{id}` only move to the trash
+  (`POST /api/trash/restore`); no endpoint erases a workspace or project, only the retention purge.
 - `GET /api/workspaces` lists the caller's workspaces with the projects they can
   open, `member_count`, `pending_invite_count` and, per project, `people` (members
   who can open it, then pending invites sent to an address).
@@ -76,16 +80,50 @@ some projects who creates or duplicates a project gets it added to their list.
 - `POST /api/workspaces/{id}/bases` accepts `empty: true` for a project without
   tables; by default it starts with "Table 1".
 - Every new table, a project's "Table 1" or one added with `POST /api/bases/{id}/tables`,
-  starts with just its primary field "Name" and a grid view; nothing else is added.
+  starts with its primary field "Name", a rich text field "Page" (the page of each record, which
+  every view of the table hides; "Page 2" and so on if a listed field already has that name)
+  and a grid view; nothing else is added. A new workspace starts with a top-level project named
+  after it, without tables.
   `POST /api/bases/{id}/tables` takes an optional `fields` array to create the rest in
   the same call: each entry has the shape of `POST /api/tables/{id}/fields` (`name`,
   `type`, `options`, `description`, `inverse_name`; `options` may be left out for the
-  type's defaults), created in order after "Name". It is all or nothing: if any entry is
+  type's defaults), created in order after "Name" (the page field comes after them). It is all
+  or nothing: if any entry is
   invalid the answer is 400 (or 409 for a name clash), the message begins with the
   entry (`fields[2] 'Status': ...`) and no table is created. A lookup, rollup or count
   may give a link field listed earlier (or "Name") as `options.link_field_id` by name;
   everything else refers to ids as in `POST /api/tables/{id}/fields`. The answer is the
   table with all its fields.
+- **Collection settings** (UX overhaul; a table is a "collection" in the app, a project a
+  "folder"). A table has a `color` (one of the palette colours, the mark the app identifies
+  it by; the `icon` stays accepted and returned but the app no longer shows it), a page
+  (`body_field_id`: the rich text field that holds the page of each record), a Home date
+  (`home_date_field_id`), a Done checkbox (`done_field_id`) and a `record_noun` (what one record
+  is called, empty = "record"). `POST /api/bases/{id}/tables` takes an optional `color` (else
+  the next colour of a cycle); `PATCH /api/tables/{id}` (Creator) takes `color`, `description`,
+  `record_noun` (at most 40 characters), `home_date_field_id` (a date, created time or last
+  modified time field, or a formula or rollup that gives a date; `null` = none) and
+  `done_field_id` (a checkbox field; `null` = none), each checked: the field must belong to the
+  table, and nothing of the request is saved when one value is refused (400).
+  `POST /api/tables/{id}/body-field` (Creator) takes `{field_id}` like `primary-field`: a rich
+  text field of the table other than its title, or `null` for no page; `{create: true}` adds a
+  rich text field called "Page" (hidden in every view) when the table has none. Deleting or
+  retyping the page field, the Home date or the Done field, or making the page field the title,
+  clears that setting and refuses nothing; a field restored from the trash is not pointed at
+  again. `PUT /api/tables/{id}/records/{rid}/page` (Editor) with `{text}` (markdown, `null`
+  clears) saves a record's page like any cell edit; when the table has no page field it adds
+  "Page" as part of the same save (`created: true` in the answer), the one change to the schema
+  an editor can cause, and fails with 409 when the table already has 500 fields.
+- **Listings.** `GET /api/bases/{id}` and `GET /api/workspaces` list each table with its
+  `record_count` (live records), `color`, `body_field_id`, `home_date_field_id`,
+  `done_field_id` and `record_noun`; counts come from one grouped query per project (per
+  workspace for the list). Workspaces carry `root_base_id`, projects `is_top_level`.
+- **The top level.** A workspace's top-level project is the one whose collections the app shows
+  directly under the workspace; every other project is a folder. `POST
+  /api/workspaces/{id}/top-level` with `{base_id}` (workspace owners; `manage` for a token)
+  moves the pointer to another live project of the workspace and answers the workspace. Nothing
+  else moves. `DELETE /api/bases/{id}` on the top-level project answers 409 with "Make another
+  folder the top level first, or delete the workspace"; deleting the workspace always works.
 - Text comes in two field types. `text` is plain text for names, titles, codes and other
   short values: `options` `{multiline, default?}`; with `multiline` off (the default) a line
   break becomes a space, with it on line breaks are kept, and either way the text is shown
@@ -109,7 +147,7 @@ The class is decided in one place (`Actor::require_capability`), and
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a project in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Your inbox** (`/api/inbox*`, and downloading a file uploaded for it): private to you and in no project | reads only | yes, but **403** for a token limited to specific projects | yes, same exception | yes |
-| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, choosing a workspace's top-level project, workspace trash, `PATCH /api/auth/me` (name, time zone, accent, `week_start`, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
@@ -234,6 +272,47 @@ was cut, between words when one ends close by) with `snippet_matches` and the `f
 `field_name` it came from. A match is `{start, end}`: the code points from `start` up to, not
 including, `end` (`Array.from(text)` in JavaScript). The server finds them because it knows which
 field matched and folds case the way it searched.
+
+### Home (internal API)
+
+`GET /api/workspaces/{id}/home` is everything the web app's Home page shows for a workspace, in one
+read. Any member of the workspace can ask; an API token needs to reach at least one of its projects
+(otherwise `404`, like a workspace that does not exist). Only projects the caller can open are read,
+so a member limited to some folders sees only those; a read-only token sees what its user does, with
+`can_edit` false everywhere.
+
+The answer is `{today, timezone, due, truncated, recent, drafts}`:
+
+- `today` and `timezone`: today's date (`YYYY-MM-DD`) in the caller's time zone (the profile's,
+  else UTC), which `overdue` and the window count from.
+- `due`: records of the collections that have a **Home date** setting (`PATCH /api/tables/{id}` with
+  `home_date_field_id`), dated from 30 days ago to 7 days ahead (both days included) and not marked
+  done, oldest first (a date with a time sorts after the all-day dates of its day), at most 50. The
+  Home date can be any date-like property, a formula or rollup that returns a date included, and a
+  record with no date is not listed. A collection's **Done** setting (`done_field_id`, a checkbox)
+  leaves out the records where it is ticked; without one, every dated record is listed. Each item
+  has `record_id`, `table_id`, `base_id`, `base_name`, `title` (the primary field's text),
+  `table_name`, `table_color`, `date` (`YYYY-MM-DD`), `has_time`, `time` (`HH:MM` on `date`, null
+  without a time), `has_done`, `done_field_id`, `overdue` (`date` is before `today`) and `can_edit`
+  (the caller may edit records there, which enables the Done checkbox). Dates and times are in the
+  caller's time zone, or in the property's own zone when it has a fixed one; a date without a time
+  stays on its day in every zone.
+- `truncated`: true when the scan budget ran out, so `due` may miss records. The budget is that of
+  search: at most 100,000 records in at most 100 collections per request. A collection is read whole
+  or not at all (collections that do not fit are skipped and later, smaller ones may still be
+  read), so which records appear never depends on where in a collection the budget ended. More
+  than 50 due records is not truncation: the 50 oldest are returned.
+- `recent`: the 10 records most recently created, edited or restored that the caller can open, newest
+  first and once each, with `kind` (the latest change: `create`, `update` or `restore`), `author`
+  (`{id, name}`, null when the account is gone or an automation made the change) and `at` (Unix
+  milliseconds). Records in the trash are left out. The history is indexed by time, not by
+  collection, so the search stops after the latest 5,000 changes.
+- `drafts`: the caller's inbox drafts, most recently changed first, as `GET /api/inbox` lists them.
+  Drafts belong to the person, so every workspace's Home shows the same ones. A token limited to
+  some projects gets an empty list (the inbox is in no project).
+
+The MCP tool `get_home` wraps it. A benchmark (`cargo test --release -p openbase --test home_perf --
+--ignored`) keeps it under 300 ms for 20 collections and 100,000 records.
 
 ### Inbox (internal API)
 
@@ -663,7 +742,7 @@ text is left out.
 
 ## 4. CSV
 
-- `GET /api/views/{id}/export.csv?timezone=` (Viewer): the view's visible
+- `GET /api/views/{id}/export.csv?timezone=&week_start=` (Viewer): the view's visible
   fields in view order, filter and sort applied, cells as display text (dates
   in `timezone`, default the caller's zone), streamed in 500-record pages
   from the list of matching records taken when the export starts (edits made
@@ -771,7 +850,9 @@ A date filter (`is`, `is_before`, `is_after`, `is_on_or_before`,
 `number_of_days_from_now`, and for `is_within` `past_week` / `past_month` /
 `past_year` / `next_week` / `next_month` / `next_year`,
 `past_number_of_days`, `next_number_of_days`, `this_calendar_month`,
-`this_calendar_year`) are **calendar days in the viewer's time zone**, never the
+`this_calendar_year`, `this_calendar_week`, `next_calendar_week`,
+`last_calendar_week`, `next_calendar_month`, `last_calendar_month`) are
+**calendar days in the viewer's time zone**, never the
 server's and not UTC unless that is the viewer's zone. In US Central time
 "today" therefore keeps meaning the same day until local midnight, even though
 UTC rolls over at 6 or 7 pm.
@@ -787,6 +868,26 @@ The zone is chosen per request, in this order:
 
 Automations have no request: their `record_matches` trigger and conditions use
 the profile zone of the automation's creator (UTC without one).
+
+**Calendar weeks and months.** `this_calendar_week` is the whole week that holds
+today, `next_calendar_week` and `last_calendar_week` the week after and before it;
+`next_calendar_month` and `last_calendar_month` are the whole calendar month after
+and before this one (`this_calendar_month` already existed). A week runs seven days
+from the first day of the week, and that day is chosen like the zone:
+
+1. the request's `week_start`, `0` for Sunday or `1` for Monday (any other value is a
+   400): `POST /api/views/{id}/query`, `GET /api/views/{id}/aggregations`, the CSV
+   export and `POST /api/tables/{id}/aggregate`,
+2. the signed-in user's profile `week_start` (`PATCH /api/auth/me {"week_start": 1}`;
+   `GET /api/auth/me` returns it, `0` for a profile that never chose),
+3. Sunday (anonymous share viewers that send no `week_start`).
+
+Automations use the `week_start` of their creator, the way they use the creator's
+zone. The Airtable-compatible API (`/api/v1`) has no such parameter: a view's
+calendar-week filter behind it uses the caller's profile. The other relative modes
+do not depend on the week start. The range is worked out as calendar days in the
+viewer's zone, so a week that holds a daylight saving change is still seven days, and
+a date-time lands in the week of its local day.
 
 How cells are compared:
 

@@ -120,7 +120,7 @@ async fn self_link_creates_the_inverse_in_the_same_table() {
     let t = f.table(&f.table_id).await;
     assert_eq!(
         Fixture::field_names(&t),
-        ["Name", "Notes", "Parent", "Table 1"]
+        ["Name", "Page", "Notes", "Parent", "Table 1"]
     );
     // one table touched => a precise event
     let env = rx.try_recv().unwrap();
@@ -175,7 +175,7 @@ async fn link_targets_are_validated() {
     // nothing was created by the failed attempts
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
 }
 
@@ -247,7 +247,7 @@ async fn the_linked_tables_field_limit_is_enforced_atomically() {
     r.assert_status(400);
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"],
+        ["Name", "Page", "Notes"],
         "no half-created pair"
     );
 }
@@ -374,7 +374,7 @@ async fn deleting_a_table_hides_links_pointing_at_it_and_restore_brings_them_bac
         "link to a trashed table is trashed with it"
     );
     assert!(!has_field(&t1, "How many"), "and so are fields built on it");
-    assert_eq!(Fixture::field_names(&t1), ["Name", "Notes"]);
+    assert_eq!(Fixture::field_names(&t1), ["Name", "Page", "Notes"]);
 
     // restoring the dangling link alone is refused: the table comes first
     restore(&f, "field", sid(&link["id"]))
@@ -385,7 +385,7 @@ async fn deleting_a_table_hides_links_pointing_at_it_and_restore_brings_them_bac
     let t1 = f.table(&f.table_id).await;
     assert_eq!(
         Fixture::field_names(&t1),
-        ["Name", "Notes", "Orders", "How many"]
+        ["Name", "Page", "Notes", "Orders", "How many"]
     );
     assert_eq!(field(&t1, "How many")["id"], count["id"]);
     let t2 = f.table(&t2id).await;

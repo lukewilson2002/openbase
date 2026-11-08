@@ -3,6 +3,6 @@
 export type CreateBase = { name: string, color?: string | null, icon?: string | null, 
 /**
  * `true` creates the base without tables; by default it starts with
- * "Table 1" (only the primary field Name, a grid view, like every new table).
+ * "Table 1" (the primary field Name, the page field Page, a grid view, like every new table).
  */
 empty?: boolean | null, };

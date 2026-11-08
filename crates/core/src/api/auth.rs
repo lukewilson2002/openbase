@@ -58,6 +58,10 @@ pub struct User {
     /// The app's accent colour for this person, one of [`ACCENTS`]; none = the default, blue.
     #[serde(default)]
     pub accent: Option<String>,
+    /// The first day of the week: 0 = Sunday (the default), 1 = Monday. The calendar-week date
+    /// filters (`this_calendar_week` and its neighbours) start their weeks on it.
+    #[serde(default)]
+    pub week_start: u8,
 }
 
 /// The accent colours a person can give the app: the hues of the palette that projects and
@@ -114,6 +118,9 @@ pub struct UpdateMeRequest {
     /// One of [`ACCENTS`], or empty string for the default (blue).
     #[serde(default)]
     pub accent: Option<String>,
+    /// 0 = Sunday, 1 = Monday.
+    #[serde(default)]
+    pub week_start: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

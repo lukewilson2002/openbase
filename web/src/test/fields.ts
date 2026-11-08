@@ -49,7 +49,7 @@ export const ALL_FIELDS: Record<FieldType, Field> = {
 };
 
 export function makeTable(fields: Field[], over: Partial<Table> = {}): Table {
-  return { id: "tbl1", base_id: "app1", name: "Tasks", description: null, primary_field_id: fields[0]?.id ?? "fld1", fields, views: [makeView({ id: "viw1" })], ...over };
+  return { id: "tbl1", base_id: "app1", name: "Tasks", description: null, primary_field_id: fields[0]?.id ?? "fld1", color: "blue", record_noun: "", record_count: 0, fields, views: [makeView({ id: "viw1" })], ...over };
 }
 
 export function makeRecord(values: Record<string, unknown>, id = "rec1"): TableRecord {

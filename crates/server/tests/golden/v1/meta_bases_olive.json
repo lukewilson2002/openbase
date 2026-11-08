@@ -1,0 +1,47 @@
+{
+  "body": {
+    "bases": [
+      {
+        "id": "appsales",
+        "name": "Sales",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appsales2",
+        "name": "Sales copy",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appops",
+        "name": "Operations",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appwide",
+        "name": "Wide",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appbetay",
+        "name": "Yearly",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appbetaz",
+        "name": "Goals",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appbetax",
+        "name": "Reading",
+        "permissionLevel": "create"
+      },
+      {
+        "id": "appbetaq",
+        "name": "Later",
+        "permissionLevel": "create"
+      }
+    ]
+  },
+  "status": 200
+}

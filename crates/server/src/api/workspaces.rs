@@ -9,7 +9,7 @@ use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use ob_core::api::events::BaseEvent;
 use ob_core::api::workspaces::{
-    CreateWorkspace, Member, Reorder, UpdateMember, UpdateWorkspace, WorkspaceSummary,
+    CreateWorkspace, Member, Reorder, SetTopLevel, UpdateMember, UpdateWorkspace, WorkspaceSummary,
 };
 use rusqlite::Connection;
 
@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/workspaces", get(list).post(create))
         .route("/api/workspaces/reorder", post(reorder))
         .route("/api/workspaces/{id}", patch(rename).delete(remove))
+        .route("/api/workspaces/{id}/top-level", post(set_top_level))
         .route("/api/workspaces/{id}/members", get(list_members))
         .route(
             "/api/workspaces/{id}/members/{user_id}",
@@ -54,6 +55,12 @@ pub fn visible_workspaces(conn: &Connection, actor: &Actor) -> AppResult<Vec<Wor
         );
         if !scope.write {
             ws.role = Role::Viewer.as_str().to_string();
+        }
+        // The listing names a top level only while it lists the project itself.
+        if let Some(root) = &ws.root_base_id
+            && !ws.bases.iter().any(|b| &b.id == root)
+        {
+            ws.root_base_id = None;
         }
         if scope.base_ids.is_some() && ws.bases.is_empty() {
             continue;
@@ -131,6 +138,41 @@ async fn rename(
                 .ok_or_else(|| AppError::not_found("workspace"))
         })
         .await?;
+    Ok(Json(out))
+}
+
+/// Choose which project of the workspace is its top level (owners). Only the pointer moves.
+async fn set_top_level(
+    State(state): State<AppState>,
+    actor: Actor,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    ApiJson(body): ApiJson<SetTopLevel>,
+) -> AppResult<Json<WorkspaceSummary>> {
+    let who = actor.clone();
+    let (out, changed) = state
+        .db
+        .write(move |tx| {
+            perm::require_workspace(tx, &actor, &id, Role::Owner)?;
+            let before = workspaces::top_level_base(tx, &id)?;
+            workspaces::set_top_level(tx, &id, &body.base_id)?;
+            let out = workspaces::list_for_user(tx, &actor.user_id)?
+                .into_iter()
+                .find(|w| w.id == id)
+                .ok_or_else(|| AppError::not_found("workspace"))?;
+            let mut changed = vec![body.base_id];
+            if let Some(b) = before
+                && !changed.contains(&b)
+            {
+                changed.push(b);
+            }
+            Ok((out, changed))
+        })
+        .await?;
+    // Both projects change their place in the app.
+    for base in changed {
+        publish(&state, &headers, &who, &base, BaseEvent::BaseChanged);
+    }
     Ok(Json(out))
 }
 

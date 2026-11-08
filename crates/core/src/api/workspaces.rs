@@ -24,6 +24,10 @@ pub struct BaseSummary {
     /// without loading every base's schema.
     #[serde(default)]
     pub tables: Vec<TableSummary>,
+    /// Whether this is the workspace's top-level project: its collections show directly under
+    /// the workspace, every other project is a folder.
+    #[serde(default)]
+    pub is_top_level: bool,
 }
 
 /// A table as a base summary lists it.
@@ -35,6 +39,23 @@ pub struct TableSummary {
     /// Lucide icon name (kebab-case); the client falls back to the name's initial.
     #[serde(default)]
     pub icon: Option<String>,
+    /// One of `ob_core::field::COLORS`.
+    pub color: String,
+    /// Live records in the table.
+    #[serde(default)]
+    pub record_count: i64,
+    /// The rich text property that holds the page of each record, if any.
+    #[serde(default)]
+    pub body_field_id: Option<String>,
+    /// The date property Home orders the table's records by, if any.
+    #[serde(default)]
+    pub home_date_field_id: Option<String>,
+    /// The checkbox property that marks a record done, if any.
+    #[serde(default)]
+    pub done_field_id: Option<String>,
+    /// What one record is called ("client"); empty means "record".
+    #[serde(default)]
+    pub record_noun: String,
 }
 
 /// Someone who can open a base, or will once they accept their invite.
@@ -70,6 +91,18 @@ pub struct WorkspaceSummary {
     pub member_count: i64,
     /// Unaccepted, unexpired invites to the workspace.
     pub pending_invite_count: i64,
+    /// The workspace's top-level project (UX decision 1), if the caller can open it. Its
+    /// collections show directly under the workspace.
+    #[serde(default)]
+    pub root_base_id: Option<String>,
+}
+
+/// `POST /api/workspaces/{id}/top-level`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct SetTopLevel {
+    /// A live project of the workspace.
+    pub base_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,7 +144,7 @@ pub struct CreateBase {
     #[serde(default)]
     pub icon: Option<String>,
     /// `true` creates the base without tables; by default it starts with
-    /// "Table 1" (only the primary field Name, a grid view, like every new table).
+    /// "Table 1" (the primary field Name, the page field Page, a grid view, like every new table).
     #[serde(default)]
     pub empty: Option<bool>,
 }

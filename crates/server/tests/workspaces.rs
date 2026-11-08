@@ -18,7 +18,13 @@ async fn creator_becomes_owner_and_sees_workspace_in_list() {
     r.assert_status(201);
     assert_eq!(r.body["name"], "Acme Inc", "name is trimmed");
     assert_eq!(r.body["role"], "owner");
-    assert_eq!(r.body["bases"], json!([]));
+    // Its top-level project, named after it and without tables.
+    let bases = r.body["bases"].as_array().unwrap();
+    assert_eq!(bases.len(), 1);
+    assert_eq!(bases[0]["name"], "Acme Inc");
+    assert_eq!(bases[0]["color"], r.body["color"]);
+    assert_eq!(bases[0]["role"], "owner");
+    assert_eq!(bases[0]["tables"], json!([]));
 
     let list = app.get(&alice, "/api/workspaces").await;
     list.assert_status(200);
@@ -288,12 +294,19 @@ async fn deleted_workspace_and_bases_disappear_from_lists() {
 
     // a deleted base alone disappears from the workspace listing
     let g = Fixture::new().await;
+    let spare = g.free_the_base().await;
     g.app
         .delete(&g.owner, &format!("/api/bases/{}", g.base_id))
         .await
         .assert_status(200);
     let list = g.app.get(&g.owner, "/api/workspaces").await;
-    assert_eq!(list.body[0]["bases"], json!([]));
+    let bases = list.body[0]["bases"].as_array().unwrap();
+    assert_eq!(
+        bases.len(),
+        1,
+        "only the project that took its place is left"
+    );
+    assert_eq!(bases[0]["id"], spare.as_str());
 }
 
 #[tokio::test]

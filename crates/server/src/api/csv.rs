@@ -1,6 +1,6 @@
 //! CSV export and import.
 //!
-//! - `GET  /api/views/{id}/export.csv?timezone=` (Viewer): the view's visible
+//! - `GET  /api/views/{id}/export.csv?timezone=&week_start=` (Viewer): the view's visible
 //!   fields in view order, its records in view order with filter, sort and
 //!   grouping applied. **Streamed** page by page from the query engine, so
 //!   memory stays flat however big the table is. UTF-8 with a BOM (Excel),
@@ -54,7 +54,7 @@ use crate::store::csv_io::{self, Csv, ImportColumn, ImportOutcome};
 use crate::store::links::NameCache;
 use crate::store::schema::{self, Touched};
 use crate::store::sharing::visible_fields;
-use crate::store::{attachments, fields, records, tables};
+use crate::store::{attachments, fields, pages, records, tables};
 
 /// Records fetched from the query engine per streamed chunk.
 const EXPORT_PAGE: usize = 500;
@@ -132,6 +132,9 @@ struct ExportParams {
     /// IANA zone for dates; defaults to the caller's profile zone.
     #[serde(default)]
     timezone: Option<String>,
+    /// First day of the week for calendar-week filters: 0 Sunday, 1 Monday.
+    #[serde(default)]
+    week_start: Option<i32>,
 }
 
 /// Everything the streaming loop needs after the first page.
@@ -223,6 +226,7 @@ async fn export(
     let cache = state.query_cache.clone();
     let versions = state.events.versions().clone();
     let tz_param = params.timezone.clone();
+    let week_start = params.week_start;
     let (first, view, fields, ids, timezone) = state
         .db
         .read(move |conn| {
@@ -240,6 +244,7 @@ async fn export(
                 };
             let req = QueryRequest {
                 timezone: Some(tz.name().to_string()),
+                week_start,
                 ..QueryRequest::default()
             };
             let ids = query::query_ids(conn, &cache, &versions, &actor.user_id, &view, &req)?;
@@ -679,7 +684,7 @@ fn build_table(
     } else {
         tables::free_name(tx, base_id, wanted)?
     };
-    let table = tables::create(tx, base_id, &name, None, &actor.user_id)?;
+    let table = tables::create_without_page(tx, base_id, &name, None, None, &actor.user_id)?;
     let mut columns: Vec<ImportColumn> = Vec::new();
     let mut imported: Vec<ImportedField> = Vec::new();
     for (i, kind) in kinds.into_iter().enumerate() {
@@ -716,6 +721,8 @@ fn build_table(
         });
         columns.push(ImportColumn { column: i, field });
     }
+    // After the file's columns, so that one of them may be called "Page".
+    pages::create_body_field(tx, &table.id)?;
     let ctx = WriteCtx::for_user(tx, &actor.user_id, WriteSource::Import)?.typecast(true);
     match csv_io::import_rows(tx, &ctx, &table.id, &columns, &csv.rows)? {
         ImportOutcome::Imported { created, outcomes } => Ok(BuiltTable {

@@ -34,10 +34,19 @@ pub struct TableRow {
     pub next_autonumber: i64,
     pub deleted_at: Option<i64>,
     pub icon: Option<String>,
+    pub color: String,
+    /// The rich text property that holds the page of each record (see `store::pages`).
+    pub body_field_id: Option<String>,
+    /// The date property Home orders the table by, and the checkbox that marks a record done.
+    pub home_date_field_id: Option<String>,
+    pub done_field_id: Option<String>,
+    /// What one record is called; empty means "record".
+    pub record_noun: String,
 }
 
-const TABLE_COLS: &str =
-    "id, base_id, name, description, position, primary_field_id, next_autonumber, deleted_at, icon";
+const TABLE_COLS: &str = "id, base_id, name, description, position, primary_field_id, \
+     next_autonumber, deleted_at, icon, color, body_field_id, home_date_field_id, done_field_id, \
+     record_noun";
 
 impl TableRow {
     fn from_row(r: &Row) -> rusqlite::Result<TableRow> {
@@ -51,6 +60,11 @@ impl TableRow {
             next_autonumber: r.get(6)?,
             deleted_at: r.get(7)?,
             icon: r.get(8)?,
+            color: r.get(9)?,
+            body_field_id: r.get(10)?,
+            home_date_field_id: r.get(11)?,
+            done_field_id: r.get(12)?,
+            record_noun: r.get(13)?,
         })
     }
 }
@@ -82,6 +96,44 @@ pub fn live_tables(conn: &Connection, base_id: &str) -> AppResult<Vec<TableRow>>
     ))?;
     let rows = stmt.query_map([base_id], TableRow::from_row)?;
     Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Live records per live table of `base_id`, in one grouped query. A table without records has
+/// a count of 0.
+pub fn record_counts_in_base(conn: &Connection, base_id: &str) -> AppResult<HashMap<String, i64>> {
+    record_counts(conn, "t.base_id = ?1", base_id)
+}
+
+/// [`record_counts_in_base`] for every live project of a workspace at once.
+pub fn record_counts_in_workspace(
+    conn: &Connection,
+    workspace_id: &str,
+) -> AppResult<HashMap<String, i64>> {
+    record_counts(
+        conn,
+        "t.base_id IN (SELECT id FROM bases WHERE workspace_id = ?1 AND deleted_at IS NULL)",
+        workspace_id,
+    )
+}
+
+fn record_counts(conn: &Connection, scope: &str, id: &str) -> AppResult<HashMap<String, i64>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT t.id, count(r.id) FROM tables t
+         LEFT JOIN records r ON r.table_id = t.id AND r.deleted_at IS NULL
+         WHERE {scope} AND t.deleted_at IS NULL
+         GROUP BY t.id"
+    ))?;
+    let rows = stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Live records of one table.
+pub fn record_count(conn: &Connection, table_id: &str) -> AppResult<i64> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM records WHERE table_id = ?1 AND deleted_at IS NULL",
+        [table_id],
+        |r| r.get(0),
+    )?)
 }
 
 // ---------------------------------------------------------------- fields

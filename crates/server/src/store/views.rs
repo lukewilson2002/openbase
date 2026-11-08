@@ -29,6 +29,7 @@ use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::perm::Role;
 use crate::store::fields_engine::{self, Stale};
+use crate::store::pages;
 use crate::store::schema::{self, PositionScope, ViewRow, live_table, live_view};
 
 fn need(role: Role, min: Role, what: &str) -> AppResult<()> {
@@ -64,12 +65,13 @@ fn ensure_view_capacity(tx: &Transaction, table_id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// The form config a new form view starts with: every editable field, in order.
-pub fn default_form_config(fields: &[Field]) -> FormConfig {
+/// The form config a new form view starts with: every editable field, in order, except the
+/// table's page property (`body_field_id`), which a form can still ask for when it is added by hand.
+pub fn default_form_config(fields: &[Field], body_field_id: Option<&str>) -> FormConfig {
     FormConfig {
         fields: fields
             .iter()
-            .filter(|f| !f.field_type().is_computed())
+            .filter(|f| !f.field_type().is_computed() && body_field_id != Some(f.id.as_str()))
             .map(|f| FormField {
                 field_id: f.id.clone(),
                 ..Default::default()
@@ -124,9 +126,15 @@ pub fn create(
     let mut config = match &input.config {
         Some(c) => c.clone(),
         None => {
-            let mut c = ViewConfig::default();
+            // A view made without a config of its own hides the table's page property, like
+            // the views the table already had: it is a document, not a column.
+            let body = pages::body_field_id(tx, table_id)?;
+            let mut c = ViewConfig {
+                hidden_fields: body.iter().cloned().collect(),
+                ..ViewConfig::default()
+            };
             if input.view_type == ViewType::Form {
-                c.form = default_form_config(&fields);
+                c.form = default_form_config(&fields, body.as_deref());
             }
             c
         }
@@ -1038,7 +1046,7 @@ mod tests {
     fn form_rules() {
         let f = fields();
         let mut c = ViewConfig {
-            form: default_form_config(&f),
+            form: default_form_config(&f, None),
             ..Default::default()
         };
         assert_eq!(c.form.fields.len(), 2, "computed fields are left out");

@@ -329,6 +329,7 @@ async fn an_agent_runs_the_business_without_the_ui() {
         order_fields,
         [
             "Name",
+            "Page",
             "Customer",
             "Qty",
             "Unit price",
@@ -418,7 +419,7 @@ async fn an_agent_runs_the_business_without_the_ui() {
                        ]},
                        "sorts": [{"field_id": "Total", "direction": "desc"}],
                        "groups": [{"field_id": "Status"}],
-                       "hidden_fields": ["Due", "Invoice"]
+                       "hidden_fields": ["Due", "Invoice", "Page"]
                    }}),
         )
         .await;

@@ -8,4 +8,8 @@ timezone?: string | null, intro_seen?: boolean | null,
 /**
  * One of [`ACCENTS`], or empty string for the default (blue).
  */
-accent?: string | null, };
+accent?: string | null, 
+/**
+ * 0 = Sunday, 1 = Monday.
+ */
+week_start?: number | null, };

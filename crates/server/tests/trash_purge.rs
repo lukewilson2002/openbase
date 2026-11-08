@@ -110,8 +110,8 @@ async fn only_items_deleted_before_the_cutoff_are_purged() {
     assert_eq!(stats.records, 1, "only the old record (OldT has none)");
     assert_eq!(
         stats.fields,
-        1 + 1,
-        "the old field and OldT's primary field"
+        1 + 2,
+        "the old field and OldT's primary field and page"
     );
     assert_eq!(stats.views, 1 + 1, "the old view and OldT's grid view");
     assert_eq!(stats.tables, 1);
@@ -133,7 +133,7 @@ async fn only_items_deleted_before_the_cutoff_are_purged() {
     // and the live schema is intact
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
 }
 
@@ -380,6 +380,7 @@ async fn purging_a_base_and_a_workspace_cascades_everything() {
     let ows = workspace(&f.app, &other, "Theirs").await;
     let obase = base(&f.app, &other, &ows, "Theirs base").await;
 
+    f.free_the_base().await;
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))
         .await

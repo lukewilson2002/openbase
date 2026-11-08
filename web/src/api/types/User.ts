@@ -8,4 +8,9 @@ intro_seen: boolean,
 /**
  * The app's accent colour for this person, one of [`ACCENTS`]; none = the default, blue.
  */
-accent?: string | null, };
+accent?: string | null, 
+/**
+ * The first day of the week: 0 = Sunday (the default), 1 = Monday. The calendar-week date
+ * filters (`this_calendar_week` and its neighbours) start their weeks on it.
+ */
+week_start: number, };

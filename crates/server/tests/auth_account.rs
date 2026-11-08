@@ -122,6 +122,46 @@ async fn accent_starts_unset_and_round_trips() {
 }
 
 #[tokio::test]
+async fn week_start_defaults_to_sunday_and_round_trips() {
+    let app = TestApp::new();
+    let user = app.user("a@example.com", "Ann");
+    assert_eq!(app.get(&user, "/api/auth/me").await.body["week_start"], 0);
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"week_start": 1}))
+        .await;
+    res.assert_status(200);
+    assert_eq!(res.body["week_start"], 1);
+    // Other updates leave it alone; it follows the account to a new session.
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"name": "Annie"}))
+        .await;
+    assert_eq!(res.body["week_start"], 1);
+    let (_, other_device) = app.login("a@example.com", PW).await;
+    assert_eq!(
+        app.get(&other_device, "/api/auth/me").await.body["week_start"],
+        1
+    );
+    // Only Sunday (0) and Monday (1); a refused value changes nothing.
+    for bad in [
+        json!(2),
+        json!(-1),
+        json!(7),
+        json!(300),
+        json!("monday"),
+        json!(0.5),
+    ] {
+        app.patch(&user, "/api/auth/me", json!({"week_start": bad}))
+            .await
+            .assert_status(400);
+    }
+    assert_eq!(app.get(&user, "/api/auth/me").await.body["week_start"], 1);
+    let res = app
+        .patch(&user, "/api/auth/me", json!({"week_start": 0}))
+        .await;
+    assert_eq!(res.body["week_start"], 0);
+}
+
+#[tokio::test]
 async fn password_change_requires_current_and_revokes_other_sessions() {
     let app = TestApp::new();
     let user = app.user("a@example.com", "A");

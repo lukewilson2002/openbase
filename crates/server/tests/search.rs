@@ -65,6 +65,7 @@ async fn names_come_before_records_and_starts_with_before_contains() {
         found(&r),
         [
             hit("workspace", "Dish club"),
+            hit("base", "Dish club"),
             hit("table", "Dishwasher"),
             hit("base", "Big dishes"),
             hit("view", "My dishes"),
@@ -82,7 +83,9 @@ async fn names_come_before_records_and_starts_with_before_contains() {
     );
     assert!(results[0]["base_id"].is_null());
 
-    let table = &results[1];
+    // The new workspace's top-level project is named like it, so it matches too.
+    assert_eq!(results[1]["base_name"], "Dish club");
+    let table = &results[2];
     assert_eq!(table["id"], washer["id"]);
     assert_eq!(table["table_id"], washer["id"]);
     assert_eq!(table["base_id"], f.base_id.as_str());
@@ -96,12 +99,12 @@ async fn names_come_before_records_and_starts_with_before_contains() {
     );
     assert_eq!(table["view_type"], "grid");
 
-    let view = &results[3];
+    let view = &results[4];
     assert_eq!(view["view_id"], view["id"]);
     assert_eq!(view["view_type"], "kanban");
     assert_eq!(view["table_id"], f.table_id.as_str());
 
-    let rec = &results[4];
+    let rec = &results[5];
     assert_eq!(rec["id"], dishes.as_str());
     assert_eq!(rec["record_id"], dishes.as_str());
     assert_eq!(rec["table_id"], f.table_id.as_str());
@@ -112,7 +115,7 @@ async fn names_come_before_records_and_starts_with_before_contains() {
         "a record opens in the table's first view, its default grid"
     );
     assert!(rec["snippet"].is_null(), "matched in the primary field");
-    let by_notes = &results[6];
+    let by_notes = &results[7];
     assert_eq!(by_notes["record_id"], kitchen.as_str());
     assert_eq!(by_notes["snippet"], "Leave the DISHES in the sink");
 
@@ -144,6 +147,7 @@ async fn search_finds_only_what_the_caller_can_open() {
         [
             hit("workspace", "Dish club"),
             hit("base", "Dish secrets"),
+            hit("base", "Dish club"),
             hit("record", "Dish in CRM"),
             hit("record", "Dish in Secrets"),
         ]
@@ -210,7 +214,11 @@ async fn search_finds_only_what_the_caller_can_open() {
         .assert_status(200);
     assert_eq!(
         found(&search(&f.app, &f.owner, "q=dish").await),
-        [hit("workspace", "Dish club"), hit("record", "Dish in CRM")]
+        [
+            hit("workspace", "Dish club"),
+            hit("base", "Dish club"),
+            hit("record", "Dish in CRM")
+        ]
     );
     search(&f.app, &f.app.anon(), "q=dish")
         .await
@@ -234,6 +242,7 @@ async fn trashed_fields_views_and_workspaces_are_not_found() {
         found(&search(&f.app, &f.owner, "q=dish").await),
         [
             hit("workspace", "Dish club"),
+            hit("base", "Dish club"),
             hit("base", "Dish base"),
             hit("view", "Dish board"),
             hit("record", "Dish in club"),
@@ -448,7 +457,11 @@ async fn scopes_narrow_to_a_workspace_or_project_and_never_widen_access() {
     );
     assert_eq!(
         found(&search(&f.app, &f.owner, &q(format!("workspace={club}"))).await),
-        [hit("base", "Dish base"), hit("record", "Dish in club")]
+        [
+            hit("base", "Dish club"),
+            hit("base", "Dish base"),
+            hit("record", "Dish in club")
+        ]
     );
     assert_eq!(
         found(&search(&f.app, &f.owner, &q(format!("base={secret_id}"))).await),
@@ -468,7 +481,7 @@ async fn scopes_narrow_to_a_workspace_or_project_and_never_widen_access() {
     // Empty values count as absent; unknown ids find nothing, like ones the caller cannot open.
     assert_eq!(
         found(&search(&f.app, &f.owner, "q=dish&workspace=&base=").await).len(),
-        6
+        7
     );
     for scope in ["workspace=wspNope", "base=appNope"] {
         assert!(found(&search(&f.app, &f.owner, &q(scope.into())).await).is_empty());

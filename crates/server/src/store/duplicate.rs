@@ -288,7 +288,39 @@ fn insert_tables(
                 s.table.icon
             ],
         )?;
+        copy_collection_settings(tx, &s.table.id, mapped(ids, &s.table.id)?, ids)?;
     }
+    Ok(())
+}
+
+/// The copy keeps the colour and record name of the original, and its page, Home date and Done
+/// properties are the copies of the original's (none if the original's is in the trash).
+fn copy_collection_settings(
+    tx: &Transaction,
+    from: &str,
+    to: &str,
+    ids: &HashMap<String, String>,
+) -> AppResult<()> {
+    type Settings = (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let (color, noun, body, home, done): Settings = tx.query_row(
+        "SELECT color, record_noun, body_field_id, home_date_field_id, done_field_id
+           FROM tables WHERE id = ?1",
+        [from],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+    )?;
+    let copy = |field: Option<String>| field.and_then(|f| ids.get(&f).cloned());
+    tx.execute(
+        "UPDATE tables SET color = ?2, record_noun = ?3, body_field_id = ?4,
+                           home_date_field_id = ?5, done_field_id = ?6
+         WHERE id = ?1",
+        params![to, color, noun, copy(body), copy(home), copy(done)],
+    )?;
     Ok(())
 }
 

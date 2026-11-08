@@ -24,11 +24,11 @@ export const F = {
 export const TABLE_FIELDS: Field[] = [F.name, F.status, F.start, F.end, F.owner, F.cover, F.deps, F.effort];
 
 export function projectTable(views: View[]): Table {
-  return { id: "tbl1", base_id: "app1", name: "Projects", description: null, primary_field_id: F.name.id, fields: TABLE_FIELDS, views };
+  return { id: "tbl1", base_id: "app1", name: "Projects", description: null, primary_field_id: F.name.id, color: "blue", record_noun: "", record_count: 0, fields: TABLE_FIELDS, views };
 }
 
 export function projectSchema(role: string, views: View[]): BaseSchema {
-  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)], people: [], workspace_name: "Acme", workspace_color: "green" };
+  return { id: "app1", workspace_id: "wsp1", name: "Tracker", color: "green_dark", icon: null, role, tables: [projectTable(views)], is_top_level: false, people: [], workspace_name: "Acme", workspace_color: "green" };
 }
 
 export function viewWithConfig(id: string, type: ViewType, patch: Partial<View["config"]>, over: Partial<View> = {}): View {

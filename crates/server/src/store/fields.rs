@@ -20,6 +20,7 @@ use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::store::field_kind::{self, KindCtx, normalize_kind};
 use crate::store::fields_engine;
+use crate::store::pages;
 use crate::store::schema::{
     self, FieldRecord, PositionScope, TableRow, Touched, live_field, live_table,
 };
@@ -295,6 +296,8 @@ pub fn update(
         if !removed.is_empty() {
             refresh_after_removal(tx, &table.base_id, &table.id, &removed)?;
         }
+        // A page, Home date or Done property that no longer has the right type stops being one.
+        pages::clear_stale_settings(tx, &touched.0)?;
     }
 
     let inverse = match new_inverse {
@@ -780,6 +783,8 @@ pub fn delete(tx: &Transaction, field_id: &str, user_id: &str) -> AppResult<Dele
     mark_deleted(tx, &ids, now_ms(), user_id)?;
 
     refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
+    // Everything trashed with it may have been a page, Home date or Done property too.
+    pages::clear_stale_settings(tx, &touched.0)?;
     Ok(DeleteOutcome {
         deleted_field_ids: ids,
         touched,
@@ -837,6 +842,7 @@ pub fn cascade_delete_incoming_links(
     }
     mark_deleted(tx, &ids, at, user_id)?;
     refresh_after_removal(tx, &table.base_id, &table.id, &ids)?;
+    pages::clear_stale_settings(tx, &touched.0)?;
     Ok(touched)
 }
 
@@ -870,6 +876,8 @@ pub fn set_primary(tx: &Transaction, table_id: &str, field_id: &str) -> AppResul
             "UPDATE tables SET primary_field_id = ?2 WHERE id = ?1",
             params![table_id, field.id],
         )?;
+        // The title cannot also be the page: a rich text property made the title stops being it.
+        pages::clear_stale_settings(tx, &[table_id.to_string()])?;
         // Linked records are shown by their primary field's text.
         schema::check_base_acyclic(tx, &table.base_id)?;
         fields_engine::after_field_change(

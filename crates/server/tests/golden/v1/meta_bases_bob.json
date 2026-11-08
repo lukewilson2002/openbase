@@ -1,0 +1,12 @@
+{
+  "body": {
+    "bases": [
+      {
+        "id": "appsales",
+        "name": "Sales",
+        "permissionLevel": "read"
+      }
+    ]
+  },
+  "status": 200
+}

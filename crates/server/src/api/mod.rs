@@ -13,6 +13,7 @@ pub mod comments;
 pub mod csv;
 pub mod events;
 pub mod fields;
+pub mod home;
 pub mod inbox;
 pub mod invites;
 pub mod notifications;
@@ -44,6 +45,7 @@ pub fn router() -> Router<AppState> {
         .merge(oauth::router())
         .merge(invites::router())
         .merge(workspaces::router())
+        .merge(home::router())
         .merge(bases::router())
         .merge(tables::router())
         .merge(fields::router())

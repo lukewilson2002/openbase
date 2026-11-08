@@ -21,4 +21,9 @@ role: string, bases: Array<BaseSummary>, member_count: number,
 /**
  * Unaccepted, unexpired invites to the workspace.
  */
-pending_invite_count: number, };
+pending_invite_count: number, 
+/**
+ * The workspace's top-level project (UX decision 1), if the caller can open it. Its
+ * collections show directly under the workspace.
+ */
+root_base_id?: string | null, };

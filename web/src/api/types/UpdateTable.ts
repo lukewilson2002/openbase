@@ -4,4 +4,21 @@ export type UpdateTable = { name?: string | null,
 /**
  * Lucide icon name (kebab-case). Absent = unchanged, `null` = clear.
  */
-icon?: string | null, description?: string | null, position?: number | null, };
+icon?: string | null, description?: string | null, position?: number | null, 
+/**
+ * One of `ob_core::field::COLORS`; absent leaves it unchanged.
+ */
+color?: string | null, 
+/**
+ * What one record is called ("client"); empty resets it to "record". Absent = unchanged.
+ */
+record_noun?: string | null, 
+/**
+ * The date property Home orders the collection by: a date, created or last modified time,
+ * or a formula or rollup that gives a date. Absent = unchanged, `null` = none.
+ */
+home_date_field_id?: string | null, 
+/**
+ * The checkbox property that marks a record done. Absent = unchanged, `null` = none.
+ */
+done_field_id?: string | null, };

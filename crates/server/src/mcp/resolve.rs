@@ -1289,6 +1289,12 @@ mod tests {
             icon: None,
             description: None,
             primary_field_id: "fld1".into(),
+            color: "blue".into(),
+            body_field_id: None,
+            home_date_field_id: None,
+            done_field_id: None,
+            record_noun: String::new(),
+            record_count: 0,
             fields: vec![
                 field("fld1", "Name", FieldKind::Text(TextOptions::default())),
                 field(

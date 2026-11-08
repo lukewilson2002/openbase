@@ -551,6 +551,7 @@ async fn deleted_by_is_recorded_for_every_kind_and_cleared_on_restore() {
     assert_eq!(deleted_by(&f.app, "fields", &link_id), None);
 
     // Bases and workspaces.
+    f.free_the_base().await;
     f.app
         .delete(&f.owner, &format!("/api/bases/{}", f.base_id))
         .await

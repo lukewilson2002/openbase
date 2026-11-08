@@ -29,8 +29,8 @@ const workspaces: WorkspaceSummary[] = [
     member_count: 1,
     pending_invite_count: 0,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "editor", people: [], tables: [{ id: "tbl1", name: "Tasks", icon: null }, { id: "tbl2", name: "People", icon: null }] },
-      { id: "app2", workspace_id: "wsp1", name: "Read only", color: "blue", role: "commenter", people: [], tables: [{ id: "tbl9", name: "Secrets", icon: null }] },
+      { id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "editor", is_top_level: false, people: [], tables: [{ id: "tbl1", name: "Tasks", icon: null, color: "blue", record_count: 0, record_noun: "" }, { id: "tbl2", name: "People", icon: null, color: "blue", record_count: 0, record_noun: "" }] },
+      { id: "app2", workspace_id: "wsp1", name: "Read only", color: "blue", role: "commenter", is_top_level: false, people: [], tables: [{ id: "tbl9", name: "Secrets", icon: null, color: "blue", record_count: 0, record_noun: "" }] },
     ],
   },
 ];

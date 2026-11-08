@@ -47,7 +47,7 @@ function openBase(role: string, extra: Record<string, unknown> = {}, route = "/b
   const api = mockApi({
     "GET /api/auth/me": USER,
     "GET /api/bases/app1": makeSchema(role),
-    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, people: [], tables: [] }])],
+    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, is_top_level: false, people: [], tables: [] }])],
     "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false, public_url: "https://base.example.org", passkeys_enabled: true },
     ...extra,
   });
@@ -146,8 +146,8 @@ describe("base shell on a desktop", () => {
     garden.tables = [{ ...garden.tables[1]!, id: "tbl7", base_id: "app2", name: "Plants", views: [makeView({ id: "viw7", table_id: "tbl7", name: "All plants" })] }];
     const api = openBase("owner", {
       "GET /api/workspaces": [
-        makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", people: [], tables: [] }]),
-        { ...makeWorkspace("owner", [{ id: "app2", workspace_id: "wsp2", name: "Garden", color: "green", role: "owner", people: [], tables: [] }]), id: "wsp2", name: "Home" },
+        makeWorkspace("owner", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role: "owner", is_top_level: false, people: [], tables: [] }]),
+        { ...makeWorkspace("owner", [{ id: "app2", workspace_id: "wsp2", name: "Garden", color: "green", role: "owner", is_top_level: false, people: [], tables: [] }]), id: "wsp2", name: "Home" },
       ],
       "GET /api/bases/app2": garden,
     });
@@ -827,7 +827,7 @@ describe("icons", () => {
     const api = openBase("creator", {
       "GET /api/bases/app1": withIcons("creator"),
       // The menu's rows (and so the icon dialog) come from the workspaces list.
-      "GET /api/workspaces": [makeWorkspace("creator", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: "store", role: "creator", people: [], tables: [] }])],
+      "GET /api/workspaces": [makeWorkspace("creator", [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", icon: "store", role: "creator", is_top_level: false, people: [], tables: [] }])],
       "PATCH /api/bases/app1": { status: 204 },
     });
     await screen.findByText("Grid view coming soon");

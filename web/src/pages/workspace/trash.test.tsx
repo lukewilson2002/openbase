@@ -23,8 +23,8 @@ const workspaces: WorkspaceSummary[] = [
     member_count: 3,
     pending_invite_count: 0,
     bases: [
-      { id: "app1", workspace_id: "wsp1", name: "Chores", color: "blue", icon: "list-checks", role: "owner", people: [], tables: [] },
-      { id: "app2", workspace_id: "wsp1", name: "Budget", color: "green", role: "owner", people: [], tables: [] },
+      { id: "app1", workspace_id: "wsp1", name: "Chores", color: "blue", icon: "list-checks", role: "owner", is_top_level: false, people: [], tables: [] },
+      { id: "app2", workspace_id: "wsp1", name: "Budget", color: "green", role: "owner", is_top_level: false, people: [], tables: [] },
     ],
   },
   {
@@ -34,7 +34,7 @@ const workspaces: WorkspaceSummary[] = [
     role: "owner",
     member_count: 1,
     pending_invite_count: 0,
-    bases: [{ id: "app3", workspace_id: "wsp2", name: "Clients", color: "purple", role: "owner", people: [], tables: [] }],
+    bases: [{ id: "app3", workspace_id: "wsp2", name: "Clients", color: "purple", role: "owner", is_top_level: false, people: [], tables: [] }],
   },
 ];
 

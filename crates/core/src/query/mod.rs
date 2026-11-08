@@ -26,7 +26,7 @@ mod tests;
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Weekday};
 use chrono_tz::Tz;
 use serde_json::{Map, Value as Json};
 
@@ -35,6 +35,10 @@ use crate::ids::FieldId;
 use crate::value::ResultType;
 
 pub use aggregate::{aggregate, aggregations_for};
+pub use dates::{
+    CellWhen, HOME_DAYS_AFTER, HOME_DAYS_BEFORE, cell_when, home_window, uses_week_start,
+    week_start_from,
+};
 pub use filter::{
     CompiledFilter, CompiledRowColor, compile_filter, compile_row_color, filter_ops_for, matches,
     row_color, row_color_compiled,
@@ -104,6 +108,9 @@ pub struct QueryCtx {
     pub timezone: Tz,
     /// The viewer, for the "me" operand of user filters.
     pub current_user_id: Option<String>,
+    /// The first day of the week, for the calendar-week operands. Sunday unless the viewer's
+    /// request or profile says otherwise.
+    pub week_start: Weekday,
 }
 
 impl QueryCtx {
@@ -112,7 +119,12 @@ impl QueryCtx {
             now,
             timezone,
             current_user_id: None,
+            week_start: Weekday::Sun,
         }
+    }
+
+    pub fn with_week_start(self, week_start: Weekday) -> Self {
+        Self { week_start, ..self }
     }
 
     pub fn with_user(self, user_id: impl Into<String>) -> Self {

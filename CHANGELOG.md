@@ -13,6 +13,44 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
+- **Upgrade to database schema 16 (a page for every table).** The server snapshots the database
+  first, as for every upgrade, and no value you entered changes. A table with exactly one rich
+  text property besides its title uses it as its page; every other table gets a new rich text
+  property called "Page" ("Page 2" and so on when the name is taken), hidden in all of its views
+  (not in tables in the trash or tables that already have 500 properties). A new table gets one
+  too, and a new workspace starts with a top-level project named after it; a workspace that had
+  no project gets one the same way. Tables are coloured in turn, each table that has a date
+  property called Due, Deadline, Date, When or Start (and a checkbox called Done or Complete) is
+  set up for the Home page, and each person gets a first day of the week (Sunday). The
+  Airtable-compatible API answers as before, except that a table lists its new Page property.
+- **Collection settings in the API and MCP.** A table has a `color` (set on create and update;
+  the `icon` still works), a page field (`body_field_id`; `POST /api/tables/{id}/body-field`,
+  MCP `set_page_field`), a record name, a Home date and a Done checkbox (`PATCH
+  /api/tables/{id}`, MCP `update_table_settings`). Listings add each table's `record_count`,
+  workspaces their `root_base_id` and projects `is_top_level`; `POST
+  /api/workspaces/{id}/top-level` (MCP `set_top_level_project`) chooses the top-level project,
+  which can no longer be deleted until another takes its place. Deleting or retyping a page,
+  Home date or Done field clears the setting. Saving a record's page with `PUT
+  /api/tables/{id}/records/{rid}/page` adds "Page" to a table that has none.
+- **Agents know the top level and what a delete leaves behind.** MCP `create_workspace` also
+  returns `workspace_id` and `top_level_project`; `list_projects` marks each project's
+  `is_top_level`. `delete_workspace` and `delete_project` say what moved to the trash, how to
+  restore it (`restore_from_trash` with kind and id) and the date the retention purge erases it
+  (`trashed`, `restore_with`, `purge_after`, `retention_days`). The tools that delete for good
+  (share links, automations, inbox drafts, invites, members) say "This can't be undone", and
+  [docs/mcp.md](docs/mcp.md#destructive-tools-and-what-can-be-undone) lists every destructive
+  tool and whether the trash brings it back.
+- **One request for Home.** `GET /api/workspaces/{id}/home` (MCP `get_home`) returns what is due
+  soon (records of collections with a Home date, from 30 days ago to 7 days ahead in your time
+  zone, not marked done), the 10 records most recently created or edited that you can open, and
+  your inbox drafts. It reads only projects you can open, never more than 100,000 records, and
+  answers in under 300 ms for 20 collections and 100,000 records.
+- **Calendar weeks and months in date filters.** `is_within` takes `this_calendar_week`,
+  `next_calendar_week`, `last_calendar_week`, `next_calendar_month` and `last_calendar_month`.
+  Weeks start on the request's `week_start` (0 Sunday, 1 Monday; a view query, summaries, CSV
+  export and MCP `query_view` accept it), else the first day of the week in your profile
+  (`PATCH /api/auth/me {"week_start": 1}`, returned by `GET /api/auth/me`), else Sunday;
+  automations use their creator's. The earlier `past_week` and `next_week` stay rolling days.
 - **Select, delete and undo in every view.** Kanban, gallery, list, calendar and timeline now
   have what the grid had: Shift/Ctrl/Cmd-click to select several cards or rows, ⌘A / Ctrl+A,
   a bar with the count and **Delete**, **Duplicate** and **Clear**, the **Delete** key, and a

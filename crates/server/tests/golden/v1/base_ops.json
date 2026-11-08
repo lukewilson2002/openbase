@@ -1,0 +1,1735 @@
+{
+  "meta": {
+    "body": {
+      "tables": [
+        {
+          "fields": [
+            {
+              "id": "fldinventorysku",
+              "name": "SKU",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldinventoryqty",
+              "name": "Qty",
+              "options": {
+                "precision": 1
+              },
+              "type": "number"
+            },
+            {
+              "id": "fldinventoryprice",
+              "name": "Price",
+              "options": {
+                "precision": 2,
+                "symbol": "$"
+              },
+              "type": "currency"
+            },
+            {
+              "id": "fldinventoryinstock",
+              "name": "In stock",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldinventoryreceived",
+              "name": "Received",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldinventorykind",
+              "name": "Kind",
+              "options": {
+                "choices": [
+                  {
+                    "color": "blue",
+                    "id": "selinventorykindPart",
+                    "name": "Part"
+                  },
+                  {
+                    "color": "red",
+                    "id": "selinventorykindTool",
+                    "name": "Tool"
+                  }
+                ]
+              },
+              "type": "singleSelect"
+            }
+          ],
+          "id": "tblinventory",
+          "name": "Inventory",
+          "primaryFieldId": "fldinventorysku",
+          "views": [
+            {
+              "id": "viwdefinventory",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldscratchname",
+              "name": "Name",
+              "type": "singleLineText"
+            }
+          ],
+          "id": "tblscratch",
+          "name": "Scratch",
+          "primaryFieldId": "fldscratchname",
+          "views": [
+            {
+              "id": "viwdefscratch",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "tables": {
+    "tblinventory": {
+      "list": [
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Price": 1.25,
+                  "Qty": 3,
+                  "SKU": "SKU-0001"
+                },
+                "id": "recinventory1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Price": 2.5,
+                  "Qty": 6,
+                  "SKU": "SKU-0002"
+                },
+                "id": "recinventory2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 3.75,
+                  "Qty": 9,
+                  "SKU": "SKU-0003"
+                },
+                "id": "recinventory3"
+              },
+              {
+                "createdTime": "2026-01-05T00:00:00.000Z",
+                "fields": {
+                  "Price": 5.0,
+                  "Qty": 12,
+                  "SKU": "SKU-0004"
+                },
+                "id": "recinventory4"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Price": 6.25,
+                  "Qty": 15,
+                  "Received": "2026-10-06",
+                  "SKU": "SKU-0005"
+                },
+                "id": "recinventory5"
+              },
+              {
+                "createdTime": "2026-01-07T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 7.5,
+                  "Qty": 1,
+                  "SKU": "SKU-0006"
+                },
+                "id": "recinventory6"
+              },
+              {
+                "createdTime": "2026-01-08T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 8.75,
+                  "Qty": 4,
+                  "SKU": "SKU-0007"
+                },
+                "id": "recinventory7"
+              },
+              {
+                "createdTime": "2026-01-09T00:00:00.000Z",
+                "fields": {
+                  "Price": 10.0,
+                  "Qty": 7,
+                  "SKU": "SKU-0008"
+                },
+                "id": "recinventory8"
+              },
+              {
+                "createdTime": "2026-01-10T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 11.25,
+                  "Qty": 10,
+                  "SKU": "SKU-0009"
+                },
+                "id": "recinventory9"
+              },
+              {
+                "createdTime": "2026-01-11T00:00:00.000Z",
+                "fields": {
+                  "Price": 12.5,
+                  "Qty": 13,
+                  "Received": "2026-10-11",
+                  "SKU": "SKU-0010"
+                },
+                "id": "recinventory10"
+              },
+              {
+                "createdTime": "2026-01-12T00:00:00.000Z",
+                "fields": {
+                  "Price": 13.75,
+                  "Qty": 16,
+                  "SKU": "SKU-0011"
+                },
+                "id": "recinventory11"
+              },
+              {
+                "createdTime": "2026-01-13T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 15.0,
+                  "Qty": 2,
+                  "SKU": "SKU-0012"
+                },
+                "id": "recinventory12"
+              },
+              {
+                "createdTime": "2026-01-14T00:00:00.000Z",
+                "fields": {
+                  "Price": 16.25,
+                  "Qty": 5,
+                  "SKU": "SKU-0013"
+                },
+                "id": "recinventory13"
+              },
+              {
+                "createdTime": "2026-01-15T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 17.5,
+                  "Qty": 8,
+                  "SKU": "SKU-0014"
+                },
+                "id": "recinventory14"
+              },
+              {
+                "createdTime": "2026-01-16T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 18.75,
+                  "Qty": 11,
+                  "Received": "2026-10-16",
+                  "SKU": "SKU-0015"
+                },
+                "id": "recinventory15"
+              },
+              {
+                "createdTime": "2026-01-17T00:00:00.000Z",
+                "fields": {
+                  "Price": 20.0,
+                  "Qty": 14,
+                  "SKU": "SKU-0016"
+                },
+                "id": "recinventory16"
+              },
+              {
+                "createdTime": "2026-01-18T00:00:00.000Z",
+                "fields": {
+                  "Price": 21.25,
+                  "Qty": 0,
+                  "SKU": "SKU-0017"
+                },
+                "id": "recinventory17"
+              },
+              {
+                "createdTime": "2026-01-19T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 22.5,
+                  "Qty": 3,
+                  "SKU": "SKU-0018"
+                },
+                "id": "recinventory18"
+              },
+              {
+                "createdTime": "2026-01-20T00:00:00.000Z",
+                "fields": {
+                  "Price": 23.75,
+                  "Qty": 6,
+                  "SKU": "SKU-0019"
+                },
+                "id": "recinventory19"
+              },
+              {
+                "createdTime": "2026-01-21T00:00:00.000Z",
+                "fields": {
+                  "Price": 25.0,
+                  "Qty": 9,
+                  "Received": "2026-10-21",
+                  "SKU": "SKU-0020"
+                },
+                "id": "recinventory20"
+              },
+              {
+                "createdTime": "2026-01-22T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Kind": "Part",
+                  "Price": 26.25,
+                  "Qty": 12,
+                  "SKU": "SKU-0021"
+                },
+                "id": "recinventory21"
+              },
+              {
+                "createdTime": "2026-01-23T00:00:00.000Z",
+                "fields": {
+                  "Price": 27.5,
+                  "Qty": 15,
+                  "SKU": "SKU-0022"
+                },
+                "id": "recinventory22"
+              },
+              {
+                "createdTime": "2026-01-24T00:00:00.000Z",
+                "fields": {
+                  "Price": 28.75,
+                  "Qty": 1,
+                  "SKU": "SKU-0023"
+                },
+                "id": "recinventory23"
+              },
+              {
+                "createdTime": "2026-01-25T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 30.0,
+                  "Qty": 4,
+                  "SKU": "SKU-0024"
+                },
+                "id": "recinventory24"
+              },
+              {
+                "createdTime": "2026-01-26T00:00:00.000Z",
+                "fields": {
+                  "Price": 31.25,
+                  "Qty": 7,
+                  "Received": "2026-10-26",
+                  "SKU": "SKU-0025"
+                },
+                "id": "recinventory25"
+              },
+              {
+                "createdTime": "2026-01-27T00:00:00.000Z",
+                "fields": {
+                  "Price": 32.5,
+                  "Qty": 10,
+                  "SKU": "SKU-0026"
+                },
+                "id": "recinventory26"
+              },
+              {
+                "createdTime": "2026-01-28T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 33.75,
+                  "Qty": 13,
+                  "SKU": "SKU-0027"
+                },
+                "id": "recinventory27"
+              },
+              {
+                "createdTime": "2026-01-29T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 35.0,
+                  "Qty": 16,
+                  "SKU": "SKU-0028"
+                },
+                "id": "recinventory28"
+              },
+              {
+                "createdTime": "2026-01-30T00:00:00.000Z",
+                "fields": {
+                  "Price": 36.25,
+                  "Qty": 2,
+                  "SKU": "SKU-0029"
+                },
+                "id": "recinventory29"
+              },
+              {
+                "createdTime": "2026-01-31T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 37.5,
+                  "Qty": 5,
+                  "Received": "2026-10-03",
+                  "SKU": "SKU-0030"
+                },
+                "id": "recinventory30"
+              },
+              {
+                "createdTime": "2026-02-01T00:00:00.000Z",
+                "fields": {
+                  "Price": 38.75,
+                  "Qty": 8,
+                  "SKU": "SKU-0031"
+                },
+                "id": "recinventory31"
+              },
+              {
+                "createdTime": "2026-02-02T00:00:00.000Z",
+                "fields": {
+                  "Price": 40.0,
+                  "Qty": 11,
+                  "SKU": "SKU-0032"
+                },
+                "id": "recinventory32"
+              },
+              {
+                "createdTime": "2026-02-03T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 41.25,
+                  "Qty": 14,
+                  "SKU": "SKU-0033"
+                },
+                "id": "recinventory33"
+              },
+              {
+                "createdTime": "2026-02-04T00:00:00.000Z",
+                "fields": {
+                  "Price": 42.5,
+                  "Qty": 0,
+                  "SKU": "SKU-0034"
+                },
+                "id": "recinventory34"
+              },
+              {
+                "createdTime": "2026-02-05T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 43.75,
+                  "Qty": 3,
+                  "Received": "2026-10-08",
+                  "SKU": "SKU-0035"
+                },
+                "id": "recinventory35"
+              },
+              {
+                "createdTime": "2026-02-06T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 45.0,
+                  "Qty": 6,
+                  "SKU": "SKU-0036"
+                },
+                "id": "recinventory36"
+              },
+              {
+                "createdTime": "2026-02-07T00:00:00.000Z",
+                "fields": {
+                  "Price": 46.25,
+                  "Qty": 9,
+                  "SKU": "SKU-0037"
+                },
+                "id": "recinventory37"
+              },
+              {
+                "createdTime": "2026-02-08T00:00:00.000Z",
+                "fields": {
+                  "Price": 47.5,
+                  "Qty": 12,
+                  "SKU": "SKU-0038"
+                },
+                "id": "recinventory38"
+              },
+              {
+                "createdTime": "2026-02-09T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 48.75,
+                  "Qty": 15,
+                  "SKU": "SKU-0039"
+                },
+                "id": "recinventory39"
+              },
+              {
+                "createdTime": "2026-02-10T00:00:00.000Z",
+                "fields": {
+                  "Price": 50.0,
+                  "Qty": 1,
+                  "Received": "2026-10-13",
+                  "SKU": "SKU-0040"
+                },
+                "id": "recinventory40"
+              },
+              {
+                "createdTime": "2026-02-11T00:00:00.000Z",
+                "fields": {
+                  "Price": 51.25,
+                  "Qty": 4,
+                  "SKU": "SKU-0041"
+                },
+                "id": "recinventory41"
+              },
+              {
+                "createdTime": "2026-02-12T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Kind": "Part",
+                  "Price": 52.5,
+                  "Qty": 7,
+                  "SKU": "SKU-0042"
+                },
+                "id": "recinventory42"
+              },
+              {
+                "createdTime": "2026-02-13T00:00:00.000Z",
+                "fields": {
+                  "Price": 53.75,
+                  "Qty": 10,
+                  "SKU": "SKU-0043"
+                },
+                "id": "recinventory43"
+              },
+              {
+                "createdTime": "2026-02-14T00:00:00.000Z",
+                "fields": {
+                  "Price": 55.0,
+                  "Qty": 13,
+                  "SKU": "SKU-0044"
+                },
+                "id": "recinventory44"
+              },
+              {
+                "createdTime": "2026-02-15T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 56.25,
+                  "Qty": 16,
+                  "Received": "2026-10-18",
+                  "SKU": "SKU-0045"
+                },
+                "id": "recinventory45"
+              },
+              {
+                "createdTime": "2026-02-16T00:00:00.000Z",
+                "fields": {
+                  "Price": 57.5,
+                  "Qty": 2,
+                  "SKU": "SKU-0046"
+                },
+                "id": "recinventory46"
+              },
+              {
+                "createdTime": "2026-02-17T00:00:00.000Z",
+                "fields": {
+                  "Price": 58.75,
+                  "Qty": 5,
+                  "SKU": "SKU-0047"
+                },
+                "id": "recinventory47"
+              },
+              {
+                "createdTime": "2026-02-18T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 60.0,
+                  "Qty": 8,
+                  "SKU": "SKU-0048"
+                },
+                "id": "recinventory48"
+              },
+              {
+                "createdTime": "2026-02-19T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 61.25,
+                  "Qty": 11,
+                  "SKU": "SKU-0049"
+                },
+                "id": "recinventory49"
+              },
+              {
+                "createdTime": "2026-02-20T00:00:00.000Z",
+                "fields": {
+                  "Price": 62.5,
+                  "Qty": 14,
+                  "Received": "2026-10-23",
+                  "SKU": "SKU-0050"
+                },
+                "id": "recinventory50"
+              },
+              {
+                "createdTime": "2026-02-21T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 63.75,
+                  "Qty": 0,
+                  "SKU": "SKU-0051"
+                },
+                "id": "recinventory51"
+              },
+              {
+                "createdTime": "2026-02-22T00:00:00.000Z",
+                "fields": {
+                  "Price": 65.0,
+                  "Qty": 3,
+                  "SKU": "SKU-0052"
+                },
+                "id": "recinventory52"
+              },
+              {
+                "createdTime": "2026-02-23T00:00:00.000Z",
+                "fields": {
+                  "Price": 66.25,
+                  "Qty": 6,
+                  "SKU": "SKU-0053"
+                },
+                "id": "recinventory53"
+              },
+              {
+                "createdTime": "2026-02-24T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 67.5,
+                  "Qty": 9,
+                  "SKU": "SKU-0054"
+                },
+                "id": "recinventory54"
+              },
+              {
+                "createdTime": "2026-02-25T00:00:00.000Z",
+                "fields": {
+                  "Price": 68.75,
+                  "Qty": 12,
+                  "Received": "2026-10-28",
+                  "SKU": "SKU-0055"
+                },
+                "id": "recinventory55"
+              },
+              {
+                "createdTime": "2026-02-26T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 70.0,
+                  "Qty": 15,
+                  "SKU": "SKU-0056"
+                },
+                "id": "recinventory56"
+              },
+              {
+                "createdTime": "2026-02-27T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 71.25,
+                  "Qty": 1,
+                  "SKU": "SKU-0057"
+                },
+                "id": "recinventory57"
+              },
+              {
+                "createdTime": "2026-02-28T00:00:00.000Z",
+                "fields": {
+                  "Price": 72.5,
+                  "Qty": 4,
+                  "SKU": "SKU-0058"
+                },
+                "id": "recinventory58"
+              },
+              {
+                "createdTime": "2026-03-01T00:00:00.000Z",
+                "fields": {
+                  "Price": 73.75,
+                  "Qty": 7,
+                  "SKU": "SKU-0059"
+                },
+                "id": "recinventory59"
+              },
+              {
+                "createdTime": "2026-01-01T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 75.0,
+                  "Qty": 10,
+                  "Received": "2026-10-05",
+                  "SKU": "SKU-0060"
+                },
+                "id": "recinventory60"
+              },
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Price": 76.25,
+                  "Qty": 13,
+                  "SKU": "SKU-0061"
+                },
+                "id": "recinventory61"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Price": 77.5,
+                  "Qty": 16,
+                  "SKU": "SKU-0062"
+                },
+                "id": "recinventory62"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Kind": "Part",
+                  "Price": 78.75,
+                  "Qty": 2,
+                  "SKU": "SKU-0063"
+                },
+                "id": "recinventory63"
+              },
+              {
+                "createdTime": "2026-01-05T00:00:00.000Z",
+                "fields": {
+                  "Price": 80.0,
+                  "Qty": 5,
+                  "SKU": "SKU-0064"
+                },
+                "id": "recinventory64"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Price": 81.25,
+                  "Qty": 8,
+                  "Received": "2026-10-10",
+                  "SKU": "SKU-0065"
+                },
+                "id": "recinventory65"
+              },
+              {
+                "createdTime": "2026-01-07T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 82.5,
+                  "Qty": 11,
+                  "SKU": "SKU-0066"
+                },
+                "id": "recinventory66"
+              },
+              {
+                "createdTime": "2026-01-08T00:00:00.000Z",
+                "fields": {
+                  "Price": 83.75,
+                  "Qty": 14,
+                  "SKU": "SKU-0067"
+                },
+                "id": "recinventory67"
+              },
+              {
+                "createdTime": "2026-01-09T00:00:00.000Z",
+                "fields": {
+                  "Price": 85.0,
+                  "Qty": 0,
+                  "SKU": "SKU-0068"
+                },
+                "id": "recinventory68"
+              },
+              {
+                "createdTime": "2026-01-10T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 86.25,
+                  "Qty": 3,
+                  "SKU": "SKU-0069"
+                },
+                "id": "recinventory69"
+              },
+              {
+                "createdTime": "2026-01-11T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 87.5,
+                  "Qty": 6,
+                  "Received": "2026-10-15",
+                  "SKU": "SKU-0070"
+                },
+                "id": "recinventory70"
+              },
+              {
+                "createdTime": "2026-01-12T00:00:00.000Z",
+                "fields": {
+                  "Price": 88.75,
+                  "Qty": 9,
+                  "SKU": "SKU-0071"
+                },
+                "id": "recinventory71"
+              },
+              {
+                "createdTime": "2026-01-13T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 90.0,
+                  "Qty": 12,
+                  "SKU": "SKU-0072"
+                },
+                "id": "recinventory72"
+              },
+              {
+                "createdTime": "2026-01-14T00:00:00.000Z",
+                "fields": {
+                  "Price": 91.25,
+                  "Qty": 15,
+                  "SKU": "SKU-0073"
+                },
+                "id": "recinventory73"
+              },
+              {
+                "createdTime": "2026-01-15T00:00:00.000Z",
+                "fields": {
+                  "Price": 92.5,
+                  "Qty": 1,
+                  "SKU": "SKU-0074"
+                },
+                "id": "recinventory74"
+              },
+              {
+                "createdTime": "2026-01-16T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 93.75,
+                  "Qty": 4,
+                  "Received": "2026-10-20",
+                  "SKU": "SKU-0075"
+                },
+                "id": "recinventory75"
+              },
+              {
+                "createdTime": "2026-01-17T00:00:00.000Z",
+                "fields": {
+                  "Price": 95.0,
+                  "Qty": 7,
+                  "SKU": "SKU-0076"
+                },
+                "id": "recinventory76"
+              },
+              {
+                "createdTime": "2026-01-18T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 96.25,
+                  "Qty": 10,
+                  "SKU": "SKU-0077"
+                },
+                "id": "recinventory77"
+              },
+              {
+                "createdTime": "2026-01-19T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 97.5,
+                  "Qty": 13,
+                  "SKU": "SKU-0078"
+                },
+                "id": "recinventory78"
+              },
+              {
+                "createdTime": "2026-01-20T00:00:00.000Z",
+                "fields": {
+                  "Price": 98.75,
+                  "Qty": 16,
+                  "SKU": "SKU-0079"
+                },
+                "id": "recinventory79"
+              },
+              {
+                "createdTime": "2026-01-21T00:00:00.000Z",
+                "fields": {
+                  "Price": 100.0,
+                  "Qty": 2,
+                  "Received": "2026-10-25",
+                  "SKU": "SKU-0080"
+                },
+                "id": "recinventory80"
+              },
+              {
+                "createdTime": "2026-01-22T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 101.25,
+                  "Qty": 5,
+                  "SKU": "SKU-0081"
+                },
+                "id": "recinventory81"
+              },
+              {
+                "createdTime": "2026-01-23T00:00:00.000Z",
+                "fields": {
+                  "Price": 102.5,
+                  "Qty": 8,
+                  "SKU": "SKU-0082"
+                },
+                "id": "recinventory82"
+              },
+              {
+                "createdTime": "2026-01-24T00:00:00.000Z",
+                "fields": {
+                  "Price": 103.75,
+                  "Qty": 11,
+                  "SKU": "SKU-0083"
+                },
+                "id": "recinventory83"
+              },
+              {
+                "createdTime": "2026-01-25T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Kind": "Part",
+                  "Price": 105.0,
+                  "Qty": 14,
+                  "SKU": "SKU-0084"
+                },
+                "id": "recinventory84"
+              },
+              {
+                "createdTime": "2026-01-26T00:00:00.000Z",
+                "fields": {
+                  "Price": 106.25,
+                  "Qty": 0,
+                  "Received": "2026-10-02",
+                  "SKU": "SKU-0085"
+                },
+                "id": "recinventory85"
+              },
+              {
+                "createdTime": "2026-01-27T00:00:00.000Z",
+                "fields": {
+                  "Price": 107.5,
+                  "Qty": 3,
+                  "SKU": "SKU-0086"
+                },
+                "id": "recinventory86"
+              },
+              {
+                "createdTime": "2026-01-28T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 108.75,
+                  "Qty": 6,
+                  "SKU": "SKU-0087"
+                },
+                "id": "recinventory87"
+              },
+              {
+                "createdTime": "2026-01-29T00:00:00.000Z",
+                "fields": {
+                  "Price": 110.0,
+                  "Qty": 9,
+                  "SKU": "SKU-0088"
+                },
+                "id": "recinventory88"
+              },
+              {
+                "createdTime": "2026-01-30T00:00:00.000Z",
+                "fields": {
+                  "Price": 111.25,
+                  "Qty": 12,
+                  "SKU": "SKU-0089"
+                },
+                "id": "recinventory89"
+              },
+              {
+                "createdTime": "2026-01-31T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 112.5,
+                  "Qty": 15,
+                  "Received": "2026-10-07",
+                  "SKU": "SKU-0090"
+                },
+                "id": "recinventory90"
+              },
+              {
+                "createdTime": "2026-02-01T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 113.75,
+                  "Qty": 1,
+                  "SKU": "SKU-0091"
+                },
+                "id": "recinventory91"
+              },
+              {
+                "createdTime": "2026-02-02T00:00:00.000Z",
+                "fields": {
+                  "Price": 115.0,
+                  "Qty": 4,
+                  "SKU": "SKU-0092"
+                },
+                "id": "recinventory92"
+              },
+              {
+                "createdTime": "2026-02-03T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 116.25,
+                  "Qty": 7,
+                  "SKU": "SKU-0093"
+                },
+                "id": "recinventory93"
+              },
+              {
+                "createdTime": "2026-02-04T00:00:00.000Z",
+                "fields": {
+                  "Price": 117.5,
+                  "Qty": 10,
+                  "SKU": "SKU-0094"
+                },
+                "id": "recinventory94"
+              },
+              {
+                "createdTime": "2026-02-05T00:00:00.000Z",
+                "fields": {
+                  "Price": 118.75,
+                  "Qty": 13,
+                  "Received": "2026-10-12",
+                  "SKU": "SKU-0095"
+                },
+                "id": "recinventory95"
+              },
+              {
+                "createdTime": "2026-02-06T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 120.0,
+                  "Qty": 16,
+                  "SKU": "SKU-0096"
+                },
+                "id": "recinventory96"
+              },
+              {
+                "createdTime": "2026-02-07T00:00:00.000Z",
+                "fields": {
+                  "Price": 121.25,
+                  "Qty": 2,
+                  "SKU": "SKU-0097"
+                },
+                "id": "recinventory97"
+              },
+              {
+                "createdTime": "2026-02-08T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 122.5,
+                  "Qty": 5,
+                  "SKU": "SKU-0098"
+                },
+                "id": "recinventory98"
+              },
+              {
+                "createdTime": "2026-02-09T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 123.75,
+                  "Qty": 8,
+                  "SKU": "SKU-0099"
+                },
+                "id": "recinventory99"
+              },
+              {
+                "createdTime": "2026-02-10T00:00:00.000Z",
+                "fields": {
+                  "Price": 125.0,
+                  "Qty": 11,
+                  "Received": "2026-10-17",
+                  "SKU": "SKU-0100"
+                },
+                "id": "recinventory100"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-02-11T00:00:00.000Z",
+                "fields": {
+                  "Price": 126.25,
+                  "Qty": 14,
+                  "SKU": "SKU-0101"
+                },
+                "id": "recinventory101"
+              },
+              {
+                "createdTime": "2026-02-12T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 127.5,
+                  "Qty": 0,
+                  "SKU": "SKU-0102"
+                },
+                "id": "recinventory102"
+              },
+              {
+                "createdTime": "2026-02-13T00:00:00.000Z",
+                "fields": {
+                  "Price": 128.75,
+                  "Qty": 3,
+                  "SKU": "SKU-0103"
+                },
+                "id": "recinventory103"
+              },
+              {
+                "createdTime": "2026-02-14T00:00:00.000Z",
+                "fields": {
+                  "Price": 130.0,
+                  "Qty": 6,
+                  "SKU": "SKU-0104"
+                },
+                "id": "recinventory104"
+              },
+              {
+                "createdTime": "2026-02-15T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Kind": "Part",
+                  "Price": 131.25,
+                  "Qty": 9,
+                  "Received": "2026-10-22",
+                  "SKU": "SKU-0105"
+                },
+                "id": "recinventory105"
+              },
+              {
+                "createdTime": "2026-02-16T00:00:00.000Z",
+                "fields": {
+                  "Price": 132.5,
+                  "Qty": 12,
+                  "SKU": "SKU-0106"
+                },
+                "id": "recinventory106"
+              },
+              {
+                "createdTime": "2026-02-17T00:00:00.000Z",
+                "fields": {
+                  "Price": 133.75,
+                  "Qty": 15,
+                  "SKU": "SKU-0107"
+                },
+                "id": "recinventory107"
+              },
+              {
+                "createdTime": "2026-02-18T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 135.0,
+                  "Qty": 1,
+                  "SKU": "SKU-0108"
+                },
+                "id": "recinventory108"
+              },
+              {
+                "createdTime": "2026-02-19T00:00:00.000Z",
+                "fields": {
+                  "Price": 136.25,
+                  "Qty": 4,
+                  "SKU": "SKU-0109"
+                },
+                "id": "recinventory109"
+              },
+              {
+                "createdTime": "2026-02-20T00:00:00.000Z",
+                "fields": {
+                  "Price": 137.5,
+                  "Qty": 7,
+                  "Received": "2026-10-27",
+                  "SKU": "SKU-0110"
+                },
+                "id": "recinventory110"
+              },
+              {
+                "createdTime": "2026-02-21T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 138.75,
+                  "Qty": 10,
+                  "SKU": "SKU-0111"
+                },
+                "id": "recinventory111"
+              },
+              {
+                "createdTime": "2026-02-22T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 140.0,
+                  "Qty": 13,
+                  "SKU": "SKU-0112"
+                },
+                "id": "recinventory112"
+              },
+              {
+                "createdTime": "2026-02-23T00:00:00.000Z",
+                "fields": {
+                  "Price": 141.25,
+                  "Qty": 16,
+                  "SKU": "SKU-0113"
+                },
+                "id": "recinventory113"
+              },
+              {
+                "createdTime": "2026-02-24T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 142.5,
+                  "Qty": 2,
+                  "SKU": "SKU-0114"
+                },
+                "id": "recinventory114"
+              },
+              {
+                "createdTime": "2026-02-25T00:00:00.000Z",
+                "fields": {
+                  "Price": 143.75,
+                  "Qty": 5,
+                  "Received": "2026-10-04",
+                  "SKU": "SKU-0115"
+                },
+                "id": "recinventory115"
+              },
+              {
+                "createdTime": "2026-02-26T00:00:00.000Z",
+                "fields": {
+                  "Price": 145.0,
+                  "Qty": 8,
+                  "SKU": "SKU-0116"
+                },
+                "id": "recinventory116"
+              },
+              {
+                "createdTime": "2026-02-27T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 146.25,
+                  "Qty": 11,
+                  "SKU": "SKU-0117"
+                },
+                "id": "recinventory117"
+              },
+              {
+                "createdTime": "2026-02-28T00:00:00.000Z",
+                "fields": {
+                  "Price": 147.5,
+                  "Qty": 14,
+                  "SKU": "SKU-0118"
+                },
+                "id": "recinventory118"
+              },
+              {
+                "createdTime": "2026-03-01T00:00:00.000Z",
+                "fields": {
+                  "Kind": "Part",
+                  "Price": 148.75,
+                  "Qty": 0,
+                  "SKU": "SKU-0119"
+                },
+                "id": "recinventory119"
+              },
+              {
+                "createdTime": "2026-01-01T00:00:00.000Z",
+                "fields": {
+                  "In stock": true,
+                  "Price": 150.0,
+                  "Qty": 3,
+                  "Received": "2026-10-09",
+                  "SKU": "SKU-0120"
+                },
+                "id": "recinventory120"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 1.25,
+                  "fldinventoryqty": 3,
+                  "fldinventorysku": "SKU-0001"
+                },
+                "id": "recinventory1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 2.5,
+                  "fldinventoryqty": 6,
+                  "fldinventorysku": "SKU-0002"
+                },
+                "id": "recinventory2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 3.75,
+                  "fldinventoryqty": 9,
+                  "fldinventorysku": "SKU-0003"
+                },
+                "id": "recinventory3"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-05T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 5.0,
+                  "fldinventoryqty": 12,
+                  "fldinventorysku": "SKU-0004"
+                },
+                "id": "recinventory4"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 6.25,
+                  "fldinventoryqty": 15,
+                  "fldinventoryreceived": "2026-10-06",
+                  "fldinventorysku": "SKU-0005"
+                },
+                "id": "recinventory5"
+              },
+              {
+                "createdTime": "2026-01-07T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 7.5,
+                  "fldinventoryqty": 1,
+                  "fldinventorysku": "SKU-0006"
+                },
+                "id": "recinventory6"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-08T00:00:00.000Z",
+                "fields": {
+                  "fldinventorykind": "Part",
+                  "fldinventoryprice": 8.75,
+                  "fldinventoryqty": 4,
+                  "fldinventorysku": "SKU-0007"
+                },
+                "id": "recinventory7"
+              },
+              {
+                "createdTime": "2026-01-09T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 10.0,
+                  "fldinventoryqty": 7,
+                  "fldinventorysku": "SKU-0008"
+                },
+                "id": "recinventory8"
+              },
+              {
+                "createdTime": "2026-01-10T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 11.25,
+                  "fldinventoryqty": 10,
+                  "fldinventorysku": "SKU-0009"
+                },
+                "id": "recinventory9"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-11T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 12.5,
+                  "fldinventoryqty": 13,
+                  "fldinventoryreceived": "2026-10-11",
+                  "fldinventorysku": "SKU-0010"
+                },
+                "id": "recinventory10"
+              },
+              {
+                "createdTime": "2026-01-12T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 13.75,
+                  "fldinventoryqty": 16,
+                  "fldinventorysku": "SKU-0011"
+                },
+                "id": "recinventory11"
+              },
+              {
+                "createdTime": "2026-01-13T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 15.0,
+                  "fldinventoryqty": 2,
+                  "fldinventorysku": "SKU-0012"
+                },
+                "id": "recinventory12"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-14T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 16.25,
+                  "fldinventoryqty": 5,
+                  "fldinventorysku": "SKU-0013"
+                },
+                "id": "recinventory13"
+              },
+              {
+                "createdTime": "2026-01-15T00:00:00.000Z",
+                "fields": {
+                  "fldinventorykind": "Part",
+                  "fldinventoryprice": 17.5,
+                  "fldinventoryqty": 8,
+                  "fldinventorysku": "SKU-0014"
+                },
+                "id": "recinventory14"
+              },
+              {
+                "createdTime": "2026-01-16T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 18.75,
+                  "fldinventoryqty": 11,
+                  "fldinventoryreceived": "2026-10-16",
+                  "fldinventorysku": "SKU-0015"
+                },
+                "id": "recinventory15"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-17T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 20.0,
+                  "fldinventoryqty": 14,
+                  "fldinventorysku": "SKU-0016"
+                },
+                "id": "recinventory16"
+              },
+              {
+                "createdTime": "2026-01-18T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 21.25,
+                  "fldinventoryqty": 0,
+                  "fldinventorysku": "SKU-0017"
+                },
+                "id": "recinventory17"
+              },
+              {
+                "createdTime": "2026-01-19T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 22.5,
+                  "fldinventoryqty": 3,
+                  "fldinventorysku": "SKU-0018"
+                },
+                "id": "recinventory18"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-20T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 23.75,
+                  "fldinventoryqty": 6,
+                  "fldinventorysku": "SKU-0019"
+                },
+                "id": "recinventory19"
+              },
+              {
+                "createdTime": "2026-01-21T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 25.0,
+                  "fldinventoryqty": 9,
+                  "fldinventoryreceived": "2026-10-21",
+                  "fldinventorysku": "SKU-0020"
+                },
+                "id": "recinventory20"
+              },
+              {
+                "createdTime": "2026-01-22T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventorykind": "Part",
+                  "fldinventoryprice": 26.25,
+                  "fldinventoryqty": 12,
+                  "fldinventorysku": "SKU-0021"
+                },
+                "id": "recinventory21"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-23T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 27.5,
+                  "fldinventoryqty": 15,
+                  "fldinventorysku": "SKU-0022"
+                },
+                "id": "recinventory22"
+              },
+              {
+                "createdTime": "2026-01-24T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 28.75,
+                  "fldinventoryqty": 1,
+                  "fldinventorysku": "SKU-0023"
+                },
+                "id": "recinventory23"
+              },
+              {
+                "createdTime": "2026-01-25T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 30.0,
+                  "fldinventoryqty": 4,
+                  "fldinventorysku": "SKU-0024"
+                },
+                "id": "recinventory24"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-26T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 31.25,
+                  "fldinventoryqty": 7,
+                  "fldinventoryreceived": "2026-10-26",
+                  "fldinventorysku": "SKU-0025"
+                },
+                "id": "recinventory25"
+              },
+              {
+                "createdTime": "2026-01-27T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 32.5,
+                  "fldinventoryqty": 10,
+                  "fldinventorysku": "SKU-0026"
+                },
+                "id": "recinventory26"
+              },
+              {
+                "createdTime": "2026-01-28T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 33.75,
+                  "fldinventoryqty": 13,
+                  "fldinventorysku": "SKU-0027"
+                },
+                "id": "recinventory27"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-29T00:00:00.000Z",
+                "fields": {
+                  "fldinventorykind": "Part",
+                  "fldinventoryprice": 35.0,
+                  "fldinventoryqty": 16,
+                  "fldinventorysku": "SKU-0028"
+                },
+                "id": "recinventory28"
+              },
+              {
+                "createdTime": "2026-01-30T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 36.25,
+                  "fldinventoryqty": 2,
+                  "fldinventorysku": "SKU-0029"
+                },
+                "id": "recinventory29"
+              },
+              {
+                "createdTime": "2026-01-31T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 37.5,
+                  "fldinventoryqty": 5,
+                  "fldinventoryreceived": "2026-10-03",
+                  "fldinventorysku": "SKU-0030"
+                },
+                "id": "recinventory30"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-02-01T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 38.75,
+                  "fldinventoryqty": 8,
+                  "fldinventorysku": "SKU-0031"
+                },
+                "id": "recinventory31"
+              },
+              {
+                "createdTime": "2026-02-02T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryprice": 40.0,
+                  "fldinventoryqty": 11,
+                  "fldinventorysku": "SKU-0032"
+                },
+                "id": "recinventory32"
+              },
+              {
+                "createdTime": "2026-02-03T00:00:00.000Z",
+                "fields": {
+                  "fldinventoryinstock": true,
+                  "fldinventoryprice": 41.25,
+                  "fldinventoryqty": 14,
+                  "fldinventorysku": "SKU-0033"
+                },
+                "id": "recinventory33"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Price": 1.25,
+            "Qty": 3,
+            "SKU": "SKU-0001"
+          },
+          "id": "recinventory1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Price": 2.5,
+            "Qty": 6,
+            "SKU": "SKU-0002"
+          },
+          "id": "recinventory2"
+        },
+        "status": 200
+      }
+    },
+    "tblscratch": {
+      "list": [
+        {
+          "body": {
+            "records": []
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": []
+          },
+          "status": 200
+        }
+      ]
+    }
+  }
+}

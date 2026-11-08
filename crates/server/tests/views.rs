@@ -175,7 +175,8 @@ async fn new_forms_default_to_all_editable_fields_in_order() {
         .iter()
         .map(|x| sid(&x["field_id"]))
         .collect();
-    let qty = f.table(&f.table_id).await["fields"][2]["id"].clone();
+    // Name, Page, Notes, Qty: the form leaves the page out.
+    let qty = f.table(&f.table_id).await["fields"][3]["id"].clone();
     assert_eq!(ids, [f.primary_id.as_str(), f.notes_id.as_str(), sid(&qty)]);
     assert_eq!(r.body["config"]["form"]["fields"][0]["required"], false);
 

@@ -59,7 +59,7 @@ async fn setup() -> Shared {
             "Public",
             "grid",
             json!({
-                "hidden_fields": [&secret, &dbl],
+                "hidden_fields": [&secret, &dbl, &p.f.page_id],
                 "field_order": [&p.status, &p.name],
                 "field_widths": { &p.name: 200, &secret: 90 },
             }),
@@ -871,6 +871,7 @@ async fn deleting_the_view_table_or_base_closes_the_link() {
 
     // Base.
     let s = setup().await;
+    s.p.f.free_the_base().await;
     s.p.f
         .app
         .delete(&s.p.f.owner, &format!("/api/bases/{}", s.p.f.base_id))

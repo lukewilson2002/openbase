@@ -134,6 +134,15 @@ describe("login, logout and the profile", () => {
     expectError(e, 400, "bad_request");
   });
 
+  it("sets the first day of the week, Sunday or Monday only", async () => {
+    const monday = parse("User", await asAdmin(() => api.auth.updateMe({ week_start: 1 })));
+    expect(monday.week_start).toBe(1);
+    expect(parse("User", await asAdmin(() => api.auth.me())).week_start).toBe(1);
+    expectError(await failure(asAdmin(() => api.auth.updateMe({ week_start: 2 }))), 400, "bad_request");
+    const sunday = parse("User", await asAdmin(() => api.auth.updateMe({ week_start: 0 })));
+    expect(sunday.week_start).toBe(0);
+  });
+
   it("changes the password and keeps the current session", async () => {
     const e = await failure(asAdmin(() => api.auth.changePassword({ current_password: "not it", new_password: `pw-${rand()}-${rand()}` })));
     expectError(e, 403, "forbidden");
@@ -334,7 +343,9 @@ describe("invitations", () => {
   it("creates a workspace and a base through the workspace API", async () => {
     const ws = parse("WorkspaceSummary", await asAdmin(() => api.workspaces.create("Contract workspace")));
     expect(admin.lastStatus).toBe(201);
-    expect(ws).toMatchObject({ name: "Contract workspace", role: "owner", bases: [] });
+    // A new workspace starts with its top-level project, named after it.
+    expect(ws).toMatchObject({ name: "Contract workspace", role: "owner" });
+    expect(ws.bases.map((b) => b.name)).toEqual(["Contract workspace"]);
     workspaceId = ws.id;
     const created = parse("BaseSchema", await asAdmin(() => api.bases.create(workspaceId, { name: "Contract base" })));
     expect(admin.lastStatus).toBe(201);
@@ -513,7 +524,7 @@ describe("administration", () => {
     const stats = parse("InstanceStats", await asAdmin(api.admin.stats));
     expect(stats.users).toBe(4);
     expect(stats.workspaces).toBe(1);
-    expect(stats.bases).toBe(1);
+    expect(stats.bases).toBe(2); // the workspace's top-level project and "Contract base"
     expect(stats.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 });

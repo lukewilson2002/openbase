@@ -11,11 +11,16 @@ use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::store::schema::{self, PositionScope, TableRow, Touched};
-use crate::store::{duplicate, fields};
+use crate::store::{duplicate, fields, pages};
 
 /// Name of the primary field every new table starts with.
 pub const PRIMARY_FIELD_NAME: &str = "Name";
-/// Name of the grid view every new table starts with.
+/// Colours new tables take in turn, so collections side by side look different. Migration 0016
+/// coloured the tables that existed with the same cycle; keep the two lists in step.
+pub const TABLE_COLORS: [&str; 10] = [
+    "blue", "orange", "green", "purple", "yellow", "pink", "teal", "red", "cyan", "gray",
+];
+
 /// Name of a table's default grid (see `View::is_default`); apps show it as an icon, not by name.
 pub const DEFAULT_VIEW_NAME: &str = "Default grid";
 
@@ -58,17 +63,39 @@ pub fn free_name(conn: &Connection, base_id: &str, wanted: &str) -> AppResult<St
     ))
 }
 
-/// Create a table with its primary single-line-text field "Name" and its default
-/// grid (no other views). Used by base and table creation.
+/// Create a table with its primary text field "Name", its page property (see
+/// [`pages::create_body_field`]) and its default grid (no other views). Used by base and table
+/// creation.
 pub fn create(
     tx: &Transaction,
     base_id: &str,
     name: &str,
     icon: Option<&str>,
+    color: Option<&str>,
+    user_id: &str,
+) -> AppResult<TableRow> {
+    let table = create_without_page(tx, base_id, name, icon, color, user_id)?;
+    pages::create_body_field(tx, &table.id)?;
+    Ok(table)
+}
+
+/// [`create`] without the page property, for callers that add the fields they were given first
+/// and then call [`pages::create_body_field`]: the page takes the first free "Page N" after those
+/// fields (a file with a "Page" column keeps it) and is left out when they fill the table. The
+/// table's colour is `color`, else the next of [`TABLE_COLORS`] after the tables the base has had.
+pub fn create_without_page(
+    tx: &Transaction,
+    base_id: &str,
+    name: &str,
+    icon: Option<&str>,
+    color: Option<&str>,
     user_id: &str,
 ) -> AppResult<TableRow> {
     let name = schema::validate_name(name, "table")?;
     let icon = schema::icon_on_create(icon)?;
+    if let Some(color) = color {
+        schema::validate_color(color)?;
+    }
     let count: i64 = tx.query_row(
         "SELECT count(*) FROM tables WHERE base_id = ?1 AND deleted_at IS NULL",
         [base_id],
@@ -81,15 +108,22 @@ pub fn create(
         )));
     }
     ensure_name_free(tx, base_id, &name, None)?;
+    // Trashed tables count: they still sit in the order until they are purged.
+    let made: i64 = tx.query_row(
+        "SELECT count(*) FROM tables WHERE base_id = ?1",
+        [base_id],
+        |r| r.get(0),
+    )?;
+    let color = color.unwrap_or(TABLE_COLORS[made as usize % TABLE_COLORS.len()]);
 
     let now = now_ms();
     let table_id = new_id(ob_core::ids::TABLE);
     let primary_id = new_id(ob_core::ids::FIELD);
     let position = schema::next_position(tx, PositionScope::TablesIn(base_id))?;
     tx.execute(
-        "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![table_id, base_id, name, icon, position, primary_id, now],
+        "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at, color)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![table_id, base_id, name, icon, position, primary_id, now, color],
     )?;
     let primary = Field {
         id: primary_id,
@@ -113,10 +147,25 @@ pub fn create(
     schema::live_table(tx, &table_id)
 }
 
-/// Apply a rename / icon / description / position update.
+/// Apply a rename / icon / description / position / colour / record name / Home date / Done
+/// update. Everything is checked before anything is written, so a bad value changes nothing.
 pub fn update(tx: &Transaction, table_id: &str, patch: &UpdateTable) -> AppResult<TableRow> {
     let table = schema::live_table(tx, table_id)?;
     let icon = schema::icon_patch(&patch.icon)?;
+    if let Some(color) = &patch.color {
+        schema::validate_color(color)?;
+    }
+    let noun = patch
+        .record_noun
+        .as_deref()
+        .map(pages::validate_record_noun)
+        .transpose()?;
+    if let Some(home) = &patch.home_date_field_id {
+        pages::set_home_date_field(tx, table_id, home.as_deref())?;
+    }
+    if let Some(done) = &patch.done_field_id {
+        pages::set_done_field(tx, table_id, done.as_deref())?;
+    }
     if let Some(name) = &patch.name {
         let name = schema::validate_name(name, "table")?;
         ensure_name_free(tx, &table.base_id, &name, Some(table_id))?;
@@ -129,6 +178,18 @@ pub fn update(tx: &Transaction, table_id: &str, patch: &UpdateTable) -> AppResul
         tx.execute(
             "UPDATE tables SET icon = ?2 WHERE id = ?1",
             params![table_id, icon],
+        )?;
+    }
+    if let Some(color) = &patch.color {
+        tx.execute(
+            "UPDATE tables SET color = ?2 WHERE id = ?1",
+            params![table_id, color],
+        )?;
+    }
+    if let Some(noun) = noun {
+        tx.execute(
+            "UPDATE tables SET record_noun = ?2 WHERE id = ?1",
+            params![table_id, noun],
         )?;
     }
     if let Some(desc) = &patch.description {
@@ -196,6 +257,12 @@ pub fn to_dto(conn: &Connection, table: &TableRow, user_id: &str) -> AppResult<T
         icon: table.icon.clone(),
         description: table.description.clone(),
         primary_field_id: table.primary_field_id.clone(),
+        color: table.color.clone(),
+        body_field_id: table.body_field_id.clone(),
+        home_date_field_id: table.home_date_field_id.clone(),
+        done_field_id: table.done_field_id.clone(),
+        record_noun: table.record_noun.clone(),
+        record_count: schema::record_count(conn, &table.id)?,
         fields: schema::fields_for_client(&stored),
         views,
     })

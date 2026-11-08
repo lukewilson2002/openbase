@@ -63,13 +63,20 @@ async fn meta_lists_the_bases_a_token_can_reach_with_permission_levels() {
         let r = v.app().get(&t, "/api/v1/meta/bases").await;
         assert_eq!(r.body["bases"][0]["permissionLevel"], level, "{role:?}");
     }
-    // Deleted bases disappear.
+    // Deleted bases disappear (the one that took over as the workspace's top level stays).
+    let spare = v.p.f.free_the_base().await;
     v.app()
         .delete(&v.p.f.owner, &format!("/api/bases/{}", v.base_id()))
         .await
         .assert_status(200);
     let r = v.app().get(&v.token, "/api/v1/meta/bases").await;
-    assert_eq!(r.body["bases"], json!([]));
+    let listed: Vec<&str> = r.body["bases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(listed, [spare.as_str()]);
 }
 
 #[tokio::test]
@@ -102,6 +109,7 @@ async fn meta_tables_describes_tables_fields_and_views() {
         types,
         [
             ("Name", "singleLineText"),
+            ("Page", "richText"),
             ("Notes", "richText"),
             ("Age", "number"),
             ("Status", "singleSelect"),

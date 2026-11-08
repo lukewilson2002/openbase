@@ -92,7 +92,13 @@ async fn an_agent_sets_changes_keeps_and_clears_icons_on_workspace_base_and_tabl
     let base_id = base["base"]["id"].as_str().unwrap().to_string();
     let schema = a.call("get_base_schema", json!({"base_id": base_id})).await;
     assert_eq!(schema["icon"], "store");
-    let in_list = listed(&a.call("list_bases", json!({})).await, &ws_id)["bases"][0].clone();
+    let in_list = listed(&a.call("list_bases", json!({})).await, &ws_id)["bases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["id"] == base_id.as_str())
+        .unwrap()
+        .clone();
     assert_eq!(in_list["icon"], "store");
 
     let kept = a
@@ -174,7 +180,10 @@ async fn an_agent_sets_changes_keeps_and_clears_icons_on_workspace_base_and_tabl
             json!({"base_id": base_id, "table": "Orders"}),
         )
         .await;
-    assert!(err.contains("name, description and/or icon"), "{err}");
+    assert!(
+        err.contains("name, description, colour and/or icon"),
+        "{err}"
+    );
 
     // ---- the REST API sees the same values (and keeps its own, format-only validation)
     let rest = r

@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "body": {
+      "tables": [
+        {
+          "fields": [
+            {
+              "id": "fldreadingname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldreadingreview",
+              "name": "Review",
+              "type": "richText"
+            }
+          ],
+          "id": "tblreading",
+          "name": "Reading",
+          "primaryFieldId": "fldreadingname",
+          "views": [
+            {
+              "id": "viwdefreading",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "tables": {
+    "tblreading": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Name": "A book",
+                  "Review": "Good."
+                },
+                "id": "recreading1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldreadingname": "A book",
+                  "fldreadingreview": "Good."
+                },
+                "id": "recreading1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Name": "A book",
+            "Review": "Good."
+          },
+          "id": "recreading1"
+        },
+        "status": 200
+      }
+    }
+  }
+}

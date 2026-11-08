@@ -35,4 +35,9 @@ limit?: number | null,
 /**
  * IANA zone for date groups and relative dates (default: the caller's).
  */
-timezone?: string | null, };
+timezone?: string | null, 
+/**
+ * First day of the week for the calendar-week dates of the view's filter: 0 = Sunday,
+ * 1 = Monday (default: the caller's profile, then Sunday).
+ */
+week_start?: number | null, };
