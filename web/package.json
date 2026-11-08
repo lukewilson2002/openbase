@@ -55,7 +55,8 @@
   "overrides": {
     "@glideapps/glide-data-grid": {
       "react": "$react",
-      "react-dom": "$react-dom"
+      "react-dom": "$react-dom",
+      "minimatch": ">=11.0.1"
     }
   },
   "devDependencies": {
