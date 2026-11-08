@@ -407,6 +407,49 @@ test("opens the record's page with Shift+Space, comments, steps with Alt+Down, a
   await expect(canvas(page)).toBeVisible();
 });
 
+test("the record's page edits its title where it stands, lists what the record has, and Hide from pages writes the default grid", async ({ page }) => {
+  await gotoGrid(page);
+  await clickCell(page, "name", 1);
+  await page.keyboard.press("Shift+Space");
+  const recordId = openRecordId(page);
+  const main = page.getByRole("main", { name: "Record" });
+  const title = main.getByRole("textbox", { name: "Name" });
+  await expect(title).toHaveValue("Bravo");
+  await expect(main.getByRole("heading", { level: 1 })).toHaveAccessibleName("Bravo");
+  await expect(main.locator(".rounded-tile")).toHaveText("B");
+  // The title is not listed again; the properties with a value are, the others fold.
+  const list = main.getByRole("region", { name: "Properties" });
+  await expect(list.locator("dt")).toHaveText(["Qty", "Status"]);
+  await expect(list.getByRole("button", { name: /^Show \d+ empty properties$/ })).toBeVisible();
+  const value = async () => ((await (await page.request.get(`/api/tables/${fx.tableId}/records/${recordId}`)).json()) as { values: Record<string, unknown> }).values[fx.fields.name];
+
+  await test.step("Enter saves the title and moves on", async () => {
+    await title.fill("Bravo!");
+    await title.press("Enter");
+    await expect.poll(value).toBe("Bravo!");
+    await expect(main.getByRole("navigation", { name: "Breadcrumb" }).getByText("Bravo!")).toBeVisible();
+    await title.fill("Bravo");
+    await title.press("Enter");
+    await expect.poll(value).toBe("Bravo");
+  });
+
+  await test.step("Hide from pages and Show on pages change the default grid at once", async () => {
+    const hidden = async () => {
+      const base = (await (await page.request.get(`/api/bases/${fx.baseId}`)).json()) as { tables: { id: string; views: { is_default: boolean; config: { hidden_fields: string[] } }[] }[] };
+      return base.tables.find((t) => t.id === fx.tableId)!.views.find((v) => v.is_default)!.config.hidden_fields;
+    };
+    await list.getByRole("button", { name: "Qty", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Hide from pages" }).click();
+    await expect.poll(hidden).toContain(fx.fields.qty);
+    await expect(list.locator("dt")).toHaveText(["Status"]);
+    await list.getByRole("button", { name: "Show 1 hidden property" }).click();
+    await list.getByRole("button", { name: "Qty", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Show on pages" }).click();
+    await expect.poll(hidden).not.toContain(fx.fields.qty);
+    await expect(list.locator("dt")).toHaveText(["Qty", "Status"]);
+  });
+});
+
 test("an old ?record= link lands on the record's page", async ({ page }) => {
   await gotoGrid(page);
   await clickCell(page, "name", 2);
