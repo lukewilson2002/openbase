@@ -1,0 +1,82 @@
+{
+  "about": "One table of example values, read by two tests: web/src/lib/guessType/index.test.ts (FLD-1, the guesser behind Add property and the capture box) and the unit test `shared_examples_agree_with_the_web_guesser` in crates/server/src/store/csv_io.rs (APP-11, the CSV importer's `infer_kind` run on a column of that one value). `guess` is what FLD-1 returns; `csv` is what `infer_kind` returns, both as `type` plus the options named here (other options are not compared). `agree` is true where the two give the same type and the same compared options; where it is false, `why` says what differs, and both tests check that the difference is real, so fixing one side means flipping the row. Add a row when a rule changes; keep `value` to a single cell.",
+  "cases": [
+    { "value": "", "guess": { "rule": 1, "type": "text", "options": { "multiline": false } }, "csv": { "type": "text", "options": { "multiline": false } }, "agree": true },
+
+    { "value": "yes", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "checkbox" }, "agree": true },
+    { "value": "No", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "checkbox" }, "agree": true },
+    { "value": "TRUE", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "checkbox" }, "agree": true },
+    { "value": "false", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "checkbox" }, "agree": true },
+    { "value": "✓", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads only words, not tick marks" },
+    { "value": "✗", "guess": { "rule": 2, "type": "checkbox" }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads only words, not tick marks" },
+    { "value": "checked", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "checkbox" }, "agree": false, "why": "the importer also reads checked and unchecked; FLD-1 lists yes, no, true, false and the two marks" },
+    { "value": "yes please", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+
+    { "value": "dana@harperco.example", "guess": { "rule": 3, "type": "email" }, "csv": { "type": "email" }, "agree": true },
+    { "value": "dana@harperco", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+
+    { "value": "https://harperco.example/book", "guess": { "rule": 4, "type": "url" }, "csv": { "type": "url" }, "agree": true },
+    { "value": "http://harperco.example", "guess": { "rule": 4, "type": "url" }, "csv": { "type": "url" }, "agree": true },
+    { "value": "www.harperco.example", "guess": { "rule": 4, "type": "url" }, "csv": { "type": "text" }, "agree": false, "why": "the importer needs http:// or https://" },
+    { "value": "harperco.example/book", "guess": { "rule": 4, "type": "url" }, "csv": { "type": "text" }, "agree": false, "why": "the importer needs http:// or https://" },
+    { "value": "harperco.example", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+
+    { "value": "+1 870 555 0100", "guess": { "rule": 5, "type": "phone" }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no phone type" },
+    { "value": "(870) 555-0100", "guess": { "rule": 5, "type": "phone" }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no phone type" },
+    { "value": "1234567", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "number", "options": { "precision": 0 } }, "agree": true },
+
+    { "value": "$600", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "$", "precision": 2 } }, "csv": { "type": "currency", "options": { "symbol": "$", "precision": 2 } }, "agree": true },
+    { "value": "€1,200.50", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "€", "precision": 2 } }, "csv": { "type": "currency", "options": { "symbol": "€", "precision": 2 } }, "agree": true },
+    { "value": "£5", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "£", "precision": 2 } }, "csv": { "type": "currency", "options": { "symbol": "£", "precision": 2 } }, "agree": true },
+    { "value": "¥1000", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "¥", "precision": 2 } }, "csv": { "type": "currency", "options": { "symbol": "¥", "precision": 2 } }, "agree": true },
+    { "value": "$1.125", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "$", "precision": 3 } }, "csv": { "type": "currency", "options": { "symbol": "$", "precision": 3 } }, "agree": true },
+    { "value": "-$5", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "$" } }, "csv": { "type": "currency", "options": { "symbol": "$" } }, "agree": true },
+    { "value": "$-5", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "$" } }, "csv": { "type": "currency", "options": { "symbol": "$" } }, "agree": true },
+    { "value": "-$-5", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "600 €", "guess": { "rule": 6, "type": "currency", "options": { "symbol": "€", "precision": 2 } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads the symbol only in front" },
+
+    { "value": "15%", "guess": { "rule": 7, "type": "percent", "options": { "precision": 0 } }, "csv": { "type": "percent", "options": { "precision": 0 } }, "agree": true },
+    { "value": "12.5%", "guess": { "rule": 7, "type": "percent", "options": { "precision": 1 } }, "csv": { "type": "percent", "options": { "precision": 1 } }, "agree": true },
+    { "value": "12.5 %", "guess": { "rule": 7, "type": "percent", "options": { "precision": 1 } }, "csv": { "type": "percent", "options": { "precision": 1 } }, "agree": true },
+    { "value": "-3%", "guess": { "rule": 7, "type": "percent", "options": { "precision": 0 } }, "csv": { "type": "percent", "options": { "precision": 0 } }, "agree": true },
+    { "value": "1,000%", "guess": { "rule": 7, "type": "percent", "options": { "precision": 0 } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads no thousands separators" },
+
+    { "value": "1:30", "guess": { "rule": 8, "type": "duration", "options": { "format": "h_mm" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no duration type" },
+    { "value": "2h 30m", "guess": { "rule": 8, "type": "duration", "options": { "format": "h_mm" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no duration type" },
+    { "value": "45 min", "guess": { "rule": 8, "type": "duration", "options": { "format": "h_mm" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no duration type" },
+
+    { "value": "2026-11-14", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "iso" } }, "csv": { "type": "date", "options": { "include_time": false, "date_format": "iso" } }, "agree": true },
+    { "value": "2026-11-14T10:00:00Z", "guess": { "rule": 9, "type": "date", "options": { "include_time": true, "date_format": "iso", "time_format": "h24" } }, "csv": { "type": "date", "options": { "include_time": true, "date_format": "iso", "time_format": "h24" } }, "agree": true },
+    { "value": "2026-11-14 10:00", "guess": { "rule": 9, "type": "date", "options": { "include_time": true, "date_format": "iso", "time_format": "h24" } }, "csv": { "type": "date", "options": { "include_time": true, "date_format": "iso", "time_format": "h24" } }, "agree": true },
+    { "value": "03/25/2026", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "us" } }, "csv": { "type": "date", "options": { "include_time": false, "date_format": "us" } }, "agree": true },
+    { "value": "25/03/2026", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "european" } }, "csv": { "type": "date", "options": { "include_time": false, "date_format": "european" } }, "agree": true },
+    { "value": "01/02/2026", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "us" } }, "csv": { "type": "date", "options": { "include_time": false, "date_format": "us" } }, "agree": true },
+    { "value": "13/13/2026", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "2026-13-45", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "11/14", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "us" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer wants a four-digit year" },
+    { "value": "Nov 14", "guess": { "rule": 10, "type": "date", "options": { "include_time": false, "date_format": "friendly" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads numeric and ISO dates only" },
+    { "value": "Nov 14 9am", "guess": { "rule": 9, "type": "date", "options": { "include_time": true, "date_format": "friendly", "time_format": "h12" } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads numeric and ISO dates only" },
+    { "value": "tomorrow", "guess": { "rule": 10, "type": "date", "options": { "include_time": false } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads numeric and ISO dates only" },
+    { "value": "Call Dana tomorrow", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "9am", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+
+    { "value": "42", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "number", "options": { "precision": 0 } }, "agree": true },
+    { "value": "0", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "number", "options": { "precision": 0 } }, "agree": true },
+    { "value": "-5", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "number", "options": { "precision": 0 } }, "agree": true },
+    { "value": "3.5", "guess": { "rule": 11, "type": "number", "options": { "precision": 1 } }, "csv": { "type": "number", "options": { "precision": 1 } }, "agree": true },
+    { "value": "0.125", "guess": { "rule": 11, "type": "number", "options": { "precision": 3 } }, "csv": { "type": "number", "options": { "precision": 3 } }, "agree": true },
+    { "value": "2024", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "number", "options": { "precision": 0 } }, "agree": true },
+    { "value": "1,250.5", "guess": { "rule": 11, "type": "number", "options": { "precision": 1 } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads no thousands separators" },
+    { "value": "1,000", "guess": { "rule": 11, "type": "number", "options": { "precision": 0 } }, "csv": { "type": "text" }, "agree": false, "why": "the importer reads no thousands separators" },
+    { "value": "007", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "02134", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "12345678901234567890", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+    { "value": "1.123456789", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true },
+
+    { "value": "★★★", "guess": { "rule": 12, "type": "rating", "options": { "max": 5 } }, "csv": { "type": "text" }, "agree": false, "why": "the importer has no rating type" },
+
+    { "value": "Line one\nLine two", "guess": { "rule": 13, "type": "text", "options": { "multiline": true } }, "csv": { "type": "text", "options": { "multiline": true } }, "agree": true },
+    { "value": "Harper", "guess": { "rule": 14, "type": "text", "options": { "multiline": false } }, "csv": { "type": "text", "options": { "multiline": false } }, "agree": true },
+    { "value": "Nov", "guess": { "rule": 14, "type": "text" }, "csv": { "type": "text" }, "agree": true }
+  ]
+}

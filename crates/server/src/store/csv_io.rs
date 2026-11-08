@@ -911,6 +911,64 @@ mod tests {
         }
     }
 
+    /// The web's property type guesser (FLD-1, `web/src/lib/guessType`) and this column guesser are
+    /// tested against one table of example values (APP-11). Where `agree` is set they must give the
+    /// same type and options; where it is not, the table says why and this checks the difference is
+    /// still there, so closing a gap on either side means flipping the row.
+    #[test]
+    fn shared_examples_agree_with_the_web_guesser() {
+        const TABLE: &str = include_str!("../../../../web/src/lib/guessType/examples.json");
+        let table: Json = serde_json::from_str(TABLE).expect("examples.json is valid JSON");
+        let cases = table["cases"].as_array().expect("a list of cases");
+        assert!(cases.len() > 50, "the table lost its rows");
+
+        // `want` names the options to compare; every one must equal what `kind` carries.
+        let options_match = |kind: &Json, want: &Json| -> bool {
+            want.as_object()
+                .is_none_or(|want| want.iter().all(|(k, v)| kind["options"].get(k) == Some(v)))
+        };
+
+        let (mut agreed, mut differ) = (0, 0);
+        for case in cases {
+            let value = case["value"].as_str().expect("a string value");
+            let actual = serde_json::to_value(infer_kind(&[value], false)).expect("a field kind");
+            let label = format!("{value:?}");
+
+            // What the table says this importer does must be what it does.
+            assert_eq!(actual["type"], case["csv"]["type"], "type for {label}");
+            assert!(
+                options_match(&actual, &case["csv"]["options"]),
+                "options for {label}: {actual} vs {}",
+                case["csv"]["options"]
+            );
+
+            let same = actual["type"] == case["guess"]["type"]
+                && options_match(&actual, &case["guess"]["options"]);
+            if case["agree"].as_bool().expect("agree is a boolean") {
+                assert!(
+                    same,
+                    "{label} is marked as agreeing: web {} vs importer {actual}",
+                    case["guess"]
+                );
+                agreed += 1;
+            } else {
+                assert!(
+                    case["why"].as_str().is_some_and(|w| !w.is_empty()),
+                    "{label} differs and says why"
+                );
+                assert!(
+                    !same,
+                    "{label} is marked as differing but the two now agree; set agree to true"
+                );
+                differ += 1;
+            }
+        }
+        assert!(
+            agreed >= 30 && differ >= 10,
+            "{agreed} agree, {differ} differ"
+        );
+    }
+
     #[test]
     fn mapping_rules() {
         let csv = parse(b"a,b,c\n1,2,3\n", true).unwrap();
