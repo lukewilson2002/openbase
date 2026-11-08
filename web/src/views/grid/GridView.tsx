@@ -49,7 +49,8 @@ import { atLeast } from "@/lib/roles";
 import { personColors } from "@/lib/colors";
 import { useTheme } from "@/theme/ThemeProvider";
 import { formatAggregate, aggregationShortLabel } from "@/lib/cells/aggregations";
-import { displayText, type FormatCtx } from "@/lib/cells/format";
+import { newRecordLabel } from "@/lib/recordNoun";
+import { displayText, linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { jsonEqual, linkNames, parseText, type ParseCtx } from "@/lib/cells/parse";
 import { isEmptyValue, writableValues } from "@/lib/cells/wire";
 import type { ViewProps } from "../types";
@@ -152,7 +153,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
   const colors = useMemo(() => personColors(people), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id), linkedColor: linkedColorIn(schema.tables) }), [timeZone, userNames, emails, colors, schema.tables]);
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions: canManageFields, format, currentUserId: me.data?.id ?? null, schema }),
     [schema, table.id, people, timeZone, canManageFields, format, me.data?.id],
@@ -997,6 +998,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     rowCount: rowCountForGrid,
     rowHeight,
     wrapHeaders: config.wrap_headers,
+    newRecordLabel: newRecordLabel(table),
     freezeColumns,
     primaryPin: desktop || !columns[0]?.isPrimary ? null : { pinned, onToggle: togglePrimaryPinned },
     showSummary: !empty,
@@ -1201,9 +1203,9 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       <ConfirmDialog
         open={!!confirmField}
         onOpenChange={(o) => !o && setConfirmField(null)}
-        title={`Delete field "${confirmField?.name ?? ""}"?`}
-        description="The field and its values are removed from every view. Undo brings it back, as does the trash."
-        confirmLabel="Delete field"
+        title={`Delete property "${confirmField?.name ?? ""}"?`}
+        description="The property and its values are removed from every view. Undo brings it back, as does the trash."
+        confirmLabel="Delete property"
         destructive
         onConfirm={async () => {
           if (!confirmField) return;

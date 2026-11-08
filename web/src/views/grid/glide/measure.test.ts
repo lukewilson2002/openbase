@@ -20,16 +20,26 @@ describe("measureRecordCell", () => {
 
   it("fits every chip with its padding and the gaps between them, and a person's face", () => {
     const tags = cell({ field: ALL_FIELDS.multiple_select!, chips: [{ text: "In progress" }, { text: "Platform" }] });
-    expect(measureRecordCell(ctx, tags, theme)).toBe(11 * 7 + 12 + 8 * 7 + 12 + 4 + 28);
+    expect(measureRecordCell(ctx, tags, theme)).toBe(11 * 7 + 16 + 8 * 7 + 16 + 4 + 28);
     const person = cell({ field: ALL_FIELDS.user!, chips: [{ text: "Alan Turing" }] });
     expect(measureRecordCell(ctx, person, theme)).toBe(11 * 7 + 12 + 18 + 28);
   });
 
-  it("fits a linked record's small card: its title in a medium-weight font, with a card's padding", () => {
+  it("fits a linked record's chip: its title in a medium-weight 12 px font, with the chip's padding and its collection's mark", () => {
     const fonts: string[] = [];
     const spy = { ...ctx, set font(f: string) { fonts.push(f); }, get font() { return fonts.at(-1) ?? ""; }, measureText: ctx.measureText } as unknown as CanvasRenderingContext2D;
     const links = cell({ field: ALL_FIELDS.link!, chips: [{ text: "Launch" }, { text: "Docs" }] });
     expect(measureRecordCell(spy, links, theme)).toBe(6 * 7 + 14 + 4 * 7 + 14 + 4 + 28);
-    expect(fonts.at(-1)).toBe("500 13px sans-serif");
+    expect(fonts.at(-1)).toBe("500 12px sans-serif");
+    // With the colour of the linked collection each chip also holds an 8 px mark and the 6 px after it.
+    const marked = cell({ field: ALL_FIELDS.link!, chips: [{ text: "Launch", color: "blue" }, { text: "Docs", color: "blue" }] });
+    expect(measureRecordCell(spy, marked, theme)).toBe(6 * 7 + 28 + 4 * 7 + 28 + 4 + 28);
+  });
+
+  it("measures the primary field's text in its 600 weight", () => {
+    const fonts: string[] = [];
+    const spy = { ...ctx, set font(f: string) { fonts.push(f); }, get font() { return fonts.at(-1) ?? ""; }, measureText: ctx.measureText } as unknown as CanvasRenderingContext2D;
+    measureRecordCell(spy, cell({ display: "Billing v2", isPrimary: true }), theme);
+    expect(fonts.at(-1)).toBe("600 14px sans-serif");
   });
 });

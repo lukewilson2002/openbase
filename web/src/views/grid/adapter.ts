@@ -136,6 +136,8 @@ export interface GridAdapterProps {
    * or null for rows that are not records (group headers, the summary row), which show nothing.
    */
   rowNumber(row: number): number | null;
+  /** The row that ends a group: "New client", after the collection's record name. */
+  newRecordLabel: string;
   /** Highlight this text inside cells (search). */
   searchTerm: string;
   dark: boolean;

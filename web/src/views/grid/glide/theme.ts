@@ -7,7 +7,8 @@ const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helv
 const common: Partial<Theme> = {
   cellHorizontalPadding: 14,
   cellVerticalPadding: 3,
-  headerFontStyle: "600 14px",
+  // The header row is 12 px, 600, muted, on the page's grey (Notebook's table header).
+  headerFontStyle: "600 12px",
   baseFontStyle: "14px",
   markerFontStyle: "11px",
   fontFamily: FONT,
@@ -59,7 +60,7 @@ export const DARK_THEME: Partial<Theme> = {
   textHeaderSelected: "#0b1220",
   bgCell: "#1a1e26",
   bgCellMedium: "#232833",
-  bgHeader: "#232833",
+  bgHeader: "#12151b",
   bgHeaderHasFocus: "#2c3240",
   bgHeaderHovered: "#2a303c",
   bgBubble: "#2c3240",

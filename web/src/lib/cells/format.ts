@@ -27,6 +27,13 @@ export interface FormatCtx {
   userEmail?: (id: string) => string | undefined;
   /** A person's own colour among the base's collaborators (`personColors`), distinct per person. */
   userColor?: (id: string) => string | undefined;
+  /** The colour of the collection a link property points to, which marks its chips (DL-3). Unknown: no mark. */
+  linkedColor?: (field: Field) => string | undefined;
+}
+
+/** `FormatCtx.linkedColor` for the collections of a folder: a link property's chips take the colour of the collection it points to. */
+export function linkedColorIn(tables: readonly { id: string; color?: string | null }[]): (field: Field) => string | undefined {
+  return (field) => (field.type === "link" ? (tables.find((t) => t.id === field.options.linked_table_id)?.color ?? undefined) : undefined);
 }
 
 export const DEFAULT_CTX: FormatCtx = { timeZone: "UTC", userName: () => undefined };
@@ -162,7 +169,7 @@ export function toNumber(v: CellJson): number | null {
 /** A chip drawn in a cell: select choices, linked records, users, computed array items. */
 export interface ChipItem {
   text: string;
-  /** Palette colour name (see lib/colors) for select choices. */
+  /** Palette colour name (see lib/colors): a select choice's own, a person's, or the linked collection's for a link. */
   color?: string;
   /** Linked record id / user id / choice id. */
   id?: string;
@@ -232,8 +239,10 @@ export function chipItems(field: Field, stored: CellJson, ctx: FormatCtx): ChipI
       }
       return out;
     }
-    case "link":
-      return linkRefs(stored).map((r) => ({ text: r.name, id: r.id }));
+    case "link": {
+      const color = ctx.linkedColor?.(field);
+      return linkRefs(stored).map((r) => ({ text: r.name, id: r.id, color }));
+    }
     case "user":
       return stringItems(stored).map((id) => {
         const text = ctx.userName(id) ?? id;

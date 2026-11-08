@@ -67,7 +67,7 @@ describe("ExpandedRecord: view mode", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(within(row("Name")).getByText("Launch")).toBeInTheDocument();
     // Pills, formatted dates and rendered Markdown, as in the views.
-    expect(within(row("Status")).getByText("In progress")).toHaveClass("rounded-full");
+    expect(within(row("Status")).getByText("In progress").closest(".choice")).toHaveClass("rounded-pill");
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toHaveAttribute("href", "https://example.com/docs");
     expect(within(row("Plain notes")).getByText("line one")).toBeInTheDocument();
     expect(within(row("Nickname")).getByText("Empty")).toHaveClass("text-faint");

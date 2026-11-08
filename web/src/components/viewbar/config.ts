@@ -231,10 +231,10 @@ export const ROW_HEIGHT_LABELS: Record<RowHeight, string> = {
   extra_tall: "Extra tall",
 };
 
-/** Pixel heights per row-height setting. */
+/** Pixel heights per row-height setting: Medium is the table row of the design language (46), and what new views start with. */
 export const ROW_HEIGHT_PX: Record<RowHeight, number> = {
-  short: 42,
-  medium: 56,
+  short: 36,
+  medium: 46,
   tall: 88,
   extra_tall: 128,
 };

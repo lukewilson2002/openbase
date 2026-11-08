@@ -465,8 +465,8 @@ describe("GridView: deleting a field", () => {
     await loaded();
     const status = grid().columns.findIndex((c) => c.id === F.status.id);
     act(() => grid().onHeaderMenu(status, { x: 5, y: 5, width: 1, height: 1 }));
-    await user.click(await screen.findByRole("menuitem", { name: "Delete field" }));
-    await user.click(await screen.findByRole("button", { name: "Delete field" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await user.click(await screen.findByRole("button", { name: "Delete property" }));
     await screen.findByText(/deleted$/);
     expect(api.callsTo(`DELETE /api/fields/${F.status.id}`)).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Undo" }));

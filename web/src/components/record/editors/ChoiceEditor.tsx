@@ -6,9 +6,9 @@ import { keys } from "@/api/keys";
 import type { Field, SelectChoice } from "@/api/types";
 import { createChoice, isSelectField } from "@/components/fields/choices";
 import { Button } from "@/components/ui/button";
+import { StatusChip } from "@/components/ui/status-chip";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
-import { choiceClass } from "@/lib/colors";
 import { stringItems } from "@/lib/cells/kinds";
 import { EditorShell } from "./EditorShell";
 import { useEditorEnv, type FieldEditorCallbacks, type Move } from "./env";
@@ -22,7 +22,11 @@ export interface ChoiceEditorProps extends FieldEditorCallbacks {
 }
 
 export function Pill({ choice, className }: { choice: Pick<SelectChoice, "name" | "color">; className?: string }) {
-  return <span className={cn(choiceClass(choice.color), "inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-xs font-medium", className)}>{choice.name}</span>;
+  return (
+    <StatusChip hue={choice.color} className={className}>
+      {choice.name}
+    </StatusChip>
+  );
 }
 
 export function ChoiceEditor({ field, value, variant, target, initialText, onChange, onCommit: commitUp, onCancel }: ChoiceEditorProps) {

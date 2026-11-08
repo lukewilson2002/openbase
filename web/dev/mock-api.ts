@@ -133,7 +133,8 @@ function emptyConfig(): Obj {
     field_order: [],
     field_widths: {},
     frozen_columns: 0,
-    row_height: "short",
+    // New views start on Medium rows, as the server makes them.
+    row_height: "medium",
     row_color: null,
     summaries: {},
     wrap_headers: false,

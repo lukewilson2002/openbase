@@ -22,6 +22,8 @@ export interface RendererContext {
   isSelected(col: number, row: number): boolean;
   /** The display row the pointer is over, if any (the add rows light up with it). */
   hoveredRow(): number | null;
+  /** What the row at the end of a group says, "New client" (the collection's record name). */
+  newLabel: string;
   onExpand(row: number): void;
   onOpenUrl(url: string): void;
 }
@@ -173,7 +175,8 @@ function drawRecordCell(args: DrawArgs<ObCell>, m: RecordCellModel, rc: Renderer
     case "text":
     case "multiline":
     case "date":
-      drawCellText(ctx, theme, rect, m.display, { color: isFormulaError(m.value) ? DANGER : textColor, highlight: hl });
+      // The title is the record's name, so it reads heavier than the values around it.
+      drawCellText(ctx, theme, rect, m.display, { color: isFormulaError(m.value) ? DANGER : textColor, highlight: hl, bold: m.isPrimary });
       break;
     case "number":
       drawCellText(ctx, theme, rect, m.display, { color: isFormulaError(m.value) ? DANGER : textColor, align: isFormulaError(m.value) ? "left" : "right", highlight: hl });
@@ -261,7 +264,7 @@ function drawAdd(args: DrawArgs<ObCell>, rc: RendererContext): void {
   ctx.font = theme.baseFontFull;
   ctx.textBaseline = "middle";
   ctx.fillStyle = lit ? theme.textMedium : theme.textLight;
-  ctx.fillText("+ Add", rect.x + theme.cellHorizontalPadding, rect.y + rect.height / 2 + 0.5);
+  ctx.fillText(`+ ${rc.newLabel}`, rect.x + theme.cellHorizontalPadding, rect.y + rect.height / 2 + 0.5);
 }
 
 function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
@@ -301,8 +304,8 @@ function drawSummary(args: DrawArgs<ObCell>, rc: RendererContext): void {
  */
 export function measureRecordCell(ctx: CanvasRenderingContext2D, m: RecordCellModel, theme: { cellHorizontalPadding: number; baseFontFull: string }): number {
   const pad = theme.cellHorizontalPadding * 2;
-  const text = (s: string) => {
-    ctx.font = theme.baseFontFull;
+  const text = (s: string, bold = false) => {
+    ctx.font = bold ? theme.baseFontFull.replace(/^(?:\d+\s+)?/, "600 ") : theme.baseFontFull;
     // A multi-line value is as wide as its longest line.
     return Math.max(0, ...s.split("\n").map((line) => ctx.measureText(line).width));
   };
@@ -320,7 +323,7 @@ export function measureRecordCell(ctx: CanvasRenderingContext2D, m: RecordCellMo
       // As `drawChips`: each chip's font and padding, 4 px apart.
       const widths = chips.map((c) => {
         ctx.font = chipFont(theme.baseFontFull, c.kind);
-        return ctx.measureText(c.text).width + chipPadding(c.kind);
+        return ctx.measureText(c.text).width + chipPadding(c.kind, c.color !== undefined);
       });
       return Math.ceil(widths.reduce((a, b) => a + b, 0) + 4 * (chips.length - 1) + pad + extra);
     }
@@ -338,7 +341,7 @@ export function measureRecordCell(ctx: CanvasRenderingContext2D, m: RecordCellMo
     case "button":
       return Math.ceil(text(m.display) + 16 + pad);
     default:
-      return Math.ceil(text(m.display) + pad + extra);
+      return Math.ceil(text(m.display, m.isPrimary) + pad + extra);
   }
 }
 

@@ -182,6 +182,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       createRenderer(() => ({
         searchTerm: pr.current.searchTerm,
         dark: pr.current.dark,
+        newLabel: pr.current.newRecordLabel,
         hoveredRow: () => hoverRow.current,
         isSelected: (c, r) => {
           const cell = selectionRef.current.current?.cell;

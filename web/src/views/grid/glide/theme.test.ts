@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ACCENTS, ACCENT_THEMES } from "@/theme/accents";
 import { contrast } from "@/theme/oklch";
@@ -23,5 +25,34 @@ describe("gridTheme", () => {
       expect(contrast(t.linkColor!, t.bgCell!)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t.textMedium!, t.bgHeader!)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it("reads the Notebook tokens of styles/index.css in both themes", () => {
+    // The canvas cannot read CSS variables, so the theme repeats them; this keeps the two from drifting.
+    const css = readFileSync(resolve(process.cwd(), "src/styles/index.css"), "utf8");
+    const tokens = (selector: string): Record<string, string> => {
+      const block = css.slice(css.indexOf(selector));
+      const body = block.slice(block.indexOf("{") + 1, block.indexOf("\n}"));
+      return Object.fromEntries([...body.matchAll(/--([a-z-]+):\s*(#[0-9a-f]{6})/g)].map((m) => [m[1]!, m[2]!]));
+    };
+    for (const [theme, selector] of [
+      [LIGHT_THEME, ":root,\n:root[data-theme=\"light\"]"],
+      [DARK_THEME, ":root[data-theme=\"dark\"] {"],
+    ] as const) {
+      const t = tokens(selector);
+      expect(theme.bgCell).toBe(t["surface"]);
+      expect(theme.bgHeader, "the header sits on the page's grey").toBe(t["bg"]);
+      expect(theme.textDark).toBe(t["fg"]);
+      expect(theme.textHeader, "header text is muted").toBe(t["muted"]);
+      expect(theme.textLight).toBe(t["faint"]);
+      expect(theme.borderColor).toBe(t["line"]);
+      expect(theme.accentColor).toBe(t["primary"]);
+      expect(theme.accentLight, "selection is primary-soft").toBe(t["primary-soft"]);
+    }
+  });
+
+  it("sets the header row at 12 px, 600", () => {
+    expect(LIGHT_THEME.headerFontStyle).toBe("600 12px");
+    expect(DARK_THEME.headerFontStyle).toBe("600 12px");
   });
 });

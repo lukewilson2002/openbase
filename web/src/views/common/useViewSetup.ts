@@ -17,7 +17,7 @@ import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
 import { LINKED_PARAM } from "./RecordPanel";
 import { personColors } from "@/lib/colors";
-import type { FormatCtx } from "@/lib/cells/format";
+import { linkedColorIn, type FormatCtx } from "@/lib/cells/format";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
 import type { ViewProps } from "../types";
 import { useRecordActions, type RecordActions } from "./useRecordActions";
@@ -79,7 +79,7 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const emails = useMemo(() => new Map(people.map((u) => [u.id, u.email] as const)), [people]);
   const userNames = useMemo(() => new Map(people.map((u) => [u.id, u.name] as const)), [people]);
   const colors = useMemo(() => personColors(people), [people]);
-  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id) }), [timeZone, userNames, emails, colors]);
+  const format = useMemo<FormatCtx>(() => ({ timeZone, userName: (id) => userNames.get(id), userEmail: (id) => emails.get(id), userColor: (id) => colors.get(id), linkedColor: linkedColorIn(schema.tables) }), [timeZone, userNames, emails, colors, schema.tables]);
   const currentUserId = me.data?.id ?? null;
   const editorEnv = useMemo<EditorEnv>(
     () => ({ baseId: schema.id, tableId: table.id, collaborators: people, timeZone, canCreateOptions, format, currentUserId, schema }),

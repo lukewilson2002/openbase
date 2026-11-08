@@ -455,7 +455,8 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
   const env = useOptionalEditorEnv();
   const inside = useContext(InsidePeek);
   const host = useContext(LinkedRecordsContext);
-  const table = inside ? undefined : linkedTableOf(env?.schema, field);
+  const linked = linkedTableOf(env?.schema, field);
+  const table = inside ? undefined : linked;
   const shown = all ? chips : chips.slice(0, LINK_CHIPS_SHOWN);
   const more = chips.length - shown.length;
   const toggle = (e: React.MouseEvent) => {
@@ -467,7 +468,7 @@ export function LinkChipList({ field, chips, format, emails, className }: { fiel
     <div className={cn("min-w-0 text-[0.8125rem]", className)}>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {shown.map((c, i) => {
-          const chip = <LinkChip key={c.id ?? `${c.text}-${i}`} name={c.text} />;
+          const chip = <LinkChip key={c.id ?? `${c.text}-${i}`} name={c.text} hue={linked?.color} markName={linked?.name} />;
           return table && env?.schema && c.id ? (
             <RecordPeek key={c.id} table={table} recordId={c.id} format={format} emails={emails} onOpen={host?.open ? () => host.open!(table.id, c.id!) : undefined} side="bottom" className="min-w-0 max-w-full">
               {chip}

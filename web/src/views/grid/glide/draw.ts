@@ -21,6 +21,8 @@ export interface DrawTheme {
   linkColor: string;
   accentColor: string;
   bgCell: string;
+  /** The page's own grey (`--bg`): a link chip's fill. */
+  bgHeader: string;
   cellHorizontalPadding: number;
   cellVerticalPadding: number;
   lineHeight: number;
@@ -129,19 +131,27 @@ export interface ChipDraw {
   kind: "select" | "link" | "user" | "plain";
 }
 
-/** Flow chips left to right, wrapping into further lines when the row is tall enough. Returns the x extents drawn per chip. */
 /**
- * The font of a chip: the cell's a pixel smaller; a linked record's title is medium weight, as on its
- * card elsewhere (see RecordSummary).
+ * The font of a chip: 12 px, medium weight, as the StatusChip and LinkChip components set it (their
+ * `text-meta font-medium`); the plain "+3" and summary text are the same size at regular weight.
  */
+export const CHIP_FONT_PX = 12;
 export function chipFont(baseFontFull: string, kind: ChipDraw["kind"]): string {
-  const smaller = baseFontFull.replace(/(\d+(?:\.\d+)?)px/, (_m, n: string) => `${Math.max(11, Number(n) - 1)}px`);
-  return kind === "link" ? `500 ${smaller.replace(/^\s*(?:normal|bold|bolder|lighter|[1-9]00)\s+/, "")}` : smaller;
+  const sized = baseFontFull.replace(/(\d+(?:\.\d+)?)px/, `${CHIP_FONT_PX}px`);
+  return kind === "plain" ? sized : `500 ${sized.replace(/^\s*(?:normal|bold|bolder|lighter|[1-9]00)\s+/, "")}`;
 }
 
-/** Room around a chip's text (and a person's face): the horizontal padding `drawChips` gives it. */
-export function chipPadding(kind: ChipDraw["kind"]): number {
-  return kind === "link" ? 14 : kind === "user" ? 12 + 18 : 12;
+/** The 8 px mark of a linked collection and the space between it and the record's name (LinkChip). */
+const LINK_MARK = 8;
+const LINK_MARK_GAP = 6;
+
+/**
+ * Room around a chip's text (and a person's face, or a linked collection's mark): the horizontal
+ * padding `drawChips` gives it. A pill has 8 px each side (StatusChip's `px-2`); a link chip a 1 px
+ * border and 6 px each side (LinkChip), plus its mark when it has one.
+ */
+export function chipPadding(kind: ChipDraw["kind"], hasMark = false): number {
+  return kind === "link" ? 14 + (hasMark ? LINK_MARK + LINK_MARK_GAP : 0) : kind === "user" ? 12 + 18 : 16;
 }
 
 /** Where `drawChips` puts each chip that fits in `rect` (the first ones, in order: `index` into the chips). */
@@ -178,7 +188,7 @@ export function layoutChips(ctx: CanvasRenderingContext2D, theme: Pick<DrawTheme
     const avatar = chip.kind === "user" ? 16 : 0;
     ctx.font = chipFont(theme.baseFontFull, chip.kind);
     const textW = ctx.measureText(chip.text).width;
-    let w = Math.min(textW + chipPadding(chip.kind), right - rect.x - padX);
+    let w = Math.min(textW + chipPadding(chip.kind, chip.color !== undefined), right - rect.x - padX);
     if (x + w > right && x > rect.x + padX) {
       line++;
       x = rect.x + padX;
@@ -225,6 +235,9 @@ export function layoutChips(ctx: CanvasRenderingContext2D, theme: Pick<DrawTheme
 }
 
 const CHIP_H = 20;
+/** A pill is drawn 18 px tall in its 20 px slot: StatusChip's 16 px line and 1 px above and below. */
+const PILL_H = 18;
+const LINK_CHIP_RADIUS = 6;
 const CHIP_GAP = 4;
 
 export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect: Rect, chips: readonly ChipDraw[], dark: boolean, highlight?: string): { x: number; y: number; w: number; h: number }[] {
@@ -236,26 +249,39 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
     const font = chipFont(theme.baseFontFull, chip.kind);
     ctx.font = font;
     let fg: string;
+    let tx: number;
     if (chip.kind === "link") {
-      // A linked record is a small card, as everywhere else records are listed: the cell's own surface
-      // (lifted a touch on a dark page), a hairline border, and its title in the accent's text colour.
-      ctx.fillStyle = dark ? mixColors(theme.bgCell, theme.textDark, 0.05) : theme.bgCell;
-      roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, chipH - 1, 4);
+      // A linked record is a LinkChip: the page's grey, a hairline border, the mark of the collection it
+      // lives in, then its name in the text colour (the chip is the link; the colour is the place's).
+      ctx.fillStyle = theme.bgHeader;
+      roundRectPath(ctx, x + 0.5, y + 0.5, w - 1, chipH - 1, LINK_CHIP_RADIUS);
       ctx.fill();
       ctx.strokeStyle = theme.borderColor;
       ctx.lineWidth = 1;
       ctx.stroke();
-      fg = theme.linkColor;
+      fg = theme.textDark;
+      tx = x + 7;
+      if (chip.color !== undefined) {
+        const my = y + (chipH - LINK_MARK) / 2;
+        const shade = accentShade(chip.color);
+        roundRectPath(ctx, tx, my, LINK_MARK, LINK_MARK, 2);
+        ctx.fillStyle = shade;
+        ctx.fill();
+        roundRectPath(ctx, tx + 0.5, my + 0.5, LINK_MARK - 1, LINK_MARK - 1, 1.5);
+        ctx.strokeStyle = mixColors(shade, theme.textDark, 0.12);
+        ctx.stroke();
+        tx += LINK_MARK + LINK_MARK_GAP;
+      }
     } else {
       // Choices and people carry their own colour, the same pill in both themes; the rest are grey.
       const own = chip.kind === "select" || chip.kind === "user";
       const pal = own ? paletteColor(chip.color) : paletteColor("gray");
       ctx.fillStyle = dark && !own ? mixColors(theme.bgCell, pal.bg, 0.55) : pal.bg;
       fg = dark && !own ? theme.textDark : pal.fg;
-      roundRectPath(ctx, x, y, w, chipH, chipH / 2);
+      roundRectPath(ctx, x, y + (chipH - PILL_H) / 2, w, PILL_H, PILL_H / 2);
       ctx.fill();
+      tx = x + 8;
     }
-    let tx = x + (chip.kind === "link" ? 7 : 6);
     if (avatar) {
       // Solid face with white initials, the same as <Avatar> outside the grid.
       ctx.fillStyle = accentShade(chip.color);
@@ -272,7 +298,7 @@ export function drawChips(ctx: CanvasRenderingContext2D, theme: DrawTheme, rect:
       tx = x + avatar + 6;
     }
     ctx.fillStyle = fg;
-    const label = fitText(ctx, chip.text, x + w - tx - 5);
+    const label = fitText(ctx, chip.text, x + w - tx - (chip.kind === "link" ? 7 : chip.kind === "user" ? 5 : 8));
     if (highlight) {
       const i = label.toLowerCase().indexOf(highlight.toLowerCase());
       if (i >= 0) {
