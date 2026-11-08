@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ColorMark } from "./color-mark";
+import { Icon } from "./icon";
 
 export interface LinkChipProps {
   /** The linked record's name. */
@@ -43,7 +44,7 @@ export function LinkChip({ name, hue, markName, onOpen, href, onRemove, classNam
       )}
       {onRemove && (
         <button type="button" aria-label={`Remove ${label}`} onClick={onRemove} className="relative mr-1 shrink-0 rounded-xs text-muted hover:bg-hover hover:text-fg after:absolute after:-inset-1.5 max-md:after:-inset-3">
-          <X aria-hidden className="size-3" />
+          <Icon icon={X} size="sm" />
         </button>
       )}
     </span>

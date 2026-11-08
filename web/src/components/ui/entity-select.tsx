@@ -2,6 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { Select as S } from "radix-ui";
 import { EntityLabel } from "@/components/icons/EntityIcon";
 import { cn } from "@/lib/cn";
+import { Icon } from "./icon";
 
 export interface EntityOption {
   /** Must not be empty (Radix Select reserves "" for "nothing chosen"). */
@@ -48,7 +49,7 @@ export function EntitySelect({ id, value, onValueChange, options, disabled, clas
           <S.Value />
         </span>
         <S.Icon asChild>
-          <ChevronDown aria-hidden className="size-4 shrink-0 text-muted" />
+          <Icon icon={ChevronDown} className="text-muted" />
         </S.Icon>
       </S.Trigger>
       <S.Portal>
@@ -72,7 +73,7 @@ export function EntitySelect({ id, value, onValueChange, options, disabled, clas
                   </EntityLabel>
                 </S.ItemText>
                 <S.ItemIndicator className="absolute right-2 inline-flex">
-                  <Check aria-hidden className="size-3.5" />
+                  <Icon icon={Check} />
                 </S.ItemIndicator>
               </S.Item>
             ))}

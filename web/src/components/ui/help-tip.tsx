@@ -7,6 +7,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Icon } from "./icon";
 
 /** How long the words stay after the mouse leaves, so it can move onto them (to select or read them). */
 const LEAVE_MS = 150;
@@ -48,7 +49,7 @@ export function HelpTip({ label, children, className }: { label: string; childre
             className,
           )}
         >
-          <CircleHelp aria-hidden className="size-[1.125rem]" />
+          <Icon icon={CircleHelp} />
         </button>
       </PopoverTrigger>
       <PopoverContent

@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Icon } from "./icon";
 
 export interface FilterChipProps extends Omit<ComponentProps<"span">, "onClick"> {
   /** The filter in words, e.g. "Status is Done". */
@@ -42,7 +43,7 @@ export function FilterChip({ children, onEdit, onRemove, removeLabel, selected, 
           // The visible target is small to keep the bar calm; the pseudo-element grows the tappable area.
           className="relative mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded-xs hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] after:absolute after:-inset-1 max-md:after:-inset-3"
         >
-          <X aria-hidden className="size-3" strokeWidth={2} />
+          <Icon icon={X} size="sm" />
         </button>
       )}
     </span>

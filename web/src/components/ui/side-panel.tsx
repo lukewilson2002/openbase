@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { IconButton } from "./icon-button";
 import { usePresence } from "./use-presence";
+import { Icon } from "./icon";
 
 export interface SidePanelProps {
   open: boolean;
@@ -62,7 +63,7 @@ export function SidePanel({ open, onOpenChange, title, actions, children, classN
         </h2>
         {actions}
         <IconButton label={`Close ${title.toLowerCase()}`} noTooltip onClick={() => onOpenChange(false)}>
-          <X aria-hidden className="size-4" />
+          <Icon icon={X} />
         </IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>

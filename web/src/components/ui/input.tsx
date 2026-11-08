@@ -1,6 +1,7 @@
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Icon } from "./icon";
 
 const control =
   "w-full rounded-md border border-line-strong bg-surface px-2.5 text-fg placeholder:text-faint " +
@@ -22,7 +23,7 @@ export function Select({ className, children, ...props }: ComponentProps<"select
       <select className={cn(control, "h-8 appearance-none pr-8", className)} {...props}>
         {children}
       </select>
-      <ChevronDown aria-hidden className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-muted" />
+      <Icon icon={ChevronDown} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
     </span>
   );
 }

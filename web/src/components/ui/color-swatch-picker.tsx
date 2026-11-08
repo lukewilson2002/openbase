@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { COLORS, colorLabel, type ChoiceColor } from "@/lib/colors";
+import { Icon } from "./icon";
 
 export interface ColorSwatchPickerProps {
   value: string | null | undefined;
@@ -29,7 +30,7 @@ export function ColorSwatchPicker({ value, onChange, label = "Colour", className
               selected && "ring-2 ring-ring ring-offset-2 ring-offset-surface",
             )}
           >
-            {selected && <Check aria-hidden className="size-3" strokeWidth={3} />}
+            {selected && <Icon icon={Check} size="sm" />}
           </button>
         );
       })}

@@ -3,6 +3,7 @@ import { FileText } from "lucide-react";
 import { accentClass } from "@/lib/colors";
 import { cn } from "@/lib/cn";
 import { ColorMark } from "./color-mark";
+import { Icon } from "./icon";
 
 export interface FeedRowProps extends Omit<ComponentProps<"div">, "title"> {
   /** A checkbox, an event icon or a `FeedTile`. Interactive content works: it sits above the row's open target. */
@@ -63,7 +64,7 @@ export function FeedRow({ leading, title, meta, metaHue, metaMarkName, trailing,
 export function FeedTile({ hue, className }: { hue?: string | null; className?: string }) {
   return (
     <span aria-hidden className={cn(accentClass(hue, "tint"), "inline-flex size-8 shrink-0 items-center justify-center rounded-md", className)}>
-      <FileText className="size-4" strokeWidth={2} />
+      <Icon icon={FileText} />
     </span>
   );
 }
