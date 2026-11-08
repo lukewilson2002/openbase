@@ -24,6 +24,13 @@ pub const CSRF_HEADER: &str = "x-openbase-csrf";
 /// Browser features no page of OpenBase uses, switched off for it and for anything it embeds.
 const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=()";
 
+/// The documents a browser-based MCP client's sign-in popup loads: the authorization endpoint, the
+/// sign-in pages and the consent page. `Cross-Origin-Opener-Policy: same-origin` would move the
+/// popup into its own browsing context group on the first of them, so the client would see it as
+/// closed and its callback page would have no `window.opener`. These carry no COOP header; every
+/// other page does (docs/security.md, accepted risks).
+const OAUTH_POPUP_PATHS: [&str; 4] = ["/oauth/authorize", "/login", "/login/2fa", "/oauth/consent"];
+
 /// One year. Without `includeSubDomains` and `preload` on purpose: the host may share its
 /// parent domain with sites that are not served over https, and preloading is a promise that is
 /// hard to take back.
@@ -102,15 +109,13 @@ fn assemble(state: AppState, with_mcp: bool) -> Router {
             HeaderValue::from_static(PERMISSIONS_POLICY),
         ))
         // No page of ours is meant to share a browsing context group with another origin's
-        // window (no popup flows with `window.opener`), and nothing we serve is meant to be
-        // embedded by another origin's no-cors `<img>`/`<script>`: attachments are fetched by
-        // the app itself, and the machine endpoints that must be read from other origins
-        // (OAuth discovery, registration, token, MCP) are fetched in CORS mode, which the
-        // resource policy does not apply to.
-        .layer(SetResponseHeaderLayer::if_not_present(
-            HeaderName::from_static("cross-origin-opener-policy"),
-            HeaderValue::from_static("same-origin"),
-        ))
+        // window (no popup flows with `window.opener`), except the pages an OAuth client's
+        // popup walks through (see `OAUTH_POPUP_PATHS`).
+        .layer(middleware::from_fn(opener_policy))
+        // Nothing we serve is meant to be embedded by another origin's no-cors `<img>`/`<script>`:
+        // attachments are fetched by the app itself, and the machine endpoints that must be read
+        // from other origins (OAuth discovery, registration, token, MCP) are fetched in CORS mode,
+        // which the resource policy does not apply to.
         .layer(SetResponseHeaderLayer::if_not_present(
             HeaderName::from_static("cross-origin-resource-policy"),
             HeaderValue::from_static("same-origin"),
@@ -153,6 +158,17 @@ async fn health(State(state): State<AppState>) -> Result<impl IntoResponse, AppE
 /// Reject cookie-authenticated unsafe requests that lack the CSRF header or that a browser
 /// declares as coming from another origin. Bearer-token requests and anonymous requests (public
 /// forms) are exempt: they carry no ambient credentials.
+async fn opener_policy(req: Request, next: Next) -> Response {
+    let exempt = OAUTH_POPUP_PATHS.contains(&req.uri().path());
+    let mut res = next.run(req).await;
+    if !exempt {
+        res.headers_mut()
+            .entry(HeaderName::from_static("cross-origin-opener-policy"))
+            .or_insert(HeaderValue::from_static("same-origin"));
+    }
+    res
+}
+
 async fn csrf_guard(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let unsafe_method = !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     if unsafe_method {

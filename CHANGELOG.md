@@ -76,9 +76,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 - The server sends `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Resource-Policy: same-origin`, and `Strict-Transport-Security` (one year) when
   the public URL is https (without `includeSubDomains` or `preload`). A popup that another
-  origin opened onto OpenBase no longer has a `window.opener` link back to it, so an OAuth client
-  that waited for the sign-in popup to talk back through it must use a redirect instead (the MCP
-  clients do).
+  origin opened onto OpenBase no longer has a `window.opener` link back to it, except on the
+  sign-in and consent pages (`/oauth/authorize`, `/login`, `/login/2fa`, `/oauth/consent`),
+  which a connecting MCP client's popup walks through and which therefore carry no opener
+  policy.
 - **Agents and the API see the right caller address.** Requests an agent makes through the
   `api_request` tool now carry the address of the connection to `/mcp` (or, behind a trusted
   proxy, the address the proxy saw), so per-address limits and the audit log name the real caller

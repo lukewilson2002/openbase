@@ -202,9 +202,12 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   `https`, `Strict-Transport-Security: max-age=31536000` (no `includeSubDomains`, no
   `preload`). The resource policy does not affect the CORS answers of the OAuth machine
   endpoints, which other origins fetch in CORS mode. The opener policy cuts the
-  `window.opener` link of a popup that a page on another origin opened onto OpenBase, so
-  an OAuth client that waits for the sign-in popup to talk back through it must use a
-  redirect instead (the MCP clients do).
+  `window.opener` link of a popup that a page on another origin opened onto OpenBase. The
+  four documents a connecting app's sign-in popup walks through (`/oauth/authorize`, `/login`,
+  `/login/2fa`, `/oauth/consent`) are the exception and carry no opener policy, so a
+  browser-based MCP client that opens them in a popup and waits for it keeps working. They hold
+  no data of the signed-in person, and every other page, including the whole app after sign-in,
+  has the policy.
 - **No dynamic SQL from user input.** User tables are JSON rows keyed by field id;
   adding, renaming or deleting a field never builds SQL from names.
 - **Roles are checked in one place** (`perm.rs`). Access comes only from workspace
@@ -391,7 +394,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Surface | Limit |
 |---|---|
 | Public requests (all `/api/public/*`) | 300 per minute per client IP, 1,200 per minute per share token |
-| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id. New passwords need 8 to 256 characters (older, shorter ones keep working). Per link, over all client addresses: after 100 wrong guesses in an hour the link refuses every guess, right or wrong, for 15 minutes (`429`). The count is per hour, not per lockout: the first guess after the lockout is let through, and if it is wrong the link locks again until the hour is over (see [accepted risks](#accepted-risks)). A right guess is not counted. Checked in their own pool of 2 hashing slots, apart from sign-in's. |
+| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id. New passwords need 8 to 256 characters (older, shorter ones keep working). Per link, over all client addresses: after 100 wrong guesses in an hour the link refuses every guess, right or wrong, for 15 minutes (`429`). The count slides over the hour (the previous hour's wrong guesses count in proportion to how much of it is still inside the last hour), so a burst split across an hour boundary gets no more than the cap, and it is per hour, not per lockout: after the lockout guesses are let through one at a time, and a wrong one locks the link again (see [accepted risks](#accepted-risks)). A right guess is never counted and never locks the link. A guess still being checked holds a place against the cap, so visitors whose right-password requests queue behind the 2 hashing slots cannot lock the link; if the places left are taken by guesses still being checked, new guesses get `429` until those finish. Checked in their own pool of 2 hashing slots, apart from sign-in's. |
 | Attachment downloads with `?share=` | 600 per minute per client IP, 2,400 per minute per token (own buckets, so a gallery of thumbnails does not eat the public-request budget) |
 | Public form submissions / uploads | 20 each per 10 minutes per (client IP, link); a file is at most 25 MB and never above the configured upload limit |
 | Anonymous upload bytes | per hour: 200 MB per client IP, 500 MB per project, 1,000 MB for the whole server; charged when the request starts, for its declared length (the cap if none is declared) |
@@ -507,9 +510,9 @@ Shares, uploads and imports:
   wrong guesses per hour is counted for the link across all addresses, because per-address limits
   cannot stop a guesser who has many of them. The price is that a stranger who has the URL can
   spend those 100 guesses on purpose, from one address in a few minutes (30 per minute per
-  address), and the link then refuses everyone, right password included, for 15 minutes. The
-  first guess after that is let through and, if wrong, locks the link again until the hour is
-  over, so someone who keeps at it can hold the prompt shut. People who are already viewing
+  address), and the link then refuses everyone, right password included, for 15 minutes. After
+  that guesses are let through one at a time and a wrong one locks the link again until the
+  hour is over, so someone who keeps at it can hold the prompt shut. People who are already viewing
   the link are shut out as well, because the browser sends the password with every request.
   Nothing is exposed and nothing is lost by it: it is an outage of one link, not a way in, and
   it ends when the guesser stops (or the link owner removes the password, or disables the link
