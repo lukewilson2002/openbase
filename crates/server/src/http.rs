@@ -21,6 +21,14 @@ use crate::state::AppState;
 /// CORS preflight, and OpenBase never answers preflights, so this blocks CSRF.
 pub const CSRF_HEADER: &str = "x-openbase-csrf";
 
+/// Browser features no page of OpenBase uses, switched off for it and for anything it embeds.
+const PERMISSIONS_POLICY: &str = "camera=(), microphone=(), geolocation=()";
+
+/// One year. Without `includeSubDomains` and `preload` on purpose: the host may share its
+/// parent domain with sites that are not served over https, and preloading is a promise that is
+/// hard to take back.
+const HSTS: &str = "max-age=31536000";
+
 /// Default JSON body limit; upload routes set their own.
 const JSON_BODY_LIMIT: usize = 4 * 1024 * 1024;
 
@@ -89,9 +97,44 @@ fn assemble(state: AppState, with_mcp: bool) -> Router {
             header::REFERRER_POLICY,
             HeaderValue::from_static("same-origin"),
         ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            HeaderName::from_static("permissions-policy"),
+            HeaderValue::from_static(PERMISSIONS_POLICY),
+        ))
+        // No page of ours is meant to share a browsing context group with another origin's
+        // window (no popup flows with `window.opener`), and nothing we serve is meant to be
+        // embedded by another origin's no-cors `<img>`/`<script>`: attachments are fetched by
+        // the app itself, and the machine endpoints that must be read from other origins
+        // (OAuth discovery, registration, token, MCP) are fetched in CORS mode, which the
+        // resource policy does not apply to.
+        .layer(SetResponseHeaderLayer::if_not_present(
+            HeaderName::from_static("cross-origin-opener-policy"),
+            HeaderValue::from_static("same-origin"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            HeaderName::from_static("cross-origin-resource-policy"),
+            HeaderValue::from_static("same-origin"),
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            hsts_when_https,
+        ))
         .layer(CatchPanicLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// `Strict-Transport-Security`, only when the public URL is https. Sent over plain http a browser
+/// ignores it, but the header would then promise something the deployment does not do; a
+/// local `http://localhost` setup must never pin the browser to https.
+async fn hsts_when_https(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    let mut res = next.run(req).await;
+    if state.config.public_https() {
+        res.headers_mut()
+            .entry(header::STRICT_TRANSPORT_SECURITY)
+            .or_insert(HeaderValue::from_static(HSTS));
+    }
+    res
 }
 
 async fn health(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
@@ -107,26 +150,53 @@ async fn health(State(state): State<AppState>) -> Result<impl IntoResponse, AppE
     ))
 }
 
-/// Reject cookie-authenticated unsafe requests that lack the CSRF header.
-/// Bearer-token requests and anonymous requests (public forms) are exempt:
-/// they carry no ambient credentials.
-async fn csrf_guard(State(_state): State<AppState>, req: Request, next: Next) -> Response {
+/// Reject cookie-authenticated unsafe requests that lack the CSRF header or that a browser
+/// declares as coming from another origin. Bearer-token requests and anonymous requests (public
+/// forms) are exempt: they carry no ambient credentials.
+async fn csrf_guard(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let unsafe_method = !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     if unsafe_method {
+        let cookie_name = state.config.session_cookie_name();
         let has_cookie = req
             .headers()
             .get_all(header::COOKIE)
             .iter()
             .filter_map(|v| v.to_str().ok())
-            .any(|v| v.contains(crate::auth::SESSION_COOKIE));
+            .any(|v| v.contains(cookie_name));
         // Exactly what the Actor extractor treats as a token: any other
         // Authorization value (e.g. Basic auth added by a proxy) leaves the
         // cookie in charge, so the CSRF header is still required.
         let has_bearer = crate::auth::bearer_from_headers(req.headers()).is_some();
-        let has_csrf = req.headers().get(CSRF_HEADER).is_some_and(|v| v == "1");
-        if has_cookie && !has_bearer && !has_csrf {
-            return AppError::forbidden("missing CSRF header").into_response();
+        if has_cookie && !has_bearer {
+            let has_csrf = req.headers().get(CSRF_HEADER).is_some_and(|v| v == "1");
+            if !has_csrf {
+                return AppError::forbidden("missing CSRF header").into_response();
+            }
+            if declared_origin_differs(req.headers(), &state.config.public_origin()) {
+                return AppError::forbidden("cross-origin request refused").into_response();
+            }
         }
     }
     next.run(req).await
+}
+
+/// Whether the request says it came from a page of another origin: its `Origin` header, or
+/// without one its `Referer`, is present and is not `public_origin`. A request with neither
+/// (every non-browser client) passes; so does anything whose header names the right origin.
+/// A header that cannot be read as an origin (including the opaque `null`) counts as different,
+/// because a browser never sends one from a page of ours.
+fn declared_origin_differs(headers: &axum::http::HeaderMap, public_origin: &str) -> bool {
+    let Some(declared) = headers
+        .get(header::ORIGIN)
+        .or_else(|| headers.get(header::REFERER))
+    else {
+        return false;
+    };
+    let Some(declared) = declared.to_str().ok() else {
+        return true;
+    };
+    match url::Url::parse(declared) {
+        Ok(u) => u.origin().ascii_serialization() != public_origin,
+        Err(_) => true,
+    }
 }
