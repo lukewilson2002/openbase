@@ -6,9 +6,9 @@
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { api } from "../src/api/endpoints";
-import { connectBaseEvents } from "../src/api/events";
+import { connectBaseEvents, connectWorkspaceEvents } from "../src/api/events";
 import { commentsApi, recordsApi, schemaApi } from "../src/api/records";
-import type { EventEnvelope } from "../src/api/types";
+import type { BaseSchema, EventEnvelope } from "../src/api/types";
 import { FetchEventSource, readFrames } from "./sse";
 import { createWorld, joinBase, newUser, Profile, seeded, sleep, type World } from "./support";
 import { parse } from "./typecheck";
@@ -52,6 +52,47 @@ async function subscribe(profile: Profile, baseId: string): Promise<Subscription
   const opened = new Promise<void>((resolve) => {
     const stop = connectBaseEvents({
       baseId,
+      clientId: profile.clientId,
+      backoff: { initialMs: 50, maxMs: 100, factor: 1 },
+      onEvent: (env) => {
+        sub.events.push(parse("EventEnvelope", env));
+      },
+      onReconnect: () => void sub.reconnects++,
+      createEventSource: (url) =>
+        new FetchEventSource(url, {
+          baseUrl: seeded.baseUrl,
+          fetch: profile.jar.fetch,
+          onResponse: (status) => {
+            sub.statuses.push(status);
+            if (status === 200) resolve();
+          },
+        }),
+    });
+    disposers.push(stop);
+  });
+  await opened;
+  return sub;
+}
+
+/** Subscribe to the workspace stream as `profile` with the real client, as Home does. */
+async function subscribeWorkspace(profile: Profile, workspaceId: string): Promise<Subscription> {
+  const sub: Subscription = {
+    events: [],
+    statuses: [],
+    reconnects: 0,
+    async next(pred, ms = 5000) {
+      const deadline = Date.now() + ms;
+      for (;;) {
+        const hit = sub.events.find(pred);
+        if (hit) return hit;
+        if (Date.now() > deadline) throw new Error(`no matching event within ${ms}ms; got ${JSON.stringify(sub.events)}`);
+        await sleep(20);
+      }
+    },
+  };
+  const opened = new Promise<void>((resolve) => {
+    const stop = connectWorkspaceEvents({
+      workspaceId,
       clientId: profile.clientId,
       backoff: { initialMs: 50, maxMs: 100, factor: 1 },
       onEvent: (env) => {
@@ -180,6 +221,98 @@ describe("access", () => {
     const frames = readFrames(res.body!);
     await w.owner.run(() => api.workspaces.removeMember(w.workspaceId, guest.id));
     // The membership change is announced (base_changed), then access is re-checked and the stream ends.
+    const outcome = await Promise.race([
+      (async () => {
+        for (;;) {
+          const next = await frames.next();
+          if (next.done) return "closed";
+        }
+      })(),
+      sleep(5000).then(() => "still open"),
+    ]);
+    expect(outcome).toBe("closed");
+  });
+});
+
+describe("workspace events (one stream for Home)", () => {
+  let second: BaseSchema;
+  let secondTable = "";
+  /** A viewer of the whole workspace: the stream's reader, never the writer of the events. */
+  let watcher: Profile;
+
+  beforeAll(async () => {
+    watcher = await newUser(w.owner, "watcher");
+    const invite = parse("CreatedInvite", await w.owner.run(() => api.invites.createForWorkspace(w.workspaceId, { role: "viewer", email: null })));
+    await watcher.run(() => api.invites.accept(invite.url.split("/invite/")[1]!));
+    second = parse("BaseSchema", await w.owner.run(() => api.bases.create(w.workspaceId, { name: "Second folder", color: null, icon: null })));
+    secondTable = second.tables[0]!.id;
+  });
+
+  it("relays the events of every project of the workspace, each with its own base_id", async () => {
+    const sub = await subscribeWorkspace(watcher, w.workspaceId);
+    const first = (await writer.run(() => recordsApi.create(tableId, { records: [{ values: { [nameField]: "one" } }] }))).records[0]!;
+    const other = (await w.owner.run(() => recordsApi.create(secondTable, { records: [{ values: {} }] }))).records[0]!;
+    const a = await sub.next((e) => e.event.kind === "records_changed" && e.event.created.includes(first.id));
+    const b = await sub.next((e) => e.event.kind === "records_changed" && e.event.created.includes(other.id));
+    expect(a).toMatchObject({ base_id: w.baseId, client_id: writer.clientId, user_id: writer.id });
+    expect(b).toMatchObject({ base_id: second.id, client_id: w.owner.clientId });
+    expect(sub.statuses).toEqual([200]);
+  });
+
+  it("starts relaying a project created after it opened, and never another workspace's", async () => {
+    const elsewhere = await createWorld("Elsewhere stream");
+    const sub = await subscribeWorkspace(watcher, w.workspaceId);
+    const late = parse("BaseSchema", await w.owner.run(() => api.bases.create(w.workspaceId, { name: "Created late", color: null, icon: null })));
+    await sub.next((e) => e.event.kind === "base_changed" && e.base_id === late.id);
+    await elsewhere.owner.run(() => recordsApi.create(elsewhere.base.tables[0]!.id, { records: [{ values: {} }] }));
+    const mine = (await w.owner.run(() => recordsApi.create(late.tables[0]!.id, { records: [{ values: {} }] }))).records[0]!;
+    await sub.next((e) => e.event.kind === "records_changed" && e.event.created.includes(mine.id));
+    expect(sub.events.every((e) => [w.baseId, second.id, late.id].includes(e.base_id))).toBe(true);
+  });
+
+  it("does not count as presence in any project", async () => {
+    const sub = await subscribeWorkspace(watcher, w.workspaceId);
+    for (const baseId of [w.baseId, second.id]) {
+      const res = await w.owner.jar.fetch(`${seeded.baseUrl}/api/bases/${baseId}/presence`);
+      expect(res.status).toBe(200);
+      expect(parse("Presence", await res.json()).viewers).not.toContain(watcher.id);
+    }
+    // The stream stays quiet about presence too.
+    await writer.run(() => recordsApi.create(tableId, { records: [{ values: {} }] }));
+    await sub.next((e) => e.event.kind === "records_changed");
+    expect(sub.events.some((e) => e.event.kind === "presence_changed")).toBe(false);
+    // The same person's project stream does count, which is what the check above would catch.
+    await subscribe(watcher, w.baseId);
+    const res = await w.owner.jar.fetch(`${seeded.baseUrl}/api/bases/${w.baseId}/presence`);
+    expect(parse("Presence", await res.json()).viewers).toContain(watcher.id);
+  });
+
+  it("relays only the projects the reader can open", async () => {
+    const guest = await newUser(w.owner, "one-folder");
+    await joinBase(w.owner, second.id, guest, "viewer");
+    const sub = await subscribeWorkspace(guest, w.workspaceId);
+    await writer.run(() => recordsApi.create(tableId, { records: [{ values: {} }] }));
+    const visible = (await w.owner.run(() => recordsApi.create(secondTable, { records: [{ values: {} }] }))).records[0]!;
+    await sub.next((e) => e.event.kind === "records_changed" && e.event.created.includes(visible.id));
+    expect(sub.events.every((e) => e.base_id === second.id)).toBe(true);
+  });
+
+  it("refuses people outside the workspace and anonymous callers", async () => {
+    const outsider = await newUser(w.owner, "outsider-ws");
+    const res = await outsider.jar.fetch(`${seeded.baseUrl}/api/workspaces/${w.workspaceId}/events`);
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
+    expect((await new Profile("anon").jar.fetch(`${seeded.baseUrl}/api/workspaces/${w.workspaceId}/events`)).status).toBe(401);
+  });
+
+  it("ends the stream when the reader is removed from the workspace", async () => {
+    const guest = await newUser(w.owner, "guest-ws");
+    await joinBase(w.owner, w.baseId, guest, "viewer");
+    const res = await guest.jar.fetch(`${seeded.baseUrl}/api/workspaces/${w.workspaceId}/events`, { headers: { accept: "text/event-stream" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const frames = readFrames(res.body!);
+    await w.owner.run(() => api.workspaces.removeMember(w.workspaceId, guest.id));
     const outcome = await Promise.race([
       (async () => {
         for (;;) {

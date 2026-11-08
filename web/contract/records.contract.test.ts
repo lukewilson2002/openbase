@@ -479,6 +479,39 @@ describe("querying a view", () => {
       expect(levels.status).toBe(400);
     });
 
+    it("computes drafted row colors like saved ones and never stores them", async () => {
+      await cfg({ filter: null, sorts: [], groups: [], row_color: null, summaries: {} });
+      const bySelect = await query({ transient: { row_color: { mode: "by_select", field_id: ctx.status } } }, viewer);
+      expect(Object.keys(bySelect.colors)).toHaveLength(5);
+      expect(bySelect.colors[bySelect.records[0]!.id]).toBe("gray");
+      const byRule = await query({ transient: { row_color: { mode: "by_conditions", rules: [{ color: "red", filter: { conjunction: "and", items: [{ field_id: ctx.qty, op: "gt", value: 4 }] } }] } } }, viewer);
+      expect(Object.entries(byRule.colors).map(([id, c]) => [byRule.records.find((x) => x.id === id)!.values[ctx.nm], c]).sort()).toEqual([["Apple", "red"], ["Date", "red"]]);
+      // Rules without entries drop the colors the view has saved.
+      await cfg({ row_color: { mode: "by_select", field_id: ctx.status } });
+      expect(Object.keys((await query({}, viewer)).colors)).toHaveLength(5);
+      expect((await query({ transient: { row_color: { mode: "by_conditions", rules: [] } } }, viewer)).colors).toEqual({});
+      expect(view.config.row_color).toEqual({ mode: "by_select", field_id: ctx.status });
+      expect(Object.keys((await query({}, viewer)).colors)).toHaveLength(5);
+      await cfg({ row_color: null });
+    });
+
+    it("computes drafted summaries like saved ones, replaces the whole map and never stores them", async () => {
+      await cfg({ filter: null, summaries: { [ctx.nm]: "filled" } });
+      const drafted = parse("AggregationsResponse", await viewer.run(() => recordsApi.aggregations(view.id, { transient: { summaries: { [ctx.qty]: "sum" } } })));
+      expect(drafted.values[ctx.qty]).toBe(19);
+      expect(drafted.values[ctx.nm]).toBeUndefined();
+      // The saved map answers when the draft names none, and {} drops every summary.
+      expect(parse("AggregationsResponse", await viewer.run(() => recordsApi.aggregations(view.id))).values[ctx.nm]).toBe(5);
+      expect(parse("AggregationsResponse", await viewer.run(() => recordsApi.aggregations(view.id, { transient: { summaries: {} } }))).values).toEqual({});
+      // Together with a drafted filter, as the filter bar sends them.
+      const both = parse("AggregationsResponse", await viewer.run(() => recordsApi.aggregations(view.id, { transient: { filter: { conjunction: "and", items: [{ field_id: ctx.qty, op: "lte", value: 2 }] }, summaries: { [ctx.qty]: "sum" } } })));
+      expect(both.values[ctx.qty]).toBe(3);
+      expect(view.config.summaries).toEqual({ [ctx.nm]: "filled" });
+      const bad = await failure(viewer.run(() => recordsApi.aggregations(view.id, { transient: { summaries: { fldNope00000000: "sum" } } })));
+      expect(bad.status).toBe(400);
+      await cfg({ summaries: {} });
+    });
+
     it("composes with search and paging", async () => {
       const r = await query({ search: "rry", offset: 0, limit: 1, transient: { sorts: [{ field_id: ctx.nm, direction: "desc" }] } }, viewer);
       expect(r.total).toBe(2);
@@ -545,6 +578,38 @@ describe("history", () => {
     expect(rest.map((e) => e.kind)).toEqual(["create"]);
   });
 
+  it("folds repeated edits of one text cell by one person into one entry, and keeps the first old value", async () => {
+    const r = await mk({ [name]: "Draft" });
+    const edit = (as: Profile, text: string) => as.run(() => recordsApi.update(tasks.id, { records: [{ id: r.id, values: { [name]: text } }] }));
+    await edit(w.owner, "Draft 2");
+    await edit(w.owner, "Draft 3");
+    await edit(w.owner, "Draft 4");
+    const folded = await w.owner.run(() => recordsApi.history(r.id));
+    expect(folded.map((e) => e.kind)).toEqual(["update", "create"]);
+    expect(folded[0]!.changes[name]).toEqual({ old: "Draft", new: "Draft 4" });
+    expect(folded[0]!.user_id).toBe(w.owner.id);
+
+    // Another person's edit is its own entry, and the first person's next edit does not reach past it.
+    await edit(editor, "Draft 5");
+    await edit(w.owner, "Draft 6");
+    const turns = await w.owner.run(() => recordsApi.history(r.id));
+    expect(turns.map((e) => [e.kind, e.user_id])).toEqual([["update", w.owner.id], ["update", editor.id], ["update", w.owner.id], ["create", w.owner.id]]);
+    expect(turns[1]!.changes[name]).toEqual({ old: "Draft 4", new: "Draft 5" });
+    expect(turns[0]!.changes[name]).toEqual({ old: "Draft 5", new: "Draft 6" });
+  });
+
+  it("keeps numbers and edits that touch two cells as separate entries", async () => {
+    const r = await mk({ [name]: "Mixed", [qty]: 1 });
+    const patch = (values: Record<string, unknown>) => w.owner.run(() => recordsApi.update(tasks.id, { records: [{ id: r.id, values: values as never }] }));
+    await patch({ [qty]: 2 });
+    await patch({ [qty]: 3 });
+    await patch({ [name]: "Mixed 2", [qty]: 4 });
+    await patch({ [name]: "Mixed 3" });
+    const history = await w.owner.run(() => recordsApi.history(r.id));
+    // qty twice, then a two-cell edit, then a name edit that cannot join it: none folded.
+    expect(history.map((e) => e.kind)).toEqual(["update", "update", "update", "update", "create"]);
+  });
+
   it("shows link changes on both sides as [{id, name}] with current names", async () => {
     const person = parse("RecordsResponse", await w.owner.run(() => recordsApi.create(people.id, { records: [{ values: { [peopleName]: "Hist person" } }] }))).records[0]!;
     const t = await mk({ [name]: "Linked hist" });
@@ -559,6 +624,24 @@ describe("history", () => {
     const r = await mk({ [name]: "Visible history" });
     expect((await viewer.run(() => recordsApi.history(r.id))).length).toBeGreaterThan(0);
     expectError(await failure(w.owner.run(() => recordsApi.history("recNope0000000"))), 404, "not_found");
+  });
+});
+
+describe("embeds in rich text", () => {
+  const page = "Quarterly invoices overview\n\n```openbase\n{\"embed\":\"linked\",\"field\":\"fldInvoiceLinks\"}\n```\n\nOpen work below\n\n```openbase\n{\"embed\":\"view\",\"view\":\"viwOpenWork\",\"limit\":10}\n```\n";
+
+  it("are not searched, in a view or in global search, but the words around them are", async () => {
+    const t = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Embedding pages")));
+    const notes = (await w.owner.run(() => schemaApi.createField(t.id, { name: "Notes", type: "rich_text", options: {} } as never))).id;
+    const rec = parse("RecordsResponse", await w.owner.run(() => recordsApi.create(t.id, { records: [{ values: { [t.primary_field_id]: "Client page", [notes]: page } }] }))).records[0]!;
+    const grid = (await tableOf(w.owner, w.baseId, t.id)).views[0]!;
+    const inView = async (search: string) => parse("QueryResponse", await w.owner.run(() => recordsApi.query(grid.id, { search }))).total;
+    for (const hidden of ["embed", "linked", "fldInvoiceLinks", "viwOpenWork", "openbase", "limit"]) expect(await inView(hidden), hidden).toBe(0);
+    for (const shown of ["overview", "open work"]) expect(await inView(shown), shown).toBe(1);
+    const records = async (q: string) => parse("SearchResponse", await w.owner.run(() => api.search.everything(q, { base: w.baseId }))).results.filter((r) => r.kind === "record" && r.record_id === rec.id);
+    expect(await records("fldInvoiceLinks")).toHaveLength(0);
+    expect(await records("openbase")).toHaveLength(0);
+    expect(await records("Quarterly")).toHaveLength(1);
   });
 });
 

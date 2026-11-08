@@ -92,6 +92,10 @@ async function startServer(bin: string, label: string): Promise<Running> {
       // Loopback-only server: let each test profile present its own client address (see cookieJar.ts).
       OPENBASE_TRUST_PROXY: "true",
       OPENBASE_BACKUP_HOUR: "-1",
+      // The MCP contract tests make a few hundred tool calls as one user inside a minute; the limits
+      // themselves are covered by crates/server/tests/mcp_*.
+      OPENBASE_MCP_RATE_PER_TOKEN: "100000",
+      OPENBASE_MCP_RATE_PER_USER: "100000",
       OPENBASE_LOG: "warn",
     },
     stdio: ["ignore", "pipe", "pipe"],

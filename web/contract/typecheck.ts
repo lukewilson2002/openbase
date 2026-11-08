@@ -53,6 +53,7 @@ import type {
   PasskeyChallenge,
   PasskeyInfo,
   PasskeysRemoved,
+  Presence,
   PublicForm,
   PublicQueryResponse,
   PublicView,
@@ -118,6 +119,7 @@ export interface TypeMap {
   PasskeyChallenge: PasskeyChallenge;
   PasskeyInfo: PasskeyInfo;
   PasskeysRemoved: PasskeysRemoved;
+  Presence: Presence;
   PublicForm: PublicForm;
   PublicQueryResponse: PublicQueryResponse;
   PublicView: PublicView;
