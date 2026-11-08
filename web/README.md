@@ -129,12 +129,12 @@ the app with `web/dist` moved away. The projects share that one instance and run
 |---|---|---|---|
 | `smoke` | `smoke.spec.ts` | | the embedded build loads `/` without console errors or CSP violations |
 | `journey` | `journey.spec.ts` | smoke | first-run setup (creates the administrator, so it must run first), workspace and project, rename a table, add number / single select / date / formula fields through the dialog, add records and edit cells, filter and sort, expanded record and a comment, log out and in |
-| `grid` | `grid.spec.ts` | journey | cell editing, undo, filters, search, hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
+| `grid` | `grid.spec.ts` | journey | cell editing, undo, the filter bar (a typed phrase, a chip's editor, Backspace, the Advanced filter, Ctrl+F and `/`), hiding fields, the field dialog, expanded record, add / delete records, and the row-marker column (numbers, none on the summary row, numbered records in a grouped view) |
 | `sharing` | `sharing.spec.ts` | grid | build, share and anonymously submit a form in a fresh cookie-less browser context, a password-protected grid share that hides a field, CSV download and import, a viewer sorting a board |
 | `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> AI assistants -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `assistants` | `assistants.spec.ts` | grid | Account -> AI assistants: the MCP address is the server's public URL and answers `401` with the sign-in metadata, Claude is open by default and the sections are an accordion (mouse and keyboard), the copy buttons write the real clipboard, the token variants are collapsed until opened, the plain-http server shows the public-address warning, and the tab fits 375 px in the light and dark themes |
 | `passkeys` | `passkeys.spec.ts` | grid | Chrome's virtual authenticator (CDP `WebAuthn.addVirtualAuthenticator`: CTAP2, internal transport, resident keys, user verification): add a passkey in Account -> Security, sign out, sign in with it and no password (the background request for the email field's autofill list stays pending until the button replaces it), rename and remove it, the removed passkey's leftover credential refused; a TOTP-enabled user signing in by passkey skips the code while the password still asks for it; the autofill request completing the sign-in; an administrator removing another user's passkeys |
-| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen (390 px): the bottom navigation (64 px, three tabs), the 56 px header with 44 px buttons, the workspace switcher and profile menu as sheets, the Collections tab, a collection with its back link and search, the filter builder and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
+| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen (390 px): the bottom navigation (64 px, three tabs), the 56 px header with 44 px buttons, the workspace switcher and profile menu as sheets, the Collections tab, a collection with its back link, the filter bar with its suggestion panel and the Advanced filter sheet, and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
 | `admin-email` | `adminEmail.spec.ts` | sharing, automations, views, oauth, assistants, mobile, passkeys | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
@@ -293,6 +293,29 @@ open (rename, delete and share a view, the collection's settings) are `BaseDialo
   `POST /api/tables/{id}/body-field`, then one `PATCH /api/tables/{id}` with only what changed (MCP `set_primary_field`, `set_page_field`,
   `update_table_settings`). `whyNotTitle` mirrors the server's `can_be_primary`; `isHomeDateProperty` the Home date's rule.
 
+### The filter bar (COL-3, `components/viewbar/ViewFilterBar.tsx`)
+
+One bar filters and searches. `ViewFrame` and `GridView` draw it under the tabs, then the `DraftBar`, then the old toolbar (which
+View options, COL-6, replaces; the bar's `trailing` prop is the slot to the right of the field where View options goes). It is the
+`FilterBar` core component wired to the view's draft: every change goes through `cfg.update`, so it is a draft and the changes bar says so.
+
+- **Chips are the view's filter.** `filterChips.ts` (pure) reads it: a plain list of conditions joined by AND is one chip per
+  condition ("Status is Done", from `conditionLabel`); a filter with OR, or with a group inside, is one chip, "Advanced filter, 3
+  conditions", that opens the builder. Adding a condition appends by AND, adds nothing that is already there, and over an OR filter
+  makes the whole of it one side of the AND. Clicking a condition chip opens `ChipEditor`: the builder's `ConditionRow` (property,
+  operator, operand editors) over a `useDraft` that waits out typing before writing the filter, with Remove filter.
+- **Typing offers suggestions** from `parsePhrase` (the Page is left out of `fields`), best first, with the property and value in bold:
+  filters, then "Notes contain “…”", then "Search every property for “…”", which sets the view's search (a chip, "Search for “…”",
+  that is not part of the draft; clicking it puts the words back in the field). "Advanced filter" ends the list and opens the
+  `FilterBuilder` on the whole filter in a popover (a sheet on a phone). An empty field opens no list (it would cover the changes bar
+  under it). Enter applies the highlighted suggestion; ids of
+  suggestions come from their words, so the highlight returns to the first row when the list changes.
+- **Shortcuts.** `/` focuses the bar (not where text is typed: an input, a text editor, a dialog or a menu) and Ctrl or Cmd+F does too,
+  selecting what is in it. Both listen in the capture phase, so the grid's canvas does not see the key. The old search box and the
+  grid's own Ctrl+F handler are gone, and so is the toolbar's Filter tool.
+- **Announcements.** Filters added and removed and the search are said in a polite region; the changes bar and the footer count say
+  how many records show.
+
 ### Plugging in a view
 
 Implement a component taking `ViewProps` (`schema`, `table`, `view`, `role`) and point the matching line of
@@ -347,7 +370,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
-| `src/components/viewbar/` | Toolbar, filter builder, pure `ViewConfig` mutations (`config.ts`) |
+| `src/components/viewbar/` | The filter bar (`ViewFilterBar`), the filter builder, the old toolbar (until View options), pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
 
 To work on the grid without a server run `VITE_MOCK=1 npm run dev`: `dev/mock-api.ts` is a Vite middleware that serves a
@@ -385,7 +408,7 @@ Date writes honour the field: a date-only field stores `YYYY-MM-DD`, a field wit
 | `src/lib/csv/` | The CSV preview parser (BOM, delimiter detection, quotes), `mapping.ts` (the column names the server derives, auto matching, payload) and `read.ts` (size / encoding checks) |
 | `src/lib/dateGuess/` | Deterministic date-phrase parser for capture (HOME-4): `guessDate(text, {now, timeZone, weekStart})` finds one phrase (today, tomorrow, weekdays, `next Friday`, `Nov 14`, `11/14`, `9am`, ISO), resolves it and returns the text without it; `restorePhrase` puts the words back. Pure: the clock is injected. Not wired into the UI yet |
 | `src/lib/guessType/` | The FLD-1 type guesser: `guessType(value)` returns a field type, complete options and the table row that matched. `examples.json` is the example table shared with the CSV importer's `infer_kind` (a Rust test in `store/csv_io.rs` reads the same file); add a row when a rule changes |
-| `src/lib/phraseFilter/` | The COL-4 phrase parser: `parsePhrase(text, {fields, userId, collaborators, now, timeZone, weekStart})` returns ranked candidates for the filter bar, using only existing operators: `filter` ("Next follow-up is this week"), `long-text` ("Notes contain “…”", only beside a filter reading) and one `search` ("Search every property for “…”"). Each carries a `condition` ready for a chip, a `label` of `property`, `operator` and `value` parts for bold rendering, and a `score`; empty text gives none and text it cannot read gives the search suggestion alone. A property needs an operator or a value that reads one way ("Name Dana" is not a filter, "Status Won" is); a bare value finds its property only when exactly one can hold it. `this week`, `next week`, `last week`, `this/next/last month` and `this year` write the BE-7 calendar operands; `me` and `mine` write the `"me"` marker. Pass `fields` without the Page property. Not wired into the filter bar yet |
+| `src/lib/phraseFilter/` | The COL-4 phrase parser: `parsePhrase(text, {fields, userId, collaborators, now, timeZone, weekStart})` returns ranked candidates for the filter bar, using only existing operators: `filter` ("Next follow-up is this week"), `long-text` ("Notes contain “…”", only beside a filter reading) and one `search` ("Search every property for “…”"). Each carries a `condition` ready for a chip, a `label` of `property`, `operator` and `value` parts for bold rendering, and a `score`; empty text gives none and text it cannot read gives the search suggestion alone. A property needs an operator or a value that reads one way ("Name Dana" is not a filter, "Status Won" is); a bare value finds its property only when exactly one can hold it. `this week`, `next week`, `last week`, `this/next/last month` and `this year` write the BE-7 calendar operands; `me` and `mine` write the `"me"` marker. Pass `fields` without the Page property. `ViewFilterBar` runs it. `describeCondition` / `conditionLabel` (`describe.ts`) read any condition back in the same words, for chips |
 | `src/views/form/` | The form view: `FormBuilder` (settings, `FormFieldList` with dnd-kit reorder, live preview through `FormSurface` with the record editors in their `form` variant) and `FormFill` (signed-in editors create a record through the normal records API) |
 | `src/components/share/ShareViewDialog.tsx` | "Share view" / "Share form" for creators: links, enable / disable, password, delete, and what is public |
 | `src/components/csv/` | Download CSV button, Import CSV (preview + column mapping + row errors), New table from CSV |
@@ -503,7 +526,10 @@ The second half of the set, all in `src/components/ui` and tested in `overlays.t
   button closes it and returns focus. On phone use a `Sheet` or a full-screen `Dialog`.
 - **CommandPalette** and **FilterBar**: presentational shells with the keyboard model built in (`listbox.tsx`: Arrow keys move the
   highlight while focus stays in the field, `aria-activedescendant`, wrap-around). The caller supplies results and suggestions and decides what
-  choosing one does. The filter bar's Backspace-on-empty selects the last chip, then removes it.
+  choosing one does. The filter bar's Backspace-on-empty selects the last chip, then removes it. A `FilterBarChip` may carry an `editor`:
+  clicking the chip opens it in a popover under the chip (a sheet titled with the chip on a phone), and closing it puts focus back on the chip.
+  Below 1024 px the suggestions are not a popover (the keyboard would cover it) but a panel docked above the keyboard
+  (`useVisualViewport`), still without taking focus from the field.
 - **TemporaryChangesBar** and **Toast**: each is a polite live region that is in the page before its text arrives. Keep the bar mounted
   and flip `open`. A toast takes `action` or `actions` (Undo, Open), waits while hovered or focused, and sits bottom-left on desktop and above
   the phone tab bar on phone: the bar sets `--bottom-nav-height` when it is shown.

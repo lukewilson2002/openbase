@@ -171,6 +171,17 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   date Home shows records by and the done checkbox. On a phone the title has a row of its own
   under the header, so a long name is no longer cut off between the buttons, and the settings are
   a full-screen sheet.
+- **One bar filters and searches a collection.** It sits under the view tabs, full width. Type
+  what you mean ("status done", "amount over 500", "next follow-up this week") and the list
+  under it offers the filters your words could mean, most likely first, then a filter on a long
+  text property, then "Search every property for …". Enter applies the highlighted one as a chip;
+  chips combine with AND. Backspace in the empty field selects the last chip and a second
+  Backspace removes it; clicking a chip changes its property, operator or value. **Advanced
+  filter**, at the bottom of the list, opens the nested builder for OR groups, and a view whose
+  filter uses OR or groups shows as one chip, "Advanced filter, 3 conditions". `/` and Ctrl+F
+  focus the bar. Everything it does is a draft, like every other change to a view. The toolbar's
+  Filter tool and its search box are gone; on a phone the suggestions sit above the keyboard
+  and the editors are sheets.
 - **The sidebar is rebuilt around one workspace.** It starts with the workspace switcher (the
   workspace's color, its name and "Switch workspace"; its menu begins with the OpenBase mark,
   lists every workspace and ends with the workspace's own actions), "Search everything", Home,
