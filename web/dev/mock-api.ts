@@ -439,14 +439,27 @@ const PRIMARY: Record<string, string> = { [T_TASKS]: "fld_name", [T_PEOPLE]: "fl
 /** What the sidebar's Rename and Color menu items changed (`PATCH /api/tables/:id`). */
 const tableEdits: Record<string, { name?: string; color?: string }> = {};
 
+/** Tables made while the mock runs (New collection, Duplicate): a primary "Name" property and a default grid, with no records. */
+const madeTables = new Map<string, { name: string; color: string }>();
+const TABLE_COLORS = ["blue", "orange", "green", "purple", "pink", "teal", "cyan", "red"];
+
+function addTable(name: string, color?: string | null): string {
+  const id = newId("tbl");
+  madeTables.set(id, { name, color: color ?? TABLE_COLORS[tableOrder.length % TABLE_COLORS.length]! });
+  PRIMARY[id] = `fld_${id}_name`;
+  views.push({ id: `viw_default_${id}`, table_id: id, name: "Default grid", type: "grid", config: emptyConfig(), personal: false, locked: false, is_default: true });
+  tableOrder.push({ id });
+  return id;
+}
+
 function tableDto(id: string): Obj {
   return {
     id,
     base_id: BASE_ID,
-    name: tableEdits[id]?.name ?? (id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People"),
+    name: tableEdits[id]?.name ?? madeTables.get(id)?.name ?? (id === T_TASKS ? "Tasks" : id === T_PROJECTS ? "Projects" : "People"),
     description: null,
     primary_field_id: PRIMARY[id]!,
-    color: tableEdits[id]?.color ?? (id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange"),
+    color: tableEdits[id]?.color ?? madeTables.get(id)?.color ?? (id === T_TASKS ? "blue" : id === T_PROJECTS ? "purple" : "orange"),
     record_noun: "",
     record_count: [...records.values()].filter((r) => r.table_id === id && !r.deleted).length,
     body_field_id: null,
@@ -468,6 +481,7 @@ function baseDto(req: IncomingMessage): Obj {
 }
 
 function fieldsOf(table: string): Obj[] {
+  if (madeTables.has(table)) return [field(PRIMARY[table]!, "Name", "text", { multiline: false }, table)];
   return table === T_TASKS ? taskFields : table === T_PROJECTS ? projectFields : peopleFields;
 }
 
@@ -1155,6 +1169,21 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (typeof body.name === "string") edit.name = body.name;
     if (typeof body.color === "string") edit.color = body.color;
     return send(res, 200, tableDto(g[1]!)), true;
+  }
+  if ((g = /^\/api\/bases\/([^/]+)\/tables$/.exec(p)) && m === "POST" && g[1] === BASE_ID) {
+    const name = String(body.name ?? "").trim();
+    if (!name) return err(res, 422, "validation_failed", "a table needs a name"), true;
+    return send(res, 201, tableDto(addTable(name, body.color))), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)\/duplicate$/.exec(p)) && m === "POST" && tableOrder.some((t) => t.id === g![1])) {
+    // The copy has the original's name and color but not its properties or records: the mock's schema is fixed.
+    const source = tableDto(g[1]!);
+    return send(res, 201, tableDto(addTable(String(body.name ?? `${source.name} copy`), String(source.color)))), true;
+  }
+  if ((g = /^\/api\/tables\/([^/]+)$/.exec(p)) && m === "DELETE" && tableOrder.some((t) => t.id === g![1])) {
+    if (tableOrder.length <= 1) return err(res, 422, "validation_failed", "a base must keep at least one table; create another before deleting this one"), true;
+    tableOrder.splice(tableOrder.findIndex((t) => t.id === g![1]), 1);
+    return send(res, 200, { ok: true }), true;
   }
   if ((g = /^\/api\/tables\/([^/]+)\/views\/reorder$/.exec(p)) && m === "POST") {
     // Shared views or personal ones, never the default grid: the listed ids keep to the places they held.
