@@ -29,8 +29,12 @@ export interface LedgerSeed {
   /** Folder (project) ids by name, and the collection ids by name. */
   folders: { marketing: string; operations: string; archive: string };
   tables: Record<string, string>;
+  /** The folder (project) id each collection lives in, by name. */
+  bases: Record<string, string>;
   /** Each collection's first view, the default grid: a collection opens in the last view used, and a view added by the seed would take that over. */
   defaultViews: Record<string, string>;
+  /** The saved views the seed adds, by "Collection / View name" (for example "Clients / Pipeline"). */
+  views: Record<string, string>;
   /** A word that matches records, collections, a folder, a view and a workspace, for the command palette. */
   palette: string;
 }
@@ -48,6 +52,9 @@ function day(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** The properties of a collection by name, for a view's settings. */
+type FieldIds = Record<string, string>;
+
 type FieldSpec = { name: string; type: "single_select"; choices: string[] } | { name: string; type: "date" | "checkbox" | "number" | "text" };
 
 interface CollectionSpec {
@@ -60,12 +67,15 @@ interface CollectionSpec {
   /** The property Home dates the collection by, and the checkbox that marks a record done. */
   homeDate?: string;
   done?: string;
-  view?: { name: string; type: "kanban" | "grid" };
+  /** What the collection's records are called ("client"): the header's button and the empty states use it. */
+  recordNoun?: string;
+  /** Saved views besides the default grid. `config` gets the ids of the properties (and of the title as "Name"). */
+  views?: { name: string; type: "kanban" | "grid" | "list" | "calendar" | "gallery" | "timeline" | "form"; config?: (ids: FieldIds) => unknown }[];
 }
 
 const DATE_OPTIONS = { include_time: false, date_format: "friendly", time_format: "h12", timezone: null };
 
-async function collection(request: APIRequestContext, baseId: string, spec: CollectionSpec): Promise<{ id: string; viewId: string }> {
+async function collection(request: APIRequestContext, baseId: string, spec: CollectionSpec): Promise<{ id: string; viewId: string; views: Record<string, string> }> {
   const table = await call<{ id: string; primary_field_id: string; views: { id: string }[] }>(request, "post", `/api/bases/${baseId}/tables`, { name: spec.name, color: spec.color });
   const ids: string[] = [];
   for (const f of spec.fields) {
@@ -82,11 +92,16 @@ async function collection(request: APIRequestContext, baseId: string, spec: Coll
   }));
   if (records.length) await call(request, "post", `/api/tables/${table.id}/records`, { records, typecast: true });
   const settings: Record<string, string> = {};
+  if (spec.recordNoun) settings["record_noun"] = spec.recordNoun;
   if (spec.homeDate) settings["home_date_field_id"] = ids[spec.fields.findIndex((f) => f.name === spec.homeDate)]!;
   if (spec.done) settings["done_field_id"] = ids[spec.fields.findIndex((f) => f.name === spec.done)]!;
   if (Object.keys(settings).length) await call(request, "patch", `/api/tables/${table.id}`, settings);
-  if (spec.view) await call(request, "post", `/api/tables/${table.id}/views`, { name: spec.view.name, type: spec.view.type, config: null });
-  return { id: table.id, viewId: table.views[0]!.id };
+  const propertyIds: FieldIds = { Name: table.primary_field_id, ...Object.fromEntries(spec.fields.map((f, i) => [f.name, ids[i]!])) };
+  const views: Record<string, string> = {};
+  for (const v of spec.views ?? []) {
+    views[v.name] = (await call<{ id: string }>(request, "post", `/api/tables/${table.id}/views`, { name: v.name, type: v.type, config: v.config?.(propertyIds) ?? null })).id;
+  }
+  return { id: table.id, viewId: table.views[0]!.id, views };
 }
 
 async function signUp(request: APIRequestContext, name: string): Promise<void> {
@@ -112,10 +127,14 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
 
   const t: Record<string, string> = {};
   const defaultViews: Record<string, string> = {};
+  const savedViews: Record<string, string> = {};
+  const bases: Record<string, string> = {};
   const make = async (baseId: string, spec: CollectionSpec) => {
     const made = await collection(r, baseId, spec);
     t[spec.name] = made.id;
+    bases[spec.name] = baseId;
     defaultViews[spec.name] = made.viewId;
+    for (const [name, id] of Object.entries(made.views)) savedViews[`${spec.name} / ${name}`] = id;
   };
   // The top level.
   await make(rootId, {
@@ -127,6 +146,30 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
       { name: "Retainer", type: "number" },
     ],
     homeDate: "Next contact",
+    recordNoun: "client",
+    views: [
+      { name: "Pipeline", type: "kanban", config: (f) => ({ kanban: { stack_field_id: f["Status"] } }) },
+      { name: "Follow-ups", type: "calendar", config: (f) => ({ calendar: { date_field_id: f["Next contact"] } }) },
+      { name: "By status", type: "list", config: (f) => ({ groups: [{ field_id: f["Status"], direction: "asc" }] }) },
+      {
+        name: "Intake",
+        type: "form",
+        config: (f) => ({
+          form: {
+            title: "Tell us about your studio",
+            description: "A few questions so we can plan the first call.",
+            fields: [
+              { field_id: f["Name"], required: true, label: "Business name" },
+              { field_id: f["Status"], required: false },
+              { field_id: f["Next contact"], required: false, label: "When should we call?", help: "Any day that suits you." },
+              { field_id: f["Retainer"], required: false },
+            ],
+            submit_label: "Send",
+            success_message: "Thanks, we will be in touch.",
+          },
+        }),
+      },
+    ],
     rows: [
       ["Fernwood Dental", "Active", day(2), 2400],
       ["Marketing retainer, Halvorsen & Co", "Active", day(5), 3800],
@@ -150,18 +193,23 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     fields: [
       { name: "Stage", type: "single_select", choices: ["Planning", "In progress", "Review", "Shipped"] },
       { name: "Due", type: "date" },
+      { name: "Start", type: "date" },
     ],
     homeDate: "Due",
+    views: [
+      { name: "Cards", type: "gallery", config: () => ({ gallery: { cover_crop: true } }) },
+      { name: "Schedule", type: "timeline", config: (f) => ({ timeline: { start_field_id: f["Start"], end_field_id: f["Due"], scale: "month" } }) },
+    ],
     rows: [
-      ["Fernwood website rebuild", "In progress", day(12)],
-      ["Product launch, Cobalt Analytics", "Planning", day(30)],
-      ["Halvorsen brand refresh", "Review", day(4)],
-      ["Oakline shop migration", "In progress", day(18)],
-      ["Tidewater label redesign", "Shipped", day(-6)],
-      ["Summit membership flow", "Planning", day(45)],
-      ["Pemberton intake forms", "In progress", day(8)],
-      ["Larkspur seasonal campaign", "Review", day(2)],
-      ["Quill & Co. catalogue", "Planning", day(60)],
+      ["Fernwood website rebuild", "In progress", day(12), day(-20)],
+      ["Product launch, Cobalt Analytics", "Planning", day(30), day(6)],
+      ["Halvorsen brand refresh", "Review", day(4), day(-14)],
+      ["Oakline shop migration", "In progress", day(18), day(-3)],
+      ["Tidewater label redesign", "Shipped", day(-6), day(-30)],
+      ["Summit membership flow", "Planning", day(45), day(14)],
+      ["Pemberton intake forms", "In progress", day(8), day(-8)],
+      ["Larkspur seasonal campaign", "Review", day(2), day(-10)],
+      ["Quill & Co. catalogue", "Planning", day(60), day(20)],
     ],
   });
   await make(rootId, {
@@ -232,7 +280,7 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
       { name: "Launch", type: "date" },
     ],
     homeDate: "Launch",
-    view: { name: "Marketing pipeline", type: "kanban" },
+    views: [{ name: "Marketing pipeline", type: "kanban" }],
     rows: [
       ["Spring launch campaign", "Email", day(16)],
       ["Tidewater taproom opening", "Events", day(11)],
@@ -324,6 +372,10 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     const top = (await (await r.get("/api/workspaces")).json()) as { id: string; root_base_id: string }[];
     await make(top.find((w) => w.id === other.id)!.root_base_id, { name, color, fields: [], rows: [["Oat milk"], ["Coffee beans"], ["Lemons"]] });
   }
+  // A collection with no records at all, for COL-9's first empty state. It lives in a workspace the sidebar and palette
+  // shots do not show, so the rows moved in earlier phases keep their pictures.
+  const sideTop = ((await (await r.get("/api/workspaces")).json()) as { id: string; root_base_id: string }[]).find((w) => w.id === others[1]!.id)!.root_base_id;
+  await make(sideTop, { name: "Ideas", color: "yellow", fields: [{ name: "Notes", type: "text" }], recordNoun: "idea", rows: [] });
 
   // A person limited to the Operations folder.
   const invite = await call<{ url: string }>(r, "post", `/api/bases/${operations.id}/invites`, { role: "editor", email: null });
@@ -340,7 +392,9 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     rootId,
     folders: { marketing: marketing.id, operations: operations.id, archive: archive.id },
     tables: t,
+    bases,
     defaultViews,
+    views: savedViews,
     palette: "mark",
   };
   await ownerContext.close();

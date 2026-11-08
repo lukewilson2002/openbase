@@ -66,6 +66,40 @@ async function openCollection(page: Page, seed: LedgerSeed, baseId: string, name
   await expect(page.locator("canvas[data-testid='data-grid-canvas']").first()).toBeVisible();
 }
 
+
+/** A saved view of a seeded collection, open: the heading comes first, the layout's own content a moment later (each shot waits for that). */
+async function openView(page: Page, seed: LedgerSeed, collection: string, view?: string): Promise<void> {
+  const id = view ? seed.views[`${collection} / ${view}`] : seed.defaultViews[collection];
+  if (!id) throw new Error(`the ledger seed has no view ${view ?? "(default)"} of ${collection}`);
+  await page.goto(`/base/${seed.bases[collection]}/${seed.tables[collection]}/${id}`);
+  await expect(page.getByRole("heading", { level: 1, name: collection })).toBeVisible();
+}
+
+/** The grid has drawn: the canvas is up and Glide's accessible table holds a record's title, which arrives with the records. */
+async function gridDrawn(page: Page, title: string): Promise<void> {
+  await expect(page.locator("canvas[data-testid='data-grid-canvas']").first()).toBeVisible();
+  await expect(page.locator("canvas[data-testid='data-grid-canvas'] td", { hasText: title }).first()).toBeAttached();
+}
+
+/** The filter bar. */
+const filterBar = (page: Page) => page.getByRole("combobox", { name: "Filter or search" });
+
+/** Types a phrase into the filter bar and applies its first suggestion, as a person does; returns once the chip is there. */
+async function applyPhrase(page: Page, phrase: string, chip: string): Promise<void> {
+  const bar = filterBar(page);
+  await bar.click();
+  await bar.fill(phrase);
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: chip, exact: true })).toBeVisible();
+}
+
+/** Takes the pointer and the keyboard focus off the screen's controls, so no hover or focus ring is part of the picture. */
+async function rest(page: Page): Promise<void> {
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.mouse.move(1435, 995);
+}
+
 /**
  * The ledger. Add a screen by adding one entry; keep the rows in order.
  */
@@ -177,6 +211,247 @@ const SHOTS: Shot[] = [
       await box.fill(seed.palette);
       const results = dialog.getByRole("listbox", { name: "Results" });
       for (const group of ["Records", "Collections", "Folders", "Views", "Workspaces"]) await expect(results.getByRole("group", { name: group })).toBeVisible();
+    },
+  },
+
+  // 5 · Collection header, tabs, filter bar and the drafts bar (COL-1 to COL-5). Clients has four saved views besides
+  // its default grid, a record name ("client") and a filter of two chips, so the shot shows every part of the screen.
+  {
+    row: 5,
+    slug: "collection-header",
+    name: "collection header, tabs, filter bar with chips and the changes bar",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await applyPhrase(page, "active", "Status is Active");
+      await applyPhrase(page, "retainer over 2000", "Retainer is over 2,000");
+      await expect(page.getByText(/Showing \d+ of 14 clients/)).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 5,
+    slug: "filter-suggestions",
+    name: "filter bar with its suggestions",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      const bar = filterBar(page);
+      await bar.click();
+      await bar.fill("next contact this week");
+      await expect(page.getByRole("listbox", { name: "Suggestions" })).toBeVisible();
+      await expect(page.getByRole("option").first()).toBeVisible();
+    },
+  },
+
+  // 6 · View options (COL-6): the main screen, and one of the screens it opens. A popover on a desktop, a sheet on a phone.
+  {
+    row: 6,
+    slug: "view-options",
+    name: "View options",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await page.getByRole("button", { name: "View options" }).click();
+      const panel = page.getByRole("dialog", { name: "View options" });
+      await expect(panel.getByRole("group", { name: "Layout" })).toBeVisible();
+      await expect(panel.getByRole("button", { name: /^Properties/ })).toBeVisible();
+    },
+  },
+  {
+    row: 6,
+    slug: "view-options-properties",
+    name: "View options, the Properties screen",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await page.getByRole("button", { name: "View options" }).click();
+      const panel = page.getByRole("dialog", { name: "View options" });
+      await panel.getByRole("button", { name: /^Properties/ }).click();
+      await expect(panel.getByRole("button", { name: "Back to View options" })).toBeVisible();
+    },
+  },
+
+  // 7 · Save as view (COL-5): the dialog over a draft of two chips, its name filled in from them.
+  {
+    row: 7,
+    slug: "save-as-view",
+    name: "Save as view",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await applyPhrase(page, "active", "Status is Active");
+      await applyPhrase(page, "retainer over 2000", "Retainer is over 2,000");
+      await page.getByRole("button", { name: "Save as view", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Save as view" });
+      await expect(dialog.getByRole("textbox", { name: "Name" })).not.toHaveValue("");
+      await expect(dialog.getByRole("radio", { name: "Only me" })).toBeChecked();
+    },
+  },
+
+  // 8 to 13 · The layouts (COL-7), each in a saved view of a seeded collection.
+  {
+    row: 8,
+    slug: "grid",
+    name: "Grid layout",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await rest(page);
+    },
+  },
+  {
+    row: 9,
+    slug: "list",
+    name: "List layout",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "By status");
+      await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
+      await expect(page.getByRole("treeitem", { name: /^Active, \d+ records?$/ })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 10,
+    slug: "board",
+    name: "Board layout",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Pipeline");
+      await expect(page.getByRole("listitem", { name: "Stack: Active" })).toBeVisible();
+      await expect(page.getByText("Fernwood Dental").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 11,
+    slug: "calendar",
+    name: "Calendar layout with the unscheduled list",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Follow-ups");
+      await expect(page.locator(".fc-event").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 11,
+    slug: "calendar-unscheduled",
+    name: "Calendar with the unscheduled list open on a phone",
+    sizes: ["390"],
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Follow-ups");
+      await expect(page.locator(".fc-event").first()).toBeVisible();
+      await page.getByRole("button", { name: /^Show unscheduled records/ }).tap();
+      await expect(page.getByRole("complementary", { name: "Unscheduled records" })).toBeVisible();
+    },
+  },
+  {
+    row: 12,
+    slug: "gallery",
+    name: "Gallery layout",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Projects", "Cards");
+      await expect(page.getByRole("button", { name: "Fernwood website rebuild" })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 13,
+    slug: "timeline",
+    name: "Timeline layout",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Projects", "Schedule");
+      await expect(page.locator("[data-bar]").first()).toBeVisible();
+      await rest(page);
+    },
+  },
+
+  // 14 · Form builder (COL-6): the Form layout of Clients, with its settings beside the live preview.
+  {
+    row: 14,
+    slug: "form-builder",
+    name: "Form builder",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Intake");
+      await expect(page.getByRole("region", { name: "Form settings" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Title" })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 14,
+    slug: "form-builder-preview",
+    name: "Form builder, the preview pane on a phone",
+    sizes: ["390"],
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "Intake");
+      await page.getByRole("group", { name: "Builder panes" }).getByRole("button", { name: "Preview" }).tap();
+      await expect(page.getByRole("region", { name: "Live preview" })).toBeVisible();
+    },
+  },
+
+  // 15 · Collection settings (COL-10), opened from the header's "…".
+  {
+    row: 15,
+    slug: "collection-settings",
+    name: "Collection settings",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients");
+      await gridDrawn(page, "Fernwood Dental");
+      await page.getByRole("button", { name: "Collection settings" }).click();
+      await expect(page.getByRole("dialog", { name: /settings/i })).toBeVisible();
+    },
+  },
+
+  // 16 · Bulk selection (COL-9): a bar with the count and the actions on a desktop; on a phone the count and Actions,
+  // whose sheet lists them. The List layout: its rows carry the selection checkboxes.
+  {
+    row: 16,
+    slug: "selection",
+    name: "bulk selection bar, and its actions sheet on a phone",
+    open: async ({ page, seed, phone }) => {
+      await openView(page, seed, "Clients", "By status");
+      for (const name of ["Oakline Cycles", "Larkspur Florists", "Quill & Co. Books"]) await page.getByRole("checkbox", { name: `Select ${name}` }).check();
+      const bar = page.getByRole("toolbar", { name: "Selected records" });
+      await expect(bar).toContainText("3 selected");
+      if (phone) {
+        await bar.getByRole("button", { name: "Actions" }).tap();
+        await expect(page.getByRole("dialog", { name: "3 selected" })).toBeVisible();
+      }
+    },
+  },
+  {
+    row: 16,
+    slug: "selection-bar",
+    name: "bulk selection bar on a phone",
+    sizes: ["390"],
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "By status");
+      for (const name of ["Oakline Cycles", "Larkspur Florists"]) await page.getByRole("checkbox", { name: `Select ${name}` }).tap();
+      await expect(page.getByRole("toolbar", { name: "Selected records" })).toContainText("2 selected");
+    },
+  },
+
+  // 17 · Empty and filtered-empty states (COL-9): a collection without records, and a filter that matches none.
+  {
+    row: 17,
+    slug: "empty-collection",
+    name: "empty collection",
+    open: async ({ page, seed }) => {
+      await page.goto(`/base/${seed.bases["Ideas"]}/${seed.tables["Ideas"]}/${seed.defaultViews["Ideas"]}`);
+      await expect(page.getByRole("heading", { level: 1, name: "Ideas" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "No ideas yet" })).toBeVisible();
+    },
+  },
+  {
+    row: 17,
+    slug: "filtered-empty",
+    name: "filter that matches nothing",
+    open: async ({ page, seed }) => {
+      await openView(page, seed, "Clients", "By status");
+      await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
+      await applyPhrase(page, "name contains zzz", "Name contains zzz");
+      await expect(page.getByRole("heading", { name: "No clients match these filters" })).toBeVisible();
+      await rest(page);
     },
   },
 
