@@ -1,6 +1,7 @@
 /** Type-specific options for the field dialog: one editor per field type (28), all controlled. */
 import { useMemo } from "react";
 import type { DateFormat, DateOptions, DurationFormat, Field, FieldKind, TimeFormat, ValueFormat } from "@/api/types";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EntitySelect } from "@/components/ui/entity-select";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -172,7 +173,7 @@ function WatchedFields({ ctx, existing, value, onChange }: { ctx: KindContext; e
   const candidates = ctx.table.fields.filter((f) => f.id !== existing?.id && !["created_time", "last_modified_time", "created_by", "last_modified_by", "autonumber", "formula", "lookup", "rollup", "count", "button"].includes(f.type));
   return (
     <fieldset>
-      <legend className="mb-1 text-[0.8125rem] font-medium">Watch these properties</legend>
+      <legend className="mb-1 text-label font-medium">Watch these properties</legend>
       <p className="mb-2 text-xs text-muted">Only changes to the checked properties update this value. Leave all unchecked to track every editable property.</p>
       <ul className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
         {candidates.map((f) => (
@@ -193,11 +194,11 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
         <div className="flex flex-col gap-3">
           <Checkbox label="Multiline (keep line breaks)" checked={kind.options.multiline} onCheckedChange={(multiline) => onChange({ type: kind.type, options: { ...kind.options, multiline } })} />
           <FormField label="Default value (optional)">{(c) => <Input {...c} value={kind.options.default ?? ""} onChange={(e) => onChange({ type: kind.type, options: { ...kind.options, default: e.target.value || undefined } })} />}</FormField>
-          <p className="text-xs text-muted">Plain text, shown as typed. For notes, summaries or anything formatted, use Rich text.</p>
+          <p className="text-meta text-muted">Plain text, shown as typed. For notes, summaries or anything formatted, use Rich text.</p>
         </div>
       );
     case "rich_text":
-      return <p className="text-[0.8125rem] text-muted">Markdown, always multiline: text formatting (bold, italics, headings, links), tables, lists, images and other files, @mentions and more. For notes, summaries, articles and posts.</p>;
+      return <p className="text-label text-muted">Markdown, always multiline: text formatting (bold, italics, headings, links), tables, lists, images and other files, @mentions and more. For notes, summaries, articles and posts.</p>;
     case "number":
     case "percent":
       return (
@@ -230,9 +231,9 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
               <div className="flex flex-wrap items-center gap-1.5">
                 <Input {...c} className="w-24" maxLength={8} value={kind.options.symbol} onChange={(e) => onChange({ ...kind, options: { ...kind.options, symbol: e.target.value } })} />
                 {CURRENCY_SYMBOLS.map((s) => (
-                  <button key={s} type="button" aria-label={`Use ${s}`} onClick={() => onChange({ ...kind, options: { ...kind.options, symbol: s } })} className="h-8 min-w-8 rounded-md border border-line px-2 text-[0.8125rem] hover:bg-hover">
+                  <Button key={s} size="sm" variant="secondary" aria-label={`Use ${s}`} onClick={() => onChange({ ...kind, options: { ...kind.options, symbol: s } })} className="min-w-control-sm px-2">
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -278,7 +279,7 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
             )}
           </FormField>
           <div>
-            <p className="mb-1 text-[0.8125rem] font-medium">Color</p>
+            <p className="mb-1 text-label font-medium">Color</p>
             <ColorSwatchPicker value={kind.options.color} label="Rating color" onChange={(color) => onChange({ ...kind, options: { ...kind.options, color } })} />
           </div>
         </div>
@@ -286,7 +287,7 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
     case "checkbox":
       return (
         <div>
-          <p className="mb-1 text-[0.8125rem] font-medium">Color</p>
+          <p className="mb-1 text-label font-medium">Color</p>
           <ColorSwatchPicker value={kind.options.color} label="Checkbox color" onChange={(color) => onChange({ ...kind, options: { ...kind.options, color } })} />
         </div>
       );
@@ -312,19 +313,32 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
     case "created_by":
     case "autonumber":
     case "barcode":
-      return <p className="text-[0.8125rem] text-muted">This type has no options.</p>;
+      return <p className="text-label text-muted">This type has no options.</p>;
     case "link": {
       const target = otherTables.find((t) => t.id === kind.options.linked_table_id);
       return (
         <div className="flex flex-col gap-3">
-          <FormField label="Collection to link to" hint={existing ? "The linked collection can't be changed once the property is added." : undefined}>
+          <FormField
+            label="Collection to link to"
+            hint={
+              <>
+                {existing && (
+                  <>
+                    <span className="block">The linked collection can't be changed once the property is added.</span>{" "}
+                  </>
+                )}
+                {/* Links work inside one folder (decision 1): the list is the folder's collections and nothing else. */}
+                <span className="block">Collections in other folders can't be linked.</span>
+              </>
+            }
+          >
             {(c) => (
               <EntitySelect
                 {...c}
                 disabled={!!existing}
                 value={kind.options.linked_table_id}
                 onValueChange={(id) => onChange({ ...kind, options: { ...kind.options, linked_table_id: id, picker_view_id: null } })}
-                options={otherTables.map((t) => ({ value: t.id, label: `${t.name}${t.id === ctx.table.id ? " (this collection)" : ""}`, icon: t.icon }))}
+                options={otherTables.map((t) => ({ value: t.id, label: `${t.name}${t.id === ctx.table.id ? " (this collection)" : ""}`, hue: t.color, markName: t.name }))}
               />
             )}
           </FormField>
@@ -376,7 +390,9 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
       return (
         <div className="flex flex-col gap-3">
           {links.length === 0 ? (
-            <p className="rounded bg-warning-soft px-2 py-1.5 text-[0.8125rem]">This collection has no link properties yet. Add a link property first.</p>
+            <p role="status" className="rounded-md bg-warning-soft px-3 py-2 text-label">
+              This collection has no link properties yet. Add a link property first.
+            </p>
           ) : (
             <FormField label="Link property">
               {(c) => (
@@ -439,7 +455,7 @@ export function OptionsEditor({ kind, onChange, ctx, existing, inverseName, onIn
         <div className="flex flex-col gap-3">
           <FormField label="Button label">{(c) => <Input {...c} maxLength={100} value={kind.options.label} onChange={(e) => onChange({ ...kind, options: { ...kind.options, label: e.target.value } })} />}</FormField>
           <FormulaEditor tableId={ctx.table.id} fields={ctx.table.fields.filter((f) => f.id !== existing?.id)} rows={3} label="URL formula" placeholder={'e.g. "https://example.com/" & {Name}'} value={kind.options.url_formula} onChange={(url_formula) => onChange({ ...kind, options: { ...kind.options, url_formula } })} />
-          <p className="text-xs text-muted">Only http, https and mailto links open when the button is clicked.</p>
+          <p className="text-meta text-muted">Only http, https and mailto links open when the button is clicked.</p>
         </div>
       );
   }

@@ -500,31 +500,33 @@ describe("webhook panel", () => {
   });
 });
 
-describe("table icons in the automation editor", () => {
-  const iconEnv = () => {
+describe("collection marks in the automation editor", () => {
+  // Collections are told apart by a color mark, never an icon (decision 3).
+  const markedEnv = () => {
     const schema = automationSchema();
-    schema.tables[0]!.icon = "clipboard-list";
-    schema.tables[1]!.icon = "users";
+    schema.tables[0]!.color = "blue";
+    schema.tables[1]!.color = "orange";
     return makeEnv({ schema });
   };
 
-  it("shows the table icons in the trigger's table select", async () => {
-    await setup(makeAutomation(), iconEnv());
+  it("shows the collection marks in the trigger's table select", async () => {
+    await setup(makeAutomation(), markedEnv());
     const select = screen.getByLabelText("Table");
-    expect(select.querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
+    expect(select.querySelector(".ob-mark.ob-hue-blue")).toBeInTheDocument();
+    expect(select.querySelector("svg.lucide-clipboard-list")).toBeNull();
     await userEvent.click(select);
     const options = await screen.findAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual(["Tasks", "People"]);
-    expect(options[1]!.querySelector("svg.lucide-users")).toBeInTheDocument();
+    expect(options[1]!.querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
   });
 
-  it("shows the table icon in an action's table select", async () => {
-    await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl2", values: {} }] }), iconEnv());
-    expect(within(card(1)).getByLabelText("Table").querySelector("svg.lucide-users")).toBeInTheDocument();
+  it("shows the collection mark in an action's table select", async () => {
+    await setup(makeAutomation({ actions: [{ type: "create_record", table_id: "tbl2", values: {} }] }), markedEnv());
+    expect(within(card(1)).getByLabelText("Table").querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
   });
 
-  it("names the form's table icon in the form trigger", async () => {
-    await setup(makeAutomation({ trigger: { type: "form_submitted", view_id: "viw9" } }), iconEnv());
-    expect(screen.getByLabelText("Form").querySelector("svg.lucide-clipboard-list")).toBeInTheDocument();
+  it("marks the form's collection in the form trigger", async () => {
+    await setup(makeAutomation({ trigger: { type: "form_submitted", view_id: "viw9" } }), markedEnv());
+    expect(screen.getByLabelText("Form").querySelector(".ob-mark.ob-hue-blue")).toBeInTheDocument();
   });
 });

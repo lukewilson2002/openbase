@@ -33,7 +33,7 @@ function TableSelect({ label, value, onChange }: { label: string; value: string;
           {...ctl}
           value={value}
           onValueChange={onChange}
-          options={[...(known ? [] : [{ value, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, icon: t.icon }))]}
+          options={[...(known ? [] : [{ value, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
         />
       )}
     </Field>

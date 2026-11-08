@@ -1,5 +1,5 @@
 /**
- * Formula text area with field-name autocomplete after `{` and a live check against
+ * Formula text area with property-name autocomplete after `{` and a live check against
  * `POST /api/tables/{id}/formula/check` (parse, type check and a preview on the first record).
  * Rollup expressions run over the linked `values`, which that endpoint does not model, so they
  * are only checked by the server when the field is saved. A 404/405 (an older server) turns the
@@ -11,12 +11,15 @@ import { isApiError } from "@/api/client";
 import { schemaApi } from "@/api/records";
 import type { Field } from "@/api/types";
 import { useDebounced } from "@/components/record/editors/useDebounced";
+import { menuSurfaceClass } from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
 import { Textarea } from "@/components/ui/input";
+import { ListboxOption } from "@/components/ui/listbox";
 import { cn } from "@/lib/cn";
 
 export interface FormulaEditorProps {
   tableId: string;
-  /** Fields whose names can be referenced as `{Name}`. */
+  /** Properties whose names can be referenced as `{Name}`. */
   fields: readonly Field[];
   value: string;
   onChange: (expression: string) => void;
@@ -120,7 +123,7 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
 
   return (
     <div className="relative">
-      <label htmlFor={`${listId}-ta`} className="text-[0.8125rem] font-medium">
+      <label htmlFor={`${listId}-ta`} className="text-label font-medium">
         {label}
       </label>
       <Textarea
@@ -129,7 +132,7 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
         rows={rows}
         spellCheck={false}
         placeholder={placeholder ?? "e.g. {Price} * {Quantity}"}
-        className="mt-1 font-mono text-[0.8125rem]"
+        className="mt-1 font-mono text-label"
         value={value}
         role="combobox"
         aria-expanded={suggestions.length > 0}
@@ -163,25 +166,24 @@ export function FormulaEditor({ tableId, fields, value, onChange, label, placeho
         }}
       />
       {suggestions.length > 0 && (
-        <ul id={listId} role="listbox" aria-label="Properties" className="absolute left-0 z-20 mt-1 max-h-48 w-64 overflow-y-auto rounded-md border border-line bg-surface p-1 shadow-pop">
+        // The focus stays in the text area while a property is picked (the rows keep it), so typing goes on.
+        <div id={listId} role="listbox" aria-label="Properties" className={cn("absolute left-0 mt-1 max-h-48 w-64 overflow-y-auto overscroll-contain", menuSurfaceClass)}>
           {suggestions.map((f, i) => (
-            <li key={f.id} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
-              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => accept(f)} className={cn("block w-full truncate rounded px-2 py-1 text-left text-[0.8125rem]", i === active && "bg-hover")}>
-                {f.name}
-              </button>
-            </li>
+            <ListboxOption key={f.id} id={`${listId}-${i}`} active={i === active} onHover={() => setActive(i)} onSelect={() => accept(f)}>
+              {f.name}
+            </ListboxOption>
           ))}
-        </ul>
+        </div>
       )}
-      <div className="mt-1 min-h-5 text-xs" aria-live="polite">
+      <div className="mt-1 min-h-5 text-meta" aria-live="polite">
         {check.status === "error" && (
           <p className="flex items-start gap-1 text-danger">
-            <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" /> {check.message}
+            <Icon icon={CircleAlert} size="sm" className="mt-0.5" /> {check.message}
           </p>
         )}
         {check.status === "ok" && (
           <p className="flex items-center gap-1 text-success">
-            <CircleCheck aria-hidden className="size-3.5" /> Looks good{check.preview !== undefined ? <span className="text-muted"> · preview: {check.preview}</span> : null}
+            <Icon icon={CircleCheck} size="sm" /> Looks good{check.preview !== undefined ? <span className="text-muted"> · preview: {check.preview}</span> : null}
           </p>
         )}
         {check.status === "checking" && <p className="text-muted">Checking…</p>}

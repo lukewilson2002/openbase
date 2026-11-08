@@ -63,7 +63,7 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
           {...ctl}
           value={tableId}
           onValueChange={(id) => onChange(withTriggerTable(trigger, id))}
-          options={[...(schema.tables.some((t) => t.id === tableId) ? [] : [{ value: tableId, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, icon: t.icon }))]}
+          options={[...(schema.tables.some((t) => t.id === tableId) ? [] : [{ value: tableId, label: "(deleted table)" }]), ...schema.tables.map((t) => ({ value: t.id, label: t.name, hue: t.color, markName: t.name }))]}
         />
       )}
     </Field>
@@ -129,7 +129,7 @@ function TriggerFields({ trigger, onChange, webhook, nextRunAt, nextRunNote, err
               {...ctl}
               value={trigger.view_id}
               onValueChange={(id) => onChange({ type: "form_submitted", view_id: id })}
-              options={[...(known ? [] : [{ value: trigger.view_id, label: "(deleted form)" }]), ...forms.map(({ table, view }) => ({ value: view.id, label: `${table.name} / ${view.name}`, icon: table.icon }))]}
+              options={[...(known ? [] : [{ value: trigger.view_id, label: "(deleted form)" }]), ...forms.map(({ table, view }) => ({ value: view.id, label: `${table.name} / ${view.name}`, hue: table.color, markName: table.name }))]}
             />
           )}
         </Field>

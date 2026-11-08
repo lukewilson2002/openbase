@@ -1,4 +1,9 @@
-/** Choices editor for single and multiple select fields: add, rename, recolour, reorder, delete. */
+/**
+ * Choices editor for single and multiple select properties (FLD-6): add, rename, recolor, reorder, delete.
+ * Each choice keeps its pastel chip color; a new one takes the next palette color (`nextChoiceColor`). On a
+ * phone the color list is a bottom sheet (PH-3) and the rows are reordered with the arrows, since a drag
+ * needs a mouse.
+ */
 import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, GripVertical, Plus, X } from "lucide-react";
 import type { SelectChoice } from "@/api/types";
@@ -6,7 +11,10 @@ import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { Icon } from "@/components/ui/icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet } from "@/components/ui/sheet";
+import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import { choiceClass } from "@/lib/colors";
 import { cn } from "@/lib/cn";
 import { nextChoiceColor } from "./choices";
@@ -14,6 +22,49 @@ import { nextChoiceColor } from "./choices";
 export interface SelectChoicesEditorProps {
   choices: readonly SelectChoice[];
   onChange: (choices: SelectChoice[]) => void;
+}
+
+/** The choice's color as a small pastel dot that opens the list of colors: a pop-over, or a sheet on a phone. */
+function ChoiceColor({ color, label, onChange }: { color: string; label: string; onChange: (color: string) => void }) {
+  const desktop = useMediaQuery(DESKTOP_QUERY);
+  const [open, setOpen] = useState(false);
+  const dot = (
+    <button
+      type="button"
+      aria-label={label}
+      aria-haspopup="dialog"
+      onClick={desktop ? undefined : () => setOpen(true)}
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-hover max-md:size-control-touch"
+    >
+      <span className={cn(choiceClass(color), "size-5 rounded-pill border border-fg/10 max-md:size-6")} />
+    </button>
+  );
+  if (desktop) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>{dot}</PopoverTrigger>
+        <PopoverContent className="w-72 p-3">
+          <ColorSwatchPicker value={color} onChange={onChange} label={label} />
+        </PopoverContent>
+      </Popover>
+    );
+  }
+  return (
+    <>
+      {dot}
+      <Sheet open={open} onOpenChange={setOpen} title="Choice color">
+        <ColorSwatchPicker
+          value={color}
+          label={label}
+          onChange={(c) => {
+            onChange(c);
+            setOpen(false);
+          }}
+          className="grid-cols-5 justify-items-center gap-3 [&>button]:size-control-touch"
+        />
+      </Sheet>
+    </>
+  );
 }
 
 export function SelectChoicesEditor({ choices, onChange }: SelectChoicesEditorProps) {
@@ -55,15 +106,8 @@ export function SelectChoicesEditor({ choices, onChange }: SelectChoicesEditorPr
             onDragEnd={() => setDragging(null)}
             className={cn("flex items-center gap-1.5", dragging === i && "opacity-50")}
           >
-            <GripVertical aria-hidden className="size-4 shrink-0 cursor-grab text-faint" />
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" aria-label={`Color of option ${c.name || i + 1}`} className={cn(choiceClass(c.color), "size-6 shrink-0 rounded-full border border-fg/10")} />
-              </PopoverTrigger>
-              <PopoverContent className="w-72 p-3">
-                <ColorSwatchPicker value={c.color} onChange={(color) => update(i, { color })} label={`Color of option ${c.name || i + 1}`} />
-              </PopoverContent>
-            </Popover>
+            <Icon icon={GripVertical} className="cursor-grab text-faint max-md:hidden" />
+            <ChoiceColor color={c.color} label={`Color of option ${c.name || i + 1}`} onChange={(color) => update(i, { color })} />
             <Input
               ref={(el) => {
                 if (el) {
@@ -88,21 +132,21 @@ export function SelectChoicesEditor({ choices, onChange }: SelectChoicesEditorPr
               }}
             />
             <IconButton label={`Move ${c.name || `option ${i + 1}`} up`} size="sm" noTooltip disabled={i === 0} onClick={() => move(i, i - 1)}>
-              <ArrowUp aria-hidden className="size-4" />
+              <Icon icon={ArrowUp} />
             </IconButton>
             <IconButton label={`Move ${c.name || `option ${i + 1}`} down`} size="sm" noTooltip disabled={i === choices.length - 1} onClick={() => move(i, i + 1)}>
-              <ArrowDown aria-hidden className="size-4" />
+              <Icon icon={ArrowDown} />
             </IconButton>
             <IconButton label={`Delete ${c.name || `option ${i + 1}`}`} size="sm" noTooltip onClick={() => onChange(choices.filter((_, k) => k !== i))}>
-              <X aria-hidden className="size-4" />
+              <Icon icon={X} />
             </IconButton>
           </li>
         ))}
       </ul>
       <Button size="sm" variant="secondary" className="mt-2" onClick={add}>
-        <Plus aria-hidden className="size-4" /> Add option
+        <Icon icon={Plus} /> Add option
       </Button>
-      {choices.length === 0 && <p className="mt-2 text-xs text-muted">Options can also be created while editing cells.</p>}
+      {choices.length === 0 && <p className="mt-2 text-meta text-muted">Options can also be created while editing cells.</p>}
     </div>
   );
 }

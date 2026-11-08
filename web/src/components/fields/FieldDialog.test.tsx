@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Field } from "@/api/types";
 import { Providers, createQueryClient } from "@/providers";
+import { COLORS } from "@/lib/colors";
 import { ALL_FIELDS, field, makeTable } from "@/test/fields";
 import { makeSchema, mockApi, stubDesktop, stubPhone } from "@/test/utils";
 import { FieldDialog, type FieldDialogState } from "./FieldDialog";
@@ -499,21 +500,25 @@ describe("FieldDialog: Change type", () => {
   });
 });
 
-describe("FieldDialog: tables with icons", () => {
-  it("shows each table's icon in the link target select, and picks by name", async () => {
+describe("FieldDialog: the link target (FLD-5)", () => {
+  it("lists the folder's collections by color mark, never an icon, and picks by name", async () => {
     const user = userEvent.setup();
+    schema.tables[1]!.color = "orange";
     schema.tables[1]!.icon = "truck";
     try {
       const { api } = setup();
       await user.type(screen.getByLabelText("Name"), "Team");
       await pick("Link to another record");
       const target = screen.getByLabelText("Collection to link to");
-      expect(target.querySelector("svg.lucide-truck")).toBeInTheDocument();
+      // The first collection of the folder is the default target, with its mark.
+      expect(target.querySelector(".ob-mark")).toBeInTheDocument();
+      expect(target.querySelector("svg.lucide-truck")).toBeNull();
       await user.click(target);
       const options = await screen.findAllByRole("option");
+      // Only collections of this folder: the schema is the folder's, so nothing else can be offered.
       expect(options.map((o) => o.textContent)).toEqual(["Tasks (this collection)", "People"]);
-      expect(options[1]!.querySelector("svg.lucide-truck")).toBeInTheDocument();
-      expect(options[0]!.querySelector("svg")).toBeNull();
+      expect(options[1]!.querySelector(".ob-mark.ob-hue-orange")).toBeInTheDocument();
+      expect(options[1]!.querySelector("svg.lucide-truck")).toBeNull();
       await user.click(options[0]!);
       await user.click(screen.getByRole("button", { name: "Add property" }));
       await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/fields")).toHaveLength(1));
@@ -521,5 +526,102 @@ describe("FieldDialog: tables with icons", () => {
     } finally {
       schema.tables[1]!.icon = undefined;
     }
+  });
+
+  it("says collections in other folders can't be linked, before and after the property is made", async () => {
+    setup();
+    await pick("Link to another record");
+    expect(screen.getByLabelText("Collection to link to")).toHaveAccessibleDescription("Collections in other folders can't be linked.");
+    cleanup();
+    const owner = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_n", name: "Owner" });
+    setup({ mode: "edit", field: owner });
+    const target = screen.getByLabelText("Collection to link to");
+    expect(target).toHaveAccessibleDescription("The linked collection can't be changed once the property is added. Collections in other folders can't be linked.");
+  });
+
+  it("offers a lookup, rollup or count only the link properties of this collection", async () => {
+    setup();
+    await pick("Lookup");
+    const links = screen.getByLabelText("Link property");
+    expect(within(links).getAllByRole("option").map((o) => o.textContent)).toEqual(["Owner"]);
+  });
+});
+
+describe("FieldDialog: choices (FLD-6)", () => {
+  it("gives each new choice the next palette color, skipping the ones in use", async () => {
+    const { api } = setup();
+    await userEvent.type(screen.getByLabelText("Name"), "Stage");
+    await pick("Single select");
+    await userEvent.click(screen.getByRole("button", { name: "Add option" }));
+    await userEvent.keyboard("Alpha{Enter}Beta{Enter}Gamma");
+    await userEvent.click(screen.getByRole("button", { name: "Add property" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/fields")).toHaveLength(1));
+    const choices = (body(api).options as { choices: { name: string; color: string }[] }).choices;
+    expect(choices.map((c) => c.name)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(new Set(choices.map((c) => c.color)).size).toBe(3);
+    expect(choices.map((c) => c.color)).toEqual(COLORS.slice(0, 3));
+  });
+
+  it("recolors a choice from the list of colors in a pop-over, keeping its pastel pair on the dot", async () => {
+    const { api } = setup();
+    await userEvent.type(screen.getByLabelText("Name"), "Stage");
+    await pick("Single select");
+    await userEvent.click(screen.getByRole("button", { name: "Add option" }));
+    await userEvent.keyboard("Alpha");
+    const dot = screen.getByRole("button", { name: "Color of option Alpha" });
+    expect(dot.firstElementChild).toHaveClass(`choice-${COLORS[0]}`);
+    await userEvent.click(dot);
+    await userEvent.click(await screen.findByRole("radio", { name: /^Purple$/ }));
+    expect(screen.getByRole("button", { name: "Color of option Alpha" }).firstElementChild).toHaveClass("choice-purple");
+    await userEvent.click(screen.getByRole("button", { name: "Add property" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/fields")).toHaveLength(1));
+    expect((body(api).options as { choices: { color: string }[] }).choices[0]!.color).toBe("purple");
+  });
+
+  it("opens the list of colors as a bottom sheet on a phone, and picking closes it", async () => {
+    stubPhone();
+    setup();
+    await userEvent.type(screen.getByLabelText("Name"), "Stage");
+    await userEvent.click(screen.getByRole("button", { name: /^Type/ }));
+    await userEvent.click(await screen.findByRole("option", { name: /^Single select/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Add option" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Color of option/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Choice color" });
+    await userEvent.click(within(sheet).getByRole("radio", { name: /^Teal$/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choice color" })).toBeNull());
+    expect(screen.getByRole("button", { name: /^Color of option/ }).firstElementChild).toHaveClass("choice-teal");
+  });
+});
+
+describe("FieldDialog: the formula editor (FLD-5)", () => {
+  it("moves through the suggested properties with the arrows and takes the one lit with Enter", async () => {
+    setup();
+    await userEvent.type(screen.getByLabelText("Name"), "Pair");
+    await pick("Formula");
+    const box = screen.getByRole("combobox", { name: "Formula" });
+    await userEvent.type(box, "{{");
+    const list = await screen.findByRole("listbox", { name: "Properties" });
+    const options = within(list).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Name", "Owner"]);
+    expect(box).toHaveAttribute("aria-activedescendant", options[0]!.id);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(box).toHaveAttribute("aria-activedescendant", options[1]!.id);
+    await userEvent.keyboard("{Enter}");
+    expect(box).toHaveValue("{Owner}");
+    expect(screen.queryByRole("listbox", { name: "Properties" })).toBeNull();
+  });
+
+  it("announces the live check through a polite region", async () => {
+    mockApi({ "POST /api/tables/tbl1/formula/check": { ok: true, preview: "7" } });
+    render(
+      <Providers client={createQueryClient()}>
+        <FieldDialog state={{ mode: "create" }} schema={schema} table={table} onOpenChange={() => {}} />
+      </Providers>,
+    );
+    await pick("Formula");
+    await userEvent.type(screen.getByRole("combobox", { name: "Formula" }), "3 + 4");
+    const verdict = await screen.findByText(/Looks good/, {}, { timeout: 3000 });
+    expect(verdict.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+    expect(verdict).toHaveTextContent("preview: 7");
   });
 });

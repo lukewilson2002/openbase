@@ -9,7 +9,8 @@ const control =
   "disabled:cursor-not-allowed disabled:bg-subtle disabled:opacity-70 aria-[invalid=true]:border-danger";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={cn(control, "h-8", className)} {...props} />;
+  // 44 px on a phone, where anything tappable is at least that tall.
+  return <input className={cn(control, "h-8 max-md:h-control-touch", className)} {...props} />;
 }
 
 export function Textarea({ className, rows = 3, ...props }: ComponentProps<"textarea">) {
@@ -20,7 +21,7 @@ export function Textarea({ className, rows = 3, ...props }: ComponentProps<"text
 export function Select({ className, children, ...props }: ComponentProps<"select">) {
   return (
     <span className="relative block w-full">
-      <select className={cn(control, "h-8 appearance-none pr-8", className)} {...props}>
+      <select className={cn(control, "h-8 appearance-none pr-8 max-md:h-control-touch", className)} {...props}>
         {children}
       </select>
       <Icon icon={ChevronDown} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
@@ -43,16 +44,16 @@ export function Field({ label, hint, error, children, className }: FieldProps) {
   const describedBy = error ? `${id}-err` : hint ? `${id}-hint` : undefined;
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <label htmlFor={id} className="text-[0.8125rem] font-medium text-fg">
+      <label htmlFor={id} className="text-label font-medium text-fg">
         {label}
       </label>
       {children({ id, "aria-describedby": describedBy, "aria-invalid": error ? true : undefined })}
       {error ? (
-        <p id={`${id}-err`} role="alert" className="text-xs text-danger">
+        <p id={`${id}-err`} role="alert" className="text-meta text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="text-xs text-muted">
+        <p id={`${id}-hint`} className="text-meta text-muted">
           {hint}
         </p>
       ) : null}
