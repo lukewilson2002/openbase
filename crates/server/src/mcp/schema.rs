@@ -49,7 +49,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "create_project",
             "Create a project",
-            "Create a project in a workspace (you become its owner), optionally with a colour and an icon. Needs the creator role on the workspace and a token with write access that is not limited to specific projects.",
+            "Create a project in a workspace (you become its owner), optionally with a colour and an icon. A project appears as a folder in the app. Needs the creator role on the workspace and a token with write access that is not limited to specific projects.",
             object(
                 json!({
                     "workspace_id": string("Workspace id (from list_projects or list_workspaces)."),
@@ -64,7 +64,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "rename_project",
             "Rename or restyle a project",
-            "Change a project's name, colour or icon (any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
+            "Change the name, colour or icon of a project (a folder in the app; any of them; what you leave out stays). icon: a Lucide name sets it, null removes it. Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -80,7 +80,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "duplicate_project",
             "Duplicate a project",
-            "Copy a project (tables, fields, views and icons; records only with include_records) into the same workspace. Needs the manage permission and the creator role.",
+            "Copy a project (tables, fields, views and icons; records only with include_records) into the same workspace, where the copy appears as a folder in the app. Needs the manage permission and the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -94,7 +94,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_project",
             "Delete a project",
-            "Delete a project with everything in it. It moves to the trash and can be restored within the trash retention period (restore_from_trash, kind 'project'). Needs the manage permission and the owner role.",
+            "Delete a project (a folder in the app) with everything in it. Nothing is erased: it moves to the trash and can be restored until the retention purge (restore_from_trash with kind 'project' and the project id). The result says what moved, how to restore it and the date it will be purged. A workspace's top-level project (is_top_level) is refused: make another project the top level first (set_top_level_project), or delete the workspace. Needs the manage permission and the owner role.",
             object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
         )
         .manage()
@@ -207,7 +207,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "update_field",
             "Update a field",
-            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type (or turning a text field's multiline off) CONVERTS every existing value and may lose values that do not fit: the first call explains this and you repeat it with confirm_conversion=true. Text and rich text convert both ways: rich text becomes the plain text it shows, and plain text becomes rich text that shows the same; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
+            "Rename a field, change its description or options (options you give are merged into the current ones; select choices repeated by name keep their values), or change its type. Changing the type (or turning a text field's multiline off) CONVERTS every existing value and may lose values that do not fit, and this can't be undone: the first call explains this and you repeat it with confirm_conversion=true. Text and rich text convert both ways: rich text becomes the plain text it shows, and plain text becomes rich text that shows the same; the result lists the views that use the field (views_to_check) so you can fix them. Needs the creator role.",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -632,14 +632,9 @@ async fn duplicate_project(ctx: &McpCtx, a: DuplicateBase) -> ToolResult {
 }
 
 async fn delete_project(ctx: &McpCtx, a: BaseArg) -> ToolResult {
+    let before = read_before_trash(ctx, "project", &a.base_id).await;
     match fetch(ctx, "DELETE", &base_path(&a.base_id, ""), None, None).await {
-        Ok(_) => ToolResult::ok(json!({
-            "deleted": a.base_id,
-            "note": format!(
-                "Moved to the trash, not erased: restore_from_trash (kind 'project') brings it back within {} days.",
-                ctx.state.config.trash_days
-            ),
-        })),
+        Ok(_) => ToolResult::ok(trash_receipt(ctx, "project", &a.base_id, before).await),
         Err(e) => e,
     }
 }

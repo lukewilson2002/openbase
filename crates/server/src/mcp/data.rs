@@ -51,7 +51,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "list_projects",
             "List workspaces and projects",
-            "List the workspaces and projects this token can reach, with your role on each (and their icons, when set). Start here to get project ids (and workspace ids for creating projects).",
+            "List the workspaces and projects this token can reach, with your role on each (and their icons, when set). Start here to get project ids (and workspace ids for creating projects). A project appears as a folder in the app, except each workspace's top-level project (top_level_project; is_top_level on the project), whose tables the app shows directly under the workspace.",
             object(json!({}), &[]),
             Level::Read,
             true,
@@ -61,7 +61,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "get_project_schema",
             "Get a project's schema",
-            "Get the tables, fields (name, id, type, options such as select choices or link targets) and views of a project. Use it to learn the exact table and field names before reading or writing records.",
+            "Get the tables, fields (name, id, type, options such as select choices or link targets) and views of a project (a folder in the app, or the workspace's top level: is_top_level). Use it to learn the exact table and field names before reading or writing records.",
             object(json!({ "project_id": string(BASE_ID) }), &["project_id"]),
             Level::Read,
             true,
@@ -304,7 +304,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "delete_records",
             "Delete records",
-            "Delete 1-10 records by id. They are moved to the trash (restorable for the trash retention period, 30 days by default), not erased immediately.",
+            "Delete 1-10 records by id. They are moved to the trash, not erased: restore_from_trash (kind 'record') brings them back for the trash retention period (30 days by default).",
             object(
                 json!({
                     "project_id": string(BASE_ID),
@@ -366,7 +366,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "api_request",
             "Call a REST endpoint",
-            "Call any endpoint listed by api_reference as the token's user: the request goes through the same permission checks, validation, live updates and automations as the web app. `path` starts with /api/ and contains real ids; `query` is an object; `body` is the JSON body (for file uploads and CSV import use {\"multipart\": {\"file\": {\"filename\": \"x.csv\", \"text\": \"...\"}, \"name\": \"value\"}}, with content_base64 instead of text for binary files). Returns {status, ok, body}. Account credentials, sessions and API tokens cannot be touched. Read-only tokens can only read; some endpoints need a token with the manage permission.",
+            "Call any endpoint listed by api_reference as the token's user: the request goes through the same permission checks, validation, live updates and automations as the web app. `path` starts with /api/ and contains real ids; `query` is an object; `body` is the JSON body (for file uploads and CSV import use {\"multipart\": {\"file\": {\"filename\": \"x.csv\", \"text\": \"...\"}, \"name\": \"value\"}}, with content_base64 instead of text for binary files). Returns {status, ok, body}. Account credentials, sessions and API tokens cannot be touched. Read-only tokens can only read; some endpoints need a token with the manage permission. DELETE requests that say so in api_reference (comments, share links, automations, invites, inbox drafts) can't be undone; records, fields, tables, views, projects and workspaces go to the trash.",
             object(
                 json!({
                     "method": { "type": "string", "enum": ["GET", "POST", "PATCH", "PUT", "DELETE"], "description": "HTTP method." },
@@ -384,7 +384,7 @@ pub fn definitions() -> Vec<ToolDef> {
         tool(
             "create_workspace",
             "Create a workspace",
-            "Create a workspace, optionally with a colour and an icon; you become its owner. Needs the manage permission.",
+            "Create a workspace, optionally with a colour and an icon; you become its owner. The workspace comes with its top-level project, named after it and empty (the app shows that project's tables directly under the workspace), and the result gives both ids: workspace_id and top_level_project (the project_id to create tables in). Needs the manage permission.",
             object(
                 json!({
                     "name": string("Workspace name."),
@@ -1455,10 +1455,18 @@ async fn create_workspace(ctx: &McpCtx, a: WorkspaceArgs) -> ToolResult {
     )
     .await
     {
-        Ok(res) if res.ok() => ToolResult::ok(with_note(
-            json!({ "workspace": res.body.unwrap_or(Value::Null) }),
-            note,
-        )),
+        Ok(res) if res.ok() => {
+            let workspace = res.body.unwrap_or(Value::Null);
+            // The ids a next call needs, without digging through the summary.
+            ToolResult::ok(with_note(
+                json!({
+                    "workspace_id": workspace["id"],
+                    "top_level_project": workspace["root_base_id"],
+                    "workspace": workspace,
+                }),
+                note,
+            ))
+        }
         Ok(res) => api_failure(ctx, &res),
         Err(e) => e,
     }

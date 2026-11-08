@@ -46,7 +46,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "set_top_level_project",
             "Choose a workspace's top-level project",
-            "Choose which project of a workspace is its top level: the project whose tables the app shows directly under the workspace, while every other project appears as a folder. Only the choice moves; no table, record or permission changes. The top-level project cannot be deleted, so call this first to free another one (or delete the workspace). list_projects marks it with is_top_level. Needs the manage permission and the owner role on the workspace.",
+            "Choose which project of a workspace is its top level: the project whose tables the app shows directly under the workspace, while every other project appears as a folder in the app. Only the choice moves; no table, record or permission changes. The top-level project cannot be deleted, so call this first to free another one (or delete the workspace). list_projects marks it with is_top_level. Needs the manage permission and the owner role on the workspace.",
             object(
                 json!({
                     "workspace_id": string("Workspace id (from list_workspaces)."),
@@ -60,7 +60,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "delete_workspace",
             "Delete a workspace",
-            "Delete a workspace and all its projects. They move to the trash and can be restored for the trash retention period (restore_from_trash with kind 'workspace'). Needs the manage permission and the owner role.",
+            "Delete a workspace and all its projects. Nothing is erased: they move to the trash and can be restored until the retention purge (restore_from_trash with kind 'workspace' and the workspace id). The result says what moved, how to restore it and the date it will be purged. No tool or token can erase a workspace sooner. Needs the manage permission and the owner role.",
             object(
                 json!({ "workspace_id": string("Workspace id (from list_workspaces).") }),
                 &["workspace_id"],
@@ -71,7 +71,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "remove_member",
             "Remove a member",
-            "Scope 'workspace': remove someone from the workspace (they lose every project in it; a workspace always keeps an owner). Scope 'project': take that project off the list of a member who was given only some projects (not their last one; members with all projects are changed with set_member_role). You may also remove yourself. Needs the manage permission and the owner role.",
+            "Scope 'workspace': remove someone from the workspace (they lose every project in it; a workspace always keeps an owner). Scope 'project': take that project off the list of a member who was given only some projects (not their last one; members with all projects are changed with set_member_role). You may also remove yourself. This can't be undone: to bring the person back, invite them again. Needs the manage permission and the owner role.",
             object(
                 json!({
                     "scope": scope_schema(),
@@ -96,7 +96,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "revoke_invite",
             "Revoke an invite",
-            "Revoke an invite link so it can no longer be accepted. Needs the manage permission.",
+            "Revoke an invite link so it can no longer be accepted. This can't be undone: create a new invite instead. Needs the manage permission.",
             object(
                 json!({ "invite_id": string("Invite id (from list_invites).") }),
                 &["invite_id"],
@@ -228,15 +228,10 @@ async fn set_top_level_project(ctx: &McpCtx, a: SetTopLevel) -> ToolResult {
 }
 
 async fn delete_workspace(ctx: &McpCtx, a: WorkspaceArg) -> ToolResult {
+    let before = read_before_trash(ctx, "workspace", &a.workspace_id).await;
     let path = format!("/api/workspaces/{}", encode_segment(&a.workspace_id));
     match fetch(ctx, "DELETE", &path, None, None).await {
-        Ok(_) => ToolResult::ok(json!({
-            "deleted": a.workspace_id,
-            "note": format!(
-                "Moved to the trash, not erased: restore_from_trash (kind 'workspace') brings it back within {} days.",
-                ctx.state.config.trash_days
-            ),
-        })),
+        Ok(_) => ToolResult::ok(trash_receipt(ctx, "workspace", &a.workspace_id, before).await),
         Err(e) => e,
     }
 }

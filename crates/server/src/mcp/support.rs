@@ -263,3 +263,145 @@ pub fn tool(
         idempotent,
     }
 }
+
+/// What a workspace or project looked like just before it went to the trash, for the delete
+/// result (AGT-4).
+pub struct TrashedBefore {
+    pub name: String,
+    /// The projects of a workspace (`id`, `name`, `tables`); empty for a project.
+    pub projects: Vec<Value>,
+    /// The number of live tables of a project.
+    pub tables: i64,
+}
+
+/// Read a workspace (`kind` "workspace") or project (`kind` "project") before it is deleted.
+/// A failed read is not an error: the delete decides whether the caller may do it, and its result
+/// only loses detail.
+pub async fn read_before_trash(ctx: &McpCtx, kind: &'static str, id: &str) -> TrashedBefore {
+    let id = id.to_string();
+    ctx.state
+        .db
+        .read(move |c| {
+            if kind == "workspace" {
+                let name =
+                    c.query_row("SELECT name FROM workspaces WHERE id = ?1", [&id], |r| {
+                        r.get(0)
+                    })?;
+                let mut stmt = c.prepare(
+                    "SELECT b.id, b.name, (SELECT COUNT(*) FROM tables t
+                                           WHERE t.base_id = b.id AND t.deleted_at IS NULL)
+                     FROM bases b WHERE b.workspace_id = ?1 AND b.deleted_at IS NULL
+                     ORDER BY b.position, b.created_at, b.id",
+                )?;
+                let projects = stmt
+                    .query_map([&id], |r| {
+                        Ok(json!({
+                            "id": r.get::<_, String>(0)?,
+                            "name": r.get::<_, String>(1)?,
+                            "tables": r.get::<_, i64>(2)?,
+                        }))
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(TrashedBefore {
+                    name,
+                    projects,
+                    tables: 0,
+                })
+            } else {
+                let (name, tables) = c.query_row(
+                    "SELECT b.name, (SELECT COUNT(*) FROM tables t
+                                     WHERE t.base_id = b.id AND t.deleted_at IS NULL)
+                     FROM bases b WHERE b.id = ?1",
+                    [&id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                Ok(TrashedBefore {
+                    name,
+                    projects: Vec::new(),
+                    tables,
+                })
+            }
+        })
+        .await
+        .unwrap_or(TrashedBefore {
+            name: String::new(),
+            projects: Vec::new(),
+            tables: 0,
+        })
+}
+
+/// The result of deleting a workspace or project: what moved to the trash, how to bring it back
+/// and when the retention purge will erase it for good (AGT-4). `deleted` is kept as it always
+/// was; everything else is additive.
+pub async fn trash_receipt(
+    ctx: &McpCtx,
+    kind: &'static str,
+    id: &str,
+    before: TrashedBefore,
+) -> Value {
+    let (table, noun) = if kind == "workspace" {
+        ("workspaces", "workspace")
+    } else {
+        ("bases", "project")
+    };
+    let row = id.to_string();
+    let deleted_at: i64 = ctx
+        .state
+        .db
+        .read(move |c| {
+            Ok(c.query_row(
+                &format!("SELECT deleted_at FROM {table} WHERE id = ?1"),
+                [&row],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap_or_else(|_| crate::db::now_ms());
+    let days = ctx.state.config.trash_days;
+    let purge_ms = deleted_at.saturating_add(crate::store::trash::retention_ms(days));
+    let purge_after = chrono::DateTime::from_timestamp_millis(purge_ms)
+        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+        .unwrap_or_default();
+    let name = &before.name;
+    let moved = if kind == "workspace" {
+        let projects = before.projects.len();
+        let tables: i64 = before
+            .projects
+            .iter()
+            .filter_map(|p| p["tables"].as_i64())
+            .sum();
+        format!(
+            "the workspace '{name}' with its {projects} project{} and {tables} table{} (records \
+             included)",
+            if projects == 1 { "" } else { "s" },
+            if tables == 1 { "" } else { "s" },
+        )
+    } else {
+        let tables = before.tables;
+        format!(
+            "the project '{name}' with its {tables} table{} (records included)",
+            if tables == 1 { "" } else { "s" },
+        )
+    };
+    let mut trashed = json!({ "kind": kind, "id": id, "name": name });
+    if kind == "workspace" {
+        trashed["projects"] = json!(before.projects);
+    } else {
+        trashed["tables"] = json!(before.tables);
+    }
+    json!({
+        "deleted": id,
+        "trashed": trashed,
+        "restore_with": {
+            "tool": "restore_from_trash",
+            "arguments": { "kind": kind, "id": id },
+        },
+        "purge_after": purge_after,
+        "retention_days": days,
+        "note": format!(
+            "Moved to the trash, not erased: {moved}. Bring the {noun} back with restore_from_trash \
+             {{kind: '{kind}', id: '{id}'}} until {purge_after}; the daily trash purge erases it \
+             for good on or after that date ({days} days after the delete).",
+        ),
+    })
+}
