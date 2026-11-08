@@ -16,7 +16,19 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // `openbase serve` listens on 127.0.0.1:8080 by default.
-      "/api": { target: "http://127.0.0.1:8080", changeOrigin: false },
+      "/api": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: false,
+        // The server refuses cookie requests whose Origin is not its public URL, and the browser
+        // sends the dev server's (:5173). Present the request as the page the server expects.
+        configure: (proxy) => {
+          const origin = process.env["OPENBASE_PUBLIC_URL"] ?? "http://localhost:8080";
+          proxy.on("proxyReq", (proxyReq) => {
+            if (proxyReq.getHeader("origin")) proxyReq.setHeader("origin", origin);
+            if (proxyReq.getHeader("referer")) proxyReq.setHeader("referer", `${origin}/`);
+          });
+        },
+      },
     },
   },
   build: {

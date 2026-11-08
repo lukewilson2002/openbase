@@ -53,6 +53,8 @@ Install with the lockfile and without lifecycle scripts (enforced by `.npmrc`):
 cd web
 npm ci
 npm run dev          # http://localhost:5173, proxies /api to a running openbase on :8080
+                     # (the proxy sends $OPENBASE_PUBLIC_URL, default http://localhost:8080, as the
+                     # Origin, which the server checks on cookie requests)
 npm run build        # type-check + production build into web/dist
 npm test -- --run    # unit and component tests (fetch is mocked)
 npm run test:contract  # the API client against the real server (needs cargo; see below)
