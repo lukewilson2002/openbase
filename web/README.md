@@ -304,6 +304,24 @@ Colours are tokens in `src/styles/index.css` for both themes; the grid canvas mi
 `lib/cells/palette.ts`. `src/styles/contrast.test.ts` keeps text on its usual surfaces at WCAG AA (4.5:1) in both themes. Marks (the dot of a
 stack or lane, the bar of a coloured row) use `swatchColor`, because the pale chip backgrounds are about 1.3:1 on a white surface.
 
+### Design tokens (Notebook)
+
+`src/styles/index.css` also holds the Notebook tokens of the UX overhaul spec (`docs/plans/2026-11-07-ux-overhaul.md`, "Design
+language"): the type scale (`text-meta`, `text-label`, `text-ui`, `text-read`, `text-h3`, `text-sheet`, `text-h2`, `text-title`,
+`text-home`, `text-record`, `text-capture`, with `-phone` variants where the spec has them; each sets size, line height, weight and
+letter spacing), the radii (`rounded-xs` to `rounded-xl` and `rounded-pill`, which replace Tailwind's own steps of the same names),
+control and row heights (`h-control-md`, `h-row-table`), layout widths (`w-sidebar`, `max-w-record`, `max-w-home`, `px-gutter`), the
+ColorMark sizes (`--mark-14`, `--mark-14-radius`), the spacing steps (`--space-8`), the durations (`duration-fast`, `duration-base`,
+`duration-slow`, each with a `-leave` variant 30% faster) and the enter curve (`ease-enter`). `num` turns on tabular figures. A
+`prefers-reduced-motion` rule makes every transition an opacity fade. `src/lib/cn.ts` teaches tailwind-merge the new names; add a name
+there whenever you add a token class. `src/styles/tokens.test.ts` pins the values.
+
+`scripts/check-tokens.sh` (part of `scripts/check.sh`, so CI) fails on a raw hex colour, `rgb()` or px font size in `src/` outside
+`styles/*.css`, `theme/accents.ts`, `lib/colors.ts`, `lib/cells/palette.ts`, `views/grid/glide/`, `components/brandMarks.ts`,
+`pages/account/AssistantMarks.tsx` and test files. Files that have not moved to tokens yet are listed in
+`scripts/check-tokens.temporary-list.txt`; the list only shrinks (a file that no longer has a violation must be removed from it), and
+it must be empty by Phase 7 of the overhaul. The detector's tests are `src/styles/checkTokens.test.mjs`.
+
 ### Logo, favicon and web app manifest
 
 `brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and
