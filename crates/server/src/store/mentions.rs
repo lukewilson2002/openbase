@@ -136,9 +136,15 @@ pub fn plain_text(md: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// [`plain_text`] of what a person is told about `md` (a notification, an
+/// email): an embed block is a line saying "Embedded view", not its JSON.
+fn notification_text(md: &str) -> String {
+    plain_text(&ob_core::cell::embeds_as_text(md))
+}
+
 /// `md` as plain text cut at [`SNIPPET_LEN`] characters, for a notification.
 pub fn snippet(md: &str) -> String {
-    let plain = plain_text(md);
+    let plain = notification_text(md);
     if plain.chars().count() <= SNIPPET_LEN {
         return plain;
     }
@@ -186,7 +192,7 @@ pub fn notify(
             r.get(0)
         })
         .unwrap_or_default();
-    let plain = plain_text(md);
+    let plain = notification_text(md);
     for m in mentioned {
         let active: bool = conn
             .query_row(
@@ -305,5 +311,11 @@ mod tests {
         let s = snippet(&long);
         assert!(s.chars().count() <= SNIPPET_LEN);
         assert!(s.ends_with('…'));
+    }
+
+    #[test]
+    fn snippets_say_embedded_view_for_an_embed_and_never_show_its_json() {
+        let md = "ping @[Ann](usrAAA111)\n\n```openbase\n{\"embed\":\"view\",\"view\":\"viwAAAAAA\",\"limit\":10}\n```\n\nthanks";
+        assert_eq!(snippet(md), "ping @Ann Embedded view thanks");
     }
 }

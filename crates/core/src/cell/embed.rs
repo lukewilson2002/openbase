@@ -23,11 +23,28 @@ fn fence(line: &str) -> Option<(char, usize, &str)> {
     (len >= 3).then(|| (ch, len, &body[len..]))
 }
 
+/// What a block reads as where embeds are only words (a notification's
+/// snippet, an email): the name the web app gives the static box it shows in
+/// those places.
+pub const EMBED_TEXT: &str = "Embedded view";
+
 /// `markdown` without its embed blocks (the fences and the JSON between them).
 /// Everything else is kept as written, so a code block with another info
 /// string that merely shows an embed is not touched. A block that is never
 /// closed runs to the end of the text, as in CommonMark.
 pub fn without_embeds(markdown: &str) -> Cow<'_, str> {
+    replace_embeds(markdown, "")
+}
+
+/// `markdown` with each embed block read as a line saying "Embedded view",
+/// for the places that show text and cannot draw the embed.
+pub fn embeds_as_text(markdown: &str) -> Cow<'_, str> {
+    replace_embeds(markdown, &format!("{EMBED_TEXT}\n"))
+}
+
+/// `markdown` with each embed block (its fences and its JSON) replaced by
+/// `replacement`.
+fn replace_embeds<'a>(markdown: &'a str, replacement: &str) -> Cow<'a, str> {
     if !markdown.contains(EMBED_INFO) {
         return Cow::Borrowed(markdown);
     }
@@ -42,7 +59,9 @@ pub fn without_embeds(markdown: &str) -> Cow<'_, str> {
                 Some((ch, len, info)) if !(ch == '`' && info.contains('`')) => {
                     let embed = info.split_whitespace().next() == Some(EMBED_INFO);
                     open = Some((ch, len, embed));
-                    if !embed {
+                    if embed {
+                        out.push_str(replacement);
+                    } else {
                         out.push_str(line);
                     }
                 }
@@ -65,7 +84,7 @@ pub fn without_embeds(markdown: &str) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::without_embeds;
+    use super::{embeds_as_text, without_embeds};
 
     #[test]
     fn text_without_an_embed_is_returned_as_is() {
@@ -131,5 +150,25 @@ mod tests {
     fn crlf_line_endings_work() {
         let md = "a\r\n```openbase\r\n{}\r\n```\r\nb\r\n";
         assert_eq!(without_embeds(md), "a\r\nb\r\n");
+    }
+
+    #[test]
+    fn embeds_read_as_words_where_they_cannot_be_drawn() {
+        let md =
+            "Before\n\n```openbase\n{\"embed\":\"linked\",\"field\":\"fldABC\"}\n```\n\nAfter\n";
+        assert_eq!(embeds_as_text(md), "Before\n\nEmbedded view\n\nAfter\n");
+        // Without an embed the text is returned as it is, borrowed.
+        assert!(matches!(
+            embeds_as_text("plain"),
+            std::borrow::Cow::Borrowed(_)
+        ));
+        // A block with another info string is code and is kept.
+        let js = "```js\nconst a = 1;\n```\n";
+        assert_eq!(embeds_as_text(js), js);
+        // Every block is one line, an unclosed one runs to the end.
+        assert_eq!(
+            embeds_as_text("```openbase\n{}\n```\nx\n```openbase\n{}\n"),
+            "Embedded view\nx\nEmbedded view\n"
+        );
     }
 }
