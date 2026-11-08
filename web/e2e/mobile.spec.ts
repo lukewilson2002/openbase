@@ -333,6 +333,12 @@ test("on a phone a hold on a card opens its action sheet, a selection is a count
   });
 
   await test.step("a selection is the count and Actions; the actions are a sheet", async () => {
+    // The select boxes are 44 px targets in a card's corner, clear of its title (PH-6).
+    await expectTouchTargets(page.getByRole("checkbox", { name: /^Select / }), "card select boxes");
+    // The title's text stops where its padding starts, which is where the box begins (the box's 44 px target may share a few pixels of it).
+    const textEnd = await page.getByRole("heading", { name: "Beta", exact: true }).evaluate((h) => h.getBoundingClientRect().right - parseFloat(getComputedStyle(h).paddingRight));
+    const tickBox = (await page.getByRole("checkbox", { name: "Select Beta" }).boundingBox())!;
+    expect(textEnd, "the select box is over the title's text").toBeLessThanOrEqual(tickBox.x + 4);
     await page.getByRole("checkbox", { name: "Select Beta" }).tap();
     await page.getByRole("checkbox", { name: "Select Gamma" }).tap();
     const bar = page.getByRole("toolbar", { name: "Selected records" });

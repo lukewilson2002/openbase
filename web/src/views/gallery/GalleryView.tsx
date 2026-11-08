@@ -373,6 +373,7 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
           emails={emails}
           color={color}
           limit={GALLERY_FIELD_LIMIT}
+          titleInset
         />
         {more > 0 && (
           <p data-more-fields className="-mt-2 px-4 pb-3 text-meta text-faint">
@@ -388,13 +389,16 @@ function GalleryCard({ record: rec, primary, fields, coverField, descriptionFiel
         aria-label={`Select ${title}`}
         tabIndex={-1}
         onClick={() => sel.toggle(rec.id)}
+        // The button is the target (44 px on a touch screen, PH-6); the box inside it is what is drawn.
         className={cn(
-          "absolute left-2 top-2 z-[2] flex size-6 items-center justify-center rounded-sm border bg-surface transition-opacity pointer-coarse:size-8",
-          selected ? "border-primary bg-primary text-primary-fg opacity-100" : "border-line-strong text-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100 pointer-coarse:opacity-100",
+          "absolute right-1 top-1 z-[2] flex size-8 items-center justify-center transition-opacity pointer-coarse:right-0 pointer-coarse:top-0 pointer-coarse:size-11",
+          !selected && "opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100 pointer-coarse:opacity-100",
           sel.count > 0 && "opacity-100",
         )}
       >
-        <Check aria-hidden className="size-4" strokeWidth={3} />
+        <span aria-hidden className={cn("flex size-6 items-center justify-center rounded-sm border bg-surface pointer-coarse:size-8", selected ? "border-primary bg-primary text-primary-fg" : "border-line-strong text-transparent")}>
+          <Check aria-hidden className="size-4" strokeWidth={3} />
+        </span>
       </button>
     </div>
   );

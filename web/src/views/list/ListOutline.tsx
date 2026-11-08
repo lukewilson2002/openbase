@@ -221,7 +221,7 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
         {...hold}
         className={cn(
           // A card: the row is its own bordered surface, so a record reads as one thing.
-          "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 outline-none hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          "relative flex min-h-11 cursor-pointer flex-col justify-center gap-1 overflow-hidden rounded-lg border border-line bg-surface py-2.5 pl-4 pr-10 pointer-coarse:pr-12 outline-none hover:border-line-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
           selected && "border-primary-soft-line bg-primary-soft hover:border-primary-soft-line",
           joining && "shadow-[inset_0_2px_0_var(--primary)]",
           isDragging && "shadow-pop",
@@ -286,13 +286,21 @@ function Row({ row, leaf, u }: { row: NestedRow; leaf: Leaf; u: Ui }) {
               e.stopPropagation();
               sel.toggle(record.id);
             }}
+            // The button is the target (44 px on a touch screen, PH-6); the box inside it is what is drawn.
             className={cn(
-              "absolute right-3 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded border bg-surface pointer-coarse:size-7",
-              selected ? "border-primary bg-primary text-primary-fg" : "border-line-strong text-transparent",
+              "absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center pointer-coarse:right-0 pointer-coarse:size-11",
               !selected && sel.count === 0 && "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 pointer-coarse:opacity-100",
             )}
           >
-            <Check aria-hidden className="size-3.5" strokeWidth={3} />
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-5 items-center justify-center rounded border bg-surface pointer-coarse:size-7",
+                selected ? "border-primary bg-primary text-primary-fg" : "border-line-strong text-transparent",
+              )}
+            >
+              <Check aria-hidden className="size-3.5" strokeWidth={3} />
+            </span>
           </button>
         )}
       </div>

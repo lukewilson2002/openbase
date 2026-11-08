@@ -36,9 +36,14 @@ export interface CardBodyProps {
   /** Palette colour name from `QueryResponse.colors`. */
   color?: string;
   limit?: number;
+  /**
+   * The card has a select box in its top right corner (a board's, a gallery's): the title leaves room for it, so it
+   * never covers a letter. A cover image under the box makes room unnecessary.
+   */
+  titleInset?: boolean;
 }
 
-export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit = CARD_PROPERTY_LIMIT }: CardBodyProps) {
+export function CardBody({ record, primary, fields, coverField, descriptionField, coverFit = "cover", coverHeight = 120, layout = "rows", format, emails, color, limit = CARD_PROPERTY_LIMIT, titleInset = false }: CardBodyProps) {
   const coverFile = coverOf(coverField, record);
   // A file without a preview (the server answers 404) shows no cover rather than a broken image.
   const [failedCover, setFailedCover] = useState<string | null>(null);
@@ -48,6 +53,7 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
   const descValue = descriptionField ? record.values[descriptionField.id] : undefined;
   // Rich text goes through the markdown parser; a board re-renders every card while one is dragged.
   const description = useMemo(() => descriptionText(descriptionField, descValue, format), [descriptionField, descValue, format]);
+  const titleClass = cn("line-clamp-2 break-words text-ui font-semibold", titleInset && !cover && "pr-5 pointer-coarse:pr-6");
   return (
     <>
       {color && <span aria-hidden data-row-color={color} className="absolute inset-y-0 left-0 z-[1] w-1" style={{ background: swatchColor(color) }} />}
@@ -58,7 +64,7 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
       )}
       {layout === "rows" ? (
         <div className="flex flex-col gap-1 px-3.5 py-3">
-          <h3 className="line-clamp-2 break-words text-ui font-semibold">{title}</h3>
+          <h3 className={titleClass}>{title}</h3>
           {description && (
             <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
               <p data-card-description className="line-clamp-3 break-words text-label text-muted">
@@ -70,7 +76,7 @@ export function CardBody({ record, primary, fields, coverField, descriptionField
         </div>
       ) : (
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
-          <h3 className="line-clamp-2 break-words text-ui font-semibold">{title}</h3>
+          <h3 className={titleClass}>{title}</h3>
           {description && (
             <DescriptionHover field={descriptionField} record={record} title={title} format={format}>
               <p data-card-description className="-mt-1 line-clamp-3 break-words text-ui text-muted">

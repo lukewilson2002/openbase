@@ -1030,17 +1030,19 @@ function KanbanCard({
       )}
     >
       {p.canEdit && (
-        // The tick box of a touch screen (no Ctrl-click there); the card's own click handler toggles.
+        // The tick box of a touch screen (no Ctrl-click there); the card's own click handler toggles. In the corner
+        // the title leaves free (CardBody's titleInset); the outer span is the target (44 px on a touch screen, PH-6).
         <span
           aria-hidden
           data-select-tick
           className={cn(
-            "absolute left-1.5 top-1.5 z-[2] flex size-5 items-center justify-center rounded border bg-surface pointer-coarse:size-6",
-            selected ? "border-primary bg-primary text-primary-fg" : "border-line-strong",
+            "absolute right-1 top-1 z-[2] flex size-8 items-center justify-center pointer-coarse:right-0 pointer-coarse:top-0 pointer-coarse:size-11",
             !selected && sel.count === 0 && "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 pointer-coarse:opacity-100",
           )}
         >
-          {selected && <Check className="size-3.5" strokeWidth={3} />}
+          <span className={cn("flex size-5 items-center justify-center rounded border bg-surface pointer-coarse:size-6", selected ? "border-primary bg-primary text-primary-fg" : "border-line-strong")}>
+            {selected && <Check className="size-3.5" strokeWidth={3} />}
+          </span>
         </span>
       )}
       <CardBody
@@ -1054,6 +1056,7 @@ function KanbanCard({
         format={p.format}
         emails={p.emails}
         color={p.colors[record.id]}
+        titleInset={p.canEdit}
       />
     </div>
   );
