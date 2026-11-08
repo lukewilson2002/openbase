@@ -18,6 +18,7 @@ import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, TableRecord } from "@/api/types";
 import { useMe } from "@/auth/useAuth";
 import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDialog";
+import { usePropertyRoles } from "@/components/fields/usePropertyRoles";
 import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/env";
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { uploadFiles } from "@/components/record/editors/AttachmentEditor";
@@ -569,6 +570,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     gridRef.current?.focus();
   }, []);
   const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
+  const roles = usePropertyRoles(schema.id, table);
   const [confirmField, setConfirmField] = useState<Field | null>(null);
   // A field inserted next to another one is placed once the refetched schema contains it.
   const [pendingPlace, setPendingPlace] = useState<{ id: string; relativeTo: { fieldId: string; side: "left" | "right" } } | null>(null);
@@ -1108,6 +1110,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         canSort
         onClose={() => closeMenu(setColMenu)}
         onEditField={(f, focus) => setFieldDialog({ mode: "edit", field: f, focus })}
+        onUseAsTitle={roles.setTitle}
+        onUseAsPage={roles.setPage}
         onInsert={(side) => colSpec && setFieldDialog({ mode: "create", relativeTo: { fieldId: colSpec.id, side } })}
         onDelete={(f) => setConfirmField(f)}
       />
@@ -1147,7 +1151,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         open={!!confirmField}
         onOpenChange={(o) => !o && setConfirmField(null)}
         title={`Delete property "${confirmField?.name ?? ""}"?`}
-        description="The property and its values are removed from every view. Undo brings it back, as does the trash."
+        description={`The property and its values are removed from every view. Undo brings it back, as does the trash.${confirmField?.id === table.body_field_id ? " It is this collection's page, so records have no page until you choose another property." : ""}`}
         confirmLabel="Delete property"
         destructive
         onConfirm={async () => {

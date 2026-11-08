@@ -6,12 +6,13 @@
  *   properties"; both folds are kept per device.
  * - A value is shown as display text and turns into its form editor on a click or tap; it saves on its own.
  *   Computed values, and everything for viewers and commenters, are read-only.
- * - A property's name opens its menu. Creators: Rename, Edit property, Delete. Editors and up: Hide from pages,
- *   or Show on pages for one that is hidden, which edits the default view's layout at once.
+ * - A property's name opens its menu. Creators: Rename, Edit property, Use as title, Use as page (rich text),
+ *   Delete. Editors and up: Hide from pages, or Show on pages for one that is hidden, which edits the default
+ *   view's layout at once.
  */
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Eye, EyeOff, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, FileText, Heading1, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { keys } from "@/api/keys";
 import { schemaApi } from "@/api/records";
 import type { BaseSchema, Field, Table, TableRecord, View } from "@/api/types";
@@ -19,6 +20,8 @@ import { CellValue } from "@/components/record/CellValue";
 import { EditableValue } from "@/components/record/EditableValue";
 import type { EditValue, EditorEnv } from "@/components/record/editors/env";
 import { FieldDialog, type FieldDialogState } from "@/components/fields/FieldDialog";
+import { whyNotPage, whyNotTitle } from "@/components/fields/propertyRoles";
+import { usePropertyRoles, type PropertyRoles } from "@/components/fields/usePropertyRoles";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { PropertyList, PropertyRow } from "@/components/ui/property-list";
@@ -34,7 +37,7 @@ import type { RecordLayout } from "./useRecordLayout";
 import type { RecordSave, Unsent } from "./useRecordSave";
 
 /** What a property's name is: plain text, or the button that opens its menu. */
-function PropertyName({ field, id, role, hidden, layout, onRename, onEdit, onDelete }: { field: Field; id: string; role: string; hidden: boolean; layout: RecordLayout | null; onRename(): void; onEdit(): void; onDelete(): void }) {
+function PropertyName({ field, table, id, role, hidden, layout, roles, onRename, onEdit, onDelete }: { field: Field; table: Table; id: string; role: string; hidden: boolean; layout: RecordLayout | null; roles: PropertyRoles; onRename(): void; onEdit(): void; onDelete(): void }) {
   const creator = atLeast(role, "creator");
   const editor = !!layout && atLeast(role, "editor");
   const box = "flex min-h-9 items-center truncate max-md:min-h-control-touch";
@@ -62,6 +65,14 @@ function PropertyName({ field, id, role, hidden, layout, onRename, onEdit, onDel
           <MenuItem icon={SlidersHorizontal} onSelect={onEdit}>
             Edit property
           </MenuItem>
+          <MenuItem icon={Heading1} reason={whyNotTitle(field)} disabled={!!whyNotTitle(field)} onSelect={() => roles.setTitle(field)}>
+            Use as title
+          </MenuItem>
+          {field.type === "rich_text" && (
+            <MenuItem icon={FileText} reason={whyNotPage(field, table)} disabled={!!whyNotPage(field, table)} onSelect={() => roles.setPage(field)}>
+              Use as page
+            </MenuItem>
+          )}
         </>
       )}
       {editor && (
@@ -83,6 +94,8 @@ function PropertyName({ field, id, role, hidden, layout, onRename, onEdit, onDel
 
 interface RowProps {
   field: Field;
+  table: Table;
+  roles: PropertyRoles;
   record: TableRecord;
   readOnly: boolean;
   hidden: boolean;
@@ -104,7 +117,7 @@ interface RowProps {
   onDelete(field: Field): void;
 }
 
-function PropertyEntry({ field, record, readOnly, hidden, role, error, env, emails, lastSaved, unsent, failed, startEditing, layout, onSave, onRename, onEdit, onDelete }: RowProps) {
+function PropertyEntry({ field, table, roles, record, readOnly, hidden, role, error, env, emails, lastSaved, unsent, failed, startEditing, layout, onSave, onRename, onEdit, onDelete }: RowProps) {
   const value = record.values[field.id] ?? null;
   const computed = isComputed(field);
   const labelId = `property-${field.id}`;
@@ -125,7 +138,7 @@ function PropertyEntry({ field, record, readOnly, hidden, role, error, env, emai
   }
   const editorKey = typedIn ? `${record.id}:${field.id}:${rebuilds.current.n}` : `${record.id}:${field.id}:${JSON.stringify(value)}`;
   return (
-    <PropertyRow label={<PropertyName field={field} id={labelId} role={role} hidden={hidden} layout={layout} onRename={() => onRename(field)} onEdit={() => onEdit(field)} onDelete={() => onDelete(field)} />} className="items-start">
+    <PropertyRow label={<PropertyName field={field} table={table} id={labelId} role={role} hidden={hidden} layout={layout} roles={roles} onRename={() => onRename(field)} onEdit={() => onEdit(field)} onDelete={() => onDelete(field)} />} className="items-start">
       {readOnly || computed ? (
         <div className="flex min-h-9 flex-col justify-center rounded-md px-2 py-1 max-md:min-h-control-touch">
           <CellValue field={field} value={value} format={env.format} emails={emails} linkFiles />
@@ -184,6 +197,7 @@ export function RecordProperties({ schema, table, record, view, role, env, email
   const qc = useQueryClient();
   const toast = useToast();
   const readOnly = !atLeast(role, "editor");
+  const roles = usePropertyRoles(schema.id, table);
   const [folds, toggleFold] = useRecordFolds(table.id);
   const [dialog, setDialog] = useState<FieldDialogState | null>(null);
   const [deleting, setDeleting] = useState<Field | null>(null);
@@ -215,6 +229,8 @@ export function RecordProperties({ schema, table, record, view, role, env, email
     <PropertyEntry
       key={f.id}
       field={f}
+      table={table}
+      roles={roles}
       record={record}
       readOnly={readOnly}
       hidden={hidden}

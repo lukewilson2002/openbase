@@ -1,6 +1,6 @@
 /** Context menus of the grid: column header, row, and summary bar. */
 import { useContext, type ReactNode } from "react";
-import { ArrowDownAZ, ArrowLeft, ArrowLeftToLine, ArrowRight, ArrowRightToLine, ArrowUpZA, CopyPlus, Eye, EyeOff, Filter, Group, Maximize2, Pencil, Pin, PinOff, Rows3, Trash2, Type } from "lucide-react";
+import { ArrowDownAZ, ArrowLeft, ArrowLeftToLine, ArrowRight, ArrowRightToLine, ArrowUpZA, CopyPlus, Eye, EyeOff, FileText, Filter, Group, Heading1, Maximize2, Pencil, Pin, PinOff, Rows3, Trash2, Type } from "lucide-react";
 import type { Aggregation, Field, Table, ViewConfig } from "@/api/types";
 import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { addFilterCondition, addSortLike, isGroupable, isSortable, moveVisibleField, setFrozenColumns, setHiddenField, sortOnly } from "@/components/viewbar/config";
@@ -9,6 +9,7 @@ import { isFilterable } from "@/lib/cells/filters";
 import { kindClassOf } from "@/lib/cells/kinds";
 import type { GridColumnSpec, ScreenRect } from "./adapter";
 import { AnchoredMenu } from "@/components/ui/anchored-menu";
+import { whyNotPage, whyNotTitle } from "@/components/fields/propertyRoles";
 import { MenuGroups } from "@/shell/NavRowMenu";
 import { MenuItem, SheetModeContext } from "@/shell/menuItems";
 import { RecordActionMenu } from "../common/RecordActionMenu";
@@ -39,15 +40,20 @@ export interface ColumnMenuProps {
   canSort: boolean;
   onClose: () => void;
   onEditField: (field: Field, focus?: "name" | "type") => void;
+  /** Makes the property the collection's title or page (FLD-3, FLD-4). */
+  onUseAsTitle: (field: Field) => void;
+  onUseAsPage: (field: Field) => void;
   onInsert: (side: "left" | "right") => void;
   onDelete: (field: Field) => void;
 }
 
-export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFields, canSort, onClose, onEditField, onInsert, onDelete }: ColumnMenuProps) {
+export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFields, canSort, onClose, onEditField, onUseAsTitle, onUseAsPage, onInsert, onDelete }: ColumnMenuProps) {
   const spec = columns[index];
   const field = spec?.field;
   const [asc, desc] = field ? sortLabels(field) : ["", ""];
   const frozenHere = config.frozen_columns === index && index > 0;
+  const titleReason = field && (spec?.isPrimary ? "It is the title already" : whyNotTitle(field));
+  const pageReason = field && (field.id === table.body_field_id ? "It is the page already" : whyNotPage(field, table));
   // The "Add field" header past the last column has no field: it has no menu either.
   if (!field || !spec) return null;
   return (
@@ -62,6 +68,14 @@ export function ColumnMenu({ index, at, columns, table, config, cfg, canManageFi
       <DropdownMenuItem disabled={!canManageFields} onSelect={() => onEditField(field, "type")}>
         <Type aria-hidden className="size-4" /> Change type…
       </DropdownMenuItem>
+      <MenuItem icon={Heading1} disabled={!canManageFields || !!titleReason} reason={canManageFields ? titleReason : null} onSelect={() => onUseAsTitle(field)}>
+        Use as title
+      </MenuItem>
+      {field.type === "rich_text" && (
+        <MenuItem icon={FileText} disabled={!canManageFields || !!pageReason} reason={canManageFields ? pageReason : null} onSelect={() => onUseAsPage(field)}>
+          Use as page
+        </MenuItem>
+      )}
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={!canManageFields} onSelect={() => onInsert("left")}>
         <ArrowLeftToLine aria-hidden className="size-4" /> Insert left

@@ -48,6 +48,8 @@ export interface SheetMenuRowProps {
   /** Leave the sheet open after the tap, for choices made one after another (the theme). */
   keepOpen?: boolean;
   disabled?: boolean;
+  /** A line under the name, in small muted type: why the row is off. */
+  hint?: ReactNode;
   /** Draw no list item around the row, for a caller that wraps it in its own (a sortable row). */
   bare?: boolean;
   className?: string;
@@ -55,7 +57,7 @@ export interface SheetMenuRowProps {
 }
 
 /** One 44 px row of a sheet menu: a link when it goes somewhere, else a button. */
-export function SheetMenuRow({ icon, lead, children, to, href, onSelect, danger, selected, keepOpen, disabled, bare, className, buttonProps }: SheetMenuRowProps) {
+export function SheetMenuRow({ icon, lead, children, to, href, onSelect, danger, selected, keepOpen, disabled, hint, bare, className, buttonProps }: SheetMenuRowProps) {
   const close = useContext(CloseContext);
   const done = () => {
     onSelect?.();
@@ -71,7 +73,14 @@ export function SheetMenuRow({ icon, lead, children, to, href, onSelect, danger,
     <>
       {icon && <Icon icon={icon} className={danger ? undefined : "text-muted"} />}
       {lead}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {hint ? (
+        <span className="flex min-w-0 flex-1 flex-col py-1.5">
+          <span className="truncate">{children}</span>
+          <span className="text-meta font-normal text-muted">{hint}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+      )}
       {selected && <Icon icon={Check} className="text-primary-text" />}
     </>
   );

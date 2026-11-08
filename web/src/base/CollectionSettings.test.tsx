@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Field, Table } from "@/api/types";
 import { ALL_FIELDS, makeTable } from "@/test/fields";
 import { apiError, mockApi, renderWithProviders, stubDesktop, stubPhone } from "@/test/utils";
-import { CollectionSettings, isHomeDateProperty, settingsPatch, whyNotTitle } from "./CollectionSettings";
+import { whyNotTitle } from "@/components/fields/propertyRoles";
+import { CollectionSettings, isHomeDateProperty, settingsPatch } from "./CollectionSettings";
 
 const named = (f: Field, id: string, name: string): Field => ({ ...f, id, name }) as Field;
 

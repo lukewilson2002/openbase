@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MutationObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
+import { field } from "@/test/fields";
 import { F, draftChanges, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import type { GridAdapterProps, GridSelectionInfo } from "./adapter";
 
@@ -476,6 +477,75 @@ describe("GridView: column menu", () => {
     expect(draftChanges()!.field_order!.slice(0, 4)).toEqual([F.name.id, F.end.id, F.start.id, F.status.id]);
     // The new order is this person's until they update the view.
     expect(api.callsTo("PATCH /api/views/viw1")).toHaveLength(0);
+  });
+});
+
+describe("GridView: title and page from a column's menu", () => {
+  const notes = field("rich_text", {}, { id: "f_notes", name: "Notes" });
+  const withNotes = (role: string, body: string | null = null) => {
+    const schema = projectSchema(role, [viewWithConfig("viw1", "grid", {})]);
+    schema.tables[0] = { ...schema.tables[0]!, fields: [...schema.tables[0]!.fields, notes], body_field_id: body };
+    return schema;
+  };
+  const open = async (id: string) => {
+    await loaded();
+    act(() => grid().onHeaderMenu(grid().columns.findIndex((c) => c.id === id), { x: 5, y: 5, width: 1, height: 1 }));
+    return screen.findByRole("menu", { name: /Column menu for/ });
+  };
+
+  it("makes a property the title with Use as title, which calls primary-field", async () => {
+    const { api } = renderView(GridView, {
+      schema: withNotes("creator"),
+      viewId: "viw1",
+      routes: { "POST /api/views/viw1/query": queryHandler({ records }), "POST /api/tables/tbl1/primary-field": { id: "tbl1" } } as never,
+    });
+    const menu = await open(F.status.id);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Use as title" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/primary-field")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/primary-field")[0]!.body).toEqual({ field_id: F.status.id });
+    expect(await screen.findByText("“Status” is now the title")).toBeInTheDocument();
+  });
+
+  it("disables Use as title with the reason for a type that cannot be the title, and for the title itself", async () => {
+    renderView(GridView, { schema: withNotes("creator"), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never });
+    const menu = await open(F.cover.id);
+    const item = within(menu).getByRole("menuitem", { name: /Use as title/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("Attachment properties can't be the title");
+    await userEvent.keyboard("{Escape}");
+    const own = await open(F.name.id);
+    expect(within(own).getByRole("menuitem", { name: /Use as title/ })).toHaveTextContent("It is the title already");
+  });
+
+  it("offers Use as page on rich text properties only, and sends body-field", async () => {
+    const { api } = renderView(GridView, {
+      schema: withNotes("creator"),
+      viewId: "viw1",
+      routes: { "POST /api/views/viw1/query": queryHandler({ records }), "POST /api/tables/tbl1/body-field": { id: "tbl1" } } as never,
+    });
+    const plain = await open(F.status.id);
+    expect(within(plain).queryByRole("menuitem", { name: /Use as page/ })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    const rich = await open(notes.id);
+    await userEvent.click(within(rich).getByRole("menuitem", { name: "Use as page" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/body-field")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/body-field")[0]!.body).toEqual({ field_id: notes.id });
+    expect(await screen.findByText("“Notes” is now the page")).toBeInTheDocument();
+  });
+
+  it("says a property is the page already, and warns before deleting it that the records have none until another is chosen", async () => {
+    renderView(GridView, { schema: withNotes("creator", notes.id), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never });
+    const menu = await open(notes.id);
+    expect(within(menu).getByRole("menuitem", { name: /Use as page/ })).toHaveTextContent("It is the page already");
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
+    expect(await screen.findByText(/It is this collection's page/)).toBeInTheDocument();
+  });
+
+  it("leaves both disabled for an editor, who cannot configure properties", async () => {
+    renderView(GridView, { schema: withNotes("editor"), viewId: "viw1", routes: { "POST /api/views/viw1/query": queryHandler({ records }) } as never });
+    const menu = await open(notes.id);
+    expect(within(menu).getByRole("menuitem", { name: /Use as title/ })).toHaveAttribute("aria-disabled", "true");
+    expect(within(menu).getByRole("menuitem", { name: /Use as page/ })).toHaveAttribute("aria-disabled", "true");
   });
 });
 

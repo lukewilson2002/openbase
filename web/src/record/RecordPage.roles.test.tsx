@@ -104,7 +104,7 @@ describe("creators", () => {
     renderRecordPage({ table, record, layout, role: "creator" });
     await ready();
     await userEvent.click(props().getByRole("button", { name: "Score" }));
-    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim())).toEqual(["Rename", "Edit property", "Hide from pages", "Delete property"]);
+    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim())).toEqual(["Rename", "Edit property", "Use as title", "Hide from pages", "Delete property"]);
   });
 
   it("do so for a property that is hidden from pages, with Show on pages in place of Hide", async () => {
@@ -112,6 +112,6 @@ describe("creators", () => {
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "Show 1 hidden property" }));
     await userEvent.click(props().getByRole("button", { name: "Secret" }));
-    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim())).toEqual(["Rename", "Edit property", "Show on pages", "Delete property"]);
+    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim())).toEqual(["Rename", "Edit property", "Use as title", "Show on pages", "Delete property"]);
   });
 });

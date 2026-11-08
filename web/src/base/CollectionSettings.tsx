@@ -15,13 +15,13 @@ import { errorMessage } from "@/api/client";
 import { keys } from "@/api/keys";
 import type { Field, Table, UpdateTable } from "@/api/types";
 import { ColorField } from "@/components/ColorField";
+import { whyNotTitle } from "@/components/fields/propertyRoles";
 import { Notice } from "@/components/layouts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { FIELD_TYPE_LABELS } from "@/components/ui/field-type-icon";
 import { Field as Labelled, Input, Select, Textarea } from "@/components/ui/input";
 import { DESKTOP_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
-import { canBePrimary, resultTypeOf, unwrapResult } from "@/lib/cells/kinds";
+import { resultTypeOf, unwrapResult } from "@/lib/cells/kinds";
 import type { ChoiceColor } from "@/lib/colors";
 
 const NO_PROPERTY = "";
@@ -34,11 +34,6 @@ export function isHomeDateProperty(field: Field): boolean {
   if (!result) return false;
   const { array, item } = unwrapResult(result);
   return !array && (item === "date" || item === "date_time");
-}
-
-/** Why a property cannot be the title, or null when it can. */
-export function whyNotTitle(field: Field): string | null {
-  return canBePrimary(field.type) ? null : `${FIELD_TYPE_LABELS[field.type]} properties can't be the title`;
 }
 
 export interface Draft {

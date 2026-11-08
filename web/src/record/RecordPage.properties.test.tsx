@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { CHOICES, field, makeRecord, makeTable } from "@/test/fields";
-import { apiError } from "@/test/utils";
+import { apiError, makeSchema } from "@/test/utils";
 import { PATCH_RECORDS, PATCH_VIEW, renderRecordPage } from "@/test/recordPage";
 import { RECORD_FOLDS_KEY } from "./useRecordFolds";
 
@@ -206,7 +206,73 @@ describe("a property's name", () => {
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "Company" }));
     const items = (await screen.findAllByRole("menuitem")).map((i) => i.textContent?.trim());
-    expect(items).toEqual(["Rename", "Edit property", "Hide from pages", "Delete property"]);
+    expect(items).toEqual(["Rename", "Edit property", "Use as title", "Hide from pages", "Delete property"]);
+  });
+
+  it("Use as title makes it the primary property, and the record's head then shows its value", async () => {
+    let primary = "fld_name";
+    const { api } = renderRecordPage({
+      table,
+      record,
+      layout,
+      routes: {
+        "POST /api/tables/tbl1/primary-field": (call: { body: unknown }) => {
+          primary = (call.body as { field_id: string }).field_id;
+          return { id: "tbl1" };
+        },
+      },
+    });
+    // The folder comes back with the new title once the page asks for it again.
+    const original = api.callsTo;
+    expect(original).toBeDefined();
+    await ready();
+    api.set("GET /api/bases/app1", () => {
+      const schema = JSON.parse(JSON.stringify(makeSchema("owner")));
+      schema.tables[0] = { ...table, primary_field_id: primary, views: [{ ...table.views[0]!, is_default: true, config: { ...table.views[0]!.config, ...layout } }] };
+      return schema;
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Company" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Use as title" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/primary-field")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/primary-field")[0]!.body).toEqual({ field_id: "fld_company" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Acme" })).toBeInTheDocument();
+    expect(await screen.findByText("“Company” is now the title")).toBeInTheDocument();
+  });
+
+  it("disables Use as title, with the reason, for a type that cannot be the title", async () => {
+    const ticked = field("checkbox", { icon: "check", color: "green" }, { id: "fld_ok", name: "Reviewed" });
+    renderRecordPage({ table: makeTable([name, company, ticked]), record: makeRecord({ fld_name: "T", fld_company: "Acme", fld_ok: true }) });
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "Reviewed" }));
+    const item = await screen.findByRole("menuitem", { name: /Use as title/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("Checkbox properties can't be the title");
+  });
+
+  it("offers Use as page on a rich text property only, and sends body-field", async () => {
+    const notesRich = field("rich_text", {}, { id: "fld_rich", name: "Minutes" });
+    const { api } = renderRecordPage({
+      table: makeTable([name, company, notesRich], { body_field_id: null }),
+      record: makeRecord({ fld_name: "T", fld_company: "Acme", fld_rich: "Hello" }),
+      routes: { "POST /api/tables/tbl1/body-field": { id: "tbl1" } },
+    });
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "Company" }));
+    expect(screen.queryByRole("menuitem", { name: "Use as page" })).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "Minutes" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Use as page" }));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/body-field")).toHaveLength(1));
+    expect(api.callsTo("POST /api/tables/tbl1/body-field")[0]!.body).toEqual({ field_id: "fld_rich" });
+  });
+
+  it("leaves Use as title and Use as page to creators", async () => {
+    const notesRich = field("rich_text", {}, { id: "fld_rich", name: "Minutes" });
+    renderRecordPage({ table: makeTable([name, company, notesRich]), record: makeRecord({ fld_name: "T", fld_company: "Acme", fld_rich: "Hello" }), role: "editor" });
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "Minutes" }));
+    await screen.findByRole("menuitem", { name: "Hide from pages" });
+    expect(screen.queryByRole("menuitem", { name: /Use as/ })).not.toBeInTheDocument();
   });
 
   it("does not edit the value", async () => {

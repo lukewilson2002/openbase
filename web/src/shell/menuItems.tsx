@@ -19,20 +19,30 @@ export interface MenuItemProps {
   children: ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  /** Why the item is off, said under its name (a disabled item that does not say why is a dead end). */
+  reason?: string | null;
   onSelect: () => void;
 }
 
-export function MenuItem({ icon, children, danger, disabled, onSelect }: MenuItemProps) {
+export function MenuItem({ icon, children, danger, disabled, reason, onSelect }: MenuItemProps) {
   if (useContext(SheetModeContext)) {
     return (
-      <SheetMenuRow icon={icon} danger={danger} disabled={disabled} onSelect={onSelect}>
+      <SheetMenuRow icon={icon} danger={danger} disabled={disabled} hint={reason} onSelect={onSelect}>
         {children}
       </SheetMenuRow>
     );
   }
   return (
     <DropdownMenuItem danger={danger} disabled={disabled} onSelect={onSelect}>
-      <Icon icon={icon} /> {children}
+      <Icon icon={icon} />
+      {reason ? (
+        <span className="flex min-w-0 flex-col">
+          <span>{children}</span>
+          <span className="max-w-60 text-meta font-normal text-muted">{reason}</span>
+        </span>
+      ) : (
+        children
+      )}
     </DropdownMenuItem>
   );
 }
