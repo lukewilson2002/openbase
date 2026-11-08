@@ -53,7 +53,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "get_record_history",
             "Get a record's history",
-            "The change history of a record, newest first: who changed which fields from what to what, with field NAMES. Includes creates, updates, deletes and restores, and the edits made through MCP, the web app, forms and automations. Page with `before`.",
+            "The change history of a record, newest first: who changed which fields from what to what, with field NAMES. Includes creates, updates, deletes and restores, and the edits made through MCP, the web app, forms and automations. Repeated edits of one text or rich text cell by the same person fold into one entry while it is under ten minutes old (it keeps the first old value, the latest new value and the time of the latest edit). Page with `before`.",
             object(
                 json!({
                     "record_id": string("Record id."),

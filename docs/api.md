@@ -531,7 +531,9 @@ to 10), or `PATCH|PUT /api/v1/{baseId}/{table}/{recordId}` with `{"fields"}`.
 `PATCH` changes only the fields given (`null` clears one); `PUT` clears every
 **editable** field that is not given (computed fields cannot be cleared).
 Updates that change nothing write nothing (no history entry, no
-`last modified` bump).
+`last modified` bump). Repeated edits of one text or rich text cell by the same
+person fold into one history entry while it is under ten minutes old (it keeps
+the first old value, the latest new value and the time of the latest edit).
 
 **Delete** — `DELETE /api/v1/{baseId}/{table}?records[]=rec1&records[]=rec2`
 (1 to 10) → `{"records": [{"id", "deleted": true}]}`; or

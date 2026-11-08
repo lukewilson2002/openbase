@@ -105,20 +105,22 @@ async fn deleted_users_leave_entries_without_a_name() {
 #[tokio::test]
 async fn pages_with_before_and_limit() {
     let f = Fixture::new().await;
+    // A number field: repeated edits of a text cell would fold into one entry.
+    let qty = f.number(&f.table_id, "Qty").await;
+    let qty = qty["id"].as_str().unwrap().to_string();
     let rec = f.create(&f.table_id, json!({ &f.primary_id: "0" })).await;
     let id = id_str(&rec["id"]);
     for i in 1..=9 {
-        f.set(&f.table_id, &id, json!({ &f.primary_id: i.to_string() }))
-            .await;
+        f.set(&f.table_id, &id, json!({ &qty: i })).await;
     }
-    // 10 entries in all: "9" down to "0" (create).
+    // 10 entries in all: 9 down to 1, then the create.
     let page1 = history_of(&f, &id, "?limit=4").await;
     assert_eq!(page1.len(), 4);
-    assert_eq!(page1[0]["changes"][&f.primary_id]["new"], "9");
+    assert_eq!(page1[0]["changes"][&qty]["new"], 9);
     let cursor = page1[3]["id"].as_i64().unwrap();
     let page2 = history_of(&f, &id, &format!("?limit=4&before={cursor}")).await;
     assert_eq!(page2.len(), 4);
-    assert_eq!(page2[0]["changes"][&f.primary_id]["new"], "5");
+    assert_eq!(page2[0]["changes"][&qty]["new"], 5);
     let cursor = page2[3]["id"].as_i64().unwrap();
     let page3 = history_of(&f, &id, &format!("?limit=4&before={cursor}")).await;
     assert_eq!(page3.len(), 2);

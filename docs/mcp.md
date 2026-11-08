@@ -487,7 +487,7 @@ needs only read access.
 |---|---|---|
 | `list_trash` | any | Deleted records, fields, tables and views of a project (creator role; an editor sees the records they deleted themselves and their own personal views); a workspace's deleted projects; your deleted workspaces |
 | `restore_from_trash` | write | Bring back a record, field, table, view, project or workspace. Editors can restore the records they deleted themselves; other people's records, fields, tables and shared views need the creator role |
-| `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values |
+| `get_record_history` | any | Who changed which fields from what to what, newest first, with field names and readable values. Repeated edits of one text or rich text cell by the same person fold into one entry while it is under ten minutes old (first old value, latest new value, time of the latest edit) |
 | `list_activity` | any | What changed lately across all your projects (or one workspace, project, table or person; one kind): who created, changed, deleted or restored which record with field names and readable values, and the comments, newest first; `before` pages it |
 | `list_notifications` / `mark_notifications_read` | any / write | Your notifications; mark some or all read |
 
