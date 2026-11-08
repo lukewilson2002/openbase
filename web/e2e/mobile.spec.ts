@@ -1,15 +1,16 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { devices } from "@playwright/test";
 import { expect, skipIntro, test } from "./fixtures";
 
 /**
- * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome). The
- * project (a base), its menu drawer and its record panel must fit the screen without horizontal scrolling (a page
- * wider than the screen makes the phone zoom it out), and every focusable text field must be at least
- * 16px, or iOS Safari zooms the page in when it is tapped. The icon picker opens as a bottom sheet
- * inside the screen and closes on a tap outside. Signs up its own users. Runs only with
- * OPENBASE_E2E=1.
+ * The app on a phone: an iPhone-sized touch screen (Playwright's "iPhone 13" metrics in Chrome, 390 px wide). The
+ * phone shell (NAV-7, NAV-8, PH-1, PH-2) is a 64 px bottom navigation with three tabs, a 56 px header with 44 px
+ * buttons, and the workspace switcher and profile menu as sheets; the Collections tab holds what the sidebar
+ * holds. Every screen must fit without horizontal scrolling (a page wider than the screen makes the phone zoom it
+ * out), and every focusable text field must be at least 16px, or iOS Safari zooms the page in when it is tapped.
+ * The icon picker opens as a bottom sheet inside the screen and closes on a tap outside. Signs up its own
+ * users. Runs only with OPENBASE_E2E=1.
  */
 test.skip(!process.env["OPENBASE_E2E"], "set OPENBASE_E2E=1 to run the end-to-end tests (see playwright.config.ts)");
 
@@ -36,7 +37,19 @@ async function expectFits(page: Page, where: string): Promise<void> {
   expect(m.small, `${where}: text fields under 16px make iOS zoom in`).toEqual([]);
 }
 
-test("the folder, the menu, its toolbar and the record panel fit a phone", async ({ page }) => {
+/** Every link and button in `scope` is at least 44 px each way (PH-6). */
+async function expectTouchTargets(scope: Locator, where: string): Promise<void> {
+  const small = await scope.evaluateAll((els) =>
+    els
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.trim().slice(0, 30) ?? "", box: el.getBoundingClientRect() }))
+      .filter((e) => e.box.height < 43.5 || e.box.width < 43.5)
+      .map((e) => `${e.name} ${Math.round(e.box.width)}x${Math.round(e.box.height)}`),
+  );
+  expect(small, `${where}: targets under 44 px`).toEqual([]);
+}
+
+test("the shell, its sheets, the collection and the record panel fit a phone", async ({ page }) => {
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -47,66 +60,112 @@ test("the folder, the menu, its toolbar and the record panel fit a phone", async
   const created = await (await page.request.post(`/api/tables/${table.id}/records`, { data: { records: [{ values: {} }] }, headers: CSRF })).json();
   const recordId = created.records[0].id as string;
 
-  // `/` is the last workspace's Home (it no longer opens the last project): a capture box that fits the phone. The menu leads on.
+  // `/` is the last workspace's Home: a capture box that fits the phone, under the header with the switcher, the avatar and the search.
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}$`));
   await expectFits(page, "home");
-  // The other screens the phone's tabs lead to fit it too.
-  for (const [route, heading, label] of [
-    [`/workspace/${ws.id}/collections`, "Collections", "collections"],
-    ["/notifications", "Notifications", "notifications"],
-    [`/workspace/${ws.id}/automations`, "Automations", "automations"],
-  ] as const) {
-    await page.goto(route);
-    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    await expectFits(page, label);
-  }
-  await page.goto(`/workspace/${ws.id}`);
-  await page.getByRole("button", { name: /^Show menu/ }).tap();
-  const inboxMenu = page.getByRole("dialog", { name: "Menu" });
-  await expect(inboxMenu.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  // The workspace is open on its Home, its folder unfolded: open its collection.
-  await expect(inboxMenu.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
-  await inboxMenu.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).tap();
-  await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
-  await expectFits(page, "project");
+  // There is no drawer and no menu button: the bottom navigation is the main menu.
+  await expect(page.getByRole("button", { name: /^(Show|Hide) menu/ })).toHaveCount(0);
+  const tabs = page.getByRole("navigation", { name: "Main menu" });
+  await expect(tabs.getByRole("link")).toHaveText(["Home", "Collections", "Notifications"]);
+  await expect(tabs.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("button", { name: /^Show menu/ }).tap();
-  const drawer = page.getByRole("dialog", { name: "Menu" });
-  const folder = drawer.getByRole("button", { name: "A base with a fairly long name", exact: true });
-  await expect(folder).toBeVisible();
-  await expectFits(page, "menu drawer");
-  // Folding a folder is not navigating: the drawer stays open.
-  await folder.tap();
-  await expect(drawer).toBeVisible();
-  await expect(folder).toHaveAttribute("aria-expanded", "false");
-  // Folded by hand is remembered on this device: open it again for the steps below.
-  await folder.tap();
-  await expect(drawer.getByRole("list", { name: /^Collections in / })).toBeVisible();
-  await drawer.getByRole("button", { name: "Close menu" }).tap();
-  await expect(drawer).toBeHidden();
+  await test.step("the bar is 64 px above the home indicator, with 22 px icons and 12 px labels", async () => {
+    const bar = (await tabs.boundingBox())!;
+    expect(bar.height).toBeGreaterThanOrEqual(64);
+    expect(bar.y + bar.height, "the bar rests on the bottom of the screen").toBeCloseTo(viewport.height, 0);
+    const home = tabs.getByRole("link", { name: "Home" });
+    expect(await home.locator("svg").evaluate((el) => el.getBoundingClientRect().width)).toBe(22);
+    expect(await home.locator("span").last().evaluate((el) => getComputedStyle(el).fontSize)).toBe("12px");
+    await expectTouchTargets(tabs.getByRole("link"), "tabs");
+  });
+
+  await test.step("the header holds the switcher, the avatar and the search, each 44 px, and the switcher opens a sheet", async () => {
+    const header = page.getByRole("main").locator("header").first();
+    expect((await header.boundingBox())!.height).toBeGreaterThanOrEqual(56);
+    await expectTouchTargets(header.getByRole("button"), "home header");
+    await header.getByRole("button", { name: /^Mobile workspace/ }).tap();
+    const sheet = page.getByRole("dialog", { name: "Switch workspace" });
+    await expect(sheet.getByRole("button", { name: "Mobile workspace" })).toHaveAttribute("aria-current", "true");
+    await expect(sheet.getByRole("button", { name: "New workspace" })).toBeVisible();
+    await expectFits(page, "workspace switcher sheet");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  });
+
+  await test.step("the avatar opens the profile menu as a sheet, with Escape returning focus to it", async () => {
+    const avatar = page.getByRole("main").locator("header").first().getByRole("button", { name: "Account menu" });
+    await avatar.tap();
+    const sheet = page.getByRole("dialog", { name: "Account" });
+    await expect(sheet.getByText(email)).toBeVisible();
+    await expect(sheet.getByRole("link", { name: "Settings" })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expectFits(page, "profile sheet");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(avatar).toBeFocused();
+  });
+
+  await test.step("the other tabs and the workspace's screens fit the phone", async () => {
+    for (const [route, heading, label] of [
+      [`/workspace/${ws.id}/collections`, "Collections", "collections"],
+      ["/notifications", "Notifications", "notifications"],
+      [`/workspace/${ws.id}/automations`, "Automations", "automations"],
+    ] as const) {
+      await page.goto(route);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expectFits(page, label);
+    }
+  });
+
+  await test.step("the Collections tab holds the switcher, the folders and the footer, and opens a collection", async () => {
+    await page.goto(`/workspace/${ws.id}/collections`);
+    const main = page.getByRole("main");
+    await expect(main.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
+    for (const name of ["History", "Trash", "Workspace settings"]) await expect(main.getByRole("link", { name })).toBeVisible();
+    await expect(main.getByRole("button", { name: "Account menu" })).toBeVisible();
+    await expectTouchTargets(main.getByRole("link"), "collections tab links");
+    const folder = main.getByRole("button", { name: "A base with a fairly long name", exact: true });
+    await expect(folder).toBeVisible();
+    // Folding a folder is not navigating.
+    await folder.tap();
+    await expect(folder).toHaveAttribute("aria-expanded", "false");
+    // Folded by hand is remembered on this device: open it again for the steps below.
+    await folder.tap();
+    await main.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).tap();
+    await expect(page).toHaveURL(new RegExp(`/base/${base.id}/${table.id}/viw[^/]+$`));
+    await expectFits(page, "collection");
+  });
+
+  await test.step("the collection's header has a back link naming the Collections tab, and the search", async () => {
+    const header = page.getByRole("main").locator("header").first();
+    const back = header.getByRole("link", { name: "Back to Collections" });
+    await expect(back).toHaveAttribute("href", `/workspace/${ws.id}/collections`);
+    await expect(header.getByRole("button", { name: "Share" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Search everything" })).toBeVisible();
+    await expectTouchTargets(header.getByRole("button").or(header.getByRole("link")), "collection header");
+    await expect(tabs.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
+    // The header's search opens the search over the screen.
+    await header.getByRole("button", { name: "Search everything" }).tap();
+    await expect(page.getByRole("dialog", { name: "Search everything" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await back.tap();
+    await expect(page).toHaveURL(new RegExp(`/workspace/${ws.id}/collections$`));
+  });
 
   await page.goto(`/base/${base.id}/${table.id}`);
   const toolbar = page.getByRole("toolbar", { name: "View toolbar" });
   await expect(toolbar).toBeVisible();
   await expectFits(page, "base");
-  // The collection's own header keeps Share as an icon, and Add floats at the bottom corner, clear of the screen edge.
-  await expect(page.getByRole("main").locator("header").getByRole("button", { name: "Share" })).toBeVisible();
+  // Add floats at the bottom corner, clear of the screen edge and of the bottom navigation.
   const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
+  const bar = (await tabs.boundingBox())!;
   expect(add.height).toBeGreaterThanOrEqual(48);
   expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
-  expect(add.y + add.height, "Add inside the screen").toBeLessThanOrEqual(viewport.height);
-
-  // The base's menu is the drawer; choosing a collection closes it.
-  await page.getByRole("button", { name: /^Show menu/ }).tap();
-  const baseMenu = page.getByRole("dialog", { name: "Menu" });
-  await expect(baseMenu.getByRole("list", { name: /^Collections in / })).toBeVisible();
-  await expect(baseMenu.getByRole("button", { name: /^Mobile workspace/ })).toBeVisible();
-  await expectFits(page, "base menu drawer");
-  await baseMenu.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).tap();
-  await expect(baseMenu).toBeHidden();
+  expect(add.y + add.height, "Add above the bottom navigation").toBeLessThanOrEqual(bar.y);
 
   await toolbar.getByRole("button", { name: "Search records (Ctrl+F)" }).click();
   await expect(page.getByRole("searchbox", { name: "Search records" })).toBeFocused();
@@ -173,38 +232,35 @@ async function swipe(page: Page, x: number, y: number, dy: number): Promise<void
   await cdp.detach();
 }
 
-test("a swipe that starts on a menu button scrolls the menu and opens nothing; a tap opens it", async ({ page }) => {
+test("a swipe that starts on a row's button scrolls the Collections tab and opens nothing; a tap opens its menu", async ({ page }) => {
   const email = `e2e-mobile-swipe-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
   await skipIntro(page.request);
   const ws = await (await page.request.post("/api/workspaces", { data: { name: "Swipe workspace" }, headers: CSRF })).json();
-  // Enough folders that the drawer has to scroll.
+  // Enough folders that the screen has to scroll.
   for (let i = 1; i <= 24; i++) {
     const res = await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: `Project ${String(i).padStart(2, "0")}`, empty: true }, headers: CSRF });
     expect(res.ok(), await res.text()).toBeTruthy();
   }
 
-  await page.goto("/");
-  await page.getByRole("button", { name: /^Show menu/ }).tap();
-  const drawer = page.getByRole("dialog", { name: "Menu" });
-  // `/` is the workspace's Home, so its folders are already listed.
-  await expect(drawer.getByRole("button", { name: "Folder options for Project 24" })).toBeAttached();
-  const scroller = drawer.locator("[data-sidebar-scroll]");
-  await expect(scroller).toBeVisible();
-  expect(await scroller.evaluate((el) => el.scrollHeight - el.clientHeight), "the menu has to scroll for this test").toBeGreaterThan(100);
+  await page.goto(`/workspace/${ws.id}/collections`);
+  const main = page.getByRole("main");
+  await expect(main.getByRole("button", { name: "Folder options for Project 24" })).toBeAttached();
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight), "the screen has to scroll for this test").toBeGreaterThan(100);
 
   // Start the swipe on a row's "…" button and drag up.
-  const more = drawer.getByRole("button", { name: "Folder options for Project 05" });
-  await more.scrollIntoViewIfNeeded();
+  const more = main.getByRole("button", { name: "Folder options for Project 05" });
+  await more.evaluate((el) => el.scrollIntoView({ block: "center" }));
   const box = (await more.boundingBox())!;
-  const before = await scroller.evaluate((el) => el.scrollTop);
+  const before = await scrollY();
   await swipe(page, box.x + box.width / 2, box.y + box.height / 2, -240);
-  await expect.poll(() => scroller.evaluate((el) => el.scrollTop), "the swipe scrolled the menu").toBeGreaterThan(before);
+  await expect.poll(scrollY, "the swipe scrolled the screen").toBeGreaterThan(before);
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   // A tap on the same button opens its menu.
-  await more.scrollIntoViewIfNeeded();
+  await more.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await more.tap();
   await expect(page.getByRole("menu").getByRole("menuitem", { name: "Rename" })).toBeVisible();
 });

@@ -382,7 +382,8 @@ test.describe("trash and notifications", () => {
     await expect(popup.getByText(`Created ${zulu}`)).toBeVisible();
 
     // Clicking it marks it read and goes to the base (an automation says which base, not which table).
-    await popup.getByRole("button", { name: new RegExp(zulu) }).click();
+    // The row's sentence is its button; the automation's message is the line under it.
+    await popup.getByRole("listitem").filter({ hasText: zulu }).getByRole("button").first().click();
     // The shell turns the bare base URL into the view last used there: the list view we were on.
     await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/${fx.tableId}/${fx.views.list}`));
     await expect.poll(async () => (await call<{ unread: number }>(page.request, "get", "/api/notifications")).unread).toBe(unreadBefore - 1);
