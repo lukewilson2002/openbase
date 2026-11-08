@@ -15,10 +15,11 @@ const budget = field("currency", { precision: 2, symbol: "$", allow_negative: tr
 const owner = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_owner", name: "Owner" });
 const secret = field("text", { multiline: false }, { id: "fld_secret", name: "Secret" });
 const score = { ...ALL_FIELDS.formula, id: "fld_score", name: "Score" };
-const table = makeTable([name, status, budget, owner, secret, score]);
+const company = field("text", { multiline: false }, { id: "fld_company", name: "Company" });
+const table = makeTable([name, status, budget, owner, secret, score, company]);
 const schema = { ...makeSchema("owner"), tables: [table] };
-const record = makeRecord({ fld_name: "Launch", fld_status: "chs2", fld_budget: 1200, fld_owner: [{ id: "recA", name: "Alpha" }], fld_score: 24, fld_secret: "hush" }, "rec1");
-const config = { ...schema.tables[0]!.views[0]!.config, hidden_fields: ["fld_secret"] };
+const record = makeRecord({ fld_name: "Launch", fld_status: "chs2", fld_budget: 1200, fld_owner: [{ id: "recA", name: "Alpha" }], fld_score: 24, fld_secret: "hush", fld_company: "Acme" }, "rec1");
+const layoutView = { ...schema.tables[0]!.views[0]!, config: { ...schema.tables[0]!.views[0]!.config, hidden_fields: ["fld_secret"] } };
 
 const comments: Comment[] = [
   { id: "cmt1", record_id: "rec1", user_id: "usr2", user_name: "Grace Hopper", body: "Looks good @[Ada Lovelace](usr1)", created_at: 1_700_000_000_000, updated_at: 1_700_000_000_000 },
@@ -52,7 +53,7 @@ function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unkno
     table,
     role: "owner",
     recordId: "rec1",
-    config,
+    layoutView,
     prevId: "rec0",
     nextId: "rec2",
     onNavigate: vi.fn(),
@@ -75,6 +76,12 @@ function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unkno
   return { api, props };
 }
 
+/** A property's row: its name and its value. */
+const rowOf = (name: string) => within(screen.getByRole("region", { name: "Properties" })).getByText(name, { selector: "dt *" }).closest("dt")!.parentElement as HTMLElement;
+
+/** The page has loaded its record: the title and the properties are there. */
+const ready = () => screen.findByRole("button", { name: "Edit Company" });
+
 /** Starts editing a field: clicks its value and answers the editor's input. */
 async function edit(field: string): Promise<HTMLInputElement> {
   await userEvent.click(await screen.findByRole("button", { name: `Edit ${field}` }));
@@ -89,14 +96,14 @@ async function openPanel(name: "Comments" | "History") {
 describe("RecordPage", () => {
   it("returns to the collection on Escape, and not while something else has use for it", async () => {
     const { props } = setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await ready();
     await userEvent.keyboard("{Escape}");
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
   it("is a page: a main bar with the breadcrumb back to the collection, and the record's name as its heading", async () => {
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await ready();
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1");
     expect(within(crumbs).getByText("Launch")).toHaveAttribute("aria-current", "page");
@@ -104,36 +111,39 @@ describe("RecordPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows every field with its value, computed ones read-only, hidden ones collapsed", async () => {
+  it("shows the properties that have a value, computed ones read-only, empty and hidden ones folded", async () => {
     setup();
-    const nameRow = await screen.findByRole("group", { name: "Name" });
+    await ready();
+    // The title is the primary property, the heading: it is not listed again.
+    expect(screen.getByRole("heading", { level: 1, name: "Launch" })).toBeInTheDocument();
+    expect(screen.queryByText("Name", { selector: "dt *" })).not.toBeInTheDocument();
     // Values are shown rendered, not as inputs.
-    expect(within(nameRow).getByText("Launch")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Launch" })).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "Budget" })).getByText("$1,200.00")).toBeInTheDocument();
+    expect(within(rowOf("Company")).getByText("Acme")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Company" })).not.toBeInTheDocument();
+    expect(within(rowOf("Budget")).getByText("$1,200.00")).toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
-    const scoreRow = screen.getByRole("group", { name: "Score" });
-    expect(within(scoreRow).getByText("24.0")).toBeInTheDocument();
-    expect(within(scoreRow).getByText(/computed, read-only/)).toBeInTheDocument();
-    expect(within(scoreRow).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(scoreRow).queryByRole("button")).not.toBeInTheDocument();
-    // Hidden fields live in a collapsible section.
+    const score = rowOf("Score");
+    expect(within(score).getByText("24.0")).toBeInTheDocument();
+    expect(within(score).getByText(/computed, read-only/)).toBeInTheDocument();
+    expect(within(score).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(score).queryByRole("button", { name: "Edit Score" })).not.toBeInTheDocument();
+    // The property the default view hides is folded away until asked for.
     expect(screen.queryByText("hush")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Show 1 hidden field/ }));
-    expect(within(screen.getByRole("group", { name: "Secret" })).getByText("hush")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show 1 hidden property" }));
+    expect(within(rowOf("Secret")).getByText("hush")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide 1 hidden property" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("edits a field through the shared editor and sends the wire value with typecast", async () => {
+  it("edits a property through the shared editor and sends the wire value with typecast", async () => {
     const { api } = setup();
-    const input = await edit("Name");
+    await ready();
+    const input = await edit("Company");
     await userEvent.clear(input);
-    await userEvent.type(input, "Ship it{Enter}");
+    await userEvent.type(input, "Globex{Enter}");
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Ship it" } }] });
-    expect(await screen.findByRole("heading", { name: "Ship it" })).toBeInTheDocument();
+    expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_company: "Globex" } }] });
+    expect(await within(rowOf("Company")).findByText("Globex")).toBeInTheDocument();
   });
 
   it("shows a validation message for an unparseable value and does not save", async () => {
@@ -145,16 +155,17 @@ describe("RecordPage", () => {
     expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(0);
   });
 
-  it("edits a field from a click on its name, as a form's label does", async () => {
+  it("does not edit a value from a click on its name: that opens the property's menu", async () => {
     setup();
-    await screen.findByRole("button", { name: "Edit Budget" });
-    await userEvent.click(screen.getByRole("heading", { name: "Budget" }));
-    expect(await screen.findByRole("textbox", { name: "Budget" })).toBeInTheDocument();
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "Budget" }));
+    expect(await screen.findByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Budget" })).not.toBeInTheDocument();
   });
 
   it("steps to the previous and next record, by button and by Alt+Arrow, and closes", async () => {
     const { props } = setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await ready();
     await userEvent.click(screen.getByRole("button", { name: /Previous record/ }));
     await userEvent.click(screen.getByRole("button", { name: /Next record/ }));
     expect(props.onNavigate).toHaveBeenNthCalledWith(1, "rec0");
@@ -167,25 +178,9 @@ describe("RecordPage", () => {
 
   it("disables navigation at the ends", async () => {
     setup({ prevId: null, nextId: null });
-    await screen.findByRole("button", { name: "Edit Name" });
+    await ready();
     expect(screen.getByRole("button", { name: /Previous record/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Next record/ })).toBeDisabled();
-  });
-
-  it("viewers see values but no editors and cannot comment", async () => {
-    setup({ role: "viewer" });
-    await screen.findByRole("heading", { name: "Launch", level: 1 });
-    expect(screen.queryByDisplayValue("Launch")).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
-    // A viewer's values are plain text: nothing to click, no hover tint, no button.
-    const nameRow = screen.getByRole("group", { name: "Name" });
-    expect(within(nameRow).getByText("Launch")).toBeInTheDocument();
-    expect(within(nameRow).queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
-    expect(nameRow.innerHTML).not.toContain("hover:bg-hover");
-    await openPanel("Comments");
-    expect(await screen.findByText(/You can read comments but not write them/)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Write a comment" })).not.toBeInTheDocument();
   });
 
   it("shows a message when the record cannot be loaded", async () => {

@@ -24,7 +24,7 @@ import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
 import { HomeShell } from "@/shell/HomeShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
-import { gridRecordLayout } from "@/views/grid/useViewConfig";
+import { recordLayoutView } from "@/views/grid/useViewConfig";
 import { useRecordNavigation } from "./navigation";
 import { RecordPage } from "./RecordPage";
 import { useRecordOrder } from "./useRecordOrder";
@@ -91,7 +91,7 @@ export function RecordRoute() {
           table={table}
           role={schema.role}
           recordId={recordId}
-          config={gridRecordLayout(table) ?? undefined}
+          layoutView={recordLayoutView(table)}
           prevId={order.prevId}
           nextId={order.nextId}
           onNavigate={onNavigate}

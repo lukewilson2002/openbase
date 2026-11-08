@@ -47,7 +47,7 @@ function setup(over: Partial<RecordPageProps> = {}) {
     table: tasks,
     role: "owner",
     recordId: "rec1",
-    config: tasks.views[0]!.config,
+    layoutView: tasks.views[0],
     prevId: null,
     nextId: null,
     onNavigate: vi.fn(),

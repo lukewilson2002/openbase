@@ -12,7 +12,7 @@ import { Ellipsis, History, MessageSquare, Share2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { keys } from "@/api/keys";
 import { attachmentsApi, commentsApi, recordKeys, recordsApi } from "@/api/records";
-import type { BaseSchema, Collaborator, Table, ViewConfig } from "@/api/types";
+import type { BaseSchema, Collaborator, Table, View } from "@/api/types";
 import { CommentsPanel } from "@/components/record/CommentsPanel";
 import { deleteRecordsText } from "@/components/record/deleteText";
 import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/env";
@@ -35,16 +35,19 @@ import { SheetModeContext } from "@/shell/menuItems";
 import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeader";
 import { discardNewRecord, isNewRecord } from "./newRecords";
 import { commentsLabel, RecordBar, RecordMoreItems, SaveStatus, type RecordActions, type RecordPanelKind } from "./RecordBar";
-import { RecordFields } from "./RecordFields";
-import { useRecordSave } from "./useRecordSave";
+import { RecordHead } from "./RecordHead";
+import { RecordProperties } from "./RecordProperties";
+import { titleModeOf } from "./properties";
+import { useRecordLayout } from "./useRecordLayout";
+import { combineSaveStates, useRecordSave } from "./useRecordSave";
 
 export interface RecordPageProps {
   schema: BaseSchema;
   table: Table;
   role: string;
   recordId: string;
-  /** Property order and which are hidden: the collection's default view, which lays out every record. */
-  config?: Pick<ViewConfig, "field_order" | "hidden_fields">;
+  /** The collection's default view: its property order and the ones it hides lay out every record. */
+  layoutView?: View | null;
   prevId?: string | null;
   nextId?: string | null;
   /** Shows another record in place of this one (previous, next, a copy): no new history entry. */
@@ -78,7 +81,7 @@ function escapeIsTaken(e: KeyboardEvent): boolean {
   return !!document.querySelector("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-radix-popper-content-wrapper]");
 }
 
-export function RecordPage({ schema, table, role, recordId, config, prevId = null, nextId = null, onNavigate, onClose, collectionHref, onOpenLinked, emails, timeZone, currentUserId, collaborators }: RecordPageProps) {
+export function RecordPage({ schema, table, role, recordId, layoutView = null, prevId = null, nextId = null, onNavigate, onClose, collectionHref, onOpenLinked, emails, timeZone, currentUserId, collaborators }: RecordPageProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const qc = useQueryClient();
   const toast = useToast();
@@ -93,10 +96,14 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
 
   const record = useQuery({ queryKey: recordKeys.record(table.id, recordId), queryFn: () => recordsApi.get(table.id, recordId) });
   const save = useRecordSave({ table, recordId, record: record.data, timeZone, collaborators });
+  const layout = useRecordLayout({ schema, table, view: layoutView });
+  // One status for everything this page saves: values, and which properties pages show.
+  const saveState = combineSaveStates(save.state, layout.state);
   const comments = useQuery({ queryKey: keys.comments(recordId), queryFn: () => commentsApi.list(recordId) });
   const commentCount = comments.data?.length ?? 0;
 
   const primary = table.fields.find((f) => f.id === table.primary_field_id);
+  const titleMode = titleModeOf(primary);
   const title = record.data && primary ? displayText(primary, record.data.values[primary.id], format) || "Untitled record" : "Record";
 
   const [panel, setPanel] = useState<RecordPanelKind | null>(null);
@@ -217,6 +224,14 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
     );
   const panelTitle = panel === "history" ? "History" : "Comments";
 
+  // Enter in the title moves on to the page (REC-5 marks it `data-record-page`); until it has one, to the first value.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const focusPage = useCallback(() => {
+    const target = bodyRef.current?.querySelector<HTMLElement>("[data-record-page]") ?? bodyRef.current?.querySelector<HTMLElement>("[data-edit-field][tabindex='0']");
+    if (target) target.focus();
+    else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }, []);
+
   const body = record.isPending ? (
     <div aria-busy className="flex flex-col gap-4">
       <Skeleton className="h-10 w-2/3" />
@@ -234,9 +249,9 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
     </div>
   ) : (
     <>
-      <h1 className="mb-4 break-words text-record-phone md:text-record">{title}</h1>
+      <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} autoFocus={justCreated && canEdit} onEnter={focusPage} />
       <LinkedRecordsProvider value={linkedHost}>
-        <RecordFields table={table} record={record.data} config={config} readOnly={!canEdit} env={env} emails={emails} save={save} justCreated={justCreated} />
+        <RecordProperties schema={schema} table={table} record={record.data} view={layoutView} role={role} env={env} emails={emails} save={save} layout={layout} titleMode={titleMode} justCreated={justCreated && canEdit} />
       </LinkedRecordsProvider>
     </>
   );
@@ -255,7 +270,7 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
           table={table}
           title={title}
           collectionHref={collectionHref}
-          saveState={save.state}
+          saveState={saveState}
           prevId={prevId}
           nextId={nextId}
           onNavigate={onNavigate}
@@ -274,10 +289,12 @@ export function RecordPage({ schema, table, role, recordId, config, prevId = nul
           {!desktop && (
             // A phone has no bar to say it: the save status sits at the top of the page.
             <div className="flex justify-end px-4 pt-2">
-              <SaveStatus state={save.state} />
+              <SaveStatus state={saveState} />
             </div>
           )}
-          <div className="mx-auto w-full max-w-record px-4 py-5 max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] md:px-8 md:py-8">{body}</div>
+          <div ref={bodyRef} className="mx-auto w-full max-w-record px-4 py-5 max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] md:px-8 md:py-10">
+            {body}
+          </div>
         </div>
         {desktop && (
           <SidePanel open={panel !== null} onOpenChange={(o) => !o && setPanel(null)} title={panelTitle} id={panelId}>

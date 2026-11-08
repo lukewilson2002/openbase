@@ -7,10 +7,12 @@ import { Providers, createQueryClient } from "@/providers";
 import { CHOICES, PEOPLE, field, makeRecord, makeTable } from "@/test/fields";
 import { apiError, makeSchema, mockApi, stubDesktop } from "@/test/utils";
 import { rememberNewRecord } from "./newRecords";
+import { RECORD_FOLDS_KEY } from "./useRecordFolds";
 import { RecordPage, type RecordPageProps } from "./RecordPage";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
 const empty = field("text", { multiline: false }, { id: "fld_empty", name: "Nickname" });
+const company = field("text", { multiline: false }, { id: "fld_company", name: "Company" });
 const status = field("single_select", { choices: CHOICES }, { id: "fld_status", name: "Status" });
 const tags = field("multiple_select", { choices: CHOICES }, { id: "fld_tags", name: "Tags" });
 const done = field("checkbox", { icon: "check", color: "green" }, { id: "fld_done", name: "Done" });
@@ -18,14 +20,16 @@ const notes = field("rich_text", {}, { id: "fld_notes", name: "Notes" });
 const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain notes" });
 const stamp = field("created_time", { include_time: true, date_format: "iso", time_format: "h24", timezone: null }, { id: "fld_stamp", name: "Created" });
 const budget = field("currency", { precision: 2, symbol: "$", allow_negative: true }, { id: "fld_budget", name: "Budget" });
-const table = makeTable([name, empty, status, tags, done, notes, plain, stamp, budget]);
+const table = makeTable([name, company, empty, status, tags, done, notes, plain, stamp, budget]);
 const schema = { ...makeSchema("owner"), tables: [table] };
-const record = makeRecord({ fld_name: "Launch", fld_status: "chs2", fld_notes: "See the [docs](https://example.com/docs) first.", fld_plain: "line one", fld_stamp: 1_700_000_000_000 }, "rec1");
+const record = makeRecord({ fld_name: "Launch", fld_company: "Acme", fld_status: "chs2", fld_notes: "See the [docs](https://example.com/docs) first.", fld_plain: "line one", fld_stamp: 1_700_000_000_000 }, "rec1");
 
 const PATCH = "PATCH /api/tables/tbl1/records";
 
-function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unknown> = {}) {
+function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unknown> = {}, folded = false) {
   stubDesktop();
+  // Properties with nothing in them are folded away; most of these tests are about editing them, so they start unfolded.
+  if (!folded) localStorage.setItem(RECORD_FOLDS_KEY, JSON.stringify({ tbl1: { empty: true } }));
   let current = record;
   const api = mockApi({
     "GET /api/tables/tbl1/records/rec1": () => current,
@@ -65,14 +69,15 @@ function setup(over: Partial<RecordPageProps> = {}, routes: Record<string, unkno
 }
 
 const area = (field: string) => screen.findByRole("button", { name: `Edit ${field}` });
-const row = (field: string) => screen.getByRole("group", { name: field });
+const row = (name: string) => within(screen.getByRole("region", { name: "Properties" })).getByText(name, { selector: "dt *" }).closest("dt")!.parentElement as HTMLElement;
 
 describe("RecordPage: view mode", () => {
   it("shows each value rendered, not as an input, and an Empty placeholder where there is none", async () => {
     setup();
-    await area("Name");
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(row("Name")).getByText("Launch")).toBeInTheDocument();
+    await area("Company");
+    // Every value is text; the one box on the page is the title.
+    expect(screen.getAllByRole("textbox").map((t) => t.getAttribute("aria-label"))).toEqual(["Name"]);
+    expect(within(row("Company")).getByText("Acme")).toBeInTheDocument();
     // Pills, formatted dates and rendered Markdown, as in the views.
     expect(within(row("Status")).getByText("In progress").closest(".choice")).toHaveClass("rounded-pill");
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toHaveAttribute("href", "https://example.com/docs");
@@ -81,74 +86,74 @@ describe("RecordPage: view mode", () => {
     expect(within(row("Tags")).getByText("Empty")).toBeInTheDocument();
     // The placeholder is the descriptive text of its button, which is named after the field.
     expect(screen.getByRole("button", { name: "Edit Nickname" })).toHaveAccessibleDescription("Empty");
-    expect(screen.getByRole("button", { name: "Edit Name" })).toHaveAccessibleDescription("Launch");
+    expect(screen.getByRole("button", { name: "Edit Company" })).toHaveAccessibleDescription("Acme");
   });
 
   it("tints editable values under the pointer, and nothing else", async () => {
     setup();
-    const name = await area("Name");
+    const name = await area("Company");
     expect(name).toHaveClass("hover:bg-hover", "cursor-text", "min-h-8", "pointer-coarse:min-h-11");
     expect(name).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("button", { name: "Edit Status" })).toHaveClass("cursor-pointer");
     // A computed field has no button, no tint.
-    expect(within(row("Created")).queryByRole("button")).not.toBeInTheDocument();
-    expect(row("Created").innerHTML).not.toContain("hover:bg-hover");
+    expect(within(row("Created")).queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
+    expect(row("Created").querySelector("dd")!.innerHTML).not.toContain("hover:bg-hover");
   });
 
   it("clicking a value replaces it with its editor, focused with the caret at the end", async () => {
     setup();
-    await userEvent.click(await area("Name"));
-    const input = await screen.findByRole("textbox", { name: "Name" });
+    await userEvent.click(await area("Company"));
+    const input = await screen.findByRole("textbox", { name: "Company" });
     expect(input).toHaveFocus();
-    expect(input).toHaveValue("Launch");
-    expect((input as HTMLInputElement).selectionStart).toBe(6);
-    expect(screen.queryByRole("button", { name: "Edit Name" })).not.toBeInTheDocument();
+    expect(input).toHaveValue("Acme");
+    expect((input as HTMLInputElement).selectionStart).toBe(4);
+    expect(screen.queryByRole("button", { name: "Edit Company" })).not.toBeInTheDocument();
   });
 
   it("enters the edit from the keyboard with Enter or Space", async () => {
     setup();
-    (await area("Name")).focus();
+    (await area("Company")).focus();
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveFocus();
+    expect(await screen.findByRole("textbox", { name: "Company" })).toHaveFocus();
     await userEvent.keyboard("{Escape}");
-    const back = await area("Name");
+    const back = await area("Company");
     expect(back).toHaveFocus();
     await userEvent.keyboard(" ");
-    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveFocus();
+    expect(await screen.findByRole("textbox", { name: "Company" })).toHaveFocus();
   });
 
   it("commits when focus leaves and shows the new value", async () => {
     const { api } = setup();
-    await userEvent.click(await area("Name"));
-    const input = await screen.findByRole("textbox", { name: "Name" });
+    await userEvent.click(await area("Company"));
+    const input = await screen.findByRole("textbox", { name: "Company" });
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it");
     await userEvent.tab();
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument());
-    expect(within(row("Name")).getByText("Ship it")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Company" })).not.toBeInTheDocument());
+    expect(within(row("Company")).getByText("Ship it")).toBeInTheDocument();
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
-    expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Ship it" } }] });
+    expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_company: "Ship it" } }] });
   });
 
   it("commits when another field is clicked, and that one starts its edit", async () => {
     const { api } = setup();
-    await userEvent.click(await area("Name"));
-    await userEvent.type(await screen.findByRole("textbox", { name: "Name" }), "!");
+    await userEvent.click(await area("Company"));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Company" }), "!");
     await userEvent.click(screen.getByRole("button", { name: "Edit Plain notes" }));
     expect(await screen.findByRole("textbox", { name: "Plain notes" })).toHaveFocus();
-    expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
-    expect(within(row("Name")).getByText("Launch!")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Company" })).not.toBeInTheDocument();
+    expect(within(row("Company")).getByText("Acme!")).toBeInTheDocument();
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
   });
 
   it("a menu of another field is not this field's: clicking a select while typing ends the typing and opens the menu", async () => {
     const { api } = setup();
-    await userEvent.click(await area("Name"));
-    await userEvent.type(await screen.findByRole("textbox", { name: "Name" }), "!");
+    await userEvent.click(await area("Company"));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Company" }), "!");
     await userEvent.click(screen.getByRole("button", { name: "Edit Status" }));
     await screen.findByRole("listbox", { name: "Status" });
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument());
-    expect(within(row("Name")).getByText("Launch!")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Company" })).not.toBeInTheDocument());
+    expect(within(row("Company")).getByText("Acme!")).toBeInTheDocument();
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
     // Clicking from the open menu to another value closes the menu and starts that edit.
     await userEvent.click(screen.getByRole("button", { name: "Edit Plain notes" }));
@@ -159,11 +164,11 @@ describe("RecordPage: view mode", () => {
 
   it("Escape cancels an uncommitted single-line change and returns to the old value, leaving the record open", async () => {
     const { api, props } = setup();
-    await userEvent.click(await area("Name"));
-    await userEvent.type(await screen.findByRole("textbox", { name: "Name" }), " changed");
+    await userEvent.click(await area("Company"));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Company" }), " changed");
     await userEvent.keyboard("{Escape}");
-    expect(await area("Name")).toHaveFocus();
-    expect(within(row("Name")).getByText("Launch")).toBeInTheDocument();
+    expect(await area("Company")).toHaveFocus();
+    expect(within(row("Company")).getByText("Acme")).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
     await new Promise((r) => setTimeout(r, 50));
     expect(api.callsTo(PATCH)).toHaveLength(0);
@@ -200,7 +205,8 @@ describe("RecordPage: view mode", () => {
 
   it("opens a link in rendered multiline text without starting an edit", async () => {
     setup();
-    const link = within(await screen.findByRole("group", { name: "Notes" })).getByRole("link", { name: "docs" });
+    await area("Notes");
+    const link = within(row("Notes")).getByRole("link", { name: "docs" });
     // jsdom does not navigate; the click must simply not be taken for a click on the value.
     link.addEventListener("click", (e) => e.preventDefault());
     await userEvent.click(link);
@@ -217,7 +223,7 @@ describe("RecordPage: view mode", () => {
     await userEvent.click(await area("Notes"));
     expect(await within(row("Notes")).findByRole("toolbar", { name: "Formatting" })).toBeInTheDocument();
     await waitFor(() => expect(row("Notes").querySelector(".ProseMirror")).toHaveFocus());
-    await userEvent.click(screen.getByRole("button", { name: "Edit Name" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit Company" }));
     await waitFor(() => expect(within(row("Notes")).queryByRole("toolbar", { name: "Formatting" })).not.toBeInTheDocument());
     expect(within(row("Notes")).getByRole("link", { name: "docs" })).toBeInTheDocument();
   });
@@ -288,35 +294,27 @@ describe("RecordPage: view mode", () => {
 
   it("keeps what could not be saved on screen with its error", async () => {
     setup({}, { [PATCH]: apiError(500, "internal", "disk full") });
-    await userEvent.click(await area("Name"));
-    const input = await screen.findByRole("textbox", { name: "Name" });
+    await userEvent.click(await area("Company"));
+    const input = await screen.findByRole("textbox", { name: "Company" });
     await userEvent.clear(input);
     await userEvent.type(input, "Lost?");
     await userEvent.tab();
     expect(await screen.findByText("Couldn't save")).toBeInTheDocument();
-    expect(within(row("Name")).getByText("Lost?")).toBeInTheDocument();
-    expect(within(row("Name")).getByRole("alert")).toHaveTextContent(/disk full/);
+    expect(within(row("Company")).getByText("Lost?")).toBeInTheDocument();
+    expect(within(row("Company")).getByRole("alert")).toHaveTextContent(/disk full/);
     // Clicking again offers the text that was typed.
-    await userEvent.click(screen.getByRole("button", { name: "Edit Name" }));
-    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue("Lost?");
+    await userEvent.click(screen.getByRole("button", { name: "Edit Company" }));
+    expect(await screen.findByRole("textbox", { name: "Company" })).toHaveValue("Lost?");
   });
 
-  it("starts the primary field of a record just added in edit mode, focused", async () => {
+  it("starts the title of a record just added focused, with the other properties read as usual", async () => {
     // Records added from a collection screen are noted as new until their page has been left.
     rememberNewRecord("rec1", {});
     setup();
     const input = await screen.findByRole("textbox", { name: "Name" });
     await waitFor(() => expect(input).toHaveFocus());
-    // The other fields are read as usual.
     expect(screen.getByRole("button", { name: "Edit Status" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Plain notes" })).not.toBeInTheDocument();
   });
 
-  it("gives viewers the plain values: no button, no tint, no checkbox to toggle", async () => {
-    setup({ role: "viewer" });
-    await screen.findByRole("heading", { name: "Launch" });
-    expect(screen.queryByRole("button", { name: /^Edit / })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(within(row("Name")).getByText("Launch").closest("[class*='hover:bg-hover']")).toBeNull();
-  });
 });

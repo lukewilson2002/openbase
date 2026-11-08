@@ -12,11 +12,12 @@ import { apiError, makeSchema, mockApi, stubDesktop, stubPhone } from "@/test/ut
 import { RecordPage, type RecordPageProps } from "./RecordPage";
 
 const name = field("text", { multiline: false }, { id: "fld_name", name: "Name" });
+const company = field("text", { multiline: false }, { id: "fld_company", name: "Company" });
 const plain = field("text", { multiline: true }, { id: "fld_plain", name: "Plain notes" });
 const rich = field("rich_text", {}, { id: "fld_rich", name: "Notes" });
-const table = makeTable([name, plain, rich]);
+const table = makeTable([name, company, plain, rich]);
 const schema = { ...makeSchema("owner"), tables: [table] };
-const record = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec1");
+const record = makeRecord({ fld_name: "Launch", fld_company: "Acme", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec1");
 
 const PATCH = "PATCH /api/tables/tbl1/records";
 
@@ -68,8 +69,8 @@ async function edit(field: string): Promise<HTMLInputElement & HTMLTextAreaEleme
   return (await screen.findByRole("textbox", { name: field })) as HTMLInputElement & HTMLTextAreaElement;
 }
 
-/** A field's row (the comment box below is a rich text editor too). */
-const fieldRow = (name: string) => screen.getByRole("group", { name });
+/** A property's row (the comment box beside the page is a rich text editor too). */
+const fieldRow = (name: string) => within(screen.getByRole("region", { name: "Properties" })).getByText(name, { selector: "dt *" }).closest("dt")!.parentElement as HTMLElement;
 
 /** Starts editing the rich text field and waits for its editor. */
 async function editRich() {
@@ -89,10 +90,10 @@ describe("RecordPage: save status", () => {
     setup({
       [PATCH]: async () => {
         await gate;
-        return { records: [{ ...record, values: { ...record.values, fld_name: "Ship it" } }] };
+        return { records: [{ ...record, values: { ...record.values, fld_company: "Ship it" } }] };
       },
     });
-    const input = await edit("Name");
+    const input = await edit("Company");
     expect(screen.getByRole("status", { name: "Save status" })).toHaveTextContent("");
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it{Enter}");
@@ -104,13 +105,13 @@ describe("RecordPage: save status", () => {
 
   it("is a polite live region", async () => {
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     expect(screen.getByRole("status", { name: "Save status" })).toHaveAttribute("aria-live", "polite");
   });
 
   it("says Couldn't save when a save fails, and the field keeps its message", async () => {
     setup({ [PATCH]: apiError(500, "internal", "disk full") });
-    const input = await edit("Name");
+    const input = await edit("Company");
     await userEvent.clear(input);
     await userEvent.type(input, "Ship it{Enter}");
     const status = await screen.findByText("Couldn't save");
@@ -124,7 +125,7 @@ describe("RecordPage: save status", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       setup();
-      const input = await edit("Name");
+      const input = await edit("Company");
       await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).type(input, "!{Enter}");
       expect(await screen.findByText("Saved")).toBeInTheDocument();
       await act(async () => {
@@ -339,7 +340,7 @@ describe("RecordPage: multiline text while saves and refetches are in flight", (
 });
 
 describe("RecordPage: Alt+Arrow while typing", () => {
-  const rec2 = makeRecord({ fld_name: "Launch", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec2");
+  const rec2 = makeRecord({ fld_name: "Launch", fld_company: "Acme", fld_plain: "first", fld_rich: "# Plan\n\n- one" }, "rec2");
 
   it("saves what was typed into the record it was typed in, and shows the next record as it is", async () => {
     // Both records hold the same text, so nothing about the field's value tells the two editors apart.
@@ -383,16 +384,17 @@ describe("RecordPage: Alt+Arrow while typing", () => {
         </MemoryRouter>
       </Providers>,
     );
-    const input = await edit("Name");
+    const input = await screen.findByRole("textbox", { name: "Name" });
     await userEvent.type(input, "!");
     await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
     // The typing went to the record it was typed in, without waiting for the field to lose focus by itself.
     await waitFor(() => expect(api.callsTo(PATCH)).toHaveLength(1));
     expect(api.callsTo(PATCH)[0]!.body).toEqual({ typecast: true, records: [{ id: "rec1", values: { fld_name: "Launch!" } }] });
     // The next record shows its own text, in an editor of its own once clicked, and leaving it saves nothing.
-    const next = await edit("Name");
-    expect(next).toHaveValue("Launch");
+    const next = await screen.findByRole("textbox", { name: "Name" });
+    await waitFor(() => expect(next).toHaveValue("Launch"));
     expect(next).not.toBe(input);
+    await userEvent.click(next);
     await userEvent.tab();
     await new Promise((r) => setTimeout(r, 100));
     expect(api.callsTo(PATCH)).toHaveLength(1);
@@ -402,7 +404,7 @@ describe("RecordPage: Alt+Arrow while typing", () => {
 describe("RecordPage: Share", () => {
   it("has a Share button, not a link button", async () => {
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copy link/i })).not.toBeInTheDocument();
   });
@@ -414,7 +416,7 @@ describe("RecordPage: Share", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     window.history.replaceState(null, "", "/base/app1/tbl1/viw1/r/rec1");
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
     expect(share).toHaveBeenCalledWith({ url: window.location.href, title: "Launch" });
     expect(share.mock.calls[0]![0].url).toContain("/r/rec1");
@@ -426,7 +428,7 @@ describe("RecordPage: Share", () => {
     Object.defineProperty(navigator, "share", { value: vi.fn().mockRejectedValue(new DOMException("closed", "AbortError")), configurable: true });
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
     await Promise.resolve();
     expect(writeText).not.toHaveBeenCalled();
@@ -438,7 +440,7 @@ describe("RecordPage: Share", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     expect(navigator.share).toBeUndefined();
     setup();
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
@@ -448,7 +450,7 @@ describe("RecordPage: Share", () => {
 describe("RecordPage: phone layout", () => {
   it("has the 56 px header: the back link naming the collection, Comments, Share and More, and no search", async () => {
     setup({}, {}, true);
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     const header = screen.getByRole("banner");
     expect(within(header).getByRole("link", { name: "Back to Tasks" })).toHaveAttribute("href", "/base/app1/tbl1/viw1");
     expect(within(header).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Comments", "Share", "More"]);
@@ -459,7 +461,7 @@ describe("RecordPage: phone layout", () => {
 
   it("opens Comments and History as full-screen sheets", async () => {
     setup({ "GET /api/records/rec1/comments": [] }, {}, true);
-    await screen.findByRole("button", { name: "Edit Name" });
+    await screen.findByRole("button", { name: "Edit Company" });
     await userEvent.click(screen.getByRole("button", { name: "Comments" }));
     expect(await screen.findByRole("dialog", { name: "Comments" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
