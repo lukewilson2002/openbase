@@ -106,7 +106,8 @@ test("the list groups by day, then by month and year from the Group tool", async
   await expect.poll(() => headers(page)).toEqual(["2027", "2026", "No date"]);
   await page.keyboard.press("Escape");
 
-  // The choice is saved with the view.
+  // The choice is a draft, kept on this device: the changes bar says so and a reload keeps it.
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
   await page.reload();
   await expect.poll(() => headers(page)).toEqual(["2027", "2026", "No date"]);
 });
@@ -125,11 +126,10 @@ test("a record added to a month group starts on the month's first day", async ({
 test("a grid's Group tool offers the granularity and its groups follow it", async ({ page }) => {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.grid}`);
   await page.getByRole("button", { name: /^Grouped by Due/ }).click();
+  // The page asks the server for the draft's groups with each query (a transient override), so the grid's groups
+  // are the ones the server computes for it.
+  const asked = page.waitForResponse((r) => r.url().endsWith(`/api/views/${fx.grid}/query`) && (r.request().postDataJSON() as { transient?: { groups?: { granularity?: string }[] } }).transient?.groups?.[0]?.granularity === "quarter");
   await page.getByRole("combobox", { name: "Granularity for group 1" }).selectOption("quarter");
-  await expect
-    .poll(async () => {
-      const res = await call<{ groups: { label: string; count: number }[] }>(page.request, "post", `/api/views/${fx.grid}/query`, { limit: 0 });
-      return res.groups.map((g) => `${g.label} (${g.count})`);
-    })
-    .toEqual(["No date (1)", "Q3 2026 (1)", "Q4 2026 (2)", "Q1 2027 (1)"]);
+  const res = (await (await asked).json()) as { groups: { label: string; count: number }[] };
+  expect(res.groups.map((g) => `${g.label} (${g.count})`)).toEqual(["No date (1)", "Q3 2026 (1)", "Q4 2026 (2)", "Q1 2027 (1)"]);
 });

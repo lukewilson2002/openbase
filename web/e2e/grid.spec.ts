@@ -349,9 +349,9 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
 
 test("adds and deletes records, with undo", async ({ page, diagnostics }) => {
   // Undoing the add of a blank record races the grid taking it back (it was never touched): the loser
-  // gets a 404, either the undo's delete or the take-back's lookup. Both ends treat that as "already
-  // gone", but the browser logs the failed request.
-  diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+)?\)$/);
+  // gets a 404, either the undo's delete or the take-back's lookup or discard. Both ends treat that as
+  // "already gone", but the browser logs the failed request.
+  diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+(\/discard)?)?\)$/);
   await gotoGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
   await expect(page.getByText("6 items")).toBeVisible();
