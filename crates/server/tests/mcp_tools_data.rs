@@ -28,7 +28,7 @@ async fn share_links_publish_views_and_forms_with_optional_passwords() {
     a.call(
         "create_view",
         json!({"base_id": b, "table": "Tasks", "name": "Board", "type": "grid",
-               "config": {"hidden_fields": ["Points"]}}),
+               "config": {"hidden_fields": ["Points", "Page"]}}),
     )
     .await;
     a.call(

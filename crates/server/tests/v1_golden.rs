@@ -56,6 +56,10 @@ struct Opened {
     /// Fields and bases that exist now but did not in the v15 file.
     new_fields: Vec<(String, String, String)>,
     new_bases: Vec<(String, String)>,
+    /// Which of those the v1 API shows to the fixture's tokens: page properties of live tables
+    /// in live projects of the live workspaces Olive made, and new projects of live workspaces.
+    visible_new_fields: BTreeSet<String>,
+    visible_new_bases: BTreeSet<String>,
     _dir: tempfile::TempDir,
 }
 
@@ -75,7 +79,7 @@ fn open_fixture() -> Opened {
     let app = TestApp::from_parts(state, router);
 
     let conn = Connection::open(&path).unwrap();
-    let new_fields = conn
+    let new_fields: Vec<(String, String, String)> = conn
         .prepare("SELECT id, name, type FROM fields ORDER BY id")
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
@@ -85,7 +89,7 @@ fn open_fixture() -> Opened {
         .into_iter()
         .filter(|(id, ..)| !before.fields.contains(id))
         .collect();
-    let new_bases = conn
+    let new_bases: Vec<(String, String)> = conn
         .prepare("SELECT id, name FROM bases ORDER BY id")
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -95,10 +99,40 @@ fn open_fixture() -> Opened {
         .into_iter()
         .filter(|(id, _)| !before.bases.contains(id))
         .collect();
+    let ids = |sql: &str| -> BTreeSet<String> {
+        conn.prepare(sql)
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    let visible = ids(
+        "SELECT f.id FROM fields f JOIN tables t ON t.id = f.table_id
+           JOIN bases b ON b.id = t.base_id JOIN workspaces w ON w.id = b.workspace_id
+          WHERE f.deleted_at IS NULL AND t.deleted_at IS NULL AND b.deleted_at IS NULL
+            AND w.deleted_at IS NULL AND w.created_by = 'usrolive'",
+    );
+    let visible_new_fields = new_fields
+        .iter()
+        .map(|(id, ..): &(String, String, String)| id.clone())
+        .filter(|id| visible.contains(id))
+        .collect();
+    let live_workspace_bases = ids(
+        "SELECT b.id FROM bases b JOIN workspaces w ON w.id = b.workspace_id
+          WHERE b.deleted_at IS NULL AND w.deleted_at IS NULL",
+    );
+    let visible_new_bases = new_bases
+        .iter()
+        .map(|(id, _): &(String, String)| id.clone())
+        .filter(|id| live_workspace_bases.contains(id))
+        .collect();
     Opened {
         app,
         new_fields,
         new_bases,
+        visible_new_fields,
+        visible_new_bases,
         _dir: dir,
     }
 }
@@ -278,8 +312,12 @@ async fn capture(o: &Opened) -> BTreeMap<String, Value> {
     files
 }
 
-/// Remove what the spec allows to differ. Returns how many page fields and projects it removed.
-fn normalize(o: &Opened, files: &mut BTreeMap<String, Value>) -> (usize, usize) {
+/// Remove what the spec allows to differ. Returns the ids of the page fields and of the projects
+/// it removed.
+fn normalize(
+    o: &Opened,
+    files: &mut BTreeMap<String, Value>,
+) -> (BTreeSet<String>, BTreeSet<String>) {
     let page_ids: BTreeSet<&str> = o
         .new_fields
         .iter()
@@ -292,22 +330,25 @@ fn normalize(o: &Opened, files: &mut BTreeMap<String, Value>) -> (usize, usize) 
         "the migration may only add page properties, found {:?}",
         o.new_fields
     );
-    let new_base_names: BTreeSet<&str> = o.new_bases.iter().map(|(_, n)| n.as_str()).collect();
 
-    let (mut pages, mut projects) = (0, 0);
-    fn walk(v: &mut Value, page_ids: &BTreeSet<&str>, count: &mut usize) {
+    let (mut pages, mut projects) = (BTreeSet::new(), BTreeSet::new());
+    fn walk(v: &mut Value, page_ids: &BTreeSet<&str>, removed: &mut BTreeSet<String>) {
         match v {
             Value::Object(m) => {
                 if let Some(Value::Array(fields)) = m.get_mut("fields") {
-                    let before = fields.len();
-                    fields.retain(|f| !f["id"].as_str().is_some_and(|id| page_ids.contains(id)));
-                    *count += before - fields.len();
+                    fields.retain(|f| match f["id"].as_str() {
+                        Some(id) if page_ids.contains(id) => {
+                            removed.insert(id.to_string());
+                            false
+                        }
+                        _ => true,
+                    });
                 }
                 for x in m.values_mut() {
-                    walk(x, page_ids, count);
+                    walk(x, page_ids, removed);
                 }
             }
-            Value::Array(a) => a.iter_mut().for_each(|x| walk(x, page_ids, count)),
+            Value::Array(a) => a.iter_mut().for_each(|x| walk(x, page_ids, removed)),
             _ => {}
         }
     }
@@ -318,13 +359,16 @@ fn normalize(o: &Opened, files: &mut BTreeMap<String, Value>) -> (usize, usize) 
         if let Some(Value::Array(bases)) =
             files.get_mut(name).and_then(|v| v["body"].get_mut("bases"))
         {
-            let before = bases.len();
             bases.retain(|b| {
-                !b["name"]
-                    .as_str()
-                    .is_some_and(|n| new_base_names.contains(n))
+                let new = o
+                    .new_bases
+                    .iter()
+                    .find(|(id, _)| Some(id.as_str()) == b["id"].as_str());
+                if let Some((id, _)) = new {
+                    projects.insert(id.clone());
+                }
+                new.is_none()
             });
-            projects += before - bases.len();
         }
     }
     (pages, projects)
@@ -414,9 +458,8 @@ async fn v1_responses_for_the_v15_fixture_are_unchanged() {
     let update = std::env::var("OPENBASE_UPDATE_GOLDEN").is_ok_and(|v| v == "1");
     let dir = golden_dir();
     if update {
-        assert_eq!(
-            (pages, projects),
-            (0, 0),
+        assert!(
+            pages.is_empty() && projects.is_empty(),
             "regenerate the golden files from a server before migration 0016"
         );
         std::fs::create_dir_all(&dir).unwrap();
@@ -461,6 +504,10 @@ async fn v1_responses_for_the_v15_fixture_are_unchanged() {
         "golden files nobody compares: {on_disk:?}"
     );
 
-    // Page properties and projects are only ever stripped where the migration added them.
-    assert!(pages <= opened.new_fields.len() && projects <= opened.new_bases.len());
+    // The comparison above is not vacuous: the fixture's 12 new page properties that Olive's
+    // token can see (Acme and Beta, live tables) and the 2 new projects Carol's can see.
+    assert_eq!((pages.len(), projects.len()), (12, 2));
+    // Everything the migration added that the API can show was stripped, and nothing else was.
+    assert_eq!(pages, opened.visible_new_fields, "page properties stripped");
+    assert_eq!(projects, opened.visible_new_bases, "new projects stripped");
 }

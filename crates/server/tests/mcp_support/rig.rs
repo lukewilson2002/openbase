@@ -43,17 +43,20 @@ impl Rig {
             .await;
         let token = tok.bearer.clone().unwrap();
         let agent = live.agent(&token);
-        let ws = agent
+        let workspace = agent
             .call("create_workspace", json!({"name": "Workspace"}))
-            .await["workspace"]["id"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let created = agent
-            .call("create_base", json!({"workspace_id": ws, "name": "Base"}))
+            .await["workspace"]
+            .clone();
+        let ws = workspace["id"].as_str().unwrap().to_string();
+        // A new workspace comes with its top-level project. The rig's base is that project,
+        // called Base, with the starter table a base used to begin with.
+        let base = workspace["bases"][0]["id"].as_str().unwrap().to_string();
+        agent
+            .call("rename_project", json!({"base_id": base, "name": "Base"}))
             .await;
-        let base = created["base"]["id"].as_str().unwrap().to_string();
-        let first_table = created["base"]["tables"][0]["id"]
+        let first_table = agent
+            .call("create_table", json!({"base_id": base, "name": "Table 1"}))
+            .await["table"]["id"]
             .as_str()
             .unwrap()
             .to_string();

@@ -385,7 +385,7 @@ async fn trashed_fields_are_not_copied() {
         )
         .await;
     res.assert_status(201);
-    assert_eq!(Fixture::field_names(&res.body), ["Name", "Notes"]);
+    assert_eq!(Fixture::field_names(&res.body), ["Name", "Page", "Notes"]);
     let records = dump_records(&f.app, &f.base_id);
     let copy_rec = records
         .values()

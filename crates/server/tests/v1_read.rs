@@ -102,6 +102,7 @@ async fn meta_tables_describes_tables_fields_and_views() {
         types,
         [
             ("Name", "singleLineText"),
+            ("Page", "richText"),
             ("Notes", "richText"),
             ("Age", "number"),
             ("Status", "singleSelect"),

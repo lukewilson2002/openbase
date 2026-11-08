@@ -30,6 +30,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0013_rich_comments.sql"),
     include_str!("../migrations/0014_text_types.sql"),
     include_str!("../migrations/0015_user_accent.sql"),
+    include_str!("../migrations/0016_collections.sql"),
 ];
 
 /// Data changes a migration needs beyond its SQL, run in the same transaction
@@ -37,6 +38,7 @@ const MIGRATIONS: &[&str] = &[
 fn after_migration(conn: &Connection, version: i64) -> rusqlite::Result<()> {
     match version {
         13 => crate::store::comments::plain_bodies_to_markdown(conn),
+        16 => crate::store::pages::upgrade_to_v16(conn),
         _ => Ok(()),
     }
 }
@@ -359,7 +361,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 15);
+        assert_eq!(schema_version(), 16);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -582,7 +584,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 15);
+        assert_eq!(schema_version(), 16);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -753,7 +755,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 15);
+        assert_eq!(schema_version(), 16);
         let flag = |id: &str| -> bool {
             conn.query_row(
                 "SELECT may_raise_roles FROM invites WHERE id = ?1",
@@ -888,7 +890,8 @@ mod tests {
                  ('v3', 't1', 'Grid', 'grid', '{}', 1);"#,
         )
         .unwrap();
-        migrate(&conn).unwrap();
+        // Up to version 8 only: later migrations add hidden fields to views of their own.
+        migrate_with(&conn, &MIGRATIONS[..8], None).unwrap();
         let config = |id: &str| -> serde_json::Value {
             let raw: String = conn
                 .query_row("SELECT config FROM views WHERE id = ?1", [id], |r| r.get(0))

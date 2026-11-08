@@ -83,7 +83,7 @@ async fn export_uses_the_views_visible_fields_order_filter_and_sort() {
             json!({
                 "filter": and(vec![cond(&p.age, "gte", json!(30))]),
                 "sorts": [{ "field_id": p.age, "direction": "desc" }, { "field_id": p.name, "direction": "asc" }],
-                "hidden_fields": [f.notes_id, p.tags],
+                "hidden_fields": [f.notes_id, f.page_id, p.tags],
                 "field_order": [p.status, p.name],
             }),
         )
@@ -126,7 +126,7 @@ async fn export_quotes_per_rfc_4180_and_round_trips() {
             &t,
             "Notes",
             "grid",
-            json!({ "hidden_fields": [p.age, p.status, p.tags, p.due, p.done] }),
+            json!({ "hidden_fields": [f.page_id, p.age, p.status, p.tags, p.due, p.done] }),
         )
         .await;
     let r = f.app.get(&f.owner, &export_url(&all)).await;
@@ -167,7 +167,7 @@ async fn export_guards_against_formula_injection() {
             &t,
             "V",
             "grid",
-            json!({ "hidden_fields": [f.notes_id, p.status, p.tags, p.due, p.done] }),
+            json!({ "hidden_fields": [f.notes_id, f.page_id, p.status, p.tags, p.due, p.done] }),
         )
         .await;
     let r = f.app.get(&f.owner, &export_url(&view)).await;
@@ -392,7 +392,7 @@ async fn a_big_table_is_streamed_in_bounded_chunks() {
             &t,
             "Sorted",
             "grid",
-            json!({ "sorts": [{ "field_id": age, "direction": "desc" }] }),
+            json!({ "hidden_fields": [f.page_id], "sorts": [{ "field_id": age, "direction": "desc" }] }),
         )
         .await;
     let req = auth(
@@ -1046,6 +1046,29 @@ const SAMPLE: &str = "Name,Age,Price,Share,Done,Joined,Email,Site,Status,Notes,Z
     Ed,50,$8,2%,yes,2026-05-25,ed@x.io,https://e.example,Open,y,73301\n";
 
 #[tokio::test]
+async fn a_file_with_a_page_column_keeps_it_and_the_new_table_gets_page_2() {
+    let f = Fixture::new().await;
+    let r = import_base(
+        &f.app,
+        &f.owner,
+        &f.base_id,
+        "Wiki.csv",
+        b"Title,Page\nHome,1\nAbout,2\n",
+        None,
+    )
+    .await;
+    r.assert_status(201);
+    assert_eq!(r.body["created"], 2);
+    let table = f.table(r.body["table_id"].as_str().unwrap()).await;
+    assert_eq!(
+        Fixture::field_names(&table),
+        vec!["Title", "Page", "Page 2"]
+    );
+    assert_eq!(table["fields"][1]["type"], "number");
+    assert_eq!(table["fields"][2]["type"], "rich_text");
+}
+
+#[tokio::test]
 async fn import_into_a_new_table_infers_field_types() {
     let f = Fixture::new().await;
     let mut events = f.app.state.events.subscribe(&f.base_id);
@@ -1103,7 +1126,11 @@ async fn import_into_a_new_table_infers_field_types() {
     assert_eq!(notes["options"]["multiline"], true);
     assert_eq!(table["name"], "People 2026");
     assert_eq!(table["primary_field_id"], r.body["fields"][0]["id"]);
-    assert_eq!(table["fields"].as_array().unwrap().len(), 11);
+    assert_eq!(
+        table["fields"].as_array().unwrap().len(),
+        12,
+        "11 columns and the page"
+    );
     assert_eq!(table["views"].as_array().unwrap().len(), 1);
     assert_eq!(table["views"][0]["type"], "grid");
     let by_name = |n: &str| {
@@ -1493,7 +1520,7 @@ async fn export_is_a_snapshot_when_rows_change_between_pages() {
             &t,
             "Sorted",
             "grid",
-            json!({ "sorts": [{ "field_id": age, "direction": "desc" }] }),
+            json!({ "hidden_fields": [f.page_id], "sorts": [{ "field_id": age, "direction": "desc" }] }),
         )
         .await;
     let req = auth(

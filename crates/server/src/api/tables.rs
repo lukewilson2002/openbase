@@ -17,9 +17,9 @@ use crate::extract::ApiJson;
 use crate::perm::{self, Role};
 use crate::state::AppState;
 use crate::store::field_kind::parse_create_field;
-use crate::store::fields;
 use crate::store::schema::{self, PositionScope, Touched};
 use crate::store::tables;
+use crate::store::{fields, pages};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -76,7 +76,7 @@ async fn create(
         .db
         .write(move |tx| {
             perm::require_base(tx, &actor, &base_id, Role::Creator)?;
-            let row = tables::create(
+            let row = tables::create_without_page(
                 tx,
                 &base_id,
                 &body.name,
@@ -99,6 +99,8 @@ async fn create(
                     touched.add(t);
                 }
             }
+            // After the caller's fields, so that one of them may be called "Page".
+            pages::create_body_field(tx, &row.id)?;
             Ok((tables::to_dto(tx, &row, &actor.user_id)?, touched))
         })
         .await?;

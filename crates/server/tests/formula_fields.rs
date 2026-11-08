@@ -262,7 +262,7 @@ async fn unknown_references_are_rejected() {
         );
     }
     // nothing was created
-    assert_eq!(f.table(&t).await["fields"].as_array().unwrap().len(), 3);
+    assert_eq!(f.table(&t).await["fields"].as_array().unwrap().len(), 4);
 }
 
 #[tokio::test]

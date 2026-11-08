@@ -247,8 +247,8 @@ async fn all_28_field_types_can_be_created_with_options() {
         .unwrap();
     let fields = t["fields"].as_array().unwrap();
     let field = |name: &str| fields.iter().find(|f| f["name"] == name).unwrap();
-    // 28 created + the primary field (a new table has nothing else)
-    assert_eq!(fields.len(), 29);
+    // 28 created + the primary field and the page (a new table has nothing else)
+    assert_eq!(fields.len(), 30);
     let mut types: Vec<&str> = fields
         .iter()
         .skip(1)

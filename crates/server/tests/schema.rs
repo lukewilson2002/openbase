@@ -22,9 +22,11 @@ async fn create_table_has_primary_name_field_and_grid_view() {
     assert_eq!(r.body["name"], "Contacts");
     assert_eq!(r.body["base_id"], f.base_id.as_str());
     let fields = r.body["fields"].as_array().unwrap();
-    assert_eq!(fields.len(), 1);
+    assert_eq!(fields.len(), 2, "the primary field and the page");
     assert_eq!(fields[0]["name"], "Name");
     assert_eq!(fields[0]["type"], "text");
+    assert_eq!(fields[1]["name"], "Page");
+    assert_eq!(fields[1]["type"], "rich_text");
     assert_eq!(fields[0]["id"], r.body["primary_field_id"]);
     let views = r.body["views"].as_array().unwrap();
     assert_eq!(views.len(), 1, "a new table has only its default grid");

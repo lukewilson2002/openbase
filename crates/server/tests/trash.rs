@@ -221,7 +221,7 @@ async fn restoring_a_table_brings_back_its_fields_views_and_data() {
     let r = restore(&f, &f.owner, "table", &t2id).await;
     r.assert_status(200);
     let t = f.table(&t2id).await;
-    assert_eq!(Fixture::field_names(&t), ["Name", "Extra"]);
+    assert_eq!(Fixture::field_names(&t), ["Name", "Page", "Extra"]);
     assert_eq!(t["views"].as_array().unwrap().len(), 1);
     assert_eq!(f.record_data(&rec), json!({ sid(&extra["id"]): 9 }));
     assert!(items(&trash(&f, &f.owner).await).is_empty());
@@ -412,7 +412,7 @@ async fn bases_and_workspaces_restore_in_order() {
     // everything inside came back untouched
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
 }
 

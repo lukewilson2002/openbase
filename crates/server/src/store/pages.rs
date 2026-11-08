@@ -1,0 +1,238 @@
+//! A collection's page: the rich text property that holds the body of its records
+//! (`tables.body_field_id`, decision 2 of the UX overhaul spec), and the data fix of schema
+//! version 16 that gives every existing table its page and its Home properties.
+
+use ob_core::field::{Field, FieldKind};
+use ob_core::limits;
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
+
+use crate::db::now_ms;
+use crate::error::AppResult;
+use crate::ids::new_id;
+use crate::store::schema::{self, PositionScope};
+
+/// Name of the page property of a collection that has none yet. Another property of the table may
+/// already use it; the new one is then called "Page 2", "Page 3" and so on.
+pub const BODY_FIELD_NAME: &str = "Page";
+
+/// The page property of `table_id`, if it has one.
+pub fn body_field_id(conn: &Connection, table_id: &str) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT body_field_id FROM tables WHERE id = ?1",
+            [table_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten())
+}
+
+/// Create the page property of `table_id`: a rich text field named "Page" (or the first free
+/// "Page N"), hidden in every view of the table, and make the table point at it. Returns its id,
+/// or `None` when the table is at the field limit (it then stays without a page).
+pub fn create_body_field(conn: &Connection, table_id: &str) -> AppResult<Option<String>> {
+    let siblings = schema::table_fields(conn, table_id)?;
+    if siblings.len() >= limits::MAX_FIELDS_PER_TABLE {
+        return Ok(None);
+    }
+    let name = schema::uniquify(
+        &schema::name_keys(siblings.iter().map(|f| f.name.as_str())),
+        BODY_FIELD_NAME,
+    );
+    let field = Field {
+        id: new_id(ob_core::ids::FIELD),
+        table_id: table_id.to_string(),
+        name,
+        description: None,
+        kind: FieldKind::RichText(Default::default()),
+    };
+    let position = schema::next_position(conn, PositionScope::FieldsIn(table_id))?;
+    schema::insert_field(conn, &field, position, now_ms())?;
+    conn.execute(
+        "UPDATE tables SET body_field_id = ?2 WHERE id = ?1",
+        params![table_id, field.id],
+    )?;
+    hide_in_every_view(conn, table_id, &field.id)?;
+    Ok(Some(field.id))
+}
+
+/// Add `field_id` to the hidden fields of every view of the table: the ones people see, personal
+/// ones and ones in the trash (a restored view must not show the page either). A view whose
+/// config cannot be read is left alone.
+fn hide_in_every_view(conn: &Connection, table_id: &str, field_id: &str) -> rusqlite::Result<()> {
+    let views: Vec<(String, String)> = conn
+        .prepare("SELECT id, config FROM views WHERE table_id = ?1")?
+        .query_map([table_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for (id, config) in views {
+        let Ok(Value::Object(mut config)) = serde_json::from_str::<Value>(&config) else {
+            continue;
+        };
+        let hidden = config.entry("hidden_fields").or_insert_with(|| json!([]));
+        match hidden {
+            Value::Array(ids) => {
+                if !ids.iter().any(|i| i == field_id) {
+                    ids.push(json!(field_id));
+                }
+            }
+            other => *other = json!([field_id]),
+        }
+        conn.execute(
+            "UPDATE views SET config = ?2 WHERE id = ?1",
+            params![id, Value::Object(config).to_string()],
+        )?;
+    }
+    Ok(())
+}
+
+/// Names (compared trimmed and case-insensitively) of the date properties Home reads, best first
+/// (HOME-5). A table with a Due and a Start date takes Due.
+const HOME_DATE_NAMES: [&str; 6] = ["due", "due date", "deadline", "date", "when", "start"];
+/// Names of the checkbox properties that mark a record done, best first (HOME-5).
+const DONE_NAMES: [&str; 3] = ["done", "complete", "completed"];
+
+/// A field as the version 16 data fix reads it.
+struct Stored {
+    id: String,
+    name: String,
+    ty: String,
+}
+
+/// The first of `fields` (in table order) of type `ty` whose name is the earliest in `names`.
+fn preset<'a>(fields: &'a [Stored], ty: &str, names: &[&str]) -> Option<&'a Stored> {
+    names.iter().find_map(|wanted| {
+        fields
+            .iter()
+            .find(|f| f.ty == ty && f.name.trim().to_lowercase() == *wanted)
+    })
+}
+
+/// Data fix of schema version 16 (BE-1), run right after `0016_collections.sql`:
+///
+/// - `home_date_field_id` and `done_field_id` take the preset of HOME-5 when the table has such a
+///   property, else stay empty. This covers trashed tables too, so a restored table behaves like
+///   the others.
+/// - `body_field_id` (decision 2): a live table with exactly one live rich text property other
+///   than its title uses it as the page; any other live table gets a new one, unless it already
+///   has the largest number of properties allowed. Tables in the trash keep none.
+///
+/// The SQL here names only the columns that existed in version 16, so that later migrations can
+/// change the tables without breaking this function.
+pub fn upgrade_to_v16(conn: &Connection) -> rusqlite::Result<()> {
+    let tables: Vec<(String, String, bool)> = conn
+        .prepare("SELECT id, primary_field_id, deleted_at IS NOT NULL FROM tables ORDER BY id")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    for (table_id, primary_id, trashed) in tables {
+        let fields: Vec<Stored> = conn
+            .prepare(
+                "SELECT id, name, type FROM fields WHERE table_id = ?1 AND deleted_at IS NULL
+                 ORDER BY position, created_at, id",
+            )?
+            .query_map([&table_id], |r| {
+                Ok(Stored {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    ty: r.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+
+        let home = preset(&fields, "date", &HOME_DATE_NAMES).map(|f| f.id.as_str());
+        let done = preset(&fields, "checkbox", &DONE_NAMES).map(|f| f.id.as_str());
+        conn.execute(
+            "UPDATE tables SET home_date_field_id = ?2, done_field_id = ?3 WHERE id = ?1",
+            params![table_id, home, done],
+        )?;
+
+        if trashed {
+            continue;
+        }
+        let candidates: Vec<&Stored> = fields
+            .iter()
+            .filter(|f| f.ty == "rich_text" && f.id != primary_id)
+            .collect();
+        if let [only] = candidates.as_slice() {
+            conn.execute(
+                "UPDATE tables SET body_field_id = ?2 WHERE id = ?1",
+                params![table_id, only.id],
+            )?;
+        } else if fields.len() < limits::MAX_FIELDS_PER_TABLE {
+            add_page_field_v16(conn, &table_id, &fields)?;
+        }
+    }
+    Ok(())
+}
+
+/// The page property of a table that needs a new one, as version 16 stored fields.
+fn add_page_field_v16(conn: &Connection, table_id: &str, live: &[Stored]) -> rusqlite::Result<()> {
+    let taken: std::collections::HashSet<String> =
+        live.iter().map(|f| f.name.to_lowercase()).collect();
+    let name = (1..)
+        .map(|n| match n {
+            1 => BODY_FIELD_NAME.to_string(),
+            n => format!("{BODY_FIELD_NAME} {n}"),
+        })
+        .find(|candidate| !taken.contains(&candidate.to_lowercase()))
+        .expect("an unbounded range has a free name");
+    let id = new_id(ob_core::ids::FIELD);
+    let position: f64 = conn.query_row(
+        "SELECT COALESCE(MAX(position), 0) + 1 FROM fields WHERE table_id = ?1",
+        [table_id],
+        |r| r.get(0),
+    )?;
+    conn.execute(
+        "INSERT INTO fields (id, table_id, name, type, options, position, created_at)
+         VALUES (?1, ?2, ?3, 'rich_text', '{}', ?4, ?5)",
+        params![id, table_id, name, position, now_ms()],
+    )?;
+    conn.execute(
+        "UPDATE tables SET body_field_id = ?2 WHERE id = ?1",
+        params![table_id, id],
+    )?;
+    hide_in_every_view(conn, table_id, &id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field(id: &str, name: &str, ty: &str) -> Stored {
+        Stored {
+            id: id.into(),
+            name: name.into(),
+            ty: ty.into(),
+        }
+    }
+
+    #[test]
+    fn the_home_date_goes_by_name_then_table_order() {
+        let fields = [
+            field("a", "Start", "date"),
+            field("b", " due DATE ", "date"),
+            field("c", "Due", "text"),
+            field("d", "Date", "date"),
+            field("e", "Due", "date"),
+        ];
+        // "Due date" beats "Date" and "Start"; the text field called "Due" is not a date.
+        assert_eq!(preset(&fields, "date", &HOME_DATE_NAMES).unwrap().id, "e");
+        assert_eq!(
+            preset(&fields[..2], "date", &HOME_DATE_NAMES).unwrap().id,
+            "b"
+        );
+        assert!(preset(&fields[2..3], "date", &HOME_DATE_NAMES).is_none());
+        assert!(preset(&[], "date", &HOME_DATE_NAMES).is_none());
+    }
+
+    #[test]
+    fn done_is_a_checkbox_called_done_complete_or_completed() {
+        let fields = [
+            field("a", "Completed", "checkbox"),
+            field("b", "COMPLETE", "checkbox"),
+            field("c", "Done", "number"),
+        ];
+        assert_eq!(preset(&fields, "checkbox", &DONE_NAMES).unwrap().id, "b");
+        assert!(preset(&fields[2..], "checkbox", &DONE_NAMES).is_none());
+    }
+}

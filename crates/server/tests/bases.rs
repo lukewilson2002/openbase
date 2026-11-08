@@ -9,16 +9,19 @@ use schema_support::*;
 use serde_json::json;
 
 #[tokio::test]
-async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view() {
+async fn new_base_has_starter_table_with_the_primary_field_the_page_and_a_grid_view() {
     let f = Fixture::new().await;
     // Fixture::new adds a "Notes" field to Table 1 for most tests; start a bare base here.
     let url = format!("/api/workspaces/{}/bases", f.ws);
     let r = f.app.post(&f.owner, &url, json!({ "name": "Bare" })).await;
     r.assert_status(201);
     let fields = r.body["tables"][0]["fields"].as_array().unwrap();
-    assert_eq!(fields.len(), 1);
+    let fields_page_id = fields[1]["id"].clone();
+    assert_eq!(fields.len(), 2, "the primary field and the page");
     assert_eq!(fields[0]["name"], "Name");
     assert_eq!(fields[0]["id"], r.body["tables"][0]["primary_field_id"]);
+    assert_eq!(fields[1]["name"], "Page");
+    assert_eq!(fields[1]["type"], "rich_text");
     let s = f.schema().await;
     assert_eq!(s["name"], "CRM");
     assert_eq!(s["color"], "blue");
@@ -30,7 +33,11 @@ async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view(
     assert_eq!(t["name"], "Table 1");
     assert_eq!(t["base_id"], f.base_id.as_str());
     let fields = t["fields"].as_array().unwrap();
-    assert_eq!(fields.len(), 2, "Name, plus the Notes the fixture added");
+    assert_eq!(
+        fields.len(),
+        3,
+        "Name and the page, plus the Notes the fixture added"
+    );
     assert_eq!(fields[0]["name"], "Name");
     assert_eq!(fields[0]["type"], "text");
     assert_eq!(fields[0]["id"], t["primary_field_id"]);
@@ -47,11 +54,12 @@ async fn new_base_has_starter_table_with_only_the_primary_field_and_a_grid_view(
     assert_eq!(views[0]["locked"], false);
     assert_eq!(views[1]["name"], "Grid view");
     assert_eq!(views[1]["is_default"], false);
-    // a bare starter table has only its default grid
+    // a bare starter table has only its default grid, which hides the page
     let bare = r.body["tables"][0]["views"].as_array().unwrap();
     assert_eq!(bare.len(), 1);
     assert_eq!(bare[0]["name"], "Default grid");
     assert_eq!(bare[0]["is_default"], true);
+    assert_eq!(bare[0]["config"]["hidden_fields"], json!([fields_page_id]));
     assert_eq!(s["workspace_name"], "Acme");
     assert_eq!(s["people"][0]["email"], "owner@example.com");
     assert_eq!(s["people"][0]["role"], "owner");
@@ -209,7 +217,7 @@ async fn schema_orders_by_position_and_skips_deleted_items() {
         .collect();
     assert_eq!(names, ["Third", "Table 1"]);
     let t1 = f.table(&f.table_id).await;
-    assert_eq!(Fixture::field_names(&t1), ["Name", "Notes"]);
+    assert_eq!(Fixture::field_names(&t1), ["Name", "Page", "Notes"]);
 }
 
 #[tokio::test]
@@ -601,7 +609,7 @@ async fn every_new_table_starts_with_just_the_primary_field() {
         .post(&f.owner, &tables_url, json!({ "name": "Later" }))
         .await;
     later.assert_status(201);
-    assert_eq!(first, ["Name"]);
+    assert_eq!(first, ["Name", "Page"]);
     assert_eq!(Fixture::field_names(&later.body), first);
     let with_fields = f
         .app
@@ -612,7 +620,10 @@ async fn every_new_table_starts_with_just_the_primary_field() {
         )
         .await;
     with_fields.assert_status(201);
-    assert_eq!(Fixture::field_names(&with_fields.body), ["Name", "Qty"]);
+    assert_eq!(
+        Fixture::field_names(&with_fields.body),
+        ["Name", "Qty", "Page"]
+    );
     let empty_list = f
         .app
         .post(
@@ -622,5 +633,5 @@ async fn every_new_table_starts_with_just_the_primary_field() {
         )
         .await;
     empty_list.assert_status(201);
-    assert_eq!(Fixture::field_names(&empty_list.body), ["Name"]);
+    assert_eq!(Fixture::field_names(&empty_list.body), ["Name", "Page"]);
 }

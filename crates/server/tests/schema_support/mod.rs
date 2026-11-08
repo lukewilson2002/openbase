@@ -120,6 +120,8 @@ pub struct Fixture {
     pub table_id: String,
     pub primary_id: String,
     pub notes_id: String,
+    /// The table's page property, which every new table starts with.
+    pub page_id: String,
     pub view_id: String,
 }
 
@@ -139,8 +141,31 @@ impl Fixture {
 
     async fn with_app(app: TestApp) -> Fixture {
         let owner = app.user("owner@example.com", "Owner");
-        let ws = workspace(&app, &owner, "Acme").await;
-        let b = base(&app, &owner, &ws, "CRM").await;
+        // A new workspace starts with its top-level project; the fixture's one base is that
+        // project, called CRM and blue, with the starter table a base used to begin with.
+        let created = app
+            .post(&owner, "/api/workspaces", json!({ "name": "Acme" }))
+            .await;
+        created.assert_status(201);
+        let ws = created.body["id"].as_str().unwrap().to_string();
+        let top = created.body["bases"][0]["id"].as_str().unwrap().to_string();
+        app.patch(
+            &owner,
+            &format!("/api/bases/{top}"),
+            json!({ "name": "CRM", "color": "blue" }),
+        )
+        .await
+        .assert_status(200);
+        app.post(
+            &owner,
+            &format!("/api/bases/{top}/tables"),
+            json!({ "name": "Table 1" }),
+        )
+        .await
+        .assert_status(201);
+        let schema = app.get(&owner, &format!("/api/bases/{top}")).await;
+        schema.assert_status(200);
+        let b = schema.body.clone();
         let t = &b["tables"][0];
         // A new table has only its primary field; most tests want a second text field.
         let notes = app
@@ -166,6 +191,7 @@ impl Fixture {
             table_id: t["id"].as_str().unwrap().into(),
             primary_id: t["primary_field_id"].as_str().unwrap().into(),
             notes_id: notes.body["id"].as_str().unwrap().into(),
+            page_id: t["fields"][1]["id"].as_str().unwrap().into(),
             view_id: view.body["id"].as_str().unwrap().into(),
             app,
             owner,

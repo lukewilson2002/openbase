@@ -63,7 +63,8 @@ async fn create_table_with_fields_builds_the_whole_table_in_one_call() {
             "Double",
             "Parent",
             "Parent notes",
-            "Edited"
+            "Edited",
+            "Page"
         ]
     );
     assert_eq!(r.body["fields"][0]["id"], r.body["primary_field_id"]);

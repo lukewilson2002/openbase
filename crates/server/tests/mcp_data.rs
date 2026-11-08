@@ -462,7 +462,7 @@ async fn list_records_errors_list_valid_names() {
     assert!(msg.contains("Unknown field name: \"Agee\""), "{msg}");
     assert!(
         msg.contains(
-            "Fields of 'Table 1': 'Name', 'Notes', 'Age', 'Status', 'Tags', 'Due', 'Done'"
+            "Fields of 'Table 1': 'Name', 'Page', 'Notes', 'Age', 'Status', 'Tags', 'Due', 'Done'"
         ),
         "{msg}"
     );

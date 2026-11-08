@@ -110,8 +110,8 @@ async fn only_items_deleted_before_the_cutoff_are_purged() {
     assert_eq!(stats.records, 1, "only the old record (OldT has none)");
     assert_eq!(
         stats.fields,
-        1 + 1,
-        "the old field and OldT's primary field"
+        1 + 2,
+        "the old field and OldT's primary field and page"
     );
     assert_eq!(stats.views, 1 + 1, "the old view and OldT's grid view");
     assert_eq!(stats.tables, 1);
@@ -133,7 +133,7 @@ async fn only_items_deleted_before_the_cutoff_are_purged() {
     // and the live schema is intact
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
 }
 

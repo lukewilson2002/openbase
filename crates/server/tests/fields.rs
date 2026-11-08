@@ -46,7 +46,7 @@ async fn every_type_with_default_options_can_be_created() {
     }
     assert_eq!(created, 22);
     let t = f.table(&f.table_id).await;
-    assert_eq!(t["fields"].as_array().unwrap().len(), 2 + created);
+    assert_eq!(t["fields"].as_array().unwrap().len(), 3 + created);
 }
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn created_fields_are_appended_and_options_default() {
     let t = f.table(&f.table_id).await;
     assert_eq!(
         Fixture::field_names(&t),
-        ["Name", "Notes", "Amount", "Stars"]
+        ["Name", "Page", "Notes", "Amount", "Stars"]
     );
     // description is stored trimmed
     let c = f.add_field(&f.table_id, json!({ "name": "Done", "type": "checkbox", "options": {}, "description": "  is it done  " })).await;
@@ -408,7 +408,10 @@ async fn update_renames_describes_and_reorders() {
     assert_eq!(r.body["description"], "first");
     assert_eq!(r.body["type"], "number", "type is untouched");
     let t = f.table(&f.table_id).await;
-    assert_eq!(Fixture::field_names(&t), ["Name", "Notes", "B", "Alpha"]);
+    assert_eq!(
+        Fixture::field_names(&t),
+        ["Name", "Page", "Notes", "B", "Alpha"]
+    );
 
     let r = f
         .app
@@ -708,7 +711,7 @@ async fn deleting_a_field_hides_it_and_frees_its_name() {
     assert_eq!(r.body["deleted_field_ids"], json!([id]));
     assert_eq!(
         Fixture::field_names(&f.table(&f.table_id).await),
-        ["Name", "Notes"]
+        ["Name", "Page", "Notes"]
     );
     f.app
         .delete(&f.owner, &format!("/api/fields/{id}"))

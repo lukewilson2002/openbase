@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ob_core::api::workspaces::{
-    BasePerson, BaseSummary, CreateWorkspace, Member, TableSummary, WorkspaceSummary,
+    BasePerson, BaseSummary, CreateBase, CreateWorkspace, Member, TableSummary, WorkspaceSummary,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -423,13 +423,31 @@ pub fn create(
          VALUES (?1, ?2, 'owner', 1, ?3)",
         params![id, user_id, now],
     )?;
+    // Its top level: a project named after the workspace, without tables, in the same colour.
+    let top = bases::create(
+        tx,
+        &id,
+        &CreateBase {
+            name: name.clone(),
+            color: Some(color.clone()),
+            icon: None,
+            empty: Some(true),
+        },
+        user_id,
+    )?;
+    tx.execute(
+        "UPDATE workspaces SET root_base_id = ?2 WHERE id = ?1",
+        params![id, top.id],
+    )?;
+    let people = People::load(tx, &id)?;
+    let top = summary_of(&top, Role::Owner, people.for_base(&top.id), Vec::new());
     Ok(WorkspaceSummary {
         id,
         name,
         icon,
         color,
         role: Role::Owner.as_str().to_string(),
-        bases: Vec::new(),
+        bases: vec![top],
         member_count: 1,
         pending_invite_count: 0,
     })

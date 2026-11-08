@@ -20,6 +20,7 @@ pub mod markdown;
 pub mod mentions;
 pub mod notifications;
 pub mod oauth;
+pub mod pages;
 pub mod passkeys;
 pub mod records;
 pub mod schema;

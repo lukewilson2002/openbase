@@ -11,11 +11,16 @@ use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::ids::new_id;
 use crate::store::schema::{self, PositionScope, TableRow, Touched};
-use crate::store::{duplicate, fields};
+use crate::store::{duplicate, fields, pages};
 
 /// Name of the primary field every new table starts with.
 pub const PRIMARY_FIELD_NAME: &str = "Name";
-/// Name of the grid view every new table starts with.
+/// Colours new tables take in turn, so collections side by side look different. Migration 0016
+/// coloured the tables that existed with the same cycle; keep the two lists in step.
+pub const TABLE_COLORS: [&str; 10] = [
+    "blue", "orange", "green", "purple", "yellow", "pink", "teal", "red", "cyan", "gray",
+];
+
 /// Name of a table's default grid (see `View::is_default`); apps show it as an icon, not by name.
 pub const DEFAULT_VIEW_NAME: &str = "Default grid";
 
@@ -58,9 +63,26 @@ pub fn free_name(conn: &Connection, base_id: &str, wanted: &str) -> AppResult<St
     ))
 }
 
-/// Create a table with its primary single-line-text field "Name" and its default
-/// grid (no other views). Used by base and table creation.
+/// Create a table with its primary text field "Name", its page property (see
+/// [`pages::create_body_field`]) and its default grid (no other views). Used by base and table
+/// creation.
 pub fn create(
+    tx: &Transaction,
+    base_id: &str,
+    name: &str,
+    icon: Option<&str>,
+    user_id: &str,
+) -> AppResult<TableRow> {
+    let table = create_without_page(tx, base_id, name, icon, user_id)?;
+    pages::create_body_field(tx, &table.id)?;
+    Ok(table)
+}
+
+/// [`create`] without the page property, for callers that add the fields they were given first
+/// and then call [`pages::create_body_field`]: the page takes the first free "Page N" after those
+/// fields (a file with a "Page" column keeps it) and is left out when they fill the table. The
+/// table's colour is the next of [`TABLE_COLORS`] after the tables the base has had.
+pub fn create_without_page(
     tx: &Transaction,
     base_id: &str,
     name: &str,
@@ -81,15 +103,22 @@ pub fn create(
         )));
     }
     ensure_name_free(tx, base_id, &name, None)?;
+    // Trashed tables count: they still sit in the order until they are purged.
+    let made: i64 = tx.query_row(
+        "SELECT count(*) FROM tables WHERE base_id = ?1",
+        [base_id],
+        |r| r.get(0),
+    )?;
+    let color = TABLE_COLORS[made as usize % TABLE_COLORS.len()];
 
     let now = now_ms();
     let table_id = new_id(ob_core::ids::TABLE);
     let primary_id = new_id(ob_core::ids::FIELD);
     let position = schema::next_position(tx, PositionScope::TablesIn(base_id))?;
     tx.execute(
-        "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![table_id, base_id, name, icon, position, primary_id, now],
+        "INSERT INTO tables (id, base_id, name, icon, position, primary_field_id, created_at, color)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![table_id, base_id, name, icon, position, primary_id, now, color],
     )?;
     let primary = Field {
         id: primary_id,

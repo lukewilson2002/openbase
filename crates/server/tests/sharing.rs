@@ -59,7 +59,7 @@ async fn setup() -> Shared {
             "Public",
             "grid",
             json!({
-                "hidden_fields": [&secret, &dbl],
+                "hidden_fields": [&secret, &dbl, &p.f.page_id],
                 "field_order": [&p.status, &p.name],
                 "field_widths": { &p.name: 200, &secret: 90 },
             }),

@@ -54,7 +54,7 @@ use crate::store::csv_io::{self, Csv, ImportColumn, ImportOutcome};
 use crate::store::links::NameCache;
 use crate::store::schema::{self, Touched};
 use crate::store::sharing::visible_fields;
-use crate::store::{attachments, fields, records, tables};
+use crate::store::{attachments, fields, pages, records, tables};
 
 /// Records fetched from the query engine per streamed chunk.
 const EXPORT_PAGE: usize = 500;
@@ -679,7 +679,7 @@ fn build_table(
     } else {
         tables::free_name(tx, base_id, wanted)?
     };
-    let table = tables::create(tx, base_id, &name, None, &actor.user_id)?;
+    let table = tables::create_without_page(tx, base_id, &name, None, &actor.user_id)?;
     let mut columns: Vec<ImportColumn> = Vec::new();
     let mut imported: Vec<ImportedField> = Vec::new();
     for (i, kind) in kinds.into_iter().enumerate() {
@@ -716,6 +716,8 @@ fn build_table(
         });
         columns.push(ImportColumn { column: i, field });
     }
+    // After the file's columns, so that one of them may be called "Page".
+    pages::create_body_field(tx, &table.id)?;
     let ctx = WriteCtx::for_user(tx, &actor.user_id, WriteSource::Import)?.typecast(true);
     match csv_io::import_rows(tx, &ctx, &table.id, &columns, &csv.rows)? {
         ImportOutcome::Imported { created, outcomes } => Ok(BuiltTable {
