@@ -21,7 +21,7 @@ export function publicLink(link: Pick<ShareLink, "kind" | "token" | "url">, page
 }
 
 /** Password rules of the server (`MIN_SHARE_PASSWORD`, `MAX_SHARE_PASSWORD`). */
-export const SHARE_PASSWORD_MIN = 4;
+export const SHARE_PASSWORD_MIN = 8;
 export const SHARE_PASSWORD_MAX = 256;
 
 export function sharePasswordProblem(password: string): string | null {
