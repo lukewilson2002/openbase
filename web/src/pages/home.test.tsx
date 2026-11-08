@@ -65,18 +65,6 @@ function routes(extra: Record<string, Handler> = {}) {
   });
 }
 
-/** The workspaces list as the server keeps it: a deleted project is gone from the next fetch. */
-function withDeletable(id: string): Record<string, Handler> {
-  let list = workspaces;
-  return {
-    "GET /api/workspaces": () => list,
-    [`DELETE /api/bases/${id}`]: () => {
-      list = list.map((w) => ({ ...w, bases: w.bases.filter((b) => b.id !== id) }));
-      return { status: 204 };
-    },
-  };
-}
-
 const remember = (place: { tables?: Record<string, string>; projects?: Record<string, string>; workspaces?: Record<string, string> }) =>
   localStorage.setItem("ob-last-place", JSON.stringify({ tables: {}, projects: {}, workspaces: {}, ...place }));
 
@@ -89,13 +77,12 @@ describe("/", () => {
     renderApp();
     expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: "Roadmap" })).not.toBeInTheDocument();
-    // The menu's Home row is the screen being shown, and it is the remembered workspace's.
+    // The sidebar's Home row is the screen being shown, and it is the remembered workspace's.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
     expect(within(menu).getByRole("link", { name: "Home" })).toHaveAttribute("href", "/workspace/wsp2");
     expect(within(menu).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-    // The workspace's name folds it: it does not lead back to its remembered project either.
-    expect(await within(menu).findByRole("button", { name: "Shared with me" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("link", { name: "Shared with me" })).not.toBeInTheDocument();
+    // The switcher names that workspace: it does not lead back to its remembered project either.
+    expect(await within(menu).findByRole("button", { name: /^Shared with me/ })).toBeInTheDocument();
   });
 
   it("opens the first workspace's Home when none was used, or the remembered one is gone", async () => {
@@ -158,42 +145,6 @@ describe("/", () => {
   });
 });
 
-describe("home menu", () => {
-  it("lists the workspaces, expands the open one, and creates a new one from the + button", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    let list = workspaces;
-    const api = routes({
-      "GET /api/workspaces": () => list,
-      "POST /api/workspaces": (call) => {
-        const ws: WorkspaceSummary = { id: "wsp9", name: (call.body as { name: string }).name, icon: "store", color: "blue", role: "owner", bases: [], member_count: 1, pending_invite_count: 0 };
-        list = [...list, ws];
-        return ws;
-      },
-    });
-    renderApp({ route: "/workspace/wsp1/settings" });
-    const menu = await screen.findByRole("navigation", { name: "Main menu" });
-    expect(await within(menu).findByRole("button", { name: "Shared with me" })).toBeInTheDocument();
-    const acme = await within(menu).findByRole("list", { name: "Projects in Acme" });
-    expect(within(acme).getByRole("button", { name: "Project tracker" })).toBeInTheDocument();
-    expect(within(acme).getByRole("button", { name: "CRM" })).toBeInTheDocument();
-    expect(within(acme).queryAllByRole("link")).toHaveLength(0);
-    // The Trash of everything closes the menu; account settings are in the profile menu now.
-    expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
-    expect(within(menu).getAllByRole("link").some((l) => l.getAttribute("href") === "/account")).toBe(false);
-
-    await user.click(within(menu).getByRole("button", { name: "New workspace" }));
-    const dialog = await screen.findByRole("dialog", { name: "New workspace" });
-    await user.type(within(dialog).getByLabelText("Name"), "Studio");
-    await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
-    await user.click(await screen.findByRole("button", { name: "Store" }));
-    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", icon: "store" });
-    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
-  });
-});
-
 describe("/workspace/:id", () => {
   it("is that workspace's Home, not its last project", async () => {
     stubDesktop();
@@ -205,35 +156,14 @@ describe("/workspace/:id", () => {
     expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
 
-  it("makes a project from the workspace's menu, with an icon, and opens it", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({
-      "POST /api/workspaces/wsp1/bases": makeSchema("owner", { id: "app9", name: "Fresh", icon: "wallet" }),
-      "GET /api/bases/app9": makeSchema("owner", { id: "app9", name: "Fresh", icon: "wallet" }),
-    });
-    renderApp({ route: "/workspace/wsp1" });
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /New project/ }));
-    const dialog = await screen.findByRole("dialog", { name: "New project" });
-    await user.type(within(dialog).getByLabelText("Project name"), "Fresh");
-    await user.click(within(dialog).getByRole("button", { name: "Choose icon" }));
-    await user.click(await screen.findByRole("button", { name: "Wallet" }));
-    await user.click(within(dialog).getByRole("button", { name: "Create project" }));
-
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Fresh", icon: "wallet", empty: true });
-    await waitFor(() => expect(api.callsTo("GET /api/bases/app9").length).toBeGreaterThan(0));
-  });
-
-  it("offers no spreadsheet import of its own: a CSV file is one table, imported inside a project", async () => {
+  it("offers no spreadsheet import of its own: a CSV file is one collection, imported inside a folder", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes();
     renderApp({ route: "/workspace/wsp1" });
     await screen.findByRole("heading", { level: 1, name: "Home" });
     expect(screen.queryByRole("button", { name: /spreadsheet|import/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
+    await user.click(await screen.findByRole("button", { name: /^Acme/ }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).queryByRole("menuitem", { name: /spreadsheet|import/i })).not.toBeInTheDocument();
   });
@@ -247,228 +177,15 @@ describe("/workspace/:id", () => {
   });
 });
 
-describe("the project menu in the tree", () => {
-  const open = () => renderApp({ route: "/workspace/wsp1/settings" });
-
-  it("renames a project, sending the icon only when it changed", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "PATCH /api/bases/app1": { status: 204 } });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Project options for Project tracker" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Rename project/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Rename project" });
-    const name = within(dialog).getByLabelText("Project name");
-    await user.clear(name);
-    await user.type(name, "Tracker");
-    await user.click(within(dialog).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app1")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/bases/app1")[0]?.body).toEqual({ name: "Tracker" });
-  });
-
-  it("changes a project's icon, duplicates it and deletes it", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({
-      "PATCH /api/bases/app2": { status: 204 },
-      "POST /api/bases/app2/duplicate": { id: "app8" },
-      ...withDeletable("app2"),
-    });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Project options for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Change icon/ }));
-    await user.click(await within(await screen.findByRole("dialog", { name: "Project icon" })).findByRole("button", { name: "Heart" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app2")[0]?.body).toEqual({ icon: "heart" }));
-
-    await user.click(screen.getByRole("button", { name: "Project options for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Duplicate project" }));
-    await waitFor(() => expect(api.callsTo("POST /api/bases/app2/duplicate")[0]?.body).toEqual({ name: "CRM copy", include_records: true }));
-
-    await user.click(screen.getByRole("button", { name: "Project options for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Delete project/ }));
-    const confirm = await screen.findByRole("alertdialog");
-    await user.click(within(confirm).getByRole("button", { name: "Delete project" }));
-    await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
-    // Gone from the menu without waiting for the list to come back.
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Project options for CRM" })).not.toBeInTheDocument());
-  });
-
-  it("leaves a deleted project's own page for its workspace", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    remember({ workspaces: { wsp1: "app2" }, projects: { app2: "tbl1" } });
-    const api = routes(withDeletable("app2"));
-    renderApp({ route: "/base/app2/tbl1/viw1" });
-    await screen.findByRole("heading", { level: 1, name: "CRM" });
-    await user.click(await screen.findByRole("button", { name: "Project options for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Delete project/ }));
-    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete project" }));
-    await waitFor(() => expect(api.callsTo("DELETE /api/bases/app2")).toHaveLength(1));
-    // Not back to the project it just lost, although it was the last one opened here: the workspace's Home.
-    expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
-  });
-
-  it("shares a project from its menu", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    routes();
-    open();
-    await user.click(await screen.findByRole("button", { name: "Project options for Project tracker" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Share/ }));
-    expect(await screen.findByRole("dialog", { name: "Share Project tracker" })).toBeInTheDocument();
-  });
-});
-
-describe("the workspace menu in the tree", () => {
-  const open = () => renderApp({ route: "/workspace/wsp1/settings" });
-
-  it("renames and deletes the workspace, and changes its icon", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "PATCH /api/workspaces/wsp1": { ...workspaces[0]! }, "DELETE /api/workspaces/wsp1": { ok: true } });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Change icon/ }));
-    await user.click(await screen.findByRole("button", { name: "Heart" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ icon: "heart" }));
-    await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Rename" }));
-    const rename = await screen.findByRole("dialog", { name: "Rename workspace" });
-    await user.clear(within(rename).getByLabelText("Name"));
-    await user.type(within(rename).getByLabelText("Name"), "Acme Inc");
-    await user.click(within(rename).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[1]?.body).toEqual({ name: "Acme Inc" }));
-
-    await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Delete workspace/ }));
-    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete workspace" }));
-    await waitFor(() => expect(api.callsTo("DELETE /api/workspaces/wsp1")).toHaveLength(1));
-  });
-
-  it("opens the Share dialog for the whole workspace, with the views of every project", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes();
-    open();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Invite people/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Share Acme" });
-    expect(within(dialog).getByRole("radio", { name: "All projects in Acme" })).toBeChecked();
-    expect(within(dialog).getByRole("button", { name: /Send invite/ })).toBeInTheDocument();
-    // The projects' schemas (for their views) load only once "Share a view" is opened.
-    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
-
-    await user.click(within(dialog).getByRole("tab", { name: "Share a view" }));
-    const select = await within(dialog).findByLabelText("View");
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Project tracker › Tasks › All tasks", "Project tracker › Tasks › Board", "Project tracker › People › Everyone"]);
-  });
-});
-
-describe("colors of workspaces and projects", () => {
-  const open = () => renderApp({ route: "/workspace/wsp1/settings" });
-
-  it("creates a workspace with the color chosen in its dialog, and sends none when none was chosen", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "POST /api/workspaces": (call) => ({ ...workspaces[0]!, id: "wsp9", name: (call.body as { name: string }).name, bases: [] }) });
-    open();
-    const menu = await screen.findByRole("navigation", { name: "Main menu" });
-    await user.click(await within(menu).findByRole("button", { name: "New workspace" }));
-    const dialog = await screen.findByRole("dialog", { name: "New workspace" });
-    await user.type(within(dialog).getByLabelText("Name"), "Studio");
-    await user.click(within(dialog).getByRole("radio", { name: "Red" }));
-    expect(within(dialog).getByRole("radio", { name: "Red" })).toBeChecked();
-    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Studio", color: "red" });
-  });
-
-  it("sends no color when none was chosen, so the server picks one", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "POST /api/workspaces": (call) => ({ ...workspaces[0]!, id: "wsp9", name: (call.body as { name: string }).name, bases: [] }) });
-    open();
-    const menu = await screen.findByRole("navigation", { name: "Main menu" });
-    await user.click(await within(menu).findByRole("button", { name: "New workspace" }));
-    const dialog = await screen.findByRole("dialog", { name: "New workspace" });
-    expect(within(dialog).queryByRole("radio", { checked: true })).not.toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText("Name"), "Garage");
-    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces")[0]?.body).toEqual({ name: "Garage" });
-  });
-
-  it("creates a project with the color chosen in its dialog", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "POST /api/workspaces/wsp1/bases": makeSchema("owner", { id: "app9", name: "Garden", tables: [] }) });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New project" }));
-    const dialog = await screen.findByRole("dialog", { name: "New project" });
-    await user.type(within(dialog).getByLabelText("Project name"), "Garden");
-    await user.click(within(dialog).getByRole("radio", { name: "Teal" }));
-    await user.click(within(dialog).getByRole("button", { name: "Create project" }));
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Garden", color: "teal", empty: true });
-  });
-
-  it("changes a workspace's color from its menu, starting on the color it has", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "PATCH /api/workspaces/wsp1": workspaces[0]! });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Change color/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Workspace color" });
-    expect(within(dialog).getByRole("radio", { name: "Green" })).toBeChecked();
-    await user.click(within(dialog).getByRole("radio", { name: "Purple" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ color: "purple" });
-    // The dialog closed, and the list is fetched again so every tile follows.
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Workspace color" })).not.toBeInTheDocument());
-    await waitFor(() => expect(api.callsTo("GET /api/workspaces").length).toBeGreaterThan(1));
-  });
-
+describe("workspace settings", () => {
   it("changes a workspace's color on its settings page", async () => {
     stubDesktop();
     const user = userEvent.setup();
     const api = routes({ "PATCH /api/workspaces/wsp1": workspaces[0]! });
-    open();
+    renderApp({ route: "/workspace/wsp1/settings" });
     await screen.findByRole("heading", { level: 1, name: "Workspace settings" });
     await user.click(screen.getByRole("button", { name: "Change color…" }));
     await user.click(within(await screen.findByRole("dialog", { name: "Workspace color" })).getByRole("radio", { name: "Orange" }));
     await waitFor(() => expect(api.callsTo("PATCH /api/workspaces/wsp1")[0]?.body).toEqual({ color: "orange" }));
-  });
-
-  it("changes a project's color from its menu", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = routes({ "PATCH /api/bases/app2": { status: 204 } });
-    open();
-    await user.click(await screen.findByRole("button", { name: "Project options for CRM" }));
-    await user.click(await screen.findByRole("menuitem", { name: /Change color/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Project color" });
-    expect(within(dialog).getByRole("radio", { name: "Blue" })).toBeChecked();
-    await user.click(within(dialog).getByRole("radio", { name: "Pink" }));
-    await waitFor(() => expect(api.callsTo("PATCH /api/bases/app2")).toHaveLength(1));
-    expect(api.callsTo("PATCH /api/bases/app2")[0]?.body).toEqual({ color: "pink" });
-  });
-
-  it("offers the color to whoever may rename: no workspace color for a non-owner, no project color for a viewer", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    routes();
-    open();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Shared with me" }));
-    expect(await screen.findByRole("menuitem", { name: /Members/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Change color/ })).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: "Expand Shared with me" }));
-    await user.click(await screen.findByRole("button", { name: "Project options for Roadmap" }));
-    expect(await screen.findByRole("menuitem", { name: /Members/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Change color/ })).not.toBeInTheDocument();
   });
 });

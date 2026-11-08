@@ -14,7 +14,6 @@ import { defaultViewOf, namedViews } from "@/lib/views";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
-import { NavGlobalLinks, NavTree } from "@/shell/NavTree";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
 import { CollectionHeader } from "./CollectionHeader";
@@ -96,7 +95,7 @@ export function BaseShell({ section }: { section?: "automations" }) {
       </div>
     );
   } else if (!table) {
-    page = <EmptyBase schema={schema} onNew={() => setDialog({ kind: "create-table" })} onImport={() => setDialog({ kind: "create-table-csv" })} />;
+    page = <EmptyBase schema={schema} />;
   } else if (!view) {
     page = (
       <EmptyState
@@ -119,14 +118,13 @@ export function BaseShell({ section }: { section?: "automations" }) {
         <AppShell
           fill
           workspaceId={schema.workspace_id}
-          mainLabel={automations ? "Automations" : (view?.name ?? "Project content")}
+          tableId={table?.id}
+          mainLabel={automations ? "Automations" : (view?.name ?? "Folder content")}
           searchHere={{ workspaceId: schema.workspace_id, baseId: schema.id }}
-          sidebar={<NavTree workspaceId={schema.workspace_id} baseId={schema.id} tableId={table?.id} viewId={view?.id} />}
-          sidebarFooter={<NavGlobalLinks page={null} />}
         >
           <CollectionHeader schema={schema} table={table} section={section} onShare={() => setDialog({ kind: "share", table: table ?? null, view: view ?? null, tab: "invite" })} />
           <div className="relative min-h-0 flex-1">{page}</div>
-          <BaseDialogs schema={schema} activeTableId={table?.id} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
+          <BaseDialogs schema={schema} activeViewId={view?.id} dialog={dialog} onClose={() => setDialog(null)} />
         </AppShell>
       </NavDialogsProvider>
     </BaseDialogContext.Provider>

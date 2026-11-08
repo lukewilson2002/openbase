@@ -562,6 +562,12 @@ function useSearchBar(): SearchBar {
   return bar;
 }
 
+/** Opens the box the header's search button holds, for another control (the sidebar's "Search everything" row). */
+export function useOpenSearch(): () => void {
+  const { setOpen } = useSearchBar();
+  return useCallback(() => setOpen(true), [setOpen]);
+}
+
 /**
  * Where the box goes in a top bar: a flexible space that holds the box, centred and at most 420 px
  * wide, while it is wide enough for it. It takes only the room the bar's other items leave over, so

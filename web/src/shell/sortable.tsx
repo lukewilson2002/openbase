@@ -1,18 +1,20 @@
 /**
- * Drag and drop for the menu's tree, shared by its four levels (workspaces, a workspace's projects, a
- * project's tables, a table's shared or personal views). One `ReorderRoot` (a dnd-kit context) wraps the
- * whole tree; each group of siblings is a `SortableGroup` with its own list, so a row only ever moves
- * among its own siblings (a project never changes workspace, a view never goes to another table or
- * between Shared and Personal). A `SortableRow` is one tree row: the drag starts on the row itself
- * (the chevron, the name, not the "…" button) after the mouse has moved a few pixels, or after a finger has
- * rested on it for a moment, so a click or tap and the drawer's scrolling still work, and the click that
- * ends a drag opens or folds nothing. The row lifts where it is and the siblings step aside; an open row
- * takes its children along. Only people who may reorder a group get drag handles; a group of one has
- * nothing to move. The fixed rows (Inbox, Notifications, Automations, History, Trash) are not in any group.
+ * Drag and drop for the sidebar's lists: the workspaces in the switcher's menu, the top-level
+ * collections, the folders, and the collections inside a folder (the view tabs of a collection reuse
+ * the same pieces). One `ReorderRoot` (a dnd-kit context) wraps a tree; each group of siblings is a
+ * `SortableGroup` with its own list, so a row only ever moves among its own siblings (a collection
+ * never changes folder, a view never goes to another collection or between Shared and Personal). A
+ * `SortableRow` is one row: the drag starts on the row itself (not its "…" button) after the mouse has
+ * moved a few pixels, or after a finger has rested on it for a moment, so a click or tap and the
+ * scrolling of the sidebar still work, and the click that ends a drag opens or folds nothing. The row
+ * lifts where it is and the siblings step aside; an open folder takes its collections along. Only
+ * people who may reorder a group get drag handles; a group of one has nothing to move. The fixed rows
+ * (Home, Notifications, Automations, History, Trash) are not in any group.
  *
  * Dragging has no keyboard form (dnd-kit's keyboard sensor would take Enter and Space from the rows'
  * links and buttons): each reorderable row's "…" menu has "Move up" and "Move down" instead
- * (`MoveItems`), which go through the same path as a drop.
+ * (`MoveItems`), which go through the same path as a drop. A workspace in the switcher has no "…",
+ * so `useRowMove` gives its menu item Alt+Up and Alt+Down.
  */
 import { createContext, useContext, useId, useRef, useState, type HTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { DndContext, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type Announcements, type CollisionDetection, type DragEndEvent, type Modifier } from "@dnd-kit/core";
@@ -20,6 +22,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/cn";
 import { TOUCH_HOLD_MS, TOUCH_HOLD_TOLERANCE_PX } from "@/lib/holdToDrag";
 import { applyOrder, moveId } from "./useReorder";
@@ -181,8 +184,8 @@ export function SortableGroup<T>({
   );
 }
 
-/** The row's own place in its group, for its menu: `null` when it cannot be moved. */
-function useRowMove(): RowMove | null {
+/** The row's own place in its group, for its menu: `null` when it cannot be moved. Call it inside a row's content. */
+export function useRowMove(): RowMove | null {
   const group = useContext(GroupContext);
   const id = useContext(RowContext);
   if (!group?.sortable || id === null) return null;
@@ -217,10 +220,10 @@ export function MoveItems({ separator, row: given }: { separator?: "before" | "a
     <>
       {separator === "before" && <DropdownMenuSeparator />}
       <DropdownMenuItem disabled={!row.canUp} onSelect={() => row.move(-1)}>
-        <ArrowUp aria-hidden className="size-4" /> Move up
+        <Icon icon={ArrowUp} /> Move up
       </DropdownMenuItem>
       <DropdownMenuItem disabled={!row.canDown} onSelect={() => row.move(1)}>
-        <ArrowDown aria-hidden className="size-4" /> Move down
+        <Icon icon={ArrowDown} /> Move down
       </DropdownMenuItem>
       {separator === "after" && <DropdownMenuSeparator />}
     </>
@@ -229,6 +232,8 @@ export function MoveItems({ separator, row: given }: { separator?: "before" | "a
 
 interface RowProps {
   id: string;
+  /** `div` for rows inside a menu, where an `li` would not be a list item: it is then a presentational wrapper. Default `li`. */
+  as?: "li" | "div";
   /** What screen readers call the row. */
   label: string;
   /** The `li`'s classes. */
@@ -264,34 +269,35 @@ export function SortableRow(props: RowProps) {
   return <RowContext.Provider value={props.id}>{group?.sortable ? <DraggableRow {...props} group={group} /> : <PlainRow {...props} />}</RowContext.Provider>;
 }
 
-function PlainRow({ className, rowClassName, row, onContextMenu, children }: RowProps) {
+function PlainRow({ as: Tag = "li", className, rowClassName, row, onContextMenu, children }: RowProps) {
   return (
-    <li className={className}>
+    <Tag className={className} role={Tag === "div" ? "none" : undefined}>
       <div className={rowClassName} onContextMenu={onContextMenu}>
         {row}
       </div>
       {children}
-    </li>
+    </Tag>
   );
 }
 
-function DraggableRow({ id, label, className, rowClassName, row, onContextMenu, children, group }: RowProps & { group: GroupState }) {
+function DraggableRow({ id, as: Tag = "li", label, className, rowClassName, row, onContextMenu, children, group }: RowProps & { group: GroupState }) {
   const data: RowData = { group: group.group, label, ids: group.ids, commit: group.commit };
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id, data });
   const rowEvents = listeners as HTMLAttributes<HTMLDivElement> | undefined;
   return (
-    <li
-      ref={setNodeRef}
+    <Tag
+      ref={setNodeRef as never}
+      role={Tag === "div" ? "none" : undefined}
       data-sortable=""
       data-dragging={isDragging || undefined}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn(className, "motion-reduce:transition-none!", isDragging && "relative z-20 rounded-[10px] bg-surface shadow-pop")}
+      className={cn(className, "motion-reduce:transition-none!", isDragging && "relative z-20 rounded-md bg-surface shadow-pop")}
     >
       {/* No attributes from dnd-kit: its role="button" and tabIndex would turn the row into a control around the controls inside it. */}
       <div {...rowEvents} onContextMenu={onContextMenu} data-drag-handle="" className={cn(rowClassName, "select-none [-webkit-touch-callout:none]", isDragging && "cursor-grabbing")}>
         {row}
       </div>
       {children}
-    </li>
+    </Tag>
   );
 }

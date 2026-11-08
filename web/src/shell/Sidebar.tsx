@@ -1,15 +1,20 @@
+/**
+ * The frames the sidebar's content (`SidebarContent`) sits in: the docked, resizable column of a desktop
+ * (a `nav` landmark, NAV-2) and the drawer of a phone (until the Collections tab replaces it, NAV-7), plus
+ * the layout of the content itself: pinned rows above, a scrolling middle, pinned rows below.
+ */
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import { NavLink } from "react-router";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
+import { Icon } from "@/components/ui/icon";
+import { IconButton } from "@/components/ui/icon-button";
 import { useScrollEdges } from "@/hooks/useScrollEdges";
 import { cn } from "@/lib/cn";
-import { ProfileMenu } from "./ProfileMenu";
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampWidth } from "./sidebarPrefs";
 
 const KEY_STEP = 16;
 
-/** A soft shadow along one edge of the menu's scrolling part, where there is more to scroll. */
+/** A soft shadow along one edge of the sidebar's scrolling part, where there is more to scroll. */
 function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) {
   return (
     <div
@@ -17,7 +22,7 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
       data-scroll-shade={edge}
       data-show={show || undefined}
       className={cn(
-        "pointer-events-none absolute inset-x-0 z-10 h-3 from-[var(--scroll-shade)] to-transparent opacity-0 transition-opacity duration-150 data-[show]:opacity-100",
+        "pointer-events-none absolute inset-x-0 z-10 h-3 from-[var(--scroll-shade)] to-transparent opacity-0 transition-opacity duration-fast data-[show]:opacity-100",
         edge === "top" ? "top-0 bg-gradient-to-b" : "bottom-0 bg-gradient-to-t",
       )}
     />
@@ -25,30 +30,28 @@ function ScrollShade({ edge, show }: { edge: "top" | "bottom"; show: boolean }) 
 }
 
 /**
- * The menu's column: the Home, Inbox and Notifications rows, the page's own content and the footer links (Trash)
- * scroll together, so a long menu pushes the footer down instead of squeezing
- * the content between fixed rows; the footer still sits at the bottom of a short one. Only the
- * profile stays put. A shadow at either end shows there is more to scroll that way.
+ * The content's three regions (NAV-1): the switcher, search and top rows stay put above, the collections
+ * scroll in the middle (with a shadow at either end where there is more), and the footer stays below.
+ * With `scroll` off (a screen of its own, the phone's Collections tab) everything flows and the screen scrolls.
  */
-function SidebarBody({ topRows, children, footer }: { topRows?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+export function SidebarLayout({ top, footer, children, scroll = true }: { top: ReactNode; footer: ReactNode; children: ReactNode; scroll?: boolean }) {
   const [scrollRef, edges] = useScrollEdges<HTMLDivElement>();
   return (
-    <>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <ScrollShade edge="top" show={edges.above} />
-        <div ref={scrollRef} data-sidebar-scroll className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-          <div className="flex-1 px-3 pb-3 pt-3">
-            {topRows && <div className="mb-1.5">{topRows}</div>}
+    <div className={cn("flex flex-col", scroll && "min-h-0 flex-1")}>
+      <div className="shrink-0 px-3 pb-2 pt-3">{top}</div>
+      {scroll ? (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <ScrollShade edge="top" show={edges.above} />
+          <div ref={scrollRef} data-sidebar-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
             {children}
           </div>
-          {footer && <div className="flex flex-col gap-0.5 px-3 pb-2">{footer}</div>}
+          <ScrollShade edge="bottom" show={edges.below} />
         </div>
-        <ScrollShade edge="bottom" show={edges.below} />
-      </div>
-      <div className="mx-3 border-t border-line py-2">
-        <ProfileMenu />
-      </div>
-    </>
+      ) : (
+        <div className="px-3 pb-3">{children}</div>
+      )}
+      <div className="shrink-0 border-t border-line px-3 py-2">{footer}</div>
+    </div>
   );
 }
 
@@ -56,17 +59,12 @@ export function DockedSidebar({
   id,
   width,
   onResize,
-  topRows,
-  footer,
   children,
 }: {
   id: string;
   width: number;
   /** `persist` is false while dragging, so storage is written once per drag rather than per pixel. */
   onResize: (width: number, persist: boolean) => void;
-  /** The Inbox and Notifications rows above the page's own content. */
-  topRows?: ReactNode;
-  footer?: ReactNode;
   children: ReactNode;
 }) {
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
@@ -99,9 +97,7 @@ export function DockedSidebar({
 
   return (
     <nav id={id} aria-label="Main menu" style={{ width }} className="sticky top-0 flex h-dvh shrink-0 flex-col border-r border-line bg-chrome">
-      <SidebarBody topRows={topRows} footer={footer}>
-        {children}
-      </SidebarBody>
+      {children}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -128,21 +124,17 @@ export function SidebarDrawer({
   open,
   onOpenChange,
   returnFocus,
-  topRows,
   notificationsPanel,
   onCloseNotifications,
-  footer,
   children,
 }: {
   id: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnFocus: RefObject<HTMLButtonElement | null>;
-  topRows?: ReactNode;
   /** The notifications, shown in place of the menu while the Notifications row is open. */
   notificationsPanel?: ReactNode;
   onCloseNotifications?: () => void;
-  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -165,128 +157,28 @@ export function SidebarDrawer({
             {notificationsPanel ? (
               <>
                 <D.Title className="sr-only">Menu</D.Title>
-                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-11 min-w-0 flex-1 items-center gap-1 self-center rounded-[10px] px-1.5 text-left text-[0.9375rem] text-fg hover:bg-hover">
-                  <ChevronLeft aria-hidden className="size-4 shrink-0 text-muted" /> <span className="truncate">Back to the menu</span>
+                <button type="button" onClick={onCloseNotifications} className="-ml-0.5 flex h-control-touch min-w-0 flex-1 items-center gap-1 rounded-md px-1.5 text-left text-ui text-fg hover:bg-hover">
+                  <Icon icon={ChevronLeft} className="text-muted" /> <span className="truncate">Back to the menu</span>
                 </button>
               </>
             ) : (
-              <D.Title className="flex-1 pl-1.5 text-[0.9375rem] font-normal">Menu</D.Title>
+              <D.Title className="flex-1 pl-1.5 text-ui font-semibold">Menu</D.Title>
             )}
-            <D.Close aria-label="Close menu" className="inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] text-muted hover:bg-hover hover:text-fg">
-              <X aria-hidden className="size-5" />
+            <D.Close asChild>
+              <IconButton label="Close menu" noTooltip>
+                <Icon icon={X} />
+              </IconButton>
             </D.Close>
           </div>
           {notificationsPanel ? (
             <div className="flex min-h-0 flex-1 flex-col">{notificationsPanel}</div>
           ) : (
             <nav aria-label="Main menu" className="flex min-h-0 flex-1 flex-col">
-              <SidebarBody topRows={topRows} footer={footer}>
-                {children}
-              </SidebarBody>
+              {children}
             </nav>
           )}
         </D.Content>
       </D.Portal>
     </D.Root>
-  );
-}
-
-// ---- building blocks for the menu content --------------------------------------------------
-
-export function SidebarSection({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <section className={cn("flex flex-col gap-0.5", className)} aria-label={title}>
-      {(title || action) && <SidebarHeading action={action}>{title}</SidebarHeading>}
-      {children}
-    </section>
-  );
-}
-
-/** A plain section heading ("Workspaces", "Tables") with an optional action (a +) at its end. */
-export function SidebarHeading({ children, action }: { children?: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex h-9 items-center justify-between gap-2 pl-3 pr-1">
-      {children && <h2 className="text-[0.8125rem] font-normal tracking-normal text-fg">{children}</h2>}
-      {action}
-    </div>
-  );
-}
-
-export const sidebarItemClass =
-  "flex h-9 min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-[0.875rem] text-fg no-underline transition-colors hover:bg-hover pointer-coarse:h-11";
-/** The current page's row: the accent itself, its icon (often muted elsewhere) in the row's text colour. */
-export const sidebarActiveClass = "bg-primary text-primary-fg hover:bg-primary-hover [&_svg]:text-primary-fg";
-
-/** A menu link; it is highlighted (and `aria-current`) on its own page. */
-export function SidebarLink({
-  to,
-  icon,
-  children,
-  end = true,
-  active,
-  muted,
-  className,
-  iconClassName,
-  onClick,
-}: {
-  to: string;
-  icon?: ReactNode;
-  children: ReactNode;
-  end?: boolean;
-  active?: boolean;
-  /** Grey text, like the footer's links (Trash, Members) and a workspace's sub-items. */
-  muted?: boolean;
-  className?: string;
-  iconClassName?: string;
-  onClick?: () => void;
-}) {
-  return (
-    <NavLink
-      to={to}
-      end={end}
-      onClick={onClick}
-      aria-current={active === undefined ? undefined : active ? "page" : false}
-      className={({ isActive }) => cn(sidebarItemClass, muted && "text-muted hover:text-fg", (active ?? isActive) && sidebarActiveClass, className)}
-    >
-      {icon && <span className={cn("flex shrink-0 items-center [&>svg]:size-[1.125rem]", iconClassName)}>{icon}</span>}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </NavLink>
-  );
-}
-
-export function SidebarButton({ icon, children, onClick, className }: { icon?: ReactNode; children: ReactNode; onClick: () => void; className?: string }) {
-  return (
-    <button type="button" onClick={onClick} className={cn(sidebarItemClass, "w-full text-left text-muted hover:text-fg", className)}>
-      {icon && <span className="flex shrink-0 items-center [&>svg]:size-[1.125rem]">{icon}</span>}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </button>
-  );
-}
-
-/**
- * The right padding of a tree row's name, where its "…" button sits: with a mouse on a wide screen
- * the button shows only on hover, focus or while its menu is open, so the name has the whole row
- * until then; on a phone or a touch screen the button is always there and keeps its room.
- */
-export const rowNamePadClass =
-  "pr-8 pointer-coarse:pr-10 md:pointer-fine:pr-2 md:pointer-fine:group-hover/item:pr-8 md:pointer-fine:group-focus-within/item:pr-8 md:pointer-fine:group-has-[[data-state=open]]/item:pr-8";
-
-/** A tree row's "…" button: hidden until the row is hovered or the button focused, with a mouse; always there for a finger. */
-export const rowActionClass =
-  "absolute right-0.5 top-1/2 size-7 -translate-y-1/2 opacity-100 pointer-coarse:size-9 md:pointer-fine:opacity-0 md:pointer-fine:focus-visible:opacity-100 md:pointer-fine:group-hover/item:opacity-100 data-[state=open]:opacity-100";
-
-/** The chevron at the start of a tree row: it folds the row's children and never navigates. */
-export function RowChevron({ expanded, label, controls, onClick }: { expanded: boolean; label: string; controls: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={expanded}
-      aria-controls={expanded ? controls : undefined}
-      aria-label={label}
-      className="inline-flex h-9 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg pointer-coarse:h-11"
-    >
-      <ChevronRight aria-hidden className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
-    </button>
   );
 }

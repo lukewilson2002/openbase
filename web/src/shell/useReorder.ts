@@ -1,6 +1,6 @@
 /**
- * Putting the menu's rows in a new order: workspaces (each person's own order), a workspace's projects,
- * a project's tables, a table's shared views or its personal views. The server takes the ids of one
+ * Putting the sidebar's rows in a new order: workspaces (each person's own order), a workspace's folders,
+ * a folder's (or the top level's) collections, a collection's shared views or its personal views. The server takes the ids of one
  * group in their new order: those ids take the places the group held, in that order, and siblings left
  * out keep theirs ("the full visible list of the group" is what the menu sends).
  *
@@ -55,7 +55,7 @@ export function reorderProjectsIn(list: WorkspaceSummary[] | undefined, workspac
   return list?.map((ws) => (ws.id === workspaceId ? { ...ws, bases: applyOrder(ws.bases, ids, idOf) } : ws));
 }
 
-/** The project's table summaries in the workspaces list (what the home pages name its tables from). */
+/** The folder's collection summaries in the workspaces list (what the sidebar draws its rows from). */
 export function reorderTablesInWorkspaces(list: WorkspaceSummary[] | undefined, baseId: string, ids: readonly string[]): WorkspaceSummary[] | undefined {
   return list?.map((ws) => (ws.bases.some((b) => b.id === baseId) ? { ...ws, bases: ws.bases.map((b) => (b.id === baseId ? { ...b, tables: applyOrder(b.tables, ids, idOf) } : b)) } : ws));
 }
@@ -75,8 +75,8 @@ export type ReorderRequest =
 const REORDER_KEY = ["reorder"] as const;
 const FAILURE: Record<ReorderRequest["kind"], string> = {
   workspaces: "Could not reorder the workspaces",
-  projects: "Could not reorder the projects",
-  tables: "Could not reorder the tables",
+  projects: "Could not reorder the folders",
+  tables: "Could not reorder the collections",
   views: "Could not reorder the views",
 };
 

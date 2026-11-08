@@ -32,6 +32,7 @@ function MenuToggle() {
       ref={menu.toggleRef}
       label={menu.toggleLabel}
       onClick={menu.toggle}
+      aria-keyshortcuts="Control+Backslash Meta+Backslash"
       aria-expanded={menu.expanded}
       aria-controls={menu.expanded ? menu.menuId : undefined}
       className="relative"

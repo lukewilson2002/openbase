@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export const SIDEBAR_KEY = "ob-sidebar";
 export const SIDEBAR_MIN = 200;
@@ -47,4 +47,24 @@ export function useSidebarPrefs() {
     });
   }, []);
   return [prefs, update] as const;
+}
+
+/**
+ * Ctrl+\ (Cmd+\ on a Mac) folds and unfolds the sidebar from anywhere. A key press that something
+ * already used (an editor, a dialog) is left alone, and so is a press with another modifier.
+ */
+export function useSidebarShortcut(toggle: () => void): void {
+  const ref = useRef(toggle);
+  ref.current = toggle;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.shiftKey) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        ref.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 }

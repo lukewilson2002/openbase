@@ -85,7 +85,6 @@ const list = () => screen.findByRole("list", { name: "Deleted items" });
 const row = async (name: string) => within(await list()).getByText(name).closest("li")!;
 const lastQuery = (api: ReturnType<typeof mockApi>) => api.callsTo("GET /api/trash").at(-1)!.query;
 /** The projects of a workspace in the menu: open for the workspace whose Trash is showing. */
-const projectsOf = (workspace: string) => screen.findByRole("list", { name: `Projects in ${workspace}` });
 
 describe("Trash page", () => {
   it("lists everything with where it was, who deleted it, when, and how long it stays", async () => {
@@ -117,8 +116,8 @@ describe("Trash page", () => {
     expect(screen.queryByText("Vacuum")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workspace: Side business" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Project: All projects" })).toBeInTheDocument();
-    // The menu opens that workspace, as it does for any page of one.
-    expect(within(await projectsOf("Side business")).getByRole("button", { name: "Clients" })).toBeInTheDocument();
+    // The sidebar shows that workspace, as it does for any page of one.
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: /^Side business/ })).toBeInTheDocument();
   });
 
   it("opens filtered to a base from the base's menu, showing the base's workspace", async () => {
@@ -147,8 +146,8 @@ describe("Trash page", () => {
     await user.click(await screen.findByRole("menuitemradio", { name: "Household" }));
     await waitFor(() => expect(lastQuery(api).get("workspace_id")).toBe("wsp1"));
     expect(lastQuery(api).get("kind")).toBe("record");
-    // The URL now says `?workspace=wsp1`: the menu opens that workspace.
-    expect(within(await projectsOf("Household")).getByRole("button", { name: "Chores" })).toBeInTheDocument();
+    // The URL now says `?workspace=wsp1`: the sidebar shows that workspace.
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: /^Household/ })).toBeInTheDocument();
 
     // The base list follows the workspace.
     await user.click(screen.getByRole("button", { name: "Project: All projects" }));

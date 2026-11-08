@@ -17,7 +17,7 @@ function open(role: string, route: string) {
   return mockApi({
     "GET /api/auth/me": USER,
     "GET /api/setup": { needs_setup: false, open_signup: false, email_enabled: false },
-    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, is_top_level: false, people: [], tables: [] }])],
+    "GET /api/workspaces": [makeWorkspace(role, [{ id: "app1", workspace_id: "wsp1", name: "Project tracker", color: "green_dark", role, is_top_level: false, people: [], tables: [{ id: "tbl1", name: "Tasks", color: "blue", record_count: 0, record_noun: "" }] }])],
     "GET /api/bases/app1": automationSchema(role),
     "GET /api/bases/app1/collaborators": PEOPLE,
     "GET /api/bases/app1/automations": [makeAutomation({ name: "Copy tasks" })],
@@ -29,21 +29,21 @@ describe("automations in the base shell", () => {
   // The links live in the menu tree, docked from tablet width up (a drawer on phones).
   beforeEach(() => stubDesktop());
 
-  it("is reached from the project in the menu by creators, keeps the tables listed and does not mistake the path for a table", async () => {
+  it("is reached from the folder in the sidebar by creators, keeps the collections listed and does not mistake the path for a collection", async () => {
     const user = userEvent.setup();
     open("creator", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
     const menu = screen.getByRole("navigation", { name: "Main menu" });
     // The menu's own Automations row is the workspace's list; the project's automations are in its menu.
     expect(within(menu).getByRole("link", { name: "Automations" })).toHaveAttribute("href", "/workspace/wsp1/automations");
-    await user.click(within(menu).getByRole("button", { name: "Project options for Project tracker" }));
+    await user.click(await within(menu).findByRole("button", { name: "Folder options for Project tracker" }));
     await user.click(await screen.findByRole("menuitem", { name: "Automations" }));
     expect(await screen.findByRole("list", { name: "Automations" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Automations" })).toBeInTheDocument();
-    // The tables stay in the menu, as a way back.
-    const tabs = within(menu).getByRole("list", { name: "Tables in Project tracker" });
-    expect(within(tabs).getByRole("link", { name: "Tasks" })).not.toHaveAttribute("aria-current");
-    await user.click(within(tabs).getByRole("link", { name: "Tasks" }));
+    // The collections stay in the sidebar, as a way back.
+    const tabs = within(menu).getByRole("list", { name: "Collections in Project tracker" });
+    expect(within(tabs).getByRole("link", { name: /^Tasks/ })).not.toHaveAttribute("aria-current");
+    await user.click(within(tabs).getByRole("link", { name: /^Tasks/ }));
     expect(await screen.findByText("Grid view coming soon")).toBeInTheDocument();
   });
 
@@ -56,7 +56,7 @@ describe("automations in the base shell", () => {
     const user = userEvent.setup();
     open("editor", "/base/app1/automations");
     expect(await screen.findByText("Automations are for creators")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Project options for Project tracker" }));
+    await user.click(await screen.findByRole("button", { name: "Folder options for Project tracker" }));
     expect(await screen.findByRole("menu")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Automations" })).not.toBeInTheDocument();
   });
@@ -65,7 +65,7 @@ describe("automations in the base shell", () => {
     const user = userEvent.setup();
     open("viewer", "/base/app1/tbl1/viw1");
     await screen.findByText("Grid view coming soon");
-    await user.click(screen.getByRole("button", { name: "Project options for Project tracker" }));
+    await user.click(await screen.findByRole("button", { name: "Folder options for Project tracker" }));
     expect(await screen.findByRole("menu")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Automations" })).not.toBeInTheDocument();
   });

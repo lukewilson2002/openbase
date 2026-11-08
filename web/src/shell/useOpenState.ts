@@ -13,9 +13,8 @@ function read(key: string): Record<string, boolean> {
 }
 
 /**
- * The menu's rows opened or closed by hand (workspaces, projects, tables), remembered on this device
- * like the menu's width. A row without an entry follows its default: a workspace or project is open
- * when the page is inside it, a table is closed.
+ * The sidebar's rows opened or closed by hand (the folders), remembered on this device like the
+ * sidebar's width. A row without an entry follows its default, which the caller chooses.
  */
 export function useOpenState(storageKey: string) {
   const [toggled, setToggled] = useState(() => read(storageKey));

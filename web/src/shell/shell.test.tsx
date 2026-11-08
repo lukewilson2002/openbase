@@ -1,15 +1,14 @@
-import { Route, Routes, useLocation } from "react-router";
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { Route, Routes } from "react-router";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BasePerson } from "@/api/types";
 import { IntroProvider } from "@/onboarding/IntroContext";
-import { ADMIN, USER, makeSchema, mockApi, renderWithProviders, stubDesktop } from "@/test/utils";
+import { ADMIN, USER, mockApi, renderWithProviders, stubDesktop } from "@/test/utils";
 import { AppShell } from "./AppShell";
 import { BaseAvatars } from "./BaseAvatars";
 import { HomeShell } from "./HomeShell";
 import { ScreenHeader } from "./ScreenHeader";
-import { SidebarLink, SidebarSection } from "./Sidebar";
 import { SIDEBAR_KEY } from "./sidebarPrefs";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,13 +29,7 @@ function Shell() {
         <Route
           path="*"
           element={
-            <AppShell
-              sidebar={
-                <SidebarSection title="Workspaces">
-                  <SidebarLink to="/workspace/wsp1">Acme</SidebarLink>
-                </SidebarSection>
-              }
-            >
+            <AppShell>
               <ScreenHeader title="Page title" />
               <p>Page body</p>
             </AppShell>
@@ -55,7 +48,7 @@ describe("AppShell on a desktop", () => {
     routes();
     const { unmount } = renderWithProviders(<Shell />);
     const menu = screen.getByRole("navigation", { name: "Main menu" });
-    expect(within(menu).getByRole("link", { name: "Acme" })).toBeInTheDocument();
+    expect(within(menu).getByRole("link", { name: "Home" })).toBeInTheDocument();
     expect(await within(menu).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
     expect(screen.getByText("Page title")).toBeInTheDocument();
 
@@ -92,7 +85,7 @@ describe("AppShell on a desktop", () => {
     expect(JSON.parse(localStorage.getItem(SIDEBAR_KEY)!)).toEqual({ width: 200, collapsed: false });
   });
 
-  it("starts the menu with Home and the Inbox, above Notifications and its unread count", async () => {
+  it("starts the sidebar with Home, then Notifications and its unread count", async () => {
     stubDesktop();
     mockApi({ "GET /api/auth/me": USER, "GET /api/notifications": { notifications: [], unread: 3 } });
     renderWithProviders(<Shell />, "/workspace/wsp1");
@@ -100,21 +93,33 @@ describe("AppShell on a desktop", () => {
     // Without a workspace of its own the shell's Home is wherever `/` leads (the last workspace's Home).
     const home = within(menu).getByRole("link", { name: "Home" });
     expect(home).toHaveAttribute("href", "/");
-    const inbox = within(menu).getByRole("link", { name: "Inbox" });
-    expect(inbox).toHaveAttribute("href", "/inbox");
-    expect(inbox).not.toHaveAttribute("aria-current", "page");
+    expect(within(menu).queryByRole("link", { name: "Inbox" })).not.toBeInTheDocument();
     const notifications = await within(menu).findByRole("button", { name: "Notifications, 3 unread" });
     expect(notifications).toHaveTextContent("3");
-    // Home, then the Inbox, Notifications under them, then the page's own menu.
-    const order = [home, inbox, notifications, within(menu).getByRole("link", { name: "Acme" })];
-    for (let i = 1; i < order.length; i++) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(home.compareDocumentPosition(notifications) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("marks the Inbox as the page being shown on /inbox", () => {
+  it("marks Home as the page being shown at /", () => {
     stubDesktop();
     routes();
-    renderWithProviders(<Shell />, "/inbox");
-    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+    renderWithProviders(<Shell />, "/");
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("folds the sidebar with Ctrl+\\ and brings it back, keeping the choice on this device", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    routes();
+    renderWithProviders(<Shell />);
+    expect(screen.getByRole("navigation", { name: "Main menu" })).toBeInTheDocument();
+    await user.keyboard("{Control>}\\{/Control}");
+    expect(screen.queryByRole("navigation", { name: "Main menu" })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_KEY)!)).toMatchObject({ collapsed: true });
+    await user.keyboard("{Control>}\\{/Control}");
+    expect(screen.getByRole("navigation", { name: "Main menu" })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_KEY)!)).toMatchObject({ collapsed: false });
+    // The toggle says so.
+    expect(screen.getByRole("button", { name: "Hide menu" })).toHaveAttribute("aria-keyshortcuts", "Control+Backslash Meta+Backslash");
   });
 
   it("ignores unreadable storage", () => {
@@ -136,7 +141,7 @@ describe("AppShell on a phone", () => {
     await user.click(toggle);
 
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    expect(within(drawer).getByRole("link", { name: "Acme" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("link", { name: "Home" })).toBeInTheDocument();
     expect(await within(drawer).findByRole("button", { name: "Account menu" })).toBeInTheDocument();
     expect(drawer).toContainElement(document.activeElement as HTMLElement);
 
@@ -145,26 +150,26 @@ describe("AppShell on a phone", () => {
     expect(screen.getByRole("button", { name: "Show menu" })).toHaveFocus();
   });
 
-  it("closes the drawer on a tap on the Inbox even when the Inbox is already the page", async () => {
+  it("closes the drawer on a tap on Home even when Home is already the page", async () => {
     const user = userEvent.setup();
     routes();
     renderWithProviders(<Shell />, "/");
     await user.click(screen.getByRole("button", { name: "Show menu" }));
-    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Inbox" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Home" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 
   it("closes the drawer with Escape and after following a link", async () => {
     const user = userEvent.setup();
     routes();
-    renderWithProviders(<Shell />);
+    renderWithProviders(<Shell />, "/elsewhere");
     await user.click(screen.getByRole("button", { name: "Show menu" }));
     await screen.findByRole("dialog", { name: "Menu" });
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "Show menu" }));
-    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Acme" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "Menu" })).getByRole("link", { name: "Home" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument());
   });
 });
@@ -176,8 +181,9 @@ describe("ProfileMenu", () => {
     const api = routes();
     renderWithProviders(<Shell />);
     const trigger = await screen.findByRole("button", { name: "Account menu" });
+    // The avatar and the name (NAV-1); the address is in the account settings.
     expect(trigger).toHaveTextContent("Ada Lovelace");
-    expect(trigger).toHaveTextContent("ada@example.com");
+    expect(trigger).not.toHaveTextContent("ada@example.com");
     await user.click(trigger);
     const menu = await screen.findByRole("menu");
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Settings", "Connect an assistant", "Replay the intro", "Send feedback", "Appearance: System", "Sign out"]);
@@ -327,24 +333,17 @@ describe("BaseAvatars", () => {
   });
 });
 
-/** Shows where the router is, so a test can see that expanding a row did not navigate. */
-function Where() {
-  const { pathname, search } = useLocation();
-  return <output data-testid="where">{pathname + search}</output>;
-}
-
 describe("HomeShell", () => {
-  const project = (id: string, workspace_id: string, name: string, role: string) => ({ id, workspace_id, name, color: "blue", icon: null, role, people: [], tables: [] });
-  const acme = { id: "wsp1", name: "Acme", icon: null, role: "owner", bases: [project("app1", "wsp1", "Chores", "owner")], member_count: 1, pending_invite_count: 0 };
-  const club = { id: "wsp2", name: "Book club", icon: null, role: "editor", bases: [project("app2", "wsp2", "Reading list", "editor")], member_count: 3, pending_invite_count: 0 };
+  const project = (id: string, workspace_id: string, name: string, role: string) => ({ id, workspace_id, name, color: "blue", icon: null, role, people: [], tables: [], is_top_level: false });
+  const acme = { id: "wsp1", name: "Acme", color: "green", icon: null, role: "owner", bases: [project("app1", "wsp1", "Chores", "owner")], member_count: 1, pending_invite_count: 0 };
+  const club = { id: "wsp2", name: "Book club", color: "purple", icon: null, role: "editor", bases: [project("app2", "wsp2", "Reading list", "editor")], member_count: 3, pending_invite_count: 0 };
 
-  function home(route = "/workspace/wsp1", props: { workspaceId?: string } = { workspaceId: "wsp1" }, extra: Record<string, unknown> = {}) {
-    const api = mockApi({
+  function home(route = "/workspace/wsp1", props: { workspaceId?: string } = { workspaceId: "wsp1" }) {
+    mockApi({
       "GET /api/auth/me": USER,
       "GET /api/notifications": { notifications: [], unread: 0 },
       "GET /api/workspaces": [acme, club],
       "GET /api/search": { results: [] },
-      ...extra,
     });
     renderWithProviders(
       <IntroProvider>
@@ -354,7 +353,6 @@ describe("HomeShell", () => {
             element={
               <HomeShell {...props}>
                 <p>Page body</p>
-                <Where />
               </HomeShell>
             }
           />
@@ -362,379 +360,7 @@ describe("HomeShell", () => {
       </IntroProvider>,
       route,
     );
-    return api;
   }
-  const where = () => screen.getByTestId("where").textContent;
-
-  it("lists the workspaces under a plain heading, the open one expanded into its projects", async () => {
-    stubDesktop();
-    const api = home();
-    const menu = screen.getByRole("navigation", { name: "Main menu" });
-    const section = within(menu).getByRole("region", { name: "Workspaces" });
-    expect(within(section).getByRole("heading", { name: "Workspaces" })).toBeInTheDocument();
-    expect(within(section).getByRole("button", { name: "New workspace" })).toBeInTheDocument();
-    expect(await within(section).findByRole("button", { name: "Collapse Acme" })).toHaveAttribute("aria-expanded", "true");
-    const projects = within(section).getByRole("list", { name: "Projects in Acme" });
-    // A project's name only folds it: nothing in the list is a link until its tables show.
-    expect(within(projects).getByRole("button", { name: "Chores" })).toBeInTheDocument();
-    expect(within(projects).queryAllByRole("link")).toHaveLength(0);
-    expect(within(section).getByRole("button", { name: "Expand Book club" })).toHaveAttribute("aria-expanded", "false");
-    expect(within(section).queryByRole("list", { name: "Projects in Book club" })).not.toBeInTheDocument();
-    // A project's tables are fetched when it is opened, not before.
-    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
-    // Each workspace has its solid colour tile.
-    expect(within(section).getByRole("button", { name: "Acme" }).querySelector("[data-entity-tile]")).toHaveClass("ob-solid");
-    // The menu ends with the History and the Trash of everything; the pages of a workspace are in its "…" menu.
-    expect(within(menu).getAllByRole("link", { name: "History" }).at(-1)).toHaveAttribute("href", "/history");
-    expect(within(menu).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("href", "/trash");
-    expect(within(menu).queryByRole("link", { name: "Members" })).not.toBeInTheDocument();
-  });
-
-  it("opens and closes a workspace with its own chevron without navigating, and remembers that on this device", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    home();
-    await user.click(await screen.findByRole("button", { name: "Expand Book club" }));
-    const projects = screen.getByRole("list", { name: "Projects in Book club" });
-    expect(within(projects).getByRole("button", { name: "Reading list" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Collapse Acme" }));
-    expect(screen.queryByRole("list", { name: "Projects in Acme" })).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("ob-workspaces-open")!)).toEqual({ wsp2: true, wsp1: false });
-    expect(where()).toBe("/workspace/wsp1");
-  });
-
-  it("folds a workspace on a tap of its name, without going to the project last opened in it", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl9: "viw9" }, projects: { app2: "tbl9" }, workspaces: { wsp2: "app2" } }));
-    home();
-    // Book club remembers its project, but its name is still only a fold, not a link there.
-    const club = await screen.findByRole("button", { name: "Book club" });
-    expect(screen.queryByRole("link", { name: "Book club" })).not.toBeInTheDocument();
-    await user.click(club);
-    expect(screen.getByRole("list", { name: "Projects in Book club" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Acme" }));
-    expect(screen.queryByRole("list", { name: "Projects in Acme" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Acme" }));
-    expect(screen.getByRole("list", { name: "Projects in Acme" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("ob-workspaces-open")!)).toEqual({ wsp2: true, wsp1: true });
-    expect(where()).toBe("/workspace/wsp1");
-  });
-
-  it("loads a project's tables when a tap on its name unfolds it, without navigating", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl2: "viw4" }, projects: { app1: "tbl2" }, workspaces: {} }));
-    const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, { "GET /api/bases/app1": makeSchema("owner", { name: "Chores" }) });
-    const chores = await screen.findByRole("button", { name: "Chores" });
-    expect(screen.queryByRole("link", { name: "Chores" })).not.toBeInTheDocument();
-    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(0);
-    await user.click(chores);
-    const tables = await screen.findByRole("list", { name: "Tables in Chores" });
-    // A table without a remembered view opens its first (BaseShell picks it); one with opens that.
-    expect(within(tables).getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/base/app1/tbl1");
-    expect(within(tables).getByRole("link", { name: "People" })).toHaveAttribute("href", "/base/app1/tbl2/viw4");
-    expect(api.callsTo("GET /api/bases/app1")).toHaveLength(1);
-    expect(JSON.parse(localStorage.getItem("ob-projects-open")!)).toEqual({ app1: true });
-    expect(where()).toBe("/workspace/wsp1");
-  });
-
-  it("puts what the workspace page, the pickers and the footer offered into the row menus", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    home();
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    let menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual([
-      "New project",
-      "Members",
-      "Invite people…",
-      "History",
-      "Trash",
-      "Settings",
-      "Rename",
-      "Change icon…",
-      "Change color…",
-      "Move up",
-      "Move down",
-      "Delete workspace",
-    ]);
-    expect(within(menu).getByRole("menuitem", { name: "Members" })).toHaveAttribute("href", "/workspace/wsp1/members");
-    expect(within(menu).getByRole("menuitem", { name: "History" })).toHaveAttribute("href", "/history?workspace=wsp1");
-    expect(within(menu).getByRole("menuitem", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
-    expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/workspace/wsp1/settings");
-    await user.keyboard("{Escape}");
-
-    // An editor makes nothing here and has no settings.
-    await user.click(screen.getByRole("button", { name: "Workspace options for Book club" }));
-    menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members", "History", "Trash", "Move up", "Move down"]);
-    await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Project options for Chores" }));
-    menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual([
-      "Rename project",
-      "Change icon…",
-      "Change color…",
-      "Duplicate project",
-      "Share…",
-      "Members",
-      "History",
-      "Trash",
-      "Automations",
-      "Delete project",
-    ]);
-    expect(within(menu).getByRole("menuitem", { name: "History" })).toHaveAttribute("href", "/history?base=app1");
-    expect(within(menu).getByRole("menuitem", { name: "Trash" })).toHaveAttribute("href", "/trash?base=app1");
-    expect(within(menu).getByRole("menuitem", { name: "Automations" })).toHaveAttribute("href", "/base/app1/automations");
-  });
-
-  it("gives an editor's project only its members", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    home("/workspace/wsp2", { workspaceId: "wsp2" });
-    await user.click(await screen.findByRole("button", { name: "Project options for Reading list" }));
-    const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent?.trim())).toEqual(["Members", "History"]);
-  });
-
-  it("makes a new project from the workspace menu, the dialog living outside the menu", async () => {
-    stubDesktop();
-    const user = userEvent.setup();
-    const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, { "POST /api/workspaces/wsp1/bases": makeSchema("owner", { id: "app9", name: "Garden" }) });
-    await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New project" }));
-    const dialog = await screen.findByRole("dialog", { name: "New project" });
-    await user.type(within(dialog).getByLabelText("Project name"), "Garden");
-    await user.click(within(dialog).getByRole("button", { name: "Create project" }));
-    await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases")).toHaveLength(1));
-    expect(api.callsTo("POST /api/workspaces/wsp1/bases")[0]?.body).toEqual({ name: "Garden", empty: true });
-    await waitFor(() => expect(where()).toBe("/base/app9"));
-  });
-
-  it("opens the workspace whose Trash is showing, and leaves the Trash of everything unmarked", async () => {
-    stubDesktop();
-    home("/trash?workspace=wsp2", {});
-    expect(await screen.findByRole("list", { name: "Projects in Book club" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getAllByRole("link", { name: "Trash" }).at(-1)).toHaveAttribute("aria-current", "false");
-  });
-
-  describe("reordering", () => {
-    const labels = (prefix: string) => screen.getAllByRole("button", { name: new RegExp(`^${prefix} `) }).map((b) => b.getAttribute("aria-label")!.slice(prefix.length + 1));
-    const move = async (user: ReturnType<typeof userEvent.setup>, button: string, item: "Move up" | "Move down") => {
-      await user.click(screen.getByRole("button", { name: button }));
-      await user.click(await screen.findByRole("menuitem", { name: item }));
-    };
-    /** Routes that keep the order a reorder call sent, like the server does (the id lists are whole groups). */
-    const stateful = <T extends { id: string }>(initial: T[], key: string, path: string, update: (order: string[]) => void = () => {}) => {
-      let list = initial;
-      return {
-        [`GET ${key}`]: () => list,
-        [`POST ${path}`]: (call: { body: unknown }) => {
-          const ids = (call.body as { ids: string[] }).ids;
-          update(ids);
-          list = ids.map((id) => list.find((x) => x.id === id)!);
-          return { ok: true };
-        },
-      };
-    };
-
-    it("moves a workspace with its menu: the new order is sent, shown at once and kept", async () => {
-      stubDesktop();
-      const user = userEvent.setup();
-      const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, stateful([acme, club], "/api/workspaces", "/api/workspaces/reorder"));
-      await screen.findByRole("button", { name: "Workspace options for Acme" });
-      expect(labels("Workspace options for")).toEqual(["Acme", "Book club"]);
-
-      // The first cannot move up.
-      await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
-      expect(await screen.findByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
-      await user.click(screen.getByRole("menuitem", { name: "Move down" }));
-      await waitFor(() => expect(api.callsTo("POST /api/workspaces/reorder")).toHaveLength(1));
-      expect(api.callsTo("POST /api/workspaces/reorder")[0]?.body).toEqual({ ids: ["wsp2", "wsp1"] });
-      expect(labels("Workspace options for")).toEqual(["Book club", "Acme"]);
-      // Still so once the lists are asked for again.
-      await waitFor(() => expect(api.callsTo("GET /api/workspaces").length).toBeGreaterThan(1));
-      expect(labels("Workspace options for")).toEqual(["Book club", "Acme"]);
-
-      // Now the last: it cannot move down, and moving up puts them back.
-      await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
-      expect(await screen.findByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
-      await user.click(screen.getByRole("menuitem", { name: "Move up" }));
-      await waitFor(() => expect(api.callsTo("POST /api/workspaces/reorder")).toHaveLength(2));
-      expect(api.callsTo("POST /api/workspaces/reorder")[1]?.body).toEqual({ ids: ["wsp1", "wsp2"] });
-      await waitFor(() => expect(labels("Workspace options for")).toEqual(["Acme", "Book club"]));
-    });
-
-    it("reorders by dragging a row, and the click that ends the drag neither folds it nor follows a link", async () => {
-      stubDesktop();
-      // jsdom has no layout: stack the rows by hand, 40px apart.
-      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-        const rows = Array.from(document.querySelectorAll("li[data-sortable]"));
-        const i = rows.indexOf(this as HTMLLIElement);
-        const top = i < 0 ? 0 : i * 40;
-        return { x: 0, y: top, left: 0, top, width: 200, height: 40, right: 200, bottom: top + 40, toJSON: () => ({}) } as DOMRect;
-      });
-      const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, stateful([acme, club], "/api/workspaces", "/api/workspaces/reorder"));
-      const handle = (await screen.findByRole("button", { name: "Acme" })).closest("[data-drag-handle]")!;
-      expect(handle).not.toBeNull();
-      const wasOpen = screen.getByRole("button", { name: "Collapse Acme" });
-      expect(wasOpen).toBeInTheDocument();
-      fireEvent.mouseDown(handle, { button: 0, clientX: 20, clientY: 20 });
-      // A move of less than 5px is still a click.
-      fireEvent.mouseMove(document, { clientX: 20, clientY: 22 });
-      await act(async () => {});
-      expect(document.querySelector("[data-dragging]")).toBeNull();
-      for (const y of [30, 50, 70]) {
-        fireEvent.mouseMove(document, { clientX: 20, clientY: y });
-        await act(async () => {});
-      }
-      expect(document.querySelector("[data-dragging]")).not.toBeNull();
-      fireEvent.mouseUp(document, { clientX: 20, clientY: 70 });
-      // The click a browser sends after the release (on the name, under the pointer) is swallowed,
-      // default and all: on a table's or a view's link it would otherwise open the page.
-      expect(fireEvent.click(screen.getByRole("button", { name: "Acme" }))).toBe(false);
-      await waitFor(() => expect(api.callsTo("POST /api/workspaces/reorder")).toHaveLength(1));
-      expect(api.callsTo("POST /api/workspaces/reorder")[0]?.body).toEqual({ ids: ["wsp2", "wsp1"] });
-      expect(screen.getByRole("button", { name: "Collapse Acme" })).toHaveAttribute("aria-expanded", "true");
-    });
-
-    it("gives every workspace the menu items, whatever its role", async () => {
-      stubDesktop();
-      const user = userEvent.setup();
-      home("/workspace/wsp2", { workspaceId: "wsp2" });
-      await user.click(await screen.findByRole("button", { name: "Workspace options for Book club" }));
-      const menu = await screen.findByRole("menu");
-      expect(within(menu).getByRole("menuitem", { name: "Move up" })).not.toHaveAttribute("aria-disabled");
-      expect(within(menu).getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
-    });
-
-    it("has nothing to move in a single workspace", async () => {
-      stubDesktop();
-      const user = userEvent.setup();
-      home("/workspace/wsp1", { workspaceId: "wsp1" }, { "GET /api/workspaces": [acme] });
-      await user.click(await screen.findByRole("button", { name: "Workspace options for Acme" }));
-      const menu = await screen.findByRole("menu");
-      expect(within(menu).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-      expect(document.querySelector("[data-sortable]")).toBeNull();
-    });
-
-    it("puts the old order back and says so when the server refuses", async () => {
-      stubDesktop();
-      const user = userEvent.setup();
-      const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, { "POST /api/workspaces/reorder": { status: 500, json: { error: { code: "internal", message: "boom" } } } });
-      await screen.findByRole("button", { name: "Workspace options for Acme" });
-      await move(user, "Workspace options for Acme", "Move down");
-      expect(await screen.findByText("Could not reorder the workspaces")).toBeInTheDocument();
-      await waitFor(() => expect(labels("Workspace options for")).toEqual(["Acme", "Book club"]));
-      expect(api.callsTo("POST /api/workspaces/reorder")).toHaveLength(1);
-    });
-
-    describe("projects", () => {
-      const chores = project("app1", "wsp1", "Chores", "owner");
-      const garden = project("app3", "wsp1", "Garden", "owner");
-      const wsp = (role: string, bases = [chores, garden]) => ({ ...acme, role, bases: bases.map((b) => ({ ...b, role })) });
-
-      it("moves a project within its workspace for those who may edit projects", async () => {
-        stubDesktop();
-        const user = userEvent.setup();
-        let list = [wsp("owner"), club];
-        const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, {
-          "GET /api/workspaces": () => list,
-          "POST /api/workspaces/wsp1/bases/reorder": (call: { body: unknown }) => {
-            const ids = (call.body as { ids: string[] }).ids;
-            list = list.map((w) => (w.id === "wsp1" ? { ...w, bases: ids.map((id) => w.bases.find((b) => b.id === id)!) } : w));
-            return { ok: true };
-          },
-        });
-        await screen.findByRole("button", { name: "Project options for Chores" });
-        expect(labels("Project options for")).toEqual(["Chores", "Garden"]);
-        await move(user, "Project options for Chores", "Move down");
-        await waitFor(() => expect(api.callsTo("POST /api/workspaces/wsp1/bases/reorder")).toHaveLength(1));
-        expect(api.callsTo("POST /api/workspaces/wsp1/bases/reorder")[0]?.body).toEqual({ ids: ["app3", "app1"] });
-        await waitFor(() => expect(labels("Project options for")).toEqual(["Garden", "Chores"]));
-        // Nothing was sent for the other workspace's project.
-        expect(api.callsTo("POST /api/workspaces/wsp2/bases/reorder")).toHaveLength(0);
-      });
-
-      it("does not offer it to an editor, nor in a workspace with a single project", async () => {
-        stubDesktop();
-        const user = userEvent.setup();
-        home("/workspace/wsp1", { workspaceId: "wsp1" }, { "GET /api/workspaces": [wsp("editor"), club] });
-        await user.click(await screen.findByRole("button", { name: "Project options for Chores" }));
-        expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-        await user.keyboard("{Escape}");
-        // Only the workspaces are rows to move: the projects of an editor are not.
-        const projects = screen.getByRole("list", { name: "Projects in Acme" });
-        expect(projects.querySelector("[data-sortable]")).toBeNull();
-        expect(screen.getAllByRole("button", { name: /^Workspace options for / })).toHaveLength(2);
-      });
-    });
-
-    describe("tables", () => {
-      const setup = async (role = "owner", extra: Record<string, unknown> = {}) => {
-        stubDesktop();
-        const user = userEvent.setup();
-        const s = makeSchema(role, { name: "Chores" });
-        let current = s;
-        const api = home("/workspace/wsp1", { workspaceId: "wsp1" }, {
-          "GET /api/bases/app1": () => current,
-          "POST /api/bases/app1/tables/reorder": (call: { body: unknown }) => {
-            const ids = (call.body as { ids: string[] }).ids;
-            current = { ...current, tables: ids.map((id) => current.tables.find((t) => t.id === id)!) };
-            return { ok: true };
-          },
-          ...extra,
-        });
-        await user.click(await screen.findByRole("button", { name: "Chores" }));
-        await screen.findByRole("list", { name: "Tables in Chores" });
-        return { user, api };
-      };
-      const tableNames = () => within(screen.getByRole("list", { name: "Tables in Chores" })).getAllByRole("link").map((a) => a.textContent);
-
-      it("moves a table in its project, in the menu and in the project's tables", async () => {
-        const { user, api } = await setup();
-        expect(tableNames()).toEqual(["Tasks", "People"]);
-        await move(user, "Table options for Tasks", "Move down");
-        await waitFor(() => expect(api.callsTo("POST /api/bases/app1/tables/reorder")).toHaveLength(1));
-        expect(api.callsTo("POST /api/bases/app1/tables/reorder")[0]?.body).toEqual({ ids: ["tbl2", "tbl1"] });
-        await waitFor(() => expect(tableNames()).toEqual(["People", "Tasks"]));
-        await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
-        expect(await screen.findByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
-      });
-
-      it("lists tables only, with no views under them or chevron to show them", async () => {
-        await setup();
-        const tables = screen.getByRole("list", { name: "Tables in Chores" });
-        expect(within(tables).getAllByRole("link").map((a) => a.textContent)).toEqual(["Tasks", "People"]);
-        expect(screen.queryByRole("button", { name: /^(Show|Hide) views of/ })).not.toBeInTheDocument();
-        expect(screen.queryByRole("list", { name: /^(Shared|Personal) views$/ })).not.toBeInTheDocument();
-      });
-
-      it("makes rows draggable only where the person may reorder them", async () => {
-        const { user } = await setup("editor");
-        const tables = screen.getByRole("list", { name: "Tables in Chores" });
-        // An editor cannot arrange tables.
-        expect(tables.querySelector("[data-sortable]")).toBeNull();
-        await user.click(screen.getByRole("button", { name: "Table options for Tasks" }));
-        expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /^Move/ })).not.toBeInTheDocument();
-      });
-
-      it("keeps the rows the menu has of its own out of the sortable ones", async () => {
-        await setup();
-        const menu = screen.getByRole("navigation", { name: "Main menu" });
-        // The sortable rows are the tree's: workspaces, projects, tables.
-        const handles = Array.from(menu.querySelectorAll("[data-drag-handle]"));
-        expect(handles.length).toBeGreaterThan(0);
-        for (const name of ["Inbox", "History", "Trash"]) {
-          for (const link of within(menu).getAllByRole("link", { name })) expect(link.closest("[data-drag-handle]"), name).toBeNull();
-        }
-        expect(within(menu).getByRole("button", { name: /^Notifications/ }).closest("[data-drag-handle]")).toBeNull();
-        expect(within(menu).getByRole("region", { name: "Workspaces" })).toContainElement(handles[0] as HTMLElement);
-      });
-    });
-  });
 
   it("draws the screen's header inside main, with the search as a button in it and no bar across the app", async () => {
     stubDesktop();
@@ -755,9 +381,9 @@ describe("HomeShell", () => {
     expect(await within(header).findByText("Acme")).toBeInTheDocument();
     await user.click(within(header).getByRole("button", { name: "Show menu" }));
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
-    expect(within(drawer).getByRole("button", { name: "Collapse Acme" })).toBeInTheDocument();
-    // Folding a row in the drawer does not close it: only a navigation does.
-    await user.click(within(drawer).getByRole("button", { name: "Expand Book club" }));
+    expect(within(drawer).getByRole("button", { name: /Acme/ })).toBeInTheDocument();
+    // Folding a folder in the drawer does not close it: only a navigation does.
+    await user.click(await within(drawer).findByRole("button", { name: "Chores" }));
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
   });
 });

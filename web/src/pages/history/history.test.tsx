@@ -263,8 +263,8 @@ describe("History page", () => {
     expect(screen.getByRole("button", { name: "Project: Ops" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Person: Grace Hopper" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-pressed", "true");
-    // The menu opens that workspace, as it does for any page of one.
-    expect(await screen.findByRole("list", { name: "Projects in Acme" })).toBeInTheDocument();
+    // The sidebar shows that workspace, as it does for any page of one.
+    expect(await within(screen.getByRole("navigation", { name: "Main menu" })).findByRole("button", { name: /^Acme/ })).toBeInTheDocument();
   });
 
   it("flips between newest and oldest first", async () => {
@@ -334,21 +334,21 @@ describe("History page", () => {
     expect(await screen.findByRole("article", { name: "Activity on Big deal" })).toBeInTheDocument();
   });
 
-  it("is linked from the menu next to the Trash, and from the workspace and project menus", async () => {
+  it("is linked from the sidebar's footer next to the Trash, filtered to the workspace, and from the workspace menu", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes();
     renderApp({ route: "/history" });
     await screen.findAllByRole("article");
     const nav = screen.getByRole("navigation", { name: /./ });
-    const link = within(nav).getAllByRole("link", { name: "History" }).at(-1)!;
-    expect(link).toHaveAttribute("href", "/history");
-    // On its own page, unfiltered, it is the current one; the Trash is not.
+    const link = within(nav).getByRole("link", { name: "History" });
+    expect(link).toHaveAttribute("href", "/history?workspace=wsp1");
+    // On its own page it is the current one; the Trash is not.
     expect(link).toHaveAttribute("aria-current", "page");
-    expect(within(nav).getAllByRole("link", { name: "Trash" }).at(-1)).not.toHaveAttribute("aria-current", "page");
-    expect(link.compareDocumentPosition(within(nav).getAllByRole("link", { name: "Trash" }).at(-1)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Trash" })).not.toHaveAttribute("aria-current", "page");
+    expect(link.compareDocumentPosition(within(nav).getByRole("link", { name: "Trash" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Workspace options for Acme" }));
+    await user.click(within(nav).getByRole("button", { name: /^Acme/ }));
     expect(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "History" })).toHaveAttribute("href", "/history?workspace=wsp1");
     await user.keyboard("{Escape}");
   });

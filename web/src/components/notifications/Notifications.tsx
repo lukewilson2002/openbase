@@ -1,5 +1,5 @@
 /**
- * Notifications: a row of every menu (below the Inbox), with the unread count (polled every minute
+ * Notifications: a row of the sidebar (below Home), with the unread count (polled every minute
  * and on window focus), opening the person's notifications beside the menu (inside the drawer on a
  * phone). Clicking a notification marks it read and goes to its record.
  */
@@ -12,6 +12,7 @@ import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
 import type { Notification, NotificationsResponse } from "@/api/types";
 import { Avatar } from "@/components/ui/avatar";
+import { NavRow } from "@/components/ui/nav-row";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/relativeTime";
@@ -67,31 +68,21 @@ export function unreadBadge(unread: number): string {
 }
 
 /**
- * The menu row. Spreads the rest of its props on the button so it can be a popover trigger;
- * `open` highlights it while the panel is showing.
+ * The sidebar row. Spreads the rest of its props on the button so it can be a popover trigger;
+ * `open` marks it while the panel is showing (not as the current page: the panel is not a page).
  */
-export function NotificationsRow({ open, className, ...props }: { open: boolean } & ComponentProps<"button">) {
+export function NotificationsRow({ open, className, ...props }: { open: boolean } & Omit<ComponentProps<typeof NavRow>, "children" | "asChild" | "count" | "selected">) {
   const unread = useUnreadCount();
   return (
-    <button
-      type="button"
+    <NavRow
       aria-expanded={open}
       aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-      className={cn(
-        "flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-left text-[0.875rem] text-fg transition-colors hover:bg-hover pointer-coarse:h-11",
-        open && "bg-primary text-primary-fg hover:bg-primary-hover",
-        className,
-      )}
+      count={unread > 0 ? <span data-testid="notifications-badge" className="font-semibold text-primary-ink">{unreadBadge(unread)}</span> : undefined}
+      className={cn(open && "bg-hover", className)}
       {...props}
     >
-      <Bell aria-hidden className={cn("size-[1.125rem] shrink-0", !open && "text-muted")} />
-      <span className="min-w-0 flex-1 truncate">Notifications</span>
-      {unread > 0 && (
-        <span aria-hidden data-testid="notifications-badge" className={cn("flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold", open ? "bg-primary-fg text-primary" : "bg-primary text-primary-fg")}>
-          {unreadBadge(unread)}
-        </span>
-      )}
-    </button>
+      Notifications
+    </NavRow>
   );
 }
 

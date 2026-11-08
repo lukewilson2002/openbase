@@ -47,7 +47,7 @@ function renderShell() {
         <Route
           path="*"
           element={
-            <AppShell sidebar={<p>Menu content</p>}>
+            <AppShell>
               <ScreenHeader />
               <Where />
             </AppShell>
@@ -65,13 +65,13 @@ async function openNotifications(user: ReturnType<typeof userEvent.setup>, name:
 }
 
 describe("Notifications in the docked menu", () => {
-  it("is the menu's row below the Home and Inbox links, with the unread count, and lists each kind beside the menu", async () => {
+  it("is the sidebar's row below Home, with the unread count, and lists each kind beside the sidebar", async () => {
     stubDesktop();
     const user = userEvent.setup();
     routes(listing());
     renderShell();
     const row = await screen.findByRole("button", { name: "Notifications, 3 unread" });
-    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getAllByRole("button")[0]).toBe(row);
+    expect(within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("button", { name: "Notifications, 3 unread" })).toBe(row);
     expect(screen.getByTestId("notifications-badge")).toHaveTextContent("3");
     expect(row).toHaveAttribute("aria-expanded", "false");
     const panel = await openNotifications(user, "Notifications, 3 unread");
@@ -84,10 +84,9 @@ describe("Notifications in the docked menu", () => {
     expect(within(panel).getByText("Weekly digest sent")).toBeInTheDocument();
     expect(within(panel).getByText("New response to Signup")).toBeInTheDocument();
     expect(within(panel).getByText("3 hours ago")).toBeInTheDocument();
-    // Home and the Inbox are the links above it; the notifications are only this row.
+    // Home is the link above it; the notifications are only this row.
     const menu = screen.getByRole("navigation", { name: "Main menu" });
     expect(within(menu).getAllByRole("link")[0]).toHaveAccessibleName("Home");
-    expect(within(menu).getAllByRole("link")[1]).toHaveAccessibleName("Inbox");
     expect(within(menu).getAllByRole("button", { name: /^Notifications/ })).toHaveLength(1);
   });
 
@@ -222,9 +221,9 @@ describe("Notifications on a phone", () => {
     await user.click(within(drawer).getByRole("button", { name: "Notifications, 3 unread" }));
     expect(within(drawer).getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(within(drawer).getByText("Grace mentioned you in Launch plan")).toBeInTheDocument();
-    expect(within(drawer).queryByText("Menu content")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("Search everything")).not.toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "Back to the menu" }));
-    expect(within(drawer).getByText("Menu content")).toBeInTheDocument();
+    expect(within(drawer).getByText("Search everything")).toBeInTheDocument();
   });
 
   it("has no dot when nothing is unread", async () => {

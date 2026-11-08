@@ -5,9 +5,11 @@
 import type { BaseSchema } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useNavDialog } from "@/shell/NavDialogs";
 import { basePermissions } from "./permissions";
 
-export function EmptyBase({ schema, onNew, onImport }: { schema: BaseSchema; onNew: () => void; onImport: () => void }) {
+export function EmptyBase({ schema }: { schema: BaseSchema }) {
+  const openDialog = useNavDialog();
   const canCreate = basePermissions.manageTables(schema.role);
   return (
     <div className="flex h-full flex-col justify-center overflow-y-auto">
@@ -17,10 +19,10 @@ export function EmptyBase({ schema, onNew, onImport }: { schema: BaseSchema; onN
           description="A collection is one list of things, like your chores or a shopping list. You add the properties you need as you go."
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="primary" onClick={onNew}>
+              <Button variant="primary" onClick={() => openDialog({ kind: "create-collection", baseId: schema.id })}>
                 New collection
               </Button>
-              <Button onClick={onImport}>Import CSV</Button>
+              <Button onClick={() => openDialog({ kind: "create-collection-csv", baseId: schema.id })}>Import CSV</Button>
             </div>
           }
         />

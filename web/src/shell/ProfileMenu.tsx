@@ -3,6 +3,7 @@ import { Bot, ChevronsUpDown, LogOut, MessageSquare, Palette, PlayCircle, Settin
 import { useMe } from "@/auth/useAuth";
 import { AccentSwatchItems, ThemeRadioItems, useLogOutAndLeave } from "@/components/accountMenu";
 import { Avatar } from "@/components/ui/avatar";
+import { Icon } from "@/components/ui/icon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,12 +18,11 @@ import { useIntro } from "@/onboarding/IntroContext";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const MODE_LABEL = { system: "System", light: "Light", dark: "Dark" } as const;
-const item = "px-3 py-2.5 text-[0.875rem] rounded-lg";
 /** Where feedback goes: the project's GitHub Discussions, in a new tab. */
 export const FEEDBACK_URL = "https://github.com/lukewilson2002/openbase/discussions";
 
 /**
- * The signed-in person at the bottom of the menu, opening their account actions upwards: the
+ * The signed-in person at the bottom of the sidebar (their avatar and name, NAV-1), opening their account actions upwards: the
  * account settings (the menu's only way there), connecting an assistant, the intro, sending feedback
  * (the project's GitHub Discussions), the theme and accent colour, administration for
  * administrators, and signing out.
@@ -41,38 +41,35 @@ export function ProfileMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex w-full min-w-0 items-center gap-2.5 rounded-[10px] p-1.5 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover"
+          className="flex min-h-control-md w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-hover data-[state=open]:bg-hover max-md:min-h-control-touch"
         >
-          <Avatar name={user.name} email={user.email} own />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[0.875rem] text-fg">{user.name}</span>
-            <span className="block truncate text-xs text-muted">{user.email}</span>
-          </span>
-          <ChevronsUpDown aria-hidden className="size-4 shrink-0 text-muted" />
+          <Avatar name={user.name} email={user.email} size="sm" own />
+          <span className="min-w-0 flex-1 truncate text-ui font-medium">{user.name}</span>
+          <Icon icon={ChevronsUpDown} className="text-muted" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[max(var(--radix-dropdown-menu-trigger-width),14rem)] rounded-xl p-1.5">
-        <DropdownMenuItem asChild className={item}>
+      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[max(var(--radix-dropdown-menu-trigger-width),14rem)]">
+        <DropdownMenuItem asChild>
           <Link to="/account">
-            <Settings aria-hidden className="size-4" /> Settings
+            <Icon icon={Settings} /> Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild className={item}>
+        <DropdownMenuItem asChild>
           <Link to="/account?tab=assistants">
-            <Bot aria-hidden className="size-4" /> Connect an assistant
+            <Icon icon={Bot} /> Connect an assistant
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={openIntro} className={item}>
-          <PlayCircle aria-hidden className="size-4" /> Replay the intro
+        <DropdownMenuItem onSelect={openIntro}>
+          <Icon icon={PlayCircle} /> Replay the intro
         </DropdownMenuItem>
-        <DropdownMenuItem asChild className={item}>
+        <DropdownMenuItem asChild>
           <a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer">
-            <MessageSquare aria-hidden className="size-4" /> Send feedback
+            <Icon icon={MessageSquare} /> Send feedback
           </a>
         </DropdownMenuItem>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger className={item}>
-            <Palette aria-hidden className="size-4" /> Appearance: {MODE_LABEL[mode]}
+          <DropdownMenuSubTrigger>
+            <Icon icon={Palette} /> Appearance: {MODE_LABEL[mode]}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <ThemeRadioItems />
@@ -81,15 +78,15 @@ export function ProfileMenu() {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {user.is_admin && (
-          <DropdownMenuItem asChild className={item}>
+          <DropdownMenuItem asChild>
             <Link to="/admin">
-              <Shield aria-hidden className="size-4" /> Administration
+              <Icon icon={Shield} /> Administration
             </Link>
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator className="mx-1 my-1.5" />
-        <DropdownMenuItem danger onSelect={logOut} className={item}>
-          <LogOut aria-hidden className="size-4" /> Sign out
+        <DropdownMenuSeparator />
+        <DropdownMenuItem danger onSelect={logOut}>
+          <Icon icon={LogOut} /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

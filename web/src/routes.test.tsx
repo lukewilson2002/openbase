@@ -138,9 +138,10 @@ describe("/workspace/:id/collections", () => {
     renderApp({ route: "/workspace/wsp1/collections" });
     expect(await screen.findByRole("heading", { level: 1, name: "Collections" })).toBeInTheDocument();
     const main = expectFrame();
-    expect(await within(main).findByRole("button", { name: "Collapse Acme" })).toBeInTheDocument();
-    expect(within(main).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash");
-    expect(within(main).getByRole("link", { name: "History" })).toHaveAttribute("href", "/history");
+    expect(await within(main).findByRole("button", { name: /^Acme/ })).toBeInTheDocument();
+    expect(within(main).getByRole("region", { name: "Collections" })).toBeInTheDocument();
+    expect(within(main).getByRole("link", { name: "Trash" })).toHaveAttribute("href", "/trash?workspace=wsp1");
+    expect(within(main).getByRole("link", { name: "History" })).toHaveAttribute("href", "/history?workspace=wsp1");
   });
 
   it("says when the workspace is not one of the person's", async () => {
@@ -169,12 +170,13 @@ describe("/notifications", () => {
 });
 
 describe("/inbox", () => {
-  it("is still reachable, and the menu marks it as the page being shown", async () => {
+  // The sidebar has no Inbox row (NAV-1); the page stays by address until Home holds the drafts (Phase 6).
+  it("is still reachable by its address", async () => {
     stubDesktop();
     routes();
     renderApp({ route: "/inbox" });
     expect(await screen.findByRole("heading", { level: 1, name: "Inbox" })).toBeInTheDocument();
-    expect(within(menu()).getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+    expect(within(menu()).queryByRole("link", { name: "Inbox" })).not.toBeInTheDocument();
   });
 });
 

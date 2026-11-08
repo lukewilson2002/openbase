@@ -6,7 +6,6 @@ import type { WorkspaceSummary } from "@/api/types";
 import { ColorDialog } from "@/components/ColorDialog";
 import { NameDialog } from "@/components/NameDialog";
 import { IconPickerDialog } from "@/components/icons/IconPicker";
-import { iconPatch } from "@/components/icons/iconPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { workspaceColor } from "@/lib/workspaceColor";
@@ -24,7 +23,7 @@ export function useUpdateWorkspace() {
   });
 }
 
-/** Rename, change the icon or colour of and delete a workspace (owners). Deleting leaves for the home page. */
+/** Rename, change the icon or color of and delete a workspace (owners). Deleting leaves for the home page. The sidebar offers no icon (decision 3); the settings page still has one. */
 export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; open: WorkspaceDialog; onClose: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -47,9 +46,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
         onOpenChange={onOpenChange}
         title="Rename workspace"
         initialValue={ws.name}
-        withIcon
-        initialIcon={ws.icon ?? null}
-        onSubmit={(name, icon) => update.mutateAsync({ id: ws.id, name, ...iconPatch(ws.icon, icon) })}
+        onSubmit={(name) => update.mutateAsync({ id: ws.id, name })}
       />
       <IconPickerDialog open={open === "icon"} onOpenChange={onOpenChange} title="Workspace icon" value={ws.icon} onChange={(icon) => update.mutate({ id: ws.id, icon })} />
       <ColorDialog open={open === "color"} onOpenChange={onOpenChange} title="Workspace color" value={workspaceColor(ws)} onChange={(color) => update.mutate({ id: ws.id, color })} />
@@ -57,7 +54,7 @@ export function WorkspaceDialogs({ ws, open, onClose }: { ws: WorkspaceSummary; 
         open={open === "delete"}
         onOpenChange={onOpenChange}
         title={`Delete ${ws.name}?`}
-        description="The workspace and all of its projects move to the trash. Restore it from Trash in the menu for 30 days."
+        description="The workspace and everything in it move to the trash. Restore it from Trash for 30 days."
         confirmLabel="Delete workspace"
         destructive
         onConfirm={() => remove.mutateAsync()}
