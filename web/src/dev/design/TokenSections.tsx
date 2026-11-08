@@ -39,6 +39,8 @@ const COLOUR_TOKENS: [string, string][] = [
   ["warning-soft", "warning fill"],
   ["ring", "focus ring"],
   ["overlay", "dimmed screen"],
+  ["paper", "white in both themes: QR quiet zone, switch thumb"],
+  ["scrim", "dark wash behind a mark on a picture"],
 ];
 
 function Swatch({ name, use }: { name: string; use: string }) {
