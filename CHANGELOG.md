@@ -13,7 +13,7 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 
 ### Added
 
-- **Upgrade to database schema 16 (a page for every table).** The server snapshots the database
+- **Upgrade to database schema 17 (a page for every table).** The server snapshots the database
   first, as for every upgrade, and no value you entered changes. A table with exactly one rich
   text property besides its title uses it as its page; every other table gets a new rich text
   property called "Page" ("Page 2" and so on when the name is taken), hidden in all of its views
@@ -21,8 +21,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   too, and a new workspace starts with a top-level project named after it; a workspace that had
   no project gets one the same way. Tables are coloured in turn, each table that has a date
   property called Due, Deadline, Date, When or Start (and a checkbox called Done or Complete) is
-  set up for the Home page, and each person gets a first day of the week (Sunday). The
-  Airtable-compatible API answers as before, except that a table lists its new Page property.
+  set up for the Home page (Due is taken before Due date, Deadline, Date, When and Start, whatever
+  their order in the table; likewise Done before Complete and Completed), and each person gets a first day of the week (Sunday). The
+  Airtable-compatible API answers as before, except that a table lists its new Page property and
+  a workspace lists its top-level project among its bases, even while that project is empty.
 - **Collection settings in the API and MCP.** A table has a `color` (set on create and update;
   the `icon` still works), a page field (`body_field_id`; `POST /api/tables/{id}/body-field`,
   MCP `set_page_field`), a record name, a Home date and a Done checkbox (`PATCH
@@ -139,7 +141,8 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
 - **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
   the same person fold into one history entry while it is under ten minutes old: it keeps the
   first old value, the latest new value and the time of the latest edit. Other fields, other
-  people and older entries still get their own entry.
+  people and older entries still get their own entry. Typing and then undoing inside that time
+  leaves no entry at all.
 - **Notifications:** the unused "invite" kind is gone from the app and the docs (the server never
   wrote one). The MCP `create_view` description now says personal views need the editor role.
 - **The Docker image runs on Debian 13** (a current ffmpeg) with its packages upgraded at build

@@ -140,7 +140,7 @@ stay out of reach, and what you can do in a project limits what the app can do.
 
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, projects, where it connects from, when it connected and when it was last used,
-with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking) and every change is written to the audit log (`oauth_grant_update`, with the old and new level), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control. Administrators see everyone's apps
+with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking) and every change is written to the audit log (`oauth_grant_update`, with the old and new level), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control, whether on the approval page (where that level is not offered once you limit the projects) or later here. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing or resetting your password, turning on
 two-factor authentication, **Sign out other sessions** and having your account deactivated
 disconnect all your apps (they have to be approved again; reactivating an account does not
@@ -407,7 +407,7 @@ finds names: every word of `query` has to match a name or an old name (`cart sho
 | Tool | Needs | What it does |
 |---|---|---|
 | `get_view` | any | A view's configuration, with field names |
-| `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration |
+| `create_view` | write | Grid, form, gallery, kanban, calendar, timeline or list view, optionally personal, with a configuration. The table's page field is hidden in the new view unless the configuration names it (in `hidden_fields` or `field_order`) |
 | `update_view` | write | Rename, lock, or change parts of the configuration (filter, sorts, groups, hidden and ordered fields, widths, summaries, row colour, kanban / calendar / gallery / list / timeline / form settings) |
 | `delete_view` | write | Delete to the trash |
 | `reorder_views` | write | Order of a table's views, for everyone: the listed ones take their own places in the new order, the rest stay. Shared views need the creator role; your own personal views the editor role. The default grid is not one of the views |

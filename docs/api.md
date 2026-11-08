@@ -106,11 +106,15 @@ some projects who creates or duplicates a project gets it added to their list.
   `done_field_id` (a checkbox field; `null` = none), each checked: the field must belong to the
   table, and nothing of the request is saved when one value is refused (400).
   `POST /api/tables/{id}/body-field` (Creator) takes `{field_id}` like `primary-field`: a rich
-  text field of the table other than its title, or `null` for no page; `{create: true}` adds a
-  rich text field called "Page" (hidden in every view) when the table has none. Deleting or
-  retyping the page field, the Home date or the Done field, or making the page field the title,
-  clears that setting and refuses nothing; a field restored from the trash is not pointed at
-  again. `PUT /api/tables/{id}/records/{rid}/page` (Editor) with `{text}` (markdown, `null`
+  text field of the table other than its title, or an explicit `null` for no page; `{create:
+  true}` adds a rich text field called "Page" (hidden in every view) when the table has none. A
+  body with neither (`{}`, a misspelled key, any key it does not know) is a 400 and changes
+  nothing. Deleting or retyping the page field, the Home date or the Done field, or making the
+  page field the title, clears that setting and refuses nothing. A field that went to the trash
+  as one of those gets its setting back when it is restored (also with the link or table it was
+  trashed with), unless the table has chosen another in the meantime; a field that was retyped
+  stays unpointed. A view created with its own `config` hides the page field too, unless the
+  config names it in `hidden_fields` or `field_order`. `PUT /api/tables/{id}/records/{rid}/page` (Editor) with `{text}` (markdown, `null`
   clears) saves a record's page like any cell edit; when the table has no page field it adds
   "Page" as part of the same save (`created: true` in the answer), the one change to the schema
   an editor can cause, and fails with 409 when the table already has 500 fields.
@@ -584,7 +588,9 @@ All batches are **atomic**: if any record fails, nothing is written.
 `GET /api/v1/meta/bases` → `{"bases": [{"id", "name", "permissionLevel"}]}`.
 `permissionLevel` is `read`, `comment`, `edit` or `create` (Creators and
 Owners), capped at `read` for read-only tokens. Projects a token cannot reach are
-not listed. There is no pagination (no `offset`).
+not listed. There is no pagination (no `offset`). A workspace's top-level project
+(created with the workspace, named after it, and added to workspaces that had no
+project when the app was upgraded) is listed like any other, even while it is empty.
 
 `GET /api/v1/meta/bases/{baseId}/tables` →
 
