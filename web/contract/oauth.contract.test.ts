@@ -407,6 +407,19 @@ describe("OAuth with the official MCP TypeScript SDK", () => {
       await live.client.close();
     });
 
+    it("refuses Full control at the approval too when the app is limited to some folders, and the request still waits", async () => {
+      const p = new MemoryProvider(`limited consent ${rand()}`);
+      const first = connectWith(p);
+      await expect(first.connect()).rejects.toBeInstanceOf(UnauthorizedError);
+      const res = await fetch(p.authorizationUrl!, { redirect: "manual", headers: { cookie: browserCookie() } });
+      const id = new URL(res.headers.get("location")!, seeded.baseUrl).searchParams.get("request")!;
+      const refused = await failure(admin.run(() => api.oauth.decide(id, { decision: "approve", access: "manage", base_ids: [baseId] })));
+      expectError(refused, 400, "bad_request");
+      expect(refused.message).toContain("limited to some projects");
+      const outcome = parse("ConsentOutcome", await admin.run(() => api.oauth.decide(id, { decision: "approve", access: "write", base_ids: [baseId] })));
+      expect(new URL(outcome.redirect_to).searchParams.get("code")).toBeTruthy();
+    });
+
     it("gives more than the app asked for only when the person chooses it, and reports what was granted", async () => {
       const p = new MemoryProvider(`SDK beyond ${rand()}`);
       const first = connectWith(p);

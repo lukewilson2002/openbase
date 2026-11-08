@@ -157,6 +157,11 @@ async fn decide(
                         None => None,
                         Some(ids) => Some(validate_base_ids(tx, &actor.user_id, ids)?),
                     };
+                    // The same rule as Change access (AGT-2), so no state is reachable by one
+                    // path only: an app limited to some projects never gets Full control.
+                    if chosen == Access::Manage && base_ids.is_some() {
+                        return Err(limited_app_cannot_manage());
+                    }
                     let token_scope = chosen.token_scope(base_ids);
                     let code = store::create_code(
                         tx,
@@ -199,6 +204,15 @@ async fn decide(
     Ok(Json(ConsentOutcome {
         redirect_to: outcome,
     }))
+}
+
+/// Full control reaches beyond single projects (workspaces, members), so an app limited to some
+/// projects cannot hold it, whether at consent or through Change access.
+fn limited_app_cannot_manage() -> AppError {
+    AppError::bad_request(
+        "an app limited to some projects cannot have Full control, which reaches beyond single \
+         projects; connect it without a project limit to give it Full control",
+    )
 }
 
 async fn list_grants(
@@ -280,10 +294,7 @@ async fn change_grant_access(
                 return Err(AppError::not_found("connected app"));
             };
             if to == Access::Manage && current.bases.is_some() {
-                return Err(AppError::bad_request(
-                    "this app is limited to some projects, and Full control reaches beyond single \
-                     projects; connect it again without a project limit to give it Full control",
-                ));
+                return Err(limited_app_cannot_manage());
             }
             let Some((before, after)) = store::set_grant_access(tx, &id, &actor.user_id, to)?
             else {

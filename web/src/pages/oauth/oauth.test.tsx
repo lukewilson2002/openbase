@@ -122,6 +122,22 @@ describe("OAuth consent page", () => {
     expect(api.callsTo("POST /api/oauth/requests/oar1/decision")[0]?.body).toEqual({ decision: "approve", access: "read", base_ids: ["app1"] });
   });
 
+  it("steps Full control down to read and write when the app is limited to some projects, and does not offer it there", async () => {
+    const user = userEvent.setup();
+    consent(
+      { requested_access: "manage", default_access: "manage" },
+      { "GET /api/workspaces": [makeWorkspace("owner", [])] },
+    );
+    renderApp({ route: ROUTE });
+    expect(await screen.findByLabelText(/Full control/)).toBeChecked();
+    await user.selectOptions(screen.getByLabelText("Projects"), "some");
+    expect(screen.getByLabelText(/Full control/)).toBeDisabled();
+    expect(screen.getByLabelText(/Read & edit/)).toBeChecked();
+    expect(screen.getByText(/cannot have Full control/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Projects"), "all");
+    expect(screen.getByLabelText(/Full control/)).toBeEnabled();
+  });
+
   describe("warnings", () => {
     it("says it cannot verify an unknown app", async () => {
       consent();

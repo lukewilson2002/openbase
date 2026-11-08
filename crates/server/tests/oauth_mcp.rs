@@ -406,17 +406,29 @@ async fn a_grant_limited_to_one_base_sees_only_that_base() {
     )
     .await;
     assert!(!own.is_error, "{}", own.text);
-    // Workspace-level actions are not available to a base-limited grant, even with manage.
-    let manage = w
-        .connect("manage", Some(vec![w.base.clone()]))
-        .await
-        .bearer();
-    let res = tool(&w.app, &manage, "create_workspace", json!({"name": "Nope"})).await;
-    assert!(res.is_error, "{}", res.text);
-    assert_eq!(
-        w.count("SELECT count(*) FROM workspaces WHERE name = 'Nope'"),
-        0
-    );
+    // Full control reaches beyond single projects (workspaces, members), so the approval refuses
+    // it for a grant limited to some projects and issues nothing.
+    let codes = w.count("SELECT count(*) FROM oauth_codes");
+    let client_id = register_client(&w.app, "Limited Manager", &[LOOPBACK_REDIRECT]).await;
+    let (_, challenge) = pkce();
+    let res = authorize_with_as(
+        &w.app,
+        &w.user,
+        &client_id,
+        LOOPBACK_REDIRECT,
+        &challenge,
+        &[("scope", scope_for("manage"))],
+    )
+    .await;
+    let refused = decide(
+        &w.app,
+        &w.user,
+        &request_id(&res),
+        json!({"decision": "approve", "access": "manage", "base_ids": [w.base]}),
+    )
+    .await;
+    refused.assert_status(400);
+    assert_eq!(w.count("SELECT count(*) FROM oauth_codes"), codes);
 }
 
 #[tokio::test]

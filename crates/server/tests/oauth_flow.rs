@@ -1103,6 +1103,23 @@ async fn the_user_picks_the_access_and_the_projects() {
         .await;
         res.assert_status(400);
     }
+    // Full control is for apps with no project limit, the same rule Change access applies.
+    let res = decide(
+        &fx.app,
+        &fx.user,
+        &id,
+        json!({"decision": "approve", "access": "manage", "base_ids": [base]}),
+    )
+    .await;
+    res.assert_status(400);
+    assert!(
+        res.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("limited to some projects"),
+        "{}",
+        res.body
+    );
     // Rejected approvals leave the request waiting and issue nothing.
     assert_eq!(fx.count("SELECT count(*) FROM oauth_codes"), 0);
     fx.app

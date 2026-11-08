@@ -132,7 +132,15 @@ function Consent({ request }: { request: ConsentRequest }) {
               key={level}
               className="flex cursor-pointer items-start gap-3 rounded-md border border-line-strong p-3 has-[:checked]:border-primary has-[:checked]:bg-subtle"
             >
-              <input type="radio" name="access" value={level} checked={access === level} onChange={() => setAccess(level)} className="mt-1" />
+              <input
+                type="radio"
+                name="access"
+                value={level}
+                checked={access === level}
+                disabled={level === "manage" && limitBases}
+                onChange={() => setAccess(level)}
+                className="mt-1"
+              />
               <span className="flex flex-col gap-0.5">
                 <span className="text-[0.875rem] font-medium">{ACCESS_LABEL[level]}</span>
                 <span className="text-xs text-muted">{ACCESS_HINT[level]}</span>
@@ -155,6 +163,8 @@ function Consent({ request }: { request: ConsentRequest }) {
           onChange={(e) => {
             setLimitBases(e.target.value === "some");
             if (e.target.value !== "some") setBaseIds([]);
+            // The server refuses Full control for an app limited to some projects, so step down rather than fail on Approve.
+            else if (access === "manage") setAccess("write");
           }}
         >
           <option value="all">All projects I can access</option>
@@ -180,7 +190,7 @@ function Consent({ request }: { request: ConsentRequest }) {
                 )),
               )
             )}
-            {access === "manage" && <p className="text-xs text-muted">An app limited to some projects cannot manage workspaces, members or the admin pages.</p>}
+            <p className="text-xs text-muted">An app limited to some projects cannot have Full control, which reaches beyond single projects.</p>
           </div>
         )}
       </fieldset>
