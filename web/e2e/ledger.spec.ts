@@ -478,6 +478,41 @@ const SHOTS: Shot[] = [
     },
   },
 
+  // 19 · Comments and history panels (REC-7): a 360 px panel beside the page on a desktop, a full-screen sheet on a phone.
+  {
+    row: 19,
+    slug: "comments-panel",
+    name: "comments panel",
+    open: async ({ page, seed, phone }) => {
+      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
+      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      await page.getByRole("button", { name: /^Comments \(2\)$/ }).click();
+      const panel = phone ? page.getByRole("dialog", { name: "Comments" }) : page.getByRole("complementary", { name: "Comments" });
+      await expect(panel.getByText("Sent the revised quote.")).toBeVisible();
+      // The box to write in has loaded (its editor is a chunk of its own).
+      await expect(panel.getByRole("textbox", { name: "Write a comment" })).toBeVisible();
+      await rest(page);
+    },
+  },
+  {
+    row: 19,
+    slug: "history-panel",
+    name: "history panel",
+    open: async ({ page, seed, phone }) => {
+      await page.goto(`/base/${seed.pageRecord.baseId}/${seed.pageRecord.tableId}/${seed.pageRecord.viewId}/r/${seed.pageRecord.recordId}`);
+      await expect(page.getByRole("heading", { level: 1, name: seed.pageRecord.title })).toBeVisible();
+      if (phone) {
+        await page.getByRole("button", { name: "More" }).click();
+        await page.getByRole("button", { name: "History" }).click();
+      } else {
+        await page.getByRole("button", { name: "History" }).click();
+      }
+      const panel = phone ? page.getByRole("dialog", { name: "History" }) : page.getByRole("complementary", { name: "History" });
+      await expect(panel.getByRole("list", { name: "Revision history" })).toBeVisible();
+      await rest(page);
+    },
+  },
+
   // 20 · Page embeds (REC-6): Linked records and View as tables in the page.
   {
     row: 20,

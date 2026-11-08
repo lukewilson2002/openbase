@@ -91,6 +91,8 @@ export default defineConfig({
     { name: "linked-records", testMatch: /linkedRecords\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The record's Page: the block menu, Markdown shortcuts, the selection bubble, Ctrl+K, autosave, the phone's formatting bar. Signs up its own user.
     { name: "record-page", testMatch: /page\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // Comments and History (the 360 px panel a desktop remembers, the phone's full-screen sheets) and new records that are taken back when left empty. Signs up its own user.
+    { name: "record-panels", testMatch: /recordPanels\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The page's embeds: Linked records and View as live tables, + Link, Open with a draft filter, and the view a reader cannot open. Signs up its own users.
     { name: "page-embeds", testMatch: /embeds\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Every route of the signed-in app opens inside the new shell: the sidebar on a desktop, the bottom bar on a phone.
@@ -100,6 +102,6 @@ export default defineConfig({
     { name: "ledger", testMatch: /ledger\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "page-embeds", "shell-routes"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "record-panels", "page-embeds", "shell-routes"] },
   ],
 });

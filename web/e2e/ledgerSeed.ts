@@ -425,6 +425,9 @@ export async function seedLedger(browser: Browser, testInfo: TestInfo): Promise<
     "```openbase\n" + JSON.stringify({ embed: "view", view: savedViews["Bills / Unpaid bills"], limit: 10 }) + "\n```",
   ].join("\n\n");
   await call(r, "patch", `/api/tables/${t["Accounts"]}/records`, { records: [{ id: fernwood, values: { [billsLink.id]: billRows.slice(0, 2).map((b) => b.id), [pageField]: pageText } }] });
+  // A thread for the comments panel (REC-7); the changes above are its history.
+  await call(r, "post", `/api/records/${fernwood}/comments`, { body: "Sent the revised quote. They want the annual price before the 12th." });
+  await call(r, "post", `/api/records/${fernwood}/comments`, { body: "I will move the hosting plan to annual **today**." });
 
   // A person limited to the Operations folder.
   const invite = await call<{ url: string }>(r, "post", `/api/bases/${operations.id}/invites`, { role: "editor", email: null });
