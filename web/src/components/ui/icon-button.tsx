@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { Slot } from "radix-ui";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "./tooltip";
 
@@ -10,14 +11,17 @@ export interface IconButtonProps extends Omit<ComponentProps<"button">, "aria-la
   variant?: "ghost" | "secondary";
   /** Skip the tooltip (e.g. inside a menu trigger that has its own). */
   noTooltip?: boolean;
-  /** The icon. */
+  /** Draws the child element (a router `Link`) instead of a button, for an icon that goes to a page. */
+  asChild?: boolean;
+  /** The icon, or with `asChild` the link around it. */
   children: ReactNode;
 }
 
-export function IconButton({ label, size = "md", variant = "ghost", noTooltip, className, children, type = "button", ...props }: IconButtonProps) {
+export function IconButton({ label, size = "md", variant = "ghost", noTooltip, asChild, className, children, type = "button", ...props }: IconButtonProps) {
+  const Tag = asChild ? Slot.Root : "button";
   const button = (
-    <button
-      type={type}
+    <Tag
+      {...(asChild ? {} : { type })}
       className={cn(
         // Transparent until hover: the icon alone marks the place, the fill only answers the pointer.
         "inline-flex shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-fg",
@@ -32,7 +36,7 @@ export function IconButton({ label, size = "md", variant = "ghost", noTooltip, c
       aria-label={label}
     >
       {children}
-    </button>
+    </Tag>
   );
   return noTooltip ? button : <Tooltip content={label}>{button}</Tooltip>;
 }
