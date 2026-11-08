@@ -48,6 +48,18 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   grid header and on the record page (and in the collection's settings); a property whose type cannot be
   the title is dimmed with the reason. "Use as page" is on rich text properties. Deleting or retyping the
   page property leaves the collection without a page and refuses nothing, as before.
+- **The link picker and the linked-record preview in the new look.** Picking records to link is a
+  list of the collection's records with their description and labels, the highlighted row in the
+  accent's soft fill; on a phone it is a bottom sheet with the search at the top, which opens with the
+  keyboard down so the list can be read first, and Done at the sheet's head. Hovering a linked record
+  (on the record page, in a card or a chip, or on the grid) shows a small card with its title, its
+  collection's colour and every property it has a value for, and **Open page**, a real link to the
+  record's page (a modified click opens it in a new tab); on a phone, holding a finger on a linked
+  record shows the same in a sheet with Open page at its foot. The property dialog's link target says
+  "Collections in other folders can't be linked" and shows each collection by its colour, never its
+  icon (the same in the automation editor's collection pickers); the formula editor's `{Property}`
+  suggestions and live check, and the choice editor's pastel chips and "next palette color" for a new
+  choice, are as they were, restyled. Inputs and selects are 44 px tall on a phone.
 - **The grid, List and Board in the new look.** The grid's header row is 12 px and muted on the
   page's grey, the title column is bold, choices are drawn as chips in their own colour and linked
   records as chips with the colour of their collection, and each group ends in "+ New client" (the
