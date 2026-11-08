@@ -39,6 +39,7 @@ import type {
   FormulaCheckResult,
   GrantInfo,
   HistoryEntry,
+  HomeResponse,
   ImportResult,
   InstanceStats,
   InviteInfo,
@@ -103,6 +104,7 @@ export interface TypeMap {
   FormulaCheckResult: FormulaCheckResult;
   GrantInfo: GrantInfo;
   HistoryEntry: HistoryEntry;
+  HomeResponse: HomeResponse;
   ImportResult: ImportResult;
   InstanceStats: InstanceStats;
   InviteInfo: InviteInfo;

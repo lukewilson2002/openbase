@@ -32,6 +32,7 @@ import type {
   EmailTestResult,
   FileInboxItem,
   GrantInfo,
+  HomeResponse,
   DuplicateBase,
   InboxItem,
   InstanceStats,
@@ -234,6 +235,8 @@ export const api = {
     reorderBases: (id: string, ids: string[]) => http.post<OkResponse>(`/api/workspaces/${enc(id)}/bases/reorder`, { ids }),
     /** Owners only: which project's collections show directly under the workspace. Only the pointer moves. */
     setTopLevel: (id: string, baseId: string) => http.post<WorkspaceSummary>(`/api/workspaces/${enc(id)}/top-level`, { base_id: baseId }),
+    /** Home in one read: what is due soon, what changed lately and the caller's inbox drafts. */
+    home: (id: string) => http.get<HomeResponse>(`/api/workspaces/${enc(id)}/home`),
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),

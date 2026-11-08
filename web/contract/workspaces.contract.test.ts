@@ -440,3 +440,68 @@ describe("collection settings", () => {
     expect(parse("OkResponse", await w.owner.run(() => api.bases.remove(w.baseId)))).toEqual({ ok: true });
   });
 });
+
+describe("home", () => {
+  let w: World;
+  let table: Awaited<ReturnType<typeof tableOf>>;
+  let doneId = "";
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+  it("lists what is due soon, oldest first, without what is done", async () => {
+    w = await createWorld("Home");
+    table = parse("Table", await w.owner.run(() => api.tables.create(w.baseId, "Tasks")));
+    const due = await w.owner.run(() => schemaApi.createField(table.id, { name: "Due", type: "date", options: { include_time: false } } as never));
+    const done = await w.owner.run(() => schemaApi.createField(table.id, { name: "Done", type: "checkbox", options: {} } as never));
+    doneId = done.id;
+    await w.owner.run(() => api.tables.update(table.id, { home_date_field_id: due.id, done_field_id: done.id }));
+    const add = (title: string, offset: number | null, finished = false) =>
+      w.owner.run(() =>
+        recordsApi.create(table.id, {
+          records: [{ values: { [table.primary_field_id]: title, ...(offset === null ? {} : { [due.id]: day(offset) }), ...(finished ? { [done.id]: true } : {}) } }],
+        }),
+      );
+    await add("Later", 3);
+    await add("Overdue", -2);
+    await add("Finished", 0, true);
+    await add("Far away", 20);
+    await add("Undated", null);
+
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(w.owner.status).toBe(200);
+    expect(home.due.map((d) => d.title)).toEqual(["Overdue", "Later"]);
+    expect(home.due[0]).toMatchObject({ table_id: table.id, base_id: w.baseId, date: day(-2), has_time: false, has_done: true, done_field_id: doneId, overdue: true, can_edit: true });
+    expect(home.due[0]!.time ?? null).toBeNull();
+    expect(home.due[1]!.overdue).toBe(false);
+    expect(home.truncated).toBe(false);
+    expect(home.timezone).toBe("UTC");
+    expect(home.today).toBe(day(0));
+  });
+
+  it("lists the latest changes once each, with who made them", async () => {
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.recent.length).toBe(5);
+    expect(home.recent[0]).toMatchObject({ title: "Undated", kind: "create", table_name: "Tasks" });
+    expect(home.recent[0]!.author?.id).toBe(w.owner.id);
+    expect(new Set(home.recent.map((r) => r.record_id)).size).toBe(5);
+  });
+
+  it("carries the caller's inbox drafts, whatever the workspace", async () => {
+    // The seeded administrator is shared by every contract file, so look for the draft rather than count.
+    const draft = await w.owner.run(() => api.inbox.create({ title: `Stamps ${rand()}`, body: "" }));
+    const home = parse("HomeResponse", await w.owner.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.drafts.map((d) => d.id)).toContain(draft.id);
+    await w.owner.run(() => api.inbox.remove(draft.id));
+  });
+
+  it("answers 404 to people outside the workspace and a viewer cannot tick Done", async () => {
+    const outsider = await newUser(w.owner, "home-outsider");
+    expectError(await failure(outsider.run(() => api.workspaces.home(w.workspaceId))), 404, "not_found");
+    expectError(await failure(w.owner.run(() => api.workspaces.home("wspDoesNotExist"))), 404, "not_found");
+    const viewer = await newUser(w.owner, "home-viewer");
+    await joinBase(w.owner, w.baseId, viewer, "viewer");
+    const home = parse("HomeResponse", await viewer.run(() => api.workspaces.home(w.workspaceId)));
+    expect(home.due.map((d) => d.title)).toEqual(["Overdue", "Later"]);
+    expect(home.due.every((d) => !d.can_edit)).toBe(true);
+    expect(home.drafts).toEqual([]);
+  });
+});
