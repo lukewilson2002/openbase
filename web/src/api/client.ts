@@ -136,6 +136,8 @@ export interface RequestOptions {
   skipAuthRedirect?: boolean;
   /** Extra request headers, e.g. `Authorization: Bearer <token>` for API-token callers. */
   headers?: Record<string, string>;
+  /** Lets the request finish after the page is gone (a tab closing); the answer is never read. */
+  keepalive?: boolean;
 }
 
 export function withQuery(path: string, query?: Query): string {
@@ -195,6 +197,7 @@ async function send(path: string, opts: RequestOptions): Promise<Response> {
       body,
       credentials: "same-origin",
       signal: opts.signal,
+      ...(opts.keepalive ? { keepalive: true } : {}),
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;

@@ -33,7 +33,7 @@ import { atLeast } from "@/lib/roles";
 import { copyToClipboard } from "@/lib/format";
 import { SheetModeContext } from "@/shell/menuItems";
 import { PhoneBackLink, PhoneHeader, type PhoneAction } from "@/shell/PhoneHeader";
-import { discardNewRecord, isNewRecord } from "./newRecords";
+import { discardNewRecord, discardNewRecordOnExit, isNewRecord } from "./newRecords";
 import { commentsLabel, RecordBar, RecordMoreItems, SaveStatus, type RecordActions } from "./RecordBar";
 import { RecordHead } from "./RecordHead";
 import { PageSection } from "./PageSection";
@@ -131,6 +131,17 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
       }, 0);
     };
   }, [recordId, qc, table]);
+
+  // Closing the tab takes it back at once too. A page that goes into the browser's back-forward cache comes
+  // back as it was, so only a page that is really going away does.
+  useEffect(() => {
+    if (!justCreated) return;
+    const onHide = (e: PageTransitionEvent) => {
+      if (!e.persisted) discardNewRecordOnExit(qc, table, recordId, save.unsent.current.anyWaiting());
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [justCreated, qc, table, recordId, save.unsent]);
 
   // Alt+Up and Alt+Down move through the records of the view the page was opened from.
   useEffect(() => {
@@ -275,7 +286,7 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
     </div>
   ) : (
     <>
-      <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} autoFocus={justCreated && canEdit} onEnter={focusPage} />
+      <RecordHead table={table} record={record.data} primary={primary} mode={titleMode} title={title} readOnly={!canEdit} format={format} save={save} autoFocus={justCreated && canEdit} onEnter={focusPage} onEscapeWhenEmpty={justCreated ? onClose : undefined} />
       <LinkedRecordsProvider value={linkedHost}>
         <RecordProperties schema={schema} table={table} record={record.data} view={layoutView} role={role} env={env} emails={emails} save={save} layout={layout} titleMode={titleMode} justCreated={justCreated && canEdit} addPropertyRequest={addPropertyRequest} />
         <PageSection schema={schema} table={table} record={record.data} role={role} save={save} pageSave={pageSave} collaborators={collaborators} upload={uploadToProject} emails={emails} onAddProperty={addProperty} />

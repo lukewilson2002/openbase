@@ -93,6 +93,13 @@ export const recordsApi = {
    */
   discard: (tableId: string, recordId: string) => countsChanged(http.post<{ discarded: boolean }>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {})),
   /**
+   * `discard` for a page that is closing: the request outlives the tab, and nothing is waited for (the answer
+   * is never read, so the sidebar's counts catch up on the next load).
+   */
+  discardOnExit: (tableId: string, recordId: string) => {
+    void http.post(`/api/tables/${enc(tableId)}/records/${enc(recordId)}/discard`, {}, { keepalive: true, skipAuthRedirect: true }).catch(() => {});
+  },
+  /**
    * Save a record's page (markdown; null clears it) through the table's page property. A table
    * without one gets "Page" as part of this save, which `created` reports.
    */

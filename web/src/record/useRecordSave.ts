@@ -53,6 +53,10 @@ export class Unsent {
   isWaiting(key: string) {
     return this.typing.has(key) || this.sent.has(key);
   }
+  /** Any text of this record has not reached the server. */
+  anyWaiting() {
+    return this.typing.size > 0 || this.sent.size > 0;
+  }
 }
 
 export interface RecordSave {

@@ -706,14 +706,27 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   );
 
   /** The group the header's New button adds into: that of the selected row, else the one at the top of what is on screen. */
-  const floatingGroup = useCallback((): number => {
+  const floatingGroupIndex = useCallback((): number => {
     const sel = selectionRef.current;
-    const gi = floatingAddGroup(rowMapRef.current, dataRef.current.groups, sel.cell?.row ?? sel.rows[0] ?? null, visibleRows.current?.[0] ?? null);
-    // Adding into a folded group would hide the new record: unfold it.
-    const key = gi >= 0 ? groupPathKeys(dataRef.current.groups)[gi] : undefined;
-    if (key && collapsedRef.current.has(key)) toggleCollapsed(key);
-    return gi;
-  }, [toggleCollapsed]);
+    return floatingAddGroup(rowMapRef.current, dataRef.current.groups, sel.cell?.row ?? sel.rows[0] ?? null, visibleRows.current?.[0] ?? null);
+  }, []);
+
+  /**
+   * A record added from the header's New button, the phone's + or the empty state opens as its page with its title
+   * focused (COL-8, REC-8); only the add row at the end of the grid adds inline. The page takes the record back if
+   * it is left with nothing entered, so the grid does not sweep it.
+   */
+  const addAndOpen = useCallback(
+    async (target: { group?: number } = {}) => {
+      const values = newRecordValues(table.fields, queryConfig.filter, dataRef.current.groups, target.group ?? -1, me.data?.id ?? null);
+      const created = await createFresh({ values });
+      if (!created) return;
+      expandedRef.current = created.id;
+      rememberNewRecord(created.id, fresh.current.get(created.id)?.values ?? writableValues(table.fields, created.values as Record<string, unknown>));
+      openRecord(created.id);
+    },
+    [table.fields, queryConfig.filter, me.data?.id, createFresh, openRecord],
+  );
 
   const insertRecord = useCallback(
     async (row: number, where: "above" | "below") => {
@@ -1006,8 +1019,8 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // summary bar that look broken.
   const gridHeight = empty ? undefined : Math.max(gridHeaderHeight(config.wrap_headers) + (rowCountForGrid + 1) * rowHeight + 2 + hScrollbar, total === 0 ? 180 : 0);
 
-  // The collection header's New button adds a record the way the end of the grid does.
-  const addFromHeader = canEdit ? () => void addRecord({ group: floatingGroup() }) : undefined;
+  // The collection header's New button adds a record into the group on screen and opens its page.
+  const addFromHeader = canEdit ? () => void addAndOpen({ group: floatingGroupIndex() }) : undefined;
   useRegisterAddRecord(addFromHeader);
 
   return (
@@ -1073,7 +1086,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           )}
           {empty && (
             <div className="border-t border-line">
-              <EmptyRecords table={table} filtered={isFiltered(config, debouncedSearch)} onAdd={canEdit ? () => void addRecord() : undefined} onReset={resetFilters} />
+              <EmptyRecords table={table} filtered={isFiltered(config, debouncedSearch)} onAdd={canEdit ? () => void addAndOpen() : undefined} onReset={resetFilters} />
             </div>
           )}
         </div>

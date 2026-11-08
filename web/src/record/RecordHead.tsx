@@ -45,15 +45,17 @@ export interface RecordHeadProps {
   autoFocus: boolean;
   /** Enter in the title. */
   onEnter(): void;
+  /** Escape in a title with nothing in it, for a record just added: leaving takes the record back (REC-8). */
+  onEscapeWhenEmpty?: () => void;
 }
 
-export function RecordHead({ table, record, primary, mode, title, readOnly, format, save, autoFocus, onEnter }: RecordHeadProps) {
+export function RecordHead({ table, record, primary, mode, title, readOnly, format, save, autoFocus, onEnter, onEscapeWhenEmpty }: RecordHeadProps) {
   const editable = mode === "inline" && !readOnly && !!primary;
   return (
     <div className="mb-6">
       <Tile table={table} record={record} title={title === "Untitled record" ? "" : title} />
       {editable ? (
-        <TitleInput key={record.id} field={primary} record={record} format={format} save={save} autoFocus={autoFocus} onEnter={onEnter} label={title} />
+        <TitleInput key={record.id} field={primary} record={record} format={format} save={save} autoFocus={autoFocus} onEnter={onEnter} onEscapeWhenEmpty={onEscapeWhenEmpty} label={title} />
       ) : (
         <h1 className={cn("break-words", TITLE)}>{title}</h1>
       )}
@@ -61,7 +63,7 @@ export function RecordHead({ table, record, primary, mode, title, readOnly, form
   );
 }
 
-function TitleInput({ field, record, format, save, autoFocus, onEnter, label }: { field: Field; record: TableRecord; format: FormatCtx; save: RecordSave; autoFocus: boolean; onEnter(): void; label: string }) {
+function TitleInput({ field, record, format, save, autoFocus, onEnter, onEscapeWhenEmpty, label }: { field: Field; record: TableRecord; format: FormatCtx; save: RecordSave; autoFocus: boolean; onEnter(): void; onEscapeWhenEmpty?: () => void; label: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const failed = save.failed[field.id];
   const seed = editText(field, failed ? (failed.value as never) : (record.values[field.id] ?? null), format);
@@ -127,6 +129,12 @@ function TitleInput({ field, record, format, save, autoFocus, onEnter, label }: 
               commit();
               onEnter();
             } else if (e.key === "Escape") {
+              // A record just added with no title typed has nothing to give up: Escape leaves, and the page takes it back.
+              if (onEscapeWhenEmpty && text.trim() === "") {
+                e.preventDefault();
+                onEscapeWhenEmpty();
+                return;
+              }
               // Gives up the change; a second Escape leaves the page.
               giveUp.current = typed !== null;
               setTyped(null);

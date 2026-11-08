@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MutationObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroupHeader } from "@/api/types";
+import { forgetNewRecord, isNewRecord } from "@/record/newRecords";
 import { field } from "@/test/fields";
 import { F, draftChanges, openViewOptions, projectSchema, queryHandler, rec, renderView, viewWithConfig } from "../common/viewTestUtils";
 import type { GridAdapterProps, GridSelectionInfo } from "./adapter";
@@ -168,6 +169,8 @@ describe("GridView: empty states (COL-9)", () => {
     expect(await screen.findByText("No records yet")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "New record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    // With no rows there is no add row to type into: the record opens as its page (COL-8).
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/n1"));
   });
 
   it("says the filter is why when it matches nothing, and Reset shows every record again as a draft", async () => {
@@ -358,6 +361,31 @@ describe("GridView: add rows and new rows", () => {
     await user.click(screen.getByRole("button", { name: "Add record" }));
     await waitFor(() => expect(sent()).toHaveLength(3));
     expect(sent()[2]).toEqual({ [F.status.id]: "s1" });
+  });
+
+  it("opens a record added from the header as its page, to be taken back there if it is left empty, and not by the grid", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({ recs: four, groups, routes });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    await user.click(screen.getByRole("button", { name: "Add record" }));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/new1"));
+    expect(JSON.parse(screen.getByTestId("trail").textContent!)).toEqual({ from: "/base/app1/tbl1/viw1", steps: 1 });
+    expect(isNewRecord("new1")).toBe(true);
+    // The grid has let go of it: clicking off does not take it back from under the page.
+    clickOff();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.callsTo("POST /api/tables/tbl1/records/new1/discard")).toHaveLength(0);
+    forgetNewRecord("new1");
+  });
+
+  it("keeps the add row at the end of a group inline: no page opens", async () => {
+    const { api } = setup({ recs: four, groups, routes });
+    await waitFor(() => expect(grid().rowCount).toBe(8));
+    act(() => grid().onAddRow(3));
+    await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
+    expect(isNewRecord("new1")).toBe(false);
   });
 
   it("closes each group with a row that adds into that group", async () => {

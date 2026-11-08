@@ -5,10 +5,10 @@
  * until the page has been left. A record that was reached some other way is never in here, so it is never taken back.
  */
 import type { QueryClient } from "@tanstack/react-query";
-import { recordsApi } from "@/api/records";
-import type { Table } from "@/api/types";
+import { recordKeys, recordsApi } from "@/api/records";
+import type { Table, TableRecord } from "@/api/types";
 import { writableValues } from "@/lib/cells/wire";
-import { discardIfUntouched } from "@/views/grid/freshRows";
+import { discardIfUntouched, isUntouched } from "@/views/grid/freshRows";
 
 const made = new Map<string, Record<string, unknown>>();
 
@@ -51,4 +51,28 @@ export async function discardNewRecord(qc: QueryClient, table: Table, recordId: 
   );
   if (gone) void qc.invalidateQueries({ queryKey: ["records", table.id] });
   return gone;
+}
+
+/** Whether an editable thing on the page holds text that has not been committed (a title or a comment being typed). */
+function typingSomething(): boolean {
+  const el = document.activeElement;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value.trim() !== "";
+  return el instanceof HTMLElement && el.isContentEditable && (el.textContent ?? "").trim() !== "";
+}
+
+/**
+ * The page is closing (a tab, a window): takes the record back at once if it was just added and is still empty.
+ * Nothing can be waited for here, so it goes by what the page holds right now: no save on its way, no text typed
+ * and not yet committed, and the record as loaded is what it was made as. The server checks again (it refuses a
+ * record that was touched), so a wrong guess leaves a record, never takes one. Answers whether it asked.
+ */
+export function discardNewRecordOnExit(qc: QueryClient, table: Table, recordId: string, unsent: boolean): boolean {
+  const values = made.get(recordId);
+  if (!values || unsent || typingSomething()) return false;
+  if (qc.isMutating({ mutationKey: ["record-save", table.id] }) > 0) return false;
+  const loaded = qc.getQueryData<TableRecord>(recordKeys.record(table.id, recordId));
+  if (!loaded || !isUntouched(table.fields, { values: writableValues(table.fields, values), op: null }, loaded)) return false;
+  made.delete(recordId);
+  recordsApi.discardOnExit(table.id, recordId);
+  return true;
 }
