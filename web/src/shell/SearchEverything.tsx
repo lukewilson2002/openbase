@@ -358,12 +358,14 @@ function SearchPalette({ open, onOpenChange, here, inputRef }: { open: boolean; 
   const [scopeId, setScopeId] = useState<ScopeId>("all");
   // `retryOnMount` off like the shell's own reads of the list: a failed list that the screen shows an error for must not start again under it.
   const workspaces = useQuery({ queryKey: keys.workspaces, queryFn: api.workspaces.list, retryOnMount: false, enabled: open });
-  const choices = useScopeChoices(here, workspaces.data);
+  // The list is read only while the palette is open: this component sits in every screen, and a closed palette has no use for it.
+  const list = open ? workspaces.data : undefined;
+  const choices = useScopeChoices(here, list);
   const choice = choices.find((c) => c.id === scopeId) ?? EVERYWHERE;
   const typed = query.trim();
   const { res, settling } = useSearch(query, choice.scope, open);
-  const places = useMemo(() => placesOf(workspaces.data), [workspaces.data]);
-  const actions = usePaletteActions(here, workspaces.data, choice.id);
+  const places = useMemo(() => placesOf(list), [list]);
+  const actions = usePaletteActions(here, list, choice.id);
 
   // A fresh palette each time: nothing typed, looking everywhere.
   useEffect(() => {
