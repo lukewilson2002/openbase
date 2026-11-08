@@ -45,8 +45,6 @@ export interface ViewSetup extends ViewProps {
   editorEnv: EditorEnv;
   search: string;
   setSearch(s: string): void;
-  searchOpen: boolean;
-  setSearchOpen(open: boolean): void;
   /** Search text after the typing pause: use this in queries. */
   debouncedSearch: string;
   writes: RecordWrites;
@@ -92,7 +90,6 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const configKey = useMemo(() => queryRelevantKey(cfg.queryConfig), [cfg.queryConfig]);
 
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const debouncedSearch = useDebounced(search.trim(), 250);
 
   const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
@@ -176,8 +173,6 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     editorEnv,
     search,
     setSearch,
-    searchOpen,
-    setSearchOpen,
     debouncedSearch,
     writes,
     actions,

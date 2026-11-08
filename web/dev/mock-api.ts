@@ -1162,7 +1162,7 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
   if (p === "/api/auth/me") {
     if (m === "PATCH" && typeof body.intro_seen === "boolean") introSeen = body.intro_seen;
     if (m === "PATCH" && typeof body.accent === "string") accent = body.accent || null;
-    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", totp_enabled: false, intro_seen: introSeen, accent }), true;
+    return send(res, 200, { id: ME, email: "ada@example.com", name: "Ada Lovelace", is_admin: true, timezone: "America/Chicago", week_start: 0, totp_enabled: false, intro_seen: introSeen, accent }), true;
   }
   // GET /api/__mock/intro/unseen brings the first-run intro back on the next page load.
   if ((g = /^\/api\/__mock\/intro\/(seen|unseen)$/.exec(p))) {

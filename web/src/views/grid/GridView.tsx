@@ -6,7 +6,8 @@
  *   useRecordOps   optimistic edits, create/delete/move, undo/redo
  *   cellModels     O(1) cell lookup for the canvas
  *   GlideGrid      the canvas (behind the GridAdapter interface)
- *   ViewBar        toolbar (hide/filter/group/sort/colour/row height/search)
+ *   ViewFilterBar  the filter bar: chips, suggestions and the view search (COL-3)
+ *   ViewBar        toolbar (hide/group/sort/colour/row height)
  *   ExpandedRecord modal reached by the row's expand icon, Shift+Space or `?record=recXXX`
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,6 +31,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewBar } from "@/components/viewbar/ViewBar";
+import { ViewFilterBar } from "@/components/viewbar/ViewFilterBar";
 import { itemsLabel } from "@/views/common/cardFields";
 import { SelectionBar } from "@/views/common/SelectionBar";
 import { usePersistedSet } from "@/views/common/usePersistedSet";
@@ -113,13 +115,11 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
 
   // ---- search ----------------------------------------------------------------------------------
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const debouncedSearch = useDebounced(search.trim(), 250);
   const searchRef = useRef(search);
   searchRef.current = search;
   const debouncedRef = useRef(debouncedSearch);
   debouncedRef.current = debouncedSearch;
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ---- data ------------------------------------------------------------------------------------
   const configKey = useMemo(() => queryRelevantKey(queryConfig), [queryConfig]);
@@ -916,19 +916,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [onGridKey],
   );
 
-  useEffect(() => {
-    // Ctrl/Cmd+F searches the view instead of the browser page.
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        setSearchOpen(true);
-        window.setTimeout(() => searchInputRef.current?.select(), 0);
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
-
   // Files pasted while a cell is selected become attachments.
   const wrapperRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -1079,6 +1066,18 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   return (
     <EditorEnvProvider value={editorEnv}>
       <div ref={wrapperRef} className="flex h-full min-h-[24rem] flex-col" onKeyDown={onWrapperKeyDown}>
+        <ViewFilterBar
+          schema={schema}
+          table={table}
+          config={config}
+          update={cfg.update}
+          collaborators={people}
+          currentUserId={me.data?.id ?? null}
+          search={search}
+          onSearchChange={setSearch}
+          timeZone={timeZone}
+        />
+        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={debouncedSearch} timeZone={timeZone} />
         <ViewBar
           schema={schema}
           table={table}
@@ -1088,16 +1087,10 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
           update={cfg.update}
           collaborators={people}
           currentUserId={me.data?.id ?? null}
-          search={search}
-          onSearchChange={setSearch}
-          searchOpen={searchOpen}
-          onSearchOpenChange={setSearchOpen}
-          searchInputRef={searchInputRef}
           onAddField={canManageFields ? () => setFieldDialog({ mode: "create" }) : undefined}
           timeZone={timeZone}
           onAdd={addFromToolbar}
         />
-        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={debouncedSearch} timeZone={timeZone} />
         <div className={viewHugAreaClass}>
         <div ref={cardRef} className={viewHugCardClass} style={{ height: gridHeight }}>
           {data.error && !data.loading && total === 0 ? (

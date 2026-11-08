@@ -1,9 +1,10 @@
 /**
- * The view toolbar, one row: Filter, Sort, Group, Hide fields, Color
+ * The view toolbar, one row: Sort, Group, Hide fields, Color
  * and Row height (each tinted and naming what it does once in use, "Sorted by Who"), the view type's
- * own settings, and More; search at the end. Tools that do not fit move into More from the right end
+ * own settings, and More. Tools that do not fit move into More from the right end
  * first; Add field and Download CSV always live there. On a phone the tools fold into one menu behind
  * a sliders button. Add floats at the screen's bottom right corner, on a phone and on a desktop alike.
+ * Filtering and searching are the filter bar's (ViewFilterBar). View options (COL-6) replaces this toolbar.
  *
  * Every change is a pure mutation of the view config (see ./config.ts) applied through `update`,
  * which keeps it as a draft for this person on this device (COL-5): everyone can change everything
@@ -12,12 +13,12 @@
  *
  * Sharing a view lives in the base's Share dialog ("Share a view") and in each view's menu.
  */
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Download, EyeOff, Filter as FilterIcon, Group, GripVertical, ListFilter, PaintBucket, Plus, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, Download, EyeOff, Group, GripVertical, ListFilter, PaintBucket, Plus, Rows3, SlidersHorizontal, X } from "lucide-react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type Modifier } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { BaseSchema, Collaborator, Filter, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
+import type { BaseSchema, Collaborator, RowColor, RowHeight, Table, View, ViewConfig } from "@/api/types";
 import { useExportCsv } from "@/components/csv/ExportCsvButton";
 import { Button } from "@/components/ui/button";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -29,7 +30,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
-import { countConditions, isFilterable } from "@/lib/cells/filters";
 import { DESKTOP_QUERY } from "@/shell/AppShell";
 import { visibleToolCount } from "./toolbarFit";
 import { FilterBuilder } from "./FilterBuilder";
@@ -46,7 +46,6 @@ import {
   removeSortLike,
   resolveFieldOrder,
   setAllHidden,
-  setFilter,
   setHiddenField,
   setRowColor,
   setRowHeight,
@@ -82,11 +81,6 @@ export interface ViewBarProps {
   update: (mutate: (c: ViewConfig) => ViewConfig) => void;
   collaborators: readonly Collaborator[];
   currentUserId: string | null;
-  search: string;
-  onSearchChange: (s: string) => void;
-  searchOpen: boolean;
-  onSearchOpenChange: (open: boolean) => void;
-  searchInputRef: RefObject<HTMLInputElement | null>;
   /**
    * Adds a field (the grid, for creators). The grid's header has its own "+" too, but that is drawn
    * on a canvas: this menu item is the way to it by keyboard and screen reader.
@@ -424,15 +418,6 @@ function ColorMenu({ table, config, update, props }: { table: Table; config: Vie
   );
 }
 
-/** The field of the first condition in a filter tree (for "Filtered by Who"). */
-function firstConditionField(filter: Filter | null | undefined): string | null {
-  for (const it of filter?.items ?? []) {
-    const found = "items" in it ? firstConditionField(it) : it.field_id;
-    if (found) return found;
-  }
-  return null;
-}
-
 /** "Who", "Who and 1 more": the fields a tool works on, for its label. */
 function fieldsPhrase(table: Table, firstFieldId: string | null, count: number): string {
   const name = table.fields.find((f) => f.id === firstFieldId)?.name;
@@ -441,20 +426,17 @@ function fieldsPhrase(table: Table, firstFieldId: string | null, count: number):
 }
 
 export function ViewBar(props: ViewBarProps) {
-  const { table, view, config, update, collaborators, schema, search, onSearchChange, searchOpen, onSearchOpenChange, searchInputRef } = props;
+  const { table, view, config, update, collaborators, schema } = props;
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const hiddenCount = config.hidden_fields.filter((id) => id !== table.primary_field_id).length;
-  const filterCount = countConditions(config.filter);
   const sortable = table.fields.filter(isSortable);
   const groupable = table.fields.filter(isGroupable);
   const heights: RowHeight[] = ["short", "medium", "tall", "extra_tall"];
   const rowColorActive = !!config.row_color && (config.row_color.mode === "by_select" || config.row_color.rules.length > 0);
-  const showSearch = searchOpen || search !== "";
   // The default grid is plain: no colours (a view of its own can have them).
   const features = { group: true, color: true, rowHeight: true, csv: true, ...props.features, ...(view.is_default ? { color: false } : {}) };
   const csv = useExportCsv(view, props.timeZone);
 
-  const filterWhat = filterCount > 0 ? fieldsPhrase(table, firstConditionField(config.filter), filterCount) : undefined;
   const sortWhat = config.sorts.length > 0 ? fieldsPhrase(table, config.sorts[0]!.field_id, config.sorts.length) : undefined;
   const groupWhat = config.groups.length > 0 ? fieldsPhrase(table, config.groups[0]!.field_id, config.groups.length) : undefined;
   const rc = config.row_color;
@@ -464,7 +446,6 @@ export function ViewBar(props: ViewBarProps) {
   const hideNoun = props.hideFieldsNoun ?? "Hide fields";
   const hiddenLabel = hiddenCount > 0 ? `${hiddenCount} hidden field${hiddenCount === 1 ? "" : "s"}` : hideNoun;
 
-  const filterPanel = <FilterBuilder value={config.filter ?? null} onChange={(f) => update((c) => setFilter(c, f))} fields={table.fields.filter(isFilterable)} collaborators={collaborators} tables={schema.tables} readOnly={false} />;
   const sortPanel = (
     <SortListEditor
       noun="sort"
@@ -505,7 +486,6 @@ export function ViewBar(props: ViewBarProps) {
   // The tools in their row order. Each shows on the toolbar while there is room and moves into
   // More, from the right end first, when there is not (see toolbarFit.ts).
   const toolDefs: ToolDef[] = [
-    { id: "filter", label: filterWhat ? `Filtered by ${filterWhat}` : "Filter", menuLabel: "Filter", icon: <FilterIcon aria-hidden />, value: filterWhat, active: filterCount > 0, wide: true, panel: filterPanel },
     { id: "sort", label: sortWhat ? `Sorted by ${sortWhat}` : "Sort", menuLabel: "Sort", icon: <ListFilter aria-hidden />, value: sortWhat, active: config.sorts.length > 0, wide: true, panel: sortPanel },
     ...(features.group ? [{ id: "group", label: groupWhat ? `Grouped by ${groupWhat}` : "Group", menuLabel: "Group", icon: <Group aria-hidden />, value: groupWhat, active: config.groups.length > 0, wide: true, panel: groupPanel }] : []),
     { id: "hide", label: hiddenLabel, menuLabel: hideNoun, icon: <EyeOff aria-hidden />, value: hiddenCount > 0 ? `${hiddenCount} hidden` : undefined, active: hiddenCount > 0, panel: <HideFields table={table} config={config} update={update} /> },
@@ -524,42 +504,13 @@ export function ViewBar(props: ViewBarProps) {
     const groups = [overflow.map(toolEntry), toggles, actions].filter((g) => g.length > 0);
     return groups.flatMap((g, i) => (i === 0 ? g : [{ kind: "separator", id: `sep-${i}` } as const, ...g]));
   };
-  const activeTools = [filterCount > 0, config.sorts.length > 0, features.group && config.groups.length > 0, hiddenCount > 0, features.color && rowColorActive].filter(Boolean).length;
-
-  const searchBox = showSearch ? (
-    <div className="relative min-w-0 max-md:flex-1">
-      <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
-      <Input
-        ref={searchInputRef}
-        type="search"
-        aria-label="Search records"
-        placeholder="Search records"
-        autoFocus
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            onSearchChange("");
-            onSearchOpenChange(false);
-          }
-        }}
-        onBlur={() => {
-          if (!search) onSearchOpenChange(false);
-        }}
-        className="h-9 w-full pl-8 md:w-56"
-      />
-    </div>
-  ) : (
-    <IconButton label="Search records (Ctrl+F)" onClick={() => onSearchOpenChange(true)} className="size-[38px] rounded-[10px] pointer-coarse:size-11">
-      <Search aria-hidden className="size-[1.125rem]" />
-    </IconButton>
-  );
+  const activeTools = [config.sorts.length > 0, features.group && config.groups.length > 0, hiddenCount > 0, features.color && rowColorActive].filter(Boolean).length;
 
   if (!desktop) {
     const tools = moreEntries(toolDefs);
     return (
       <div role="toolbar" aria-label="View toolbar" className="flex flex-wrap items-center gap-1.5 bg-surface px-2.5 py-2">
-        {!showSearch && <div className="flex-1" />}
+        <div className="flex-1" />
         <ToolMenu
           label="View tools"
           align="end"
@@ -575,14 +526,13 @@ export function ViewBar(props: ViewBarProps) {
           trigger={
             <button
               type="button"
-              aria-label={activeTools > 0 ? `Tools: filter, sort and more (${activeTools} on)` : "Tools: filter, sort and more"}
+              aria-label={activeTools > 0 ? `Tools: sort, group and more (${activeTools} on)` : "Tools: sort, group and more"}
               className={cn("inline-flex size-11 shrink-0 items-center justify-center rounded-[10px] hover:bg-hover data-[state=open]:bg-hover", activeTools > 0 ? "text-primary-text" : "text-muted")}
             >
               <SlidersHorizontal aria-hidden className="size-5" />
             </button>
           }
         />
-        {searchBox}
         {props.onAdd && <FloatingAdd onAdd={props.onAdd} />}
       </div>
     );
@@ -594,12 +544,7 @@ export function ViewBar(props: ViewBarProps) {
       moreEntries={moreEntries}
       setting={props.setting}
       extra={props.extra}
-      end={
-        <>
-          {searchBox}
-          {props.onAdd && <FloatingAdd onAdd={props.onAdd} />}
-        </>
-      }
+      end={props.onAdd && <FloatingAdd onAdd={props.onAdd} />}
     />
   );
 }

@@ -349,12 +349,11 @@ describe("KanbanView", () => {
     expect(asked.length).toBeGreaterThan(1);
   });
 
-  it("filters through the shared toolbar's search (sent with the query)", async () => {
+  it("searches through the filter bar's search suggestion (sent with the query)", async () => {
     const user = userEvent.setup();
     const { asked } = setup();
     await screen.findByRole("listitem", { name: "Stack: Todo" });
-    await user.click(screen.getByRole("button", { name: /Search records/ }));
-    await user.type(screen.getByRole("searchbox", { name: "Search records" }), "docs");
+    await user.type(screen.getByRole("combobox", { name: "Filter or search" }), "docs{Enter}");
     await waitFor(() => expect(asked.some((a) => a.search === "docs")).toBe(true));
   });
   describe("person stacks", () => {

@@ -1,13 +1,14 @@
 /**
- * Layout shared by the non-grid views: the toolbar (hide/filter/sort/colour/search, plus
- * view-specific settings), the view body, an optional footer line, and the expanded record
+ * Layout shared by the non-grid views: the filter bar, the draft's changes bar, the toolbar (sort,
+ * group, colour, hide fields, plus view-specific settings), the view body, an optional footer line, and the expanded record
  * opened by `?record=recXXX`.
  */
-import { useMemo, useRef, type ComponentProps, type ReactNode } from "react";
+import { useMemo, type ComponentProps, type ReactNode } from "react";
 import { RecordPanel } from "./RecordPanel";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewBar, type MoreToggle } from "@/components/viewbar/ViewBar";
+import { ViewFilterBar } from "@/components/viewbar/ViewFilterBar";
 import { cn } from "@/lib/cn";
 import { gridRecordLayout } from "@/views/grid/useViewConfig";
 import { useRegisterAddRecord } from "./addRecord";
@@ -65,7 +66,6 @@ export interface ViewFrameProps {
 
 export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide fields", toolbarSetting, toolbarExtra, moreToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
-  const searchInputRef = useRef<HTMLInputElement>(null);
   useRegisterAddRecord(onAdd);
   // Ctrl/Cmd+Z reverts the last drop, edit, add or delete (not while a record is open: its fields have their own).
   useUndoShortcuts(setup.writes.history, setup.canEdit && !setup.openRecordId);
@@ -106,6 +106,18 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
   return (
     <EditorEnvProvider value={setup.editorEnv}>
       <div className="flex h-full min-h-[24rem] flex-col">
+        <ViewFilterBar
+          schema={schema}
+          table={table}
+          config={config}
+          update={cfg.update}
+          collaborators={setup.people}
+          currentUserId={setup.currentUserId}
+          search={setup.search}
+          onSearchChange={setup.setSearch}
+          timeZone={setup.timeZone}
+        />
+        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={setup.debouncedSearch} timeZone={setup.timeZone} />
         <ViewBar
           schema={schema}
           table={table}
@@ -115,11 +127,6 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           update={cfg.update}
           collaborators={setup.people}
           currentUserId={setup.currentUserId}
-          search={setup.search}
-          onSearchChange={setup.setSearch}
-          searchOpen={setup.searchOpen}
-          onSearchOpenChange={setup.setSearchOpen}
-          searchInputRef={searchInputRef}
           timeZone={setup.timeZone}
           features={features}
           hideFieldsNoun={hideFieldsNoun}
@@ -128,7 +135,6 @@ export function ViewFrame({ setup, recordIds, features, hideFieldsNoun = "Hide f
           moreToggles={moreToggles}
           onAdd={onAdd}
         />
-        <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={setup.debouncedSearch} timeZone={setup.timeZone} />
         {body}
       </div>
       {setup.openRecordId && (

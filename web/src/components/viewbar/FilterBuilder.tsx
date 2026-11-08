@@ -30,9 +30,12 @@ export interface FilterBuilderProps {
 
 const DEBOUNCE_MS = 450;
 
-/** Local draft of a filter that reports to the parent immediately or after a pause. */
-function useDraft(value: Filter | null, onChange: (v: Filter | null) => void) {
-  const [draft, setDraft] = useState<Filter | null>(value);
+/**
+ * Local draft of a value (a filter, or one condition of it) that reports to the parent immediately or after
+ * a pause. The filter bar's chip editor keeps its condition the same way.
+ */
+export function useDraft<T>(value: T, onChange: (v: T) => void) {
+  const [draft, setDraft] = useState<T>(value);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(draft);
@@ -59,7 +62,7 @@ function useDraft(value: Filter | null, onChange: (v: Filter | null) => void) {
   useEffect(() => flush, [flush]);
 
   const apply = useCallback(
-    (next: Filter | null, debounce: boolean) => {
+    (next: T, debounce: boolean) => {
       latest.current = next;
       dirty.current = true;
       setDraft(next);
@@ -165,7 +168,8 @@ export function FilterBuilder({ value, onChange, fields, collaborators, tables, 
   );
 }
 
-function ConditionRow({
+/** One condition as property, operator and operand editors in a row: a builder's row, and a chip's editor. */
+export function ConditionRow({
   cond,
   field,
   filterable,

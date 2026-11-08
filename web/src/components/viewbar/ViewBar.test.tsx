@@ -1,4 +1,3 @@
-import { createRef } from "react";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -27,11 +26,6 @@ function renderBar(over: Partial<ViewBarProps> = {}, { phone = false }: { phone?
     update: vi.fn(),
     collaborators: [],
     currentUserId: null,
-    search: "",
-    onSearchChange: vi.fn(),
-    searchOpen: false,
-    onSearchOpenChange: vi.fn(),
-    searchInputRef: createRef<HTMLInputElement>(),
     ...over,
   };
   const { unmount } = renderWithProviders(<ViewBar {...props} />);
@@ -45,15 +39,22 @@ const withConfig = (patch: Partial<ViewConfig>) => {
 };
 
 describe("ViewBar: every change is a draft, for everyone", () => {
-  it.each(["viewer", "commenter", "editor", "creator"])("as %s: filters, sorts, groups, colors and row height are all there to change", async (role) => {
+  it.each(["viewer", "commenter", "editor", "creator"])("as %s: sorts, groups, colors and row height are all there to change", async (role) => {
     const props = renderBar({ role, schema: makeSchema(role) });
-    await userEvent.click(screen.getByRole("button", { name: "Filter" }));
-    // No note about permission or about not being saved: the changes bar under the toolbar says it.
+    await userEvent.click(screen.getByRole("button", { name: "Group" }));
+    // No note about permission or about not being saved: the changes bar under the filter bar says it.
     expect(screen.queryByText(/not saved|permission|apply only to you/i)).not.toBeInTheDocument();
-    const add = screen.getByRole("button", { name: "Add condition" });
+    const add = screen.getByRole("button", { name: /Add (a )?group/i });
     expect(add).toBeEnabled();
     await userEvent.click(add);
     expect(props.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no filter tool and no search: the filter bar has both", () => {
+    renderBar();
+    expect(screen.queryByRole("button", { name: /^Filter/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Search records/ })).not.toBeInTheDocument();
   });
 
   it("lets them sort and group too", async () => {
@@ -95,7 +96,7 @@ describe("ViewBar tools in use", () => {
         hidden_fields: ["fld_notes"],
       }),
     );
-    for (const label of ["Sorted by Name", "Filtered by Notes and 1 more", "Grouped by Name", "1 hidden field"]) {
+    for (const label of ["Sorted by Name", "Grouped by Name", "1 hidden field"]) {
       // On: a neutral fill and bold words, never the accent (it marks what is selected).
       expect(screen.getByRole("button", { name: label })).toHaveClass("bg-tool-on");
       expect(screen.getByRole("button", { name: label })).not.toHaveClass("bg-primary");
@@ -121,7 +122,7 @@ describe("ViewBar tools in use", () => {
 
   it("are plain words while not in use, with no collapsed state to remember", () => {
     renderBar();
-    for (const label of ["Filter", "Sort", "Group", "Hide fields", "More"]) expect(screen.getByRole("button", { name: label })).not.toHaveClass("font-semibold");
+    for (const label of ["Sort", "Group", "Hide fields", "More"]) expect(screen.getByRole("button", { name: label })).not.toHaveClass("font-semibold");
     expect(screen.queryByRole("button", { name: /Hide tools|^Tools/ })).not.toBeInTheDocument();
     expect(localStorage.length).toBe(0);
   });
@@ -170,13 +171,12 @@ describe("ViewBar on a phone", () => {
   it("folds the tools into one menu, each opening its editor in place", async () => {
     const user = userEvent.setup();
     renderBar(withConfig({ sorts: [{ field_id: "fld_name", direction: "asc" }] }), { phone: true });
-    expect(screen.queryByRole("button", { name: "Filter" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Tools: filter, sort and more (1 on)" }));
+    expect(screen.queryByRole("button", { name: "Sort" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Tools: sort, group and more (1 on)" }));
     const menu = screen.getByRole("menu", { name: "View tools" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Filter", "SortName", "Group", "Hide fields", "Color", "Row height", "Download CSV"]);
-    await user.click(within(menu).getByRole("menuitem", { name: "Filter" }));
-    expect(screen.getByRole("heading", { name: "Filter" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add condition" })).toBeInTheDocument();
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["SortName", "Group", "Hide fields", "Color", "Row height", "Download CSV"]);
+    await user.click(within(menu).getByRole("menuitem", { name: /^Sort/ }));
+    expect(screen.getByRole("heading", { name: "Sort" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to the tools" }));
     expect(screen.getByRole("menu", { name: "View tools" })).toBeInTheDocument();
   });
@@ -215,7 +215,7 @@ describe("ViewBar: a view type's own setting and switches", () => {
   it("puts the view's main setting before the tools", () => {
     renderBar({ setting: <button type="button">Stacked by Status</button> });
     const tools = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(tools.indexOf("Stacked by Status")).toBeLessThan(tools.indexOf("Filter"));
+    expect(tools.indexOf("Stacked by Status")).toBeLessThan(tools.indexOf("Sort"));
   });
 
   it("lists the view's switches in More, checked or not, and flips them", async () => {
@@ -243,11 +243,11 @@ describe("ViewBar on a narrow window", () => {
     try {
       renderBar({ onAddField: vi.fn() });
       const bar = screen.getByRole("toolbar", { name: "View toolbar" });
-      expect(within(bar).getByRole("button", { name: "Filter" })).toBeInTheDocument();
       expect(within(bar).getByRole("button", { name: "Sort" })).toBeInTheDocument();
-      expect(within(bar).queryByRole("button", { name: "Group" })).not.toBeInTheDocument();
+      expect(within(bar).getByRole("button", { name: "Group" })).toBeInTheDocument();
+      expect(within(bar).queryByRole("button", { name: "Hide fields" })).not.toBeInTheDocument();
       await userEvent.click(within(bar).getByRole("button", { name: "More" }));
-      expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Group", "Hide fields", "Color", "Row height", "Add field", "Download CSV"]);
+      expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Hide fields", "Color", "Row height", "Add field", "Download CSV"]);
     } finally {
       width.mockRestore();
       room.mockRestore();
