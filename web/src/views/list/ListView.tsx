@@ -4,7 +4,7 @@
  * prefix field (a checkbox, a choice, a person) starts every row and is changed there, and a
  * self-link parent field nests records under their parents (indent, outdent, fold).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { recordKeys } from "@/api/records";
 import type { Field, ViewConfig } from "@/api/types";
@@ -72,30 +72,16 @@ function ListInner(props: ViewProps) {
   const paths = useMemo(() => allPaths(roots), [roots]);
   const recordIds = useMemo(() => data?.records.map((r) => r.id) ?? [], [data?.records]);
 
-  // What can be selected, and what Previous and Next of the record panel step through: the rows on
-  // screen, in the order they are drawn (sub-items follow their parent), which leaves out the records
-  // of folded groups and of folded rows.
-  const openId = setup.openRecordId;
+  // What can be selected: the rows on screen, in the order they are drawn (sub-items follow their parent),
+  // which leaves out the records of folded groups and of folded rows.
   const parentId = parentField?.id;
   const onScreen = useMemo(
     () => drawnIds(data?.records ?? [], roots, parentId, { collapsed, folded, loaded: lifted?.loaded }),
     [data?.records, roots, parentId, collapsed, folded, lifted?.loaded],
   );
   const sel = useRecordSelection(onScreen);
-  // The open record itself always counts: from a folded group, or after it stopped matching the view
-  // (edited out of its filter), it keeps its place so Previous and Next still work from it.
-  const lastIndex = useRef(-1);
-  const panelIds = useMemo(() => {
-    // Folded rows count here: opening a record unfolds the rows above it.
-    const seen = drawnIds(data?.records ?? [], roots, parentId, { collapsed, loaded: lifted?.loaded, keep: openId });
-    if (!openId || seen.includes(openId)) return seen;
-    const at = Math.min(Math.max(lastIndex.current, 0), seen.length);
-    return [...seen.slice(0, at), openId, ...seen.slice(at)];
-  }, [data?.records, roots, parentId, collapsed, lifted?.loaded, openId]);
-  useEffect(() => {
-    const at = openId ? panelIds.indexOf(openId) : -1;
-    if (at >= 0 && recordIds.includes(openId!)) lastIndex.current = at;
-  }, [openId, panelIds, recordIds]);
+  // Previous and Next of a record's page step through every row, folded ones too: the page cannot unfold them.
+  const stepIds = useMemo(() => drawnIds(data?.records ?? [], roots, parentId, { collapsed, loaded: lifted?.loaded }), [data?.records, roots, parentId, collapsed, lifted?.loaded]);
 
   const [menu, setMenu] = useState<{ id: string; anchor: MenuAnchor; tree: RowTreeActions } | null>(null);
   // Rows can be put in a new place only where the view keeps them in manual order.
@@ -195,7 +181,6 @@ function ListInner(props: ViewProps) {
         onDelete={(ids) => actions.requestDelete(ids, sel.clear)}
         onRecordMenu={(id, anchor, tree) => setMenu({ id, anchor, tree })}
         onReorder={reorderable ? reorder : undefined}
-        reveal={openId}
       />
     );
   }
@@ -203,7 +188,7 @@ function ListInner(props: ViewProps) {
   return (
     <ViewFrame
       setup={setup}
-      recordIds={panelIds}
+      recordIds={stepIds}
       layout="hug"
       features={{ rowHeight: false }}
       layoutSettings={

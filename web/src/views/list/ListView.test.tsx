@@ -69,7 +69,7 @@ describe("ListView", () => {
     await user.click(await screen.findByRole("treeitem", { name: "New record in Grace Hopper" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ typecast: true, records: [{ values: { f_status: "s1", f_owner: ["usr2"] } }] });
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r9"));
   });
 
   it("adds from the header to the group of the row last focused", async () => {
@@ -99,11 +99,7 @@ describe("ListView", () => {
     await screen.findByRole("tree");
     expect(screen.queryByRole("treeitem", { name: /^New record/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("treeitem", { name: /^R1(,|$)/ }));
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading", { name: "R1" })).toBeInTheDocument();
-    // Previous/next follow the list order.
-    expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled();
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r1");
   });
 
   it("shows one empty message, without the outline's own empty row, when there are no records", async () => {
@@ -145,7 +141,7 @@ describe("ListView", () => {
       expect(sheet.getByRole("button", { name: "Open record" })).toBeInTheDocument();
       expect(sheet.getByRole("button", { name: "Delete record" })).toBeInTheDocument();
       // The press did not also open the record.
-      expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+      expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     } finally {
       vi.useRealTimers();
     }
@@ -207,7 +203,7 @@ describe("ListView selection, menu and order", () => {
     await user.click(screen.getByRole("treeitem", { name: /^R1(,|$)/ }));
     await user.click(screen.getByRole("treeitem", { name: /^R3(,|$)/ }));
     await user.keyboard("{/Control}");
-    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     const bar = screen.getByRole("toolbar", { name: "Selected records" });
     expect(bar).toHaveTextContent("2 selected");
     expect(screen.getByRole("treeitem", { name: /^R1(,|$)/ })).toHaveAttribute("aria-selected", "true");
@@ -291,35 +287,19 @@ describe("ListView selection, menu and order", () => {
   });
 });
 
-describe("ListView record panel", () => {
-  it("steps Previous and Next over the rows on screen, not the records of folded groups", async () => {
+describe("ListView record page", () => {
+  it("hands the page the rows in the order they are drawn, not the records of folded groups", async () => {
     const user = userEvent.setup();
     localStorage.setItem("ob-list-collapsed:viw1", JSON.stringify([`${F.status.id}:s2`]));
     const byStatus = viewWithConfig("viw1", "list", { groups: [{ field_id: F.status.id, direction: "asc" }] });
     const rows = [rec("r1", { [F.status.id]: "s1" }), rec("r2", { [F.status.id]: "s1" }), rec("r3", { [F.status.id]: "s2" }), rec("r4", { [F.status.id]: "s3" })];
     const heads = [header(0, F.status.id, "s1", "Todo", 0, 2, "s1"), header(0, F.status.id, "s2", "Doing", 2, 1, "s2"), header(0, F.status.id, "s3", "Done", 3, 1, "s3")];
-    setup("editor", byStatus, { records: rows, groups: heads }, { "GET /api/tables/tbl1/records/r2": rows[1]!, "GET /api/tables/tbl1/records/r4": rows[3]! });
+    setup("editor", byStatus, { records: rows, groups: heads });
     await user.click(await screen.findByRole("treeitem", { name: /^R2(,|$)/ }));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /Next record/ }));
-    // r3 is in the folded group: the next row on screen is r4.
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r4");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2");
+    // r3 is in the folded group: next after r2 is r4.
+    expect(JSON.parse(screen.getByTestId("trail").textContent!)).toMatchObject({ order: ["r1", "r2", "r4"] });
     localStorage.clear();
-  });
-
-  it("keeps Previous and Next for a record that no longer matches the view", async () => {
-    const user = userEvent.setup();
-    const flat = viewWithConfig("viw1", "list", {});
-    const all = [rec("r1", {}), rec("r2", {}), rec("r3", {})];
-    let served = all;
-    const { client } = setup("editor", flat, { records: all, groups: [] }, { "POST /api/views/viw1/query": () => ({ total: served.length, offset: 0, records: served, groups: [], colors: {} }), "GET /api/tables/tbl1/records/r2": all[1]! });
-    await user.click(await screen.findByRole("treeitem", { name: /^R2(,|$)/ }));
-    const dialog = await screen.findByRole("dialog");
-    served = [all[0]!, all[2]!];
-    await client.invalidateQueries({ queryKey: ["records"] });
-    await waitFor(() => expect(screen.queryByRole("treeitem", { name: /^R2(,|$)/ })).not.toBeInTheDocument());
-    expect(within(dialog).getByRole("button", { name: /Previous record/ })).toBeEnabled();
-    expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled();
   });
 });
 
@@ -357,7 +337,7 @@ describe("ListView prefix", () => {
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Done: R2" })).toHaveAttribute("aria-checked", "true")); // before the server answers
     await waitFor(() => expect(api.callsTo("PATCH /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("PATCH /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ id: "r2", values: { f_done: true } }] });
-    expect(screen.getByTestId("where")).not.toHaveTextContent("?record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
   });
 
   it("shows the box but cannot tick it for a commenter", async () => {
@@ -400,15 +380,13 @@ describe("ListView sub-items", () => {
     ]);
   });
 
-  it("steps Previous and Next through the rows in the order they are drawn, sub-items after their parent", async () => {
+  it("hands the page the rows in the order they are drawn, sub-items after their parent", async () => {
     const user = userEvent.setup();
     // r3 is a sub-item of r1 but is listed after r2: it is drawn right under r1.
     const listed = [rec("r1", {}), rec("r2", {}), rec("r3", parentOf("r1"))];
-    setup("editor", nestedView, { records: listed, groups: [] }, { "GET /api/tables/tbl1/records/r1": listed[0]! });
+    setup("editor", nestedView, { records: listed, groups: [] });
     await user.click(await screen.findByRole("treeitem", { name: /^R1(,|$)/ }));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /Next record/ }));
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r3");
+    expect(JSON.parse(screen.getByTestId("trail").textContent!)).toMatchObject({ order: ["r1", "r3", "r2"] });
   });
 
   it("folds a parent and remembers it", async () => {

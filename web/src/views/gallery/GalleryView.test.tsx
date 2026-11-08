@@ -100,7 +100,7 @@ describe("GalleryView", () => {
     const { api } = setup("editor", gallery(), records, { "POST /api/tables/tbl1/records": { records: [created] }, "GET /api/tables/tbl1/records/r9": created });
     await user.click(await screen.findByRole("button", { name: "Add record" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r9"));
   });
 
   it("opens a record from its card, and hides the add card from viewers", async () => {
@@ -108,7 +108,7 @@ describe("GalleryView", () => {
     setup("viewer", gallery(), records, { "GET /api/tables/tbl1/records/r2": records[1]! });
     expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "R2" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r2");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2");
   });
 
   it("says so when there are no records, with a New button for editors only", async () => {
@@ -153,7 +153,7 @@ describe("GalleryView on a phone", () => {
       const sheet = within(await screen.findByRole("dialog", { name: "R2" }));
       expect(sheet.getByRole("button", { name: "Open record" })).toBeInTheDocument();
       expect(sheet.getByRole("button", { name: "Delete record" })).toBeInTheDocument();
-      expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+      expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     } finally {
       vi.useRealTimers();
     }
@@ -231,11 +231,11 @@ describe("GalleryView keyboard and selection", () => {
     await screen.findByRole("button", { name: "R1" });
     screen.getByRole("button", { name: "R1" }).focus();
     await user.keyboard(" ");
-    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     expect(screen.getByRole("button", { name: "R1" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("toolbar", { name: "Selected records" })).toHaveTextContent("1 selected");
     await user.keyboard("{Enter}");
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r1");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r1");
   });
 
   it("follows a link inside a card on Enter instead of opening the record", async () => {
@@ -251,9 +251,9 @@ describe("GalleryView keyboard and selection", () => {
     link.focus();
     await user.keyboard("{Enter}");
     expect(click).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     await user.click(link);
-    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
   });
 
   it("selects with Ctrl-click and Shift-click, with a bar to duplicate or delete the selection", async () => {
@@ -272,7 +272,7 @@ describe("GalleryView keyboard and selection", () => {
     const bar = screen.getByRole("toolbar", { name: "Selected records" });
     expect(bar).toHaveTextContent("3 selected");
     expect(screen.getByRole("checkbox", { name: "Select R1" })).toBeChecked();
-    expect(screen.getByTestId("where")).not.toHaveTextContent("record=");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("/r/");
     await user.click(within(bar).getByRole("button", { name: /Duplicate/ }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records/duplicate")[0]!.body).toEqual({ ids: ["r0", "r1", "r2"] }));
     // The copies are made; the selection is let go.
@@ -406,31 +406,3 @@ describe("GalleryView fields", () => {
     expect(screen.getByRole("button", { name: "R1" }).querySelector("[data-more-fields]")).toBeNull();
   });
 });
-
-describe("GalleryView record panel", () => {
-  it("loads the next page when Next nears the end of what is loaded", async () => {
-    const many = Array.from({ length: GALLERY_PAGE + 10 }, (_, i) => rec(`m${i}`, {}));
-    const { asked } = setup("editor", gallery(), many, { [`GET /api/tables/tbl1/records/m${GALLERY_PAGE - 1}`]: many[GALLERY_PAGE - 1]! });
-    await screen.findByRole("button", { name: "M0" });
-    expect(asked).toHaveLength(1);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: `M${GALLERY_PAGE - 1}` }));
-    await waitFor(() => expect(asked.map((a) => a.limit)).toEqual([GALLERY_PAGE, GALLERY_PAGE * 2]));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled());
-  });
-
-  it("keeps Previous and Next for a record that no longer matches the view", async () => {
-    const user = userEvent.setup();
-    let served = four;
-    const { client } = setup("editor", gallery(), four, { "POST /api/views/viw1/query": () => ({ total: served.length, offset: 0, records: served, groups: [], colors: {} }), "GET /api/tables/tbl1/records/r1": four[1]! });
-    await user.click(await screen.findByRole("button", { name: "R1" }));
-    const dialog = await screen.findByRole("dialog");
-    served = [four[0]!, four[2]!, four[3]!];
-    await client.invalidateQueries({ queryKey: ["records"] });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "R1" })).not.toBeInTheDocument());
-    expect(within(dialog).getByRole("button", { name: /Previous record/ })).toBeEnabled();
-    expect(within(dialog).getByRole("button", { name: /Next record/ })).toBeEnabled();
-  });
-});
-

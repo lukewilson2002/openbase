@@ -242,7 +242,7 @@ function useMentionPicker(editor: TiptapEditor | null, people: readonly MentionP
   };
 
   // The editor is the combobox: it keeps the focus while the list shows. Meanwhile Escape is the list's:
-  // `data-escape-cancels` tells the dialog around the editor (ExpandedRecord, FullScreen) to stay open.
+  // `data-escape-cancels` tells what has its own use for Escape around the editor (the record page, the full-screen dialog) to leave it alone.
   useEffect(() => {
     if (!editor?.isInitialized || editor.isDestroyed || !people) return;
     const dom = editor.view.dom;

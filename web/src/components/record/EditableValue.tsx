@@ -181,7 +181,7 @@ export function EditableValue({ field, value, failed, labelId, format, emails, e
           ref={editRef}
           onFocus={onFocus}
           onBlur={onBlur}
-          // Escape belongs to the field, not to the record (ExpandedRecord leaves it alone in here). The
+          // Escape belongs to the field, not to the page (RecordPage leaves it alone in here). The
           // single-line editors cancel on it themselves; multiline text, saved as it is typed, just ends the edit.
           data-escape-cancels=""
           onKeyDown={(e) => {

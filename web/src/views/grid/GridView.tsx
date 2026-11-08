@@ -8,10 +8,9 @@
  *   GlideGrid      the canvas (behind the GridAdapter interface)
  *   ViewFilterBar  the filter bar: chips, suggestions and the view search (COL-3)
  *   ViewOptions    layout, sort, group, colour, properties and row height (in the filter bar)
- *   ExpandedRecord modal reached by the row's expand icon, Shift+Space or `?record=recXXX`
+ *   the record's page, reached by the row's expand icon or Shift+Space (`record/RecordPage`)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -23,7 +22,8 @@ import { EditorEnvProvider, type EditorEnv } from "@/components/record/editors/e
 import { FieldEditor } from "@/components/record/editors/FieldEditor";
 import { uploadFiles } from "@/components/record/editors/AttachmentEditor";
 import { FloatingRecordPeek, linkedTableOf, type FloatingPeekTarget } from "@/components/record/linked/LinkedRecords";
-import { LINKED_PARAM, RecordPanel, formatTrail } from "@/views/common/RecordPanel";
+import { rememberNewRecord } from "@/record/newRecords";
+import { useRecordNavigation } from "@/record/navigation";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconButton } from "@/components/ui/icon-button";
@@ -93,7 +93,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   const qc = useQueryClient();
   const me = useMe();
   const { resolved, accent } = useTheme();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const nav = useRecordNavigation();
   const timeZone = me.data?.timezone || browserTimeZone();
   const canEdit = atLeast(role, "editor");
   const canManageFields = atLeast(role, "creator");
@@ -592,82 +592,28 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
     [pathKeys, toggleCollapsed],
   );
 
-  // ---- expanded record -------------------------------------------------------------------------
-  const openRecordId = searchParams.get("record");
-  const openRecord = useCallback(
-    (recordId: string | null) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (recordId) next.set("record", recordId);
-          else next.delete("record");
-          // Linked records opened on top of the record go with it.
-          next.delete(LINKED_PARAM);
-          return next;
-        },
-        { replace: false },
-      );
-    },
-    [setSearchParams],
-  );
+  // ---- record pages ----------------------------------------------------------------------------
+  // Previous and next on a record's page follow the server's order for this view (the grid has no order of its own).
+  const openRecord = useCallback((recordId: string) => nav.open({ baseId: schema.id, tableId: table.id, recordId, viewId: view.id }), [nav, schema.id, table.id, view.id]);
+  // The record whose page was opened from a row just added here: the page takes it back if it is left untouched.
+  const expandedRef = useRef<string | null>(null);
   const onExpand = useCallback(
     (row: number) => {
       const rec = recordAtRow(row);
-      if (rec) openRecord(rec.id);
+      if (!rec) return;
+      const made = fresh.current.get(rec.id);
+      if (made) {
+        expandedRef.current = rec.id;
+        rememberNewRecord(rec.id, made.values);
+      }
+      openRecord(rec.id);
     },
     [recordAtRow, openRecord],
   );
 
-  // A linked record's chip under the pointer: its preview floats over it, with Open (the cell's record
-  // in the panel, and the linked one on top of it, a step back away).
+  // A linked record's chip under the pointer: its preview floats over it, with Open (the linked record's page).
   const [linkHover, setLinkHover] = useState<FloatingPeekTarget | null>(null);
-  /** Opens `cellRecordId` in the panel with the linked record on top of it (a step back away). */
-  const openLinkedFromCell = useCallback(
-    (cellRecordId: string, tableId: string, recordId: string) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("record", cellRecordId);
-        next.set(LINKED_PARAM, formatTrail([{ tableId, recordId }]));
-        return next;
-      });
-    },
-    [setSearchParams],
-  );
-
-  /** Record indexes of the rows before and after the open record in grid order (-1: none), skipping group headers and folded groups. */
-  const neighbourIndexes = useMemo(() => {
-    const none = { prev: -1, next: -1 };
-    if (!openRecordId) return none;
-    const idx = data.indexOf(openRecordId);
-    const row = idx < 0 ? -1 : rowMap.rowOfRecord(idx);
-    if (row < 0) return none;
-    const find = (dir: 1 | -1): number => {
-      for (let r = row + dir; r >= 0 && r < rowMap.length; r += dir) {
-        const i = rowMap.recordIndexAt(r);
-        if (i >= 0) return i;
-      }
-      return -1;
-    };
-    return { prev: find(-1), next: find(1) };
-    // `data.version` changes when pages arrive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRecordId, data.version, rowMap]);
-  /** Neighbouring record ids in grid order (for prev/next in the expanded record); null until their page has arrived. */
-  const neighbours = useMemo(
-    () => ({
-      prev: neighbourIndexes.prev >= 0 ? (dataRef.current.getRecord(neighbourIndexes.prev)?.id ?? null) : null,
-      next: neighbourIndexes.next >= 0 ? (dataRef.current.getRecord(neighbourIndexes.next)?.id ?? null) : null,
-    }),
-    // `data.version` changes when pages arrive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [neighbourIndexes, data.version],
-  );
-  // Stepping through the records must not stop where the loaded pages do: the pages of the records on
-  // either side of the open one are fetched, and the buttons enable themselves when they arrive. (Not
-  // `ensureRange`: that is the range on screen, which a refresh keeps.)
-  useEffect(() => {
-    for (const i of [neighbourIndexes.prev, neighbourIndexes.next]) if (i >= 0 && !dataRef.current.getRecord(i)) void dataRef.current.loadRange(i, i);
-  }, [neighbourIndexes, data.version]);
+  const openLinked = useCallback((tableId: string, recordId: string) => nav.open({ baseId: schema.id, tableId, recordId }), [nav, schema.id]);
 
   // ---- add / delete rows -----------------------------------------------------------------------
   // The new row is selected and scrolled into view once its page has arrived, unless the person has
@@ -782,8 +728,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   // ---- untouched new rows go away ---------------------------------------------------------------
   // A record added here and left empty when the person clicks off is taken back, as if it had never
   // been added: no toast, nothing in the trash or the history, and no step left in Undo.
-  const openIdRef = useRef(openRecordId);
-  openIdRef.current = openRecordId;
   const takeBack = useCallback(
     async (id: string, made: Fresh) => {
       const idx = dataRef.current.indexOf(id);
@@ -817,7 +761,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       if (fresh.current.size === 0) return;
       const sel = selectionRef.current;
       for (const [id, made] of [...fresh.current]) {
-        if (id === openIdRef.current) continue;
+        if (id === expandedRef.current) continue;
         if (!leaving) {
           const idx = dataRef.current.indexOf(id);
           // Not on screen: while the new row is still being looked for it may yet be selected;
@@ -834,11 +778,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
   );
   const sweepRef = useRef(sweepFresh);
   sweepRef.current = sweepFresh;
-
-  // A record panel closing leaves the record it was on, if the selection is elsewhere.
-  useEffect(() => {
-    if (!openRecordId) sweepRef.current();
-  }, [openRecordId]);
 
   // Focus going to somewhere else in the page, or the grid going away, leaves every new row.
   useEffect(() => {
@@ -1051,7 +990,7 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
       const cellRecord = hit ? recordAtRow(hit.point.row) : undefined;
       setLinkHover(
         hit && linked && cellRecord
-          ? { key: `${cellRecord.id}:${hit.point.col}:${hit.recordId}`, table: linked, recordId: hit.recordId, rect: hit.rect, open: () => openLinkedFromCell(cellRecord.id, linked.id, hit.recordId) }
+          ? { key: `${cellRecord.id}:${hit.point.col}:${hit.recordId}`, table: linked, recordId: hit.recordId, rect: hit.rect, open: () => openLinked(linked.id, hit.recordId) }
           : null,
       );
     },
@@ -1239,26 +1178,6 @@ function GridViewInner({ schema, table, view, role }: ViewProps) {
         }}
       />
       <FloatingRecordPeek at={linkHover} format={format} emails={emails} />
-      {openRecordId && (
-        <RecordPanel
-          schema={schema}
-          table={table}
-          view={view}
-          role={role}
-          recordId={openRecordId}
-          config={config}
-          prevId={neighbours.prev}
-          nextId={neighbours.next}
-          onNavigate={openRecord}
-          onClose={() => openRecord(null)}
-          emails={emails}
-          timeZone={timeZone}
-          currentUserId={me.data?.id ?? null}
-          collaborators={people}
-          onDeleteRecord={(id) => opsRef.current.deleteRecords([id])}
-          onDuplicateRecord={async (rec) => (await opsRef.current.duplicateRecords([rec.id]))[0]}
-        />
-      )}
     </EditorEnvProvider>
   );
 }

@@ -3,7 +3,7 @@ import type { GroupHeader } from "@/api/types";
 import type { TableRecord } from "@/api/types";
 import { ALL_FIELDS, makeRecord } from "@/test/fields";
 import { DEFAULT_CTX } from "@/lib/cells/format";
-import { allPaths, buildOutline, flattenOutline, foldRows, foldedAncestors, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, drawnIds, withTails, type DropPlan } from "./outline";
+import { allPaths, buildOutline, flattenOutline, foldRows, groupDefaults, indentTarget, leafNodes, moveBetweenGroups, nestRows, outdentValue, parentLinkOf, placeIndexes, planDrop, rowLabel, drawnIds, withTails, type DropPlan } from "./outline";
 
 const h = (depth: number, field_id: string, key: string, start: number, count: number, value: unknown = key): GroupHeader => ({ depth, field_id, key, label: key || "(Empty)", value: value as GroupHeader["value"], start, count });
 
@@ -223,13 +223,6 @@ describe("foldRows", () => {
     expect(order(foldRows(rows, new Set(["a"])))).toEqual(["a", "e"]);
     expect(order(foldRows(rows, new Set(["b"])))).toEqual(["a", "-b", "-d", "e"]);
   });
-
-  it("names the folded rows that hide a row", () => {
-    expect(foldedAncestors(rows, "c", new Set(["a", "b"]))).toEqual(["a", "b"]);
-    expect(foldedAncestors(rows, "c", new Set(["b"]))).toEqual(["b"]);
-    expect(foldedAncestors(rows, "e", new Set(["a"]))).toEqual([]);
-    expect(foldedAncestors(rows, "zzz", new Set(["a"]))).toEqual([]);
-  });
 });
 
 describe("indent and outdent", () => {
@@ -315,11 +308,10 @@ describe("drawnIds", () => {
   const recs = ["r0", "r1", "r2", "r3", "r4", "r5"].map((id) => node(id));
   const none = new Set<string>();
 
-  it("is the records in order, less those of folded groups, but keeps the open one", () => {
+  it("is the records in order, less those of folded groups", () => {
     expect(drawnIds(recs, roots, null, { collapsed: none })).toEqual(ids);
     expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo"]) })).toEqual(["r3", "r4", "r5"]);
     expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo/ow:ada", "st:done"]) })).toEqual(["r2", "r5"]);
-    expect(drawnIds(recs, roots, null, { collapsed: new Set(["st:todo"]), keep: "r1" })).toEqual(["r1", "r3", "r4", "r5"]);
   });
 
   it("puts sub-items right after their parent, inside their group, and leaves out the folded ones", () => {
@@ -330,11 +322,10 @@ describe("drawnIds", () => {
     // r4 is listed before its parent r3: it is drawn right after it.
     const swapped = [node("r0"), node("r1"), node("r2"), node("r4", "r3"), node("r3"), node("r5")];
     expect(drawnIds(swapped, roots, P, grouped)).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
-    // Folding a parent hides its sub-items from the selection but not from the panel's steps.
+    // Folding a parent hides its sub-items from the selection.
     const tucked = [node("r0"), node("r1", "r0"), node("r2"), node("r3"), node("r4"), node("r5")];
     expect(drawnIds(tucked, roots, P, { collapsed: none, folded: new Set(["r0"]) })).toEqual(["r0", "r2", "r3", "r4", "r5"]);
     expect(drawnIds(tucked, roots, P, { collapsed: none })).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
-    expect(drawnIds(tucked, roots, P, { collapsed: none, folded: new Set(["r0"]), keep: "r1" })).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
   });
 
   it("follows the rows present per group and a list without groups", () => {

@@ -10,6 +10,7 @@
  * and anything unexpected is ignored, so a payload the client does not know yet still renders.
  */
 import type { Notification } from "@/api/types";
+import { recordPath } from "@/lib/recordPath";
 
 export type NotificationKind = "mention" | "assigned" | "automation" | "form_response" | "other";
 
@@ -32,17 +33,16 @@ function payloadOf(n: Notification): Record<string, unknown> {
 }
 
 /**
- * `/base/:base/:table?record=:record`, as far as the payload goes. A record is only linked with
- * its table (the expanded record is looked up in the table of the route); automations name a
- * record but not its table, so they link to the base.
+ * `/base/:base/:table/r/:record` (the record's page), as far as the payload goes. A record is only linked with
+ * its table; automations name a record but not its table, so they link to the base.
  */
 export function notificationHref(p: Record<string, unknown>): string | null {
   const base = text(p, "base_id");
   if (!base) return null;
   const table = text(p, "table_id");
   const record = text(p, "record_id");
-  const path = `/base/${encodeURIComponent(base)}${table ? `/${encodeURIComponent(table)}` : ""}`;
-  return table && record ? `${path}?record=${encodeURIComponent(record)}` : path;
+  if (table && record) return recordPath(base, table, record);
+  return `/base/${encodeURIComponent(base)}${table ? `/${encodeURIComponent(table)}` : ""}`;
 }
 
 /** Who did it: the author of a mention. */

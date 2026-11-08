@@ -121,7 +121,7 @@ describe("Notifications in the docked menu", () => {
     await user.click(within(panel).getByRole("button", { name: /^Grace mentioned you in Launch plan/ }));
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")).toHaveLength(1));
     expect(api.callsTo("POST /api/notifications/read")[0]!.body).toEqual({ ids: ["n1"] });
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1?record=rec1");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/r/rec1");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Notifications" })).not.toBeInTheDocument());
   });
 
@@ -179,7 +179,7 @@ describe("Notifications in the docked menu", () => {
     expect(within(panel).getByText("Automation notification").closest("li")!.querySelector(".ob-mark")).toBeNull();
     await user.click(chip);
     await waitFor(() => expect(api.callsTo("POST /api/notifications/read")[0]?.body).toEqual({ ids: ["n1"] }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1?record=rec2");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/r/rec2");
   });
 
   it("gives the person who mentioned you the face they have everywhere else", async () => {

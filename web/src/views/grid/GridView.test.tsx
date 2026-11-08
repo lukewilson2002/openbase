@@ -65,6 +65,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("GridView: record pages", () => {
+  it("opens a row as its page, with the view in the address", async () => {
+    setup();
+    await loaded();
+    act(() => grid().onExpand(1));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2"));
+    // The page returns to the collection it was opened from, not to some earlier step.
+    expect(JSON.parse(screen.getByTestId("trail").textContent!)).toEqual({ from: "/base/app1/tbl1/viw1", steps: 1 });
+  });
+});
+
 describe("GridView: Delete on selected rows", () => {
   it("deletes the records after a count confirmation, not their cells", async () => {
     const user = userEvent.setup();
@@ -442,36 +453,6 @@ describe("GridView: undo", () => {
   });
 });
 
-describe("GridView: record panel", () => {
-  it("fetches the page next to the open record so Next does not stop at the loaded pages", async () => {
-    const many = Array.from({ length: 450 }, (_, i) => rec(`m${i}`, {}));
-    const open = many[199]!;
-    const { asked } = setup({ recs: many, route: "/base/app1/tbl1/viw1?record=m199", routes: { "GET /api/tables/tbl1/records/m199": open } });
-    // The first page holds m199, the last of the page; Next lives on the second.
-    await waitFor(() => expect((asked as { offset: number }[]).map((a) => a.offset)).toContain(200));
-    const next = await screen.findByRole("button", { name: "Next record (Alt+Down)" });
-    await waitFor(() => expect(next).toBeEnabled());
-  });
-});
-
-describe("GridView: record panel with folded groups", () => {
-  it("steps over a folded group to the next record that is on screen", async () => {
-    const groups: GroupHeader[] = [
-      { depth: 0, field_id: F.status.id, key: "s1", value: "s1", label: "Todo", count: 2, start: 0 },
-      { depth: 0, field_id: F.status.id, key: "s2", value: "s2", label: "Doing", count: 2, start: 2 },
-      { depth: 0, field_id: F.status.id, key: "s3", value: "s3", label: "Done", count: 2, start: 4 },
-    ];
-    // The middle group is folded: after r2 comes r5.
-    localStorage.setItem("ob-grid-collapsed:viw1", JSON.stringify([`${F.status.id}:s2`]));
-    const { api } = setup({ recs: records.slice(0, 6), groups, route: "/base/app1/tbl1/viw1?record=r2", routes: { "GET /api/tables/tbl1/records/r2": records[1], "GET /api/tables/tbl1/records/r5": records[4] } });
-    const next = await screen.findByRole("button", { name: "Next record (Alt+Down)" });
-    await waitFor(() => expect(next).toBeEnabled());
-    await userEvent.setup().click(next);
-    await waitFor(() => expect(api.callsTo("GET /api/tables/tbl1/records/r5").length).toBeGreaterThan(0));
-    expect(api.callsTo("GET /api/tables/tbl1/records/r3")).toHaveLength(0);
-  });
-});
-
 describe("GridView: column menu", () => {
   it("moves a column left or right, never before the primary field, as a draft", async () => {
     const user = userEvent.setup();
@@ -524,12 +505,12 @@ describe("GridView: deleting a field", () => {
   });
 });
 
-describe("GridView: edits made in the record panel", () => {
+describe("GridView: edits made on the record page", () => {
   it("are on the undo stack, so Undo reverts the last thing done", async () => {
     const user = userEvent.setup();
     const { api, client } = setup();
     await loaded();
-    // What ExpandedRecord's save mutation looks like: its variables, and the record it read before saving.
+    // What the record page's save mutation looks like: its variables, and the record it read before saving.
     const save = new MutationObserver<unknown, Error, { recordId: string; field: typeof F.name; value: unknown }, { prev: (typeof records)[number] }>(client, { mutationKey: ["record-save", "tbl1"], mutationFn: async () => ({ records: [] }), onMutate: () => ({ prev: records[0] }) });
     await act(async () => void (await save.mutate({ recordId: "r1", field: F.name, value: "Renamed" })));
     const undo = await screen.findByRole("button", { name: "Undo: Edit Name (Ctrl/Cmd+Z)" });

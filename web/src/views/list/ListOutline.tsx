@@ -44,10 +44,8 @@ import {
   buildOutline,
   flattenOutline,
   foldRows,
-  foldedAncestors,
   groupDefaults,
   indentTarget,
-  leafNodes,
   nestRows,
   outdentValue,
   parentLinkOf,
@@ -133,8 +131,6 @@ export interface ListOutlineProps {
    * cannot be written to.
    */
   onReorder?(recordId: string, plan: DropPlan | "blocked"): void | Promise<unknown>;
-  /** The record open in the panel: its row is brought into view, even past the first rows of its group. */
-  reveal?: string | null;
   /** Filled with a function giving the values for a record added "here": the group in focus, in the selection, or at the top of the scrolled view. */
   addTargetRef?: MutableRefObject<(() => Record<string, unknown>) | null>;
 }
@@ -590,40 +586,6 @@ export function ListOutline(p: ListOutlineProps) {
       addSub: () => p.onAdd({ ...(leaf.node ? groupDefaults(leaf.node) : {}), [p.parentField!.id]: [{ id, name: nameOf(row.record) }] }),
     };
   }
-
-  // The open record's row is drawn (its group may show only the first rows, and a parent may be folded) and brought into view.
-  const { reveal } = p;
-  const opened = useRef<string | null>(null);
-  useEffect(() => {
-    if (!reveal) {
-      opened.current = null;
-      return;
-    }
-    const grow = (path: string, need: number) => setLimits((cur) => ((cur[path] ?? ROWS_PER_GROUP) >= need ? cur : { ...cur, [path]: Math.ceil(need / ROWS_PER_GROUP) * ROWS_PER_GROUP }));
-    const entry = entries.find((e): e is Extract<Entry, { kind: "leaf" }> => e.kind === "leaf" && e.leaf.all.some((r) => r.record.id === reveal));
-    if (!entry) {
-      // Possibly in a group whose rows are not loaded yet: show rows up to where it would be, which fetches them.
-      const at = ids.indexOf(reveal);
-      const leaf = at >= 0 && grouped ? leafNodes(roots).find((n) => at >= n.start && at < n.start + n.count) : null;
-      if (leaf) grow(leaf.path, at - leaf.start + 1);
-      return;
-    }
-    const { leaf } = entry;
-    // Folded parents above it open once, when the record is opened (folding them again afterwards is left alone).
-    const hiding = opened.current === reveal ? [] : foldedAncestors(leaf.all, reveal, folded ?? new Set());
-    opened.current = reveal;
-    for (const id of hiding) p.onToggleFold?.(id);
-    const open = new Set([...(folded ?? [])].filter((id) => !hiding.includes(id)));
-    const need = foldRows(leaf.all, open).findIndex((r) => r.record.id === reveal) + 1;
-    if (need > 0) grow(leaf.path, need);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new `reveal`, or its rows arriving, is what brings a row into view
-  }, [reveal, ids, grouped, roots, entries]);
-  useEffect(() => {
-    if (!reveal) return;
-    for (const el of roving.containerRef.current?.querySelectorAll<HTMLElement>("[data-record-id]") ?? []) {
-      if (el.dataset.recordId === reveal) el.scrollIntoView?.({ block: "nearest" });
-    }
-  }, [reveal, limits, roving.containerRef]);
 
   const canSet = (fieldId: string) => {
     const f = p.tableFields.find((x) => x.id === fieldId);

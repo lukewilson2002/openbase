@@ -80,8 +80,8 @@ async function openPalette(user: ReturnType<typeof userEvent.setup>) {
 const groupNames = (list: HTMLElement) => within(list).getAllByRole("group").map((g) => document.getElementById(g.getAttribute("aria-labelledby")!)!.textContent);
 
 describe("searchResultHref", () => {
-  it("opens each kind where it lives, a record expanded over its collection like a notification link", () => {
-    expect(RESULTS.map(searchResultHref)).toEqual(["/base/app0/tbl1?record=rec1", "/base/app1", "/workspace/wsp1", "/base/app0/tbl1/viw2", "/base/app0/tbl2"]);
+  it("opens each kind where it lives, a record as its page like a notification link", () => {
+    expect(RESULTS.map(searchResultHref)).toEqual(["/base/app0/tbl1/r/rec1", "/base/app1", "/workspace/wsp1", "/base/app0/tbl1/viw2", "/base/app0/tbl2"]);
   });
 });
 
@@ -297,7 +297,7 @@ describe("the palette on a desktop", () => {
     expect(groupNames(screen.getByRole("listbox"))[1]).toBe("Comments");
     expect(option).toHaveTextContent("Ada on Take out trash");
     await user.click(option);
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1?record=rec1"));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1/r/rec1"));
   });
 
   it("says when nothing matches, and explains a failed search", async () => {
@@ -370,7 +370,7 @@ describe("actions", () => {
     await openPalette(user);
     await user.keyboard("new record chores");
     await user.click(await screen.findByRole("option", { name: "New record in Chores" }));
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1?record=recNew"));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app0/tbl1/r/recNew"));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: {} }] });
   });
 

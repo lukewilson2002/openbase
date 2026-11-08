@@ -1,15 +1,13 @@
 /**
  * Layout shared by the non-grid views: the filter bar with View options at its right end, the draft's changes
- * bar, the view body, an optional footer line, and the expanded record opened by `?record=recXXX`.
+ * bar, the view body and an optional footer line.
  */
-import { useMemo, type ReactNode } from "react";
-import { RecordPanel } from "./RecordPanel";
+import type { ReactNode } from "react";
 import { EditorEnvProvider } from "@/components/record/editors/env";
 import { DraftBar } from "@/components/viewbar/DraftBar";
 import { ViewFilterBar } from "@/components/viewbar/ViewFilterBar";
 import { ViewOptions, type LayoutToggle, type ViewOptionsFeatures, type ViewOptionsProps } from "@/components/viewbar/ViewOptions";
 import { cn } from "@/lib/cn";
-import { gridRecordLayout } from "@/views/grid/useViewConfig";
 import { useRegisterAddRecord } from "./addRecord";
 import { useUndoShortcuts } from "./useUndoShortcuts";
 import type { ViewSetup } from "./useViewSetup";
@@ -42,7 +40,10 @@ export type ViewLayout = "fill" | "hug" | "bare";
 
 export interface ViewFrameProps {
   setup: ViewSetup;
-  /** Record ids in display order, for the previous/next buttons of the expanded record. */
+  /**
+   * The records in the order this layout shows them, for layouts whose order is not the server's (a board's
+   * stacks, a calendar's days): a record opened from here steps through them with Previous and Next.
+   */
   recordIds?: readonly string[];
   /** Which sections of View options the layout has (all by default). */
   features?: ViewOptionsFeatures;
@@ -67,17 +68,9 @@ export interface ViewFrameProps {
 export function ViewFrame({ setup, recordIds, features, layoutSettings, propertySettings, layoutToggles, footer, layout = "fill", onAdd, children }: ViewFrameProps) {
   const { schema, table, view, role, cfg, config } = setup;
   useRegisterAddRecord(onAdd);
-  // Ctrl/Cmd+Z reverts the last drop, edit, add or delete (not while a record is open: its fields have their own).
-  useUndoShortcuts(setup.writes.history, setup.canEdit && !setup.openRecordId);
-  // A record shows its fields as the table's grid lays them out, whichever view it is opened from.
-  const recordLayout = useMemo(() => gridRecordLayout(table) ?? config, [table, config]);
-
-  const neighbours = useMemo(() => {
-    if (!setup.openRecordId || !recordIds) return { prev: null as string | null, next: null as string | null };
-    const i = recordIds.indexOf(setup.openRecordId);
-    if (i < 0) return { prev: null, next: null };
-    return { prev: recordIds[i - 1] ?? null, next: recordIds[i + 1] ?? null };
-  }, [setup.openRecordId, recordIds]);
+  setup.stepOrder.current = recordIds;
+  // Ctrl/Cmd+Z reverts the last drop, edit, add or delete.
+  useUndoShortcuts(setup.writes.history, setup.canEdit);
 
   let body: ReactNode;
   if (layout === "hug") {
@@ -139,28 +132,6 @@ export function ViewFrame({ setup, recordIds, features, layoutSettings, property
         <DraftBar schema={schema} table={table} view={view} cfg={cfg} search={setup.debouncedSearch} timeZone={setup.timeZone} />
         {body}
       </div>
-      {setup.openRecordId && (
-        <RecordPanel
-          schema={schema}
-          table={table}
-          view={view}
-          role={role}
-          recordId={setup.openRecordId}
-          config={recordLayout}
-          prevId={neighbours.prev}
-          nextId={neighbours.next}
-          onNavigate={setup.openRecord}
-          onClose={() => setup.openRecord(null)}
-          justCreated={setup.newRecordId === setup.openRecordId}
-          // Deletes and copies go through the view's writes, so they can be undone.
-          onDeleteRecord={setup.canEdit ? (id) => setup.writes.remove([id]) : undefined}
-          onDuplicateRecord={setup.canEdit ? async (r) => (await setup.writes.duplicate([r]))[0] : undefined}
-          emails={setup.emails}
-          timeZone={setup.timeZone}
-          currentUserId={setup.currentUserId}
-          collaborators={setup.people}
-        />
-      )}
       {setup.actions.dialog}
     </EditorEnvProvider>
   );

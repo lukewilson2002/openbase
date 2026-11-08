@@ -292,7 +292,7 @@ describe("KanbanView", () => {
     await user.click(await screen.findByRole("button", { name: "New record in Doing" }));
     await waitFor(() => expect(api.callsTo("POST /api/tables/tbl1/records")).toHaveLength(1));
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ typecast: true, records: [{ values: { f_status: "s2" } }] });
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?record=r9"));
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r9"));
   });
 
   it("adds from the header to the stack of the card last focused", async () => {
@@ -331,12 +331,15 @@ describe("KanbanView", () => {
     expect(api.callsTo("POST /api/tables/tbl1/records")[0]!.body).toMatchObject({ records: [{ values: {} }] });
   });
 
-  it("opens the record from a card with ?record= in the URL", async () => {
+  it("opens the record from a card as its page, handing over the order of the stacks", async () => {
     const user = userEvent.setup();
-    setup("viewer", board(), { "GET /api/tables/tbl1/records/r3": records[2]! });
+    setup("viewer", board());
     await user.click(await screen.findByRole("button", { name: "R3" }));
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r3");
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r3");
+    // Previous and next on the page follow the stacks left to right, not the server's order.
+    const trail = JSON.parse(screen.getByTestId("trail").textContent!) as { order: string[] };
+    expect(trail.order).toContain("r3");
+    expect(trail.order).toHaveLength(records.length);
   });
 
   it("is read-only for viewers: no add buttons, cards are not draggable", async () => {

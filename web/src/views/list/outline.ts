@@ -281,21 +281,6 @@ export function foldRows(rows: readonly NestedRow[], folded: ReadonlySet<string>
   return out;
 }
 
-/** The rows above `id` that are folded and hide it, outermost first. */
-export function foldedAncestors(rows: readonly NestedRow[], id: string, folded: ReadonlySet<string>): string[] {
-  const at = rows.findIndex((r) => r.record.id === id);
-  if (at < 0) return [];
-  const out: string[] = [];
-  let depth = rows[at]!.depth;
-  for (let i = at - 1; i >= 0 && depth > 0; i--) {
-    if (rows[i]!.depth < depth) {
-      depth = rows[i]!.depth;
-      if (folded.has(rows[i]!.record.id)) out.unshift(rows[i]!.record.id);
-    }
-  }
-  return out;
-}
-
 /** The row above `id` at its own level, whose sub-item indenting it makes it (none for the first of its level). */
 export function indentTarget(rows: readonly NestedRow[], id: string): TableRecord | null {
   const at = rows.findIndex((r) => r.record.id === id);
@@ -334,15 +319,14 @@ export function rowLabel(title: string, parts: readonly { field: Field; value: u
 /**
  * The ids of the records in the order the outline draws them: group by group, and inside a group each
  * record followed by its sub-items (see `nestRows`). Records of folded groups are left out, and so are
- * those under a folded row when `folded` is given; `keep` (the open record) stays wherever it would
- * be. `loaded` is the rows present per group (see `withTails`); without it every record in the range
- * of its group counts.
+ * those under a folded row when `folded` is given. `loaded` is the rows present per group (see
+ * `withTails`); without it every record in the range of its group counts.
  */
 export function drawnIds(
   records: readonly TableRecord[],
   roots: readonly GroupNode[],
   parentFieldId: string | null | undefined,
-  opts: { collapsed: ReadonlySet<string>; folded?: ReadonlySet<string>; loaded?: ReadonlyMap<string, number>; keep?: string | null },
+  opts: { collapsed: ReadonlySet<string>; folded?: ReadonlySet<string>; loaded?: ReadonlyMap<string, number> },
 ): string[] {
   const out: string[] = [];
   const add = (path: string, start: number, count: number, hidden: boolean) => {
@@ -350,7 +334,7 @@ export function drawnIds(
     const rows = nestRows(records.slice(start, start + have), parentFieldId);
     const shown = opts.folded && opts.folded.size > 0 ? new Set(foldRows(rows, opts.folded).map((r) => r.record.id)) : null;
     for (const { record } of rows) {
-      if (record.id === opts.keep || (!hidden && (!shown || shown.has(record.id)))) out.push(record.id);
+      if (!hidden && (!shown || shown.has(record.id))) out.push(record.id);
     }
   };
   if (roots.length === 0) {

@@ -369,17 +369,6 @@ describe("ListOutline order", () => {
   });
 });
 
-describe("ListOutline reveal", () => {
-  it("draws the open record even when it is past the first rows of its group", () => {
-    const many = Array.from({ length: ROWS_PER_GROUP + 30 }, (_, i) => rec(`m${i}`, `Row ${i}`));
-    const { props, rerender } = outline({ records: many, groups: [] });
-    expect(queryRow(`Row ${ROWS_PER_GROUP + 5}`)).not.toBeInTheDocument();
-    rerender(<ListOutline {...props} reveal={`m${ROWS_PER_GROUP + 5}`} />);
-    expect(row(`Row ${ROWS_PER_GROUP + 5}`)).toBeInTheDocument();
-  });
-});
-
-
 describe("ListOutline tree", () => {
   it("is a tree of tree items: headings with their level, place and fold state, rows named with their values", () => {
     outline({ fields: [num] });
@@ -641,17 +630,6 @@ describe("ListOutline sub-items", () => {
     outline({ records: rows, groups: g, fields: [], parentField: parent, folded: new Set(), tableFields: [name, status, parent] });
     expect(row("Design")).toHaveAttribute("aria-level", "3");
     expect(row("Wire")).toHaveAttribute("aria-level", "2");
-  });
-
-  it("opens the folded parents above the record that is opened, once", () => {
-    const onToggleFold = vi.fn();
-    const { props, rerender } = nested({ folded: new Set(["a", "b"]), onToggleFold });
-    expect(queryRow("Wire")).not.toBeInTheDocument();
-    rerender(<ListOutline {...props} reveal="c" />);
-    expect(onToggleFold.mock.calls.map((c) => c[0])).toEqual(["a", "b"]);
-    // A parent folded again by hand while the record stays open is left alone.
-    rerender(<ListOutline {...props} reveal="c" records={[...tasks]} />);
-    expect(onToggleFold).toHaveBeenCalledTimes(2);
   });
 
   it("makes a row dropped by Alt+Down a sibling of the row it passes", async () => {

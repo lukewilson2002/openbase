@@ -1,10 +1,9 @@
 /**
  * Everything the non-grid views have in common: current user and time zone, collaborators, the
  * formatting and editing environment, the view config (saved through `useViewConfig`), search,
- * record writes and the `?record=` URL parameter of the expanded record.
+ * record writes, and opening a record as its page.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
 import { keys } from "@/api/keys";
@@ -15,11 +14,11 @@ import { useDebounced } from "@/components/record/editors/useDebounced";
 import { queryRelevantKey } from "@/components/viewbar/config";
 import { browserTimeZone } from "@/lib/format";
 import { atLeast } from "@/lib/roles";
-import { LINKED_PARAM } from "./RecordPanel";
 import { isFiltered } from "./filtered";
 import { useResetFilters } from "./useResetFilters";
 import { personColors } from "@/lib/colors";
 import { linkedColorIn, type FormatCtx } from "@/lib/cells/format";
+import { useRecordNavigation } from "@/record/navigation";
 import { useViewConfig, type ViewConfigApi } from "../grid/useViewConfig";
 import type { ViewProps } from "../types";
 import { useRecordActions, type RecordActions } from "./useRecordActions";
@@ -56,26 +55,21 @@ export interface ViewSetup extends ViewProps {
   writes: RecordWrites;
   /** Delete and duplicate for cards and rows (the confirmation for several is drawn by `ViewFrame`). */
   actions: RecordActions;
-  openRecordId: string | null;
-  openRecord(recordId: string | null): void;
-  /**
-   * Opens a record the person just added: its first field starts being edited, and the record is
-   * thrown away again when its panel closes with nothing changed (see `RecordWrites.discardIfUntouched`).
-   */
-  openNewRecord(recordId: string): void;
+  /** Opens a record as its page; previous and next there follow this view's order. */
+  openRecord(recordId: string): void;
+  /** The ids of the records in the order the layout shows them, which `ViewFrame` keeps up to date for `openRecord` to hand over. */
+  stepOrder: RefObject<readonly string[] | undefined>;
   /**
    * The way a view adds a record: creates it (starting from the values of the view's filter, then
-   * `values`, e.g. the stack or group it is added to) and opens it for typing. Resolves with the record,
-   * or null when it was not created (also while an earlier add is still on its way).
+   * `values`, e.g. the stack or group it is added to) and opens its page with the title ready for typing.
+   * Resolves with the record, or null when it was not created (also while an earlier add is still on its way).
    */
   addRecord(values?: Record<string, unknown>, opts?: { afterRecordId?: string }): Promise<TableRecord | null>;
-  /** The record that was just added, while it is the one open. */
-  newRecordId: string | null;
 }
 
 export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetup {
   const me = useMe();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const nav = useRecordNavigation();
   const timeZone = me.data?.timezone || browserTimeZone();
   const canEdit = atLeast(role, "editor");
   const canCreateOptions = atLeast(role, "creator");
@@ -104,63 +98,18 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
   const writes = useRecordWrites({ tableId: table.id, fields: table.fields, canEdit, queryConfig: cfg.queryConfig, currentUserId });
   const actions = useRecordActions({ writes, role, canEdit });
 
-  const openRecordId = searchParams.get("record");
-  const openRecord = useCallback(
-    (recordId: string | null) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (recordId) next.set("record", recordId);
-          else next.delete("record");
-          // Linked records opened on top of the record go with it.
-          next.delete(LINKED_PARAM);
-          return next;
-        },
-        { replace: false },
-      );
-    },
-    [setSearchParams],
-  );
-  // Which record was added a moment ago, so its expanded form starts in edit mode. It is forgotten (and thrown
-  // away if nothing was typed in it) once another record, or none, is open.
-  const [newId, setNewId] = useState<string | null>(null);
-  // The address changes a moment after `newId` is set: the record counts as opened only once it showed up there.
-  const sawNewOpen = useRef(false);
-  const newIdRef = useRef<string | null>(null);
-  newIdRef.current = newId;
-  const { discardIfUntouched } = writes;
-  useEffect(() => {
-    if (!newId) {
-      sawNewOpen.current = false;
-      return;
-    }
-    if (openRecordId === newId) {
-      sawNewOpen.current = true;
-      return;
-    }
-    if (sawNewOpen.current) {
-      sawNewOpen.current = false;
-      setNewId(null);
-      void discardIfUntouched(newId);
-    }
-  }, [openRecordId, newId, discardIfUntouched]);
-  const openNewRecord = useCallback(
-    (recordId: string) => {
-      const earlier = newIdRef.current;
-      if (earlier && earlier !== recordId) void discardIfUntouched(earlier);
-      sawNewOpen.current = false;
-      setNewId(recordId);
-      openRecord(recordId);
-    },
-    [openRecord, discardIfUntouched],
-  );
+  const baseId = schema.id;
+  const tableId = table.id;
+  const viewId = view.id;
+  const stepOrder = useRef<readonly string[] | undefined>(undefined);
+  const openRecord = useCallback((recordId: string) => nav.open({ baseId, tableId, recordId, viewId }, { order: stepOrder.current }), [nav, baseId, tableId, viewId]);
   const addRecord = useCallback<ViewSetup["addRecord"]>(
     async (values = {}, opts) => {
       const created = await writes.create(values, opts);
-      if (created) openNewRecord(created.id);
+      if (created) openRecord(created.id);
       return created;
     },
-    [writes, openNewRecord],
+    [writes, openRecord],
   );
 
   return {
@@ -187,10 +136,8 @@ export function useViewSetup({ schema, table, view, role }: ViewProps): ViewSetu
     resetFilters,
     writes,
     actions,
-    openRecordId,
     openRecord,
-    openNewRecord,
+    stepOrder,
     addRecord,
-    newRecordId: newId,
   };
 }

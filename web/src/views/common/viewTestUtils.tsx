@@ -81,7 +81,14 @@ function HeaderAdd() {
 
 function Where() {
   const l = useLocation();
-  return <output data-testid="where">{l.pathname + l.search}</output>;
+  // The trail of a record page (where it was opened from, and the order the layout handed over) rides in the history state.
+  const trail = (l.state as { obRecord?: unknown } | null)?.obRecord;
+  return (
+    <>
+      <output data-testid="where">{l.pathname + l.search}</output>
+      <output data-testid="trail">{trail ? JSON.stringify(trail) : ""}</output>
+    </>
+  );
 }
 
 export function renderView(Component: ComponentType<ViewProps>, opts: { schema: BaseSchema; viewId: string; routes?: Record<string, Handler>; route?: string; timeZone?: string; phone?: boolean }): RenderedView {

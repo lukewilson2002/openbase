@@ -6,8 +6,8 @@
  *
  * Every successful write is also pushed to the view's undo stack (`history`; Ctrl/Cmd+Z in
  * `ViewFrame`), and deletes and drops show a toast with an Undo button. New records start with the
- * values the view's filter pins down (`prefill`), and one that is left untouched can be thrown away
- * again when its panel closes (`discardIfUntouched`).
+ * values the view's filter pins down (`prefill`), and the record page it opens on is told what it was made
+ * with, so it can be thrown away again when left untouched (`record/newRecords`).
  */
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import { toWire, writableValues } from "@/lib/cells/wire";
 import { hasPlacement, type Placement, type RecordOp, type ValueChange } from "@/lib/undo/recordOps";
 import { UndoStack } from "@/lib/undo/stack";
 import { isViewRecordsData, moveRecordInList, patchRecordValues, removeRecords, upsertRecords, type ViewRecordsData } from "./cache";
+import { forgetNewRecord, rememberNewRecord } from "@/record/newRecords";
 import { prefillFor } from "./prefill";
 
 type Snapshot = [QueryKey, ViewRecordsData][];
@@ -71,12 +72,6 @@ export interface RecordWrites {
   duplicate(records: readonly TableRecord[]): Promise<TableRecord[]>;
   /** Values a new record starts with in this view: its filter's, then `group` (field id to raw value) on top. */
   prefill(group?: Record<string, unknown>): Record<string, unknown>;
-  /**
-   * Delete a record `create` made if nothing was changed in it since (its values on the server are
-   * still those it was created with). For the panel of a record just added, when it closes. Resolves
-   * true when it was discarded.
-   */
-  discardIfUntouched(recordId: string): Promise<boolean>;
   history: RecordHistory;
 }
 
@@ -96,20 +91,11 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** What a created record held when it was made, and the undo step that made it. */
-interface Created {
-  values: Record<string, unknown>;
-  op: RecordOp;
-}
-
 export function useRecordWrites({ tableId, fields, canEdit, queryConfig, currentUserId = null }: RecordWritesParams): RecordWrites {
   const qc = useQueryClient();
   const toast = useToast();
   const fieldById = useMemo(() => new Map(fields.map((f) => [f.id, f] as const)), [fields]);
   const stack = useMemo(() => new UndoStack<RecordOp>(), []);
-  const created = useRef(new Map<string, Created>());
   const creating = useRef(false);
   const filter = queryConfig?.filter ?? null;
 
@@ -226,8 +212,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
           const removing = (op.kind === "create") === (dir === "undo");
           try {
             if (removing) {
-              // No longer "just added and untouched": looking it up again would answer 404.
-              for (const id of op.ids) created.current.delete(id);
+              for (const id of op.ids) forgetNewRecord(id);
               mutateCaches((d) => removeRecords(d, new Set(op.ids)));
               for (const part of chunk(op.ids, BATCH)) await recordsApi.remove(tableId, part);
             } else {
@@ -370,7 +355,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
         const rec = await insert(opts?.prefill === false ? values : { ...prefill(), ...values }, opts?.afterRecordId);
         const op: RecordOp = { kind: "create", label: "Add record", ids: [rec.id] };
         stack.push(op);
-        created.current.set(rec.id, { values: writableValues(fields, rec.values as Record<string, unknown>), op });
+        rememberNewRecord(rec.id, writableValues(fields, rec.values as Record<string, unknown>));
         settle(true);
         return rec;
       } catch (e) {
@@ -408,7 +393,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
       await qc.cancelQueries({ queryKey: recordKeys.table(tableId) });
       const snap = snapshot();
       const gone = new Set(ids);
-      for (const id of ids) created.current.delete(id);
+      for (const id of ids) forgetNewRecord(id);
       mutateCaches((d) => removeRecords(d, gone));
       try {
         for (const part of chunk(ids, BATCH)) await recordsApi.remove(tableId, part);
@@ -426,37 +411,6 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
     [canEdit, qc, tableId, snapshot, mutateCaches, rollback, toast, settle, done],
   );
 
-  const discardIfUntouched = useCallback<RecordWrites["discardIfUntouched"]>(
-    async (recordId) => {
-      const made = created.current.get(recordId);
-      if (!made) return false;
-      created.current.delete(recordId);
-      // The panel saves what was typed as it goes away: let those saves land before looking.
-      await sleep(0);
-      for (let i = 0; i < 100 && qc.isMutating({ mutationKey: ["record-save", tableId] }) > 0; i++) await sleep(40);
-      try {
-        const now = await recordsApi.get(tableId, recordId);
-        if (!jsonEqual(writableValues(fields, now.values as Record<string, unknown>), made.values)) return false;
-        const snap = snapshot();
-        mutateCaches((d) => removeRecords(d, new Set([recordId])));
-        // The server removes it for good (no trash, no history) unless it was touched meanwhile.
-        if (!(await recordsApi.discard(tableId, recordId)).discarded) {
-          rollback(snap);
-          settle(true);
-          return false;
-        }
-      } catch {
-        // Not there, or not removable: it stays, as before.
-        settle(true);
-        return false;
-      }
-      stack.drop(made.op);
-      settle(true);
-      return true;
-    },
-    [qc, tableId, fields, snapshot, mutateCaches, rollback, stack, settle],
-  );
-
   // --- History --------------------------------------------------------------------------------
 
   const revision = useSyncExternalStore(
@@ -470,7 +424,7 @@ export function useRecordWrites({ tableId, fields, canEdit, queryConfig, current
   );
 
   return useMemo(
-    () => ({ update, move, updateAndMove, create, remove, duplicate, prefill, discardIfUntouched, history }),
-    [update, move, updateAndMove, create, remove, duplicate, prefill, discardIfUntouched, history],
+    () => ({ update, move, updateAndMove, create, remove, duplicate, prefill, history }),
+    [update, move, updateAndMove, create, remove, duplicate, prefill, history],
   );
 }

@@ -83,27 +83,6 @@ function GalleryInner(props: ViewProps) {
   // Cards can be put in a new place only where the view keeps them in manual order.
   const reorderable = setup.canEdit && cfg.queryConfig.sorts.length === 0;
 
-  // --- The record panel's Previous and Next ---------------------------------------------------
-  const openId = setup.openRecordId;
-  // A record that stops matching the view (edited out of its filter) while its panel is open keeps
-  // its place for Previous and Next, so the buttons do not go dead under the person's hands.
-  const lastIndex = useRef(-1);
-  useEffect(() => {
-    const at = openId ? recordIds.indexOf(openId) : -1;
-    if (at >= 0) lastIndex.current = at;
-  }, [openId, recordIds]);
-  const panelIds = useMemo(() => {
-    if (!openId || recordIds.includes(openId)) return recordIds;
-    const at = Math.min(Math.max(lastIndex.current, 0), recordIds.length);
-    return [...recordIds.slice(0, at), openId, ...recordIds.slice(at)];
-  }, [openId, recordIds]);
-  // Stepping towards the end of what is loaded fetches the next page before Next runs out.
-  useEffect(() => {
-    if (!openId || !hasMore) return;
-    const at = recordIds.indexOf(openId);
-    if (at >= 0 && at >= recordIds.length - 3) loadMore();
-  }, [openId, recordIds, hasMore, loadMore]);
-
   // --- Moving cards ---------------------------------------------------------------------------
   const moveCard = useCallback(
     async (id: string, target: { beforeId?: string; afterId?: string }) => {
@@ -212,7 +191,6 @@ function GalleryInner(props: ViewProps) {
   return (
     <ViewFrame
       setup={setup}
-      recordIds={panelIds}
       layout="bare"
       features={{ group: false, rowHeight: false }}
       layoutSettings={settings}

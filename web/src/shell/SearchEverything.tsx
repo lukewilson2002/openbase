@@ -25,7 +25,9 @@ import { Icon } from "@/components/ui/icon";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { basePermissions } from "@/base/permissions";
+import { recordPath } from "@/lib/recordPath";
 import { atLeast } from "@/lib/roles";
+import { rememberNewRecord } from "@/record/newRecords";
 import { foldersOf, topLevelOf } from "@/lib/topLevel";
 import { workspaceToOpen } from "@/pages/workspace/lastWorkspace";
 import { VIEW_TYPE_META } from "@/views/meta";
@@ -53,10 +55,7 @@ export interface SearchScope {
   base?: string;
 }
 
-/**
- * Where a result opens. A record, and a comment's record, opens expanded over its collection, the way notification
- * links do; the record page (Phase 5) will take that over here.
- */
+/** Where a result opens. A record, and a comment's record, opens as its page, the way notification links do. */
 export function searchResultHref(r: SearchResult): string {
   const e = encodeURIComponent;
   const base = r.base_id ?? r.id;
@@ -71,7 +70,7 @@ export function searchResultHref(r: SearchResult): string {
       return `/base/${e(base)}/${e(r.table_id ?? "")}/${e(r.id)}`;
     case "record":
     case "comment":
-      return `/base/${e(base)}/${e(r.table_id ?? "")}?record=${e(r.record_id ?? r.id)}`;
+      return recordPath(base, r.table_id ?? "", r.record_id ?? r.id);
     default:
       // The server types `kind` as a plain string; a kind added there later still opens somewhere sensible.
       return r.base_id ? `/base/${e(r.base_id)}` : `/workspace/${e(r.workspace_id)}`;
@@ -321,7 +320,7 @@ function usePaletteActions(here: SearchHere | undefined, workspaces: WorkspaceSu
           icon: Plus,
           hint: w.id !== ws?.id ? w.name : topLevelOf(w)?.id === b.id ? undefined : b.name,
           run: () => {
-            // An empty record, opened to fill in; the page that opens it also teaches the lists about it.
+            // An empty record, opened to fill in; its page takes it back if it is left empty.
             void recordsApi
               .create(t.id, { records: [{ values: {} }], typecast: true })
               .then((res) => {
@@ -329,7 +328,8 @@ function usePaletteActions(here: SearchHere | undefined, workspaces: WorkspaceSu
                 if (!rec) throw new Error("The server did not return the new record");
                 void qc.invalidateQueries({ queryKey: recordKeys.table(t.id) });
                 void qc.invalidateQueries({ queryKey: keys.workspaces });
-                void navigate(`/base/${encodeURIComponent(b.id)}/${encodeURIComponent(t.id)}?record=${encodeURIComponent(rec.id)}`);
+                rememberNewRecord(rec.id, rec.values as Record<string, unknown>);
+                void navigate(recordPath(b.id, t.id, rec.id));
               })
               .catch((e: unknown) => toast.error(e, "Could not add the record"));
           },

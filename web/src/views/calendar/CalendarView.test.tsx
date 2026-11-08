@@ -64,7 +64,7 @@ describe("CalendarView", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     setup("viewer", cal(), { "GET /api/tables/tbl1/records/r2": records[1]! });
     await user.click(await screen.findByText("R2"));
-    expect(screen.getByTestId("where")).toHaveTextContent("?record=r2");
+    expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r2");
   });
 
   it("switches between month, week and list layouts", async () => {
@@ -186,12 +186,12 @@ describe("CalendarView", () => {
       expect(within(chip).queryByText("Doing")).not.toBeInTheDocument();
     });
 
-    it("lets the record panel's next record follow the day's sort", async () => {
+    it("hands the record page the day's sort as the order its next record follows", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       setup("editor", sortedCal, { "GET /api/tables/tbl1/records/r1": same[0]!, "GET /api/tables/tbl1/records/r2": same[1]! }, same);
       await user.click(await screen.findByText("Zed"));
-      await user.click(await screen.findByRole("button", { name: /next record/i }));
-      expect(screen.getByTestId("where")).toHaveTextContent("?record=r2");
+      expect(screen.getByTestId("where")).toHaveTextContent("/base/app1/tbl1/viw1/r/r1");
+      expect(JSON.parse(screen.getByTestId("trail").textContent!)).toMatchObject({ from: "/base/app1/tbl1/viw1", steps: 1, order: ["r1", "r2"] });
     });
   });
 
