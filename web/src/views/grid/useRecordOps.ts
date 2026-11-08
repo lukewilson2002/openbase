@@ -61,7 +61,7 @@ export interface RecordOpsParams {
   canEdit: boolean;
   /** Records were added or removed (a delete, a copy, an undo of either): row positions, and a selection made of them, no longer hold. */
   onRowsChanged?: () => void;
-  /** Records got a cell change (an edit, paste, fill, clear, or the undo and redo of one), whatever became of it. */
+  /** Records got a cell change (an edit, paste, fill, clear, or the undo and redo of one), whatever became of it; also the ones an undo or redo is about to remove. */
   onEdited?: (recordIds: readonly string[]) => void;
 }
 
@@ -122,6 +122,9 @@ export function useRecordOps({ baseId, tableId, fields, data, stack, canEdit, on
         case "create":
         case "delete": {
           const remove = (op.kind === "create") === (dir === "undo");
+          // A record this removes is no placeholder for the grid to take back as well: the take-back would
+          // look it up, or discard it, a moment after it is gone and lose the race with a 404.
+          if (remove) onEdited?.(op.ids);
           try {
             for (const part of chunk(op.ids, BATCH)) {
               if (remove) await recordsApi.remove(tableId, part);

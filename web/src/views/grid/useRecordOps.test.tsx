@@ -37,6 +37,7 @@ function fakeData(): GridData & { upserted: TableRecord[][] } {
 function setup() {
   const data = fakeData();
   const rowsChanged = { n: 0 };
+  const edited: string[][] = [];
   const stack = new UndoStack<UndoOp>();
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { retry: false } });
@@ -45,8 +46,8 @@ function setup() {
       <ToastProvider>{children}</ToastProvider>
     </QueryClientProvider>
   );
-  const hook = renderHook(() => useRecordOps({ baseId: "app1", tableId: "tbl1", fields: [name], data, stack, canEdit: true, onRowsChanged: () => void rowsChanged.n++ }), { wrapper });
-  return { hook, data, stack, rowsChanged };
+  const hook = renderHook(() => useRecordOps({ baseId: "app1", tableId: "tbl1", fields: [name], data, stack, canEdit: true, onRowsChanged: () => void rowsChanged.n++, onEdited: (ids) => void edited.push([...ids]) }), { wrapper });
+  return { hook, data, stack, rowsChanged, edited };
 }
 
 const created = (ids: string[]): RecordsResponse => ({ records: ids.map((id) => makeRecord({}, id)) });
@@ -168,6 +169,16 @@ describe("useRecordOps against the server's record contract", () => {
     expect(rowsChanged.n).toBe(1);
     await act(async () => hook.result.current.undo());
     expect(rowsChanged.n).toBe(2);
+  });
+
+  it("tells the grid a record is about to be removed by an undo, before the request, so it does not also take it back", async () => {
+    const api = mockApi({ "POST /api/tables/tbl1/records": { status: 201, json: created(["recNew"]) }, "DELETE /api/tables/tbl1/records": { status: 204 } });
+    const { hook, edited } = setup();
+    await act(async () => void (await hook.result.current.createRecords({})));
+    expect(edited).toEqual([]);
+    await act(async () => hook.result.current.undo());
+    expect(edited).toEqual([["recNew"]]);
+    expect(api.callsTo("DELETE /api/tables/tbl1/records")).toHaveLength(1);
   });
 
   it("moves a record back to where it was when undone", async () => {
