@@ -74,6 +74,22 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   page of a record opened by a signed-in person: shared pages, forms, comments, grid cells and previews show a
   static "Embedded view" box and fetch nothing, and notification snippets say "Embedded view". A block that does
   not read shows "This embed can't be shown" and keeps its text. Search skips the JSON.
+- **Comments and History are a panel you leave open.** On a desktop each opens a 360 px panel on the
+  right of the record page, beside the page rather than over it; switching between them keeps the panel,
+  and which one is open (or none) is remembered on this device, so the next record opens with it
+  already there, without taking the keyboard from the page. On a phone each is a full-screen sheet
+  with the box to write a comment kept above the keyboard, and nothing is remembered, so a record
+  never opens covered. The Comments button carries the number of comments on the desktop's bar and the
+  phone's header, and follows comments others write. The panels are restyled: names, times and
+  properties use the type scale, a thread loads as a skeleton, an empty one says so, and a long value in
+  History is cut after a few lines.
+- **A new record opens as its page.** The New button in the collection's header, the phone's +, the
+  "+ New client" rows in a List and the end of a Board stack, and the New button of an empty Grid add a
+  record and open its page with the title ready to type in; only the "+ New client" row at the end of a
+  Grid stays inline. Leave a record you just added with nothing in it (Escape in its empty title, the
+  back link, the browser's back, any other screen, or closing the tab) and it is taken back as if it
+  had never been added: not in the trash, not in History. A record you typed anything into, commented on
+  or linked stays.
 - **The link picker and the linked-record preview in the new look.** Picking records to link is a
   list of the collection's records with their description and labels, the highlighted row in the
   accent's soft fill; on a phone it is a bottom sheet with the search at the top, which opens with the

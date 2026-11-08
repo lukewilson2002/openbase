@@ -37,6 +37,7 @@ export function historyValueText(field: Field | undefined, value: unknown, forma
   return displayText(field, value, format);
 }
 
+// A value as long as a page is cut after a few lines: the panel says what changed, not the whole text.
 function Change({ field, name, oldValue, newValue, format }: { field: Field | undefined; name: string; oldValue: unknown; newValue: unknown; format: FormatCtx }) {
   const before = historyValueText(field, oldValue, format);
   const after = historyValueText(field, newValue, format);
@@ -44,9 +45,9 @@ function Change({ field, name, oldValue, newValue, format }: { field: Field | un
     <li className="text-label">
       <span className="font-semibold">{name}</span>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-        <span className="max-w-full break-words rounded-sm bg-danger-soft px-1.5 py-0.5 line-through decoration-danger/60">{before || "(empty)"}</span>
+        <span className="line-clamp-6 max-w-full break-words rounded-sm bg-danger-soft px-1.5 py-0.5 line-through decoration-danger/60">{before || "(empty)"}</span>
         <Icon icon={ArrowRight} size="sm" aria-hidden={false} aria-label="changed to" role="img" className="text-muted" />
-        <span className="max-w-full break-words rounded-sm bg-success-soft px-1.5 py-0.5">{after || "(empty)"}</span>
+        <span className="line-clamp-6 max-w-full break-words rounded-sm bg-success-soft px-1.5 py-0.5">{after || "(empty)"}</span>
       </div>
     </li>
   );

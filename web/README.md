@@ -295,6 +295,25 @@ value, 800 ms after typing pauses (`useAutosave`), and when the editor loses foc
 .../records/{id}/page` (`usePageSave`), which makes "Page". `useRebuilds` decides when the editor is built again because the text changed
 under it (never for its own save coming back); the property rows use the same hook. The page has no focus ring of its own: the caret is its focus.
 
+### Comments, History and new records (REC-7, REC-8, `record/useRecordPanel.ts`, `record/newRecords.ts`)
+
+Comments and History share one panel slot. `useRecordPanel(desktop)` holds which is open: on a desktop it reads and writes `ob-record-panel`
+(`comments`, `history`, or the key removed for none; anything else reads as none) and says whether the person opened the panel, so a panel
+restored on arrival is passed `focusOnOpen={false}` (`SidePanel`) and the keyboard stays where the page put it; on a phone it is plain state, so
+no sheet opens by itself. The desktop panel is the core `SidePanel` (360 px, beside the page); the phone's is `Dialog` with `flush`, a full-screen
+body with no padding or scroll of its own, which `CommentsPanel` and `HistoryPanel` fill: the thread scrolls and the box stays above the keyboard.
+Both panels use `Avatar`, `Icon`, `IconButton`, `Skeleton` and `EmptyState`. The Comments count is `CountBadge` on the bar's button and, as
+`PhoneAction.badge`, on the phone header's; the button's name carries it ("Comments (3)") and the badge is `aria-hidden`.
+
+A record added from a collection is noted in `newRecords` (`rememberNewRecord`, with the values it was made with, which a view's filter may have
+filled in) and its page focuses the title. It is taken back through the discard endpoint when the page goes away: `RecordPage`'s cleanup calls
+`discardNewRecord` (a route change, Escape, back, a move to another record), which waits for saves still on their way and compares what the server holds
+with what the record was made with. Escape in an empty title of a new record leaves at once (`onEscapeWhenEmpty`). On `pagehide` (not for a page that is
+only entering the back-forward cache) `discardNewRecordOnExit` asks at once with `recordsApi.discardOnExit`, a `keepalive` request that outlives the
+tab, but only when no save is on its way, no text waits to be saved (`Unsent.anyWaiting`) or is being typed, and the loaded record is what it was made
+as; the server checks again and refuses a record that was touched. Grid's header New button, the phone's + and its empty state use `addAndOpen`
+(`GridView`), which hands the record to the page; the add row at the end of a grid group stays inline and the grid takes its own back.
+
 ### Embeds in the page (REC-6, `lib/embeds.ts`, `components/embeds/`, `components/richtext/embed.ts`)
 
 An embed is a fenced code block with the info string `openbase` holding one JSON object: `{"embed":"linked","field":"fld…"}` or
@@ -456,7 +475,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/lib/cells/` | Pure helpers: display formatting, text parsing (mirrors `ob_core::cell::parse_text`), filter operator tables, aggregation availability, view/wire value conversion |
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the record page, comments, history, linked-record cards and previews (`linked/LinkedRecords.tsx`: `RecordPeek`, the hover preview, a bottom sheet on a phone, with Open page, a link where the record's page has an address; `FloatingRecordPeek` is the grid's; `editors/LinkEditor.tsx` is the link picker, a pop-over, or through `EditorShell`'s `sheetOnPhone` a bottom sheet on a phone) |
-| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `RecordHead` (tile and title, REC-2), `RecordProperties` (the property list, its folds and label menu, REC-3) with `properties.ts` (what is listed, folded or hidden), `useRecordFolds` and `useRecordLayout` (Hide from pages), `AddProperty` (the Add property box, REC-4) with `newProperty.ts` (the type a value gets, the chip's words, and the cell a value becomes, pure), `PageSection` (the page under the properties, REC-5) with `usePageSave` and `useRebuilds`, `useRecordSave`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty) |
+| `src/record/` | The record page (REC-1): `RecordRoute` (the address, the opening view, the people), `RecordPage` and `RecordBar`, `RecordHead` (tile and title, REC-2), `RecordProperties` (the property list, its folds and label menu, REC-3) with `properties.ts` (what is listed, folded or hidden), `useRecordFolds` and `useRecordLayout` (Hide from pages), `AddProperty` (the Add property box, REC-4) with `newProperty.ts` (the type a value gets, the chip's words, and the cell a value becomes, pure), `PageSection` (the page under the properties, REC-5) with `usePageSave` and `useRebuilds`, `useRecordSave`, `useRecordOrder` (previous and next), `navigation` (the way in and back), `newRecords` (a record just added is taken back if left empty, also when the tab closes), `useRecordPanel` (which of Comments and History is open, remembered per device on a desktop) |
 | `src/components/fields/` | The property dialog (`FieldDialog`, FLD-2) with options for all 28 types, and `PropertyTypeList`, the grouped type list with a description for each type (the dialog opens it inline or as a bottom sheet; the record page's Change type opens it in a popover or a sheet); `fieldKinds.ts` (defaults, validation, and `kindChange`, which says what a type change clears by the server's rules) with `useFilledCount` (how many records have a value, asked as the `filled` summary of the default view); `propertyRoles.ts` and `usePropertyRoles` (Use as title and Use as page, FLD-3 and FLD-4: the same calls Collection settings makes); `OptionsEditor` (link target with the note that other folders' collections can't be linked, lookup, rollup, count), `FormulaEditor` (`{Property}` autocomplete and the live check) and `SelectChoicesEditor` (choices keep their pastel chips; the color list is a bottom sheet on a phone, FLD-5 and FLD-6) |
 | `src/components/viewbar/` | The filter bar (`ViewFilterBar`), View options (`ViewOptions` and its screens), the filter builder, pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
