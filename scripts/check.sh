@@ -8,6 +8,10 @@
 # data directory; see web/playwright.config.ts). They are opt-in because they need Chrome and take
 # a minute or two.
 #
+# Two of the steps are scans that read advisory databases over the network: `cargo deny check`
+# (needs cargo-deny) and `npm audit --audit-level=high` (the install-time audit stays off in
+# web/.npmrc; this is the explicit run). Offline, they fail rather than pass silently.
+#
 # The web steps need `npm ci --ignore-scripts` in web/ once; without node_modules this script
 # stops there with a hint (it does not silently skip them). The web client is built before
 # `cargo test` because the server embeds web/dist and its tests inspect it; testing against a
@@ -22,6 +26,20 @@ cargo fmt --all -- --check
 step "cargo clippy"
 cargo clippy --workspace --all-targets -- -D warnings
 
+if ! cargo deny --version >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+
+cargo-deny is missing, so the dependency scan cannot run.
+Install it, then re-run scripts/check.sh:
+
+    cargo install --locked cargo-deny      # or: brew install cargo-deny
+
+EOF
+  exit 1
+fi
+step "cargo deny check (advisories, licences, bans, sources; see deny.toml)"
+cargo deny check
+
 if [[ ! -d web/node_modules ]]; then
   cat >&2 <<'EOF'
 
@@ -33,6 +51,9 @@ Install the pinned dependencies, then re-run scripts/check.sh:
 EOF
   exit 1
 fi
+
+step "web: npm audit --audit-level=high (the whole tree, dev dependencies included)"
+(cd web && npm audit --audit-level=high)
 
 step "web: production build (the server embeds web/dist, so build before cargo test)"
 (cd web && npm run build)

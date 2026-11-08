@@ -34,3 +34,21 @@ updates:
     directory: /deploy
     schedule:
       interval: weekly
+
+  # The base images in deploy/Dockerfile (Node, Rust, Debian), pinned there by digest: Dependabot
+  # moves the digest when Debian or Node publish fixes. Two rules keep it from breaking things:
+  # - Node: only LTS lines (even majors) are acceptable, and the move to the next one is a decision
+  #   (see CONTRIBUTING.md), so major bumps are ignored.
+  # - Rust: the image tag must equal the version in rust-toolchain.toml (the Docker build checks it).
+  #   A Rust bump from Dependabot therefore fails until the same pull request also changes
+  #   rust-toolchain.toml and the other places that name the version; that is the intended prompt.
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]

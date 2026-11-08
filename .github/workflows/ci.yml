@@ -13,6 +13,12 @@
 #   e2e     the Playwright end-to-end tests against the real server in Google Chrome. A failed test is
 #           retried once; one that only passes on the retry is "flaky": it is listed in the job summary
 #           and as a warning, and it fails the job when `fail_on_flaky` is set (the release does).
+#   secrets gitleaks over the whole git history.
+#   image   builds deploy/Dockerfile and has Trivy scan the result; critical or high findings that
+#           have a fix fail the job.
+# The dependency scans (cargo deny, npm audit) are part of scripts/check.sh, so they run in `checks`.
+# The scanners are installed from their official releases at pinned checksums
+# (scripts/ci-install-tool.sh), not through marketplace actions.
 name: CI
 
 on:
@@ -57,8 +63,8 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
-      # rust-toolchain.toml pins "stable" plus rustfmt, clippy and the wasm32 target. Recent rustup
-      # no longer installs it on first use, so do it explicitly.
+      # rust-toolchain.toml pins an exact Rust version plus rustfmt, clippy and the wasm32 target.
+      # Recent rustup no longer installs it on first use, so do it explicitly.
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: |
           rustup toolchain install --profile minimal
@@ -75,7 +81,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -83,8 +89,77 @@ jobs:
         working-directory: web
         run: npm ci --ignore-scripts
 
+      # scripts/check.sh runs `cargo deny check`, which needs the binary.
+      - name: Install cargo-deny
+        run: scripts/ci-install-tool.sh cargo-deny
+
       - name: scripts/check.sh
         run: scripts/check.sh
+
+  # A secret that was ever committed counts as leaked, so this reads the full history, not only the
+  # change under review. Findings are printed redacted. If a test fixture ever trips it, allow that
+  # one value in .gitleaks.toml with the reason; never loosen a rule.
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: scripts/ci-install-tool.sh gitleaks
+
+      - name: gitleaks
+        run: gitleaks git --redact --verbose --exit-code 1 .
+
+  # Scans what users actually run: the image the Dockerfile builds (Debian, ffmpeg, the binary).
+  # Critical and high findings fail the job, but only those with a fixed version available
+  # (--ignore-unfixed): Debian always carries some high findings it has not patched yet, and a job
+  # that cannot be made green teaches people to ignore it. A finding without a fix is not
+  # actionable here; it starts failing the job the day Debian ships the fix, and Dependabot then
+  # moves the pinned base-image digest forward.
+  image:
+    name: Docker image scan (Trivy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The same default target a self-hoster builds with `docker build -f deploy/Dockerfile .`.
+      # Layers are cached per branch by GitHub; only main writes the cache so pull requests cannot
+      # evict it.
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          load: true
+          tags: openbase:scan
+          provenance: false
+          cache-from: type=gha,scope=ci-image
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=ci-image,ignore-error=true' || '' }}
+
+      - name: Install Trivy
+        run: scripts/ci-install-tool.sh trivy
+
+      # TRIVY_DB_REPOSITORY lists mirrors in order: ghcr.io rate-limits anonymous pulls from shared
+      # runners now and then, and the public ECR mirror carries the same database.
+      - name: Trivy
+        env:
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2,public.ecr.aws/aquasecurity/trivy-db:2
+        run: trivy image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 openbase:scan
 
   e2e:
     name: End-to-end (Playwright, Chrome)
@@ -120,7 +195,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: web/package-lock.json
 
