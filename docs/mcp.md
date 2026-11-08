@@ -140,7 +140,7 @@ stay out of reach, and what you can do in a project limits what the app can do.
 
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, projects, where it connects from, when it connected and when it was last used,
-with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control. Administrators see everyone's apps
+with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking) and every change is written to the audit log (`oauth_grant_update`, with the old and new level), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing or resetting your password, turning on
 two-factor authentication, **Sign out other sessions** and having your account deactivated
 disconnect all your apps (they have to be approved again; reactivating an account does not
@@ -329,7 +329,7 @@ are names or ids.
 | Tool | Needs | What it does |
 |---|---|---|
 | `list_projects` | any | Workspaces and projects the token can reach, with your role on each and their icons (alias `list_bases`). A project appears as a folder in the app, except a workspace's top-level project: each workspace names it (`top_level_project`) and each project says `is_top_level` |
-| `get_project_schema` | any | The project's icon, and its tables (with icons), fields (id, name, type, options) and views (alias `get_base_schema`) |
+| `get_project_schema` | any | The project's icon and `is_top_level`, and its tables (with `color`, icon, `record_count` and the collection settings `page_field`, `home_date_field`, `done_field` and `record_noun`, as field names, left out when not set), fields (id, name, type, options) and views (alias `get_base_schema`) |
 | `list_records` | any | Records keyed by field **name**; optional view, `filterByFormula`, sort, field list; 50 per call (max 200), `offset` continues; `include_empty: true` returns fields with no value as `null` (default: left out, as in Airtable) |
 | `search_records` | any | Case-insensitive text search over all fields (embed blocks in rich text are skipped, see [Embedding records and views in rich text](#embedding-records-and-views-in-rich-text)); takes `include_empty` like `list_records` |
 | `search_everything` | any | The web app's search box: names, record text (rich text as plain words) and comments across all your projects, or only inside one `workspace` or `project` (names or ids); best first. Each result says where it is and where it matched: `name_matches`, and for a record found by another field or a comment a plain-text `snippet` (`…` where cut) with `snippet_matches` and the `field`; ranges are `[start, end)` in code points. Same as `GET /api/search` ([docs/api.md](api.md)) |
@@ -383,8 +383,10 @@ are names or ids.
 #### Icons
 
 Workspaces, projects and tables can have an icon: a [Lucide](https://lucide.dev) name in
-kebab-case such as `briefcase`, `users` or `chart-column` (the web app's icon picker offers
-the same set). `create_workspace`, `create_project` and `create_table` take an optional `icon`;
+kebab-case such as `briefcase`, `users` or `chart-column`. **The web app no longer displays them**:
+it marks workspaces, folders (projects) and collections (tables) by `color` alone, so an agent that
+wants to change how one looks sets its `color`. Icons stay accepted and returned so that existing
+agents, scripts and data keep working. `create_workspace`, `create_project` and `create_table` take an optional `icon`;
 `rename_workspace`, `rename_project` and `rename_table` change it. In those, **leaving `icon` out
 keeps the current icon, a name sets it, and `null` removes it**. The tools keep their
 `rename_*` names (an `update_*` rename would have broken existing agents and prompts); their
@@ -889,7 +891,13 @@ tool above its access. `scope` and `resource_metadata` are left out when OAuth i
   connected. It runs in a temporary directory with a temporary home, leaving your
   Claude configuration alone.
 - `web/contract/mcp.contract.test.ts`: handshake, `tools/list` and tool calls against
-  the live server, read back through the web client's REST API.
+  the live server, read back through the web client's REST API, including the collection
+  settings, the page and `get_home`.
+- `web/contract/agentAccess.contract.test.ts`: a full-access token creates a workspace (and gets
+  its top-level project), creates, deletes and restores a folder, then deletes and restores the
+  workspace, over REST and through the tools; a token without `manage` is refused with an error
+  that names the permission; a creator or editor with full access cannot delete; the top-level
+  project cannot be deleted.
 - OAuth, in `crates/server/tests/oauth_*.rs`: discovery documents and when OAuth is
   advertised; registration (every unsafe redirect address and malformed document),
   metadata documents fetched from a local test server (cache, stale fallback, SSRF
@@ -903,7 +911,8 @@ tool above its access. `scope` and `resource_metadata` are left out when OAuth i
 - `web/contract/oauth.contract.test.ts`: the **official MCP TypeScript SDK client**
   (`@modelcontextprotocol/sdk`, its `OAuthClientProvider`) discovers, registers, runs PKCE,
   connects, calls tools, refreshes an expired token by itself and is cut off by a
-  revocation. `web/e2e/oauth.spec.ts` (Playwright in Chrome): a client registers with a
+  revocation, and is upgraded with Change access to Full control, after which the token it
+  already holds can delete (and back down again). `web/e2e/oauth.spec.ts` (Playwright in Chrome): a client registers with a
   loopback redirect, the browser logs in and approves "Read & edit", the loopback listener
   captures the code, `tools/list` and a write tool work, the app is revoked from the
   account page and its tokens stop working. Component tests cover the approval page and

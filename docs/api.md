@@ -202,6 +202,23 @@ the two sign-in calls are session-only.
 `GET /api/setup` reports `passkeys_enabled` (false when `OPENBASE_PUBLIC_URL` is an IP address).
 How passkeys are protected: [security.md](security.md#passkeys).
 
+### Connected apps (internal API)
+
+How apps that sign in with OAuth are approved and changed; the flow itself is described in
+[mcp.md](mcp.md#connect-with-oauth-sign-in). All of these are session-only (an API token, or an app's
+own access token, is refused) and cookie requests need the `X-OpenBase-CSRF: 1` header.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/oauth/requests/{id}` | A pending request, as the consent page shows it: the app's name and address, `requested_access` (what it asked for), `default_access` (preselected: that, or `read`) and `max_access` (what the person may choose: `manage` for anyone who may create `manage` tokens, whatever the app asked for). |
+| `POST /api/oauth/requests/{id}/decision` | `{decision: "approve" \| "deny", access?, base_ids?}`. The person may choose any level up to `max_access`, including more than the app asked for; the audit entry (`oauth_approve`) records `access`, `requested` and `beyond_request`, and the token response reports the scope actually granted. |
+| `GET /api/oauth/grants` | The caller's connected apps: `{id, client_name, write, manage, bases, created_at, last_used_at, expires_at, ...}`. |
+| `PATCH /api/oauth/grants/{id}` | **Change access**: `{access: "read" \| "write" \| "manage"}`, up or down, answered with the updated grant. It applies to the grant and to its live access tokens from their next request, with no reconnect, and writes an `oauth_grant_update` audit entry (`from`, `to`). It never goes beyond what the person themselves may hand out, an app limited to some projects cannot be given `manage` (400), and a grant that is not the caller's is a 404. |
+| `DELETE /api/oauth/grants/{id}` | Revoke: the app is cut off at once. |
+| `GET /api/admin/oauth/grants`, `DELETE /api/admin/oauth/grants/{id}` | Administrators: everyone's connected apps, and revoking one. |
+
+Because these are session-only, an agent cannot raise its own access: `api_request` refuses them.
+
 ### Presence (internal API)
 
 Who has a project open right now. (The routes keep the name `bases`: see the note at the top.)
@@ -280,6 +297,40 @@ Empty values count as absent. The answer is `{items, next, fields}`:
 
 Records whose history is gone are gone from the feed too: purging a trashed record, table or project
 removes its history, and with it its entries here.
+
+### View queries and drafts (internal API)
+
+`POST /api/views/{id}/query` (Viewer; a read) answers a view's records with its filter, sorts and
+groups applied. The body is `{offset, limit, search, range, timezone, week_start, transient}`, all
+optional: `limit` defaults to 100 (`0` counts only), `search` is case-insensitive over the visible
+fields, `range` is a `{field_id, from, to}` window for calendar and timeline layouts,
+`timezone` (IANA) decides what "today" means and `week_start` (`0` Sunday, `1` Monday; anything
+else is a 400) where a calendar week begins ([section 6](#6-relative-date-filters-and-time-zones)).
+The answer is `{total, offset, records, groups, colors}`, with `colors` mapping record ids to the
+row colour the view (or the draft) gives them.
+
+`transient` is a **draft**: parts of the view's configuration that apply to this request only and
+are never stored. It is what the web app sends for changes nobody has saved yet, and what lets a
+person who cannot save the view (a viewer of a shared view, an editor of a locked one) filter, sort
+and group anyway. Each part that is present replaces the saved one, and parts left out keep the
+saved value; it is checked like a saved configuration (an unknown field or an operator that does
+not suit the field is a 400 whose message starts with `transient:`).
+
+| Part | Replaces | To drop the saved one |
+|---|---|---|
+| `filter` | the filter | a filter with no items |
+| `sorts` | the sorts | `[]` |
+| `groups` | the groups (at most 3 levels) | `[]` |
+| `row_color` | the row colours: `{mode: "by_select", field_id}` or `{mode: "by_conditions", rules: [{color, filter}]}` | `{mode: "by_conditions", rules: []}` |
+| `summaries` | the whole summary map, `{field_id: aggregation}` | `{}` |
+
+A drafted `row_color` gives `colors` and a drafted `summaries` gives the summary bar exactly as the
+same configuration saved on the view would. `GET /api/views/{id}/aggregations?timezone=&week_start=&search=&transient=`
+answers the summary bar (`{values: {field_id: value}}`) over the records that pass the filter and
+`search`; its `transient` is the same object JSON-encoded, and only its `filter` and `summaries`
+count there. The public share query takes the same body, limited to the fields the link shows.
+The MCP tool `query_view` takes `timezone`, `week_start`, `search` and a date window; an agent that
+needs a draft calls these endpoints through `api_request`.
 
 ### Search everything (internal API)
 
@@ -771,7 +822,7 @@ length). Unattached public-form uploads are deleted after 2 hours.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/public/shares/{token}` | the shared view: name, layout config and **only the visible fields** (hidden fields and field order of the view apply) |
-| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group/row-color/summary overrides may only use visible fields (400 otherwise); a drafted `row_color` colours rows only when it is `by_select` on a visible field, like a saved one. `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
+| `POST /api/public/shares/{token}/query` | records (`QueryRequest`: `offset`, `limit`, `search`, `range`, `timezone`, `week_start`, `transient`). `search` is at most 500 characters (400 otherwise). Search, ranges and `transient` filter/sort/group/row-color/summary overrides may only use visible fields (400 otherwise); a drafted `row_color` colours rows only when it is `by_select` on a visible field, like a saved one. `groups` carries at most 1,000 headers, each with `key`/`label` cut to 200 characters and `value` always `null`; keys of user fields are placeholders (`user-0`, ...), never user ids. Records contain only visible fields; user values are `[{"name"}]`, created/modified-by `{"name"}`; **no user ids, e-mail addresses or creator/editor metadata** ever appear |
 | `GET /api/attachments/{id}/{filename}?share={token}` (also `/api/attachments/{id}/thumb`) | attachment files **the shared view shows**: the id must be in a visible attachment field, or referenced (`/api/attachments/{id}/...`) in a visible rich text field, of a live record the view's filter lists, otherwise 404 (`Range` requests work as for signed-in users) (also for files of other tables, hidden fields, filtered-out or trashed records, and uploads not yet attached to a record). Send `X-Share-Password` when protected. Counts against its own rate limits (600/min per IP, 2,400/min per token) and the shared password limit (30/min per IP and link; 429 beyond) |
 | `GET /api/public/forms/{token}` | the form: title, description, fields with label/help/required/options |
 | `POST /api/public/forms/{token}/submit` | `{"values": {fieldId: value}}` creates one record anonymously (history source `form`, no user) and answers `{"ok": true, "record_id"}` (a form's `redirect_url` may contain `{record_id}`, which the page replaces). Only form fields are accepted, required fields are enforced, values are read leniently like a browser form but **never create select options**. **Link and user fields are not collected by public forms** (they would need pickers over other data), even if listed in the form's config |
@@ -869,7 +920,8 @@ record to the client. Request (all optional):
   "filter_by_formula": "{Region}='EU'",
   "sort": [{"by": "sum_Amount", "direction": "desc"}],
   "limit": 1000,
-  "timezone": "Europe/Berlin"
+  "timezone": "Europe/Berlin",
+  "week_start": 1
 }
 ```
 
@@ -885,6 +937,9 @@ Response:
 }
 ```
 
+- **Time**: `timezone` (default the caller's) and `week_start` (`0` Sunday, `1` Monday, default the
+  caller's profile; see [section 6](#6-relative-date-filters-and-time-zones)) decide what the view's
+  relative date filters mean; the MCP tool uses the caller's own.
 - **Selecting records** works as in listing: `view` (name or id; its filter applies, personal
   views of others are not found) and/or `filter_by_formula` (an Airtable formula, the same
   5-second evaluation budget); with neither, every record is included. The caller needs the
