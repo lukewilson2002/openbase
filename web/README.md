@@ -322,6 +322,16 @@ there whenever you add a token class. `src/styles/tokens.test.ts` pins the value
 `scripts/check-tokens.temporary-list.txt`; the list only shrinks (a file that no longer has a violation must be removed from it), and
 it must be empty by Phase 7 of the overhaul. The detector's tests are `src/styles/checkTokens.test.mjs`.
 
+### Core components (`src/components/ui`)
+
+The Notebook component set (spec "Core components"): `Button`, `IconButton` (`label` is its `aria-label`, required by type),
+`ColorMark`, `NavRow`, `StatusChip`, `FilterChip`, `LinkChip`, `CaptureChip`, `Card`, `FeedRow` (with `FeedTile`), `PropertyList` /
+`PropertyRow`, `Tabs`, `EmptyState` and `Skeleton`. A screen uses these rather than hand-rolling one. Components that can carry an entity
+colour take `hue` (a palette colour; `null` draws the mark in the colour its `markName` hashes to, `undefined` draws none), because `color`
+is an HTML attribute. `ColorMark` is the `.ob-mark` / `.ob-mark-<px>` classes plus the hue's `.ob-solid` fill. Phone sizes (44 px
+targets) switch on at the compact layout (`max-md:`) and on touch screens (`pointer-coarse:`). `src/components/ui/core.test.tsx` covers
+their behaviour and accessibility attributes.
+
 ### Logo, favicon and web app manifest
 
 `brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and
