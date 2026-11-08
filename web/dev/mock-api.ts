@@ -1326,6 +1326,19 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     if (!v) return err(res, 404, "not_found", "view not found"), true;
     return send(res, 200, runQuery(v, body)), true;
   }
+  // Download CSV (View options): the view's visible fields in its order, its saved filter and sorts applied.
+  if ((g = /^\/api\/views\/([^/]+)\/export\.csv$/.exec(p)) && m === "GET") {
+    const v = views.find((x) => x.id === g![1]);
+    if (!v) return err(res, 404, "not_found", "view not found"), true;
+    const all = fieldsOf(v.table_id);
+    const order: string[] = [...v.config.field_order, ...all.map((f) => f.id)];
+    const shown = [...new Set(order)].map((id) => all.find((f) => f.id === id)).filter((f): f is Obj => !!f && !v.config.hidden_fields.includes(f.id));
+    const cell = (text: string) => (/[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text);
+    const lines = [shown.map((f) => cell(f.name)).join(","), ...runQuery(v, {}).records.map((r: Obj) => shown.map((f) => cell(textOf(f, r.values[f.id]))).join(","))];
+    res.writeHead(200, { "Content-Type": "text/csv", "Content-Disposition": `attachment; filename="${v.name}.csv"` });
+    res.end(`\uFEFF${lines.join("\r\n")}\r\n`);
+    return true;
+  }
   if ((g = /^\/api\/views\/([^/]+)\/aggregations$/.exec(p))) {
     const v = views.find((x) => x.id === g![1]);
     if (!v) return err(res, 404, "not_found", "view not found"), true;
