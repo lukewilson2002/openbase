@@ -36,9 +36,11 @@ import type { DateContext } from "@/lib/dateGuess";
 import { BARE_BOOLEAN, BOOLEAN, BOOLEAN_PREFIX, DATE_OPS, EMPTINESS, EMPTINESS_PREFIX, ITEM_TEXT_OPS, ME_PHRASES, NUMBER_OPS, SET_OPS, TEXT_OPS, operatorsAt, wholeMatch, type Lexicon, type OpMatch, type SetTag } from "./lexicon";
 import { findPropertyMatches, type Quality } from "./match";
 import { keysOf, tokenize, valueText, type Token } from "./tokens";
+import { OP_TEXT } from "./words";
 import { ME, choiceEntries, dateValue, numberLabel, numberValue, peopleEntries, segmentValue, type ChoiceEntry, type Segmented } from "./values";
 
 export type { DateContext } from "@/lib/dateGuess";
+export { conditionLabel, describeCondition } from "./describe";
 
 export interface PhraseContext {
   /** The collection's properties, in their order. Leave out any that should not be offered, such as the Page. */
@@ -105,31 +107,6 @@ interface Env {
   dates: DateContext;
 }
 
-const OP_TEXT: Record<FilterOp, string> = {
-  is: "is",
-  is_not: "is not",
-  is_empty: "is empty",
-  is_not_empty: "is not empty",
-  contains: "contains",
-  does_not_contain: "doesn't contain",
-  starts_with: "starts with",
-  ends_with: "ends with",
-  lt: "is under",
-  lte: "is at most",
-  gt: "is over",
-  gte: "is at least",
-  is_any_of: "is any of",
-  is_none_of: "is none of",
-  has_any_of: "has any of",
-  has_all_of: "has all of",
-  has_none_of: "has none of",
-  is_exactly: "is exactly",
-  is_before: "is before",
-  is_after: "is after",
-  is_on_or_before: "is on or before",
-  is_on_or_after: "is on or after",
-  is_within: "is",
-};
 
 function reading(op: FilterOp, value: Condition["value"], valueLabel: string | null, explicit: boolean): Reading {
   return { op, value, opText: OP_TEXT[op], valueLabel, explicit };
