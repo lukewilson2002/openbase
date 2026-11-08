@@ -194,20 +194,31 @@ test("filters by a text condition and shows the record count", async ({ page }) 
   await page.getByLabel("Operator").selectOption("contains");
   await page.getByLabel("Value").fill("lph");
   await expect(page.getByText("1 item")).toBeVisible();
+  // A draft: the changes bar counts what the filter shows against what the view shows.
+  await expect(page.getByText("Showing 1 of 5 records.")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Filtered by / }).click();
   await page.getByRole("button", { name: "Remove condition" }).click();
   await expect(page.getByText("5 items")).toBeVisible();
+  // Undone by hand, the draft is gone and so is the bar.
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
 
-test("sorts by a field descending from the toolbar", async ({ page }) => {
+test("sorts by a field descending from the toolbar, as a draft the server computes", async ({ page }) => {
   await gotoGrid(page);
   await page.getByRole("button", { name: /^Sort/ }).click();
   await page.getByRole("button", { name: "Add sort" }).click();
+  // The page asks the server for the draft's order with each query (a transient override).
+  const sorted = page.waitForResponse((r) => r.url().endsWith(`/api/views/${fx.viewId}/query`) && (r.request().postDataJSON() as { transient?: { sorts?: { direction: string }[] } }).transient?.sorts?.[0]?.direction === "desc");
   await page.getByLabel("Direction for sort 1").selectOption("desc");
   await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
-  await expect.poll(async () => (await rows(page))[0]!.name).toBe("Echo");
+  const body = (await (await sorted).json()) as { records: { values: Record<string, unknown> }[] };
+  expect(body.records[0]!.values[fx.fields.name]).toBe("Echo");
+  // The view itself is not sorted: the draft is only for now.
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+  expect((await rows(page))[0]!.name).toBe("Alpha");
   await page.getByRole("button", { name: "Remove sort 1" }).click();
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
 
 test("searches with Ctrl+F", async ({ page }) => {
@@ -219,7 +230,7 @@ test("searches with Ctrl+F", async ({ page }) => {
   await expect(page.getByText("5 items")).toBeVisible();
 });
 
-test("a click on a column's edge leaves its width alone; a drag resizes it and is saved", async ({ page }) => {
+test("a click on a column's edge leaves its width alone; a drag resizes it as a draft that survives a reload and that Update view saves", async ({ page }) => {
   await gotoGrid(page);
   const box = (await canvas(page).boundingBox())!;
   const viewConfig = async () => {
@@ -233,8 +244,9 @@ test("a click on a column's edge leaves its width alone; a drag resizes it and i
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
   await page.mouse.up();
-  // Past the save delay of a resize: nothing was changed.
+  // Past the pause a resize waits for in case the release never arrives: nothing was changed.
   await page.waitForTimeout(900);
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
   expect((await viewConfig()).field_widths[fx.fields.done]).toBe(before.field_widths[fx.fields.done]);
 
   await page.mouse.move(edge.x, edge.y);
@@ -242,7 +254,16 @@ test("a click on a column's edge leaves its width alone; a drag resizes it and i
   await page.mouse.move(edge.x + 30, edge.y, { steps: 5 });
   await page.mouse.move(edge.x + 60, edge.y, { steps: 5 });
   await page.mouse.up();
+  // A draft on this device: the bar says so, and the view as saved still has its old width.
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+  await page.waitForTimeout(900);
+  expect((await viewConfig()).field_widths[fx.fields.done]).toBe(before.field_widths[fx.fields.done]);
+  await page.reload();
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+  // Update view writes it to the view.
+  await page.getByRole("button", { name: "Update view" }).click();
   await expect.poll(async () => (await viewConfig()).field_widths[fx.fields.done] ?? 0).toBeGreaterThan(WIDTHS.done + 40);
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 
   // Put it back for the tests that click by column position.
   const after = await viewConfig();
@@ -274,10 +295,12 @@ test("hides a field and shows it again", async ({ page }) => {
   await page.getByRole("switch", { name: "Qty" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /2 hidden fields/ })).toBeVisible();
+  await expect(page.getByText(/These changes are only for now/)).toBeVisible();
   await page.getByRole("button", { name: /2 hidden fields/ }).click();
   await page.getByRole("switch", { name: "Qty" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /1 hidden field/ })).toBeVisible();
+  await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
 
 test("adds a field from the dialog", async ({ page }) => {

@@ -272,12 +272,22 @@ test.describe("timeline", () => {
     expect((await record(page, fx.records.charlie)).values[fx.fields.end]).toBe(next(before[fx.fields.end]));
   });
 
-  test("switches the scale and keeps it after a reload", async ({ page }) => {
+  test("switches the scale as a draft, keeps it after a reload, and saves it with Update view", async ({ page }) => {
+    const scaleOnServer = async () => (await call<{ tables: { views: { id: string; config: { timeline: { scale: string } } }[] }[] }>(page.request, "get", `/api/bases/${fx.baseId}`)).tables[0]!.views.find((v) => v.id === fx.views.timeline)!.config.timeline.scale;
     await open(page, "timeline");
+    const before = await scaleOnServer();
     await page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: "Month" }).click();
-    await expect.poll(async () => (await call<{ tables: { views: { id: string; config: { timeline: { scale: string } } }[] }[] }>(page.request, "get", `/api/bases/${fx.baseId}`)).tables[0]!.views.find((v) => v.id === fx.views.timeline)!.config.timeline.scale).toBe("month");
+    await expect(page.getByText(/These changes are only for now/)).toBeVisible();
+    expect(await scaleOnServer()).toBe(before);
     await page.reload();
     await expect(page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Update view" }).click();
+    await expect.poll(scaleOnServer).toBe("month");
+    await expect(page.getByText(/These changes are only for now/)).toBeHidden();
+    // Back to how it was, for the tests that follow.
+    await page.getByRole("group", { name: "Timeline scale" }).getByRole("button", { name: before === "week" ? "Week" : "Month" }).click();
+    await page.getByRole("button", { name: "Update view" }).click();
+    await expect.poll(scaleOnServer).toBe(before);
   });
 
   test("lists undated records beside the chart and dates one dropped on a lane", async ({ page }) => {

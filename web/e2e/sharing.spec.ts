@@ -10,7 +10,7 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  *     rows but not the hidden field;
  *   - download a view as CSV and check the file; import a CSV into a new table and into an
  *     existing one, including the rows the server refuses;
- *   - a viewer can filter and sort a board for themselves ("Not saved") without changing the view.
+ *   - a viewer can filter and sort a board for themselves (a draft, with Reset only) without changing the view.
  *
  * Results are asserted against the API where the grid (a canvas) would otherwise be the only
  * witness. Runs only with OPENBASE_E2E=1 (see playwright.config.ts).
@@ -418,11 +418,11 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   await expect(g.getByRole("listitem", { name: "Stack: Todo" })).toBeVisible();
   await expect(g.getByRole("button", { name: "Share view" })).toHaveCount(0);
 
-  // Sort and filter locally: the marker appears, the saved view does not change.
+  // Sort and filter as a draft: the changes bar appears, the saved view does not change.
   await g.getByRole("button", { name: /^Sort/ }).click();
   await g.getByRole("button", { name: "Add sort" }).click();
   await g.keyboard.press("Escape");
-  await expect(g.getByRole("status").filter({ hasText: "Not saved" })).toBeVisible();
+  await expect(g.getByRole("status").filter({ hasText: "These changes are only for now" })).toBeVisible();
   await g.getByRole("button", { name: /^Filter/ }).click();
   await g.getByRole("button", { name: "Add condition", exact: true }).click();
   await g.getByLabel("Operator").selectOption("contains");
@@ -435,8 +435,11 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   expect(saved.config.filter ?? null).toBeNull();
   expect(saved.config.sorts).toEqual([]);
 
+  // A viewer may only take the draft back: no Update view, no Save as view.
+  await expect(g.getByRole("button", { name: "Update view" })).toHaveCount(0);
+  await expect(g.getByRole("button", { name: "Save as view" })).toHaveCount(0);
   await g.getByRole("button", { name: "Reset" }).click();
   await expect(g.getByRole("button", { name: "Bravo" })).toBeVisible();
-  await expect(g.getByRole("status").filter({ hasText: "Not saved" })).toHaveCount(0);
+  await expect(g.getByRole("status").filter({ hasText: "These changes are only for now" })).toHaveCount(0);
   await guest.close();
 });

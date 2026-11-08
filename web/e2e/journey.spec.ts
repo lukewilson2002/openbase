@@ -252,7 +252,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect.poll(async () => (await records())[0]!.values[fid("Due")]).toBe("2026-03-04");
   });
 
-  await test.step("filters and sorts from the toolbar; the view remembers both", async () => {
+  await test.step("filters and sorts from the toolbar as a draft; Reset takes it back and Update view saves it", async () => {
     await page.getByRole("button", { name: /^Filter/ }).click();
     await page.getByRole("button", { name: "Add condition", exact: true }).click();
     await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
@@ -269,10 +269,38 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
     await page.keyboard.press("Escape");
 
-    // The server applies the saved view config: only Qty >= 20, biggest first.
+    // Nothing is saved yet: the bar counts what the draft shows, and the view still holds all three.
+    await expect(page.getByText("Showing 2 of 3 records.")).toBeVisible();
+    await expect.poll(async () => (await records()).length).toBe(3);
+    expect((await loadTable()).views.find((v) => v.id === viewId)!.config).toMatchObject({ filter: null, sorts: [] });
+    // The draft survives a reload on this device.
+    await page.reload();
+    await expect(page.getByText("2 items")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
+    await expect(page.getByText("Showing 2 of 3 records.")).toBeVisible();
+
+    // Reset takes both back.
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(page.getByText("3 items")).toBeVisible();
+    await expect(page.getByText(/These changes are only for now/)).toBeHidden();
+
+    // Again, and this time Update view writes it: the server applies the saved view, only Qty >= 20, biggest first.
+    await page.getByRole("button", { name: /^Filter/ }).click();
+    await page.getByRole("button", { name: "Add condition", exact: true }).click();
+    await page.getByLabel("Field", { exact: true }).selectOption({ label: "Qty" });
+    await page.getByLabel("Operator").selectOption("gte");
+    await page.getByLabel("Value").fill("20");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /^Sort/ }).click();
+    await page.getByRole("button", { name: "Add sort" }).click();
+    await page.getByLabel("Field for sort 1").selectOption({ label: "Qty" });
+    await page.getByLabel("Direction for sort 1").selectOption("desc");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Update view" }).click();
     await expect.poll(async () => (await records()).map((r) => r.values[table.primary_field_id])).toEqual(["Charlie", "Bravo"]);
     const view = (await loadTable()).views.find((v) => v.id === viewId)!;
     expect(view.config).toMatchObject({ filter: { items: [{ field_id: fid("Qty"), op: "gte", value: 20 }] }, sorts: [{ field_id: fid("Qty"), direction: "desc" }] });
+    await expect(page.getByText(/These changes are only for now/)).toBeHidden();
     // The saved view survives a reload.
     await page.reload();
     await expect(page.getByText("2 items")).toBeVisible();
