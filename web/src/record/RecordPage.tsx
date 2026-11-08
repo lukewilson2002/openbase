@@ -233,7 +233,24 @@ export function RecordPage({ schema, table, role, recordId, layoutView = null, p
   // Enter in the title moves on to the page (the editor marks itself `data-record-page`); until it has one, to the first value.
   const bodyRef = useRef<HTMLDivElement>(null);
   const focusPage = useCallback(() => {
-    const target = bodyRef.current?.querySelector<HTMLElement>("[data-record-page]") ?? bodyRef.current?.querySelector<HTMLElement>("[data-edit-field][tabindex='0']");
+    const root = bodyRef.current;
+    const page = () => root?.querySelector<HTMLElement>("[data-record-page]");
+    if (page()) return page()!.focus();
+    // The editor is a chunk of its own: with its place on the page but the editor not there yet, wait for it (a
+    // few seconds at most), unless the focus has been moved on by then.
+    if (root?.querySelector("section[aria-label=Page] [aria-busy]")) {
+      const from = document.activeElement;
+      let tries = 0;
+      const wait = () => {
+        if (document.activeElement !== from || !root.isConnected || ++tries > 60) return;
+        const target = page();
+        if (target) target.focus();
+        else setTimeout(wait, 50);
+      };
+      setTimeout(wait, 50);
+      return;
+    }
+    const target = root?.querySelector<HTMLElement>("[data-edit-field][tabindex='0']");
     if (target) target.focus();
     else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   }, []);

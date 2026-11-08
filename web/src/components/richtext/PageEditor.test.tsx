@@ -432,6 +432,20 @@ describe("PageEditor", () => {
       expect(md()).toBe("see [https://example.com](https://example.com)");
     });
 
+    it("keeps Ctrl+K in the link form too, selecting the address", async () => {
+      const { box } = await open({}, { initial: "text" });
+      press(box, { ctrlKey: true });
+      const input = await screen.findByLabelText("Link address");
+      await userEvent.type(input, "example.com");
+      const seenByWindow = vi.fn();
+      window.addEventListener("keydown", seenByWindow);
+      await userEvent.keyboard("{Control>}k{/Control}");
+      window.removeEventListener("keydown", seenByWindow);
+      expect(seenByWindow.mock.calls.every(([e]) => e.defaultPrevented || e.key !== "k")).toBe(true);
+      expect((input as HTMLInputElement).selectionStart).toBe(0);
+      expect((input as HTMLInputElement).selectionEnd).toBe(11);
+    });
+
     it("leaves other Ctrl keys alone", async () => {
       const { box } = await open({}, { initial: "text" });
       expect(press(box, { ctrlKey: true, key: "j" }).defaultPrevented).toBe(false);

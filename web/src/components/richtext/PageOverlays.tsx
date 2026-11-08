@@ -44,6 +44,12 @@ export function LinkForm({ editor, onClose }: { editor: Editor; onClose: () => v
     onClose();
   };
   const onKeyDown = (e: KeyboardEvent) => {
+    // Ctrl+K again stays in the form (selecting the address) rather than falling through to the command palette.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      if (e.target instanceof HTMLInputElement) e.target.select();
+      return;
+    }
     if (e.key !== "Escape") return;
     e.preventDefault();
     e.stopPropagation();
