@@ -33,6 +33,26 @@ const CASES: Record<string, string> = {
   "a tilde, escaped once": "yo\\~!!!!",
   "entities and spaces in code stay as typed": "```\nx  ~ &nbsp; &amp;\n```\n\nand `a~b &nbsp;`",
   "ampersands": "R&D and a & b and &amp;copy; written out",
+  // The page's Linked records and View blocks (REC-6): a fenced block with the info string `openbase`.
+  "openbase linked embed": '```openbase\n{"embed":"linked","field":"fld1"}\n```',
+  "openbase view embed between paragraphs": 'before\n\n```openbase\n{"embed":"view","view":"viw1","limit":10}\n```\n\nafter',
+  "openbase block that is not JSON keeps its text": "```openbase\nnot json {\n```",
+  "a page with every block the slash menu adds": [
+    "# One",
+    "## Two",
+    "### Three",
+    "- bullet",
+    "1. numbered",
+    "- [ ] checklist",
+    "> quote",
+    "> [!NOTE]\n> callout",
+    "```\ncode\n```",
+    "| A   | B   |\n| --- | --- |\n| 1   | 2   |",
+    "---",
+    '![A photo](/api/attachments/att_1/photo.png "Caption")',
+    '```openbase\n{"embed":"linked","field":"fld1"}\n```',
+    "end",
+  ].join("\n\n"),
   "media between paragraphs": "before\n\n![A photo](/api/attachments/att_1/photo.png \"Caption\")\n\nafter",
 };
 

@@ -13,18 +13,17 @@
  * The expand button at the bottom-right of the box opens the same editor full screen; the two
  * share the value through the caller, and whichever is not being typed in follows it.
  */
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Maximize2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import type { AttachmentRef } from "@/api/types";
 import { FullScreen } from "@/components/record/editors/FullScreen";
 import { useToastIfAny } from "@/components/ui/toast";
-import { matchPeople } from "@/components/record/mentions";
 import { cn } from "@/lib/cn";
 import { richTextExtensions } from "./extensions";
-import { dismissMention, mentionQuery, type MentionQuery } from "./mention";
 import { MentionPicker, type MentionPerson } from "./MentionPicker";
+import { typingElsewhere, useMentionPicker } from "./useMentionPicker";
 import { Toolbar, toolbarControls } from "./Toolbar";
 
 export interface RichTextEditorProps {
@@ -45,12 +44,6 @@ export interface RichTextEditorProps {
   /** A smaller box (the comment composer). */
   compact?: boolean;
   "aria-label"?: string;
-}
-
-/** Whether a text box, or anything else that takes typing, has the focus already. */
-function typingElsewhere(): boolean {
-  const el = document.activeElement;
-  return !!el && el !== document.body && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el as HTMLElement).isContentEditable);
 }
 
 export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen, placeholder, upload, people, compact, "aria-label": label }: RichTextEditorProps) {
@@ -173,105 +166,4 @@ export function RichTextEditor({ value, onChange, onBlur, autoFocus, fullScreen,
       )}
     </div>
   );
-}
-
-type TiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
-
-/**
- * The people picker of an editor: follows the `@` query at the caret (mention.ts), filters `people`
- * by it, takes the arrow keys, Enter and Tab while it shows (and Escape, through `dismiss`), and places itself under the `@`
- * (above it near the bottom of the window). The editor keeps the focus and announces the list with
- * the combobox attributes.
- */
-function useMentionPicker(editor: TiptapEditor | null, people: readonly MentionPerson[] | undefined, box: RefObject<HTMLDivElement | null>) {
-  const listId = useId();
-  const [query, setQuery] = useState<MentionQuery | null>(null);
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    if (!editor || !people) return;
-    const follow = () => {
-      const next = editor.isInitialized && editor.isFocused ? mentionQuery(editor.state) : null;
-      setQuery((q) => (q?.from === next?.from && q?.to === next?.to && q?.query === next?.query ? q : next));
-    };
-    follow();
-    editor.on("transaction", follow);
-    editor.on("focus", follow);
-    editor.on("blur", follow);
-    return () => {
-      editor.off("transaction", follow);
-      editor.off("focus", follow);
-      editor.off("blur", follow);
-    };
-  }, [editor, people]);
-
-  const matches = useMemo(() => (query && people ? matchPeople(people, query.query) : []), [query, people]);
-  const open = matches.length > 0;
-  // A new query starts at the top of its list.
-  useEffect(() => setActive(0), [query?.from, query?.query]);
-
-  const choose = (p: MentionPerson) => {
-    if (!editor || !query) return;
-    editor
-      .chain()
-      .focus()
-      .insertContentAt({ from: query.from, to: query.to }, [
-        { type: "mention", attrs: { id: p.id, label: p.name } },
-        { type: "text", text: " " },
-      ])
-      .run();
-  };
-
-  const onKey = (e: KeyboardEvent): boolean => {
-    if (!editor || !open) return false;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      const step = e.key === "ArrowDown" ? 1 : -1;
-      setActive((a) => (a + step + matches.length) % matches.length);
-      return true;
-    }
-    if (e.key === "Enter" || e.key === "Tab") {
-      const p = matches[Math.min(active, matches.length - 1)];
-      if (p) choose(p);
-      return true;
-    }
-    return false;
-  };
-
-  const dismiss = () => {
-    if (editor) editor.view.dispatch(dismissMention(editor.state));
-  };
-
-  // The editor is the combobox: it keeps the focus while the list shows. Meanwhile Escape is the list's:
-  // `data-escape-cancels` tells what has its own use for Escape around the editor (the record page, the full-screen dialog) to leave it alone.
-  useEffect(() => {
-    if (!editor?.isInitialized || editor.isDestroyed || !people) return;
-    const dom = editor.view.dom;
-    dom.setAttribute("aria-autocomplete", "list");
-    dom.setAttribute("aria-expanded", String(open));
-    if (open) {
-      dom.setAttribute("aria-controls", listId);
-      dom.setAttribute("aria-activedescendant", `${listId}-${active}`);
-      dom.setAttribute("data-escape-cancels", "");
-    } else {
-      dom.removeAttribute("aria-controls");
-      dom.removeAttribute("aria-activedescendant");
-      dom.removeAttribute("data-escape-cancels");
-    }
-  }, [editor, people, open, active, listId]);
-
-  let style: CSSProperties | undefined;
-  if (open && editor?.isInitialized && query && box.current) {
-    const rect = box.current.getBoundingClientRect();
-    let at = { left: rect.left + 8, top: rect.top, bottom: rect.top + 24 };
-    try {
-      at = editor.view.coordsAtPos(query.from);
-    } catch {
-      // No layout to measure (a document without one): the list goes at the top left.
-    }
-    const left = Math.max(4, Math.min(at.left - rect.left, rect.width - 260));
-    const below = window.innerHeight - at.bottom > 240;
-    style = below ? { left, top: at.bottom - rect.top + box.current.scrollTop + 4 } : { left, bottom: rect.bottom - at.top - box.current.scrollTop + 4 };
-  }
-
-  return { open, matches, active, choose, onKey, dismiss, listId, style };
 }

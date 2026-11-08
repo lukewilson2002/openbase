@@ -1204,6 +1204,10 @@
     color: var(--faint);
     pointer-events: none;
   }
+  /* The selection of an editor that has lost focus to its link form (the page's Selection extension marks it). */
+  .ob-editor .selection {
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+  }
   .ob-editor .selectedCell::after {
     content: "";
     position: absolute;

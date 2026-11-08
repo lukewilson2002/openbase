@@ -50,13 +50,15 @@ export interface ListboxOptionProps {
    */
   rich?: boolean;
   className?: string;
+  /** The row is listed but cannot be picked (the reason goes in `detail`). */
+  disabled?: boolean;
 }
 
 /**
  * One option of a listbox whose focus stays in the field above it. A press does not take focus off the field
  * (`onMouseDown` is cancelled), and the highlighted row scrolls into view as the keys move it.
  */
-export function ListboxOption({ id, active, onSelect, onHover, leading, hint, detail, children, rich, className }: ListboxOptionProps) {
+export function ListboxOption({ id, active, onSelect, onHover, leading, hint, detail, children, rich, className, disabled }: ListboxOptionProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: "nearest" });
@@ -67,11 +69,12 @@ export function ListboxOption({ id, active, onSelect, onHover, leading, hint, de
       id={id}
       role="option"
       aria-selected={active}
+      aria-disabled={disabled || undefined}
       data-active={active}
       onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
+      onClick={disabled ? undefined : onSelect}
       onMouseMove={onHover}
-      className={cn(menuRowClass, "cursor-pointer", rich && "h-auto py-1.5", className)}
+      className={cn(menuRowClass, "cursor-pointer", rich && "h-auto py-1.5", disabled && "opacity-60", className)}
     >
       {leading}
       {rich ? (

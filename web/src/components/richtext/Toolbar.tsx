@@ -35,6 +35,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
 import { CALLOUT_KINDS, CALLOUT_LABELS, type CalloutKind } from "./callout";
+import { applyLink, currentLink, linkAddress, removeLink } from "./links";
 
 // A grid cell editor closes on a click outside of it; the editor's menus render in portals.
 const KEEP_GRID_EDITOR = "click-outside-ignore";
@@ -127,31 +128,24 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
 
   const onOpenChange = (o: boolean) => {
     if (o) {
-      setHref((editor.getAttributes("link").href as string | undefined) ?? "");
+      setHref(currentLink(editor));
       setError(null);
     }
     setOpen(o);
   };
 
   const apply = () => {
-    let url = href.trim();
-    if (!url) {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    if (!href.trim()) {
+      removeLink(editor);
       setOpen(false);
       return;
     }
-    // "example.com" is an address, not a relative link; anything else must carry a scheme we allow.
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith("/") && !url.startsWith("#")) url = `https://${url}`;
-    if (!/^(?:https?:|mailto:|tel:|\/(?!\/)|#)/i.test(url)) {
-      setError("Use a web address, an email address (mailto:) or a phone number (tel:).");
+    const address = linkAddress(href);
+    if (!address.ok) {
+      setError(address.error);
       return;
     }
-    const { empty } = editor.state.selection;
-    if (empty && !editor.isActive("link")) {
-      editor.chain().focus().insertContent({ type: "text", text: url, marks: [{ type: "link", attrs: { href: url } }] }).run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-    }
+    applyLink(editor, address.href);
     setOpen(false);
   };
 
@@ -203,7 +197,7 @@ function LinkButton({ editor, active }: { editor: Editor; active: boolean }) {
             <Button
               variant="secondary"
               onClick={() => {
-                editor.chain().focus().extendMarkRange("link").unsetLink().run();
+                removeLink(editor);
                 setOpen(false);
               }}
             >
