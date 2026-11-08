@@ -704,6 +704,82 @@ describe("FilterBar", () => {
   });
 });
 
+describe("FilterBar: where its panels go", () => {
+  const SUGGESTIONS: FilterBarSuggestion[] = [{ id: "s1", label: "Status is Done" }];
+  function Harness({ onClose }: { onClose?: () => void }) {
+    const [text, setText] = useState("");
+    const chips: FilterBarChip[] = [
+      {
+        id: "c1",
+        label: "Status is Todo",
+        editor: (close) => (
+          <div>
+            <label>
+              Value <input defaultValue="Todo" />
+            </label>
+            <button
+              onClick={() => {
+                onClose?.();
+                close();
+              }}
+            >
+              Finish
+            </button>
+          </div>
+        ),
+      },
+    ];
+    return <FilterBar chips={chips} onRemoveChip={() => {}} text={text} onTextChange={setText} suggestions={text ? SUGGESTIONS : []} onApplySuggestion={() => {}} />;
+  }
+
+  it("on a desktop, draws the suggestions in a popover under the field", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.type(screen.getByRole("combobox"), "done");
+    const list = await screen.findByRole("listbox", { name: "Suggestions" });
+    expect(list.closest("[data-radix-popper-content-wrapper]")).not.toBeNull();
+  });
+
+  it("on a phone, draws them in a panel docked to the bottom of the screen that is not a popover", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.type(screen.getByRole("combobox"), "done");
+    const list = await screen.findByRole("listbox", { name: "Suggestions" });
+    expect(list.closest("[data-radix-popper-content-wrapper]")).toBeNull();
+    expect(list.parentElement).toHaveClass("fixed", "inset-x-0");
+    // Focus stays in the field for the keys.
+    expect(screen.getByRole("combobox")).toHaveFocus();
+  });
+
+  it("opens a chip's editor in a popover on a desktop, and closing it gives focus back to the chip", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
+    await user.click(screen.getByRole("button", { name: "Status is Todo" }));
+    const input = await screen.findByRole("textbox", { name: "Value" });
+    expect(input.closest("[data-radix-popper-content-wrapper]")).not.toBeNull();
+    // A click inside the editor is not a click on the field: focus stays where the person put it.
+    await user.click(input);
+    expect(input).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Finish" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Value" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Status is Todo" })).toHaveFocus());
+  });
+
+  it("opens it as a sheet on a phone, named for the chip", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Status is Todo" }));
+    const sheet = await screen.findByRole("dialog", { name: "Status is Todo" });
+    expect(within(sheet).getByRole("textbox", { name: "Value" })).toBeInTheDocument();
+    await user.click(within(sheet).getByRole("button", { name: "Finish" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+});
+
 describe("TemporaryChangesBar", () => {
   it("says what is shown and that it is only for now, with Reset and Save as view", async () => {
     const user = userEvent.setup();
