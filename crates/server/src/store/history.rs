@@ -57,7 +57,9 @@ pub const COALESCE_WINDOW_MS: i64 = 10 * 60 * 1000;
 /// not the value this edit started from) adds a row as usual.
 ///
 /// The row keeps its id, so a reader paging by id (record history) sees no
-/// gap; feeds sort by time, where the row simply becomes the newest.
+/// gap; feeds sort by time, where the row simply becomes the newest. When the
+/// fold puts the cell back to the row's first `old` (typing, then undo) there is
+/// no change left to show, and the row is removed.
 pub fn record_update(
     conn: &Connection,
     record_id: &str,
@@ -100,6 +102,15 @@ pub fn record_update(
             && prev.get("new") == incoming.get("old")
         {
             prev["new"] = incoming.get("new").cloned().unwrap_or(Json::Null);
+            // An undo inside the window puts the cell back to where the row started. A row
+            // claiming "changed from X to X" would be the newest thing in the history, the
+            // activity feed and Home, and would bump a last-modified time for no change; the
+            // edit and its undo cancel out, so the row goes.
+            if prev.get("old") == prev.get("new") {
+                conn.prepare_cached("DELETE FROM record_history WHERE id = ?1")?
+                    .execute([id])?;
+                return Ok(());
+            }
             conn.prepare_cached(
                 "UPDATE record_history SET changes = ?1, created_at = ?2 WHERE id = ?3",
             )?

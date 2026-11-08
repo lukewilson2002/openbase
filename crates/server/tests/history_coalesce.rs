@@ -128,6 +128,50 @@ async fn an_edit_over_ten_minutes_after_the_last_adds_a_row() {
 }
 
 #[tokio::test]
+async fn typing_and_then_undoing_inside_the_window_leaves_no_row_claiming_x_to_x() {
+    let f = Fixture::new().await;
+    let id = new_record(&f).await;
+    let owner = uid(&f.owner);
+    let t0 = Utc::now() + Duration::seconds(1);
+    api_edit(&f, &owner, t0, &id, json!({ &f.primary_id: "v1" }));
+    assert_eq!(updates(&f, &id).len(), 1);
+    // The web undo writes the old text back as an ordinary edit by the same person.
+    api_edit(
+        &f,
+        &owner,
+        t0 + Duration::seconds(30),
+        &id,
+        json!({ &f.primary_id: "v0" }),
+    );
+    assert!(updates(&f, &id).is_empty(), "{:?}", updates(&f, &id));
+
+    // Typing again after that starts a fresh row from the restored text.
+    api_edit(
+        &f,
+        &owner,
+        t0 + Duration::seconds(60),
+        &id,
+        json!({ &f.primary_id: "v2" }),
+    );
+    let rows = updates(&f, &id);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].1[&f.primary_id],
+        json!({ "old": "v0", "new": "v2" })
+    );
+
+    // An undo that lands outside the window is a real second change and keeps its own row.
+    api_edit(
+        &f,
+        &owner,
+        t0 + Duration::milliseconds(WINDOW_MS + 61_000),
+        &id,
+        json!({ &f.primary_id: "v0" }),
+    );
+    assert_eq!(updates(&f, &id).len(), 2);
+}
+
+#[tokio::test]
 async fn the_folded_row_moves_to_the_latest_edit_so_the_window_slides() {
     let f = Fixture::new().await;
     let id = new_record(&f).await;
