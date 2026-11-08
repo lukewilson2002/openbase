@@ -287,8 +287,9 @@ describe("ViewFilterBar: a press elsewhere", () => {
     const elsewhere = document.createElement("button");
     elsewhere.textContent = "Elsewhere";
     document.body.append(elsewhere);
-    await bar.user.click(field_());
-    await bar.user.keyboard("{Enter}");
+    await bar.user.type(field_(), "x");
+    await screen.findAllByRole("option");
+    await bar.user.keyboard("{ArrowUp}{Enter}");
     await screen.findByRole("group", { name: "Advanced filter" });
     await bar.user.click(elsewhere);
     await waitFor(() => expect(screen.queryByRole("group", { name: "Advanced filter" })).not.toBeInTheDocument());
@@ -301,7 +302,7 @@ describe("ViewFilterBar: a press elsewhere", () => {
 describe("ViewFilterBar advanced filter", () => {
   it("opens the nested builder from the bottom of the list, on the whole filter", async () => {
     const bar = renderBar({ filter: and(is("fld_status", done.id)) });
-    await bar.user.click(field_());
+    await bar.user.type(field_(), "x");
     await bar.user.click(await screen.findByRole("option", { name: "Advanced filter" }));
     const group = await screen.findByRole("group", { name: "Advanced filter" });
     expect(within(group).getByRole("combobox", { name: "Field" })).toHaveValue("fld_status");
@@ -309,11 +310,21 @@ describe("ViewFilterBar advanced filter", () => {
     expect(bar.config().filter!.items).toHaveLength(2);
   });
 
-  it("reaches the row with the keys", async () => {
+  it("reaches the row with the keys: ArrowUp from the first suggestion wraps to it", async () => {
     const bar = renderBar();
-    await bar.user.click(field_());
-    await bar.user.keyboard("{Enter}");
+    await bar.user.type(field_(), "x");
+    await screen.findAllByRole("option");
+    await bar.user.keyboard("{ArrowUp}{Enter}");
     expect(await screen.findByRole("group", { name: "Advanced filter" })).toBeInTheDocument();
+  });
+
+  it("opens no list while the field is empty, so nothing under the bar is covered", async () => {
+    const bar = renderBar({ filter: and(is("fld_status", done.id)) });
+    await bar.user.click(field_());
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await bar.user.type(field_(), "name is dana{Enter}");
+    // Applied: the field is empty again, and the list is gone with its text.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
   it("opens from the Advanced filter chip, and a group made there stays one chip", async () => {
@@ -328,8 +339,9 @@ describe("ViewFilterBar advanced filter", () => {
 
   it("closes on Escape with focus back in the field", async () => {
     const bar = renderBar();
-    await bar.user.click(field_());
-    await bar.user.keyboard("{Enter}");
+    await bar.user.type(field_(), "x");
+    await screen.findAllByRole("option");
+    await bar.user.keyboard("{ArrowUp}{Enter}");
     await screen.findByRole("group", { name: "Advanced filter" });
     await bar.user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("group", { name: "Advanced filter" })).not.toBeInTheDocument());
@@ -442,7 +454,7 @@ describe("ViewFilterBar on a phone", () => {
 
   it("opens the Advanced filter as a sheet", async () => {
     const bar = renderBar({ phone: true });
-    await bar.user.click(field_());
+    await bar.user.type(field_(), "x");
     await bar.user.click(await screen.findByRole("option", { name: "Advanced filter" }));
     const sheet = await screen.findByRole("dialog", { name: "Advanced filter" });
     expect(within(sheet).getByRole("group", { name: "Advanced filter" })).toBeInTheDocument();

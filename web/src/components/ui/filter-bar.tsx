@@ -42,7 +42,7 @@ export interface FilterBarProps {
   suggestions: FilterBarSuggestion[];
   /** Enter, or a click, on a suggestion. The caller adds the chip and clears the text. */
   onApplySuggestion: (suggestion: FilterBarSuggestion) => void;
-  /** A last row set apart from the suggestions ("Advanced filter"). */
+  /** A last row set apart from the suggestions ("Advanced filter"). It comes with them: an empty field opens no list, which would cover what is under the bar. */
   footerAction?: { label: string; onSelect: () => void };
   placeholder?: string;
   /** The field's accessible name. */
@@ -110,7 +110,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
     }, 0);
   };
 
-  const rowIds = [...suggestions.map((s) => s.id), ...(footerAction ? [FOOTER_ID] : [])];
+  const rowIds = suggestions.length > 0 ? [...suggestions.map((s) => s.id), ...(footerAction ? [FOOTER_ID] : [])] : [];
   const nav = useListNav(rowIds);
   const open = focused && !dismissed && rowIds.length > 0;
   const domId = (id: string) => `${uid}-${id}`;
@@ -163,7 +163,7 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
     }
   };
 
-  const status = selectedChip ? `Press Backspace again to remove ${selectedChip.label}` : open && suggestions.length > 0 ? `${suggestions.length} ${suggestions.length === 1 ? "suggestion" : "suggestions"}` : "";
+  const status = selectedChip ? `Press Backspace again to remove ${selectedChip.label}` : open ? `${suggestions.length} ${suggestions.length === 1 ? "suggestion" : "suggestions"}` : "";
 
   const list = (
     <div id={`${uid}-list`} role="listbox" aria-label="Suggestions">
