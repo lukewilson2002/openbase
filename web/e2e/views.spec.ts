@@ -159,13 +159,18 @@ test.describe("kanban", () => {
   test("moves a card with the keyboard (Space, arrow, Space)", async ({ page }) => {
     await open(page, "kanban");
     await page.getByRole("button", { name: "Delta" }).focus();
-    // dnd-kit ignores arrow keys until it has measured the cards and announced what the picked-up card
-    // is over (the overlay shows earlier than that), so wait for the announcement, then for each step to show.
+    // dnd-kit ignores arrow keys until it has measured the cards (the overlay shows earlier than that).
+    // The board announces only the pick-up at that point, nothing about what the card is over, so wait for
+    // the pick-up, then press the arrow until the card shows in the next stack. A press that was ignored
+    // moves nothing; one that was taken shows the card at once, so it is never pressed twice.
     await page.keyboard.press("Space");
     await expect(page.locator("[data-drag-overlay]")).toBeVisible();
-    await expect(page.getByRole("status").filter({ hasText: /moved over droppable area/ })).toBeAttached();
-    await page.keyboard.press("ArrowLeft");
-    await expect(page.getByRole("listitem", { name: "Stack: Doing" }).getByRole("button", { name: "Delta" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /Picked up Delta/ })).toBeAttached();
+    const inDoing = page.getByRole("listitem", { name: "Stack: Doing" }).getByRole("button", { name: "Delta" });
+    await expect(async () => {
+      await page.keyboard.press("ArrowLeft");
+      await expect(inDoing).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
     await page.keyboard.press("Space");
     await expect.poll(async () => (await record(page, fx.records.delta)).values[fx.fields.status]).toBe(fx.choice.doing);
   });
@@ -192,8 +197,9 @@ test.describe("gallery and list", () => {
   test("the list groups by status with counts and adds a record inside a group", async ({ page }) => {
     await open(page, "list");
     await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
-    await expect(page.getByRole("treeitem", { name: /Todo/ })).toBeVisible();
-    await page.getByRole("button", { name: "Add record to Todo" }).click();
+    // A group header is a tree item named "<group>, <n> records"; each group ends in an "Add record to <group>" item.
+    await expect(page.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toBeVisible();
+    await page.getByRole("treeitem", { name: "Add record to Todo" }).click();
     await expect(page).toHaveURL(/record=rec/);
     const id = new URL(page.url()).searchParams.get("record")!;
     expect((await record(page, id)).values[fx.fields.status]).toBe(fx.choice.todo);
@@ -298,6 +304,8 @@ test.describe("timeline", () => {
     await page.goto(`/base/${fx.baseId}/${fx.tableId}/${lanes}`);
     const bar = page.getByRole("button", { name: /^Charlie, / });
     await expect(bar).toBeVisible();
+    // Charlie starts three days from today: on some weekdays that is past the two weeks the chart shows.
+    await bar.scrollIntoViewIfNeeded();
     const from = (await bar.boundingBox())!;
     const todo = (await page.locator(`[data-lane="${fx.choice.todo}"]`).boundingBox())!;
     // Near its start: the bar can run on under the Unscheduled column, depending on today's date.

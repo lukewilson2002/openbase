@@ -163,7 +163,8 @@ test("builds a form, shares it, and a stranger's submission shows up as a record
     const preview = page.getByRole("region", { name: "Form preview" });
     await expect(preview.getByRole("heading", { name: "Join the waitlist" })).toBeVisible();
     await expect(preview.getByText("Your name")).toBeVisible();
-    await expect(preview.getByRole("button", { name: "Sign me up" })).toBeDisabled();
+    // The preview's button can be tried, and says nothing is sent.
+    await expect(preview.getByRole("button", { name: "Sign me up" })).toHaveAttribute("title", /nothing is sent or saved/);
     await expect.poll(async () => (await table(page.request)).views.find((v) => v.id === formViewId)!.config.form.fields.map((f) => f.field_id)).toEqual([fx.fields.name, fx.fields.qty]);
     const form = (await table(page.request)).views.find((v) => v.id === formViewId)!.config.form;
     expect(form.title).toBe("Join the waitlist");

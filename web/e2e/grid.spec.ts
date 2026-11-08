@@ -323,7 +323,11 @@ test("opens the expanded record with Shift+Space, comments, and the link is shar
   await expect(page).not.toHaveURL(/record=/);
 });
 
-test("adds and deletes records, with undo", async ({ page }) => {
+test("adds and deletes records, with undo", async ({ page, diagnostics }) => {
+  // Undoing the add of a blank record races the grid taking it back (it was never touched): the loser
+  // gets a 404, either the undo's delete or the take-back's lookup. Both ends treat that as "already
+  // gone", but the browser logs the failed request.
+  diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+)?\)$/);
   await gotoGrid(page);
   await page.getByRole("button", { name: "Add record" }).click();
   await expect(page.getByText("6 items")).toBeVisible();
@@ -393,8 +397,10 @@ test("in a grouped view the marker column numbers the records, not the group hea
   const res = await page.request.post(`/api/views/${view.id}/query`, { data: { offset: 0, limit: 100 }, headers: CSRF });
   const grouped = (await res.json()) as { total: number; groups: { start: number; depth: number }[] };
   expect(grouped.groups.length).toBeGreaterThan(1);
-  // Display row of record i: the records before it plus the group headers that precede it.
-  const displayRow = (i: number) => i + grouped.groups.filter((g) => g.start <= i).length;
+  // Every group ends with an "+ Add" row. Display row of record i: the records before it, plus the group
+  // headers that precede it, plus the Add rows of the groups that ended before it.
+  const groupEnd = (j: number) => grouped.groups[j + 1]?.start ?? grouped.total;
+  const displayRow = (i: number) => i + grouped.groups.filter((g) => g.start <= i).length + grouped.groups.filter((_, j) => groupEnd(j) <= i).length;
 
   // Reference glyphs: the same numbers in the ungrouped view.
   await gotoGrid(page);
@@ -408,9 +414,9 @@ test("in a grouped view the marker column numbers the records, not the group hea
     // Record i + 1 draws the same number as in the plain view: a number, not a (hover-only) checkbox.
     await expect.poll(() => markerInk(page, displayRow(i)), { message: `marker of record ${i + 1}` }).toBe(plain[i]);
   }
-  // Group header j sits after its own start records and the j headers before it.
+  // Group header j sits after its own start records, the j headers before it and the j Add rows before it.
   for (const [j, g] of grouped.groups.entries()) {
-    expect(inked(await markerInk(page, g.start + j)), `group header ${j} shows a number`).toBe(false);
+    expect(inked(await markerInk(page, g.start + 2 * j)), `group header ${j} shows a number`).toBe(false);
   }
   expect(inked(await markerInk(page, "summary")), "the summary row shows a number").toBe(false);
 });

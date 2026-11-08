@@ -68,8 +68,9 @@ async function seed(page: Page): Promise<Fixture> {
 
 /** The group headers of the list view, top to bottom. */
 async function headers(page: Page): Promise<string[]> {
-  const buttons = page.getByRole("tree", { name: "Grouped records" }).getByRole("treeitem").getByRole("button");
-  return (await buttons.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))).map((l) => l.replace(/^(Collapse|Expand) /, ""));
+  // A group header is a tree item named "<group>, <n> record(s)"; the records are tree items too, without the count.
+  const items = page.getByRole("tree", { name: "Grouped records" }).getByRole("treeitem", { name: /, \d+ records?$/ });
+  return (await items.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))).map((l) => l.replace(/, \d+ records?$/, ""));
 }
 
 test.beforeAll(async ({ browser }, testInfo) => {
@@ -113,7 +114,7 @@ test("the list groups by day, then by month and year from the Group tool", async
 test("a record added to a month group starts on the month's first day", async ({ page }) => {
   await call(page.request, "patch", `/api/views/${fx.list}`, { config: { groups: [{ field_id: fx.due, direction: "asc", granularity: "month" }] } });
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.list}`);
-  await page.getByRole("button", { name: "Add record to October 2026" }).click();
+  await page.getByRole("treeitem", { name: "Add record to October 2026" }).click();
   await expect(page).toHaveURL(/record=rec/);
   const id = new URL(page.url()).searchParams.get("record")!;
   const rec = await call<{ values: Record<string, unknown> }>(page.request, "get", `/api/tables/${fx.tableId}/records/${id}`);

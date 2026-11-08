@@ -208,14 +208,19 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
 
   await test.step("adds records and edits cells in the grid", async () => {
     await expect(page.getByText("0 items")).toBeVisible();
-    for (let i = 1; i <= 3; i++) {
-      await page.getByRole("button", { name: "Add record" }).click();
-      await expect(page.getByText(`${i} item${i === 1 ? "" : "s"}`)).toBeVisible();
+    const names = ["Alpha", "Bravo", "Charlie"];
+    for (const [i, name] of names.entries()) {
+      // Exact: once the first record exists, the toolbar's "Undo: Add record" button also matches.
+      await page.getByRole("button", { name: "Add record", exact: true }).click();
+      await expect(page.getByText(`${i + 1} item${i === 0 ? "" : "s"}`)).toBeVisible();
+      // A record added and left blank is taken back when the next one is added, so name each one as it
+      // is added. Click its name cell: the grid selects it but does not hold the keyboard yet.
+      await selectCell(page, "name", i);
+      await typeToEdit(page, name);
+      await page.keyboard.press("Enter");
+      await gridFocused(page);
     }
     expect(await records()).toHaveLength(3);
-
-    const names = ["Alpha", "Bravo", "Charlie"];
-    await typeDown(page, "name", 0, names);
     await expect.poll(async () => (await records()).map((r) => r.values[table.primary_field_id])).toEqual(names);
 
     await typeDown(page, "qty", 0, ["10", "20", "30"]);
