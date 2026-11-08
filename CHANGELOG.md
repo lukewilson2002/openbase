@@ -54,6 +54,26 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   date range. Form `show_if`, blocks and `notify_user_ids`, and the new kanban and list settings,
   are set with `update_view`.
 
+### Security
+
+- **Everyone is signed out once after this update when OpenBase is served over https.** The
+  session cookie is now named `__Host-ob_session` (the browser then refuses to let a sibling
+  subdomain set it); sessions issued under the old name are no longer recognised. Over plain
+  http the cookie keeps its name. Sessions that sit unused for 14 days now end, on top of the
+  30-day maximum; with plain http that also signs out anyone whose session was started more
+  than 14 days ago, because the time of last use was not tracked before.
+- Cookie-authenticated requests whose `Origin` (or `Referer`) is not the public URL are refused
+  with 403, as the documentation always said. Bearer-token clients and anonymous form posts are
+  unaffected. If you reach OpenBase at an address other than `OPENBASE_PUBLIC_URL`, requests
+  from that address are now refused: set the URL to the address people use. (The web client's dev
+  server proxy sends the configured public URL as the origin.)
+- **Share-link passwords:** new passwords need at least 8 characters (existing ones keep
+  working). A link locks for 15 minutes after 100 wrong guesses in an hour from all addresses
+  together, and checking those passwords no longer competes with sign-in for hashing slots.
+- The server sends `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Resource-Policy: same-origin`, and `Strict-Transport-Security` (one year) when
+  the public URL is https.
+
 ### Changed
 
 - **Delete deletes.** Delete or Backspace on selected grid rows now deletes the records (with

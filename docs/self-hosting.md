@@ -575,6 +575,8 @@ keeps passkeys.
 | Login works but you are logged out immediately | `OPENBASE_PUBLIC_URL` must match the URL in the browser exactly, including `https://`. |
 | "Add a passkey" is greyed out, or a passkey is refused | Passkeys work only at the exact address in `OPENBASE_PUBLIC_URL`, whose host must be a domain name (not an IP address), over `https://` or on `localhost`. After changing the host, old passkeys no longer work: sign in with the password and add new ones. |
 | Requests rejected with "missing CSRF header" | A custom script is using a session cookie. Use a personal access token (`Authorization: Bearer ...`) instead. |
+| Saving anything fails with 403 "cross-origin request refused" | The page was opened at an address other than `OPENBASE_PUBLIC_URL` (another host name, `http` instead of `https`, a different port). Open the public address, or set the variable to the address people use. |
+| Everyone was signed out after an update | Expected once when the public URL is `https`: the session cookie was renamed to `__Host-ob_session`. |
 | All users appear to come from one IP (rate limits hit) | Set `OPENBASE_TRUST_PROXY=true` when running behind a reverse proxy. Never enable it when OpenBase is reachable directly, and only behind a proxy that sets or appends the client address in `X-Forwarded-For` (OpenBase uses the last entry); see `docs/security.md`. |
 | Uploads fail with 413 | Raise `OPENBASE_MAX_UPLOAD_MB`. If you use a proxy other than Caddy, raise its body size limit too (nginx: `client_max_body_size`). |
 | Live updates do not appear | A proxy is buffering Server-Sent Events. For nginx set `proxy_buffering off;` for `/api/bases/`. |

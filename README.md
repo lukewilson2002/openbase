@@ -258,7 +258,7 @@ in `deploy/.env`; with systemd in `/etc/openbase/openbase.env`.
 |---|---|---|
 | `OPENBASE_DATA_DIR` | `./data` (`/data` in the image) | Directory for the database, attachments and backups. |
 | `OPENBASE_BIND` | `127.0.0.1:8080` (`0.0.0.0:8080` in the image) | Address to listen on. |
-| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenBase at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure. Must match the browser's address exactly. Passkeys are tied to its host: pick the final domain before people add passkeys, because changing the host makes them unusable (see [Security](docs/security.md#passkeys)). |
+| `OPENBASE_PUBLIC_URL` | `http://localhost:8080` | URL users reach OpenBase at. Used for links in emails and the CSRF Origin check. With `https://`, session cookies are marked Secure and named `__Host-ob_session`, and the server sends HSTS. Must match the browser's address exactly. Passkeys are tied to its host: pick the final domain before people add passkeys, because changing the host makes them unusable (see [Security](docs/security.md#passkeys)). |
 | `OPENBASE_OPEN_SIGNUP` | `false` | Let anyone create an account. When false, new users need an invite (the first account is always allowed and becomes admin). |
 | `OPENBASE_TRUST_PROXY` | `false` | Take the client address from the last `X-Forwarded-For` entry. Enable only when OpenBase can be reached solely through the reverse proxy that sets it; see [docs/security.md](docs/security.md). The Compose file sets it for you. |
 | `OPENBASE_MAX_UPLOAD_MB` | `100` | Maximum size of one uploaded file, in MB. |
