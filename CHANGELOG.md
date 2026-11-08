@@ -147,7 +147,12 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   folders and workspaces show a color mark, never an icon or a letter, and their menus offer a
   color instead of an icon. A "+" beside Collections adds a collection, one from CSV or a folder.
   Folder menus gain "Use as top level"; collection menus no longer hold Edit schema or Add view
-  (views are made from the view list). Ctrl+\ folds the sidebar, and the Inbox is no longer in it.
+  (views are made from the view list). Ctrl+\ folds the sidebar (focus moves to the header's
+  button when it was inside), and the Inbox is no longer in it; old /inbox links go to Home. A
+  collection's record count follows your own adds and deletes within a second or so. The
+  workspace's Automations page lists the top level and every folder, each with a New automation
+  link. A folder that no longer exists opens a "Folder not found" screen inside the sidebar.
+  Workspace settings no longer offers a workspace icon.
 - **The phone has a bottom navigation instead of a menu drawer.** Home, Collections and
   Notifications are three tabs at the bottom of the screen (with the unread count), above the
   home indicator; the bar hides on record pages. The Collections tab is a screen of its own with
@@ -156,8 +161,10 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   the record and the time, with Mark all read at the top (it was "Mark all as read"). Every phone
   screen has a 56 px header with 44 px buttons: Home has the workspace switcher and your avatar,
   which opens your profile menu as a sheet; other screens have a back link that names the
-  screen it leads to. The workspace switcher opens as a sheet on a phone. Home, the Collections
-  tab and every collection have a search button in the header.
+  screen it leads to. The workspace switcher opens as a sheet on a phone, and so do a row's "..."
+  menus and the "+" beside Collections. The Collections tab follows other people's changes live.
+  With no workspace yet, the first-run screen has your avatar, so Sign out stays reachable. Home,
+  the Collections tab and every collection have a search button in the header.
 - **Search is a command palette.** Ctrl K or Cmd K (or the search button, or the sidebar's
   "Search everything") opens it from anywhere; it fills the screen on a phone. Results come in
   groups: records (each with its collection's color mark), collections, folders, views and

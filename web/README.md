@@ -201,7 +201,7 @@ its own column (header, then a `min-h-0 flex-1` body).
 
 Routes (`App.tsx`; `routes.test.tsx` holds the table): `/` goes to the last workspace's Home (`workspaceToOpen` in `pages/workspace/lastWorkspace.ts`)
 or shows first run; `/workspace/:id` is Home (for now the Inbox's capture box until HOME-1 to HOME-11 rebuild it); `/workspace/:id/collections` is
-the phone's Collections tab and redirects to Home on a desktop; `/notifications` and `/inbox` (until Home absorbs it) are screens of their own;
+the phone's Collections tab and redirects to Home on a desktop; `/notifications` is a screen of its own and `/inbox` redirects to Home;
 `/workspace/:id/automations` lists automations by folder and links to the unchanged editor route. `lib/topLevel.ts` splits a workspace's
 projects into the top level and the folders the person can open (NAV-10: `GET /api/workspaces` lists only openable projects and drops
 `root_base_id` when the top level is not one of them).
@@ -260,7 +260,9 @@ On a phone a menu is a `Sheet` (PH-3): `components/ui/sheet-menu.tsx` (`SheetMen
 sheet after acting) holds the workspace switcher (`WorkspaceSwitcher` picks the menu or the sheet by `DESKTOP_QUERY`, with the same rows,
 drag-to-reorder by holding a row, and Alt+Up and Alt+Down) and the profile menu (`ProfileSheet.tsx`; `ProfileMenu` is the sidebar footer row,
 a dropdown on a desktop and the same sheet on a phone). The Collections tab (`pages/workspace/CollectionsPage.tsx`) is `SidebarContent
-mode="page"`; its rows keep their "…" menus. `/notifications` is `NotificationsPanel` (shared with the desktop popover; each row is an
+mode="page"`, live through the workspace stream (`hooks/useWorkspaceEvents.ts`); its rows keep their "…" menus, which are sheets here: `shell/menuItems.tsx`
+(`ActionMenu`, `MenuItem`, `LinkItem`) draws one menu's items as a dropdown on a desktop and as `SheetMenu` rows on a phone, so a menu is written once. With no
+workspace (first run) `HomeShell` gives the `tab` header the avatar, because there is no tab bar to reach the profile from. `/notifications` is `NotificationsPanel` (shared with the desktop popover; each row is an
 avatar, one sentence, a `LinkChip` to the record and the time, with Mark all read at the top). In tests `stubPhone()` (`test/utils.tsx`) sets a
 phone-width media query.
 
