@@ -9,7 +9,7 @@
  * of its collection's grid; the search matches those properties too, and hovering a record shows the whole
  * of it (`RecordPeek`).
  */
-import { Fragment, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { recordKeys, recordsApi } from "@/api/records";
 import type { Field, LinkRef } from "@/api/types";
@@ -33,12 +33,18 @@ export interface LinkEditorProps extends FieldEditorCallbacks {
   variant: "cell" | "form";
   target?: { width: number; height: number };
   initialText?: string;
+  /**
+   * Makes this the picker that only adds (the "+ Link" row of a page's Linked records): the host's own button
+   * opens the search, and each record picked is added to the links at once, the picker closing. The records
+   * linked already are the host's to show.
+   */
+  addAnchor?: (api: { open: () => void }) => ReactNode;
 }
 
 // The chip itself is a core component (DL-3); this re-export keeps the editors' imports as they were.
 export { LinkChip };
 
-export function LinkEditor({ field, value, variant, target, initialText, onChange, onCommit: commitUp, onCancel }: LinkEditorProps) {
+export function LinkEditor({ field, value, variant, target, initialText, addAnchor, onChange, onCommit: commitUp, onCancel }: LinkEditorProps) {
   const [selected, setSelected] = useState<LinkRef[]>(() => linkRefs(value));
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -101,9 +107,14 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
         )
       : null;
   // The cards stay outside the pop-over: in the field itself in a form, over the cell in the grid.
-  const inPlace = !!cards;
+  const adding = !!addAnchor;
+  const inPlace = !!cards || adding;
   const pick = (r: LinkRef, move?: Move) => {
-    if (single) {
+    if (adding) {
+      const next = single ? [r] : [...selectedRef.current, r];
+      setSelected(next);
+      commit({ json: next }, move);
+    } else if (single) {
       // The editor can stay mounted after this (a form), so it shows the pick at once.
       setSelected([r]);
       commit({ json: [r] }, move);
@@ -163,12 +174,13 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
       width={table ? 380 : 340}
       sheetOnPhone
       onDismiss={() => {
-        if (variant === "form" && !single) commitUp({ json: selectedRef.current });
+        if (variant === "form" && !single && !adding) commitUp({ json: selectedRef.current });
       }}
       triggerLabel={field.name}
       trigger={selected.length > 0 ? selected.map((r) => <LinkChip key={r.id} name={r.name} hue={table?.color} markName={table?.name} />) : <span className="text-faint">Link records…</span>}
       anchor={
-        inPlace && variant === "cell"
+        addAnchor ??
+        (inPlace && variant === "cell"
           ? () => (
               // The cell opens out into its records, as many as there are (scrolling past a few).
               <div
@@ -200,7 +212,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
                 {selected.length > 0 ? cards!(selected) : <span className="text-faint">Empty</span>}
               </div>
             )
-          : undefined
+          : undefined)
       }
     >
       {({ close, sheet }) => {
@@ -266,7 +278,7 @@ export function LinkEditor({ field, value, variant, target, initialText, onChang
               {!results.isFetching && !results.isError && total === 0 && <p role="status" className="px-2 py-3 text-center text-label text-muted">{debounced ? "No matching records." : "No more records to link."}</p>}
             </div>
             {/* In place, the cards above remove their records: the panel only finds new ones. A sheet has its own Done. */}
-            {(!inPlace || (!single && !sheet)) && (
+            {!adding && (!inPlace || (!single && !sheet)) && (
               <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line p-2">
                 {!inPlace && (
                   <Button size="sm" variant="ghost" onClick={clear} disabled={selected.length === 0}>

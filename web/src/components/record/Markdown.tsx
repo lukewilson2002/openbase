@@ -17,11 +17,22 @@
  * are loaded with it (public/view/ShareEmbeds.ts).
  *
  * Mentions (`@[Name](usrXXXX)`, record/mentions.ts) show as chips (`.ob-mention`), as in the editor.
+ *
+ * Embeds (REC-6) are fenced code blocks with the info string `openbase` (lib/embeds.ts). They are never HTML made
+ * from the block's text: a block is a static "Embedded view" box, or "This embed can't be shown" when it does not
+ * read, written by the renderer itself. Only inside a record page's Page (a host, components/embeds) does the
+ * component then draw the live embed with React into the place the renderer marked, which carries the render's
+ * secret so text cannot forge one.
  */
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { cn } from "@/lib/cn";
+import { embedOfBlock, isEmbedInfo, type Embed } from "@/lib/embeds";
+import { STATIC_TEXT, UNREADABLE_TEXT } from "@/components/embeds/boxes";
+import { EmbedBlock } from "@/components/embeds/EmbedBlock";
+import { useEmbedHost } from "@/components/embeds/host";
 import { MENTION_AT_START } from "./mentions";
 import { embedFilename, embedPreviewSrc, isEmbedSrc, mediaKind, mediaLabel, withShare } from "@/lib/media";
 import { useShareOrNull } from "@/public/view/ShareContext";
@@ -73,6 +84,9 @@ interface Embeds {
   password: boolean;
 }
 let embeds: Embeds | null = null;
+
+/** The readable embeds of the render in progress, in the order of their places, when the caller wants to bring them to life. */
+let found: Embed[] | null = null;
 
 const esc = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -129,6 +143,16 @@ renderer.paragraph = (text: string) => {
     })
     .join("");
 };
+// Embeds (REC-6). The box says what it is without the block's text, which is the one thing that never reaches the page.
+const defaultCode = renderer.code.bind(renderer);
+renderer.code = (code: string, infostring: string | undefined, escaped: boolean) => {
+  if (!isEmbedInfo(infostring)) return defaultCode(code, infostring, escaped);
+  const embed = embedOfBlock(infostring, code);
+  if (!embed) return `<div class="ob-embed ob-embed-unreadable" role="note"><span>${UNREADABLE_TEXT}</span></div>\n`;
+  // The place is only marked when the caller asked for the embeds; the nonce is this render's, so the text cannot forge one.
+  const place = found ? ` data-ob-embed="${nonce}:${found.push(embed) - 1}"` : "";
+  return `<div class="ob-embed ob-embed-static" role="note"${place}><span>${STATIC_TEXT}</span></div>\n`;
+};
 renderer.checkbox = (checked: boolean) => `<span class="ob-check" role="checkbox" aria-checked="${checked}" aria-disabled="true"></span> `;
 
 // A mention is read before links (extensions come first), so `@[Name](usr…)` never becomes a link.
@@ -171,15 +195,28 @@ function plainEmbeds(found: marked.Token): void {
  * are authorised by the share's token.
  */
 export function renderMarkdown(source: string, share?: Embeds | null): string {
+  return render(source, share, false).html;
+}
+
+interface Rendered {
+  html: string;
+  /** The embeds the text holds that can be brought to life, by the number their place carries. */
+  embeds: Embed[];
+  nonce: string;
+}
+
+function render(source: string, share: Embeds | null | undefined, wantEmbeds: boolean): Rendered {
   ensureHooks();
   embeds = share ?? null;
   nonce = newNonce();
-  let html: string;
+  found = wantEmbeds ? [] : null;
   try {
-    html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer, walkTokens: plainEmbeds });
-    return sanitize(html);
+    const html = marked.parse(source, { gfm: true, breaks: true, mangle: false, headerIds: false, renderer, walkTokens: plainEmbeds });
+    return { html: sanitize(html), embeds: found ?? [], nonce };
   } finally {
     embeds = null;
+    found = null;
+    // The nonce stays with the result for the places it marked; the next render makes a new one.
     nonce = "";
   }
 }
@@ -208,23 +245,48 @@ const BLOCK_END = /<(?:br|hr|\/(?:p|h[1-6]|li|td|th|tr|blockquote|pre|div))\b[^>
  */
 export function markdownToText(source: string): string {
   const html = renderMarkdown(source).replace(BLOCK_END, "$& ");
-  return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+  const body = new DOMParser().parseFromString(html, "text/html").body;
+  // An embed is a box, not words.
+  for (const box of Array.from(body.querySelectorAll(".ob-embed"))) box.remove();
+  return body.textContent ?? "";
 }
 
 export function Markdown({ source, className }: { source: string; className?: string }) {
   const share = useShareOrNull();
   const token = share?.token;
   const protectedShare = share ? share.password !== null : false;
-  const html = useMemo(() => renderMarkdown(source, token === undefined ? null : { token, password: protectedShare }), [source, token, protectedShare]);
+  // Embeds come alive only where a record page's Page has made a host for them (REC-6).
+  const live = useEmbedHost() !== null;
+  const rendered = useMemo(() => render(source, token === undefined ? null : { token, password: protectedShare }, live), [source, token, protectedShare, live]);
+  const { html } = rendered;
   const ref = useRef<HTMLDivElement>(null);
   useProtectedEmbeds(ref, html, share);
+  const [places, setPlaces] = useState<{ el: Element; embed: Embed }[]>([]);
+  useLayoutEffect(() => {
+    const root = ref.current;
+    const next: { el: Element; embed: Embed }[] = [];
+    if (root && live) {
+      for (const el of Array.from(root.querySelectorAll("[data-ob-embed]"))) {
+        const [secret, index] = (el.getAttribute("data-ob-embed") ?? "").split(":");
+        const embed = secret === rendered.nonce ? rendered.embeds[Number(index)] : undefined;
+        if (!embed) continue;
+        // The static box gives way to the live one.
+        el.replaceChildren();
+        next.push({ el, embed });
+      }
+    }
+    setPlaces(next);
+  }, [rendered, live]);
   return (
-    <div
-      ref={ref}
-      onClick={protectedShare ? (e) => protectedDownload(e, share) : undefined}
-      className={cn("ob-markdown ob-prose text-[0.8125rem] leading-relaxed", className)}
-      // Sanitized by DOMPurify in renderMarkdown.
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <div
+        ref={ref}
+        onClick={protectedShare ? (e) => protectedDownload(e, share) : undefined}
+        className={cn("ob-markdown ob-prose text-[0.8125rem] leading-relaxed", className)}
+        // Sanitized by DOMPurify in renderMarkdown.
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {places.map(({ el, embed }, i) => createPortal(<EmbedBlock embed={embed} />, el, `${rendered.nonce}:${i}`))}
+    </>
   );
 }

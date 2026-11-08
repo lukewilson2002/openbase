@@ -57,11 +57,8 @@ describe("matchBlocks", () => {
 });
 
 describe("embedBlock", () => {
-  it("is a code block with the openbase info string and one JSON object, then a paragraph to go on in", () => {
-    expect(embedBlock({ embed: "linked", field: "fld1" })).toEqual([
-      { type: "codeBlock", attrs: { language: "openbase" }, content: [{ type: "text", text: '{"embed":"linked","field":"fld1"}' }] },
-      { type: "paragraph" },
-    ]);
-    expect(embedBlock({ embed: "view", view: "viw1", limit: 10 })[0]!.content![0]!.text).toBe('{"embed":"view","view":"viw1","limit":10}');
+  it("is an embed node holding one JSON object, then a paragraph to go on in", () => {
+    expect(embedBlock({ embed: "linked", field: "fld1" })).toEqual([{ type: "embed", attrs: { source: '{"embed":"linked","field":"fld1"}' } }, { type: "paragraph" }]);
+    expect(embedBlock({ embed: "view", view: "viw1", limit: 10 })[0]!.attrs!.source).toBe('{"embed":"view","view":"viw1","limit":10}');
   });
 });

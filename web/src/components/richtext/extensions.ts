@@ -5,7 +5,7 @@
  * Markdown cannot store them.
  *
  * Embedded files (media.ts) are Markdown images of our own files; any other image is read as a link.
- * Mentions (mention.ts) are `@[Name](usrXXXX)`.
+ * Mentions (mention.ts) are `@[Name](usrXXXX)`. An embed (embed.ts) is a code block with the info string `openbase`.
  *
  * Three small departures from the library's own Markdown writer, each covered in markdown.test.ts:
  * a table is written without the blank lines it pads itself with, a line break is a plain newline
@@ -22,6 +22,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import StarterKit from "@tiptap/starter-kit";
 import { Callout, QuoteOrCallout } from "./callout";
+import { EmbedNode } from "./embed";
 import { ImageAsLink, Media, parseParagraph, type MediaOptions } from "./media";
 import { Mention, MentionSuggest, type MentionSuggestOptions } from "./mention";
 
@@ -125,6 +126,7 @@ export function richTextExtensions(placeholder?: string, media: MediaOptions = {
     }),
     Media.configure(media),
     ImageAsLink,
+    EmbedNode,
     Mention,
     ...(mentions ? [MentionSuggest.configure(mentions)] : []),
     QuoteOrCallout,

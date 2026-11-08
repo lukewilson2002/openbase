@@ -12,14 +12,22 @@ import { Icon } from "@/components/ui/icon";
 import { ListboxOption, useListNav } from "@/components/ui/listbox";
 import { menuSurfaceClass } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import { DEFAULT_LIMIT } from "@/lib/embeds";
 import { anchorStyle } from "./anchor";
 import { BLOCKS, insertEmbed, matchBlocks, runBlock, type BlockDef, type Embed, type Range } from "./blocks";
 import { dismissSlash, slashQuery, type SlashQuery } from "./slash";
 
-/** What the collection can embed: this record's link properties and the saved views the person may pick (each with the collection it shows). */
+/**
+ * What the page can embed: this record's link properties and the saved views of the workspace the person may pick
+ * (each with the collection it shows, and the folder when it is not this one).
+ */
 export interface EmbedChoices {
   linkFields: readonly { id: string; name: string }[];
-  views: readonly { id: string; name: string; collection: string }[];
+  views: readonly { id: string; name: string; collection: string; folder?: string }[];
+  /** The other folders' views are still arriving. */
+  loading?: boolean;
+  /** The block menu opened: the page may start asking for the other folders' views. */
+  onOpen?: () => void;
 }
 
 export interface SlashContext {
@@ -106,9 +114,10 @@ export function useSlashMenu(editor: Editor | null, ctx: SlashContext, box: RefO
       case "linked":
       case "view": {
         const choices = def.id === "linked" ? embeds.linkFields : embeds.views;
-        const only = choices.length === 1 ? choices[0] : undefined;
+        // A lone view is not a choice, unless the other folders' views are still on their way.
+        const only = choices.length === 1 && !(def.id === "view" && embeds.loading) ? choices[0] : undefined;
         if (only) {
-          insertEmbed(editor, def.id === "linked" ? { embed: "linked", field: only.id } : { embed: "view", view: only.id, limit: 10 }, range);
+          insertEmbed(editor, def.id === "linked" ? { embed: "linked", field: only.id } : { embed: "view", view: only.id, limit: DEFAULT_LIMIT }, range);
         } else {
           editor.chain().focus().deleteRange(range).run();
           setStep({ kind: def.id, pos: range.from });
@@ -130,7 +139,8 @@ export function useSlashMenu(editor: Editor | null, ctx: SlashContext, box: RefO
       return embeds.linkFields.map((f) => ({ id: f.id, label: f.name, choose: embed({ embed: "linked", field: f.id }, step.pos) }));
     }
     if (step?.kind === "view") {
-      return embeds.views.map((v) => ({ id: v.id, label: v.name, hint: v.collection, choose: embed({ embed: "view", view: v.id, limit: 10 }, step.pos) }));
+      const views: Row[] = embeds.views.map((v) => ({ id: v.id, label: v.name, hint: v.folder ? `${v.collection} · ${v.folder}` : v.collection, choose: embed({ embed: "view", view: v.id, limit: DEFAULT_LIMIT }, step.pos) }));
+      return embeds.loading ? [...views, { id: "loading", label: "Loading views from other folders…", disabled: true, choose: () => {} }] : views;
     }
     const range: Range = step ? { from: step.pos, to: step.pos } : query ? { from: query.from, to: query.to } : { from: 0, to: 0 };
     if (!step && !query) return [];
@@ -147,6 +157,10 @@ export function useSlashMenu(editor: Editor | null, ctx: SlashContext, box: RefO
   }, [editor, step, query, embeds, ctx.canUpload, ctx.onAddProperty, ctx.pickFiles]);
 
   const open = rows.length > 0;
+  const { onOpen } = embeds;
+  useEffect(() => {
+    if (open) onOpen?.();
+  }, [open, onOpen]);
   const nav = useListNav(rows.map((r) => r.id));
   const title = step?.kind === "linked" ? "Link property to show" : step?.kind === "view" ? "View to show" : "Blocks";
 

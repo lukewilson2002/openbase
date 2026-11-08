@@ -249,6 +249,8 @@ function seedData(): void {
 seedData();
 // A few long notes for the search's snippets.
 for (const [i, note] of [
+  // A page with a heading, a list and both embeds (REC-6): the first task's owner, and the projects board.
+  [0, '## Plan\n\n- Confirm the scope with the owner\n- Send the revised pricing\n\nWho owns it:\n\n```openbase\n{"embed":"linked","field":"fld_owner"}\n```\n\nWhat else is in flight:\n\n```openbase\n{"embed":"view","view":"viw12","limit":5}\n```'],
   [4, "Kickoff is booked for Monday with @[Grace Hopper](usr2), and Steven will be in charge of **marketing**. That may mean a few late nights before the launch, so plan ahead and keep Friday free."],
   [11, "The marketing site needs new screenshots before the release train leaves; ask design for the dark versions too."],
 ] as const) {

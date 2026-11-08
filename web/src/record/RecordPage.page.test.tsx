@@ -3,8 +3,9 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
+import type { BaseSchema } from "@/api/types";
 import { field, makeRecord, makeTable } from "@/test/fields";
-import { apiError, makeSchema } from "@/test/utils";
+import { apiError, makeSchema, makeView } from "@/test/utils";
 import { PATCH_RECORDS, renderRecordPage } from "@/test/recordPage";
 import { PAGE_AUTOSAVE_MS } from "./PageSection";
 
@@ -167,22 +168,41 @@ describe("the page on the record page", () => {
     expect(within(box).getByRole("textbox", { name: "Name" })).toHaveFocus();
   });
 
-  it("offers Linked records this collection's link properties and View the folder's saved views, personal ones left out", async () => {
+  it("offers Linked records this collection's link properties and View the saved views of the folder, personal ones and default grids left out", async () => {
     const link = field("link", { linked_table_id: "tbl2", inverse_field_id: "fld_inv", single: false }, { id: "fld_link", name: "Invoices" });
-    renderRecordPage({ table: makeTable([name, status, page, link], { body_field_id: "fld_page" }), record });
+    const withLink = makeTable([name, status, page, link], { body_field_id: "fld_page" });
+    const folder: BaseSchema = makeSchema("owner");
+    const people = folder.tables.find((t) => t.id === "tbl2")!;
+    // Two saved views besides People's default grid, and a personal one.
+    const peopleViews = [{ ...makeView({ id: "viw4", name: "Everyone" }), table_id: "tbl2" }, { ...makeView({ id: "viw5", name: "Directory" }), table_id: "tbl2" }, { ...makeView({ id: "viw6", name: "Mine" }), table_id: "tbl2", personal: true }, { ...makeView({ id: "viw7", name: "All people" }), table_id: "tbl2", is_default: true }];
+    renderRecordPage({
+      table: withLink,
+      record,
+      routes: { "GET /api/bases/app1": () => ({ ...folder, tables: [{ ...withLink, views: [{ ...withLink.views[0]!, is_default: true }] }, { ...people, views: peopleViews }] }) },
+    });
     const { type, editor } = await editorOf();
     type("\n/view");
     await userEvent.keyboard("{Enter}");
-    const names = within(screen.getByRole("listbox", { name: "View to show" }))
+    const names = within(await screen.findByRole("listbox", { name: "View to show" }))
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(names.some((n) => n!.startsWith("All tasks"))).toBe(false);
     expect(names.some((n) => n!.includes("Everyone"))).toBe(true);
-    expect(names.some((n) => n!.includes("My tasks"))).toBe(false);
+    expect(names.some((n) => n!.includes("Directory"))).toBe(true);
+    expect(names.some((n) => n!.includes("Mine"))).toBe(false);
+    expect(names.some((n) => n!.includes("All people"))).toBe(false);
     await userEvent.keyboard("{Escape}");
     type("\n/linked");
     await userEvent.keyboard("{Enter}");
     expect(editor.getMarkdown()).toContain('{"embed":"linked","field":"fld_link"}');
+  });
+
+  it("puts a lone saved view in at once, with no list to choose from", async () => {
+    renderRecordPage({ table, record });
+    const { type, editor } = await editorOf();
+    type("\n/view");
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(editor.getMarkdown()).toContain('"embed":"view","view":"viw4","limit":10'));
+    expect(screen.queryByRole("listbox", { name: "View to show" })).not.toBeInTheDocument();
   });
 });
 

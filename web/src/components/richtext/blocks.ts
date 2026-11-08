@@ -2,11 +2,14 @@
  * The blocks the page's `/` menu adds (REC-5), and how each one is inserted. The menu lists them in this order.
  *
  * Linked records and View write an embed (REC-6): a fenced code block with the info string `openbase` holding one
- * JSON object, which is how it is stored in the Markdown. Rendering it as a live table is the embed's own step;
- * here the block is written, and until then it shows as the code it is.
+ * JSON object (lib/embeds.ts), which is how it is stored in the Markdown. The editor shows it as the embed
+ * (embed.ts); here the block is written.
  */
 import type { Editor, JSONContent } from "@tiptap/core";
+import { embedJson, type Embed } from "@/lib/embeds";
 import { Heading1, Heading2, Heading3, ImagePlus, Info, Link2, List, ListChecks, ListOrdered, Minus, Plus, Quote, SquareCode, Table2, LayoutList, type LucideIcon } from "lucide-react";
+
+export type { Embed };
 
 export type BlockId = "h1" | "h2" | "h3" | "bullet" | "numbered" | "checklist" | "quote" | "callout" | "code" | "table" | "divider" | "file" | "linked" | "view" | "property";
 
@@ -59,15 +62,10 @@ export interface Range {
   to: number;
 }
 
-/** The embeds REC-6 renders. Ids are written exactly as the server made them. */
-export type Embed = { embed: "linked"; field: string } | { embed: "view"; view: string; limit: number };
-
-export const EMBED_LANGUAGE = "openbase";
-
-/** The block that stores an embed: the info string, then one JSON object (the key order is the documented one). */
+/** The block that stores an embed (the key order of the JSON is the documented one). */
 export function embedBlock(embed: Embed): JSONContent[] {
   // The paragraph after it is where typing goes on; it is not stored when it is the last thing (the value is trimmed).
-  return [{ type: "codeBlock", attrs: { language: EMBED_LANGUAGE }, content: [{ type: "text", text: JSON.stringify(embed) }] }, { type: "paragraph" }];
+  return [{ type: "embed", attrs: { source: embedJson(embed) } }, { type: "paragraph" }];
 }
 
 /** Makes the block `id` where `range` is (the typed `/query`, which goes). Blocks that need more than the editor are the caller's. */
