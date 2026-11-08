@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { clickGrid, expect, gridFocused, newRecordButton, openOptionsScreen, openViewOptions, redo, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, gridFocused, newRecordButton, openOptionsScreen, openRecordPanel, openViewOptions, redo, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * The journey of a new instance, driven through the real UI in a real browser against the real
@@ -299,22 +299,25 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.keyboard.press("Escape");
   });
 
-  await test.step("opens the expanded record and comments on it", async () => {
+  await test.step("opens the record's page and comments on it", async () => {
     await selectCell(page, "name", 0); // Charlie, the biggest Qty
     await page.keyboard.press("Shift+Space");
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Charlie" })).toBeVisible();
-    await dialog.getByRole("textbox", { name: "Write a comment" }).fill("Ship it");
-    await dialog.getByRole("button", { name: "Comment" }).click();
-    await expect(dialog.getByText("Ship it")).toBeVisible();
+    await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Charlie" })).toBeVisible();
+    const comments = await openRecordPanel(page, "Comments");
+    await comments.getByRole("textbox", { name: "Write a comment" }).fill("Ship it");
+    await comments.getByRole("button", { name: "Comment" }).click();
+    await expect(comments.getByText("Ship it")).toBeVisible();
     const rec = (await records())[0]!;
-    const comments = await api<{ body: string; user_name: string }[]>(page, `/api/records/${rec.id}/comments`);
-    expect(comments.map((c) => c.body)).toEqual(["Ship it"]);
-    expect(comments[0]!.user_name).toBe("Journey Admin");
-    await dialog.getByRole("tab", { name: "History" }).click();
-    await expect(dialog.getByRole("list", { name: "Revision history" })).toBeVisible();
+    const saved = await api<{ body: string; user_name: string }[]>(page, `/api/records/${rec.id}/comments`);
+    expect(saved.map((c) => c.body)).toEqual(["Ship it"]);
+    expect(saved[0]!.user_name).toBe("Journey Admin");
+    const history = await openRecordPanel(page, "History");
+    await expect(history.getByRole("list", { name: "Revision history" })).toBeVisible();
+    // The History panel is the open one; Escape closes it first and the next returns to the grid.
     await page.keyboard.press("Escape");
-    await expect(page).not.toHaveURL(/record=/);
+    await expect(page.getByRole("complementary", { name: "History" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page).not.toHaveURL(/\/r\//);
   });
 
   await test.step("logs out and back in; the data is where it was left", async () => {

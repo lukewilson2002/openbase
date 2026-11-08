@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, newClientContext, skipIntro, test } from "./fixtures";
+import { expect, newClientContext, openRecordId, skipIntro, test } from "./fixtures";
 
 /**
  * Kanban, gallery, calendar, timeline and list views, plus the trash and the notification bell,
@@ -178,20 +178,22 @@ test.describe("kanban", () => {
   test("adds a card prefilled with the stack value and opens it", async ({ page }) => {
     await open(page, "kanban");
     await page.getByRole("button", { name: "New record in Done" }).click();
-    await expect(page).toHaveURL(/record=rec/);
-    await expect(page.getByRole("dialog")).toBeVisible();
-    const id = new URL(page.url()).searchParams.get("record")!;
-    expect((await record(page, id)).values[fx.fields.status]).toBe(fx.choice.done);
+    await expect(page).toHaveURL(/\/r\/rec/);
+    await expect(page.getByRole("main", { name: "Record" })).toBeVisible();
+    expect((await record(page, openRecordId(page))).values[fx.fields.status]).toBe(fx.choice.done);
   });
 });
 
 test.describe("gallery and list", () => {
-  test("the gallery shows a card per record and opens one in the expanded record", async ({ page }) => {
+  test("the gallery shows a card per record and opens one as its page", async ({ page }) => {
     await open(page, "gallery");
     await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
     await page.getByRole("button", { name: "Bravo" }).click();
-    await expect(page).toHaveURL(new RegExp(`record=${fx.records.bravo}`));
-    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/r/${fx.records.bravo}$`));
+    await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
+    // Back (Escape) is the gallery again, where the card was.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
   });
 
   test("a filter that matches nothing says so with Reset, and Reset shows the cards again as a draft (COL-9)", async ({ page }) => {
@@ -224,9 +226,8 @@ test.describe("gallery and list", () => {
     // A group header is a tree item named "<group>, <n> records"; each group ends in a "New record in <group>" item.
     await expect(page.getByRole("treeitem", { name: /^Todo, \d+ records?$/ })).toBeVisible();
     await page.getByRole("treeitem", { name: "New record in Todo" }).click();
-    await expect(page).toHaveURL(/record=rec/);
-    const id = new URL(page.url()).searchParams.get("record")!;
-    expect((await record(page, id)).values[fx.fields.status]).toBe(fx.choice.todo);
+    await expect(page).toHaveURL(/\/r\/rec/);
+    expect((await record(page, openRecordId(page))).values[fx.fields.status]).toBe(fx.choice.todo);
   });
 });
 
@@ -241,7 +242,7 @@ test.describe("calendar", () => {
   test("clicking an event opens its record", async ({ page }) => {
     await open(page, "calendar");
     await page.locator(".fc-event", { hasText: "Alpha" }).first().click();
-    await expect(page).toHaveURL(new RegExp(`record=${fx.records.alpha}`));
+    await expect(page).toHaveURL(new RegExp(`/r/${fx.records.alpha}$`));
   });
 
   test("clicking an empty day creates a record dated that day and opens it", async ({ page }) => {
@@ -250,8 +251,8 @@ test.describe("calendar", () => {
     const cell = page.locator(".fc-daygrid-day").last();
     const date = await cell.getAttribute("data-date");
     await cell.locator(".fc-daygrid-day-frame").click({ position: { x: 20, y: 40 } });
-    await expect(page).toHaveURL(/record=rec/);
-    const id = new URL(page.url()).searchParams.get("record")!;
+    await expect(page).toHaveURL(/\/r\/rec/);
+    const id = openRecordId(page);
     expect((await record(page, id)).values[fx.fields.start]).toBe(date);
     // Delete it again: the timeline tests count the dated records.
     await call(page.request, "delete", `/api/tables/${fx.tableId}/records`, { ids: [id] });
@@ -368,9 +369,8 @@ test.describe("timeline", () => {
     await page.mouse.down();
     await page.mouse.move(x + 100, y, { steps: 8 });
     await page.mouse.up();
-    await expect(page).toHaveURL(/record=rec/);
-    const id = new URL(page.url()).searchParams.get("record")!;
-    const values = (await record(page, id)).values;
+    await expect(page).toHaveURL(/\/r\/rec/);
+    const values = (await record(page, openRecordId(page))).values;
     expect(values[fx.fields.start]).toBeTruthy();
     expect(values[fx.fields.end]).toBeTruthy();
   });

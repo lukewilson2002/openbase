@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Locator, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, newRecordButton, openOptionsScreen, openViewOptions, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, newClientContext, newRecordButton, openOptionsScreen, openRecordId, openRecordPanel, openViewOptions, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
@@ -366,34 +366,55 @@ test("adds a property from View options", async ({ page }) => {
   expect(fields.find((f) => f.name === "Remarks")?.type).toBe("rich_text");
 });
 
-test("opens the expanded record with Shift+Space, comments, and the link is shareable", async ({ page }) => {
+test("opens the record's page with Shift+Space, comments, steps with Alt+Down, and the link is shareable", async ({ page }) => {
   await gotoGrid(page);
   await clickCell(page, "name", 1);
   await page.keyboard.press("Shift+Space");
-  await expect(page).toHaveURL(/[?&]record=rec/);
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Bravo" })).toBeVisible();
+  await expect(page).toHaveURL(/\/r\/rec/);
+  const main = page.getByRole("main", { name: "Record" });
+  await expect(main.getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
+  // The bar's breadcrumb leads back to the collection the page was opened from.
+  await expect(main.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Tasks" })).toBeVisible();
+  const comments = await openRecordPanel(page, "Comments");
   // The comment box is rich text: typing @ offers the project's people, Enter picks one as a chip.
-  const box = dialog.getByRole("textbox", { name: "Write a comment" });
+  const box = comments.getByRole("textbox", { name: "Write a comment" });
   await box.click();
   await page.keyboard.type("Hello from the e2e test, @");
-  await expect(dialog.getByRole("listbox", { name: "People to mention" }).getByRole("option").first()).toBeVisible();
+  await expect(comments.getByRole("listbox", { name: "People to mention" }).getByRole("option").first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(box.locator(".ob-mention")).toBeVisible();
-  await dialog.getByRole("button", { name: "Comment" }).click();
-  const posted = dialog.getByRole("listitem").filter({ hasText: "Hello from the e2e test" });
+  await comments.getByRole("button", { name: "Comment" }).click();
+  const posted = comments.getByRole("listitem").filter({ hasText: "Hello from the e2e test" });
   await expect(posted.locator(".ob-mention")).toBeVisible();
   await expect(box).toHaveText("");
-  const recordId = new URL(page.url()).searchParams.get("record")!;
-  const comments = await (await page.request.get(`/api/records/${recordId}/comments`)).json();
-  expect(comments.map((c: { body: string }) => c.body)).toEqual([expect.stringMatching(/^Hello from the e2e test, @\[[^\]]+\]\(usr[0-9A-Za-z]+\)$/)]);
-  await dialog.getByRole("tab", { name: "History" }).click();
-  await expect(dialog.getByRole("list", { name: "Revision history" })).toBeVisible();
+  const recordId = openRecordId(page);
+  const saved = await (await page.request.get(`/api/records/${recordId}/comments`)).json();
+  expect(saved.map((c: { body: string }) => c.body)).toEqual([expect.stringMatching(/^Hello from the e2e test, @\[[^\]]+\]\(usr[0-9A-Za-z]+\)$/)]);
+  const history = await openRecordPanel(page, "History");
+  await expect(history.getByRole("list", { name: "Revision history" })).toBeVisible();
+  // Alt+Down is the next record of the grid, and the page replaces itself: back leaves for the grid in one step.
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page).not.toHaveURL(new RegExp(`/r/${recordId}`));
+  await expect(main.getByRole("heading", { level: 1 })).not.toHaveText("Bravo");
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect(page).toHaveURL(new RegExp(`/r/${recordId}`));
   const url = page.url();
   await page.goto(url);
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "Bravo" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1, name: "Bravo" })).toBeVisible();
+  // Escape returns to the collection the page was named for.
   await page.keyboard.press("Escape");
-  await expect(page).not.toHaveURL(/record=/);
+  await expect(page).not.toHaveURL(/\/r\//);
+  await expect(page.getByRole("main").getByRole("heading", { level: 1, name: "Tasks" })).toBeVisible();
+});
+
+test("an old ?record= link lands on the record's page", async ({ page }) => {
+  await gotoGrid(page);
+  await clickCell(page, "name", 2);
+  await page.keyboard.press("Shift+Space");
+  const recordId = openRecordId(page);
+  await page.goto(`/base/${fx.baseId}/${fx.tableId}?record=${recordId}`);
+  await expect(page).toHaveURL(new RegExp(`/base/${fx.baseId}/${fx.tableId}/r/${recordId}$`));
+  await expect(page.getByRole("main", { name: "Record" }).getByRole("heading", { level: 1 })).toBeVisible();
 });
 
 test("adds and deletes records, with undo", async ({ page, diagnostics }) => {

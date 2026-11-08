@@ -336,4 +336,19 @@ export async function openOptionsScreen(page: Page, screen: "Sort" | "Group" | "
 /** The header's New button (named after the collection's record name, "New record" when it has none). */
 export const newRecordButton = (page: Page, name = "New record"): Locator => page.getByRole("main").locator("header").first().getByRole("button", { name });
 
+/** The id of the record whose page is open: the segment after `/r/`. */
+export const openRecordId = (page: Page): string => {
+  const id = /\/r\/([^/?#]+)/.exec(new URL(page.url()).pathname)?.[1];
+  if (!id) throw new Error(`no record page is open at ${page.url()}`);
+  return id;
+};
+
+/** The record page's Comments or History panel on a desktop: its button in the bar opens it, and it is the complementary region with that name. */
+export async function openRecordPanel(page: Page, name: "Comments" | "History"): Promise<Locator> {
+  const panel = page.getByRole("complementary", { name });
+  if (!(await panel.isVisible())) await page.getByRole("main").locator("header").getByRole("button", { name: new RegExp(`^${name}`) }).click();
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 export { expect };

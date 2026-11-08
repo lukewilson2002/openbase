@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, newClientContext, openOptionsScreen, skipIntro, test } from "./fixtures";
+import { expect, newClientContext, openOptionsScreen, openRecordId, skipIntro, test } from "./fixtures";
 
 /**
  * Grouping by a date with a granularity: the Group tool's Day / Week / Month / Quarter / Year picker,
@@ -116,8 +116,8 @@ test("a record added to a month group starts on the month's first day", async ({
   await call(page.request, "patch", `/api/views/${fx.list}`, { config: { groups: [{ field_id: fx.due, direction: "asc", granularity: "month" }] } });
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.list}`);
   await page.getByRole("treeitem", { name: "New record in October 2026" }).click();
-  await expect(page).toHaveURL(/record=rec/);
-  const id = new URL(page.url()).searchParams.get("record")!;
+  await expect(page).toHaveURL(/\/r\/rec/);
+  const id = openRecordId(page);
   const rec = await call<{ values: Record<string, unknown> }>(page.request, "get", `/api/tables/${fx.tableId}/records/${id}`);
   expect(rec.values[fx.due]).toBe("2026-10-01");
   await call(page.request, "delete", `/api/tables/${fx.tableId}/records`, { ids: [id] });

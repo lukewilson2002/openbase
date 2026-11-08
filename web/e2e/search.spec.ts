@@ -60,13 +60,11 @@ test("searches from inside a folder and shows where the text matched", async ({ 
   await expect(results.getByRole("option", { name: /Marketing site/ })).toHaveCount(0);
   await expect(record).toBeVisible();
   await record.click();
-  await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/[^/?]+\\?record=${recordId}`));
+  await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/r/${recordId}$`));
   await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("main", { name: "Record" })).toBeVisible();
 
-  // Ctrl K opens it from anywhere on the page, once the record is closed.
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Ctrl K opens it from anywhere on the page, a record's included.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press("ControlOrMeta+k");
   await expect(box).toBeFocused();
@@ -92,12 +90,12 @@ test("runs actions from the keyboard: a new record, a new collection, Home and s
   const add = dialog.getByRole("option", { name: /^New record in / }).first();
   await expect(add).toBeVisible();
   await box.press("Enter");
-  await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/[^/?]+\\?record=rec`));
+  await expect(page).toHaveURL(new RegExp(`/base/${baseId}/[^/]+/r/rec`));
   await expect(dialog).toHaveCount(0);
-  // The record is the only dialog left; closing it before the next step keeps the two from racing.
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // Its page opens; leaving it empty takes the record back, and Escape returns to the collection before the next step.
+  await expect(page.getByRole("main", { name: "Record" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("main", { name: "Record" })).toHaveCount(0);
 
   // New collection opens the dialog for the name, with focus in its field.
   await page.keyboard.press("ControlOrMeta+k");

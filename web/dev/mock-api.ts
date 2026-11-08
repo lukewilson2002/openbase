@@ -1453,6 +1453,21 @@ function route(req: IncomingMessage, res: ServerResponse, url: URL, body: Obj): 
     emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: body.ids, updated: [], deleted: [] } });
     return send(res, 200, { records: out }), true;
   }
+  if ((g = /^\/api\/tables\/([^/]+)\/records\/duplicate$/.exec(p)) && m === "POST") {
+    // Each copy sits right after its original and holds its values, minus the computed ones the mock does not store.
+    const out: Obj[] = [];
+    for (const id of (body.ids ?? []) as string[]) {
+      const from = records.get(id);
+      if (!from || from.deleted || from.table_id !== g[1]) return err(res, 404, "not_found", "record not found"), true;
+      const copy = addRecord(from.table_id, {});
+      copy.created_at = copy.updated_at = Date.now();
+      copy.order = from.order + 0.0001;
+      applyValues(copy, { ...from.values }, clientId, "create");
+      out.push(shape(copy));
+    }
+    emit({ client_id: clientId, event: { kind: "records_changed", table_id: g[1], created: out.map((r) => r.id), updated: [], deleted: [] } });
+    return send(res, 201, { records: out }), true;
+  }
   if ((g = /^\/api\/tables\/([^/]+)\/records\/move$/.exec(p))) {
     const anchor = records.get(body.before_id ?? body.after_id);
     if (anchor) {

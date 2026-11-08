@@ -8,7 +8,7 @@ import { expect, newClientContext, skipIntro, test } from "./fixtures";
  * phone, one `main` with its own header and one `h1`, no bar across the app, no error screen, and on a phone no
  * horizontal page scroll. The console, uncaught exceptions and failed requests are watched by the fixture, so a
  * route that logs an error fails here. What each screen shows has its own specs; this one is about where a route
- * leads. A route is added to {@link ROUTES} in the phase that creates it (the record page in Phase 5).
+ * leads. A route is added to {@link ROUTES} in the phase that creates it (the Home rebuild in Phase 6).
  *
  * Not in the list, on purpose: the design reference (`/__dev/design`), sign-in, sign-up, invite, public form and
  * share pages and the OAuth consent page are outside the shell; `/inbox` redirects to Home.
@@ -27,6 +27,8 @@ interface Fixture {
   tableId: string;
   /** The collection's default view. */
   viewId: string;
+  /** A record of the collection. */
+  recordId: string;
   folderId: string;
   emptyFolderId: string;
 }
@@ -42,6 +44,8 @@ interface Route {
   /** The phone's address, when it differs from the desktop's (`/workspace/:id/collections` is Home on a desktop). */
   desktopLands?: (f: Fixture) => RegExp;
   admin?: boolean;
+  /** A screen of its own on a phone (PH-4): the bottom bar steps aside, and the header's back link names the collection. */
+  fullScreen?: string;
 }
 
 const ROUTES: Route[] = [
@@ -50,6 +54,9 @@ const ROUTES: Route[] = [
   { name: "Collection", path: (f) => `/base/${f.rootId}/${f.tableId}`, heading: "Tasks", lands: (f) => new RegExp(`/base/${f.rootId}/${f.tableId}/viw`) },
   // The ledger's `/base/:baseId/:tableId/:viewId`: a view named in the address, which is not redirected.
   { name: "Collection view", path: (f) => `/base/${f.rootId}/${f.tableId}/${f.viewId}`, heading: "Tasks" },
+  // The record page (Phase 5): previous and next follow the view in the address, else the last used or the default.
+  { name: "Record page", path: (f) => `/base/${f.rootId}/${f.tableId}/${f.viewId}/r/${f.recordId}`, heading: "Send the quote", fullScreen: "Tasks" },
+  { name: "Record page without a view", path: (f) => `/base/${f.rootId}/${f.tableId}/r/${f.recordId}`, heading: "Send the quote", fullScreen: "Tasks" },
   { name: "Collection in a folder", path: (f) => `/base/${f.folderId}`, heading: "Plants", lands: (f) => new RegExp(`/base/${f.folderId}/tbl[^/]+/viw`) },
   { name: "Empty folder", path: (f) => `/base/${f.emptyFolderId}`, heading: "Archive" },
   {
@@ -90,11 +97,11 @@ async function seed(request: APIRequestContext): Promise<Fixture> {
   const ws = await post<{ id: string }>(request, "/api/workspaces", { name: "Routes workspace" });
   const rootId = ((await (await request.get("/api/workspaces")).json()) as { id: string; root_base_id: string }[]).find((w) => w.id === ws.id)!.root_base_id;
   const tasks = await post<{ id: string; primary_field_id: string; views: { id: string }[] }>(request, `/api/bases/${rootId}/tables`, { name: "Tasks" });
-  await post(request, `/api/tables/${tasks.id}/records`, { records: [{ values: { [tasks.primary_field_id]: "Send the quote" } }], typecast: true });
+  const made = await post<{ records: { id: string }[] }>(request, `/api/tables/${tasks.id}/records`, { records: [{ values: { [tasks.primary_field_id]: "Send the quote" } }], typecast: true });
   const garden = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Garden", empty: true });
   await post(request, `/api/bases/${garden.id}/tables`, { name: "Plants" });
   const archive = await post<{ id: string }>(request, `/api/workspaces/${ws.id}/bases`, { name: "Archive", empty: true });
-  return { workspaceId: ws.id, rootId, tableId: tasks.id, viewId: tasks.views[0]!.id, folderId: garden.id, emptyFolderId: archive.id };
+  return { workspaceId: ws.id, rootId, tableId: tasks.id, viewId: tasks.views[0]!.id, recordId: made.records[0]!.id, folderId: garden.id, emptyFolderId: archive.id };
 }
 
 const menu = (page: Page) => page.getByRole("navigation", { name: "Main menu" });
@@ -140,7 +147,11 @@ for (const [sizeName, viewport, phone] of SIZES) {
         await expect(main.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 
         await test.step("the shell's menu: the sidebar on a desktop, the bottom bar on a phone", async () => {
-          if (phone) {
+          if (phone && route.fullScreen) {
+            // A record page is a screen of its own: no bottom bar, and the way back names the collection.
+            await expect(menu(page)).toHaveCount(0);
+            await expect(main.locator("header").getByRole("link", { name: `Back to ${route.fullScreen}` })).toBeVisible();
+          } else if (phone) {
             await expect(menu(page).getByRole("link")).toHaveText(["Home", "Collections", "Notifications"]);
             // Nothing else is a main menu: the drawer is gone.
             await expect(page.getByRole("button", { name: /^(Show|Hide) menu/ })).toHaveCount(0);

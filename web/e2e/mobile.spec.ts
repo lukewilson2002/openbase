@@ -48,7 +48,7 @@ async function expectTouchTargets(scope: Locator, where: string): Promise<void> 
   expect(small, `${where}: targets under 44 px`).toEqual([]);
 }
 
-test("the shell, its sheets, the collection and the record panel fit a phone", async ({ page }) => {
+test("the shell, its sheets, the collection and the record page fit a phone", async ({ page }) => {
   const email = `e2e-mobile-${randomBytes(4).toString("hex")}@example.com`;
   const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
   expect(signup.ok(), await signup.text()).toBeTruthy();
@@ -225,10 +225,20 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
   await expect(sheet).toBeHidden();
   await expect(options).toBeFocused();
 
-  await page.goto(`/base/${base.id}/${table.id}?record=${recordId}`);
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Write a comment" })).toBeVisible();
-  await expectFits(page, "record panel");
+  // A record is a screen of its own (PH-4): the 56 px header has the way back, Comments, Share and More, and no bottom bar.
+  await page.goto(`/base/${base.id}/${table.id}/r/${recordId}`);
+  const record = page.getByRole("main", { name: "Record" });
+  await expect(record.getByRole("heading", { level: 1 })).toBeVisible();
+  const bar = record.locator("header").first();
+  await expect(bar.getByRole("link", { name: /^Back to / })).toBeVisible();
+  await expect(bar.getByRole("button")).toHaveCount(3);
+  await expectTouchTargets(bar.getByRole("button").or(bar.getByRole("link")), "record header");
+  await expect(page.getByRole("navigation", { name: "Main menu" })).toHaveCount(0);
+  await expectFits(page, "record page");
+  await bar.getByRole("button", { name: "Comments" }).tap();
+  const comments = page.getByRole("dialog", { name: "Comments" });
+  await expect(comments.getByRole("textbox", { name: "Write a comment" })).toBeVisible();
+  await expectFits(page, "record comments");
 });
 
 /** A one-finger swipe from (x, y) by dy, sent as real touch events (Playwright only has taps). */
