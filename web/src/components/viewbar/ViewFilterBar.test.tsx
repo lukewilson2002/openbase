@@ -266,6 +266,38 @@ describe("ViewFilterBar chip editor", () => {
   });
 });
 
+describe("ViewFilterBar: a press elsewhere", () => {
+  it("closes a chip's editor and leaves focus on what was pressed", async () => {
+    const bar = renderBar({ filter: and(is("fld_status", done.id)) });
+    const elsewhere = document.createElement("button");
+    elsewhere.textContent = "Elsewhere";
+    document.body.append(elsewhere);
+    await bar.user.click(screen.getByRole("button", { name: "Status is Done" }));
+    await screen.findByRole("combobox", { name: "Operator" });
+    await bar.user.click(elsewhere);
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "Operator" })).not.toBeInTheDocument());
+    // Give a late focus move the time it would take.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(elsewhere).toHaveFocus();
+    elsewhere.remove();
+  });
+
+  it("closes the Advanced filter and leaves focus on what was pressed", async () => {
+    const bar = renderBar();
+    const elsewhere = document.createElement("button");
+    elsewhere.textContent = "Elsewhere";
+    document.body.append(elsewhere);
+    await bar.user.click(field_());
+    await bar.user.keyboard("{Enter}");
+    await screen.findByRole("group", { name: "Advanced filter" });
+    await bar.user.click(elsewhere);
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Advanced filter" })).not.toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(elsewhere).toHaveFocus();
+    elsewhere.remove();
+  });
+});
+
 describe("ViewFilterBar advanced filter", () => {
   it("opens the nested builder from the bottom of the list, on the whole filter", async () => {
     const bar = renderBar({ filter: and(is("fld_status", done.id)) });

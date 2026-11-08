@@ -93,12 +93,17 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
   const selectedChip = chips.find((c) => c.id === pickedChip) ?? null;
   const editing = chips.find((c) => c.id === editingId && c.editor) ?? null;
 
+  // A press elsewhere closes an editor too, and then focus belongs to what was pressed.
+  const pressedOutside = useRef(false);
+
   /** Shuts a chip's editor and gives focus back to the chip that opened it, else to the field. */
   const closeEditor = () => {
     const id = editingId;
+    const restore = !pressedOutside.current;
+    pressedOutside.current = false;
     setEditingId(null);
     // A sheet gives focus back itself, and focusing the field on a phone would raise the keyboard.
-    if (!desktop) return;
+    if (!desktop || !restore) return;
     window.setTimeout(() => {
       const button = id ? field.current?.querySelector<HTMLElement>(`[data-chip-id="${CSS.escape(id)}"] button`) : null;
       (button ?? input.current)?.focus();
@@ -205,7 +210,9 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
                   c.editor || c.onEdit
                     ? () => {
                         c.onEdit?.();
-                        if (c.editor) setEditingId(c.id);
+                        if (!c.editor) return;
+                        pressedOutside.current = false;
+                        setEditingId(c.id);
                       }
                     : undefined
                 }
@@ -222,7 +229,12 @@ export function FilterBar({ chips, onRemoveChip, text, onTextChange, suggestions
             return (
               <Popover key={c.id} open={desktop && editing?.id === c.id} onOpenChange={(next) => !next && closeEditor()} modal={false}>
                 <PopoverAnchor asChild>{chip}</PopoverAnchor>
-                <PopoverContent align="start" onCloseAutoFocus={(e) => e.preventDefault()} className="w-[min(34rem,calc(100vw-1.5rem))] p-3">
+                <PopoverContent
+                  align="start"
+                  onInteractOutside={() => (pressedOutside.current = true)}
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                  className="w-[min(34rem,calc(100vw-1.5rem))] p-3"
+                >
                   {c.editor(closeEditor)}
                 </PopoverContent>
               </Popover>

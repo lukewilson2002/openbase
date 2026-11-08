@@ -132,10 +132,17 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
     setText("");
   };
 
+  // A press elsewhere closes the builder too, and then focus belongs to what was pressed.
+  const pressedOutside = useRef(false);
+  const openAdvanced = () => {
+    pressedOutside.current = false;
+    setAdvancedOpen(true);
+  };
+
   const model = chipsOf(config.filter);
   const filter = config.filter;
   const chips: FilterBarChip[] = model.map((m) => {
-    if (m.kind === "advanced") return { id: "advanced", label: advancedLabel(m.count), onEdit: () => setAdvancedOpen(true) };
+    if (m.kind === "advanced") return { id: "advanced", label: advancedLabel(m.count), onEdit: openAdvanced };
     return {
       id: `c${m.index}`,
       label: describe(m.condition),
@@ -205,8 +212,10 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
   }, []);
 
   const closeAdvanced = () => {
+    const restore = !pressedOutside.current;
+    pressedOutside.current = false;
     setAdvancedOpen(false);
-    if (desktop) window.setTimeout(() => inputRef.current?.focus(), 0);
+    if (desktop && restore) window.setTimeout(() => inputRef.current?.focus(), 0);
   };
   const builder = (
     <FilterBuilder
@@ -235,7 +244,7 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
               const candidate = candidates[suggestions.indexOf(s)];
               if (candidate) apply(candidate);
             }}
-            footerAction={{ label: "Advanced filter", onSelect: () => setAdvancedOpen(true) }}
+            footerAction={{ label: "Advanced filter", onSelect: openAdvanced }}
             inputRef={inputRef}
           />
           {trailing}
@@ -244,7 +253,12 @@ export function ViewFilterBar({ schema, table, config, update, collaborators, cu
           </span>
         </div>
       </PopoverAnchor>
-      <PopoverContent align="start" onCloseAutoFocus={(e) => e.preventDefault()} className="max-h-[min(34rem,var(--ob-avail))] w-[min(46rem,calc(100vw-1.5rem))] overflow-y-auto p-3">
+      <PopoverContent
+        align="start"
+        onInteractOutside={() => (pressedOutside.current = true)}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        className="max-h-[min(34rem,var(--ob-avail))] w-[min(46rem,calc(100vw-1.5rem))] overflow-y-auto p-3"
+      >
         {builder}
       </PopoverContent>
       {!desktop && (
