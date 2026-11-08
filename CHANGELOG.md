@@ -148,6 +148,16 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   color instead of an icon. A "+" beside Collections adds a collection, one from CSV or a folder.
   Folder menus gain "Use as top level"; collection menus no longer hold Edit schema or Add view
   (views are made from the view list). Ctrl+\ folds the sidebar, and the Inbox is no longer in it.
+- **The phone has a bottom navigation instead of a menu drawer.** Home, Collections and
+  Notifications are three tabs at the bottom of the screen (with the unread count), above the
+  home indicator; the bar hides on record pages. The Collections tab is a screen of its own with
+  the workspace switcher, your collections and folders, History, Trash, Workspace settings and
+  your account. Notifications is a full screen too: each row shows who, one sentence, a chip for
+  the record and the time, with Mark all read at the top (it was "Mark all as read"). Every phone
+  screen has a 56 px header with 44 px buttons: Home has the workspace switcher and your avatar,
+  which opens your profile menu as a sheet; other screens have a back link that names the
+  screen it leads to. The workspace switcher opens as a sheet on a phone. Home, the Collections
+  tab and every collection have a search button in the header.
 - **Text edits no longer flood record history.** Repeated edits of one text or rich text cell by
   the same person fold into one history entry while it is under ten minutes old: it keeps the
   first old value, the latest new value and the time of the latest edit. Other fields, other

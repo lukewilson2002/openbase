@@ -134,7 +134,7 @@ the app with `web/dist` moved away. The projects share that one instance and run
 | `oauth` | `oauth.spec.ts` | grid | an MCP OAuth client in Chrome: registers with a loopback redirect served by the test, the authorization URL sends the browser to the login and back to the consent page, "Read & edit" is approved, the code arrives at the loopback listener and is exchanged with PKCE, `tools/list` and a write tool work, a manage tool is refused with 403, then the app is revoked from Account -> AI assistants -> Connected apps and its tokens stop working; a second test denies an app named "Claude" on another host |
 | `assistants` | `assistants.spec.ts` | grid | Account -> AI assistants: the MCP address is the server's public URL and answers `401` with the sign-in metadata, Claude is open by default and the sections are an accordion (mouse and keyboard), the copy buttons write the real clipboard, the token variants are collapsed until opened, the plain-http server shows the public-address warning, and the tab fits 375 px in the light and dark themes |
 | `passkeys` | `passkeys.spec.ts` | grid | Chrome's virtual authenticator (CDP `WebAuthn.addVirtualAuthenticator`: CTAP2, internal transport, resident keys, user verification): add a passkey in Account -> Security, sign out, sign in with it and no password (the background request for the email field's autofill list stays pending until the button replaces it), rename and remove it, the removed passkey's leftover credential refused; a TOTP-enabled user signing in by passkey skips the code while the password still asks for it; the autofill request completing the sign-in; an administrator removing another user's passkeys |
-| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen: the home page, a project, search, the filter builder and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
+| `mobile` | `mobile.spec.ts` | grid | an iPhone 13 sized touch screen (390 px): the bottom navigation (64 px, three tabs), the 56 px header with 44 px buttons, the workspace switcher and profile menu as sheets, the Collections tab, a collection with its back link and search, the filter builder and the record panel fit the screen without horizontal scrolling, and no text field is under 16px (iOS Safari zooms the page into a smaller one) |
 | `admin-email` | `adminEmail.spec.ts` | sharing, automations, views, oauth, assistants, mobile, passkeys | Administration -> Email: the tab, saving an SMTP server (no restart), the password shown only as "Saved", the real connection error from "Send test email", and turning email off again (runs last because the setting is instance-wide) |
 | `automations` | `automations.spec.ts` | grid | builds "record created in Table 1 -> create a record in Table 2 with Name = {{trigger.record.fields.Name}}" in the editor, turns it on, adds a record in the grid, checks through the API and the Runs tab that it ran, then runs it for real from the Test panel |
 | `views` | `views.spec.ts` | grid | kanban (pointer and keyboard drag), gallery, list, calendar (events, create by click, drag from "Unscheduled"), timeline (bars, dependency arrows, keyboard move, scale, create by drag), the trash, and the notification bell |
@@ -184,10 +184,11 @@ src/automations/ the automations page (list, editor, test panel, run history); i
 
 ### App frame and routes (NAV-5)
 
-There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked sidebar (a drawer on phone) beside `main`. Each screen draws its own
-header as the first thing inside `main`: `shell/ScreenHeader.tsx` (the menu toggle, an optional `h1`, actions, the search button; the workspace
-screens get it from `HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (path, the collection's `h1` with its color mark, presence faces, Share).
-`shell/menuContext.tsx` is how a header reaches the menu's state. A screen that scrolls inside itself passes `fill` to `AppShell` and lays out
+There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked sidebar beside `main` on a desktop, and on a phone the bottom
+navigation (see "The phone shell"). Each screen draws its own header as the first thing inside `main`: `shell/ScreenHeader.tsx` (on a desktop the sidebar's
+toggle, an optional `h1`, actions, the search button; on a phone the `PhoneHeader` it is given in `phone`; the workspace screens get it from
+`HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (path, the collection's `h1` with its color mark, presence faces, Share).
+`shell/menuContext.tsx` is how a desktop header reaches the sidebar's state. A screen that scrolls inside itself passes `fill` to `AppShell` and lays out
 its own column (header, then a `min-h-0 flex-1` body).
 
 Routes (`App.tsx`; `routes.test.tsx` holds the table): `/` goes to the last workspace's Home (`workspaceToOpen` in `pages/workspace/lastWorkspace.ts`)
@@ -202,11 +203,10 @@ projects into the top level and the folders the person can open (NAV-10: `GET /a
 `shell/SidebarContent.tsx` holds what the sidebar holds, top to bottom: `WorkspaceSwitcher` (the open workspace's 26 px mark, its name and "Switch
 workspace"; its menu starts with the OpenBase mark, lists the workspaces with a check on the open one, then New workspace and the open workspace's
 Rename, Color, Members, Invite people, Settings, History, Trash and Delete), the "Search everything" row (opens the header's search box; the command
-palette replaces it in NAV-9), Home, Notifications (a popover beside the docked sidebar, a swap inside the phone drawer, a link on the Collections
-tab) and Automations (creators), then `NavTree` (the top level's collections, then the folders, each folded open to its collections: `NavTables`
+palette replaces it in NAV-9), Home, Notifications (a popover beside the docked sidebar) and Automations (creators), then `NavTree` (the top level's collections, then the folders, each folded open to its collections: `NavTables`
 draws a folder's rows), then History, Trash (both filtered to the workspace), Workspace settings (owners) and `ProfileMenu`. `Sidebar.tsx` has only
-the frames (`DockedSidebar`, `SidebarDrawer`) and `SidebarLayout`. One component serves the docked sidebar, the drawer and the phone's Collections
-tab (`mode`).
+the docked frame (`DockedSidebar`) and `SidebarLayout`. One component serves the docked sidebar and the phone's Collections tab (`mode`: the tab
+leaves out the search row and the Home and Notifications rows, which the header and the bottom bar already have, and flows with the screen).
 
 The tree is drawn from `GET /api/workspaces` alone: a folder carries its collections' summaries and `record_count`, so nothing is fetched when a
 folder unfolds. `SidebarContent` asks for the list again on window focus and every 60 s (BE-9); `useBaseEvents` also refreshes it, at most every
@@ -219,7 +219,29 @@ Folders fold on a click or Enter (`useOpenState("ob-folders-open")`: open unless
 collection turns out to be inside it). Drag a collection or folder to reorder it (`sortable.tsx`, `useReorder.ts`), or use Move up and Move down;
 workspaces are dragged inside the switcher's menu, or moved with Alt+Up and Alt+Down on the focused one. Width (200 to 400 px, 256 by default) and
 the collapsed state are per device (`sidebarPrefs.ts`); Ctrl+\ (Cmd+\) folds it. The dialogs the rows open are `NavDialogs.tsx`, which sits
-around the page so they survive the drawer closing; a collection's CSV import loads the folder's schema first, because the summaries carry no properties.
+around the page so they survive the menu or sheet that opened them closing; a collection's CSV import loads the folder's schema first, because the summaries carry no properties.
+
+### The phone shell (NAV-7, NAV-8, PH-1, PH-2)
+
+Below 1024 px there is no sidebar and no drawer. `shell/bottomNav.tsx` is the 64 px bottom navigation (`<nav aria-label="Main menu">`, three
+tabs: Home, Collections, Notifications with the unread count; 22 px icons, 12 px labels, the current tab in the accent at 600, above
+`env(safe-area-inset-bottom)`). `AppShell` draws it when there is a workspace to lead to, pads the page by its height and sets
+`--bottom-nav-height` on `:root` while it shows, so toasts and the floating Add button stand above it. A record page (`isRecordPath`) hides it by
+its address; any other full-screen screen calls `useHideBottomNav()` from `bottomNav.tsx` while mounted. A collection belongs to the Collections tab.
+
+`shell/PhoneHeader.tsx` is the 56 px header (PH-2): `leading` (the workspace switcher on Home, or a `PhoneBackLink` naming the parent
+screen), an optional `h1`, then at most three 44 px buttons, as `PhoneAction`s: the search always has one (`SearchButton`, which opens the
+palette once NAV-9 lands), and when there are more actions than fit the rest go behind a More button (it counts as one of the three) that opens a
+sheet. `ScreenHeader` renders it on a phone from its `phone` prop; `HomeShell` has a `variant`: `home` (the switcher and the avatar that opens the
+profile sheet), `tab` (the root of a tab: just its title) or `page` (a back link to the Collections tab, or to Home when there is no workspace).
+
+On a phone a menu is a `Sheet` (PH-3): `components/ui/sheet-menu.tsx` (`SheetMenu`, `SheetMenuGroup`, `SheetMenuRow`, 44 px rows that close the
+sheet after acting) holds the workspace switcher (`WorkspaceSwitcher` picks the menu or the sheet by `DESKTOP_QUERY`, with the same rows,
+drag-to-reorder by holding a row, and Alt+Up and Alt+Down) and the profile menu (`ProfileSheet.tsx`; `ProfileMenu` is the sidebar footer row,
+a dropdown on a desktop and the same sheet on a phone). The Collections tab (`pages/workspace/CollectionsPage.tsx`) is `SidebarContent
+mode="page"`; its rows keep their "…" menus. `/notifications` is `NotificationsPanel` (shared with the desktop popover; each row is an
+avatar, one sentence, a `LinkChip` to the record and the time, with Mark all read at the top). In tests `stubPhone()` (`test/utils.tsx`) sets a
+phone-width media query.
 
 ### Plugging in a view
 
