@@ -89,6 +89,8 @@ export default defineConfig({
     { name: "collection", testMatch: /collection\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // The link picker (a pop-over, a bottom sheet on a phone) and the linked-record peek with Open page. Signs up its own user.
     { name: "linked-records", testMatch: /linkedRecords\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
+    // The record's Page: the block menu, Markdown shortcuts, the selection bubble, Ctrl+K, autosave, the phone's formatting bar. Signs up its own user.
+    { name: "record-page", testMatch: /page\.spec\.ts$/, use: chrome, dependencies: ["grid"] },
     // Every route of the signed-in app opens inside the new shell: the sidebar on a desktop, the bottom bar on a phone.
     // Signs up its own users and signs in as the journey's administrator for /admin, so it needs only the instance to be set up.
     { name: "shell-routes", testMatch: /shellRoutes\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
@@ -96,6 +98,6 @@ export default defineConfig({
     { name: "ledger", testMatch: /ledger\.spec\.ts$/, use: chrome, dependencies: ["journey"] },
     // Administration -> Email: changes the instance-wide mail settings and restores them, so it
     // runs after everything else.
-    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "shell-routes"] },
+    { name: "admin-email", testMatch: /adminEmail\.spec\.ts$/, use: chrome, dependencies: ["sharing", "automations", "views", "date-groups", "oauth", "assistants", "appearance", "mobile", "passkeys", "search", "sidebar", "collection", "linked-records", "record-page", "shell-routes"] },
   ],
 });
