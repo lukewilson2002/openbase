@@ -54,12 +54,13 @@ export type FieldMutationResult = Field & { inverse?: Field; removed_field_ids?:
 export const recordsApi = {
   query: (viewId: string, body: QueryRequest, signal?: AbortSignal) => http.post<QueryResponse>(`/api/views/${enc(viewId)}/query`, body, { signal }),
   /**
-   * Summaries over the records that pass the view filter and `search`. `transient` (only its
-   * filter matters here) is sent JSON-encoded in the query string.
+   * Summaries over the records that pass the view filter and `search`. `transient` (its filter
+   * and summaries matter here) is sent JSON-encoded in the query string. `weekStart` (0 Sunday,
+   * 1 Monday) sets where calendar-week dates of the filter begin; the profile's applies without it.
    */
-  aggregations: (viewId: string, opts: { search?: string; timezone?: string; transient?: TransientConfig | null; signal?: AbortSignal } = {}) =>
+  aggregations: (viewId: string, opts: { search?: string; timezone?: string; weekStart?: number; transient?: TransientConfig | null; signal?: AbortSignal } = {}) =>
     http.get<AggregationsResponse>(`/api/views/${enc(viewId)}/aggregations`, {
-      query: { search: opts.search || undefined, timezone: opts.timezone, transient: opts.transient ? JSON.stringify(opts.transient) : undefined },
+      query: { search: opts.search || undefined, timezone: opts.timezone, week_start: opts.weekStart, transient: opts.transient ? JSON.stringify(opts.transient) : undefined },
       signal: opts.signal,
     }),
   get: (tableId: string, recordId: string) => http.get<TableRecord>(`/api/tables/${enc(tableId)}/records/${enc(recordId)}`),

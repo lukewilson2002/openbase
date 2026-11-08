@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_BACKOFF, backoffDelay, connectBaseEvents, parseEnvelope, queryKeysForEvent, type EventSourceLike } from "./events";
+import { DEFAULT_BACKOFF, backoffDelay, connectBaseEvents, connectWorkspaceEvents, parseEnvelope, queryKeysForEvent, type EventSourceLike } from "./events";
 import type { EventEnvelope } from "./types";
 
 class FakeEventSource implements EventSourceLike {
@@ -57,6 +57,31 @@ describe("parseEnvelope", () => {
     expect(parseEnvelope("null")).toBeNull();
     expect(parseEnvelope(JSON.stringify({ base_id: "a" }))).toBeNull();
     expect(parseEnvelope(JSON.stringify({ base_id: "a", event: {} }))).toBeNull();
+  });
+});
+
+describe("connectWorkspaceEvents", () => {
+  beforeEach(() => {
+    FakeEventSource.instances = [];
+  });
+
+  it("connects to the workspace events URL and delivers the events of every project", () => {
+    const onEvent = vi.fn();
+    connectWorkspaceEvents({ workspaceId: "wsp1", clientId: "me", onEvent, createEventSource: create });
+    const es = FakeEventSource.instances[0]!;
+    expect(es.url).toBe("/api/workspaces/wsp1/events");
+    es.emit("records_changed", JSON.stringify(envelope({ base_id: "app1" })));
+    es.emit("base_changed", JSON.stringify(envelope({ base_id: "app2", event: { kind: "base_changed" } })));
+    expect(onEvent.mock.calls.map((c) => c[0].base_id)).toEqual(["app1", "app2"]);
+  });
+
+  it("still skips this tab's own changes and malformed payloads", () => {
+    const onEvent = vi.fn();
+    connectWorkspaceEvents({ workspaceId: "wsp1", clientId: "me", onEvent, createEventSource: create });
+    const es = FakeEventSource.instances[0]!;
+    es.emit("records_changed", JSON.stringify(envelope({ client_id: "me" })));
+    es.emit("records_changed", "{oops");
+    expect(onEvent).not.toHaveBeenCalled();
   });
 });
 

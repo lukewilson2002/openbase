@@ -1,5 +1,6 @@
 /**
- * Server-Sent Events for a base (`GET /api/bases/{id}/events`).
+ * Server-Sent Events for a base (`GET /api/bases/{id}/events`) and for a whole workspace
+ * (`GET /api/workspaces/{id}/events`).
  *
  * The browser's own EventSource reconnection gives up for good on an HTTP error
  * (for example an expired session), so this helper manages the connection itself:
@@ -51,8 +52,7 @@ export function parseEnvelope(data: string): EventEnvelope | null {
   }
 }
 
-export interface ConnectOptions {
-  baseId: string;
+interface StreamOptions {
   onEvent: (envelope: EventEnvelope) => void;
   /** Called when the stream opens again after a failure: events may have been missed. */
   onReconnect?: () => void;
@@ -63,12 +63,33 @@ export interface ConnectOptions {
   createEventSource?: (url: string) => EventSourceLike;
 }
 
-/** Open the stream; returns a function that closes it and cancels any pending reconnect. */
+export interface ConnectOptions extends StreamOptions {
+  baseId: string;
+}
+
+export interface WorkspaceConnectOptions extends StreamOptions {
+  workspaceId: string;
+}
+
+/** Open a project's stream; returns a function that closes it and cancels any pending reconnect. */
 export function connectBaseEvents(opts: ConnectOptions): () => void {
+  return connectStream(api.bases.eventsUrl(opts.baseId), (env) => env.base_id === opts.baseId, opts);
+}
+
+/**
+ * Open the stream of every project of a workspace the caller can open (Home and the Collections
+ * tab; a browser holds only about six connections per site, so one stream per project is out).
+ * Each envelope's `base_id` says which project it belongs to. It never counts as presence, so
+ * screens that show who is viewing keep using the project stream.
+ */
+export function connectWorkspaceEvents(opts: WorkspaceConnectOptions): () => void {
+  return connectStream(api.workspaces.eventsUrl(opts.workspaceId), () => true, opts);
+}
+
+function connectStream(url: string, accepts: (env: EventEnvelope) => boolean, opts: StreamOptions): () => void {
   const clientId = opts.clientId ?? getClientId();
   const backoff = opts.backoff ?? DEFAULT_BACKOFF;
   const create = opts.createEventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }) as unknown as EventSourceLike);
-  const url = api.bases.eventsUrl(opts.baseId);
   if (!opts.createEventSource && typeof EventSource === "undefined") return () => {};
 
   let source: EventSourceLike | null = null;
@@ -80,7 +101,7 @@ export function connectBaseEvents(opts: ConnectOptions): () => void {
   const handle = (ev: MessageEvent<string>) => {
     if (disposed) return;
     const env = parseEnvelope(typeof ev.data === "string" ? ev.data : "");
-    if (!env || env.base_id !== opts.baseId) return;
+    if (!env || !accepts(env)) return;
     if (env.client_id && env.client_id === clientId) return;
     opts.onEvent(env);
   };

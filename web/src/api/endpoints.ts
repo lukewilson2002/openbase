@@ -240,6 +240,8 @@ export const api = {
     setTopLevel: (id: string, baseId: string) => http.post<WorkspaceSummary>(`/api/workspaces/${enc(id)}/top-level`, { base_id: baseId }),
     /** Home in one read: what is due soon, what changed lately and the caller's inbox drafts. */
     home: (id: string) => http.get<HomeResponse>(`/api/workspaces/${enc(id)}/home`),
+    /** SSE endpoint path of every project the caller can open in the workspace (see events.ts). */
+    eventsUrl: (id: string) => `/api/workspaces/${enc(id)}/events`,
     members: (id: string) => http.get<Member[]>(`/api/workspaces/${enc(id)}/members`),
     updateMember: (id: string, userId: string, body: UpdateMember) =>
       http.patch<OkResponse>(`/api/workspaces/${enc(id)}/members/${enc(userId)}`, body),
