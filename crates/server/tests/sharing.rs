@@ -1479,5 +1479,7 @@ async fn attachment_password_guesses_are_rate_limited() {
     assert!(statuses[..limit].iter().all(|s| *s == 404), "{statuses:?}");
     assert!(statuses[limit..].iter().all(|s| *s == 429), "{statuses:?}");
     // Even the right password waits for the window.
-    pub_get_pw(&f.app, &url, "pw-12345").await.assert_status(429);
+    pub_get_pw(&f.app, &url, "pw-12345")
+        .await
+        .assert_status(429);
 }

@@ -38,10 +38,7 @@ pub fn multipart_body(parts: &[(&str, Option<&str>, &[u8])]) -> Vec<u8> {
     body
 }
 
-pub fn auth(
-    req: axum::http::request::Builder,
-    client: &Client,
-) -> axum::http::request::Builder {
+pub fn auth(req: axum::http::request::Builder, client: &Client) -> axum::http::request::Builder {
     auth_named(req, client, openbase::auth::SESSION_COOKIE)
 }
 
