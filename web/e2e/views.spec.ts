@@ -194,6 +194,30 @@ test.describe("gallery and list", () => {
     await expect(page.getByRole("dialog")).toBeVisible();
   });
 
+  test("a filter that matches nothing says so with Reset, and Reset shows the cards again as a draft (COL-9)", async ({ page }) => {
+    await open(page, "gallery");
+    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
+    const filterBar = page.getByRole("combobox", { name: "Filter or search" });
+    await filterBar.fill("zzz-no-such-record");
+    await page.keyboard.press("Enter");
+    const message = page.getByRole("heading", { name: "No records match these filters" });
+    await expect(message).toBeVisible();
+    // A record added into a filter that hides it would seem to vanish: the empty state offers Reset, not New.
+    await expect(message.locator("..").getByRole("button", { name: /^New / })).toHaveCount(0);
+    await message.locator("..").getByRole("button", { name: "Reset" }).click();
+    await expect(message).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Bravo" })).toBeVisible();
+  });
+
+  test("a right-click on a card opens its menu at the pointer, not a sheet", async ({ page }) => {
+    await open(page, "gallery");
+    await page.getByRole("button", { name: "Bravo" }).click({ button: "right" });
+    const menu = page.getByRole("menu", { name: "Record menu" });
+    await expect(menu.getByRole("menuitem", { name: "Open record" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
   test("the list groups by status with counts and adds a record inside a group", async ({ page }) => {
     await open(page, "list");
     await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();

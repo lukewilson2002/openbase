@@ -276,3 +276,92 @@ test("a swipe that starts on a row's button scrolls the Collections tab and open
   await expect(page.getByRole("dialog", { name: "Project 05" }).getByRole("button", { name: "Rename" })).toBeVisible();
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
+
+/** A finger that rests on (x, y) for `ms`, optionally slides to (x, y + dy), and lifts: real touch events. */
+async function hold(page: Page, x: number, y: number, ms: number, dy = 0): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: "touchStart" | "touchMove" | "touchEnd", at: number) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y: at }] });
+  await touch("touchStart", y);
+  await page.waitForTimeout(ms);
+  if (dy !== 0) {
+    for (let i = 1; i <= 6; i++) await touch("touchMove", y + (dy * i) / 6);
+  }
+  await touch("touchEnd", y + dy);
+  await cdp.detach();
+}
+
+test("on a phone a hold on a card opens its action sheet, a selection is a count and Actions, and a filter that matches nothing says so with Reset (COL-9)", async ({ page }) => {
+  const email = `e2e-mobile-col9-${randomBytes(4).toString("hex")}@example.com`;
+  const signup = await page.request.post("/api/auth/signup", { data: { email, name: "Mobile E2E", password: PASSWORD }, headers: CSRF });
+  expect(signup.ok(), await signup.text()).toBeTruthy();
+  await skipIntro(page.request);
+  const ws = await (await page.request.post("/api/workspaces", { data: { name: "Hold workspace" }, headers: CSRF })).json();
+  const base = await (await page.request.post(`/api/workspaces/${ws.id}/bases`, { data: { name: "Hold base" }, headers: CSRF })).json();
+  const table = base.tables[0] as { id: string; primary_field_id: string };
+  await page.request.patch(`/api/tables/${table.id}`, { data: { record_noun: "card" }, headers: CSRF });
+  const made = await page.request.post(`/api/tables/${table.id}/records`, { data: { records: ["Alpha", "Beta", "Gamma"].map((name) => ({ values: { [table.primary_field_id]: name } })) }, headers: CSRF });
+  expect(made.ok(), await made.text()).toBeTruthy();
+  // A gallery sorted by name: its cards are not draggable, so a hold that moves is a scroll, not a reorder.
+  const view = await (
+    await page.request.post(`/api/tables/${table.id}/views`, { data: { name: "Cards", type: "gallery", config: { sorts: [{ field_id: table.primary_field_id, direction: "asc" }] } }, headers: CSRF })
+  ).json();
+  await page.goto(`/base/${base.id}/${table.id}/${view.id}`);
+  const alpha = page.getByRole("button", { name: "Alpha", exact: true });
+  await expect(alpha).toBeVisible();
+  const where = new URL(page.url()).pathname;
+
+  await test.step("a hold that lets go without moving opens the card's sheet, and does not open the card", async () => {
+    const box = (await alpha.boundingBox())!;
+    await hold(page, box.x + box.width / 2, box.y + box.height / 2, 450);
+    const sheet = page.getByRole("dialog", { name: "Alpha" });
+    await expect(sheet).toBeVisible();
+    await expectTouchTargets(sheet.getByRole("button"), "card sheet");
+    await expect(sheet.getByRole("button", { name: "Open record" })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Delete record" })).toBeVisible();
+    expect(new URL(page.url()).pathname + new URL(page.url()).search, "the press did not open the card").toBe(where);
+    await expectFits(page, "card sheet");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  });
+
+  await test.step("a quick tap still opens the card, and a hold that slides is a scroll, not a menu", async () => {
+    const box = (await alpha.boundingBox())!;
+    await hold(page, box.x + box.width / 2, box.y + box.height / 2, 450, 40);
+    await page.waitForTimeout(300);
+    await expect(page.getByRole("dialog", { name: "Alpha" })).toHaveCount(0);
+  });
+
+  await test.step("a selection is the count and Actions; the actions are a sheet", async () => {
+    await page.getByRole("checkbox", { name: "Select Beta" }).tap();
+    await page.getByRole("checkbox", { name: "Select Gamma" }).tap();
+    const bar = page.getByRole("toolbar", { name: "Selected records" });
+    await expect(bar).toContainText("2 selected");
+    await expectTouchTargets(bar.getByRole("button"), "selection bar");
+    await expect(bar.getByRole("button", { name: "Duplicate" })).toHaveCount(0);
+    await bar.getByRole("button", { name: "Actions" }).tap();
+    const sheet = page.getByRole("dialog", { name: "2 selected" });
+    await expect(sheet.getByRole("button", { name: "Duplicate" })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Delete" })).toBeVisible();
+    await expectTouchTargets(sheet.getByRole("button"), "selection sheet");
+    await expectFits(page, "selection sheet");
+    await page.keyboard.press("Escape");
+    await bar.getByRole("button", { name: "Clear selection" }).tap();
+    await expect(bar).toHaveCount(0);
+  });
+
+  await test.step("a filter that matches nothing says so, with Reset", async () => {
+    const filterBar = page.getByRole("combobox", { name: "Filter or search" });
+    await filterBar.click();
+    await filterBar.fill("zzz-no-such-card");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "No cards match these filters" })).toBeVisible();
+    // The header's New card stays; the empty state offers Reset, not New (a record added here would vanish).
+    await expect(page.getByRole("heading", { name: "No cards match these filters" }).locator("..").getByRole("button", { name: "New card" })).toHaveCount(0);
+    await expectFits(page, "filtered to nothing");
+    // The changes bar has a Reset of its own (it drops the whole draft); this one is the empty state's.
+    await page.getByRole("heading", { name: "No cards match these filters" }).locator("..").getByRole("button", { name: "Reset" }).tap();
+    await expect(page.getByRole("heading", { name: "No cards match these filters" })).toHaveCount(0);
+    await expect(alpha).toBeVisible();
+  });
+});
