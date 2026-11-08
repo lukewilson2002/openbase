@@ -74,27 +74,27 @@ describe("OAuth consent page", () => {
     expect(await screen.findByText(/Refused\. Returning to/)).toBeInTheDocument();
   });
 
-  it("offers only what the app asked for, and preselects what the server says", async () => {
-    consent({ requested_access: "write", max_access: "write", default_access: "write" });
+  it("offers every level whatever the app asked for, and preselects what it asked for", async () => {
+    const user = userEvent.setup();
+    const api = consent({ requested_access: "write", max_access: "manage", default_access: "write" });
     renderApp({ route: ROUTE });
     expect(await screen.findByLabelText(/Read & edit/)).toBeChecked();
     expect(screen.getByLabelText(/Read only/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Full control/)).not.toBeInTheDocument();
-    expect(screen.getByText(/asked for no more than read & edit/i)).toBeInTheDocument();
-  });
-
-  it("offers Full control, with what it adds spelled out, but never preselects it", async () => {
-    const user = userEvent.setup();
-    const api = consent({ requested_access: "manage", default_access: "write" });
-    renderApp({ route: ROUTE });
-    const full = await screen.findByLabelText(/Full control/);
-    expect(full).not.toBeChecked();
-    expect(screen.getByLabelText(/Read & edit/)).toBeChecked();
-    expect(screen.getByText(/manage workspaces, members, invites and settings/)).toBeInTheDocument();
-    await user.click(full);
+    expect(screen.getByLabelText(/Full control/)).toBeInTheDocument();
+    expect(screen.queryByText(/only because you chose it/i)).not.toBeInTheDocument();
+    // Choosing more than it asked for is allowed, says so, and is sent as the explicit choice.
+    await user.click(screen.getByLabelText(/Full control/));
+    expect(screen.getByText(/asked for read & edit, not full control/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(api.callsTo("POST /api/oauth/requests/oar1/decision")).toHaveLength(1));
     expect(api.callsTo("POST /api/oauth/requests/oar1/decision")[0]?.body).toMatchObject({ access: "manage" });
+  });
+
+  it("preselects Full control when the app asked for it, with what it adds spelled out", async () => {
+    consent({ requested_access: "manage", default_access: "manage" });
+    renderApp({ route: ROUTE });
+    expect(await screen.findByLabelText(/Full control/)).toBeChecked();
+    expect(screen.getByText(/manage workspaces, members, invites and settings/)).toBeInTheDocument();
   });
 
   it("limits the app to the selected bases and cannot approve with none selected", async () => {

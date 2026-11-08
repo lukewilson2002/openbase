@@ -31,6 +31,7 @@ import type {
   EmailSettings,
   EmailTestResult,
   FileInboxItem,
+  GrantAccessUpdate,
   GrantInfo,
   DuplicateBase,
   InboxItem,
@@ -177,6 +178,8 @@ export const api = {
     /** `redirect_to` is where the browser goes next: the app's address with the code (or the refusal). */
     decide: (id: string, body: ConsentDecision) => http.post<ConsentOutcome>(`/api/oauth/requests/${enc(id)}/decision`, body),
     grants: () => http.get<GrantInfo[]>("/api/oauth/grants"),
+    /** Change access: up or down, applied to the app's live tokens from their next request. */
+    changeGrantAccess: (id: string, body: GrantAccessUpdate) => http.patch<GrantInfo>(`/api/oauth/grants/${enc(id)}`, body),
     revokeGrant: (id: string) => http.delete<void>(`/api/oauth/grants/${enc(id)}`),
   },
 
