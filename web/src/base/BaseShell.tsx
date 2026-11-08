@@ -13,6 +13,7 @@ import { lastTableOf, lastViewOf, rememberPlace } from "@/lib/lastPlace";
 import { defaultViewOf, namedViews } from "@/lib/views";
 import { rememberWorkspace } from "@/pages/workspace/lastWorkspace";
 import { AppShell } from "@/shell/AppShell";
+import { HomeShell } from "@/shell/HomeShell";
 import { NavDialogsProvider } from "@/shell/NavDialogs";
 import { ViewHost } from "@/views/ViewHost";
 import { BaseDialogContext, BaseDialogs, type BaseDialog } from "./BaseDialogs";
@@ -49,31 +50,34 @@ export function BaseShell({ section }: { section?: "automations" }) {
   // Else its first view, else its default grid (a new table has no other).
   const view = table?.views.find((v) => v.id === viewId) ?? (viewId ? undefined : (table?.views.find((v) => v.id === lastViewOf(table.id)) ?? (table ? (namedViews(table)[0] ?? defaultViewOf(table)) : undefined)));
 
-  // What the menu's rows open next time: this view, its table, its project.
+  // What the menu's rows open next time: this view, its table, and the workspace used last.
   const workspaceId = loaded?.workspace_id;
   const tableOpen = table?.id;
   const viewOpen = view?.id;
   useEffect(() => {
     if (!workspaceId) return;
     rememberWorkspace(workspaceId);
-    if (tableOpen && viewOpen) rememberPlace({ workspaceId, baseId, tableId: tableOpen, viewId: viewOpen });
+    if (tableOpen && viewOpen) rememberPlace({ baseId, tableId: tableOpen, viewId: viewOpen });
   }, [workspaceId, baseId, tableOpen, viewOpen]);
 
-  if (base.isPending) return <PageSpinner label="Loading project" />;
+  if (base.isPending) return <PageSpinner label="Loading folder" />;
   if (base.isError) {
     const missing = isApiError(base.error) && (base.error.isNotFound || base.error.isForbidden);
+    // Inside the shell, so an old link to a deleted folder still has the sidebar, the workspace switcher and the search.
     return (
-      <EmptyState
-        icon={<FileQuestionMark />}
-        title={missing ? "Project not found" : "Could not load this project"}
-        description={missing ? "It may have been deleted, or you may not have access to it." : base.error instanceof Error ? base.error.message : undefined}
-        action={
-          <Button asChild variant="primary">
-            <Link to="/">Back to my projects</Link>
-          </Button>
-        }
-        className="min-h-dvh justify-center"
-      />
+      <HomeShell title="Folder">
+        <EmptyState
+          icon={<FileQuestionMark />}
+          title={missing ? "Folder not found" : "Could not load this folder"}
+          description={missing ? "It may have been deleted, or you may not have access to it." : base.error instanceof Error ? base.error.message : undefined}
+          action={
+            <Button asChild variant="primary">
+              <Link to="/">Go home</Link>
+            </Button>
+          }
+          className="py-20"
+        />
+      </HomeShell>
     );
   }
 

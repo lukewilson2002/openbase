@@ -65,14 +65,14 @@ function routes(extra: Record<string, Handler> = {}) {
   });
 }
 
-const remember = (place: { tables?: Record<string, string>; projects?: Record<string, string>; workspaces?: Record<string, string> }) =>
-  localStorage.setItem("ob-last-place", JSON.stringify({ tables: {}, projects: {}, workspaces: {}, ...place }));
+const remember = (place: { tables?: Record<string, string>; projects?: Record<string, string> }) =>
+  localStorage.setItem("ob-last-place", JSON.stringify({ tables: {}, projects: {}, ...place }));
 
 describe("/", () => {
   it("opens the last workspace's Home: it does not take the person back to the project they left", async () => {
     stubDesktop();
     localStorage.setItem("ob-last-workspace", "wsp2");
-    remember({ workspaces: { wsp2: "app3" }, projects: { app3: "tbl2" }, tables: { tbl2: "viw4" } });
+    remember({ projects: { app3: "tbl2" }, tables: { tbl2: "viw4" } });
     routes();
     renderApp();
     expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe("/", () => {
 describe("/workspace/:id", () => {
   it("is that workspace's Home, not its last project", async () => {
     stubDesktop();
-    remember({ workspaces: { wsp1: "app2" } });
+    remember({ projects: { app2: "tbl9" } });
     const api = routes();
     renderApp({ route: "/workspace/wsp1" });
     expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();

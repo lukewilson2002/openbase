@@ -253,36 +253,36 @@ describe("base shell on a desktop", () => {
 
   it("opens the view last used in a collection when its row is tapped, and remembers each view it shows", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viw2" }, projects: {}, workspaces: {} }));
+    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viw2" }, projects: {} }));
     openBase("owner", {}, "/base/app1/tbl2/viw4");
     await screen.findByText("Grid view coming soon");
-    expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl2" }, workspaces: { wsp1: "app1" } });
+    expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl2" } });
     await user.click(tasksLink());
     expect(await screen.findByText("Kanban view coming soon")).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Board" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View: Board" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl1" }, workspaces: { wsp1: "app1" } });
+    expect(JSON.parse(localStorage.getItem("ob-last-place")!)).toEqual({ tables: { tbl1: "viw2", tbl2: "viw4" }, projects: { app1: "tbl1" } });
     expect(localStorage.getItem("ob-last-workspace")).toBe("wsp1");
   });
 
   it("opens the last table and view when the address has none", async () => {
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl2: "viw4", tbl1: "viw2" }, projects: { app1: "tbl2" }, workspaces: {} }));
+    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl2: "viw4", tbl1: "viw2" }, projects: { app1: "tbl2" } }));
     openBase("owner");
     expect(await screen.findByRole("main", { name: "Everyone" })).toBeInTheDocument();
   });
 
   it("opens a table's last view when the address names only the table", async () => {
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viw2" }, projects: {}, workspaces: {} }));
+    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viw2" }, projects: {} }));
     openBase("owner", {}, "/base/app1/tbl1");
     expect(await screen.findByRole("main", { name: "Board" })).toBeInTheDocument();
   });
 
   it("falls back to the first table and view when the remembered ones are gone", async () => {
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viwGone" }, projects: { app1: "tblGone" }, workspaces: {} }));
+    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viwGone" }, projects: { app1: "tblGone" } }));
     openBase("owner");
     expect(await screen.findByRole("main", { name: "All tasks" })).toBeInTheDocument();
     cleanup();
-    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viwGone" }, projects: {}, workspaces: {} }));
+    localStorage.setItem("ob-last-place", JSON.stringify({ tables: { tbl1: "viwGone" }, projects: {} }));
     openBase("owner", {}, "/base/app1/tbl1");
     expect(await screen.findByRole("main", { name: "All tasks" })).toBeInTheDocument();
   });
@@ -333,11 +333,13 @@ describe("base shell on a desktop", () => {
     expect(tables()).toBeInTheDocument();
   });
 
-  it("explains a missing project", async () => {
-    mockApi({ "GET /api/auth/me": USER, "GET /api/bases/app1": apiError(404, "not_found", "base not found") });
+  it("explains a missing folder inside the shell, with the sidebar and the way home", async () => {
+    mockApi({ "GET /api/auth/me": USER, "GET /api/workspaces": [makeWorkspace("owner", [])], "GET /api/bases/app1": apiError(404, "not_found", "base not found") });
     renderApp({ route: "/base/app1" });
-    expect(await screen.findByText("Project not found")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to my projects" })).toBeInTheDocument();
+    expect(await screen.findByText("Folder not found")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go home" })).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Main menu" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Folder" })).toBeInTheDocument();
   });
 
   describe("viewer", () => {
