@@ -35,6 +35,7 @@ function MenuToggle() {
     <IconButton
       label={menu.toggleLabel}
       onClick={menu.toggle}
+      data-menu-toggle=""
       aria-keyshortcuts="Control+Backslash Meta+Backslash"
       aria-expanded={menu.expanded}
       aria-controls={menu.expanded ? menu.menuId : undefined}

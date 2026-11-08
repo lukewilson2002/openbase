@@ -5,7 +5,7 @@
  * notifications open beside it. A phone has no sidebar: its three tabs are the bottom navigation (PH-1), and the
  * Collections tab holds what the sidebar holds (NAV-7).
  */
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/endpoints";
@@ -70,7 +70,17 @@ export function AppShell({ children, className, fill, mainLabel, searchHere, wor
   }, [bottomNav]);
 
   const expanded = !prefs.collapsed;
-  const toggle = useCallback(() => setPrefs({ collapsed: !prefs.collapsed }), [prefs.collapsed, setPrefs]);
+  // Folding unmounts the sidebar: with focus inside it, focus would fall to the page and the next Tab would start from the top.
+  const refocusToggle = useRef(false);
+  const toggle = useCallback(() => {
+    refocusToggle.current = !prefs.collapsed && !!document.getElementById(menuId)?.contains(document.activeElement);
+    setPrefs({ collapsed: !prefs.collapsed });
+  }, [prefs.collapsed, setPrefs, menuId]);
+  useEffect(() => {
+    if (!refocusToggle.current) return;
+    refocusToggle.current = false;
+    document.querySelector<HTMLElement>("[data-menu-toggle]")?.focus();
+  }, [prefs.collapsed]);
   // Notifications is in the sidebar, so a hidden sidebar carries its unread mark on the toggle.
   const flagUnread = unread > 0 && !expanded;
   const toggleLabel = expanded ? "Hide menu" : flagUnread ? `Show menu (${unread} unread in Notifications)` : "Show menu";

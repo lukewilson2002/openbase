@@ -122,6 +122,18 @@ describe("AppShell on a desktop", () => {
     expect(screen.getByRole("button", { name: "Hide menu" })).toHaveAttribute("aria-keyshortcuts", "Control+Backslash Meta+Backslash");
   });
 
+  it("keeps the keyboard's place when folding the sidebar from inside it: focus goes to the header's toggle", async () => {
+    stubDesktop();
+    const user = userEvent.setup();
+    routes();
+    renderWithProviders(<Shell />);
+    const home = within(screen.getByRole("navigation", { name: "Main menu" })).getByRole("link", { name: "Home" });
+    home.focus();
+    await user.keyboard("{Control>}\\{/Control}");
+    expect(screen.queryByRole("navigation", { name: "Main menu" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show menu" })).toHaveFocus();
+  });
+
   it("ignores unreadable storage", () => {
     stubDesktop();
     localStorage.setItem(SIDEBAR_KEY, "{not json");
