@@ -120,6 +120,8 @@ export interface GridAdapterProps {
   columns: readonly GridColumnSpec[];
   rowCount: number;
   rowHeight: number;
+  /** Property names wrap onto a second line instead of being cut (the view's Wrap headers setting). */
+  wrapHeaders?: boolean;
   /** Columns kept in place when scrolling horizontally (including the primary field). */
   freezeColumns: number;
   /**

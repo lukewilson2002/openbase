@@ -31,7 +31,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import type { CellEdit, CellModel, GridAdapterProps, GridHandle, GridRange, GridSelectionInfo, ScreenRect } from "../adapter";
 import { isFormulaError } from "@/lib/cells/format";
 import { displayShapeOf } from "@/lib/cells/kinds";
-import { layoutChips, type PlacedChip } from "./draw";
+import { layoutChips, wrapLines, type PlacedChip } from "./draw";
 import { isObCell, toGridCell, withPending, type ObCell } from "./cells";
 import { ADD_ICON, headerIcons } from "./icons";
 import { cn } from "@/lib/cn";
@@ -76,6 +76,11 @@ function storedMarkerWidth(): number {
 }
 const ADD_COLUMN_ID = "__add_field__";
 export const GRID_HEADER_HEIGHT = 44;
+/** Room for two lines of a property name. */
+const WRAPPED_HEADER_HEIGHT = 64;
+const WRAPPED_LINE_HEIGHT = 18;
+/** How tall the header row is: the view's Wrap headers setting makes it two lines. */
+export const gridHeaderHeight = (wrap: boolean | undefined): number => (wrap ? WRAPPED_HEADER_HEIGHT : GRID_HEADER_HEIGHT);
 /** A number that turns into a checkbox on hover; `marker.ts` decides the number per row. */
 const rowMarkers = (width: number) => ({ kind: "both", width, startIndex: MARKER_START_INDEX }) as const;
 /** About how wide a character of a group label is, to tell when the first column cuts it. */
@@ -288,13 +293,58 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
   // With the pin button showing, the primary field's title stops short of it (the menu button
   // still draws in its own place at the right end).
   const showPin = pin !== null;
+  const wrapHeaders = props.wrapHeaders === true;
+  const headerHeight = gridHeaderHeight(wrapHeaders);
   const drawHeader = useCallback<DrawHeaderCallback>(
     (args, drawContent) => {
-      if (!showPin || args.columnIndex !== 0) {
+      const { ctx, rect, theme, column, columnIndex } = args;
+      const pinned = showPin && columnIndex === 0;
+      // Glide cuts a long name at one line. Wrapped, it draws the icon itself (the title is clipped out of that),
+      // sets the name on up to two lines, and draws the menu button's triangle where Glide would.
+      if (wrapHeaders && (column as { rowMarker?: unknown }).rowMarker === undefined) {
+        const xPad = theme.cellHorizontalPadding;
+        const iconSlot = column.icon !== undefined ? Math.ceil(theme.headerIconSize * 1.3) : 0;
+        const reserve = HEADER_MENU_WIDTH + (pinned ? PIN_BUTTON_SIZE + PIN_BUTTON_GAP : 0);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(rect.x, rect.y, xPad + iconSlot, rect.height);
+        ctx.clip();
+        drawContent();
+        ctx.restore();
+        const ink = args.isSelected ? theme.textHeaderSelected : theme.textHeader;
+        const room = rect.width - xPad - iconSlot - reserve;
+        if (room > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y, rect.width, rect.height);
+          ctx.clip();
+          ctx.font = `${theme.headerFontStyle} ${theme.fontFamily}`;
+          ctx.fillStyle = ink;
+          ctx.textBaseline = "middle";
+          const lines = wrapLines(ctx, column.title, room, 2);
+          lines.forEach((line, i) => ctx.fillText(line, rect.x + xPad + iconSlot, rect.y + rect.height / 2 + (i - (lines.length - 1) / 2) * WRAPPED_LINE_HEIGHT));
+          ctx.restore();
+        }
+        if (column.hasMenu === true && args.isHovered) {
+          const { x, y, width, height } = args.menuBounds;
+          const left = x + width / 2 - 5.5;
+          const top = y + height / 2 - 3;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(left, top);
+          ctx.lineTo(left + 11, top);
+          ctx.lineTo(left + 5.5, top + 6);
+          ctx.closePath();
+          ctx.fillStyle = ink;
+          ctx.fill();
+          ctx.restore();
+        }
+        return;
+      }
+      if (!pinned) {
         drawContent();
         return;
       }
-      const { ctx, rect } = args;
       const titleEnd = rect.width - HEADER_MENU_WIDTH - PIN_BUTTON_SIZE - PIN_BUTTON_GAP;
       ctx.save();
       ctx.beginPath();
@@ -304,7 +354,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       drawContent();
       ctx.restore();
     },
-    [showPin],
+    [showPin, wrapHeaders],
   );
 
   // The keyboard and a long press open the record menu themselves; the browser's own context menu event
@@ -540,7 +590,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
       rows={props.rowCount + (props.showSummary ? 1 : 0)}
       freezeTrailingRows={props.showSummary ? 1 : 0}
       rowHeight={props.rowHeight}
-      headerHeight={GRID_HEADER_HEIGHT}
+      headerHeight={headerHeight}
       freezeColumns={props.freezeColumns}
       getCellContent={getCellContent}
       customRenderers={customRenderers}
@@ -634,7 +684,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
     />
     {pin && primary && (
       // Clipped to the columns, so an unpinned primary field's button slides out under the row numbers.
-      <div className="pointer-events-none absolute top-0 right-0 overflow-hidden" style={{ left: markerWidth, height: GRID_HEADER_HEIGHT }}>
+      <div className="pointer-events-none absolute top-0 right-0 overflow-hidden" style={{ left: markerWidth, height: headerHeight }}>
         <button
           type="button"
           onClick={pin.onToggle}
@@ -645,7 +695,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
             "pointer-events-auto absolute flex items-center justify-center rounded-lg hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring",
             pin.pinned ? "text-primary-text" : "text-muted",
           )}
-          style={{ left: pinLeft, top: (GRID_HEADER_HEIGHT - PIN_BUTTON_SIZE) / 2, width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}
+          style={{ left: pinLeft, top: (headerHeight - PIN_BUTTON_SIZE) / 2, width: PIN_BUTTON_SIZE, height: PIN_BUTTON_SIZE }}
         >
           <Pin aria-hidden className="size-4" fill={pin.pinned ? "currentColor" : "none"} />
         </button>
@@ -689,7 +739,7 @@ export const GlideGrid = forwardRef<GridHandle, GridAdapterProps>(function Glide
         keepMarker(clampMarker(next));
       }}
       className="group absolute top-0 z-10 flex w-2 cursor-col-resize touch-none justify-center focus-visible:outline-none"
-      style={{ left: markerWidth - 4, height: GRID_HEADER_HEIGHT }}
+      style={{ left: markerWidth - 4, height: headerHeight }}
     >
       <span aria-hidden className="h-full w-0.5 bg-transparent transition-colors group-hover:bg-primary group-focus-visible:bg-ring group-active:bg-primary" />
     </div>
