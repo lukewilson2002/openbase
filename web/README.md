@@ -332,6 +332,31 @@ is an HTML attribute. `ColorMark` is the `.ob-mark` / `.ob-mark-<px>` classes pl
 targets) switch on at the compact layout (`max-md:`) and on touch screens (`pointer-coarse:`). `src/components/ui/core.test.tsx` covers
 their behaviour and accessibility attributes.
 
+### Overlays and the other core components (`src/components/ui`)
+
+The second half of the set, all in `src/components/ui` and tested in `overlays.test.tsx`:
+
+- **Popover and Menu**: `popover.tsx` and `dropdown-menu.tsx` share one surface (`menuSurfaceClass`: radius 12, `--shadow`, 6 px
+  padding) and one row (`menuRowClass`: 40 px, 44 on phone, the highlighted row in primary-soft). A popover that holds a form rather
+  than rows adds its own padding (`p-3`). Radix gives both the arrow keys and Escape. Escape returns focus to the opener.
+- **Sheet** (`sheet.tsx`): the phone's bottom sheet, with the grab handle, title and Done. Hold the handle or title and it follows the
+  finger, then settles at half, full or closed from the drag velocity (`sheet-snap.ts`, pure and unit tested). It is sized from the visual
+  viewport, so it clears the on-screen keyboard. **Dialog** is centered above the desktop breakpoint (`DESKTOP_QUERY`, now defined in
+  `hooks/useMediaQuery` and re-exported by the shell) and a full-screen sheet below it; `phone="bottom"` makes it a `Sheet` instead.
+  **ConfirmDialog** is a `Dialog` with `role="alertdialog"`, focus on Cancel and no dismissal by a press outside.
+- **SidePanel** (`side-panel.tsx`): the docked 360 px right panel (`w-panel`) for comments and history. Not modal; Escape or its close
+  button closes it and returns focus. On phone use a `Sheet` or a full-screen `Dialog`.
+- **CommandPalette** and **FilterBar**: presentational shells with the keyboard model built in (`listbox.tsx`: Arrow keys move the
+  highlight while focus stays in the field, `aria-activedescendant`, wrap-around). The caller supplies results and suggestions and decides what
+  choosing one does. The filter bar's Backspace-on-empty selects the last chip, then removes it.
+- **TemporaryChangesBar** and **Toast**: each is a polite live region that is in the page before its text arrives. Keep the bar mounted
+  and flip `open`. A toast takes `action` or `actions` (Undo, Open), waits while hovered or focused, and sits bottom-left on desktop and above
+  the phone tab bar on phone: the bar sets `--bottom-nav-height` when it is shown.
+
+Dialogs opened from state have no Radix trigger to return focus to, so `use-return-focus.ts` notes the opener and gives focus back
+(A11Y-1). Leaving animations (`[data-state="closed"]` on `.ob-*-in` in `styles/index.css`) run 30% faster than entering; under reduced
+motion everything fades for 120 ms. `use-presence.ts` does the same for the pieces that are not Radix primitives.
+
 ### Logo, favicon and web app manifest
 
 `brand/` holds the logo artwork (see `brand/README.md`); `scripts/gen-brand.sh` turns it into what the client ships and
