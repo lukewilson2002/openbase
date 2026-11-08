@@ -57,9 +57,23 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   palette stays closed. On a phone a bar above the keyboard has the same controls, the lists' indent and
   outdent and a + that opens the block menu. The page saves 800 ms after you stop typing, as an
   ordinary save of the Page property, and the bar says Saving, Saved or Couldn't save. Linked records and
-  View write the embed's fenced `openbase` block with the property or view you pick; it reads as a code
-  block until embeds are drawn. Viewers and commenters read the page rendered. A collection with no Page
+  View write the embed's fenced `openbase` block with the property or view you pick (see the next entry).
+  Viewers and commenters read the page rendered. A collection with no Page
   property offers creators "Add Page property"; an editor who types in one gets "Page" made by that first save.
+- **Embeds in a page: linked records and views.** A page can show a small table of this record's linked
+  records, or the first records of any saved view of the workspace. Linked records picks one of the record's
+  link properties: the linked collection's title and its first three visible properties, a caption such as
+  "Invoices · linked to this client, 2", **Open** (the collection with a draft filter on the link back to this
+  record, saved nowhere), rows that open the records' pages and, for editors, a **+ Link** row that adds links
+  through the link picker. View shows the first ten records of the view (more with `"limit"`, up to 50),
+  read-only, with **Open view**; a reader who cannot open the view sees "You can't open this view" and nothing
+  of its name or records. Personal views cannot be embedded. An embed is stored as a fenced code block with the
+  info string `openbase` and one JSON object, `{"embed":"linked","field":"fld…"}` or
+  `{"embed":"view","view":"viw…","limit":10}`, so agents and the API can write one; it is read strictly
+  (those keys only, ids in the shape of ids) and drawn by components, never as HTML. Embeds are alive only in the
+  page of a record opened by a signed-in person: shared pages, forms, comments, grid cells and previews show a
+  static "Embedded view" box and fetch nothing, and notification snippets say "Embedded view". A block that does
+  not read shows "This embed can't be shown" and keeps its text. Search skips the JSON.
 - **The link picker and the linked-record preview in the new look.** Picking records to link is a
   list of the collection's records with their description and labels, the highlighted row in the
   accent's soft fill; on a phone it is a bottom sheet with the search at the top, which opens with the

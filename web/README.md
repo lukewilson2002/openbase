@@ -279,7 +279,7 @@ page text size (`text-read`, `text-read-phone` below 1024 px). It adds what is t
   mention list: a `/` at the start of a block or after a space, at most 24 characters of query) and `blocks.ts` (the blocks, `matchBlocks`
   by the start of any word, and how each is inserted). The editor keeps focus; rows are `ListboxOption`s and the editor points at the
   highlighted one with `aria-activedescendant`. Linked records and View take a second step (the link property, or the saved view of the
-  folder, personal ones left out) and write ```` ```openbase ```` with one JSON object (`embedBlock`); a collection with just one skips it. Image or file
+  workspace, personal ones and default grids left out) and write ```` ```openbase ```` with one JSON object (`embedBlock`, the block of the next section); a collection with just one skips it. Image or file
   needs `upload`, and Property needs `onAddProperty` (creators): without them a row is listed disabled with its reason, or left out for files.
 - `PageOverlays.tsx`: `SelectionBubble` (desktop; bold, italic, strike, code, link over the selection) and `FormatBar` (phone; fixed on the
   visual viewport's bottom edge through `useVisualViewport`, with the block menu docked on top of it, and the link form in place of the buttons).
@@ -294,6 +294,36 @@ commenters the `Markdown` renderer (nothing when empty), and creators of a colle
 value, 800 ms after typing pauses (`useAutosave`), and when the editor loses focus; with no Page property the first save is `PUT
 .../records/{id}/page` (`usePageSave`), which makes "Page". `useRebuilds` decides when the editor is built again because the text changed
 under it (never for its own save coming back); the property rows use the same hook. The page has no focus ring of its own: the caret is its focus.
+
+### Embeds in the page (REC-6, `lib/embeds.ts`, `components/embeds/`, `components/richtext/embed.ts`)
+
+An embed is a fenced code block with the info string `openbase` holding one JSON object: `{"embed":"linked","field":"fld…"}` or
+`{"embed":"view","view":"viw…","limit":10}`. `lib/embeds.ts` is the one reader (`parseEmbed`, `embedOfBlock`, `isEmbedInfo`): exact info
+string, exactly the documented keys, ids against their pattern, `limit` a whole number from 1 to 50 (10 when left out). Anything else is
+not an embed and keeps its text. Both ways of showing a page use it: `richtext/embed.ts` (`EmbedNode`, an atom Tiptap node with a React node
+view, `EmbedView.tsx`; it reads a `code` token ahead of the code block, writes back the text it read, labels an unreadable `openbase`
+block "This embed can't be shown" with a decoration, and turns a hand-typed valid block into the node when the editor blurs) and
+`Markdown.tsx` (`renderer.code` writes the static box itself, never HTML made of the block's text; given a host, `Markdown` draws the live
+embed with a portal into the place the renderer marked with its render's secret, so text cannot forge one).
+
+Embeds are alive only where `EmbedHostProvider` (`components/embeds/host.ts`) is set, and only `PageSection` sets it: the record, its
+collection, the folder, the role, the format context and `save` of the page. Without a host `EmbedBlock` is the static "Embedded view"
+box and nothing is fetched (shared pages, forms, comments, grid cells; `markdownToText` leaves the boxes out of previews).
+
+- `LinkedEmbed`: one of the record's own link properties (any other id is "This embed can't be shown"), the linked collection's
+  `previewFields` (first three visible properties of its default view) of the first ten links through `useRecordsById`, and **Open**, which
+  writes a draft on the linked collection's default view (`nextDraft`, a `has_any_of` filter on the inverse link) before it navigates.
+  Editors get "+ Link", which is `LinkEditor` with `addAnchor`: the host's button opens the picker and each pick is saved at once through
+  the page's own `save`.
+- `ViewEmbed`: finds the view among the views the server sent for this person (the current folder, then `useWorkspaceViews` for the
+  workspace's other folders, which asks `GET /api/bases/{id}` only when the view is not in this folder); a view not found, a personal view,
+  and a 404 or 403 from `POST /api/views/{id}/query` are all "You can't open this view", which shows no name, count or record. The query is
+  the one the collection screen makes, so the server decides: it answers 404 for a folder the person cannot open and for another person's
+  personal view (`crates/server/tests/embeds_security.rs`).
+- `EmbedTable` draws both: caption, Open, rows (title link and three properties from `CellValue`, with no host and links as chips, so a
+  page cannot embed itself through a record that shows its own rich text), and a footer.
+
+The block menu's View step lists `useWorkspaceViews` (started once the menu opens), folder named after the collection for other folders.
 
 ### The collection screen (COL-1, COL-2, COL-10, `src/base`)
 
