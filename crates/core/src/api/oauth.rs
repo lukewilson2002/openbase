@@ -47,9 +47,10 @@ pub struct ConsentRequest {
     /// The highest access level the app asked for, if it asked for any.
     #[serde(default)]
     pub requested_access: Option<String>,
-    /// The highest level the user may choose (`read`, `write` or `manage`).
+    /// The highest level the user may choose (`read`, `write` or `manage`). Every level is offered
+    /// whatever the app asked for; choosing more than it asked for is the person's explicit call.
     pub max_access: String,
-    /// The level the page selects first (never `manage`).
+    /// The level the page selects first: what the app asked for (`read` when it named nothing).
     pub default_access: String,
     /// When the request lapses (unix ms).
     pub expires_at: i64,
@@ -67,6 +68,15 @@ pub struct ConsentDecision {
     /// For `approve`: limit the app to these bases; absent = every base the user can access.
     #[serde(default)]
     pub base_ids: Option<Vec<String>>,
+}
+
+/// The person's new choice for a connected app (`PATCH /api/oauth/grants/{id}`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+pub struct GrantAccessUpdate {
+    /// `read`, `write` or `manage`. The app keeps its project limit; it applies to the grant and
+    /// to the access tokens already issued from their next request.
+    pub access: String,
 }
 
 /// Where the browser goes next: the app's redirect address with the authorization code (or the

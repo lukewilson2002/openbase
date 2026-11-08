@@ -659,6 +659,35 @@ pub fn revoke_by_token(
     Ok(row)
 }
 
+/// Change the access level of a user's grant, keeping its project limit. Every access token of
+/// the grant reads its scope from this row on each request, and refresh tokens issue the new
+/// scope, so the change reaches the app without it reconnecting. Returns the scope before and
+/// after, or None when the user has no such grant.
+pub fn set_grant_access(
+    conn: &Connection,
+    grant_id: &str,
+    user_id: &str,
+    access: scope::Access,
+) -> AppResult<Option<(TokenScope, TokenScope)>> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT scopes FROM oauth_grants WHERE id = ?1 AND user_id = ?2",
+            params![grant_id, user_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(stored) = stored else {
+        return Ok(None);
+    };
+    let before: TokenScope = serde_json::from_str(&stored)?;
+    let after = access.token_scope(before.base_ids.clone());
+    conn.execute(
+        "UPDATE oauth_grants SET scopes = ?1 WHERE id = ?2",
+        params![serde_json::to_string(&after)?, grant_id],
+    )?;
+    Ok(Some((before, after)))
+}
+
 /// The owner of a grant, if it exists (for audit entries).
 pub fn grant_owner(conn: &Connection, grant_id: &str) -> AppResult<Option<String>> {
     Ok(conn

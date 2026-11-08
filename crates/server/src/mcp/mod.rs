@@ -556,7 +556,8 @@ fn insufficient_scope(ctx: &McpCtx, bytes: &[u8]) -> Option<(String, String)> {
     Some((
         format!(
             "The tool '{name}' needs more access than this connection was given ({needed}). \
-             Reconnect the app and choose more access on the approval page."
+             The person can give it more under Account, AI assistants, Change access, \
+             or reconnect the app and choose more access on the approval page."
         ),
         needed.to_string(),
     ))

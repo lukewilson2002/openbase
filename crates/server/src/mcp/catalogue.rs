@@ -1228,6 +1228,17 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "GrantInfo[]",
     ),
     e(
+        PATCH,
+        "/api/oauth/grants/{id}",
+        "account",
+        "-",
+        SessionOnly,
+        "Change a connected app's access (Change access): upgrade or downgrade; applies to its \
+         live tokens from their next request. Session only, so an app cannot raise its own access.",
+        "{access: read|write|manage}",
+        "GrantInfo",
+    ),
+    e(
         DELETE,
         "/api/oauth/grants/{id}",
         "account",

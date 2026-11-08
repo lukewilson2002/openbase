@@ -119,11 +119,12 @@ and approve. The app then holds a short-lived access token for `/mcp`.
 | Read & edit | also create, change and delete content in your projects | "Allow writes" |
 | Full control | also manage workspaces, members, invites and settings (and the admin pages for an administrator) | "Allow managing ..." |
 
-Plus **All projects** or **only the projects you tick**. The page **always preselects Read
-only**; you choose more. An app is offered what it asked for and nothing above it: Read &
-edit when it asked for write (an app that named no scope we know can get that much), and
-Full control only when it asked for `openbase:manage` (the `401` from `/mcp` names
-`openbase:read openbase:write`, so a client that follows it does not ask for more). It shows
+Plus **All projects** or **only the projects you tick**. All three levels are always offered,
+whatever the app asked for, because many assistants never ask for Full control. The page
+preselects what the app asked for (Read only when it named no scope we know), and anything
+above that is your explicit choice; the audit entry records that you went beyond the request.
+The token response reports the scope you actually granted. (The `401` from `/mcp` names
+`openbase:read openbase:write`, so a client that follows it asks for that much.) It shows
 the app's name (written by the app itself, so not proof of anything) and the address the
 answer goes to, and warns when the app runs on your own computer, when OpenBase cannot
 verify the address, and when an app calls itself "Claude" or "ChatGPT" (look-alikes with
@@ -139,7 +140,7 @@ stay out of reach, and what you can do in a project limits what the app can do.
 
 **Managing connections.** **Account → AI assistants → Connected apps** lists every app with
 its access, projects, where it connects from, when it connected and when it was last used,
-with **Revoke**. Revoking cuts the app off at once. Administrators see everyone's apps
+with **Revoke**. Revoking cuts the app off at once. The REST endpoint `PATCH /api/oauth/grants/{id}` with `{"access": "read"|"write"|"manage"}` is **Change access**: it moves the app up or down, and its live tokens follow from their next request, with no reconnect. It is session-only on purpose (like revoking), so an agent, which could otherwise raise its own access, cannot call it through `api_request`; the endpoint is listed in `api_reference` as session-only. It never goes beyond your own role, and an app limited to some projects cannot be given Full control. Administrators see everyone's apps
 under **Admin → Connected apps**. Changing or resetting your password, turning on
 two-factor authentication, **Sign out other sessions** and having your account deactivated
 disconnect all your apps (they have to be approved again; reactivating an account does not
@@ -866,7 +867,7 @@ tool above its access. `scope` and `resource_metadata` are left out when OAuth i
 |---|---|
 | `401` "session cookies are not accepted" | the client sent a cookie but no bearer token; configure the `Authorization` header |
 | `401` `invalid_token` | the token is wrong, expired, revoked, or its owner was deactivated or changed their password (that deletes all tokens; a deactivation also deletes connected apps). For an OAuth app: its access token expired and it did not refresh, or you revoked the connection; connect it again |
-| `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; disconnect it under Connected apps and connect it again with more access |
+| `403` `insufficient_scope` | an OAuth app called a tool above the access you approved; give it more under Account → AI assistants → Change access (it applies from its next request), or disconnect it and connect it again with more access |
 | the connector says it cannot reach or sign in to the server | Claude and ChatGPT connect from the internet: OpenBase needs a public `https://` address (`OPENBASE_PUBLIC_URL` set to it) with a valid certificate; `curl https://<your OpenBase>/.well-known/oauth-protected-resource/mcp` should answer JSON |
 | `could not fetch the app's metadata document` on the approval step | the app's `client_id` URL did not answer with its JSON document from a public address (the server log has the reason). Private and loopback addresses are refused on purpose |
 | `404` `oauth_disabled` | `OPENBASE_PUBLIC_URL` is plain `http://` on a public address; OAuth is only served over HTTPS (or on localhost) |
