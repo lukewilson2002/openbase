@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, skipIntro, test, typeToEdit } from "./fixtures";
+import { clickGrid, expect, newClientContext, newRecordButton, skipIntro, test, typeToEdit } from "./fixtures";
 
 /**
  * The automations journey against a live server: build "when a record is created in Table 1,
@@ -101,7 +101,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
 
   await test.step("opens Automations from the base menu and sees the empty state", async () => {
     await page.goto(`/base/${fx.baseId}`);
-    await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
     // In the folder's menu, which a right-click on its row opens too.
     await page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: "Automations E2E", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Automations", exact: true }).click();
@@ -155,9 +155,9 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
 
   await test.step("adds a record in the grid", async () => {
     await page.getByRole("list", { name: /^Collections in / }).getByRole("link", { name: /^Table 1/ }).click();
-    await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
     await expect(page.getByText("0 items")).toBeVisible();
-    await page.getByRole("button", { name: "Add record" }).click();
+    await newRecordButton(page).click();
     await expect(page.getByText("1 item")).toBeVisible();
     // Name it, as a person would.
     const canvas = page.locator("canvas[data-testid='data-grid-canvas']").first();
@@ -176,7 +176,7 @@ test("builds, enables and runs an automation from a grid edit, and shows the run
     const [run] = await runs(page, automationId);
     expect(run!.trigger_data.type).toBe("record_created");
     expect(run!.log.map((l) => [l.action, l.status])).toEqual([["create_record", "succeeded"]]);
-    // The record was created at the moment of "Add record" (blank), then named: the copy is the blank one.
+    // The record was created at the moment of New record (blank), then named: the copy is the blank one.
     expect(await names(page, fx.table2)).toEqual([""]);
   });
 

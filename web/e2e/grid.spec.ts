@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Locator, Page } from "@playwright/test";
-import { clickGrid, expect, newClientContext, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, newClientContext, newRecordButton, openOptionsScreen, openViewOptions, redo, skipIntro, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * Grid journeys against a live server: edit cells (text, number, select), undo/redo, filter, sort,
@@ -114,7 +114,7 @@ async function clickCell(page: Page, col: keyof typeof WIDTHS, row: number, opts
 
 async function gotoGrid(page: Page) {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.viewId}`);
-  await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
   await expect(page.getByText(/\d+ items?/)).toBeVisible();
   await expect(canvas(page)).toBeVisible();
 }
@@ -237,19 +237,23 @@ test("the Advanced filter opens the nested builder, and a filter with OR is one 
   await expect(page.getByText("5 items")).toBeVisible();
 });
 
-test("sorts by a field descending from the toolbar, as a draft the server computes", async ({ page }) => {
+test("sorts by a property descending from View options, as a draft the server computes", async ({ page }) => {
   await gotoGrid(page);
-  await page.getByRole("button", { name: /^Sort/ }).click();
+  const panel = await openOptionsScreen(page, "Sort");
   await page.getByRole("button", { name: "Add sort" }).click();
   // The page asks the server for the draft's order with each query (a transient override).
   const sorted = page.waitForResponse((r) => r.url().endsWith(`/api/views/${fx.viewId}/query`) && (r.request().postDataJSON() as { transient?: { sorts?: { direction: string }[] } }).transient?.sorts?.[0]?.direction === "desc");
   await page.getByLabel("Direction for sort 1").selectOption("desc");
-  await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
   const body = (await (await sorted).json()) as { records: { values: Record<string, unknown> }[] };
   expect(body.records[0]!.values[fx.fields.name]).toBe("Echo");
+  // Back on the first screen, the Sort row says what is sorted.
+  await panel.getByRole("button", { name: "Back to View options" }).click();
+  await expect(panel.getByRole("button", { name: /^Sort .*Z to A$/ })).toBeVisible();
+  await page.keyboard.press("Escape");
   // The view itself is not sorted: the draft is only for now.
   await expect(page.getByText(/These changes are only for now/)).toBeVisible();
   expect((await rows(page))[0]!.name).toBe("Alpha");
+  await openOptionsScreen(page, "Sort");
   await page.getByRole("button", { name: "Remove sort 1" }).click();
   await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
@@ -330,25 +334,27 @@ test("the row numbers' column is resized from its edge, kept on this device, and
   await expect(page.getByRole("separator", { name: "Resize the row numbers" })).toHaveAttribute("aria-valuenow", String(MARKER_W));
 });
 
-test("hides a field and shows it again", async ({ page }) => {
+test("hides a property and shows it again", async ({ page }) => {
   await gotoGrid(page);
-  // A table's Page property starts hidden in its views, so the button already counts one.
-  await page.getByRole("button", { name: /1 hidden field/ }).click();
+  // A table's Page property starts hidden in its views, so the Properties row already counts one.
+  const panel = await openViewOptions(page);
+  await expect(panel.getByRole("button", { name: /^Properties .*1 hidden$/ })).toBeVisible();
+  await panel.getByRole("button", { name: /^Properties/ }).click();
   await page.getByRole("switch", { name: "Qty" }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: /2 hidden fields/ })).toBeVisible();
+  await panel.getByRole("button", { name: "Back to View options" }).click();
+  await expect(panel.getByRole("button", { name: /^Properties .*2 hidden$/ })).toBeVisible();
   await expect(page.getByText(/These changes are only for now/)).toBeVisible();
-  await page.getByRole("button", { name: /2 hidden fields/ }).click();
+  await panel.getByRole("button", { name: /^Properties/ }).click();
   await page.getByRole("switch", { name: "Qty" }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: /1 hidden field/ })).toBeVisible();
+  await panel.getByRole("button", { name: "Back to View options" }).click();
+  await expect(panel.getByRole("button", { name: /^Properties .*1 hidden$/ })).toBeVisible();
   await expect(page.getByText(/These changes are only for now/)).toBeHidden();
 });
 
-test("adds a field from the dialog", async ({ page }) => {
+test("adds a property from View options", async ({ page }) => {
   await gotoGrid(page);
-  await page.getByRole("button", { name: "More" }).click();
-  await page.getByRole("menuitem", { name: "Add field" }).click();
+  const panel = await openViewOptions(page);
+  await panel.getByRole("button", { name: "Add property" }).click();
   await page.getByLabel("Field name").fill("Remarks");
   await page.getByRole("option", { name: /^Rich text/ }).click();
   await page.getByRole("button", { name: "Create field" }).click();
@@ -395,7 +401,7 @@ test("adds and deletes records, with undo", async ({ page, diagnostics }) => {
   // "already gone", but the browser logs the failed request.
   diagnostics.allow(/status of 404.*\/api\/tables\/[^/]+\/records(\/[^/]+(\/discard)?)?\)$/);
   await gotoGrid(page);
-  await page.getByRole("button", { name: "Add record" }).click();
+  await newRecordButton(page).click();
   await expect(page.getByText("6 items")).toBeVisible();
   // Undo is ignored while the grid is still finishing the write it would undo: wait for the server to have it.
   await expect.poll(async () => (await rows(page)).length).toBe(6);

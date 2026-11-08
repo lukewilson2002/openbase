@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { clickGrid, expect, gridFocused, redo, test, typeToEdit, undo } from "./fixtures";
+import { clickGrid, expect, gridFocused, newRecordButton, openOptionsScreen, openViewOptions, redo, test, typeToEdit, undo } from "./fixtures";
 
 /**
  * The journey of a new instance, driven through the real UI in a real browser against the real
@@ -134,7 +134,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await newCollection.getByLabel("Collection name").fill("Table 1");
     await newCollection.getByRole("button", { name: "Create collection" }).click();
     await expect(page).toHaveURL(new RegExp(`/base/${baseId}/tbl[^/]+/viw[^/]+$`));
-    await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
     // A new table opens in its default grid, its only view: its tab reads "All" and the collection's name.
     await expect(page.getByRole("tab", { name: "All table 1" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tab")).toHaveCount(1);
@@ -164,8 +164,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
   });
 
   const addField = async (name: string, type: RegExp, fill?: () => Promise<void>) => {
-    await page.getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: "Add field" }).click();
+    await (await openViewOptions(page)).getByRole("button", { name: "Add property" }).click();
     const dialog = page.getByRole("dialog", { name: "Add a field" });
     await dialog.getByLabel("Field name").fill(name);
     await dialog.getByRole("option", { name: type }).click();
@@ -198,7 +197,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     const status = table.fields.find((f) => f.name === "Status")!;
     expect((status.options.choices as { name: string }[]).map((c) => c.name)).toEqual(["Todo", "Done"]);
     // The new columns are in the grid.
-    await expect(page.getByText("5 fields").or(page.getByRole("toolbar", { name: "View toolbar" }))).toBeVisible();
+    await expect(page.getByText("5 fields").or(page.getByRole("button", { name: "View options" }))).toBeVisible();
   });
 
   const fid = (name: string) => table.fields.find((f) => f.name === name)!.id;
@@ -209,15 +208,14 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     const res = await page.request.patch(`/api/views/${viewId}`, { data: { config: { ...view.config, field_widths } }, headers: CSRF });
     expect(res.ok(), await res.text()).toBeTruthy();
     await page.reload();
-    await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
   });
 
   await test.step("adds records and edits cells in the grid", async () => {
     await expect(page.getByText("0 items")).toBeVisible();
     const names = ["Alpha", "Bravo", "Charlie"];
     for (const [i, name] of names.entries()) {
-      // Exact: once the first record exists, the toolbar's "Undo: Add record" button also matches.
-      await page.getByRole("button", { name: "Add record", exact: true }).click();
+      await newRecordButton(page).click();
       await expect(page.getByText(`${i + 1} item${i === 0 ? "" : "s"}`)).toBeVisible();
       // A record added and left blank is taken back when the next one is added, so name each one as it
       // is added. Click its name cell: the grid selects it but does not hold the keyboard yet.
@@ -252,17 +250,16 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect.poll(async () => (await records())[0]!.values[fid("Due")]).toBe("2026-03-04");
   });
 
-  await test.step("filters and sorts from the toolbar as a draft; Reset takes it back and Update view saves it", async () => {
+  await test.step("filters from the filter bar and sorts from View options as a draft; Reset takes it back and Update view saves it", async () => {
     await page.getByRole("combobox", { name: "Filter or search" }).fill("qty at least 20");
     await page.keyboard.press("Enter");
     await expect(page.getByText("2 items")).toBeVisible();
     await expect(page.getByRole("button", { name: "Qty is at least 20", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: /^Sort/ }).click();
+    await openOptionsScreen(page, "Sort");
     await page.getByRole("button", { name: "Add sort" }).click();
-    await page.getByLabel("Field for sort 1").selectOption({ label: "Qty" });
+    await page.getByLabel("Property for sort 1").selectOption({ label: "Qty" });
     await page.getByLabel("Direction for sort 1").selectOption("desc");
-    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
     await page.keyboard.press("Escape");
 
     // Nothing is saved yet: the bar counts what the draft shows, and the view still holds all three.
@@ -272,7 +269,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     // The draft survives a reload on this device.
     await page.reload();
     await expect(page.getByText("2 items")).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
+    await expect((await openViewOptions(page)).getByRole("button", { name: /^Sort Qty, highest first$/ })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.getByText("Showing 2 of 3 records.")).toBeVisible();
 
     // Reset takes both back.
@@ -284,9 +282,9 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await page.getByRole("combobox", { name: "Filter or search" }).fill("qty at least 20");
     await page.keyboard.press("Enter");
     await expect(page.getByText("2 items")).toBeVisible();
-    await page.getByRole("button", { name: /^Sort/ }).click();
+    await openOptionsScreen(page, "Sort");
     await page.getByRole("button", { name: "Add sort" }).click();
-    await page.getByLabel("Field for sort 1").selectOption({ label: "Qty" });
+    await page.getByLabel("Property for sort 1").selectOption({ label: "Qty" });
     await page.getByLabel("Direction for sort 1").selectOption("desc");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Update view" }).click();
@@ -297,7 +295,8 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     // The saved view survives a reload.
     await page.reload();
     await expect(page.getByText("2 items")).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Sorted by / })).toBeVisible();
+    await expect((await openViewOptions(page)).getByRole("button", { name: /^Sort Qty, highest first$/ })).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   await test.step("opens the expanded record and comments on it", async () => {
@@ -354,8 +353,7 @@ test("a new instance, from first-run setup to a logged-in grid with data", async
     await expect(row).toBeVisible();
     await expect(row.locator("svg")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: "Add field" }).click();
+    await (await openViewOptions(page)).getByRole("button", { name: "Add property" }).click();
     const dialog = page.getByRole("dialog", { name: "Add a field" });
     await dialog.getByLabel("Field name").fill("Client");
     await dialog.getByRole("option", { name: /^Link to another record/ }).click();

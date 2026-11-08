@@ -114,7 +114,7 @@ async function record(page: Page, id: string): Promise<{ values: Record<string, 
 
 async function open(page: Page, view: keyof Fixture["views"]) {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.views[view]}`);
-  await expect(page.getByRole("toolbar", { name: "View toolbar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
 }
 
 test.beforeAll(async ({ browser }, testInfo) => {

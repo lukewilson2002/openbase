@@ -1,5 +1,5 @@
 import type { APIRequestContext, Cookie, Page } from "@playwright/test";
-import { expect, newClientContext, skipIntro, test } from "./fixtures";
+import { expect, newClientContext, openOptionsScreen, skipIntro, test } from "./fixtures";
 
 /**
  * Grouping by a date with a granularity: the Group tool's Day / Week / Month / Quarter / Year picker,
@@ -87,12 +87,12 @@ test.beforeEach(async ({ context }) => {
 
 test.use({ viewport: { width: 1360, height: 820 } });
 
-test("the list groups by day, then by month and year from the Group tool", async ({ page }) => {
+test("the list groups by day, then by month and year from View options", async ({ page }) => {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.list}`);
   await expect(page.getByRole("tree", { name: "Grouped records" })).toBeVisible();
   await expect.poll(() => headers(page)).toEqual(["No date", "September 30, 2026", "October 2, 2026", "October 21, 2026", "January 15, 2027"]);
 
-  await page.getByRole("button", { name: /^Grouped by Due/ }).click();
+  await openOptionsScreen(page, "Group");
   const pick = page.getByRole("combobox", { name: "Granularity for group 1" });
   await expect(pick).toHaveValue("day");
   await pick.selectOption("month");
@@ -123,9 +123,9 @@ test("a record added to a month group starts on the month's first day", async ({
   await call(page.request, "delete", `/api/tables/${fx.tableId}/records`, { ids: [id] });
 });
 
-test("a grid's Group tool offers the granularity and its groups follow it", async ({ page }) => {
+test("a grid's Group screen offers the granularity and its groups follow it", async ({ page }) => {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${fx.grid}`);
-  await page.getByRole("button", { name: /^Grouped by Due/ }).click();
+  await openOptionsScreen(page, "Group");
   // The page asks the server for the draft's groups with each query (a transient override), so the grid's groups
   // are the ones the server computes for it.
   const asked = page.waitForResponse((r) => r.url().endsWith(`/api/views/${fx.grid}/query`) && (r.request().postDataJSON() as { transient?: { groups?: { granularity?: string }[] } }).transient?.groups?.[0]?.granularity === "quarter");

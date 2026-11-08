@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { APIRequestContext, Browser, BrowserContext, Cookie, Page, TestInfo } from "@playwright/test";
-import { expect, newClientContext, skipIntro, test } from "./fixtures";
+import { expect, newClientContext, openOptionsScreen, openViewOptions, skipIntro, test } from "./fixtures";
 
 /**
  * Forms, share links and CSV against a live server, in Chrome:
@@ -112,7 +112,7 @@ async function stranger(browser: Browser, testInfo: TestInfo, baseURL: string | 
 
 async function openView(page: Page, viewId = fx.viewId) {
   await page.goto(`/base/${fx.baseId}/${fx.tableId}/${viewId}`);
-  await expect(page.getByRole("toolbar", { name: /toolbar/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View options" })).toBeVisible();
 }
 
 test.beforeAll(async ({ browser, baseURL }, testInfo) => {
@@ -309,8 +309,8 @@ test("downloads a view as CSV: visible fields, the view's sort, BOM and quoting"
   const created = await call<{ id: string; config: Record<string, unknown> }>(page.request, "post", `/api/tables/${fx.tableId}/views`, { name: "Export me", type: "grid", config: null });
   await call(page.request, "patch", `/api/views/${created.id}`, { config: { ...created.config, hidden_fields: [...((created.config.hidden_fields as string[] | undefined) ?? []), fx.fields.salary], sorts: [{ field_id: fx.fields.qty, direction: "desc" }] } });
   await openView(page, created.id);
-  await page.getByRole("button", { name: "More" }).click();
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: "Download CSV" }).click()]);
+  const panel = await openViewOptions(page);
+  const [download] = await Promise.all([page.waitForEvent("download"), panel.getByRole("button", { name: "Download CSV" }).click()]);
   expect(download.suggestedFilename()).toBe("Export me.csv");
   const text = await readFile((await download.path())!, "utf8");
   expect(text.startsWith("﻿")).toBe(true);
@@ -417,7 +417,7 @@ test("a viewer can filter and sort a board for themselves; the view stays as it 
   await expect(g.getByRole("button", { name: "Share view" })).toHaveCount(0);
 
   // Sort and filter as a draft: the changes bar appears, the saved view does not change.
-  await g.getByRole("button", { name: /^Sort/ }).click();
+  await openOptionsScreen(g, "Sort");
   await g.getByRole("button", { name: "Add sort" }).click();
   await g.keyboard.press("Escape");
   await expect(g.getByRole("status").filter({ hasText: "These changes are only for now" })).toBeVisible();

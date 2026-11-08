@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, test as base, type APIRequestContext, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type TestInfo } from "@playwright/test";
+import { expect, test as base, type APIRequestContext, type Browser, type BrowserContext, type BrowserContextOptions, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 /**
  * `test` with an automatic watchdog: every page opened by a test is observed, and the test fails
@@ -229,7 +229,7 @@ const GLIDE_DOUBLE_CLICK_MS = 500;
  * Two traps are closed here:
  *
  *  - Glide decides "double click" from the time of the last mouse release anywhere on the page, not
- *    from the cell. A click on "Add record" a moment ago followed by a click on an already selected
+ *    from the cell. A click on New record a moment ago followed by a click on an already selected
  *    cell (the app selects the new row by itself) therefore opens that cell's editor, and the editor
  *    holds the keyboard for good. So the click waits until the last release is out of that window
  *    (the page records it, see the init script of `test`). It never sleeps: when nothing was clicked
@@ -316,5 +316,24 @@ export async function redo(page: Page): Promise<void> {
   await page.waitForTimeout(300);
   await page.keyboard.press("Control+Shift+Z");
 }
+
+/** Opens View options (the sliders button at the right of the filter bar) and returns its panel: a popover on a desktop, a sheet on a phone. */
+export async function openViewOptions(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "View options" }).click();
+  const panel = page.getByRole("dialog", { name: "View options" });
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+/** Opens View options and goes into one of its screens: Sort, Group, Color or Properties. */
+export async function openOptionsScreen(page: Page, screen: "Sort" | "Group" | "Color" | "Properties"): Promise<Locator> {
+  const panel = await openViewOptions(page);
+  await panel.getByRole("button", { name: new RegExp(`^${screen}\\b`) }).click();
+  await expect(panel.getByRole("button", { name: "Back to View options" })).toBeVisible();
+  return panel;
+}
+
+/** The header's New button (named after the collection's record name, "New record" when it has none). */
+export const newRecordButton = (page: Page, name = "New record"): Locator => page.getByRole("main").locator("header").first().getByRole("button", { name });
 
 export { expect };

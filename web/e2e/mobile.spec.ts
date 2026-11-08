@@ -166,15 +166,13 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
   });
 
   await page.goto(`/base/${base.id}/${table.id}`);
-  const toolbar = page.getByRole("toolbar", { name: "View toolbar" });
-  await expect(toolbar).toBeVisible();
+  // View options is one 44 px sliders button at the right end of the filter bar; the old toolbar and the floating Add are gone.
+  const options = page.getByRole("button", { name: "View options" });
+  await expect(options).toBeVisible();
+  await expectTouchTargets(options, "View options button");
   await expectFits(page, "base");
-  // Add floats at the bottom corner, clear of the screen edge and of the bottom navigation.
-  const add = (await page.getByRole("button", { name: "Add record" }).boundingBox())!;
-  const bar = (await tabs.boundingBox())!;
-  expect(add.height).toBeGreaterThanOrEqual(48);
-  expect(add.x + add.width, "Add inside the screen").toBeLessThanOrEqual(viewport.width);
-  expect(add.y + add.height, "Add above the bottom navigation").toBeLessThanOrEqual(bar.y);
+  await expect(page.getByRole("toolbar", { name: "View toolbar" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add record" })).toHaveCount(0);
 
   // The filter bar is under the tabs, full width and at least 44 px tall; its suggestions are a panel above the keyboard, not a popover.
   const filterBar = page.getByRole("combobox", { name: "Filter or search" });
@@ -201,11 +199,31 @@ test("the shell, its sheets, the collection and the record panel fit a phone", a
   await expectFits(page, "advanced filter");
   await page.keyboard.press("Escape");
 
-  // On a phone the tools are one menu behind a sliders button.
-  await toolbar.getByRole("button", { name: /^Tools/ }).click();
-  await expect(page.getByRole("menu", { name: "View tools" }).getByRole("menuitem", { name: "Sort" })).toBeVisible();
-  await expectFits(page, "tools");
+  // On a phone View options is a sheet: the layout tiles three to a row, then Sort, Group, Color and Properties.
+  await options.tap();
+  const sheet = page.getByRole("dialog", { name: "View options" });
+  await expect(sheet).toBeVisible();
+  const tiles = sheet.getByRole("group", { name: "Layout" }).getByRole("button");
+  await expect(tiles).toHaveCount(7);
+  await expect(sheet.getByRole("button", { name: "Grid", pressed: true })).toBeVisible();
+  await expectTouchTargets(sheet.getByRole("button"), "View options");
+  const first = (await tiles.nth(0).boundingBox())!;
+  const fourth = (await tiles.nth(3).boundingBox())!;
+  expect(fourth.y, "the fourth tile starts the second row").toBeGreaterThan(first.y + first.height - 1);
+  await expectFits(page, "view options");
+  // A row opens its screen in the same sheet, with Back.
+  await sheet.getByRole("button", { name: /^Sort/ }).tap();
+  await expect(sheet.getByRole("button", { name: "Back to View options" })).toBeVisible();
+  await expectTouchTargets(sheet.getByRole("button"), "View options sort");
+  await expectFits(page, "view options sort");
+  await sheet.getByRole("button", { name: "Add sort" }).tap();
+  await expectFits(page, "view options with a sort");
+  await sheet.getByRole("button", { name: "Back to View options" }).tap();
+  await sheet.getByRole("button", { name: /^Properties/ }).tap();
+  await expectFits(page, "view options properties");
   await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(options).toBeFocused();
 
   await page.goto(`/base/${base.id}/${table.id}?record=${recordId}`);
   await expect(page.getByRole("dialog")).toBeVisible();
