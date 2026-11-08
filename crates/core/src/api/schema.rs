@@ -196,12 +196,17 @@ pub struct SetPrimaryField {
 }
 
 /// `POST /api/tables/{id}/body-field`: make a rich text property the table's page.
+// A misspelled key must not read as "no page", which would clear the pointer, so unknown keys
+// are refused and an absent `field_id` is an error unless `create` is set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 pub struct SetBodyField {
-    /// A rich text property of the table. `null` or absent: the table has no page property.
-    #[serde(default)]
-    pub field_id: Option<String>,
+    /// A rich text property of the table, or `null` for no page property. Required unless
+    /// `create` is `true`.
+    #[serde(default, deserialize_with = "super::double_option")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    pub field_id: Option<Option<String>>,
     /// `true` instead of a `field_id`: make sure the table has a page, adding a rich text
     /// property called "Page" (hidden in every view) when it has none. Nothing changes if it
     /// already has one.

@@ -5,7 +5,8 @@
  */
 export type SetBodyField = { 
 /**
- * A rich text property of the table. `null` or absent: the table has no page property.
+ * A rich text property of the table, or `null` for no page property. Required unless
+ * `create` is `true`.
  */
 field_id?: string | null, 
 /**

@@ -1032,6 +1032,8 @@ pub fn restore(tx: &Transaction, field_id: &str) -> AppResult<RestoreOutcome> {
         touched.add(&f.table_id);
     }
 
+    // A page, Home date or Done property gets its job back with the property.
+    pages::restore_cleared_settings(tx, &members)?;
     schema::check_base_acyclic(tx, &table.base_id)?;
     let mut per_table: Vec<(String, Vec<String>)> = Vec::new();
     // Every restored field counts, computed or not: formulas that referenced a

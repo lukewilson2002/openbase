@@ -197,13 +197,14 @@ impl Upgraded {
 }
 
 #[test]
-fn the_database_reaches_version_16_and_stays_consistent() {
+fn the_database_reaches_the_current_version_and_stays_consistent() {
     let up = upgrade();
     let version: i64 = up
         .conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 16);
+    // 17 only adds the column that remembers which setting a trashed property was.
+    assert_eq!(version, 17);
     assert_eq!(version, openbase::db::schema_version());
     let violations: i64 = up
         .conn

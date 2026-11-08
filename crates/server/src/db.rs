@@ -31,6 +31,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0014_text_types.sql"),
     include_str!("../migrations/0015_user_accent.sql"),
     include_str!("../migrations/0016_collections.sql"),
+    include_str!("../migrations/0017_trashed_settings.sql"),
 ];
 
 /// Data changes a migration needs beyond its SQL, run in the same transaction
@@ -361,7 +362,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, schema_version());
-        assert_eq!(schema_version(), 16);
+        assert_eq!(schema_version(), 17);
         let icon = |sql: &str| -> Option<String> { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
         // new columns exist and start empty; existing rows are intact
         assert_eq!(icon("SELECT icon FROM workspaces WHERE id = 'w1'"), None);
@@ -584,7 +585,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 16);
+        assert_eq!(schema_version(), 17);
 
         let member = |ws: &str, user: &str| -> (String, bool, Vec<String>) {
             let (role, all): (String, bool) = conn
@@ -755,7 +756,7 @@ mod tests {
         )
         .unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(), 16);
+        assert_eq!(schema_version(), 17);
         let flag = |id: &str| -> bool {
             conn.query_row(
                 "SELECT may_raise_roles FROM invites WHERE id = ?1",

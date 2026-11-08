@@ -459,7 +459,7 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "fields",
         "creator",
         Write,
-        "Make a rich text field the table's page (the body of its records), or pass field_id null for no page, or create true to add a rich text field called \"Page\" (hidden in every view) when the table has none (nothing changes if it has one). The title field cannot also be the page. Deleting or retyping the page field clears it again, and so does making it the primary field.",
+        "Make a rich text field the table's page (the body of its records), or pass field_id null (explicitly; an empty body or an unknown key is refused) for no page, or create true to add a rich text field called \"Page\" (hidden in every view) when the table has none (nothing changes if it has one). The title field cannot also be the page. Deleting or retyping the page field clears it again, and so does making it the primary field; a page field restored from the trash is the page again.",
         "{field_id: field id | null} or {create: true}",
         "Table",
     ),

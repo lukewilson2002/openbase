@@ -463,6 +463,81 @@ async fn the_page_can_be_another_rich_text_property_or_none() {
 }
 
 #[tokio::test]
+async fn a_body_that_names_no_field_id_is_refused_instead_of_clearing_the_page() {
+    let f = Fixture::new().await;
+    let id = f.table_id.as_str();
+    let url = format!("/api/tables/{id}/body-field");
+    // A misspelled key, an empty body and an unknown key beside a valid one each leave the
+    // page where it was.
+    for body in [
+        json!({}),
+        json!({ "field": f.notes_id }),
+        json!({ "fieldId": f.notes_id }),
+        json!({ "field_id": f.notes_id, "extra": true }),
+        json!({ "create": false }),
+    ] {
+        let r = f.app.post(&f.owner, &url, body.clone()).await;
+        r.assert_status(400);
+        assert_eq!(
+            f.table(id).await["body_field_id"],
+            f.page_id.as_str(),
+            "{body}"
+        );
+    }
+    // null is still the explicit way to clear it, and create may carry a null field_id.
+    f.app
+        .post(&f.owner, &url, json!({ "field_id": null }))
+        .await
+        .assert_status(200);
+    assert!(f.table(id).await["body_field_id"].is_null());
+    f.app
+        .post(&f.owner, &url, json!({ "field_id": null, "create": true }))
+        .await
+        .assert_status(200);
+    assert!(!f.table(id).await["body_field_id"].is_null());
+}
+
+#[tokio::test]
+async fn a_view_created_with_a_config_hides_the_page_unless_the_config_names_it() {
+    let f = Fixture::new().await;
+    let id = f.table_id.as_str();
+    let url = format!("/api/tables/{id}/views");
+    let hidden = |v: &Value| -> Vec<Value> {
+        v["config"]["hidden_fields"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+    let make = |config: Value| {
+        let (f, url) = (&f, &url);
+        async move {
+            let r = f
+                .app
+                .post(
+                    &f.owner,
+                    url,
+                    json!({ "name": "V", "type": "grid", "config": config }),
+                )
+                .await;
+            r.assert_status(201);
+            r.body.clone()
+        }
+    };
+
+    // Any config at all, such as a sort.
+    let v = make(json!({ "sorts": [{ "field_id": f.primary_id, "direction": "asc" }] })).await;
+    assert_eq!(hidden(&v), vec![json!(f.page_id)]);
+    // Other hidden fields keep their place, and the page is not listed twice.
+    let v = make(json!({ "hidden_fields": [f.notes_id] })).await;
+    assert_eq!(hidden(&v), vec![json!(f.notes_id), json!(f.page_id)]);
+    let v = make(json!({ "hidden_fields": [f.page_id] })).await;
+    assert_eq!(hidden(&v), vec![json!(f.page_id)]);
+    // A config that places the page in the field order shows it on purpose.
+    let v = make(json!({ "field_order": [f.page_id] })).await;
+    assert!(hidden(&v).is_empty());
+}
+
+#[tokio::test]
 async fn the_page_must_be_a_rich_text_property_of_the_table_other_than_its_title() {
     let f = Fixture::new().await;
     let id = f.table_id.as_str();
@@ -628,7 +703,8 @@ async fn deleting_or_retyping_the_page_clears_it_and_nothing_is_refused() {
     assert_eq!(r.body["deleted_field_ids"], json!([f.page_id]));
     assert!(f.table(id).await["body_field_id"].is_null());
 
-    // Coming back from the trash does not point at it again.
+    // Coming back from the trash makes it the page again, hidden views and all: otherwise the
+    // next page save would start a second "Page" and leave the first one's text out of sight.
     f.app
         .post(
             &f.owner,
@@ -637,7 +713,74 @@ async fn deleting_or_retyping_the_page_clears_it_and_nothing_is_refused() {
         )
         .await
         .assert_status(200);
-    assert!(f.table(id).await["body_field_id"].is_null());
+    assert_eq!(f.table(id).await["body_field_id"], f.page_id.as_str());
+}
+
+#[tokio::test]
+async fn a_restored_property_gets_its_setting_back_only_if_nothing_else_took_the_place() {
+    let f = Fixture::new().await;
+    let id = f.table_id.as_str();
+    let url = format!("/api/tables/{id}/body-field");
+    let restore = |field: String| {
+        let f = &f;
+        async move {
+            f.app
+                .post(
+                    &f.owner,
+                    "/api/trash/restore",
+                    json!({"kind": "field", "id": field}),
+                )
+                .await
+                .assert_status(200);
+        }
+    };
+
+    // The table chose another page while the first was in the trash: that choice stands.
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{}", f.page_id))
+        .await
+        .assert_status(200);
+    f.app
+        .post(&f.owner, &url, json!({ "field_id": f.notes_id }))
+        .await
+        .assert_status(200);
+    restore(f.page_id.clone()).await;
+    assert_eq!(f.table(id).await["body_field_id"], f.notes_id.as_str());
+
+    // A Home date comes back as the Home date, once: the mark is spent by the restore.
+    let due = add_date(&f, id, "Due").await;
+    patch_table(&f, id, json!({ "home_date_field_id": due }))
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{due}"))
+        .await
+        .assert_status(200);
+    assert!(f.table(id).await["home_date_field_id"].is_null());
+    restore(due.clone()).await;
+    assert_eq!(f.table(id).await["home_date_field_id"], due.as_str());
+    // Cleared by hand before the second delete, it stays cleared through that restore.
+    patch_table(&f, id, json!({ "home_date_field_id": null }))
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{due}"))
+        .await
+        .assert_status(200);
+    restore(due.clone()).await;
+    assert!(f.table(id).await["home_date_field_id"].is_null());
+
+    // The same for Done.
+    let done = add_checkbox(&f, id, "Done").await;
+    patch_table(&f, id, json!({ "done_field_id": done }))
+        .await
+        .assert_status(200);
+    f.app
+        .delete(&f.owner, &format!("/api/fields/{done}"))
+        .await
+        .assert_status(200);
+    restore(done.clone()).await;
+    assert_eq!(f.table(id).await["done_field_id"], done.as_str());
 }
 
 #[tokio::test]
@@ -780,6 +923,33 @@ async fn a_home_date_rollup_goes_with_the_link_it_reads() {
             .contains(&json!(latest))
     );
     assert!(f.table(id).await["home_date_field_id"].is_null());
+
+    // Restoring the link brings the rollup back, and it is the Home date again.
+    f.app
+        .post(
+            &f.owner,
+            "/api/trash/restore",
+            json!({"kind": "field", "id": link["id"]}),
+        )
+        .await
+        .assert_status(200);
+    assert_eq!(f.table(id).await["home_date_field_id"], latest.as_str());
+
+    // So does restoring the table the link pointed at, which took the link and rollup with it.
+    f.app
+        .delete(&f.owner, &format!("/api/tables/{other_id}"))
+        .await
+        .assert_status(200);
+    assert!(f.table(id).await["home_date_field_id"].is_null());
+    f.app
+        .post(
+            &f.owner,
+            "/api/trash/restore",
+            json!({"kind": "table", "id": other_id}),
+        )
+        .await
+        .assert_status(200);
+    assert_eq!(f.table(id).await["home_date_field_id"], latest.as_str());
 }
 
 #[tokio::test]

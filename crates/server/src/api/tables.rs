@@ -176,7 +176,7 @@ async fn set_body_field(
             let base = perm::base_of_table(tx, &table_id)?;
             perm::require_base(tx, &actor, &base, Role::Creator)?;
             let row = if body.create {
-                if body.field_id.is_some() {
+                if matches!(body.field_id, Some(Some(_))) {
                     return Err(AppError::bad_request(
                         "give either field_id or create, not both",
                     ));
@@ -184,7 +184,13 @@ async fn set_body_field(
                 pages::ensure_body_field(tx, &table_id)?;
                 schema::live_table(tx, &table_id)?
             } else {
-                pages::set_body_field(tx, &table_id, body.field_id.as_deref())?
+                let Some(field_id) = body.field_id else {
+                    return Err(AppError::bad_request(
+                        "give field_id (a rich text property id, or null for no page property) \
+                         or create: true",
+                    ));
+                };
+                pages::set_body_field(tx, &table_id, field_id.as_deref())?
             };
             Ok((base, tables::to_dto(tx, &row, &actor.user_id)?))
         })

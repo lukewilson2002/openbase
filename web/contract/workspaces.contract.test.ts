@@ -398,6 +398,10 @@ describe("collection settings", () => {
     expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, { field_id: chosen.primary_field_id }))), 400, "bad_request");
     expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, { field_id: "fldDoesNotExist" }))), 404, "not_found");
     expectError(await failure(editor.run(() => api.tables.setBodyField(table.id, { field_id: null }))), 403, "forbidden");
+    // No field_id is not "no page": only an explicit null clears it.
+    expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, {}))), 400, "bad_request");
+    expectError(await failure(w.owner.run(() => api.tables.setBodyField(table.id, { field: notes.id } as never))), 400, "bad_request");
+    expect((await tableOf(w.owner, w.baseId, table.id)).body_field_id).toBe(notes.id);
     const none = parse("Table", await w.owner.run(() => api.tables.setBodyField(table.id, { field_id: null })));
     expect(none.body_field_id ?? null).toBeNull();
 

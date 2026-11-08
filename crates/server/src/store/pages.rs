@@ -194,8 +194,8 @@ fn set_pointer(
 /// the page when its property is deleted, retyped away from rich text or made the title; the
 /// Home date or Done property when theirs is deleted or retyped. Nothing is refused, so the
 /// calls that delete or retype a property behave as they always did (FLD-4); run this after
-/// them for every table they touched. A property that comes back from the trash is not
-/// pointed at again.
+/// them for every table they touched. A property cleared because it went to the trash is
+/// marked with the setting it was, so [`restore_cleared_settings`] can give it back.
 pub fn clear_stale_settings(conn: &Connection, table_ids: &[String]) -> AppResult<()> {
     for table_id in table_ids {
         let Some(table) = schema::table_any(conn, table_id)? else {
@@ -210,26 +210,82 @@ pub fn clear_stale_settings(conn: &Connection, table_ids: &[String]) -> AppResul
         let checks = [
             (
                 "body_field_id",
+                &table.body_field_id,
                 fits(&table.body_field_id, &|f| {
                     is_rich_text(&f.kind) && f.id != table.primary_field_id
                 }),
             ),
             (
                 "home_date_field_id",
+                &table.home_date_field_id,
                 fits(&table.home_date_field_id, &|f| is_date_like(&f.kind)),
             ),
             (
                 "done_field_id",
+                &table.done_field_id,
                 fits(&table.done_field_id, &|f| is_checkbox(&f.kind)),
             ),
         ];
-        for (column, ok) in checks {
+        for (column, pointer, ok) in checks {
             if !ok {
                 conn.execute(
                     &format!("UPDATE tables SET {column} = NULL WHERE id = ?1"),
                     [table_id],
                 )?;
+                // Only a property in the trash can come back; a retyped one stays what it is.
+                conn.execute(
+                    "UPDATE fields SET trashed_setting = ?2 WHERE id = ?1 AND deleted_at IS NOT NULL",
+                    params![pointer, column],
+                )?;
             }
+        }
+    }
+    Ok(())
+}
+
+/// After `field_ids` came back from the trash: give each back the setting it lost when it went
+/// (page, Home date or Done property), unless the table has chosen another since or the property
+/// no longer fits. Without this a restored page stays an ordinary hidden column and the next
+/// page save starts a second "Page", leaving the original text out of sight.
+pub fn restore_cleared_settings(conn: &Connection, field_ids: &[String]) -> AppResult<()> {
+    for id in field_ids {
+        let Some((table_id, column)) = conn
+            .query_row(
+                "SELECT table_id, trashed_setting FROM fields
+                 WHERE id = ?1 AND deleted_at IS NULL AND trashed_setting IS NOT NULL",
+                [id],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()?
+        else {
+            continue;
+        };
+        conn.execute(
+            "UPDATE fields SET trashed_setting = NULL WHERE id = ?1",
+            [id],
+        )?;
+        let (table, field) = (
+            schema::table_any(conn, &table_id)?,
+            table_field(conn, &table_id, id)?,
+        );
+        let (Some(table), Some(field)) = (table, field) else {
+            continue;
+        };
+        let (current, fits) = match column.as_str() {
+            "body_field_id" => (
+                &table.body_field_id,
+                is_rich_text(&field.kind) && field.id != table.primary_field_id,
+            ),
+            "home_date_field_id" => (&table.home_date_field_id, is_date_like(&field.kind)),
+            "done_field_id" => (&table.done_field_id, is_checkbox(&field.kind)),
+            _ => continue,
+        };
+        if current.is_none() && fits {
+            // `column` was matched against this file's own names just above.
+            conn.execute(
+                &format!("UPDATE tables SET {column} = ?2 WHERE id = ?1"),
+                params![table_id, id],
+            )?;
         }
     }
     Ok(())

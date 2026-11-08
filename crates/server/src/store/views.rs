@@ -124,7 +124,19 @@ pub fn create(
     ensure_view_capacity(tx, table_id)?;
     let fields = schema::table_fields(tx, table_id)?;
     let mut config = match &input.config {
-        Some(c) => c.clone(),
+        Some(c) => {
+            // A config of its own hides the page property too, unless it already names the
+            // property (hidden, or placed in the field order on purpose): otherwise every view
+            // an agent or the app creates with a filter would show the page text as a column.
+            let mut c = c.clone();
+            if let Some(body) = pages::body_field_id(tx, table_id)?
+                && !c.hidden_fields.contains(&body)
+                && !c.field_order.contains(&body)
+            {
+                c.hidden_fields.push(body);
+            }
+            c
+        }
         None => {
             // A view made without a config of its own hides the table's page property, like
             // the views the table already had: it is a document, not a column.
