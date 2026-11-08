@@ -195,7 +195,7 @@ src/automations/ the automations page (list, editor, test panel, run history); i
 There is no app-wide top bar. `shell/AppShell.tsx` is the frame: the docked sidebar beside `main` on a desktop, and on a phone the bottom
 navigation (see "The phone shell"). Each screen draws its own header as the first thing inside `main`: `shell/ScreenHeader.tsx` (on a desktop the sidebar's
 toggle, an optional `h1`, actions, the search button; on a phone the `PhoneHeader` it is given in `phone`; the workspace screens get it from
-`HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (path, the collection's `h1` with its color mark, presence faces, Share).
+`HomeShell`/`AppPage`) or `base/CollectionHeader.tsx` (see "The collection screen": the collection's `h1` with its color mark, count, presence faces, Share and New).
 `shell/menuContext.tsx` is how a desktop header reaches the sidebar's state. A screen that scrolls inside itself passes `fill` to `AppShell` and lays out
 its own column (header, then a `min-h-0 flex-1` body).
 
@@ -265,6 +265,33 @@ mode="page"`, live through the workspace stream (`hooks/useWorkspaceEvents.ts`);
 workspace (first run) `HomeShell` gives the `tab` header the avatar, because there is no tab bar to reach the profile from. `/notifications` is `NotificationsPanel` (shared with the desktop popover; each row is an
 avatar, one sentence, a `LinkChip` to the record and the time, with Mark all read at the top). In tests `stubPhone()` (`test/utils.tsx`) sets a
 phone-width media query.
+
+### The collection screen (COL-1, COL-2, COL-10, `src/base`)
+
+`BaseShell` draws, inside `main`: `CollectionHeader`, then `CollectionTabs`, then the open layout (`ViewHost`). Dialogs the header and tabs
+open (rename, delete and share a view, the collection's settings) are `BaseDialogs`, opened through `BaseDialogContext`.
+
+- **`CollectionHeader`** is the collection's `h1` (28 px mark on a desktop, 24 on a phone), "N records" (the sidebar's count, from
+  the workspaces list that the live streams and `useOwnRecordCounts` keep fresh, else the schema's), presence faces, Share (creators)
+  and the primary New button (editors and up) named by `newRecordLabel` (the collection's record name, else "New record"). Above the
+  title a collection in a folder shows the folder's name with an 8 px mark; below it the description, click-to-edit for creators
+  (Enter or blur saves, Escape cancels). A "…" beside the title opens the settings (creators). On a phone `PhoneHeader` holds the back
+  link, Share, + and the search, and the title block sits under it with the whole row (the 390 px truncation of Phase 3 is gone);
+  who is viewing is left out there.
+- **The New button reaches the layout through `views/common/addRecord.tsx`.** Every layout adds a record its own way, so `ViewFrame`
+  and `GridView` call `useRegisterAddRecord(onAdd)` while they are shown and the header's `useAddRecord()` runs it; with nothing
+  registered (a form, a layout with no way to add) the button is disabled. (The floating Add pill is the same handler and goes with COL-8.)
+- **`CollectionTabs`** (a Radix `Tabs`, `activationMode="manual"`: arrows move, Enter chooses) lists `viewTabs(table)` from
+  `lib/viewTabs.ts`: the default view first as `defaultTabLabel` ("All clients"), then the saved views in server order. `fitTabs` decides
+  which tabs fit by measuring a hidden copy of them (a tab in More still has a width); the first tab and the open one always stay.
+  `ViewMenuItems` is the view menu, drawn as dropdown items or sheet rows (`shell/menuItems.tsx`); a right-click or the menu key opens it
+  at the pointer (`AnchoredMenu`), a phone shows a `SheetMenu`. Dragging uses dnd-kit's mouse sensor (5 px) and touch sensor (a 250 ms
+  hold); a hold released without moving opens the menu, a hold that moves drags. `dropOrder` keeps a view among those of its kind
+  (shared or personal) and never moves the default view. Move left and Move right send the same `views/reorder` request.
+- **`CollectionSettings`** is a `Dialog` (full screen on a phone, Save and Cancel in its footer). Save makes at most three calls, in an
+  order that lets the server clear a setting that names a property that becomes the title: `POST /api/tables/{id}/primary-field`,
+  `POST /api/tables/{id}/body-field`, then one `PATCH /api/tables/{id}` with only what changed (MCP `set_primary_field`, `set_page_field`,
+  `update_table_settings`). `whyNotTitle` mirrors the server's `can_be_primary`; `isHomeDateProperty` the Home date's rule.
 
 ### Plugging in a view
 

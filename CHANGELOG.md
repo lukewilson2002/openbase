@@ -150,12 +150,27 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   the changes after the filter and offers Only me or Everyone (creators). If the view was saved by
   someone else meanwhile the bar adds "This view changed since you started." and keeps your
   changes. The toolbar no longer saves after a pause, and the "Not saved" and "Locked" badges are
-  gone (the view list still marks locked views). Viewers and commenters can now choose a board's
+  gone (a locked view's tab still wears a lock). Viewers and commenters can now choose a board's
   stack property, a calendar's date and the like, and color records, for themselves. A form's own
   settings and fields still save as they are made. Old per-device filters and layouts move into
   drafts the first time you open a view. Row colors and summaries drafted in the app are computed
   by the server like saved ones (`transient.row_color` and `transient.summaries`, see
   [docs/api.md](docs/api.md)).
+- **A collection has a header, view tabs and a settings screen.** The header shows the collection's
+  color mark, its name, how many records it holds (it follows adds and deletes), who is viewing,
+  **Share** and a primary **New client** button named after the collection's record name ("New
+  record" when it has none); a collection inside a folder shows the folder's name above its
+  title, and the description is a muted line under it that creators click to change. The views
+  are tabs under it: the default view first, reading "All clients", then the saved views with
+  their layout's icon and a person or lock glyph for personal and locked ones. Tabs that do not
+  fit go into **More**; a right-click, the menu key or a held press on a phone opens the view's
+  menu (rename, duplicate, share, lock, move left or right, delete), and tabs can be dragged
+  into a new order. There is no **Add view** any more: a new view comes from **Save as view**.
+  Creators open **Collection settings** from the "…" beside the title: name, color,
+  description, record name, the title property (the first screen for it), the page property, the
+  date Home shows records by and the done checkbox. On a phone the title has a row of its own
+  under the header, so a long name is no longer cut off between the buttons, and the settings are
+  a full-screen sheet.
 - **The sidebar is rebuilt around one workspace.** It starts with the workspace switcher (the
   workspace's color, its name and "Switch workspace"; its menu begins with the OpenBase mark,
   lists every workspace and ends with the workspace's own actions), "Search everything", Home,
