@@ -1,6 +1,6 @@
 //! Authentication: who is calling.
 //!
-//! Browser clients use an opaque session cookie (`ob_session`); integrations
+//! Browser clients use an opaque session cookie (`ob_session`, `__Host-ob_session` over https); integrations
 //! use `Authorization: Bearer <api token>`. Both resolve to an [`Actor`].
 //! Only SHA-256 hashes of tokens are stored.
 
@@ -20,7 +20,12 @@ use crate::error::{AppError, AppResult};
 use crate::ids::hash_token;
 use crate::state::AppState;
 
+/// Name of the session cookie over plain http (local use). Over https the cookie is
+/// [`SESSION_COOKIE_HOST`]; use `Config::session_cookie_name` rather than either constant.
 pub const SESSION_COOKIE: &str = "ob_session";
+/// Name of the session cookie when the public URL is https. Sessions issued under the old name
+/// are not recognised, so the rename signs everyone out once.
+pub const SESSION_COOKIE_HOST: &str = "__Host-ob_session";
 
 /// Scope of an API token. Session-authenticated actors have no scope (full
 /// access as the user).
@@ -245,9 +250,17 @@ impl FromRequestParts<AppState> for ClientInfo {
     }
 }
 
-/// Resolve a session token to an actor. Expired, 2FA-pending, or inactive-user
-/// sessions resolve to None. Refreshes `last_seen_at` at most once a minute.
+/// Resolve a session token to an actor. Expired, idle (see
+/// [`session::SESSION_IDLE_TIMEOUT_MS`]), 2FA-pending, or inactive-user sessions resolve to
+/// None. Reading does not refresh `last_seen_at`; callers that count as activity use
+/// [`lookup_session`] and [`stamp_session_use`].
 pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Actor>> {
+    Ok(lookup_session(conn, token)?.map(|(actor, _)| actor))
+}
+
+/// Like [`actor_from_session`], also returning the session's `last_seen_at` (for
+/// [`stamp_session_use`]).
+pub fn lookup_session(conn: &Connection, token: &str) -> AppResult<Option<(Actor, i64)>> {
     let hash = hash_token(token);
     let now = now_ms();
     let row = conn
@@ -269,23 +282,43 @@ pub fn actor_from_session(conn: &Connection, token: &str) -> AppResult<Option<Ac
             },
         )
         .optional()?;
-    let Some((user_id, name, email, is_admin, expires_at, pending_2fa, _last_seen)) = row else {
+    let Some((user_id, name, email, is_admin, expires_at, pending_2fa, last_seen)) = row else {
         return Ok(None);
     };
-    if expires_at <= now || pending_2fa {
+    if expires_at <= now || pending_2fa || last_seen <= now - session::SESSION_IDLE_TIMEOUT_MS {
         return Ok(None);
     }
-    Ok(Some(Actor {
-        user_id,
-        name,
-        email,
-        is_admin,
-        token_scope: None,
-        session_hash: Some(hash),
-        token_hash: None,
-        token_id: None,
-        oauth_grant_id: None,
-    }))
+    Ok(Some((
+        Actor {
+            user_id,
+            name,
+            email,
+            is_admin,
+            token_scope: None,
+            session_hash: Some(hash),
+            token_hash: None,
+            token_id: None,
+            oauth_grant_id: None,
+        },
+        last_seen,
+    )))
+}
+
+/// Best-effort refresh of the idle clock of the session behind `actor`, at most once per
+/// [`session::SESSION_TOUCH_INTERVAL_MS`]: when the `last_seen_at` read with the session is
+/// recent there is no write at all. Never fails the request.
+pub async fn stamp_session_use(state: &AppState, actor: &Actor, last_seen: i64) {
+    let Some(hash) = actor.session_hash.clone() else {
+        return;
+    };
+    let now = now_ms();
+    if last_seen >= now - session::SESSION_TOUCH_INTERVAL_MS {
+        return;
+    }
+    let _ = state
+        .db
+        .write(move |tx| session::touch(tx, &hash, now))
+        .await;
 }
 
 /// `last_used_at` of an API token is refreshed at most this often, so a busy
@@ -537,15 +570,17 @@ impl FromRequestParts<AppState> for Actor {
             return found.map(|(a, _)| a).ok_or(AppError::Unauthorized);
         }
         let jar = CookieJar::from_headers(&parts.headers);
-        let Some(cookie) = jar.get(SESSION_COOKIE) else {
+        let Some(cookie) = jar.get(state.config.session_cookie_name()) else {
             return Err(AppError::Unauthorized);
         };
         let token = cookie.value().to_string();
-        state
+        let (actor, last_seen) = state
             .db
-            .read(move |c| actor_from_session(c, &token))
+            .read(move |c| lookup_session(c, &token))
             .await?
-            .ok_or(AppError::Unauthorized)
+            .ok_or(AppError::Unauthorized)?;
+        stamp_session_use(state, &actor, last_seen).await;
+        Ok(actor)
     }
 }
 

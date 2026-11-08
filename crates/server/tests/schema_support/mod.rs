@@ -132,6 +132,11 @@ impl Fixture {
         Self::with_app(TestApp::with_config(f)).await
     }
 
+    /// A fixture whose app state `tweak` may change before the router is built.
+    pub async fn with_state(tweak: impl FnOnce(&mut openbase::state::AppState)) -> Fixture {
+        Self::with_app(TestApp::with_config_and_state(|_| {}, tweak)).await
+    }
+
     async fn with_app(app: TestApp) -> Fixture {
         let owner = app.user("owner@example.com", "Owner");
         let ws = workspace(&app, &owner, "Acme").await;

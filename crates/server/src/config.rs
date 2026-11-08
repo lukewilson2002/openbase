@@ -167,8 +167,23 @@ impl Config {
     pub fn backups_dir(&self) -> PathBuf {
         self.data_dir.join("backups")
     }
-    pub fn secure_cookies(&self) -> bool {
+    /// Whether the public URL is https. Decides everything that is only safe or only meaningful
+    /// over TLS: the cookie's `Secure` flag and `__Host-` name, and HSTS.
+    pub fn public_https(&self) -> bool {
         self.public_url.starts_with("https://")
+    }
+    pub fn secure_cookies(&self) -> bool {
+        self.public_https()
+    }
+    /// Name of the session cookie. Over https it carries the `__Host-` prefix, which makes
+    /// browsers accept it only with `Secure`, `Path=/` and no `Domain`, so a sibling subdomain
+    /// cannot plant or overwrite it.
+    pub fn session_cookie_name(&self) -> &'static str {
+        if self.public_https() {
+            crate::auth::SESSION_COOKIE_HOST
+        } else {
+            crate::auth::SESSION_COOKIE
+        }
     }
     pub fn max_upload_bytes(&self) -> u64 {
         self.max_upload_mb.saturating_mul(1024 * 1024)

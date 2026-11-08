@@ -81,14 +81,14 @@ describe("a read-only view link", () => {
     const api = open(view, [], { "POST /api/views/viw1/shares": { status: 201, json: link({ has_password: true }) } });
     await screen.findByText(/No links yet/);
     await user.click(screen.getByRole("switch", { name: "Protect with a password" }));
-    await user.type(screen.getByLabelText("Password"), "abc");
+    await user.type(screen.getByLabelText("Password"), "abcdefg");
     await user.click(screen.getByRole("button", { name: "Create link" }));
-    expect(await screen.findByText("Use at least 4 characters.")).toBeInTheDocument();
+    expect(await screen.findByText("Use at least 8 characters.")).toBeInTheDocument();
     expect(api.callsTo("POST /api/views/viw1/shares")).toHaveLength(0);
-    await user.type(screen.getByLabelText("Password"), "d");
+    await user.type(screen.getByLabelText("Password"), "h");
     await user.click(screen.getByRole("button", { name: "Create link" }));
     await waitFor(() => expect(api.callsTo("POST /api/views/viw1/shares")).toHaveLength(1));
-    expect(api.callsTo("POST /api/views/viw1/shares")[0]!.body).toEqual({ kind: "view", password: "abcd" });
+    expect(api.callsTo("POST /api/views/viw1/shares")[0]!.body).toEqual({ kind: "view", password: "abcdefgh" });
   });
 
   it("switches a link off and on again", async () => {

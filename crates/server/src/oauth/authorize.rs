@@ -30,7 +30,7 @@ use axum::response::{IntoResponse, Response};
 use axum_extra::extract::CookieJar;
 
 use super::{normalize_resource, parse_params, rate_key, redirect, scope};
-use crate::auth::{ClientInfo, SESSION_COOKIE, actor_from_session};
+use crate::auth::{ClientInfo, lookup_session, stamp_session_use};
 use crate::state::AppState;
 use crate::store::oauth as store;
 
@@ -157,11 +157,15 @@ pub async fn authorize(
 
     // Who is looking? Only a signed-in person (a session cookie; never a bearer token) may have
     // anything stored or fetched on their behalf.
-    let user = match jar.get(SESSION_COOKIE) {
+    let user = match jar.get(state.config.session_cookie_name()) {
         Some(cookie) => {
             let token = cookie.value().to_string();
-            match state.db.read(move |c| actor_from_session(c, &token)).await {
-                Ok(actor) => actor,
+            match state.db.read(move |c| lookup_session(c, &token)).await {
+                Ok(Some((actor, last_seen))) => {
+                    stamp_session_use(&state, &actor, last_seen).await;
+                    Some(actor)
+                }
+                Ok(None) => None,
                 Err(e) => return e.into_response(),
             }
         }

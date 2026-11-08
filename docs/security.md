@@ -64,7 +64,8 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 ## Checklist for administrators
 
 - **Run it behind HTTPS** and set `OPENBASE_PUBLIC_URL` to the exact public URL.
-  With an `https://` URL session cookies are marked `Secure`; the URL's origin is
+  With an `https://` URL session cookies are marked `Secure` and named
+  `__Host-ob_session`, and the server sends HSTS; the URL's origin is
   also what the CSRF `Origin` check compares against. The bundled Caddy setup
   does this for you.
 - **`OPENBASE_TRUST_PROXY=true` only behind a proxy, and only when OpenBase is
@@ -140,10 +141,16 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
 ## Built-in protections
 
 - **Passwords** are hashed with Argon2id (m = 19 MiB, t = 2, p = 1); at most 2
-  hashes run at a time, which also caps the memory a flood of sign-in attempts can
-  take.
+  hashes run at a time for sign-in, which also caps the memory a flood of sign-in
+  attempts can take. Visitors checking a share link's password have a pool of 2
+  slots of their own, so anonymous traffic cannot queue logins.
 - **Sessions** are opaque server-side tokens (only the SHA-256 is stored), sent as
-  `HttpOnly`, `SameSite=Lax` cookies, `Secure` when the public URL is `https`.
+  `HttpOnly`, `SameSite=Lax` cookies, `Secure` when the public URL is `https`. Over
+  `https` the cookie is named `__Host-ob_session` (the browser then insists on
+  `Secure`, `Path=/` and no `Domain`, so a sibling subdomain cannot set it); over
+  plain http it is `ob_session`. A session ends 30 days after sign-in at the latest
+  and after 14 days without a request (the idle clock is refreshed at most every
+  10 minutes per session).
   Optional TOTP two-factor authentication; turning it on signs out the account's
   other sessions and ends its connected apps (OAuth grants). Optional passkeys (WebAuthn),
   see [Passkeys](#passkeys).
@@ -170,17 +177,27 @@ disable 2FA, which is a path to any account (signed in; their API tokens cannot)
   SSRF guard as the automations' HTTP action (see [automations](automations.md#http-requests-and-ssrf)),
   with a size limit and no redirects. Full details: [MCP](mcp.md#security-model).
 - **CSRF.** Cookie-authenticated unsafe requests need the `X-OpenBase-CSRF`
-  header; no CORS is enabled for any cookie-authenticated route, so cross-site pages
-  cannot add it. (The only cross-origin answers are the OAuth discovery, registration,
+  header, and when the request carries an `Origin` (or, without one, a `Referer`) it must
+  be the public URL's origin, otherwise the answer is `403`. Requests with neither header
+  (non-browser clients) and requests with a bearer token or no session cookie at all are not
+  affected. No CORS is enabled for any cookie-authenticated route, so cross-site pages
+  cannot add the header. (The only cross-origin answers are the OAuth discovery, registration,
   token and revocation endpoints, which never read cookies; see [OAuth](#oauth-connected-apps).) Only a
   well-formed `Authorization: Bearer` header exempts a request; other
   `Authorization` values (such as Basic auth added by a proxy) do not. The
   Airtable-compatible `/api/v1` reads bearer tokens only and never the cookie.
 - **Response headers** set by the server: a restrictive
   `Content-Security-Policy` (`default-src 'self'`, no framing, no `object-src`),
-  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
-  `Referrer-Policy: same-origin`. The bundled Caddyfile adds
-  `Strict-Transport-Security`.
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: same-origin`, `Permissions-Policy: camera=(), microphone=(),
+  geolocation=()`, `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Resource-Policy: same-origin`, and, only when the public URL is
+  `https`, `Strict-Transport-Security: max-age=31536000` (no `includeSubDomains`, no
+  `preload`). The resource policy does not affect the CORS answers of the OAuth machine
+  endpoints, which other origins fetch in CORS mode. The opener policy cuts the
+  `window.opener` link of a popup that a page on another origin opened onto OpenBase, so
+  an OAuth client that waits for the sign-in popup to talk back through it must use a
+  redirect instead (the MCP clients do).
 - **No dynamic SQL from user input.** User tables are JSON rows keyed by field id;
   adding, renaming or deleting a field never builds SQL from names.
 - **Roles are checked in one place** (`perm.rs`). Access comes only from workspace
@@ -348,7 +365,7 @@ used), and the browser side is the plain WebAuthn API.
 What is not covered: a passkey protected only by a weak device PIN or an unlocked device, malware
 on the device that uses the authenticator while it is unlocked, and the loss of every device
 together with the password (an administrator can create a reset link). Passkeys do not make a
-stolen session cookie harmless: a session lives for 30 days however it was created. The WebAuthn
+stolen session cookie harmless: a session lives for 30 days at most however it was created (and ends sooner after 14 days without use). The WebAuthn
 ceremony state (not the credentials) is kept in memory, which suits the single-node design.
 
 ## Share links, forms, uploads, CSV and webhooks
@@ -358,7 +375,7 @@ ceremony state (not the credentials) is kept in memory, which suits the single-n
 | Surface | Limit |
 |---|---|
 | Public requests (all `/api/public/*`) | 300 per minute per client IP, 1,200 per minute per share token |
-| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id |
+| Share-link password checks | 30 per minute per (client IP, link), on the public endpoints and on attachment downloads together; Argon2id. New passwords need 8 to 256 characters (older, shorter ones keep working). Per link, over all client addresses: after 100 wrong guesses in an hour the link refuses every guess, right or wrong, for 15 minutes (`429`); a guess after the lockout still counts against the same hour. Checked in their own pool of 2 hashing slots, apart from sign-in's. |
 | Attachment downloads with `?share=` | 600 per minute per client IP, 2,400 per minute per token (own buckets, so a gallery of thumbnails does not eat the public-request budget) |
 | Public form submissions / uploads | 20 each per 10 minutes per (client IP, link); a file is at most 25 MB and never above the configured upload limit |
 | Anonymous upload bytes | per hour: 200 MB per client IP, 500 MB per project, 1,000 MB for the whole server; charged when the request starts, for its declared length (the cap if none is declared) |

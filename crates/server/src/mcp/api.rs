@@ -400,6 +400,10 @@ pub async fn execute_with(
         req.extensions_mut()
             .insert(crate::auth::TrustedActor(ctx.actor.clone()));
     }
+    // Without a trusted proxy the caller's address is the outer connection's, handed over as the
+    // extension the handlers read it from, never as a header: a header would be one more thing
+    // a client could try to write itself. (With `trust_proxy`, the header above carries the
+    // address the proxy saw, which is what `client_ip` reads in that mode.)
     if let Some(peer) = ctx.peer {
         req.extensions_mut().insert(ConnectInfo(peer));
     }

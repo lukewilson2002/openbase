@@ -16,8 +16,10 @@ describe("share link addresses", () => {
   });
 
   it("checks the password length like the server", () => {
-    expect(sharePasswordProblem("abc")).toMatch(/at least 4/);
-    expect(sharePasswordProblem("abcd")).toBeNull();
+    expect(sharePasswordProblem("abc")).toMatch(/at least 8/);
+    expect(sharePasswordProblem("abcdefg")).toMatch(/at least 8/);
+    expect(sharePasswordProblem("abcdefgh")).toBeNull();
+    expect(sharePasswordProblem("éééééééé")).toBeNull();
     expect(sharePasswordProblem("x".repeat(257))).toMatch(/at most 256/);
   });
 });

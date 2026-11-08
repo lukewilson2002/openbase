@@ -9,7 +9,7 @@ use crate::email::{EmailService, Mailer, MailerFactory};
 use crate::engine::query::QueryCache;
 use crate::error::AppResult;
 use crate::events::EventBus;
-use crate::ratelimit::RateLimiter;
+use crate::ratelimit::{GuessLimiter, RateLimiter};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,6 +17,9 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub events: EventBus,
     pub limiter: RateLimiter,
+    /// Wrong share-link password guesses per link, over all client addresses (the per-address
+    /// limits cannot see a guesser who has many).
+    pub share_guesses: GuessLimiter,
     /// The passkey (WebAuthn) relying party and its pending ceremonies.
     pub passkeys: Arc<Passkeys>,
     /// Outgoing email: the [`EmailService`] as a [`Mailer`] (SMTP, or a no-op logger when SMTP
@@ -58,6 +61,11 @@ impl AppState {
             config: Arc::new(config),
             events: EventBus::default(),
             limiter: RateLimiter::default(),
+            share_guesses: GuessLimiter::new(
+                crate::api::sharing::GUESS_CAP,
+                crate::api::sharing::GUESS_WINDOW,
+                crate::api::sharing::GUESS_LOCKOUT,
+            ),
             passkeys,
             mailer,
             email,
