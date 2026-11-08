@@ -1074,6 +1074,43 @@ async fn public_transient_overrides_may_only_use_shown_fields() {
 }
 
 #[tokio::test]
+async fn public_transient_row_colors_and_summaries_may_only_use_shown_fields() {
+    let s = setup().await;
+    let q = s.query_path();
+    let by_hidden = json!({ "mode": "by_select", "field_id": s.secret });
+    let by_hidden_rule = json!({ "mode": "by_conditions", "rules": [
+        { "color": "red", "filter": and(vec![cond(&s.secret, "gt", json!(102))]) } ] });
+    for t in [
+        json!({ "row_color": by_hidden }),
+        json!({ "row_color": by_hidden_rule }),
+        json!({ "summaries": { &s.secret: "sum" } }),
+    ] {
+        let r = pub_post(s.app(), &q, json!({ "transient": t })).await;
+        r.assert_status(400);
+        assert!(r.body.get("records").is_none());
+    }
+    // A color by a shown select is drawn, as when the view saves it.
+    let r = pub_post(
+        s.app(),
+        &q,
+        json!({ "transient": { "row_color": { "mode": "by_select", "field_id": s.p.status } } }),
+    )
+    .await;
+    r.assert_status(200);
+    assert_eq!(r.body["colors"].as_object().unwrap().len(), 4);
+    // Rules are never drawn for visitors, drafted or saved.
+    let r = pub_post(
+        s.app(),
+        &q,
+        json!({ "transient": { "row_color": { "mode": "by_conditions", "rules": [
+            { "color": "red", "filter": and(vec![cond(&s.p.age, "gt", json!(35))]) } ] } } }),
+    )
+    .await;
+    r.assert_status(200);
+    assert!(r.body["colors"].as_object().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn public_group_headers_carry_no_user_ids_or_raw_values() {
     let s = setup().await;
     let owner_id = s.p.f.owner.user_id.clone().unwrap();

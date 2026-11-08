@@ -501,9 +501,9 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "records",
         "viewer",
         Read,
-        "Records of a view with its filter, sorts and groups applied, plus optional search and per-request overrides. A POST that only reads.",
-        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, transient?: {filter?, sorts?, groups?}}",
-        "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors}",
+        "Records of a view with its filter, sorts and groups applied, plus optional search and per-request overrides. A transient override (the web app's unsaved changes to a view) is computed exactly like the same config saved on the view and is never stored: its row_color gives `colors`. A POST that only reads.",
+        "{offset?, limit? (default 100; 0 = count only), search?, range?, timezone?, transient?: {filter?, sorts?, groups?, row_color? ({mode: by_select, field_id} | {mode: by_conditions, rules: [{color, filter}]}; rules [] = no colors), summaries? ({field_id: aggregation}, as in a view config; {} = none)}}",
+        "QueryResponse {total, offset, records: [{id, values: {field_id: value}, ...}], groups, colors: {record_id: color}}",
     ),
     e(
         POST,
@@ -521,8 +521,8 @@ pub static ENDPOINTS: &[Endpoint] = &[
         "records",
         "viewer",
         Read,
-        "The summary-bar aggregations configured on a view.",
-        "query: timezone?, search?, transient? (JSON)",
+        "The summary-bar aggregations configured on a view, or those of a transient override.",
+        "query: timezone?, search?, transient? (JSON {filter?, summaries?: {field_id: aggregation}}: replaces the saved filter and summaries for this request only; sorts, groups and row_color are ignored here)",
         "{values: {field_id: value}}",
     ),
     e(

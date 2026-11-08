@@ -459,8 +459,13 @@ async fn public_query(
                 .drain(..)
                 .map(|rec| sharing::public_record(conn, rec, &visible, &mut names))
                 .collect();
+            // The colors the visitor is shown follow the row color in force
+            // for this request, which a transient override may replace.
             let colors_ok = matches!(
-                &config.row_color,
+                req.transient
+                    .as_ref()
+                    .and_then(|t| t.row_color.as_ref())
+                    .or(config.row_color.as_ref()),
                 Some(RowColor::BySelect { field_id }) if ids.contains(field_id.as_str())
             );
             Ok(PublicQueryResponse {
@@ -500,6 +505,16 @@ fn ensure_transient_visible(t: &TransientConfig, visible: &HashSet<&str>) -> App
     for g in t.groups.iter().flatten() {
         used.push(g.field_id.as_str());
     }
+    match &t.row_color {
+        Some(RowColor::BySelect { field_id }) => used.push(field_id.as_str()),
+        Some(RowColor::ByConditions { rules }) => {
+            for r in rules {
+                filter_field_ids(&r.filter, &mut used);
+            }
+        }
+        None => {}
+    }
+    used.extend(t.summaries.iter().flatten().map(|(id, _)| id.as_str()));
     if used.iter().any(|id| !visible.contains(id)) {
         return Err(AppError::bad_request(
             "transient refers to a field that is not shown in this view",
