@@ -742,6 +742,22 @@ describe("TemporaryChangesBar", () => {
     render(<TemporaryChangesBar summary="Sorted by Due date." note="This sort is only for now." onReset={() => {}} />);
     expect(screen.getByRole("status")).toHaveTextContent("Sorted by Due date. This sort is only for now.");
   });
+
+  it("names the records after the count, and says when the view changed under the draft", () => {
+    render(<TemporaryChangesBar shown={3} total={12} noun="clients" note="These changes are only for now." alert="This view changed since you started." onReset={() => {}} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 3 of 12 clients. These changes are only for now. This view changed since you started.");
+  });
+
+  it("puts Update view between Reset and Save as view, and shows it working", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const { rerender } = render(<TemporaryChangesBar onReset={() => {}} onUpdateView={onUpdate} onSaveAsView={() => {}} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Reset", "Update view", "Save as view"]);
+    await user.click(screen.getByRole("button", { name: "Update view" }));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    rerender(<TemporaryChangesBar onReset={() => {}} onUpdateView={onUpdate} updating />);
+    expect(screen.getByRole("button", { name: /Update view/ })).toBeDisabled();
+  });
 });
 
 describe("Toast", () => {

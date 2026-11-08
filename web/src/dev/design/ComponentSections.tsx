@@ -506,13 +506,16 @@ export function TemporaryChangesBarSection() {
   return (
     <Section
       section={byId("temporary-changes-bar")}
-      note="A subtle-grey strip: the count, the reminder, Reset (ghost) and Save as view (soft). Keep it mounted and flip open, so the change is announced."
+      note="A subtle-grey strip: the count, the reminder, Reset (ghost), Update view (secondary, for people who may change the view) and Save as view (soft). Keep it mounted and flip open, so the change is announced."
     >
       <State label="Filter" className="w-full">
         <TemporaryChangesBar shown={3} total={12} onReset={noop} onSaveAsView={noop} />
       </State>
       <State label="A change that adds no count" className="w-full">
         <TemporaryChangesBar summary="Sorted by Due date." note="This sort is only for now." onReset={noop} onSaveAsView={noop} />
+      </State>
+      <State label="With Update view, the collection's record name and a view that changed meanwhile" className="w-full">
+        <TemporaryChangesBar shown={3} total={12} noun="clients" note="These changes are only for now." alert="This view changed since you started." onReset={noop} onUpdateView={noop} onSaveAsView={noop} />
       </State>
       <State label="A person who may not make views" className="w-full">
         <TemporaryChangesBar shown={0} total={12} onReset={noop} />
