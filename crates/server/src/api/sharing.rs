@@ -382,12 +382,13 @@ pub async fn check_password(
         PASSWORD_LIMIT,
         MINUTE,
     )?;
-    // Counted as wrong before it is checked, so parallel guesses cannot all slip in ahead of
-    // the first recorded failure.
-    state.share_guesses.begin(share_id)?;
+    // The guess holds a place against the cap while it is checked, so parallel guesses cannot
+    // all slip in ahead of the first recorded failure, and counts as wrong unless it turns out
+    // right (also when the request is dropped mid-check).
+    let guess = state.share_guesses.begin(share_id)?;
     let ok = crate::auth::password::verify_anonymous_async(given.to_string(), hash).await;
     if matches!(ok, Ok(true)) {
-        state.share_guesses.was_right(share_id);
+        guess.right();
     }
     ok
 }

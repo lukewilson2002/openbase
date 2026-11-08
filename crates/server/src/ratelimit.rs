@@ -123,9 +123,12 @@ pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync>;
 
 /// Brute-force lockout for one secret shared by many guessers, such as a share link's password:
 /// the per-IP limits cannot see a guesser who has many addresses, so this counts *wrong* guesses
-/// per key across all of them. After `max_failures` wrong guesses within `window` the key
-/// refuses every guess, right or wrong, for `lockout`; a guess made after the lockout still
-/// counts against the same window, so the cap holds for the window and not for each lockout.
+/// per key across all of them. When `max_failures` wrong guesses fall within `window` the key
+/// refuses every guess, right or wrong, for `lockout`. Once the lockout is over, guesses are let
+/// through one at a time, and a wrong one locks the key again, so the cap holds for the window
+/// and not for each lockout. The window slides: the previous window's failures count in
+/// proportion to how much of it is still inside the last `window`, so a burst split across a
+/// window boundary cannot get twice the cap.
 ///
 /// Anyone who knows a link can therefore lock its password prompt by guessing wrongly on
 /// purpose. That is accepted (docs/security.md): the alternative is leaving the password open to
@@ -141,14 +144,78 @@ pub struct GuessLimiter {
 
 struct GuessEntry {
     window_start: Instant,
+    /// Wrong guesses in the window that began at `window_start`.
     failures: u32,
+    /// Wrong guesses in the window before it.
+    prev_failures: u32,
+    /// Guesses started and not yet settled; each could turn out wrong.
+    in_flight: u32,
     locked_until: Option<Instant>,
 }
 
-/// Entries of keys that are neither locked nor inside their window are dropped when the map
+impl GuessEntry {
+    /// Move the window forward to `now`.
+    fn roll(&mut self, now: Instant, window: Duration) {
+        let elapsed = now.saturating_duration_since(self.window_start);
+        if elapsed >= window * 2 {
+            self.window_start = now;
+            self.prev_failures = 0;
+            self.failures = 0;
+        } else if elapsed >= window {
+            self.window_start += window;
+            self.prev_failures = self.failures;
+            self.failures = 0;
+        }
+    }
+
+    /// Wrong guesses inside the last `window` (call after [`GuessEntry::roll`]).
+    fn recent_failures(&self, now: Instant, window: Duration) -> u32 {
+        let elapsed = now.saturating_duration_since(self.window_start);
+        let left = window.saturating_sub(elapsed).as_millis();
+        let carried = u128::from(self.prev_failures) * left / window.as_millis().max(1);
+        self.failures.saturating_add(carried as u32)
+    }
+}
+
+/// Entries of keys that are idle, unlocked and outside both windows are dropped when the map
 /// grows past this. Keys are ids of real share links (callers only count after resolving one),
 /// so the map is bounded by the links that exist; this keeps long-dead entries from piling up.
 const GUESS_SWEEP_AT: usize = 4096;
+
+/// A guess started with [`GuessLimiter::begin`]. It counts as wrong unless [`Guess::right`] is
+/// called, including when it is dropped unfinished (the request went away mid-check), so a guesser
+/// cannot get free attempts by hanging up.
+pub struct Guess {
+    limiter: GuessLimiter,
+    key: String,
+    right: bool,
+}
+
+impl Guess {
+    /// The guess was the right secret: it does not count against the key.
+    pub fn right(mut self) {
+        self.right = true;
+    }
+}
+
+impl Drop for Guess {
+    fn drop(&mut self) {
+        let l = &self.limiter;
+        let now = (l.clock)();
+        let mut map = l.entries.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(e) = map.get_mut(&self.key) else {
+            return;
+        };
+        e.roll(now, l.window);
+        e.in_flight = e.in_flight.saturating_sub(1);
+        if !self.right {
+            e.failures = e.failures.saturating_add(1);
+            if e.recent_failures(now, l.window) >= l.max_failures {
+                e.locked_until = Some(now + l.lockout);
+            }
+        }
+    }
+}
 
 impl GuessLimiter {
     pub fn new(max_failures: u32, window: Duration, lockout: Duration) -> Self {
@@ -167,49 +234,48 @@ impl GuessLimiter {
         self
     }
 
-    /// Start a guess at `key`'s secret: Err (429) while the key is locked, else the guess is
-    /// counted as wrong at once, which locks the key when it makes `max_failures` in the window.
-    /// Counting before the (slow) check, not after, keeps a burst of parallel guesses from all
-    /// getting through before the first failure is recorded. Call [`GuessLimiter::was_right`]
-    /// when the guess turns out right.
-    pub fn begin(&self, key: &str) -> AppResult<()> {
+    /// Start a guess at `key`'s secret: Err (429) while the key is locked, or when the guesses
+    /// already running could by themselves use up what is left of the cap. Only a guess that
+    /// proves wrong counts and can lock the key; guesses still being checked just hold a place,
+    /// so a crowd of visitors with the right password queued behind slow hashing cannot lock a
+    /// link, while a burst of parallel guesses still cannot get past the cap before the first
+    /// failure is recorded.
+    pub fn begin(&self, key: &str) -> AppResult<Guess> {
         let now = (self.clock)();
         let mut map = self.entries.lock().unwrap_or_else(|p| p.into_inner());
         if map.len() >= GUESS_SWEEP_AT {
             map.retain(|_, e| {
-                e.locked_until.is_some_and(|u| now < u)
-                    || now.duration_since(e.window_start) < self.window
+                e.in_flight > 0
+                    || e.locked_until.is_some_and(|u| now < u)
+                    || now.saturating_duration_since(e.window_start) < self.window * 2
             });
         }
         let e = map.entry(key.to_string()).or_insert(GuessEntry {
             window_start: now,
             failures: 0,
+            prev_failures: 0,
+            in_flight: 0,
             locked_until: None,
         });
         if e.locked_until.is_some_and(|u| now < u) {
             return Err(AppError::TooManyRequests);
         }
-        if now.duration_since(e.window_start) >= self.window {
-            e.window_start = now;
-            e.failures = 0;
+        e.locked_until = None;
+        e.roll(now, self.window);
+        // Past the cap with the lockout over, one probe at a time.
+        let room = self
+            .max_failures
+            .saturating_sub(e.recent_failures(now, self.window))
+            .max(1);
+        if e.in_flight >= room {
+            return Err(AppError::TooManyRequests);
         }
-        e.failures = e.failures.saturating_add(1);
-        if e.failures >= self.max_failures {
-            e.locked_until = Some(now + self.lockout);
-        }
-        Ok(())
-    }
-
-    /// The guess started with [`GuessLimiter::begin`] was right: it does not count against the
-    /// key, and if it was the one that locked the key, the key is open again.
-    pub fn was_right(&self, key: &str) {
-        let mut map = self.entries.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(e) = map.get_mut(key) {
-            e.failures = e.failures.saturating_sub(1);
-            if e.failures < self.max_failures {
-                e.locked_until = None;
-            }
-        }
+        e.in_flight += 1;
+        Ok(Guess {
+            limiter: self.clone(),
+            key: key.to_string(),
+            right: false,
+        })
     }
 
     /// Number of tracked keys (for tests).
@@ -260,18 +326,74 @@ mod tests {
     }
 
     #[test]
-    fn a_right_guess_is_not_counted_and_unlocks_what_it_locked() {
+    fn a_right_guess_is_not_counted() {
         let (clock, _now) = manual_clock();
         let g = GuessLimiter::new(100, HOUR, QUARTER).with_clock(clock);
-        for _ in 0..100 {
-            g.begin("lnk").unwrap(); // the 100th attempt locks the key ...
+        for _ in 0..99 {
+            g.begin("lnk").unwrap(); // 99 wrong guesses
         }
-        g.was_right("lnk"); // ... but it was the right password
-        g.begin("lnk").unwrap();
+        g.begin("lnk").unwrap().right(); // the 100th is right: no lock
+        g.begin("lnk").unwrap().right();
         // Right guesses never add up to a lockout.
         for _ in 0..500 {
-            g.begin("ok").unwrap();
-            g.was_right("ok");
+            g.begin("ok").unwrap().right();
+        }
+    }
+
+    #[test]
+    fn a_right_guess_after_a_lockout_does_not_lock_the_key_again() {
+        let (clock, now) = manual_clock();
+        let g = GuessLimiter::new(100, HOUR, QUARTER).with_clock(clock);
+        for _ in 0..100 {
+            g.begin("lnk").unwrap();
+        }
+        assert!(g.begin("lnk").is_err());
+        advance(&now, QUARTER + Duration::from_secs(1));
+        for _ in 0..5 {
+            g.begin("lnk").unwrap().right();
+        }
+        // A wrong guess still locks it again: the cap is for the hour.
+        g.begin("lnk").unwrap();
+        assert!(g.begin("lnk").is_err());
+    }
+
+    #[test]
+    fn guesses_still_being_checked_never_lock_the_key() {
+        let (clock, _now) = manual_clock();
+        let g = GuessLimiter::new(100, HOUR, QUARTER).with_clock(clock);
+        let running: Vec<Guess> = (0..100).map(|_| g.begin("lnk").unwrap()).collect();
+        // The cap is spoken for, so more are refused for now ...
+        assert!(g.begin("lnk").is_err());
+        // ... but all of them turn out right, so nothing was locked.
+        for guess in running {
+            guess.right();
+        }
+        g.begin("lnk").unwrap().right();
+    }
+
+    #[test]
+    fn parallel_guesses_cannot_get_past_the_cap() {
+        let (clock, _now) = manual_clock();
+        let g = GuessLimiter::new(100, HOUR, QUARTER).with_clock(clock);
+        let running: Vec<Guess> = (0..100).map(|_| g.begin("lnk").unwrap()).collect();
+        assert!(g.begin("lnk").is_err(), "no 101st before any is settled");
+        drop(running); // all wrong
+        assert!(g.begin("lnk").is_err(), "and the key is locked now");
+    }
+
+    #[test]
+    fn a_burst_split_across_a_window_boundary_does_not_double_the_cap() {
+        let (clock, now) = manual_clock();
+        let g = GuessLimiter::new(100, HOUR, QUARTER).with_clock(clock);
+        for _ in 0..99 {
+            g.begin("lnk").unwrap();
+        }
+        advance(&now, HOUR + Duration::from_secs(1));
+        // The 99 just before the boundary still weigh almost fully.
+        let mut let_through = 0;
+        while g.begin("lnk").is_ok() {
+            let_through += 1;
+            assert!(let_through < 5, "locked well before another 99");
         }
     }
 
@@ -288,8 +410,8 @@ mod tests {
             g.begin("lnk").is_err(),
             "... but that wrong guess locks it again: the cap is per hour, not per lockout"
         );
-        // A new hour starts a new count.
-        advance(&now, HOUR);
+        // Two hours on, the old failures no longer count.
+        advance(&now, HOUR * 2);
         g.begin("lnk").unwrap();
         g.begin("lnk").unwrap();
     }
@@ -312,7 +434,7 @@ mod tests {
             g.begin(&format!("k{i}")).unwrap();
         }
         assert_eq!(g.len(), GUESS_SWEEP_AT);
-        advance(&now, HOUR + Duration::from_secs(1));
+        advance(&now, HOUR * 2 + Duration::from_secs(1));
         g.begin("fresh").unwrap();
         assert_eq!(g.len(), 1, "idle entries are dropped");
     }

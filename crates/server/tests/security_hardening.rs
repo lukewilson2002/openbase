@@ -422,6 +422,17 @@ async fn a_link_locks_after_a_hundred_wrong_guesses_from_any_addresses() {
     guess(&f, &token, "10.9.9.9", "the real secret")
         .await
         .assert_status(200);
+    // Right guesses after a lockout do not lock the link again (the page sends the password with
+    // every request, so the next one follows at once).
+    for ip in ["10.9.9.9", "10.9.9.8", "10.9.9.7"] {
+        guess(&f, &token, ip, "the real secret")
+            .await
+            .assert_status(200);
+    }
+    *now.lock().unwrap() += Duration::from_secs(16 * 60);
+    guess(&f, &token, "10.9.9.9", "the real secret")
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]
@@ -459,13 +470,17 @@ async fn the_attachment_route_counts_against_the_same_cap() {
 
 fn assert_hardening_headers(res: &Response, what: &str) {
     assert_eq!(
-        header_of(res, "permissions-policy"),
-        Some("camera=(), microphone=(), geolocation=()"),
-        "{what}"
-    );
-    assert_eq!(
         header_of(res, "cross-origin-opener-policy"),
         Some("same-origin"),
+        "{what}"
+    );
+    assert_hardening_headers_except_opener(res, what);
+}
+
+fn assert_hardening_headers_except_opener(res: &Response, what: &str) {
+    assert_eq!(
+        header_of(res, "permissions-policy"),
+        Some("camera=(), microphone=(), geolocation=()"),
         "{what}"
     );
     assert_eq!(
@@ -490,7 +505,7 @@ async fn every_response_carries_the_hardening_headers() {
         "/",
         "/some/client/route",
         "/api/nope",
-        "/login",
+        "/login/other",
         "/.well-known/oauth-authorization-server",
     ] {
         let r = app.get(&me, path).await;
@@ -499,6 +514,22 @@ async fn every_response_carries_the_hardening_headers() {
     let r = app.get(&app.anon(), "/api/auth/me").await;
     r.assert_status(401);
     assert_hardening_headers(&r, "an error answer");
+}
+
+#[tokio::test]
+async fn the_pages_an_oauth_popup_walks_through_keep_the_window_opener_link() {
+    // A browser-based MCP client opens /oauth/authorize in a popup and waits for it; the opener
+    // policy would cut that link on the first page. Everything else keeps the policy.
+    let app = TestApp::new();
+    let me = app.user("a@example.com", "A");
+    for path in ["/oauth/authorize", "/login", "/login/2fa", "/oauth/consent"] {
+        let r = app.get(&me, path).await;
+        assert!(
+            header_of(&r, "cross-origin-opener-policy").is_none(),
+            "{path}"
+        );
+        assert_hardening_headers_except_opener(&r, path);
+    }
 }
 
 #[tokio::test]
