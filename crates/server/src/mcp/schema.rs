@@ -310,7 +310,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef::new(
             "list_icons",
             "Search icon names",
-            "Search the Lucide icon names that workspaces, projects and tables can have (set with the `icon` argument of create_workspace / rename_workspace, create_project / rename_project and create_table / rename_table). Every word of `query` has to match an icon's name or one of its old names ('cart shop' finds shopping-cart, 'home' finds house); without a query the first icons alphabetically are listed. Names are kebab-case, e.g. briefcase, users, chart-column.",
+            "Search the Lucide icon names that workspaces, projects and tables can have (set with the `icon` argument of create_workspace / rename_workspace, create_project / rename_project and create_table / rename_table). The web app no longer displays these icons: it marks workspaces, folders (projects) and collections (tables) by color alone, so set `color` to change how one looks. Icons are still stored and returned for compatibility. Every word of `query` has to match an icon's name or one of its old names ('cart shop' finds shopping-cart, 'home' finds house); without a query the first icons alphabetically are listed. Names are kebab-case, e.g. briefcase, users, chart-column.",
             object(
                 json!({
                     "query": string("Words to search for, e.g. 'money' or 'truck delivery'."),
