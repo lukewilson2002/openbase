@@ -23,6 +23,15 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   property called Due, Deadline, Date, When or Start (and a checkbox called Done or Complete) is
   set up for the Home page, and each person gets a first day of the week (Sunday). The
   Airtable-compatible API answers as before, except that a table lists its new Page property.
+- **Collection settings in the API and MCP.** A table has a `color` (set on create and update;
+  the `icon` still works), a page field (`body_field_id`; `POST /api/tables/{id}/body-field`,
+  MCP `set_page_field`), a record name, a Home date and a Done checkbox (`PATCH
+  /api/tables/{id}`, MCP `update_table_settings`). Listings add each table's `record_count`,
+  workspaces their `root_base_id` and projects `is_top_level`; `POST
+  /api/workspaces/{id}/top-level` (MCP `set_top_level_project`) chooses the top-level project,
+  which can no longer be deleted until another takes its place. Deleting or retyping a page,
+  Home date or Done field clears the setting. Saving a record's page with `PUT
+  /api/tables/{id}/records/{rid}/page` adds "Page" to a table that has none.
 - **Select, delete and undo in every view.** Kanban, gallery, list, calendar and timeline now
   have what the grid had: Shift/Ctrl/Cmd-click to select several cards or rows, ⌘A / Ctrl+A,
   a bar with the count and **Delete**, **Duplicate** and **Clear**, the **Delete** key, and a

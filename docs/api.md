@@ -90,6 +90,36 @@ some projects who creates or duplicates a project gets it added to their list.
   may give a link field listed earlier (or "Name") as `options.link_field_id` by name;
   everything else refers to ids as in `POST /api/tables/{id}/fields`. The answer is the
   table with all its fields.
+- **Collection settings** (UX overhaul; a table is a "collection" in the app, a project a
+  "folder"). A table has a `color` (one of the palette colours, the mark the app identifies
+  it by; the `icon` stays accepted and returned but the app no longer shows it), a page
+  (`body_field_id`: the rich text field that holds the page of each record), a Home date
+  (`home_date_field_id`), a Done checkbox (`done_field_id`) and a `record_noun` (what one record
+  is called, empty = "record"). `POST /api/bases/{id}/tables` takes an optional `color` (else
+  the next colour of a cycle); `PATCH /api/tables/{id}` (Creator) takes `color`, `description`,
+  `record_noun` (at most 40 characters), `home_date_field_id` (a date, created time or last
+  modified time field, or a formula or rollup that gives a date; `null` = none) and
+  `done_field_id` (a checkbox field; `null` = none), each checked: the field must belong to the
+  table, and nothing of the request is saved when one value is refused (400).
+  `POST /api/tables/{id}/body-field` (Creator) takes `{field_id}` like `primary-field`: a rich
+  text field of the table other than its title, or `null` for no page; `{create: true}` adds a
+  rich text field called "Page" (hidden in every view) when the table has none. Deleting or
+  retyping the page field, the Home date or the Done field, or making the page field the title,
+  clears that setting and refuses nothing; a field restored from the trash is not pointed at
+  again. `PUT /api/tables/{id}/records/{rid}/page` (Editor) with `{text}` (markdown, `null`
+  clears) saves a record's page like any cell edit; when the table has no page field it adds
+  "Page" as part of the same save (`created: true` in the answer), the one change to the schema
+  an editor can cause, and fails with 409 when the table already has 500 fields.
+- **Listings.** `GET /api/bases/{id}` and `GET /api/workspaces` list each table with its
+  `record_count` (live records), `color`, `body_field_id`, `home_date_field_id`,
+  `done_field_id` and `record_noun`; counts come from one grouped query per project (per
+  workspace for the list). Workspaces carry `root_base_id`, projects `is_top_level`.
+- **The top level.** A workspace's top-level project is the one whose collections the app shows
+  directly under the workspace; every other project is a folder. `POST
+  /api/workspaces/{id}/top-level` with `{base_id}` (workspace owners; `manage` for a token)
+  moves the pointer to another live project of the workspace and answers the workspace. Nothing
+  else moves. `DELETE /api/bases/{id}` on the top-level project answers 409 with "Make another
+  folder the top level first, or delete the workspace"; deleting the workspace always works.
 - Text comes in two field types. `text` is plain text for names, titles, codes and other
   short values: `options` `{multiline, default?}`; with `multiline` off (the default) a line
   break becomes a space, with it on line breaks are kept, and either way the text is shown
@@ -113,7 +143,7 @@ The class is decided in one place (`Actor::require_capability`), and
 |---|---|---|---|---|
 | Data: records, comments, tables, fields, views, shares, automations, CSV, attachments, creating a project in a workspace | reads only | yes (the owner's role still applies) | yes | yes |
 | **Your inbox** (`/api/inbox*`, and downloading a file uploaded for it): private to you and in no project | reads only | yes, but **403** for a token limited to specific projects | yes, same exception | yes |
-| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
+| **Manage**: create / rename / delete / restore workspaces, workspace members (role and project access changes, removal), the members of a project (listing, taking a project off a member's list), invites (create, list, revoke, accept), deleting, duplicating and restoring projects, choosing a workspace's top-level project, workspace trash, `PATCH /api/auth/me` (name, time zone, `intro_seen`) | 403 | 403 | yes (the owner's role still applies) | yes |
 | **Admin** pages (`/api/admin/*`: users, email settings, audit log, stats, listing and creating backups) | 403 | 403 | only if the owner is an instance administrator; every call is written to the audit log (`admin_token_use`, naming the token). Credential parts are session-only, see below | administrators |
 | **Session only**: `/api/auth/password`, `/api/auth/2fa/*`, `/api/auth/passkeys*` (list, register, rename, remove), `/api/auth/sessions*`, `GET/POST /api/tokens`, `DELETE /api/tokens/{id}`, `POST /api/admin/users/{id}/reset-link`, `DELETE /api/admin/users/{id}/passkeys`, `GET /api/admin/backups/{name}` (downloading a backup archive: it holds every password hash, two-factor secret and the SMTP password), the OAuth consent step and the connected-apps lists (`/api/oauth/*`, `/api/admin/oauth/*`) | 403 | 403 | **403** | yes |
 | **Session-only parts of admin requests**: `disable_2fa` in `PATCH /api/admin/users/{id}`; `password` in `POST /api/admin/users` (and the `reset_link` in its answer); `password` in `PATCH /api/admin/email` | 403 | 403 | **403** for that part (the whole request is refused, nothing is changed) | administrators |
