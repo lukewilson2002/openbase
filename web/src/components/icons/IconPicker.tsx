@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactElement, type TouchEvent } from "react";
 import { Search, Shapes, X } from "lucide-react";
 import { Dialog as D } from "radix-ui";
-import { Dialog } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { COARSE_POINTER, useMediaQuery } from "@/hooks/useMediaQuery";
 import { useVisualViewport } from "@/hooks/useVisualViewport";
@@ -115,21 +114,6 @@ export function IconPicker({ value, onChange, label = "Choose icon", disabled, c
         <IconPickerBody value={value} onSelect={pick} />
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** "Change icon…" from a menu: the same picker body in a dialog (a popover cannot hang off a closing menu). */
-export function IconPickerDialog({ open, onOpenChange, title, value, onChange }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; value?: string | null; onChange: (icon: string | null) => void }) {
-  const asSheet = useMediaQuery(SHEET_MEDIA);
-  const pick = (icon: string | null) => {
-    onOpenChange(false);
-    onChange(icon);
-  };
-  if (asSheet) return <IconPickerSheet open={open} onOpenChange={onOpenChange} title={title} value={value} onSelect={pick} />;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={title} size="sm" className="[&>div:nth-child(2)]:p-0">
-      <IconPickerBody value={value} onSelect={pick} />
-    </Dialog>
   );
 }
 

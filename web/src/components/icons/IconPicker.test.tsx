@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NameDialog } from "@/components/NameDialog";
-import { IconPicker, IconPickerDialog } from "./IconPicker";
+import { IconPicker } from "./IconPicker";
 import { resetIconRegistryForTests } from "./registry";
 import { fakeIconSet, gatedImporter } from "./testSet";
 
@@ -226,19 +226,6 @@ describe("IconPicker", () => {
   });
 });
 
-describe("IconPickerDialog", () => {
-  it("shows the same picker in a dialog and reports the choice", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    const onOpenChange = vi.fn();
-    render(<IconPickerDialog open onOpenChange={onOpenChange} title="Table icon" value="star" onChange={onChange} />);
-    const dialog = await screen.findByRole("dialog", { name: "Table icon" });
-    await user.click(await within(dialog).findByRole("button", { name: "Target" }));
-    expect(onChange).toHaveBeenCalledExactlyOnceWith("target");
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-  });
-});
-
 /** A phone: `(pointer: coarse)` matches (and so does any query that lists it). */
 function touchScreen() {
   vi.spyOn(window, "matchMedia").mockImplementation(
@@ -337,19 +324,5 @@ describe("IconPicker on a touch screen", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Kitchen", "truck", null);
-  });
-
-  it("shows the menu's icon dialog as a sheet too", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    const onOpenChange = vi.fn();
-    render(<IconPickerDialog open onOpenChange={onOpenChange} title="Table icon" value="star" onChange={onChange} />);
-    const sheet = await screen.findByRole("dialog", { name: "Table icon" });
-    expect(screen.getByTestId("icon-picker-backdrop")).toBeInTheDocument();
-    await loaded();
-    expect(screen.getByRole("searchbox", { name: "Search icons" })).not.toHaveFocus();
-    await user.click(within(sheet).getByRole("button", { name: "Target" }));
-    expect(onChange).toHaveBeenCalledExactlyOnceWith("target");
-    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
