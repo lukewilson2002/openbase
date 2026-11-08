@@ -69,7 +69,8 @@ export function RowPrefix({ field, value, title, canEdit, onChange, people, emai
           if (canEdit) onChange(checked ? null : true);
         }}
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded border pointer-coarse:size-7",
+          // The box is what is drawn; the pseudo-element grows the target to 44 px on a touch screen (PH-6).
+          "relative flex size-5 shrink-0 items-center justify-center rounded border pointer-coarse:size-7 pointer-coarse:after:absolute pointer-coarse:after:-inset-2",
           checked ? "border-primary bg-primary text-primary-fg" : "border-line-strong bg-surface text-transparent",
           canEdit ? "cursor-pointer hover:border-primary" : "cursor-default",
         )}

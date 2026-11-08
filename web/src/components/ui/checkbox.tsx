@@ -12,10 +12,17 @@ export interface CheckboxProps {
   className?: string;
 }
 
+/**
+ * On a phone the whole row is the target (PH-6): the label stretches a transparent layer over it, so a tap beside
+ * a 16 px box or a 20 px switch still lands on the control the row belongs to.
+ */
+const rowClass = "flex items-center gap-2 max-md:relative max-md:min-h-control-touch";
+const labelClass = "text-[0.8125rem] max-md:after:absolute max-md:after:inset-0";
+
 export function Checkbox({ checked, onCheckedChange, label, disabled, className }: CheckboxProps) {
   const id = useId();
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn(rowClass, className)}>
       <C.Root
         id={id}
         checked={checked}
@@ -27,7 +34,7 @@ export function Checkbox({ checked, onCheckedChange, label, disabled, className 
           <Icon icon={Check} size="sm" className="text-primary-fg" />
         </C.Indicator>
       </C.Root>
-      <label htmlFor={id} className={cn("text-[0.8125rem]", disabled && "opacity-60")}>
+      <label htmlFor={id} className={cn(labelClass, disabled && "opacity-60")}>
         {label}
       </label>
     </div>
@@ -45,7 +52,7 @@ export interface SwitchProps {
 export function Switch({ checked, onCheckedChange, label, disabled, className }: SwitchProps) {
   const id = useId();
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn(rowClass, className)}>
       <S.Root
         id={id}
         checked={checked}
@@ -55,7 +62,7 @@ export function Switch({ checked, onCheckedChange, label, disabled, className }:
       >
         <S.Thumb className="block size-4 translate-x-0.5 rounded-full bg-paper shadow transition-transform data-[state=checked]:translate-x-[18px]" />
       </S.Root>
-      <label htmlFor={id} className={cn("text-[0.8125rem]", disabled && "opacity-60")}>
+      <label htmlFor={id} className={cn(labelClass, disabled && "opacity-60")}>
         {label}
       </label>
     </div>

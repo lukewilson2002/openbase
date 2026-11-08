@@ -112,12 +112,12 @@ function PropertyRow({
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex items-center gap-1 rounded-md bg-surface px-1 py-1 hover:bg-hover", isDragging && "relative z-10 shadow-pop")}>
       {reorderable &&
         (primary ? (
-          <span aria-hidden className="inline-block h-6 w-5 shrink-0" />
+          <span aria-hidden className="inline-block h-6 w-5 shrink-0 max-md:w-control-touch" />
         ) : (
           <button
             type="button"
             aria-label={`Drag ${field.name} to reorder`}
-            className="inline-flex h-6 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-xs text-faint hover:text-fg active:cursor-grabbing"
+            className="inline-flex h-6 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-xs text-faint hover:text-fg active:cursor-grabbing max-md:h-control-touch max-md:w-control-touch"
             {...attributes}
             {...listeners}
           >
@@ -128,10 +128,10 @@ function PropertyRow({
       <Switch className="min-w-0 flex-1 flex-row-reverse justify-between" label={<span className="truncate">{field.name}</span>} checked={shown} disabled={primary} onCheckedChange={onToggle} />
       {reorderable && (
         <>
-          <IconButton label={`Move ${field.name} up`} size="sm" noTooltip disabled={primary || !canUp} onClick={onUp} className={primary ? "invisible" : undefined}>
+          <IconButton label={`Move ${field.name} up`} size="sm" noTooltip disabled={primary || !canUp} onClick={onUp} className={cn("max-md:size-control-touch", primary && "invisible")}>
             <ArrowUp aria-hidden className="size-4" />
           </IconButton>
-          <IconButton label={`Move ${field.name} down`} size="sm" noTooltip disabled={primary || !canDown} onClick={onDown} className={primary ? "invisible" : undefined}>
+          <IconButton label={`Move ${field.name} down`} size="sm" noTooltip disabled={primary || !canDown} onClick={onDown} className={cn("max-md:size-control-touch", primary && "invisible")}>
             <ArrowDown aria-hidden className="size-4" />
           </IconButton>
         </>

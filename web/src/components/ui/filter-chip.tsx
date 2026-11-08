@@ -29,8 +29,14 @@ export function FilterChip({ children, onEdit, onRemove, removeLabel, selected, 
       {...props}
     >
       {onEdit ? (
-        <button type="button" onClick={onEdit} className="min-w-0 truncate rounded-sm py-0.5 pl-2 pr-1 text-left hover:underline">
-          {children}
+        <button
+          type="button"
+          onClick={onEdit}
+          // The text is small to keep the bar calm; on a phone the pseudo-element grows the tappable area to 44 px, as for the remove button.
+          // The text truncates inside, since an overflow clip on the button itself would cut the pseudo-element off.
+          className="min-w-0 rounded-sm py-0.5 pl-2 pr-1 text-left hover:underline max-md:relative max-md:after:absolute max-md:after:inset-x-0 max-md:after:-inset-y-3"
+        >
+          <span className="block truncate">{children}</span>
         </button>
       ) : (
         <span className="min-w-0 truncate py-0.5 pl-2 pr-1">{children}</span>
