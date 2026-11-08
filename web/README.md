@@ -295,9 +295,9 @@ open (rename, delete and share a view, the collection's settings) are `BaseDialo
 
 ### The filter bar (COL-3, `components/viewbar/ViewFilterBar.tsx`)
 
-One bar filters and searches. `ViewFrame` and `GridView` draw it under the tabs, then the `DraftBar`, then the old toolbar (which
-View options, COL-6, replaces; the bar's `trailing` prop is the slot to the right of the field where View options goes). It is the
-`FilterBar` core component wired to the view's draft: every change goes through `cfg.update`, so it is a draft and the changes bar says so.
+One bar filters and searches. `ViewFrame` and `GridView` draw it under the tabs, then the `DraftBar`; the bar's `trailing` prop is the
+slot to the right of the field, where View options sits. It is the `FilterBar` core component wired to the view's draft: every change
+goes through `cfg.update`, so it is a draft and the changes bar says so.
 
 - **Chips are the view's filter.** `filterChips.ts` (pure) reads it: a plain list of conditions joined by AND is one chip per
   condition ("Status is Done", from `conditionLabel`); a filter with OR, or with a group inside, is one chip, "Advanced filter, 3
@@ -316,6 +316,34 @@ View options, COL-6, replaces; the bar's `trailing` prop is the slot to the righ
 - **Announcements.** Filters added and removed and the search are said in a polite region; the changes bar and the footer count say
   how many records show.
 
+### View options (COL-6, `components/viewbar/ViewOptions.tsx`)
+
+One control holds every setting of a view. The "View options" button (a secondary button with the sliders icon on a desktop, a 44 px
+icon button on a phone) opens a 360 px popover anchored right, or a `Sheet` on a phone. It replaces the old toolbar: `ViewBar`,
+`toolbarFit.ts` (the More overflow), `ViewSettings` and the floating Add record pill are deleted.
+
+- **Sections, in order.** Layout tiles (`LayoutTiles`: List, Grid, Board, Calendar, Gallery, Timeline, Form; 4 to a row on a desktop, 3 on a
+  phone; the shown one is a pressed button with a 2 px blue border on primary-soft) with the layout's own settings under them;
+  Sort, Group, Color and Properties as rows that say their value (`optionsSummary.ts`, pure: "Next follow-up, soonest", "By Status",
+  "By conditions", "4 shown, 1 hidden") and open a screen in the same popover or sheet with a Back button (`SortListEditor`,
+  `RowColorEditor`, `PropertiesEditor`); Row height (four choices) and Wrap headers for a grid; a footer with the layout's switches,
+  Add property (creators; the dialog is `FieldDialog`) and Download CSV.
+- **What a layout passes.** `ViewFrame` takes `layoutSettings` (under the tiles; a function receives `close`, which the form uses for
+  "Open the form builder"), `propertySettings` (the description property and a card layout's "Properties on a card", shown at the foot
+  of the Properties screen), `layoutToggles` ("Hide empty stacks", "Fold all groups") and `features` (`sort`, `group`, `color`,
+  `properties`, `rowHeight`, `addProperty`, `csv`; all on except `rowHeight`, which is the grid's). `GridView` renders `ViewOptions`
+  itself. The form's toolbar has its own `ViewOptions` with only the tiles and Download CSV.
+- **Everything is a draft** (`cfg.update`, and `cfg.setLayout` for a tile) except a form's own settings, which the builder saves as they
+  are made. Choosing a layout swaps the whole view component, so the next `ViewOptions` opens at once (a module-level hand-over,
+  `forgetViewOptionsHandOver` for tests) on the new layout's settings, instead of the panel closing under the person.
+- **Wrap headers** is drawn by the canvas: `GlideGrid`'s `wrapHeaders` prop makes the header row 64 px and its `drawHeader` sets the
+  property name on up to two lines (`gridHeaderHeight`).
+- **Where the old toolbar's actions went.** Sort, Group, Color and Row height: their rows and sections here. Hide fields: Properties
+  (with its search, order handles, Hide all and Show all). The view's own settings (the old "View" tool): under the tiles. Hide empty
+  stacks and Fold all groups: the footer's switches (the grid's Collapse all and Expand all buttons became the same Fold all groups
+  switch). Add field: Add property in the footer, for every layout. Download CSV: the footer. Add record: the collection header's New
+  button (and the phone header's +), which each layout registers with through `useRegisterAddRecord`.
+
 ### Plugging in a view
 
 Implement a component taking `ViewProps` (`schema`, `table`, `view`, `role`) and point the matching line of
@@ -325,7 +353,7 @@ view's layout: its own type, or the one this person's draft switched to. The com
 ### Drafts (COL-5, `src/views/drafts` and `views/grid/useViewConfig.ts`)
 
 Every change to a view is a draft until someone saves it (decision 4). Nothing saves by itself: there is no timer, no
-"Not saved" badge and no "Locked" badge on the toolbar. `useViewConfig(schema, table, view, role)` is the one hook the
+"Not saved" badge and no "Locked" badge. `useViewConfig(schema, table, view, role)` is the one hook the
 views use; its `config` is the saved config with this person's draft laid over it, `update(mutate)` writes the draft.
 
 | File | What |
@@ -370,7 +398,7 @@ on `@tanstack/react-virtual`. The grid chunk is lazy-loaded from `views/registry
 | `src/views/grid/` | `GridView`, paged data (`useGridData`), mutations and undo (`useRecordOps`, `undo.ts`), paste/fill/clear planning (`gridOps.ts`), group rows (`rowMap.ts`), view config and drafts (`useViewConfig`) |
 | `src/components/record/` | Cell editors shared by the grid overlay and the expanded record, the expanded record, comments, history |
 | `src/components/fields/` | Field create/edit dialog with options for all 28 types |
-| `src/components/viewbar/` | The filter bar (`ViewFilterBar`), the filter builder, the old toolbar (until View options), pure `ViewConfig` mutations (`config.ts`) |
+| `src/components/viewbar/` | The filter bar (`ViewFilterBar`), View options (`ViewOptions` and its screens), the filter builder, pure `ViewConfig` mutations (`config.ts`) |
 | `src/api/records.ts` | Typed records, comments, attachments and field/view endpoints |
 
 To work on the grid without a server run `VITE_MOCK=1 npm run dev`: `dev/mock-api.ts` is a Vite middleware that serves a
@@ -386,7 +414,7 @@ All five get `{schema, table, view, role}`, are lazy chunks registered in `views
 | `common/useViewSetup.ts` | Current user and time zone, collaborators, format/editor environment, the view config with this person's draft (`grid/useViewConfig`), search, record writes and the `?record=` parameter |
 | `common/useViewRecords.ts` | Whole-view query: pages of 1,000 up to a 5,000 cap (`truncated` drives the "showing first N" notice), cached under `["records", tableId, viewId, "query", ...]` so SSE invalidation refetches it |
 | `common/useRecordWrites.ts`, `cache.ts` | Optimistic edits, manual-order moves and creates over every cached whole-view query of the table, rolled back when the server rejects them |
-| `common/ViewFrame.tsx` | The shared toolbar (`components/viewbar`, with `features`/`extra` props to drop grid-only controls and add view settings), the changes bar (`DraftBar`) plus `ExpandedRecord` for `?record=` |
+| `common/ViewFrame.tsx` | The filter bar with View options (`components/viewbar`, with `features`, `layoutSettings`, `propertySettings` and `layoutToggles` props), the changes bar (`DraftBar`) plus `ExpandedRecord` for `?record=` |
 | `common/wallTime.ts` | Calendar/timeline time model: date cells are read as *wall time* (the wall-clock reading as UTC ms) in the field's zone, else the viewer's, so a day is always 86,400,000 ms and drags map back to stored values through `zonedToInstant` |
 
 - **Kanban** stacks by single select, single user or checkbox (`stacks.ts` is pure: bucketing, `stack_order`, drop planning). dnd-kit with pointer and keyboard sensors (Space picks up, arrows move, Space drops, Enter opens). A drop writes the stack field with `typecast` and, only when the view has no sorts, a manual-order move; both are optimistic with rollback.

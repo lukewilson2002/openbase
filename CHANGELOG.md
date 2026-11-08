@@ -182,6 +182,23 @@ Releases are published from [GitHub Releases](https://github.com/lukewilson2002/
   focus the bar. Everything it does is a draft, like every other change to a view. The toolbar's
   Filter tool and its search box are gone; on a phone the suggestions sit above the keyboard
   and the editors are sheets.
+- **One "View options" button holds every setting of a view.** It sits at the right end of the
+  filter bar and opens a panel anchored right (a bottom sheet on a phone). It starts with the
+  layouts as tiles (List, Grid, Board, Calendar, Gallery, Timeline and Form; a kanban is now
+  called a Board) and, right under them, the chosen layout's own settings: what a board stacks
+  by, a calendar's dates and week start, a gallery's cover, a timeline's start, end, swimlanes
+  and dependencies, a list's prefix and sub-items, and for a form a button that opens the form
+  builder. Sort, Group, Color and Properties are rows that say what they are set to ("Next
+  follow-up, soonest", "By Status", "4 shown, 1 hidden") and open a screen of their own with a
+  Back button; Properties also holds the description property and how many properties a card
+  shows. A grid adds Row height and a new **Wrap headers** switch that sets long property names
+  on two lines. The footer has the layout's switches (Hide empty stacks, Fold all groups), Add
+  property (creators) and Download CSV. Everything in it is a draft, except a form's own
+  settings. Picking another layout shows the same records in it and keeps the panel open. The old
+  toolbar and its More menu, and the floating Add record button, are gone: New record is in the
+  collection header (the + on a phone), Add property and Download CSV are in View options, and
+  the grid's Collapse all and Expand all became the Fold all groups switch. Color is no longer
+  switched off on a collection's default view (as a draft it can become a new view).
 - **The sidebar is rebuilt around one workspace.** It starts with the workspace switcher (the
   workspace's color, its name and "Switch workspace"; its menu begins with the OpenBase mark,
   lists every workspace and ends with the workspace's own actions), "Search everything", Home,
