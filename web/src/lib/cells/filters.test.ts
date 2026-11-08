@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Filter, FieldType } from "@/api/types";
 import { ALL_FIELDS, field } from "@/test/fields";
-import { dateModesFor, defaultOperand, filterOpsFor, isFilterable, isIncomplete, makeDateOperand, newCondition, opLabel, operandKindFor, pruneFilter, countConditions, withOp } from "./filters";
+import { DATE_MODE_LABELS, dateModesFor, defaultOperand, filterOpsFor, isFilterable, isIncomplete, makeDateOperand, newCondition, opLabel, operandKindFor, pruneFilter, countConditions, withOp } from "./filters";
 
 const ops = (t: FieldType) => filterOpsFor(ALL_FIELDS[t]);
 
@@ -80,6 +80,15 @@ describe("labels and operands", () => {
     expect(dateModesFor("is")).not.toContain("past_week");
     expect(dateModesFor("is_within")).toContain("past_number_of_days");
     expect(dateModesFor("is_within")).not.toContain("today");
+  });
+  it("offers the calendar weeks and months for is_within only", () => {
+    const calendar = ["this_calendar_week", "next_calendar_week", "last_calendar_week", "next_calendar_month", "last_calendar_month"] as const;
+    for (const mode of calendar) {
+      expect(dateModesFor("is_within")).toContain(mode);
+      expect(dateModesFor("is")).not.toContain(mode);
+      expect(makeDateOperand(mode)).toEqual({ mode });
+      expect(DATE_MODE_LABELS[mode]).toBeTruthy();
+    }
   });
   it("builds date operands in the server's shape", () => {
     expect(makeDateOperand("today")).toEqual({ mode: "today" });

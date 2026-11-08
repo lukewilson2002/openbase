@@ -123,7 +123,7 @@ export const SINGLE_DAY_MODES = [
   "exact_date",
 ] as const;
 
-export const RANGE_MODES = ["past_week", "past_month", "past_year", "next_week", "next_month", "next_year", "past_number_of_days", "next_number_of_days", "this_calendar_month", "this_calendar_year"] as const;
+export const RANGE_MODES = ["past_week", "past_month", "past_year", "next_week", "next_month", "next_year", "past_number_of_days", "next_number_of_days", "this_calendar_month", "this_calendar_year", "this_calendar_week", "next_calendar_week", "last_calendar_week", "next_calendar_month", "last_calendar_month"] as const;
 
 export type DateMode = DateOperand["mode"];
 
@@ -148,6 +148,11 @@ export const DATE_MODE_LABELS: Record<DateMode, string> = {
   next_number_of_days: "the next number of days",
   this_calendar_month: "this calendar month",
   this_calendar_year: "this calendar year",
+  this_calendar_week: "this calendar week",
+  next_calendar_week: "next calendar week",
+  last_calendar_week: "last calendar week",
+  next_calendar_month: "next calendar month",
+  last_calendar_month: "last calendar month",
 };
 
 export function dateModesFor(op: FilterOp): readonly DateMode[] {

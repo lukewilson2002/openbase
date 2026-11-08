@@ -634,7 +634,7 @@ fn eval_cond(c: &Cond, row: &dyn Row, ctx: &QueryCtx, names: &dyn NameResolver) 
             let today = ctx.now.with_timezone(&ctx.timezone).date_naive();
             match (
                 cell_day(field, stored, ctx.timezone),
-                resolve_range(operand, today),
+                resolve_range(operand, today, ctx.week_start),
             ) {
                 (Some(d), Some((start, end))) => start <= d && d <= end,
                 _ => false,

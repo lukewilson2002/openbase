@@ -139,6 +139,12 @@ pub enum DateOperand {
     NextNumberOfDays { days: u32 },
     ThisCalendarMonth,
     ThisCalendarYear,
+    // weeks start on the viewer's week start (request, else profile, else Sunday)
+    ThisCalendarWeek,
+    NextCalendarWeek,
+    LastCalendarWeek,
+    NextCalendarMonth,
+    LastCalendarMonth,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
