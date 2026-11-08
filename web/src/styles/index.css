@@ -208,6 +208,7 @@
   --radius-md: 0.5rem; /* 8 */
   --radius-lg: 0.75rem; /* 12 */
   --radius-xl: 1rem; /* 16 */
+  --radius-tile: 0.625rem; /* 10: the record page's tile (REC-2), between a button and a card */
   --radius-pill: 999px;
 
   /* Control heights (h-control-md, min-h-control-touch ...) and row heights (h-row-table ...). */

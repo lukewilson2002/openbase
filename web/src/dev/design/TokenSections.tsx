@@ -199,12 +199,13 @@ export function RadiusSection() {
     ["rounded-xs", "rounded-xs", "4 · kbd, marks"],
     ["rounded-sm", "rounded-sm", "6 · chips in inputs, link chips"],
     ["rounded-md", "rounded-md", "8 · buttons, inputs, nav rows"],
+    ["rounded-tile", "rounded-tile", "10 · the record page's tile"],
     ["rounded-lg", "rounded-lg", "12 · cards, popovers, embeds"],
     ["rounded-xl", "rounded-xl", "16 · bottom sheets, phone cards"],
     ["rounded-pill", "rounded-pill", "999 · status chips, avatars"],
   ];
   return (
-    <Section section={byId("radius")} note="--radius-xs to --radius-xl and --radius-pill. They replace Tailwind's own steps of the same names.">
+    <Section section={byId("radius")} note="--radius-xs to --radius-xl, --radius-tile and --radius-pill. They replace Tailwind's own steps of the same names.">
       <Gallery>
         {radii.map(([name, cls, spec]) => (
           <State key={name} label={`${name} · ${spec}`} className="w-40">

@@ -13,9 +13,16 @@ import { jsonEqual, parseText } from "@/lib/cells/parse";
 import { toWire } from "@/lib/cells/wire";
 
 /** How long "Saved" stays in the bar. */
-const SAVED_VISIBLE_MS = 3000;
+export const SAVED_VISIBLE_MS = 3000;
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
+
+const URGENCY: Record<SaveState, number> = { idle: 0, saved: 1, error: 2, saving: 3 };
+
+/** One status for the bar out of several things being saved: what is still going on, else what failed, else what was saved. */
+export function combineSaveStates(...states: SaveState[]): SaveState {
+  return states.reduce<SaveState>((worst, s) => (URGENCY[s] > URGENCY[worst] ? s : worst), "idle");
+}
 
 /** Nothing in a field: an empty list, no text, unchecked are all "no value", whichever way an editor says so. */
 const isBlank = (v: unknown) => v === null || v === undefined || v === "" || v === false || (Array.isArray(v) && v.length === 0);

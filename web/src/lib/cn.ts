@@ -26,7 +26,7 @@ const twMerge = extendTailwindMerge({
         "capture",
         "capture-phone",
       ],
-      radius: ["pill"],
+      radius: ["pill", "tile"],
       spacing: [
         "control-sm",
         "control-md",

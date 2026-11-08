@@ -23,17 +23,20 @@ import { canConfigureView, draftActions, draftLayout, type DraftActions } from "
 import { readDraft, useDraftUser, useViewDraft, writeDraft } from "../drafts/store";
 
 /**
- * The field layout (order and hidden fields) of the table's records wherever they are shown outside
- * a grid (the record panel opened from other views, linked records' cards and previews): the
- * table's default grid's, as it is saved. A table from before default grids existed uses its first
+ * The view that lays out the table's records wherever they are shown outside a grid (the record page,
+ * linked records' cards and previews): the table's default grid, as it is saved. A table from before default grids existed uses its first
  * shared grid, else any grid; null when it has none. A person's drafts are for the view they are
  * made in and do not reach the other places records show.
  */
-export function gridRecordLayout(table: Pick<Table, "views">): Pick<ViewConfig, "field_order" | "hidden_fields"> | null {
+export function recordLayoutView(table: Pick<Table, "views">): View | null {
   const grids = table.views.filter((v) => v.type === "grid");
-  const grid = grids.find((v) => v.is_default) ?? grids.find((v) => !v.personal) ?? grids[0];
-  if (!grid) return null;
-  return { field_order: grid.config.field_order, hidden_fields: grid.config.hidden_fields };
+  return grids.find((v) => v.is_default) ?? grids.find((v) => !v.personal) ?? grids[0] ?? null;
+}
+
+/** The field layout (order and hidden fields) of `recordLayoutView`. */
+export function gridRecordLayout(table: Pick<Table, "views">): Pick<ViewConfig, "field_order" | "hidden_fields"> | null {
+  const grid = recordLayoutView(table);
+  return grid ? { field_order: grid.config.field_order, hidden_fields: grid.config.hidden_fields } : null;
 }
 
 /**
@@ -260,7 +263,7 @@ export function useViewConfig(schema: BaseSchema, table: Table, view: View, role
   };
 }
 
-function replaceViewConfig(schema: BaseSchema, tableId: string, viewId: string, config: ViewConfig): BaseSchema {
+export function replaceViewConfig(schema: BaseSchema, tableId: string, viewId: string, config: ViewConfig): BaseSchema {
   return {
     ...schema,
     tables: schema.tables.map((t) => (t.id === tableId ? { ...t, views: t.views.map((v) => (v.id === viewId ? { ...v, config } : v)) } : t)),
