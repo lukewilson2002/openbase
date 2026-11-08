@@ -408,6 +408,30 @@
         {
           "fields": [
             {
+              "id": "fldtitledtitle",
+              "name": "Title",
+              "type": "richText"
+            },
+            {
+              "id": "fldtitlednote",
+              "name": "Note",
+              "type": "singleLineText"
+            }
+          ],
+          "id": "tbltitled",
+          "name": "Rich titles",
+          "primaryFieldId": "fldtitledtitle",
+          "views": [
+            {
+              "id": "viwdeftitled",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
               "id": "fldhabitsname",
               "name": "Name",
               "type": "singleLineText"
@@ -2204,6 +2228,53 @@
           "status": 200
         }
       ]
+    },
+    "tbltitled": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Note": "n",
+                  "Title": "A **bold** title"
+                },
+                "id": "rectitled1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldtitlednote": "n",
+                  "fldtitledtitle": "A **bold** title"
+                },
+                "id": "rectitled1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Note": "n",
+            "Title": "A **bold** title"
+          },
+          "id": "rectitled1"
+        },
+        "status": 200
+      }
     }
   }
 }

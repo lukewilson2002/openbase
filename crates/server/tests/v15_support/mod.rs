@@ -483,10 +483,28 @@ fn tables() -> Vec<Tbl> {
         "sales",
         "Collision A",
         4.0,
-        vec![text("name", "Name"), text("page", "Page")],
+        vec![
+            text("name", "Name"),
+            text("page", "Page"),
+            // Trashed fields are never picked as the Home date or Done property.
+            trashed(date("olddue", "Due")),
+            trashed(check("olddone", "Done")),
+        ],
         vec![rec(
             1,
             vec![("name", json!("a1")), ("page", json!("not a page"))],
+        )],
+    ));
+    // The only rich text field is the title itself: it cannot also be the page.
+    out.push(tbl(
+        "titled",
+        "sales",
+        "Rich titles",
+        7.5,
+        vec![rich("title", "Title"), text("note", "Note")],
+        vec![rec(
+            1,
+            vec![("title", json!("A **bold** title")), ("note", json!("n"))],
         )],
     ));
     out.push(tbl(
