@@ -1,0 +1,65 @@
+{
+  "no_token": {
+    "body": {
+      "error": {
+        "message": "This API needs an API token: send the header \"Authorization: Bearer <token>\". Session cookies are not accepted.",
+        "type": "AUTHENTICATION_REQUIRED"
+      }
+    },
+    "status": 401
+  },
+  "other_workspace_base": {
+    "body": {
+      "error": {
+        "message": "base not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "trashed_base_tables": {
+    "body": {
+      "error": {
+        "message": "base not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "trashed_record": {
+    "body": {
+      "error": {
+        "message": "Record not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "trashed_table_by_id": {
+    "body": {
+      "error": {
+        "message": "Table not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "trashed_table_by_name": {
+    "body": {
+      "error": {
+        "message": "Table not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "unknown_table": {
+    "body": {
+      "error": {
+        "message": "Table not found",
+        "type": "NOT_FOUND"
+      }
+    },
+    "status": 404
+  }
+}

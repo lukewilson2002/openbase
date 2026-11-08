@@ -1,0 +1,2209 @@
+{
+  "meta": {
+    "body": {
+      "tables": [
+        {
+          "description": "What needs doing",
+          "fields": [
+            {
+              "id": "fldtaskstitle",
+              "name": "Title",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldtasksnotes",
+              "name": "Notes",
+              "type": "multilineText"
+            },
+            {
+              "id": "fldtaskscomplete",
+              "name": "Complete",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldtasksdone",
+              "name": "Done",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldtasksstart",
+              "name": "Start",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldtasksdue",
+              "name": "Due",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldtasksprio",
+              "name": "Priority",
+              "options": {
+                "choices": [
+                  {
+                    "color": "blue",
+                    "id": "seltasksprioHigh",
+                    "name": "High"
+                  },
+                  {
+                    "color": "red",
+                    "id": "seltasksprioMedium",
+                    "name": "Medium"
+                  },
+                  {
+                    "color": "green",
+                    "id": "seltasksprioLow",
+                    "name": "Low"
+                  }
+                ]
+              },
+              "type": "singleSelect"
+            },
+            {
+              "id": "fldtaskshours",
+              "name": "Hours",
+              "options": {
+                "precision": 1
+              },
+              "type": "number"
+            },
+            {
+              "id": "fldtaskstags",
+              "name": "Tags",
+              "options": {
+                "choices": [
+                  {
+                    "color": "blue",
+                    "id": "seltaskstagshome",
+                    "name": "home"
+                  },
+                  {
+                    "color": "red",
+                    "id": "seltaskstagswork",
+                    "name": "work"
+                  }
+                ]
+              },
+              "type": "multipleSelects"
+            },
+            {
+              "id": "fldtaskseverything",
+              "name": "Everything",
+              "options": {
+                "inverseLinkFieldId": "fldeverythinglinks",
+                "isReversed": false,
+                "linkedTableId": "tbleverything",
+                "prefersSingleRecordLink": false
+              },
+              "type": "multipleRecordLinks"
+            }
+          ],
+          "id": "tbltasks",
+          "name": "Tasks",
+          "primaryFieldId": "fldtaskstitle",
+          "views": [
+            {
+              "id": "viwdeftasks",
+              "name": "Default grid",
+              "type": "grid"
+            },
+            {
+              "id": "viwtasksboard",
+              "name": "Board",
+              "type": "kanban"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldclientsname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldclientsemail",
+              "name": "Email",
+              "type": "email"
+            },
+            {
+              "id": "fldclientsphone",
+              "name": "Phone",
+              "type": "phoneNumber"
+            },
+            {
+              "id": "fldclientssite",
+              "name": "Site",
+              "type": "url"
+            },
+            {
+              "id": "fldclientsrating",
+              "name": "Rating",
+              "options": {
+                "color": "yellow",
+                "icon": "star",
+                "max": 5
+              },
+              "type": "rating"
+            },
+            {
+              "id": "fldclientsbrief",
+              "name": "Brief",
+              "type": "richText"
+            },
+            {
+              "id": "fldclientsdeadline",
+              "name": "DEADLINE",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldclientscompleted",
+              "name": "Completed",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldclientsowner",
+              "name": "Owner",
+              "type": "singleCollaborator"
+            },
+            {
+              "id": "fldclientslogo",
+              "name": "Logo",
+              "options": {
+                "isReversed": false
+              },
+              "type": "multipleAttachments"
+            }
+          ],
+          "id": "tblclients",
+          "name": "Clients",
+          "primaryFieldId": "fldclientsname",
+          "views": [
+            {
+              "id": "viwdefclients",
+              "name": "Default grid",
+              "type": "grid"
+            },
+            {
+              "id": "viwclientsform",
+              "name": "New client form",
+              "type": "form"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldmeetingstopic",
+              "name": "Topic",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldmeetingsstart",
+              "name": "Start",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                },
+                "timeFormat": {
+                  "format": "HH:mm",
+                  "name": "24hour"
+                },
+                "timeZone": "client"
+              },
+              "type": "dateTime"
+            },
+            {
+              "id": "fldmeetingswhen",
+              "name": "When",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                },
+                "timeFormat": {
+                  "format": "HH:mm",
+                  "name": "24hour"
+                },
+                "timeZone": "Europe/Paris"
+              },
+              "type": "dateTime"
+            },
+            {
+              "id": "fldmeetingsagenda",
+              "name": "Agenda",
+              "type": "richText"
+            },
+            {
+              "id": "fldmeetingsminutes",
+              "name": "Minutes",
+              "type": "richText"
+            },
+            {
+              "id": "fldmeetingsattended",
+              "name": "Attended",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            }
+          ],
+          "id": "tblmeetings",
+          "name": "Meetings",
+          "primaryFieldId": "fldmeetingstopic",
+          "views": [
+            {
+              "id": "viwdefmeetings",
+              "name": "Default grid",
+              "type": "grid"
+            },
+            {
+              "id": "viwmeetingsagenda",
+              "name": "Agenda only",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldpageaname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldpageapage",
+              "name": "Page",
+              "type": "singleLineText"
+            }
+          ],
+          "id": "tblpagea",
+          "name": "Collision A",
+          "primaryFieldId": "fldpageaname",
+          "views": [
+            {
+              "id": "viwdefpagea",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldpagebname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldpagebpagelo",
+              "name": "page",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldpagebpage2",
+              "name": "Page 2",
+              "options": {
+                "precision": 1
+              },
+              "type": "number"
+            }
+          ],
+          "id": "tblpageb",
+          "name": "Collision B",
+          "primaryFieldId": "fldpagebname",
+          "views": [
+            {
+              "id": "viwdefpageb",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldpagecname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldpagecbody",
+              "name": "Body",
+              "type": "richText"
+            }
+          ],
+          "id": "tblpagec",
+          "name": "Collision C",
+          "primaryFieldId": "fldpagecname",
+          "views": [
+            {
+              "id": "viwdefpagec",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldpagedname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldpagedpg",
+              "name": "Page",
+              "type": "richText"
+            },
+            {
+              "id": "fldpagedextra",
+              "name": "Extra",
+              "type": "richText"
+            }
+          ],
+          "id": "tblpaged",
+          "name": "Collision D",
+          "primaryFieldId": "fldpagedname",
+          "views": [
+            {
+              "id": "viwdefpaged",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldhabitsname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldhabitsduetext",
+              "name": "Due",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldhabitsdate",
+              "name": "Date",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldhabitsdonetext",
+              "name": "Done",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldhabitscomplete",
+              "name": "complete",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            }
+          ],
+          "id": "tblhabits",
+          "name": "Habits",
+          "primaryFieldId": "fldhabitsname",
+          "views": [
+            {
+              "id": "viwdefhabits",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        },
+        {
+          "fields": [
+            {
+              "id": "fldeverythingtitle",
+              "name": "Title",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldeverythinglong",
+              "name": "Long",
+              "type": "multilineText"
+            },
+            {
+              "id": "fldeverythingrich",
+              "name": "Rich",
+              "type": "richText"
+            },
+            {
+              "id": "fldeverythingnum",
+              "name": "Num",
+              "options": {
+                "precision": 2
+              },
+              "type": "number"
+            },
+            {
+              "id": "fldeverythingcur",
+              "name": "Cur",
+              "options": {
+                "precision": 2,
+                "symbol": "EUR"
+              },
+              "type": "currency"
+            },
+            {
+              "id": "fldeverythingpct",
+              "name": "Pct",
+              "options": {
+                "precision": 1
+              },
+              "type": "percent"
+            },
+            {
+              "id": "fldeverythingdur",
+              "name": "Dur",
+              "options": {
+                "durationFormat": "h:mm:ss"
+              },
+              "type": "duration"
+            },
+            {
+              "id": "fldeverythingrate",
+              "name": "Rate",
+              "options": {
+                "color": "yellow",
+                "icon": "star",
+                "max": 5
+              },
+              "type": "rating"
+            },
+            {
+              "id": "fldeverythingcheck",
+              "name": "Check",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldeverythingsel",
+              "name": "Sel",
+              "options": {
+                "choices": [
+                  {
+                    "color": "blue",
+                    "id": "seleverythingselRed",
+                    "name": "Red"
+                  },
+                  {
+                    "color": "red",
+                    "id": "seleverythingselGreen",
+                    "name": "Green"
+                  }
+                ]
+              },
+              "type": "singleSelect"
+            },
+            {
+              "id": "fldeverythingmulti",
+              "name": "Multi",
+              "options": {
+                "choices": [
+                  {
+                    "color": "blue",
+                    "id": "seleverythingmultix",
+                    "name": "x"
+                  },
+                  {
+                    "color": "red",
+                    "id": "seleverythingmultiy",
+                    "name": "y"
+                  },
+                  {
+                    "color": "green",
+                    "id": "seleverythingmultiz",
+                    "name": "z"
+                  }
+                ]
+              },
+              "type": "multipleSelects"
+            },
+            {
+              "id": "fldeverythingday",
+              "name": "Day",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            },
+            {
+              "id": "fldeverythingmoment",
+              "name": "Moment",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                },
+                "timeFormat": {
+                  "format": "HH:mm",
+                  "name": "24hour"
+                },
+                "timeZone": "Europe/Paris"
+              },
+              "type": "dateTime"
+            },
+            {
+              "id": "fldeverythingemail",
+              "name": "Email",
+              "type": "email"
+            },
+            {
+              "id": "fldeverythingurl",
+              "name": "Url",
+              "type": "url"
+            },
+            {
+              "id": "fldeverythingphone",
+              "name": "Phone",
+              "type": "phoneNumber"
+            },
+            {
+              "id": "fldeverythingfiles",
+              "name": "Files",
+              "options": {
+                "isReversed": false
+              },
+              "type": "multipleAttachments"
+            },
+            {
+              "id": "fldeverythingowner",
+              "name": "Owner",
+              "type": "singleCollaborator"
+            },
+            {
+              "id": "fldeverythingteam",
+              "name": "Team",
+              "type": "multipleCollaborators"
+            },
+            {
+              "id": "fldeverythingcode",
+              "name": "Code",
+              "type": "barcode"
+            },
+            {
+              "id": "fldeverythinglinks",
+              "name": "Links",
+              "options": {
+                "inverseLinkFieldId": "fldtaskseverything",
+                "isReversed": false,
+                "linkedTableId": "tbltasks",
+                "prefersSingleRecordLink": false
+              },
+              "type": "multipleRecordLinks"
+            },
+            {
+              "id": "fldeverythingcalc",
+              "name": "Calc",
+              "options": {
+                "isValid": true,
+                "referencedFieldIds": [
+                  "fldeverythingnum"
+                ],
+                "result": {
+                  "options": {
+                    "precision": 8
+                  },
+                  "type": "number"
+                }
+              },
+              "type": "formula"
+            },
+            {
+              "id": "fldeverythingnames",
+              "name": "Names",
+              "options": {
+                "fieldIdInLinkedTable": "fldtaskstitle",
+                "isValid": true,
+                "recordLinkFieldId": "fldeverythinglinks",
+                "result": {
+                  "type": "singleLineText"
+                }
+              },
+              "type": "multipleLookupValues"
+            },
+            {
+              "id": "fldeverythinghoursum",
+              "name": "HourSum",
+              "options": {
+                "fieldIdInLinkedTable": "fldtaskshours",
+                "isValid": true,
+                "recordLinkFieldId": "fldeverythinglinks",
+                "referencedFieldIds": [],
+                "result": {
+                  "options": {
+                    "precision": 8
+                  },
+                  "type": "number"
+                }
+              },
+              "type": "rollup"
+            },
+            {
+              "id": "fldeverythingcnt",
+              "name": "Cnt",
+              "options": {
+                "isValid": true,
+                "recordLinkFieldId": "fldeverythinglinks"
+              },
+              "type": "count"
+            },
+            {
+              "id": "fldeverythingcreated",
+              "name": "Created",
+              "options": {
+                "result": {
+                  "options": {
+                    "dateFormat": {
+                      "format": "YYYY-MM-DD",
+                      "name": "iso"
+                    },
+                    "timeFormat": {
+                      "format": "HH:mm",
+                      "name": "24hour"
+                    },
+                    "timeZone": "client"
+                  },
+                  "type": "dateTime"
+                }
+              },
+              "type": "createdTime"
+            },
+            {
+              "id": "fldeverythingmodified",
+              "name": "Modified",
+              "options": {
+                "isValid": true,
+                "referencedFieldIds": [],
+                "result": {
+                  "options": {
+                    "dateFormat": {
+                      "format": "YYYY-MM-DD",
+                      "name": "iso"
+                    },
+                    "timeFormat": {
+                      "format": "HH:mm",
+                      "name": "24hour"
+                    },
+                    "timeZone": "client"
+                  },
+                  "type": "dateTime"
+                }
+              },
+              "type": "lastModifiedTime"
+            },
+            {
+              "id": "fldeverythingcreatedby",
+              "name": "CreatedBy",
+              "type": "createdBy"
+            },
+            {
+              "id": "fldeverythingmodifiedby",
+              "name": "ModifiedBy",
+              "options": {
+                "referencedFieldIds": []
+              },
+              "type": "lastModifiedBy"
+            },
+            {
+              "id": "fldeverythingauto",
+              "name": "Auto",
+              "type": "autoNumber"
+            },
+            {
+              "id": "fldeverythingbtn",
+              "name": "Btn",
+              "options": {
+                "label": "Open"
+              },
+              "type": "button"
+            }
+          ],
+          "id": "tbleverything",
+          "name": "Everything",
+          "primaryFieldId": "fldeverythingtitle",
+          "views": [
+            {
+              "id": "viwdefeverything",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "tables": {
+    "tblclients": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Brief": "# Brief\n\nBuilds **TPS reports**.\n\n- one\n- two\n",
+                  "DEADLINE": "2026-12-01",
+                  "Email": "hello@initech.example",
+                  "Logo": [
+                    {
+                      "filename": "logo.png",
+                      "height": 64,
+                      "id": "attlogo",
+                      "size": 4096,
+                      "type": "image/png",
+                      "url": "http://localhost:8080/api/attachments/attlogo/logo.png",
+                      "width": 64
+                    }
+                  ],
+                  "Name": "Initech",
+                  "Owner": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "Phone": "+1 555 0100",
+                  "Rating": 4,
+                  "Site": "https://initech.example"
+                },
+                "id": "recclients1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Brief": "Plain paragraph with `code`.",
+                  "Completed": true,
+                  "Email": "info@globex.example",
+                  "Name": "Globex"
+                },
+                "id": "recclients2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Name": "Umbrella"
+                },
+                "id": "recclients3"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldclientsbrief": "# Brief\n\nBuilds **TPS reports**.\n\n- one\n- two\n",
+                  "fldclientsdeadline": "2026-12-01",
+                  "fldclientsemail": "hello@initech.example",
+                  "fldclientslogo": [
+                    {
+                      "filename": "logo.png",
+                      "height": 64,
+                      "id": "attlogo",
+                      "size": 4096,
+                      "type": "image/png",
+                      "url": "http://localhost:8080/api/attachments/attlogo/logo.png",
+                      "width": 64
+                    }
+                  ],
+                  "fldclientsname": "Initech",
+                  "fldclientsowner": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "fldclientsphone": "+1 555 0100",
+                  "fldclientsrating": 4,
+                  "fldclientssite": "https://initech.example"
+                },
+                "id": "recclients1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldclientsbrief": "Plain paragraph with `code`.",
+                  "fldclientscompleted": true,
+                  "fldclientsemail": "info@globex.example",
+                  "fldclientsname": "Globex"
+                },
+                "id": "recclients2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "fldclientsname": "Umbrella"
+                },
+                "id": "recclients3"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Brief": "# Brief\n\nBuilds **TPS reports**.\n\n- one\n- two\n",
+            "DEADLINE": "2026-12-01",
+            "Email": "hello@initech.example",
+            "Logo": [
+              {
+                "filename": "logo.png",
+                "height": 64,
+                "id": "attlogo",
+                "size": 4096,
+                "type": "image/png",
+                "url": "http://localhost:8080/api/attachments/attlogo/logo.png",
+                "width": 64
+              }
+            ],
+            "Name": "Initech",
+            "Owner": {
+              "email": "ann@example.com",
+              "id": "usrann",
+              "name": "Ann Editor"
+            },
+            "Phone": "+1 555 0100",
+            "Rating": 4,
+            "Site": "https://initech.example"
+          },
+          "id": "recclients1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Brief": "Plain paragraph with `code`.",
+            "Completed": true,
+            "Email": "info@globex.example",
+            "Name": "Globex"
+          },
+          "id": "recclients2"
+        },
+        "status": 200
+      }
+    },
+    "tbleverything": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Auto": 1,
+                  "Calc": 25,
+                  "Check": true,
+                  "Cnt": 2,
+                  "Code": {
+                    "text": "4006381333931"
+                  },
+                  "Created": "2026-01-02T00:00:00.000Z",
+                  "CreatedBy": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "Cur": 99.99,
+                  "Day": "2026-11-07",
+                  "Dur": 3725,
+                  "Email": "someone@example.com",
+                  "Files": [
+                    {
+                      "filename": "spec.pdf",
+                      "id": "attspec",
+                      "size": 1234,
+                      "type": "application/pdf",
+                      "url": "http://localhost:8080/api/attachments/attspec/spec.pdf"
+                    }
+                  ],
+                  "HourSum": 8.5,
+                  "Links": [
+                    "rectasks1",
+                    "rectasks2"
+                  ],
+                  "Long": "first line\nsecond line",
+                  "Modified": "2026-01-02T01:00:00.000Z",
+                  "ModifiedBy": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "Moment": "2026-11-07T13:45:00.000Z",
+                  "Multi": [
+                    "x",
+                    "z"
+                  ],
+                  "Names": [
+                    "Write the spec",
+                    "Book the venue"
+                  ],
+                  "Num": 12.5,
+                  "Owner": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "Pct": 0.256,
+                  "Phone": "+44 20 7946 0958",
+                  "Rate": 3,
+                  "Rich": "## Heading\n\nSome *rich* text with a [link](https://example.com).",
+                  "Sel": "Red",
+                  "Team": [
+                    {
+                      "email": "olive@example.com",
+                      "id": "usrolive",
+                      "name": "Olive Owner"
+                    },
+                    {
+                      "email": "ann@example.com",
+                      "id": "usrann",
+                      "name": "Ann Editor"
+                    }
+                  ],
+                  "Title": "Everything one",
+                  "Url": "https://example.com/path?q=1"
+                },
+                "id": "receverything1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Auto": 2,
+                  "Calc": -6,
+                  "Cnt": 1,
+                  "Created": "2026-01-03T00:00:00.000Z",
+                  "CreatedBy": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "HourSum": 2,
+                  "Links": [
+                    "rectasks2"
+                  ],
+                  "Modified": "2026-01-03T01:00:00.000Z",
+                  "ModifiedBy": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "Names": [
+                    "Book the venue"
+                  ],
+                  "Num": -3,
+                  "Title": "Everything two"
+                },
+                "id": "receverything2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Auto": 3,
+                  "Created": "2026-01-04T00:00:00.000Z",
+                  "CreatedBy": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "Modified": "2026-01-04T01:00:00.000Z",
+                  "ModifiedBy": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "Title": "Everything three, otherwise empty"
+                },
+                "id": "receverything3"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldeverythingauto": 1,
+                  "fldeverythingcalc": 25,
+                  "fldeverythingcheck": true,
+                  "fldeverythingcnt": 2,
+                  "fldeverythingcode": {
+                    "text": "4006381333931"
+                  },
+                  "fldeverythingcreated": "2026-01-02T00:00:00.000Z",
+                  "fldeverythingcreatedby": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "fldeverythingcur": 99.99,
+                  "fldeverythingday": "2026-11-07",
+                  "fldeverythingdur": 3725,
+                  "fldeverythingemail": "someone@example.com",
+                  "fldeverythingfiles": [
+                    {
+                      "filename": "spec.pdf",
+                      "id": "attspec",
+                      "size": 1234,
+                      "type": "application/pdf",
+                      "url": "http://localhost:8080/api/attachments/attspec/spec.pdf"
+                    }
+                  ],
+                  "fldeverythinghoursum": 8.5,
+                  "fldeverythinglinks": [
+                    "rectasks1",
+                    "rectasks2"
+                  ],
+                  "fldeverythinglong": "first line\nsecond line",
+                  "fldeverythingmodified": "2026-01-02T01:00:00.000Z",
+                  "fldeverythingmodifiedby": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "fldeverythingmoment": "2026-11-07T13:45:00.000Z",
+                  "fldeverythingmulti": [
+                    "x",
+                    "z"
+                  ],
+                  "fldeverythingnames": [
+                    "Write the spec",
+                    "Book the venue"
+                  ],
+                  "fldeverythingnum": 12.5,
+                  "fldeverythingowner": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "fldeverythingpct": 0.256,
+                  "fldeverythingphone": "+44 20 7946 0958",
+                  "fldeverythingrate": 3,
+                  "fldeverythingrich": "## Heading\n\nSome *rich* text with a [link](https://example.com).",
+                  "fldeverythingsel": "Red",
+                  "fldeverythingteam": [
+                    {
+                      "email": "olive@example.com",
+                      "id": "usrolive",
+                      "name": "Olive Owner"
+                    },
+                    {
+                      "email": "ann@example.com",
+                      "id": "usrann",
+                      "name": "Ann Editor"
+                    }
+                  ],
+                  "fldeverythingtitle": "Everything one",
+                  "fldeverythingurl": "https://example.com/path?q=1"
+                },
+                "id": "receverything1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldeverythingauto": 2,
+                  "fldeverythingcalc": -6,
+                  "fldeverythingcnt": 1,
+                  "fldeverythingcreated": "2026-01-03T00:00:00.000Z",
+                  "fldeverythingcreatedby": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "fldeverythinghoursum": 2,
+                  "fldeverythinglinks": [
+                    "rectasks2"
+                  ],
+                  "fldeverythingmodified": "2026-01-03T01:00:00.000Z",
+                  "fldeverythingmodifiedby": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "fldeverythingnames": [
+                    "Book the venue"
+                  ],
+                  "fldeverythingnum": -3,
+                  "fldeverythingtitle": "Everything two"
+                },
+                "id": "receverything2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "fldeverythingauto": 3,
+                  "fldeverythingcreated": "2026-01-04T00:00:00.000Z",
+                  "fldeverythingcreatedby": {
+                    "email": "olive@example.com",
+                    "id": "usrolive",
+                    "name": "Olive Owner"
+                  },
+                  "fldeverythingmodified": "2026-01-04T01:00:00.000Z",
+                  "fldeverythingmodifiedby": {
+                    "email": "ann@example.com",
+                    "id": "usrann",
+                    "name": "Ann Editor"
+                  },
+                  "fldeverythingtitle": "Everything three, otherwise empty"
+                },
+                "id": "receverything3"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Auto": 1,
+            "Calc": 25,
+            "Check": true,
+            "Cnt": 2,
+            "Code": {
+              "text": "4006381333931"
+            },
+            "Created": "2026-01-02T00:00:00.000Z",
+            "CreatedBy": {
+              "email": "olive@example.com",
+              "id": "usrolive",
+              "name": "Olive Owner"
+            },
+            "Cur": 99.99,
+            "Day": "2026-11-07",
+            "Dur": 3725,
+            "Email": "someone@example.com",
+            "Files": [
+              {
+                "filename": "spec.pdf",
+                "id": "attspec",
+                "size": 1234,
+                "type": "application/pdf",
+                "url": "http://localhost:8080/api/attachments/attspec/spec.pdf"
+              }
+            ],
+            "HourSum": 8.5,
+            "Links": [
+              "rectasks1",
+              "rectasks2"
+            ],
+            "Long": "first line\nsecond line",
+            "Modified": "2026-01-02T01:00:00.000Z",
+            "ModifiedBy": {
+              "email": "ann@example.com",
+              "id": "usrann",
+              "name": "Ann Editor"
+            },
+            "Moment": "2026-11-07T13:45:00.000Z",
+            "Multi": [
+              "x",
+              "z"
+            ],
+            "Names": [
+              "Write the spec",
+              "Book the venue"
+            ],
+            "Num": 12.5,
+            "Owner": {
+              "email": "ann@example.com",
+              "id": "usrann",
+              "name": "Ann Editor"
+            },
+            "Pct": 0.256,
+            "Phone": "+44 20 7946 0958",
+            "Rate": 3,
+            "Rich": "## Heading\n\nSome *rich* text with a [link](https://example.com).",
+            "Sel": "Red",
+            "Team": [
+              {
+                "email": "olive@example.com",
+                "id": "usrolive",
+                "name": "Olive Owner"
+              },
+              {
+                "email": "ann@example.com",
+                "id": "usrann",
+                "name": "Ann Editor"
+              }
+            ],
+            "Title": "Everything one",
+            "Url": "https://example.com/path?q=1"
+          },
+          "id": "receverything1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Auto": 2,
+            "Calc": -6,
+            "Cnt": 1,
+            "Created": "2026-01-03T00:00:00.000Z",
+            "CreatedBy": {
+              "email": "olive@example.com",
+              "id": "usrolive",
+              "name": "Olive Owner"
+            },
+            "HourSum": 2,
+            "Links": [
+              "rectasks2"
+            ],
+            "Modified": "2026-01-03T01:00:00.000Z",
+            "ModifiedBy": {
+              "email": "ann@example.com",
+              "id": "usrann",
+              "name": "Ann Editor"
+            },
+            "Names": [
+              "Book the venue"
+            ],
+            "Num": -3,
+            "Title": "Everything two"
+          },
+          "id": "receverything2"
+        },
+        "status": 200
+      }
+    },
+    "tblhabits": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Date": "2026-11-11",
+                  "Done": "yes",
+                  "Due": "tomorrow",
+                  "Name": "Stretch",
+                  "complete": true
+                },
+                "id": "rechabits1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Name": "Read"
+                },
+                "id": "rechabits2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldhabitscomplete": true,
+                  "fldhabitsdate": "2026-11-11",
+                  "fldhabitsdonetext": "yes",
+                  "fldhabitsduetext": "tomorrow",
+                  "fldhabitsname": "Stretch"
+                },
+                "id": "rechabits1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldhabitsname": "Read"
+                },
+                "id": "rechabits2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Date": "2026-11-11",
+            "Done": "yes",
+            "Due": "tomorrow",
+            "Name": "Stretch",
+            "complete": true
+          },
+          "id": "rechabits1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Name": "Read"
+          },
+          "id": "rechabits2"
+        },
+        "status": 200
+      }
+    },
+    "tblmeetings": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Agenda": "1. Intro\n2. Plan",
+                  "Attended": true,
+                  "Minutes": "Agreed on **everything**.",
+                  "Start": "2026-11-10T09:00:00.000Z",
+                  "Topic": "Kickoff",
+                  "When": "2026-11-10T14:30:00.000Z"
+                },
+                "id": "recmeetings1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Topic": "Retro",
+                  "When": "2026-11-20T10:00:00.000Z"
+                },
+                "id": "recmeetings2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldmeetingsagenda": "1. Intro\n2. Plan",
+                  "fldmeetingsattended": true,
+                  "fldmeetingsminutes": "Agreed on **everything**.",
+                  "fldmeetingsstart": "2026-11-10T09:00:00.000Z",
+                  "fldmeetingstopic": "Kickoff",
+                  "fldmeetingswhen": "2026-11-10T14:30:00.000Z"
+                },
+                "id": "recmeetings1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldmeetingstopic": "Retro",
+                  "fldmeetingswhen": "2026-11-20T10:00:00.000Z"
+                },
+                "id": "recmeetings2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Agenda": "1. Intro\n2. Plan",
+            "Attended": true,
+            "Minutes": "Agreed on **everything**.",
+            "Start": "2026-11-10T09:00:00.000Z",
+            "Topic": "Kickoff",
+            "When": "2026-11-10T14:30:00.000Z"
+          },
+          "id": "recmeetings1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Topic": "Retro",
+            "When": "2026-11-20T10:00:00.000Z"
+          },
+          "id": "recmeetings2"
+        },
+        "status": 200
+      }
+    },
+    "tblpagea": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Name": "a1",
+                  "Page": "not a page"
+                },
+                "id": "recpagea1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldpageaname": "a1",
+                  "fldpageapage": "not a page"
+                },
+                "id": "recpagea1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Name": "a1",
+            "Page": "not a page"
+          },
+          "id": "recpagea1"
+        },
+        "status": 200
+      }
+    },
+    "tblpageb": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Name": "b1",
+                  "Page 2": 2,
+                  "page": "lower"
+                },
+                "id": "recpageb1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldpagebname": "b1",
+                  "fldpagebpage2": 2,
+                  "fldpagebpagelo": "lower"
+                },
+                "id": "recpageb1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Name": "b1",
+            "Page 2": 2,
+            "page": "lower"
+          },
+          "id": "recpageb1"
+        },
+        "status": 200
+      }
+    },
+    "tblpagec": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Body": "the live one",
+                  "Name": "c1"
+                },
+                "id": "recpagec1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldpagecbody": "the live one",
+                  "fldpagecname": "c1"
+                },
+                "id": "recpagec1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Body": "the live one",
+            "Name": "c1"
+          },
+          "id": "recpagec1"
+        },
+        "status": 200
+      }
+    },
+    "tblpaged": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Extra": "extra",
+                  "Name": "d1",
+                  "Page": "page one"
+                },
+                "id": "recpaged1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldpagedextra": "extra",
+                  "fldpagedname": "d1",
+                  "fldpagedpg": "page one"
+                },
+                "id": "recpaged1"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Extra": "extra",
+            "Name": "d1",
+            "Page": "page one"
+          },
+          "id": "recpaged1"
+        },
+        "status": 200
+      }
+    },
+    "tbltasks": {
+      "by_name": {
+        "body": {
+          "offset": "<offset>",
+          "records": [
+            {
+              "createdTime": "2026-01-02T00:00:00.000Z",
+              "fields": {
+                "Done": true,
+                "Due": "2026-11-05",
+                "Everything": [
+                  "receverything1"
+                ],
+                "Hours": 6.5,
+                "Notes": "Two pages\nwith a break",
+                "Priority": "High",
+                "Start": "2026-11-01",
+                "Tags": [
+                  "work"
+                ],
+                "Title": "Write the spec"
+              },
+              "id": "rectasks1"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "empty_cells": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldtasksdone": true,
+                  "fldtasksdue": "2026-11-05",
+                  "fldtaskseverything": [
+                    "receverything1"
+                  ],
+                  "fldtaskshours": 6.5,
+                  "fldtasksnotes": "Two pages\nwith a break",
+                  "fldtasksprio": "High",
+                  "fldtasksstart": "2026-11-01",
+                  "fldtaskstags": [
+                    "work"
+                  ],
+                  "fldtaskstitle": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldtasksdue": "2026-11-14",
+                  "fldtaskseverything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "fldtaskshours": 2,
+                  "fldtasksprio": "Medium",
+                  "fldtasksstart": "2026-11-03",
+                  "fldtaskstags": [
+                    "work",
+                    "home"
+                  ],
+                  "fldtaskstitle": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "fldtaskscomplete": true,
+                  "fldtasksdue": "2026-11-09",
+                  "fldtaskshours": 0.5,
+                  "fldtaskstags": [
+                    "home"
+                  ],
+                  "fldtaskstitle": "Water the plants"
+                },
+                "id": "rectasks3"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "fldtasksnotes": "line one\nline two\nline three",
+                  "fldtasksprio": "Low",
+                  "fldtaskstitle": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "formula": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Done": true,
+                  "Due": "2026-11-05",
+                  "Everything": [
+                    "receverything1"
+                  ],
+                  "Hours": 6.5,
+                  "Notes": "Two pages\nwith a break",
+                  "Priority": "High",
+                  "Start": "2026-11-01",
+                  "Tags": [
+                    "work"
+                  ],
+                  "Title": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-14",
+                  "Everything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "Hours": 2,
+                  "Priority": "Medium",
+                  "Start": "2026-11-03",
+                  "Tags": [
+                    "work",
+                    "home"
+                  ],
+                  "Title": "Book the venue"
+                },
+                "id": "rectasks2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Done": true,
+                  "Due": "2026-11-05",
+                  "Everything": [
+                    "receverything1"
+                  ],
+                  "Hours": 6.5,
+                  "Notes": "Two pages\nwith a break",
+                  "Priority": "High",
+                  "Start": "2026-11-01",
+                  "Tags": [
+                    "work"
+                  ],
+                  "Title": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-14",
+                  "Everything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "Hours": 2,
+                  "Priority": "Medium",
+                  "Start": "2026-11-03",
+                  "Tags": [
+                    "work",
+                    "home"
+                  ],
+                  "Title": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Complete": true,
+                  "Due": "2026-11-09",
+                  "Hours": 0.5,
+                  "Tags": [
+                    "home"
+                  ],
+                  "Title": "Water the plants"
+                },
+                "id": "rectasks3"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Notes": "line one\nline two\nline three",
+                  "Priority": "Low",
+                  "Title": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "offset": "<offset>",
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldtasksdone": true,
+                  "fldtasksdue": "2026-11-05",
+                  "fldtaskseverything": [
+                    "receverything1"
+                  ],
+                  "fldtaskshours": 6.5,
+                  "fldtasksnotes": "Two pages\nwith a break",
+                  "fldtasksprio": "High",
+                  "fldtasksstart": "2026-11-01",
+                  "fldtaskstags": [
+                    "work"
+                  ],
+                  "fldtaskstitle": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldtasksdue": "2026-11-14",
+                  "fldtaskseverything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "fldtaskshours": 2,
+                  "fldtasksprio": "Medium",
+                  "fldtasksstart": "2026-11-03",
+                  "fldtaskstags": [
+                    "work",
+                    "home"
+                  ],
+                  "fldtaskstitle": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "fldtaskscomplete": true,
+                  "fldtasksdue": "2026-11-09",
+                  "fldtaskshours": 0.5,
+                  "fldtaskstags": [
+                    "home"
+                  ],
+                  "fldtaskstitle": "Water the plants"
+                },
+                "id": "rectasks3"
+              }
+            ]
+          },
+          "status": 200
+        },
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "fldtasksnotes": "line one\nline two\nline three",
+                  "fldtasksprio": "Low",
+                  "fldtaskstitle": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Done": true,
+            "Due": "2026-11-05",
+            "Everything": [
+              "receverything1"
+            ],
+            "Hours": 6.5,
+            "Notes": "Two pages\nwith a break",
+            "Priority": "High",
+            "Start": "2026-11-01",
+            "Tags": [
+              "work"
+            ],
+            "Title": "Write the spec"
+          },
+          "id": "rectasks1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Due": "2026-11-14",
+            "Everything": [
+              "receverything1",
+              "receverything2"
+            ],
+            "Hours": 2,
+            "Priority": "Medium",
+            "Start": "2026-11-03",
+            "Tags": [
+              "work",
+              "home"
+            ],
+            "Title": "Book the venue"
+          },
+          "id": "rectasks2"
+        },
+        "status": 200
+      },
+      "some_fields": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-05",
+                  "Title": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-14",
+                  "Title": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-09",
+                  "Title": "Water the plants"
+                },
+                "id": "rectasks3"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Title": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "sorted": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Done": true,
+                  "Due": "2026-11-05",
+                  "Everything": [
+                    "receverything1"
+                  ],
+                  "Hours": 6.5,
+                  "Notes": "Two pages\nwith a break",
+                  "Priority": "High",
+                  "Start": "2026-11-01",
+                  "Tags": [
+                    "work"
+                  ],
+                  "Title": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-14",
+                  "Everything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "Hours": 2,
+                  "Priority": "Medium",
+                  "Start": "2026-11-03",
+                  "Tags": [
+                    "work",
+                    "home"
+                  ],
+                  "Title": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Complete": true,
+                  "Due": "2026-11-09",
+                  "Hours": 0.5,
+                  "Tags": [
+                    "home"
+                  ],
+                  "Title": "Water the plants"
+                },
+                "id": "rectasks3"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Notes": "line one\nline two\nline three",
+                  "Priority": "Low",
+                  "Title": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "view": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Done": true,
+                  "Due": "2026-11-05",
+                  "Everything": [
+                    "receverything1"
+                  ],
+                  "Hours": 6.5,
+                  "Notes": "Two pages\nwith a break",
+                  "Priority": "High",
+                  "Start": "2026-11-01",
+                  "Tags": [
+                    "work"
+                  ],
+                  "Title": "Write the spec"
+                },
+                "id": "rectasks1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Due": "2026-11-14",
+                  "Everything": [
+                    "receverything1",
+                    "receverything2"
+                  ],
+                  "Hours": 2,
+                  "Priority": "Medium",
+                  "Start": "2026-11-03",
+                  "Tags": [
+                    "work",
+                    "home"
+                  ],
+                  "Title": "Book the venue"
+                },
+                "id": "rectasks2"
+              },
+              {
+                "createdTime": "2026-01-04T00:00:00.000Z",
+                "fields": {
+                  "Complete": true,
+                  "Due": "2026-11-09",
+                  "Hours": 0.5,
+                  "Tags": [
+                    "home"
+                  ],
+                  "Title": "Water the plants"
+                },
+                "id": "rectasks3"
+              },
+              {
+                "createdTime": "2026-01-06T00:00:00.000Z",
+                "fields": {
+                  "Notes": "line one\nline two\nline three",
+                  "Priority": "Low",
+                  "Title": "Emoji and \"quotes\" 🚀"
+                },
+                "id": "rectasks5"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ]
+    }
+  }
+}

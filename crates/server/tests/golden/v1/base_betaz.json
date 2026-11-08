@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "body": {
+      "tables": [
+        {
+          "fields": [
+            {
+              "id": "fldgoalsname",
+              "name": "Name",
+              "type": "singleLineText"
+            },
+            {
+              "id": "fldgoalsdone",
+              "name": "Done",
+              "options": {
+                "color": "green",
+                "icon": "check"
+              },
+              "type": "checkbox"
+            },
+            {
+              "id": "fldgoalsdeadline",
+              "name": "Deadline",
+              "options": {
+                "dateFormat": {
+                  "format": "YYYY-MM-DD",
+                  "name": "iso"
+                }
+              },
+              "type": "date"
+            }
+          ],
+          "id": "tblgoals",
+          "name": "Goals",
+          "primaryFieldId": "fldgoalsname",
+          "views": [
+            {
+              "id": "viwdefgoals",
+              "name": "Default grid",
+              "type": "grid"
+            }
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "tables": {
+    "tblgoals": {
+      "list": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "Deadline": "2026-12-24",
+                  "Name": "Ship it"
+                },
+                "id": "recgoals1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "Done": true,
+                  "Name": "Rest"
+                },
+                "id": "recgoals2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "list_by_field_id": [
+        {
+          "body": {
+            "records": [
+              {
+                "createdTime": "2026-01-02T00:00:00.000Z",
+                "fields": {
+                  "fldgoalsdeadline": "2026-12-24",
+                  "fldgoalsname": "Ship it"
+                },
+                "id": "recgoals1"
+              },
+              {
+                "createdTime": "2026-01-03T00:00:00.000Z",
+                "fields": {
+                  "fldgoalsdone": true,
+                  "fldgoalsname": "Rest"
+                },
+                "id": "recgoals2"
+              }
+            ]
+          },
+          "status": 200
+        }
+      ],
+      "record_1": {
+        "body": {
+          "createdTime": "2026-01-02T00:00:00.000Z",
+          "fields": {
+            "Deadline": "2026-12-24",
+            "Name": "Ship it"
+          },
+          "id": "recgoals1"
+        },
+        "status": 200
+      },
+      "record_2": {
+        "body": {
+          "createdTime": "2026-01-03T00:00:00.000Z",
+          "fields": {
+            "Done": true,
+            "Name": "Rest"
+          },
+          "id": "recgoals2"
+        },
+        "status": 200
+      }
+    }
+  }
+}
