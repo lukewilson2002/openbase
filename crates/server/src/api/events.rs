@@ -29,9 +29,13 @@
 //!   comment: a `presence_changed` frame without a `user_id`, so a client needs
 //!   no separate GET and cannot miss an arrival in between. It does not receive
 //!   its own arrival a second time.
+//! * **Workspace stream.** `GET /api/workspaces/{id}/events` relays the events of
+//!   every project of the workspace the caller can open, so Home needs one
+//!   connection instead of one per project (see [`stream_workspace_events`]).
 //! * **Echoes.** Every event carries the `client_id` (the `X-Client-Id` of the
 //!   request that caused it) so a client can skip its own changes.
 
+use std::collections::{HashSet, VecDeque};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -49,10 +53,11 @@ use tokio::time::Instant;
 
 use crate::auth::Actor;
 use crate::db::now_ms;
-use crate::error::AppResult;
-use crate::events::PresenceGuard;
+use crate::error::{AppError, AppResult};
+use crate::events::{PresenceGuard, WorkspaceStreamGuard};
 use crate::perm::{self, Role};
 use crate::state::AppState;
+use crate::store::workspaces;
 
 /// Interval of the keep-alive comment.
 pub const KEEP_ALIVE: Duration = Duration::from_secs(15);
@@ -77,6 +82,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/bases/{id}/events", get(stream_events))
         .route("/api/bases/{id}/presence", get(presence))
+        .route("/api/workspaces/{id}/events", get(stream_workspace_events))
 }
 
 /// Who has the base open right now.
@@ -95,10 +101,16 @@ async fn presence(
     }))
 }
 
-/// Whether the actor may still read the base: the user is active, a session
-/// actor's session (or a token actor's API token) is still valid, and the role
-/// is at least Viewer.
+/// Whether the actor may still read the base: the credential is still valid
+/// (see [`actor_valid`]) and the role is at least Viewer.
 fn access_ok(conn: &Connection, actor: &Actor, base_id: &str) -> bool {
+    actor_valid(conn, actor) && perm::require_base(conn, actor, base_id, Role::Viewer).is_ok()
+}
+
+/// Whether the actor's credential still stands: the user is active and a
+/// session actor's session (or a token actor's API token, or an OAuth grant)
+/// has not ended.
+fn actor_valid(conn: &Connection, actor: &Actor) -> bool {
     let active: bool = conn
         .query_row(
             "SELECT is_active FROM users WHERE id = ?1",
@@ -148,7 +160,7 @@ fn access_ok(conn: &Connection, actor: &Actor, base_id: &str) -> bool {
             return false;
         }
     }
-    perm::require_base(conn, actor, base_id, Role::Viewer).is_ok()
+    true
 }
 
 struct Feed {
@@ -284,6 +296,230 @@ async fn stream_events(
         _presence: presence,
     };
     Ok(Sse::new(feed_stream(feed)).keep_alive(
+        KeepAlive::new().interval(Duration::from_millis(KEEP_ALIVE_MS.load(Ordering::Relaxed))),
+    ))
+}
+
+// ------------------------------------------------------- workspace stream
+
+/// The projects of the workspace the actor can open right now.
+fn readable_projects(
+    conn: &Connection,
+    actor: &Actor,
+    workspace_id: &str,
+) -> AppResult<HashSet<String>> {
+    Ok(workspaces::base_ids(conn, workspace_id)?
+        .into_iter()
+        .filter(|b| perm::require_base(conn, actor, b, Role::Viewer).is_ok())
+        .collect())
+}
+
+/// Whether the actor still stands in the workspace: a live credential and a
+/// workspace role. Without them the stream ends.
+fn still_member(conn: &Connection, actor: &Actor, workspace_id: &str) -> bool {
+    actor_valid(conn, actor)
+        && perm::workspace_role(conn, &actor.user_id, workspace_id)
+            .ok()
+            .flatten()
+            .is_some()
+}
+
+struct WorkspaceFeed {
+    state: AppState,
+    actor: Actor,
+    workspace_id: String,
+    /// Every project's events; this stream keeps the ones in `allowed`.
+    rx: broadcast::Receiver<std::sync::Arc<EventEnvelope>>,
+    shutdown: tokio::sync::watch::Receiver<bool>,
+    greeted: bool,
+    /// The projects being relayed. Only this set decides what passes: an event
+    /// of any other project, including every other workspace's, is dropped.
+    allowed: HashSet<String>,
+    /// Synthetic `base_changed` notices waiting to be sent.
+    queue: VecDeque<Event>,
+    next_recheck: Instant,
+    /// Frees the user's stream slot, whichever way the stream ends.
+    _slot: WorkspaceStreamGuard,
+}
+
+impl WorkspaceFeed {
+    /// Re-read which projects the actor can open. A project that appeared or
+    /// vanished since the last look is announced with `base_changed` (all of
+    /// them when `everything`, after a lag). `false`: access to the whole
+    /// workspace is gone and the stream must end.
+    async fn refresh(&mut self, everything: bool) -> bool {
+        self.next_recheck = Instant::now() + recheck_interval();
+        let (actor, ws) = (self.actor.clone(), self.workspace_id.clone());
+        let now = self
+            .state
+            .db
+            .read(move |conn| {
+                still_member(conn, &actor, &ws)
+                    .then(|| readable_projects(conn, &actor, &ws))
+                    .transpose()
+            })
+            .await
+            .unwrap_or(None);
+        let Some(now) = now else {
+            return false;
+        };
+        let mut changed: Vec<&String> = if everything {
+            now.union(&self.allowed).collect()
+        } else {
+            now.symmetric_difference(&self.allowed).collect()
+        };
+        changed.sort();
+        self.queue
+            .extend(changed.into_iter().map(|id| base_changed(id)));
+        self.allowed = now;
+        true
+    }
+
+    /// Whether the actor can open `base_id`, a project of this workspace: only
+    /// `base_changed` events ask (a project created, granted, restored, taken
+    /// away or deleted). `None`: the actor lost the workspace itself.
+    async fn can_open(&mut self, base_id: &str) -> Option<bool> {
+        let (actor, ws, base) = (
+            self.actor.clone(),
+            self.workspace_id.clone(),
+            base_id.to_string(),
+        );
+        self.state
+            .db
+            .read(move |conn| {
+                // Every project of the server passes here: most are another
+                // workspace's and cost one query.
+                let ours: bool = conn
+                    .query_row(
+                        "SELECT count(*) > 0 FROM bases WHERE id = ?1 AND workspace_id = ?2",
+                        [&base, &ws],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(false);
+                if !ours {
+                    return Ok(Some(false));
+                }
+                if !still_member(conn, &actor, &ws) {
+                    return Ok(None);
+                }
+                Ok(Some(
+                    perm::require_base(conn, &actor, &base, Role::Viewer).is_ok(),
+                ))
+            })
+            .await
+            .unwrap_or(None)
+    }
+}
+
+fn workspace_feed_stream(feed: WorkspaceFeed) -> impl Stream<Item = Result<Event, Infallible>> {
+    futures::stream::unfold(feed, |mut feed| async move {
+        if !feed.greeted {
+            feed.greeted = true;
+            return Some((Ok(Event::default().comment("connected")), feed));
+        }
+        loop {
+            if let Some(event) = feed.queue.pop_front() {
+                return Some((Ok(event), feed));
+            }
+            let received = tokio::select! {
+                biased;
+                _ = feed.shutdown.wait_for(|down| *down) => return None,
+                msg = feed.rx.recv() => Some(msg),
+                _ = tokio::time::sleep_until(feed.next_recheck) => None,
+            };
+            match received {
+                None => {
+                    if !feed.refresh(false).await {
+                        return None;
+                    }
+                }
+                Some(Ok(env)) => {
+                    let was = feed.allowed.contains(&env.base_id);
+                    if matches!(env.event, BaseEvent::BaseChanged) {
+                        let now = feed.can_open(&env.base_id).await?;
+                        if now {
+                            feed.allowed.insert(env.base_id.clone());
+                        } else {
+                            feed.allowed.remove(&env.base_id);
+                        }
+                        // A project that just left the list is still announced,
+                        // so the client drops it; one that never was is not.
+                        if now || was {
+                            return Some((Ok(to_sse(&env)), feed));
+                        }
+                    } else if was {
+                        return Some((Ok(to_sse(&env)), feed));
+                    }
+                }
+                Some(Err(RecvError::Lagged(_))) => {
+                    if !feed.refresh(true).await {
+                        return None;
+                    }
+                }
+                Some(Err(RecvError::Closed)) => return None,
+            }
+        }
+    })
+}
+
+/// `GET /api/workspaces/{id}/events`: one stream for all the projects of a
+/// workspace the caller can open, for Home, which cannot hold a connection per
+/// project (a browser allows about six per site).
+///
+/// The messages are the projects' own (`records_changed`, `schema_changed`,
+/// `comments_changed`, `base_changed`) with the same envelope; its `base_id`
+/// says which project an event belongs to. `presence_changed` is never relayed,
+/// and the stream does not count its user as viewing any project: that is what
+/// the per-project stream is for.
+///
+/// Projects created, restored or granted after the stream opened start being
+/// relayed when their `base_changed` passes (creating and duplicating publish
+/// one); a project the caller loses (access removed, project deleted) is
+/// announced once with `base_changed` and then dropped. The whole set is also
+/// re-read every [`RECHECK`] and after a lag, announcing the difference. The
+/// stream ends when the caller leaves the workspace or the credential ends.
+async fn stream_workspace_events(
+    State(state): State<AppState>,
+    actor: Actor,
+    Path(workspace_id): Path<String>,
+) -> AppResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    let slot = state
+        .events
+        .open_workspace_stream(&actor.user_id)
+        .ok_or(AppError::TooManyRequests)?;
+    let (a, w, events) = (actor.clone(), workspace_id.clone(), state.events.clone());
+    let (rx, allowed) = state
+        .db
+        .read(move |conn| {
+            if perm::workspace_role(conn, &a.user_id, &w)?.is_none() {
+                return Err(AppError::not_found("workspace"));
+            }
+            // Subscribe before listing the projects: one created in between is
+            // then seen as an event instead of being missed.
+            let rx = events.subscribe_all();
+            let allowed = readable_projects(conn, &a, &w)?;
+            // A token limited to other workspaces' projects does not see this one.
+            let limited = a.token_scope.as_ref().is_some_and(|s| s.base_ids.is_some());
+            if limited && allowed.is_empty() {
+                return Err(AppError::not_found("workspace"));
+            }
+            Ok((rx, allowed))
+        })
+        .await?;
+    let shutdown = state.events.shutdown_signal();
+    let feed = WorkspaceFeed {
+        state,
+        actor,
+        workspace_id,
+        rx,
+        shutdown,
+        greeted: false,
+        allowed,
+        queue: VecDeque::new(),
+        next_recheck: Instant::now() + recheck_interval(),
+        _slot: slot,
+    };
+    Ok(Sse::new(workspace_feed_stream(feed)).keep_alive(
         KeepAlive::new().interval(Duration::from_millis(KEEP_ALIVE_MS.load(Ordering::Relaxed))),
     ))
 }

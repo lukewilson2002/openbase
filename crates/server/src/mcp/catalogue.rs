@@ -1740,6 +1740,16 @@ pub static ENDPOINTS: &[Endpoint] = &[
         NO_BODY,
         "text/event-stream",
     ),
+    e(
+        GET,
+        "/api/workspaces/{id}/events",
+        "system",
+        "viewer",
+        Blocked,
+        "Server-sent live-update stream of every project of the workspace the caller can open (events carry their project id; never counts as presence): it never ends, so it cannot be returned through a tool call.",
+        NO_BODY,
+        "text/event-stream",
+    ),
 ];
 
 /// Routes that exist in the server but are deliberately not endpoints of the internal API

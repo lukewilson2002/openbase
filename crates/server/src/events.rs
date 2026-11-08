@@ -11,6 +11,14 @@ use tokio::sync::{broadcast, watch};
 use crate::store::versions::DataVersions;
 
 const CHANNEL_CAPACITY: usize = 256;
+/// The all-projects tap carries the traffic of every project at once, so it is
+/// roomier than a single project's channel.
+const TAP_CAPACITY: usize = 1024;
+/// Open workspace event streams one user may hold (see
+/// [`EventBus::open_workspace_stream`]). A browser keeps one per tab and
+/// allows about six connections per site, so this is generous; it stops a
+/// runaway client from holding the server's connections.
+pub const MAX_WORKSPACE_STREAMS_PER_USER: usize = 20;
 
 /// Flipped to `true` when the server begins to shut down.
 #[derive(Clone)]
@@ -19,6 +27,18 @@ struct Shutdown(Arc<watch::Sender<bool>>);
 impl Default for Shutdown {
     fn default() -> Self {
         Shutdown(Arc::new(watch::channel(false).0))
+    }
+}
+
+/// Every project's events in one channel, for the workspace stream
+/// (`GET /api/workspaces/{id}/events`), which relays many projects at once and
+/// so cannot hold a subscription per project.
+#[derive(Clone)]
+struct Tap(broadcast::Sender<Arc<EventEnvelope>>);
+
+impl Default for Tap {
+    fn default() -> Self {
+        Tap(broadcast::channel(TAP_CAPACITY).0)
     }
 }
 
@@ -39,6 +59,33 @@ pub struct EventBus {
     presence: Presence,
     versions: DataVersions,
     shutdown: Shutdown,
+    tap: Tap,
+    /// Open workspace streams per user id.
+    workspace_streams: Arc<Mutex<HashMap<String, usize>>>,
+}
+
+/// One open workspace event stream of a user. Dropping it frees the user's
+/// slot. It is deliberately not [`PresenceGuard`]: a workspace stream never
+/// counts as viewing any project.
+pub struct WorkspaceStreamGuard {
+    bus: EventBus,
+    user_id: String,
+}
+
+impl Drop for WorkspaceStreamGuard {
+    fn drop(&mut self) {
+        let mut map = self
+            .bus
+            .workspace_streams
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if let Some(n) = map.get_mut(&self.user_id) {
+            *n -= 1;
+            if *n == 0 {
+                map.remove(&self.user_id);
+            }
+        }
+    }
 }
 
 /// One open event stream of a user on a base. Dropping it (the stream ended or
@@ -179,6 +226,31 @@ impl EventBus {
             .unwrap_or_default()
     }
 
+    /// Take a slot for a workspace event stream of `user_id`, or `None` when
+    /// they already hold [`MAX_WORKSPACE_STREAMS_PER_USER`].
+    pub fn open_workspace_stream(&self, user_id: &str) -> Option<WorkspaceStreamGuard> {
+        let mut map = self
+            .workspace_streams
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let n = map.entry(user_id.to_string()).or_insert(0);
+        if *n >= MAX_WORKSPACE_STREAMS_PER_USER {
+            return None;
+        }
+        *n += 1;
+        Some(WorkspaceStreamGuard {
+            bus: self.clone(),
+            user_id: user_id.to_string(),
+        })
+    }
+
+    /// The events of every project, in publish order. Presence changes are not
+    /// in it: a workspace stream never takes part in presence. The caller
+    /// filters by project and permission.
+    pub fn subscribe_all(&self) -> broadcast::Receiver<Arc<EventEnvelope>> {
+        self.tap.0.subscribe()
+    }
+
     pub fn subscribe(&self, base_id: &str) -> broadcast::Receiver<Arc<EventEnvelope>> {
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(base_id.to_string())
@@ -202,13 +274,23 @@ impl EventBus {
             self.versions.bump(base_id);
         }
         let mut map = self.channels.lock().unwrap_or_else(|p| p.into_inner());
+        let tapped =
+            !matches!(event, BaseEvent::PresenceChanged { .. }) && self.tap.0.receiver_count() > 0;
+        if !tapped && !map.contains_key(base_id) {
+            return;
+        }
+        let env = Arc::new(EventEnvelope {
+            base_id: base_id.to_string(),
+            client_id,
+            user_id,
+            event,
+        });
+        // Both sends happen under the channels lock, so the tap and the
+        // project's channel see events in the same order.
+        if tapped {
+            let _ = self.tap.0.send(env.clone());
+        }
         if let Some(tx) = map.get(base_id) {
-            let env = Arc::new(EventEnvelope {
-                base_id: base_id.to_string(),
-                client_id,
-                user_id,
-                event,
-            });
             if tx.send(env).is_err() {
                 // No receivers left: drop the channel.
                 map.remove(base_id);
@@ -271,6 +353,32 @@ mod tests {
         assert!(bus.viewers("app1").is_empty());
         // Presence never counts as a data change.
         assert_eq!(bus.versions().current("app1"), 0);
+    }
+
+    #[tokio::test]
+    async fn the_tap_sees_every_project_but_never_presence() {
+        let bus = EventBus::default();
+        let mut tap = bus.subscribe_all();
+        bus.publish("app1", None, None, BaseEvent::BaseChanged);
+        bus.publish("app2", None, None, BaseEvent::BaseChanged);
+        let _guard = bus.join("app1", "usr1");
+        assert_eq!(tap.recv().await.unwrap().base_id, "app1");
+        assert_eq!(tap.recv().await.unwrap().base_id, "app2");
+        assert!(tap.try_recv().is_err(), "presence is not tapped");
+        // A tap alone creates no per-project channel.
+        assert_eq!(bus.active_channels(), 0);
+    }
+
+    #[test]
+    fn workspace_stream_slots_are_limited_per_user_and_freed_on_drop() {
+        let bus = EventBus::default();
+        let held: Vec<_> = (0..MAX_WORKSPACE_STREAMS_PER_USER)
+            .map(|_| bus.open_workspace_stream("usr1").unwrap())
+            .collect();
+        assert!(bus.open_workspace_stream("usr1").is_none());
+        assert!(bus.open_workspace_stream("usr2").is_some());
+        drop(held);
+        assert!(bus.open_workspace_stream("usr1").is_some());
     }
 
     #[test]

@@ -34,9 +34,11 @@ pub fn router() -> Router<AppState> {
 async fn create(
     State(state): State<AppState>,
     actor: Actor,
+    headers: HeaderMap,
     Path(workspace_id): Path<String>,
     ApiJson(body): ApiJson<CreateBase>,
 ) -> AppResult<(StatusCode, Json<BaseSchema>)> {
+    let who = actor.clone();
     let out = state
         .db
         .write(move |tx| {
@@ -46,6 +48,8 @@ async fn create(
             bases::schema(tx, &base, &actor.user_id, role)
         })
         .await?;
+    // Nobody streams the new project yet; the workspace stream (Home) hears of it here.
+    publish(&state, &headers, &who, &out.id, BaseEvent::BaseChanged);
     Ok((StatusCode::CREATED, Json(out)))
 }
 
@@ -150,10 +154,12 @@ async fn remove(
 async fn duplicate(
     State(state): State<AppState>,
     actor: Actor,
+    headers: HeaderMap,
     Path(id): Path<String>,
     OptionalJson(body): OptionalJson<DuplicateBaseBody>,
 ) -> AppResult<(StatusCode, Json<BaseSchema>)> {
     actor.require_capability(Capability::Manage)?;
+    let who = actor.clone();
     let req: DuplicateBase = body.into();
     let out = state
         .db
@@ -166,6 +172,7 @@ async fn duplicate(
             bases::schema(tx, &copy, &actor.user_id, role)
         })
         .await?;
+    publish(&state, &headers, &who, &out.id, BaseEvent::BaseChanged);
     Ok((StatusCode::CREATED, Json(out)))
 }
 

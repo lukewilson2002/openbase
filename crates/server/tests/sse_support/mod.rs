@@ -47,10 +47,24 @@ pub struct Stream {
 }
 
 pub async fn open(app: &TestApp, client: &Client, base_id: &str) -> Opened {
+    open_url(app, client, &format!("/api/bases/{base_id}/events")).await
+}
+
+/// The stream of every project of a workspace (`GET /api/workspaces/{id}/events`).
+pub async fn open_workspace(app: &TestApp, client: &Client, workspace_id: &str) -> Opened {
+    open_url(
+        app,
+        client,
+        &format!("/api/workspaces/{workspace_id}/events"),
+    )
+    .await
+}
+
+async fn open_url(app: &TestApp, client: &Client, url: &str) -> Opened {
     fast();
     let mut req = Request::builder()
         .method("GET")
-        .uri(format!("/api/bases/{base_id}/events"))
+        .uri(url)
         .header(header::ACCEPT, "text/event-stream");
     if let Some(c) = &client.cookie {
         req = req.header(
